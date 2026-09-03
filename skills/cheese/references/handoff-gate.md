@@ -4,7 +4,10 @@ Use this reference whenever a workflow skill asks the user to choose the next st
 
 ## Contract
 
-A handoff gate prevents silent dispatch. It does not mean the agent stops after the user selects an option. Once the user chooses a non-stop option, the current assistant turn immediately starts the selected action — either dispatching a downstream skill (skill transition) or continuing internal work in the current skill (in-skill continuation).
+A handoff gate prevents silent dispatch.
+It does not stop work after the user selects an option.
+A non-stop selection starts the action in the current turn.
+The action dispatches another skill or continues the current skill.
 
 "Never auto-invoke" means no downstream skill starts before an explicit user selection. It is not permission to answer only with "next: /some-skill" after the user has already selected that option.
 
@@ -128,13 +131,23 @@ Examples of when to attach a `handoff_context:` block:
 - `/melt -> upstream skill` carries the interrupted operation and original skill invocation.
 - `/cheese -> <target>` carries `wiki_hits` grounded from the wiki corpus at routing time.
 
-`wiki_hits` is the query-time wiki retrieval key — a list of `{page, line, why}` entries grounded from the `repo:<repo>:wiki` corpus when hallouminate is present (probe and degrade contract: [`optional-plugins.md`](optional-plugins.md)). The attaching skill always renders the hits to the user at dispatch so memory use is visible and stale hits can be challenged; when hallouminate is absent, omit the key.
+`wiki_hits` contains `{page, line, why}` entries from the repository wiki corpus.
+Use it when hallouminate is present.
+The attaching skill always shows these hits during dispatch.
+This display lets the user challenge stale information.
+Omit the key when hallouminate is absent.
+See [`optional-plugins.md`](optional-plugins.md) for probe and fallback rules.
 
 Keep payloads short and factual. If a payload would exceed a compact screenful, write or reference a `.cheese/.../<slug>.md` handoff artifact and pass the path instead.
 
 ## Fan-in envelope fields
 
-Every phase handoff slug (`/cook`, `/press`, `/age`, `/cure`, and equivalents) already carries `status`/`next`/`artifact`/orientation — see each skill's own `## Handoff slug` section for its exact schema. This section documents the additional fields that make the envelope mechanically validatable at fan-in points (a workflow barrier collecting multiple sub-agent handoffs, `/ultracook`'s per-phase resume, or a reconcile pass over fanned-out reviewers): SCOPE, EVIDENCE, ASSUMPTIONS, and RISKS. Extend the existing slug with these fields; do not fork a second handoff shape. Use the canonical `status:` grammar from the [handback contract](handback-contract.md).
+Each phase handoff already carries `status`, `next`, `artifact`, and orientation.
+The skill's `## Handoff slug` section defines its schema.
+Fan-in points add SCOPE, EVIDENCE, ASSUMPTIONS, and RISKS.
+Extend the existing slug with these fields.
+Do not create a second handoff shape.
+Use the canonical grammar from the [handback contract](handback-contract.md).
 
 ```yaml
 status: <canonical status field>
@@ -152,24 +165,38 @@ risks:
   - <residual risk, tagged certain | speculating | don't know>
 ```
 
-- **SCOPE** — `owned` lists what this dispatch is authoritative over (files it changed or reviewed); `untouched` lists what it explicitly did not touch, so a fan-in barrier can tell disjointness held.
-- **EVIDENCE** — the citation(s) backing the verdict (diff hunks, spec lines, test output), per cross-cutting contract 1 (grounded verdicts) in `routing-policy.md`: a claim no evidence can settle returns `escalate`, never a guessed pass or fail.
+- **SCOPE** — `owned` lists authoritative files or areas.
+  `untouched` lists files or areas outside the dispatch.
+  These lists let the fan-in barrier verify separation.
+- **EVIDENCE** — list the citations that support the verdict.
+  A claim without sufficient evidence returns `escalate`.
 - **ASSUMPTIONS** — any loaded assumption the dispatch made where evidence was incomplete; empty when none.
 - **RISKS** — residual risk, tagged `certain | speculating | don't know` per the shared voice kernel.
 
-A fan-in workflow validates the envelope mechanically (presence and shape of these fields) before consuming an entry — validation is not routing, and the thin-wrapper rule holds: the validating workflow script does not re-derive `next`/`scope`/`risks` itself, it only checks the fields are present and well-formed.
+A fan-in workflow validates the presence and shape of these fields.
+The workflow script does not derive `next`, `scope`, or `risks` again.
+It only checks that the fields are present and valid.
 
 ## Flag propagation
 
-Propagate `--hard` through every runnable downstream option while the flag is in scope. Propagate `--auto` inside documented auto-mode chains and inside `/cheese`'s autonomous-by-default dispatch path (see `skills/cheese/SKILL.md` § Escalation — tier-1 and tier-2 dispatches pre-select the auto variant and run it without a gate unless `--safe` is set).
+Propagate `--hard` through each runnable downstream option.
+Propagate `--auto` through documented auto chains and the default `/cheese` dispatch path.
+See the Escalation section in `skills/cheese/SKILL.md`.
 
-Propagate `--safe`, `--open-pr`, and `--hard` through runnable implementation options. `--open-pr` reaches terminal `/plate`; it authorizes new-PR publication but does not override an explicit topology choice or waive a question required by `/plate`'s review-shape policy. `--hard` is consumed by `/plate` after its final artifact-writing gate.
+Propagate `--safe`, `--open-pr`, and `--hard` through runnable implementation options.
+`--open-pr` reaches terminal `/plate`.
+It does not override topology or required questions.
+`/plate` consumes `--hard` after its final artifact gate.
 
-Outside those autonomous paths, interactive gates must not add `--auto` unless the option explicitly says `--auto` and the user selected it. Inside them, the auto variant is the pre-selected recommended target by design — `--safe` is the user's opt-out to a gated flow, where the auto variant remains pre-selected but dispatch waits for confirmation.
+Outside autonomous paths, do not add `--auto` unless the selected option includes it.
+Inside them, the auto variant is the recommended target.
+`--safe` adds confirmation before dispatch.
 
 ## Standard forward-step menu
 
-The forward command and label vary per gate. A simple menu contains four options by design, not a host or button cap: one forward step plus the standard tail (**Plate it**, **Checkpoint & stop**, **Stop**).
+The forward command and label vary by gate.
+A simple menu contains four options by design, not a host or button cap.
+It includes one forward step, Plate it, Checkpoint and stop, and Stop.
 
 - **<forward verb>** *(recommended)* — one interactive downstream phase.
 - **Plate it** — run the remaining pipeline headless, then dispatch `/plate`; a new PR follows its explicit-choice and review-shape policy.

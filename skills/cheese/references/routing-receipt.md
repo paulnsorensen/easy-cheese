@@ -20,8 +20,13 @@ route: intent=<intent> target=<skill> path=<fast|escalated> probes=<n>
 Apply these rules:
 
 - **One line, one route.** A re-entry after a `clarify` answer starts a new route. Print a new receipt.
-- **Never a duration and never a timestamp.** The router cannot measure wall-clock time. The host adds timestamps. Analytics take the boundary from when this line was emitted.
-- **Never a new artifact.** The receipt is ordinary output. It is not written to `.cheese/`, not a schema, not a handoff field. It carries no authority over the pipeline.
+- **Never a duration and never a timestamp.** Omit both values.
+  The router cannot measure wall-clock time.
+  The host adds timestamps.
+  Analytics take the boundary from when this line was emitted.
+- **Never a new artifact.** Keep the receipt as ordinary one-line output.
+  It is not written to `.cheese/`, not a schema, not a handoff field.
+  It carries no authority over the pipeline.
 - **Portable by construction.** The receipt is plain text in the announce block. No harness capability is required.
 - **Optional to consume, mandatory to emit.** Emit it on all routes, including obvious routes and the fast path.
 
@@ -39,6 +44,11 @@ Classify and dispatch with **zero** probes for these inputs:
 - **A resolvable durable pointer**, such as a spec path, note path, work ID, or slug. The target validates this pointer.
 - **A bounded implementation request** that passes cook's fast-path check from the message text. It must name a file or behavior. It must have no open design question.
 
-On the fast path, use no repository exploration, task graph, wiki grounding, or clarifying question. Print the receipt with `path=fast probes=0`, and dispatch.
+On the fast path, use no repository exploration, task graph, wiki grounding, or clarifying question.
+Print the receipt with `path=fast probes=0`.
+Then dispatch.
 
-Everything else is `escalated`, and stays escalated. Genuinely ambiguous input still gets `/culture` reasoning before dispatch. The fast path never removes a tier from unclear ones. It never adds an approval step to a route that was already unambiguous.
+- **Everything else is `escalated`, and stays escalated.** Route every other input through escalation.
+- **Genuinely ambiguous input still gets `/culture` reasoning.** Run `/culture` before dispatch.
+- **Never removes a tier from unclear ones.** Keep every tier for unclear input.
+- **Never adds an approval step to a route that was already unambiguous.** Do not add approval to a clear route.

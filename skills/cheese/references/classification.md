@@ -4,11 +4,15 @@ Intent shapes for `/cheese`, with the signals that drive each one and the disamb
 
 ## Clarity check (implementation intents)
 
-For `cook` and `mold` intents only, classification feeds cook's fast-path check (§ "Standalone fast-path" in `skills/cook/SKILL.md`), which drives the three-tier escalation in `skills/cheese/SKILL.md` § Escalation.
+For `cook` and `mold`, classification feeds cook's fast-path check.
+This check drives the three-tier escalation in `skills/cheese/SKILL.md`.
 
-The `clarify` intent below is exclusively the tier-3 path; classify a request as `clarify` when the cook-fast-path check fails twice (input + post-tier-2-refined input) or when intent confidence stays below `medium` after the silent culture pass.
+Use `clarify` only for the tier-3 path.
+Use it when the fast-path check fails before and after tier 2.
+Also use it when intent confidence stays below `medium` after the silent Culture pass.
 
-Other intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `ultracook`) bypass the clarity check and dispatch directly to their target skill — each target owns its own escalation.
+Other intents bypass the clarity check and dispatch directly.
+The `ultracook` compatibility invocation resolves to `/cook` without the clarity check.
 
 ## Shape index
 
@@ -22,7 +26,7 @@ Other intents (`research`, `rubber-duck`, `debug`, `age`, `age-then-cure`, `ultr
 | debug | — | `/pasteurize --auto` (default) → `/cook --auto` |
 | age | — | `/age` |
 | age-then-cure | — | `/age` → `/cure` |
-| ultracook | — | `/ultracook` |
+| ultracook (retired) | — | `/cook` (compatibility redirect) |
 | plate | — | `/plate` |
 
 ## Signal table
@@ -55,7 +59,9 @@ Defer to `/briesearch` even when the user did not say "research" — the router'
 
 ### rubber-duck (`/culture`)
 
-The user has explicitly asked for discussion only — no production writes, no code, no PRs. This is a narrow path; in all other cases, agent reasoning happens silently via `/culture` during step 1 of `/cheese` and never surfaces to the user.
+The user has explicitly requested discussion without production writes, code, or pull requests.
+This path is narrow.
+For all other cases, `/culture` runs silently during step 1 of `/cheese`.
 
 | Signal | Example |
 | --- | --- |
@@ -91,7 +97,8 @@ Clear, scoped implementation request meeting the standalone fast-path checks.
 
 When two of the three fast-path checks are clear but the third is borderline, downgrade to `mold`.
 
-Before minting a fresh mini-spec for a tier-1 `cook`/`mold` dispatch, the router runs the `## Spec-discovery check` in `skills/cheese/references/escalation.md` — a keyword glob over `.cheese/specs/*.md` that reuses an existing matching spec instead of writing a duplicate.
+Before a tier-1 `cook` or `mold` dispatch, run the specification discovery check in `skills/cheese/references/escalation.md`.
+Reuse a matching specification instead of writing a duplicate.
 
 ### debug (`/pasteurize --auto` → `/cook --auto`)
 
@@ -105,7 +112,10 @@ Symptom-driven work where the cause has not been confirmed yet and a code-level 
 | "Why is X broken" / "what's wrong with Y" framing | — |
 | Visual / behavioural bug with a clear repro | "flash of white between two clips" with a file path |
 
-Route to `/pasteurize` so the cause is named via a deterministic feedback loop, the regression test is written, and the minimal fix is applied. `/pasteurize` then hands off forward into the standard `/cook → /press → /age → /cure` chain. If the cause is already obvious **and** the fix is a single-file tweak with a known seam, jump straight to `/cook` instead. Only route a debug signal to `/culture` when the user explicitly opted out of writes (see the rubber-duck shape).
+Route to `/pasteurize` to identify the cause, add a regression test, and apply the minimum fix.
+`/pasteurize` then hands off through `/cook`, `/press`, `/age`, and `/cure`.
+When the cause and a single-file fix are clear, route directly to `/cook`.
+Route a debug signal to `/culture` only when the user requests no writes.
 
 ### age (`/age`)
 

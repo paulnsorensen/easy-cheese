@@ -1,10 +1,11 @@
 # Ask user question — sources
 
-Maintainer appendix for [`ask-user-question.md`](ask-user-question.md): the
-per-harness evidence behind the capability-first rule. Agents do not read this
-file at runtime — the active tool list is the runtime authority. Update a row
-when a harness changes its question primitive; move a behavior into the runtime
-doc's caveat list only when capability detection alone cannot infer it.
+Maintainer appendix for [`ask-user-question.md`](ask-user-question.md).
+This appendix gives the harness evidence.
+Agents do not read this file at runtime.
+The active tool list is the runtime authority.
+Update a row when a harness changes its question tool.
+Move behavior to the runtime caveats only when capability detection cannot infer it.
 
 | Harness | Prefer | Notes |
 | --- | --- | --- |

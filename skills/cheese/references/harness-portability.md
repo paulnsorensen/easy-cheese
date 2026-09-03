@@ -1,15 +1,20 @@
 # Harness Portability
 
-Use this reference when a skill needs to talk about host capabilities instead of one harness's syntax. Helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions are capability contracts. The portable docs name the contract first and only then show a host example.
+Use this reference for host capability descriptions.
+Helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions are capability contracts.
+Name the contract before you show a host example.
 
 ## Helper resolution
 
-Use repo-relative paths — they work on every host (Claude Code, Codex, OMP):
+Prefer bundled or repo-local paths.
+They work on every host:
 
 - `src/easy_cheese/shared/*.py` for repo-wide helpers such as corpus path resolution, handoff artifact writing, and slug readers.
 - `skills/<skill>/scripts/*.pyz` for skill-specific helpers bundled with the repo.
 
-Do not use the `${CLAUDE_SKILL_DIR}` environment variable in invocation paths. Claude Code substitutes it in SKILL.md content, but Codex CLI has no equivalent — the literal variable lands in the model's context and fails at runtime.
+Do not use the `${CLAUDE_SKILL_DIR}` environment variable in invocation paths.
+Claude Code substitutes it, but Codex CLI does not.
+Codex receives the literal variable and fails.
 
 If a helper path is shown, the doc should say what behavior the helper provides, not imply one absolute path is the only valid transport.
 
@@ -46,13 +51,17 @@ Then show the host-specific syntax as an example:
 - Codex: host-exposed sub-agent capability, such as `collaboration.spawn_agent`
 - OMP: `task(...)`
 
-Treat every syntax name as an example. Discover the active host capability and gate on fresh context, tool scope, and synchronous completion rather than a versioned identifier.
+Treat each syntax name as an example.
+Discover the active host capability.
+Require fresh context, correct tool scope, and synchronous completion.
 
-Agent selection, minimum power, fallback order, permission degradation, and artifact provenance are normative in [`agent-resolution.md`](agent-resolution.md). Use that resolver before rendering any host-specific dispatch.
+[`agent-resolution.md`](agent-resolution.md) defines selection, minimum power, fallbacks, permission degradation, and artifact provenance.
+Use that resolver before you render host-specific dispatch.
 
 ## GitHub operations
 
-State the GitHub action first: read PR state, post a reply, push a branch, open a PR. Then name the transport:
+State the GitHub action first.
+Then name the transport:
 
 - host GitHub primitive when the harness exposes one
 - `gh` CLI as the fallback transport
@@ -67,7 +76,10 @@ Slash commands are presentation, not the control model. The portable contract is
 - `artifact`
 - one-line orientation
 
-If a skill can render a slash command, it may do so, but the same transition should also be usable as explicit dispatch data for non-slash hosts. When the handoff is a resume point, `next` names the runnable target; when it is terminal, `next: done` records that the chain is complete.
+A slash command can render a transition.
+The same transition must also work as explicit dispatch data.
+At a resume point, `next` names the runnable target.
+At a terminal point, `next: done` records completion.
 
 ## Quick checklist
 

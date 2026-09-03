@@ -1,6 +1,8 @@
 ---
 name: cheese
-description: Route any dropped-in input — idea, spec path, file path, PR or issue, stack trace, bug report, or bare `/cheese` — to the right workflow skill. Use as the unified entry point — phrases include "/cheese", "what should I do with this", "help me get started", "route this", or any opening message that does not already name a downstream skill.
+description: >-
+  Route an idea, path, pull request, issue, failure, question, or bare `/cheese` to the correct workflow skill.
+  Use this skill for `/cheese`, routing requests, help requests, or opening messages without a named workflow skill.
 license: MIT
 ---
 
@@ -21,28 +23,53 @@ Accept anything the user supplies as `$ARGUMENTS`:
 Optional flags:
 
 - `--safe` — gate dispatch behind a confirmation prompt.
-- `--open-pr` — propagate through the implementation chain to terminal `/plate`; a new PR follows `/plate`'s explicit-choice and review-shape policy.
+- `--open-pr` — propagate through the implementation chain to terminal `/plate`.
+  A new PR follows `/plate`'s explicit choice and review shape policy.
 - `--continue <slug-or-note-path>` — resume an in-flight pipeline from a handoff slug or note.
 - `--hard` — propagate to `/plate`, which runs the final artifact-writing gate before `/hard-cheese` and publication.
 - `--reground` — use with `--continue` only. Adversarially re-check the handoff claims before phase dispatch.
 
-If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question through the host routing guide in [`references/handoff-gate.md`](references/handoff-gate.md) before classifying.
+If `$ARGUMENTS` is missing, ask one clarifying question through the host routing guide.
+Use [`references/handoff-gate.md`](references/handoff-gate.md).
 
 ## Flow
 
-0. **Read the full user message, not just `$ARGUMENTS`.** Any prose accompanying the invocation is a directive list; execute or answer it before — and where it conflicts, instead of — the flow's defaults and any handoff protocol. The handoff file restores state; the user's live message overrides it.
+0. **Read the full user message, not just `$ARGUMENTS`.** Treat all other user prose as a directive list.
+   Follow live directives instead of conflicting defaults or the handoff protocol.
+   The handoff file restores state.
+   The user's live message overrides it.
 1. **Think first (silent).** Model the problem internally per `skills/culture/SKILL.md` — restate the ask, list candidate targets, name the deciding signal. Output is the classification that drives step 2.
 2. **Classify** — match `$ARGUMENTS` against the intent shapes in `references/classification.md`. Pick the highest-confidence shape; below the threshold, route to `clarify` (handled by the tier-3 escalation in step 4).
 3. **Clarity check (implementation intents only).** Run cook's fast-path check for `cook` and `mold`. Direct `plate` intents bypass it.
-4. **Escalate (if needed).** Tier 1 dispatches the chosen target (writing a mini-spec via `/mold`'s agent-invoked mode when the dispatch is `/cook --auto` and no spec path was supplied). Tier 2 autonomously invokes `/culture` and/or `/briesearch` in internal mode, then re-runs the clarity check. Tier 3 blocks on a single targeted host-routed question and re-enters classification on the answer. See `## Escalation`.
-5. **Wiki grounding (when hallouminate is present).** Derive a search query from the dropped-in input, ground it against the wiki corpus — at most one `mcp__hallouminate__ground` call, corpus resolved via `list_corpora` (probe shape: `skills/mold/references/grounding.md`) — and fold the top hits into the dispatch packet as `handoff_context.wiki_hits` (`[{page, line, why}]`; see [`references/handoff-gate.md`](references/handoff-gate.md) § Context payloads). When hallouminate is absent or no wiki corpus exists, skip and degrade per [`references/optional-plugins.md`](references/optional-plugins.md).
+4. **Escalate when needed.** Tier 1 dispatches the chosen target.
+   It uses `/mold`'s agent mode when `/cook --auto` needs a specification.
+   Tier 2 invokes `/culture` or `/briesearch` internally, then repeats the clarity check.
+   Tier 3 blocks on a single targeted host-routed question.
+   Classify the answer again.
+   See `## Escalation`.
+5. **Ground the wiki when hallouminate is present.** Derive a query from the input.
+   Make at most one `mcp__hallouminate__ground` call against the wiki corpus.
+   Resolve the corpus through `list_corpora`.
+   Use the probe shape in `skills/mold/references/grounding.md`.
+   Add the best hits to `handoff_context.wiki_hits` as `[{page, line, why}]`.
+   See [`references/handoff-gate.md`](references/handoff-gate.md) section Context payloads.
+   When no wiki corpus exists, use [`references/optional-plugins.md`](references/optional-plugins.md).
 6. **Announce** — print a short block (Intent / Reason / Target, plus wiki hits when present) per the format in `## Output`. Cite the signal that drove the routing decision.
 7. **Self-check** — run the coherence questions in `references/coherence-check.md`. If any fails, downgrade to `clarify` (tier 3) or `research`.
-8. **Dispatch** — without `--safe`, run the chosen skill immediately with its exact dispatch command and context packet, in the same turn as the announce. With `--safe`, issue a handoff gate per [`references/handoff-gate.md`](references/handoff-gate.md) (recommended target pre-selected, at least one alternative, `Stop`) and wait for the user's selection before dispatching.
+8. **Dispatch.** Without `--safe`, run the chosen skill and its context packet after the announcement.
+   With `--safe`, issue a handoff gate from [`references/handoff-gate.md`](references/handoff-gate.md).
+   Pre-select the recommended target, include an alternative, and put `Stop` last.
+   Wait for the user's selection before dispatch.
 
-`/cheese` is a router, not a worker: it never edits files, runs tests, or opens PRs. Use only the host's read, search, and dispatch capabilities. The sole exception is invoking `/mold`'s agent-invoked mini-spec mode in tier 1 when `/cook --auto` needs a spec first; that write happens inside `/mold`'s own capability scope, not the router's.
+`/cheese` is a router, not a worker.
+It never edits files, runs tests, or opens pull requests.
+Use only the host's read, search, and dispatch capabilities.
+Tier 1 can invoke `/mold`'s agent mode when `/cook --auto` needs a specification.
+That write stays inside `/mold`'s capability scope.
 
-Portability reference: [`references/harness-portability.md`](references/harness-portability.md). It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions; prefer the bundled or repo-local helper first, and treat `${CLAUDE_SKILL_DIR}` as optional host-provided fallback.
+See [`references/harness-portability.md`](references/harness-portability.md) for helper resolution, agent dispatch, GitHub operations, and handoff transitions.
+Prefer bundled or repository helpers.
+Do not use `${CLAUDE_SKILL_DIR}` in invocation paths.
 The handoff blocks below are the portable contract; slash commands are host renderings, not the control model.
 
 ## Intent shapes
@@ -51,13 +78,25 @@ The full classification table — including all intent shapes, signals, disambig
 
 ## Escalation
 
-For `cook` and `mold` intents, `/cheese` runs cook's fast-path check (§ "Standalone fast-path" in `skills/cook/SKILL.md`) and escalates through three tiers: **tier 1** (clear) dispatches immediately — reusing a matching spec via the spec-discovery check, or having `/mold` write a mini-spec, with no user interaction; **tier 2** (borderline) autonomously invokes `/culture` and/or `/briesearch` to fill missing context, then re-runs the fast-path check; **tier 3** (still borderline) blocks on one targeted host-routed question and re-enters classification on the answer. `--safe` does not skip the tiers, it only gates the final dispatch. Full tier mechanics and the spec-discovery check: [`references/escalation.md`](references/escalation.md).
+For `cook` and `mold`, `/cheese` runs cook's fast-path check.
+Tier 1 dispatches immediately and can reuse a matching specification.
+Otherwise, `/mold` writes a mini-specification without user interaction.
+Tier 2 invokes `/culture` or `/briesearch`, then repeats the fast-path check.
+Tier 3 asks one targeted host-routed question and classifies the answer again.
+`--safe` gates only the final dispatch.
+See [`references/escalation.md`](references/escalation.md) for the complete tier rules and specification discovery.
 
-Non-implementation intents bypass the escalation entirely. Their target skills own their own internal escalation: `/pasteurize` has its Phase 1 feedback-loop check, `/briesearch` clarifies missing version/scope inline, `/age` and `/cure` work directly against the supplied diff or report.
+Non-implementation intents bypass this escalation.
+Their target skills own their escalation.
+`/pasteurize` has its Phase 1 feedback-loop check.
+`/briesearch` clarifies missing version or scope.
+`/age` and `/cure` use the supplied diff or report.
 
 ## Rejected-directions check
 
-Before dispatching any `mold` intent, scan `.cheese/.out-of-scope/` for rejection records whose `## Direction` section's one-line description substantially matches the incoming request. If a match is found:
+Before each `mold` dispatch, scan `.cheese/.out-of-scope/` for a matching rejection record.
+Compare the incoming request with the record's `## Direction` line.
+If you find a match:
 
 1. Surface the previously-rejected direction and its rationale in one line.
 2. Ask the user whether to proceed with the new request or take a different angle.
@@ -67,7 +106,16 @@ This check is lightweight — a glob + keyword scan over `.cheese/.out-of-scope/
 
 ## --continue
 
-`/cheese --continue <slug-or-note-path>` is the manual fresh-context resumption path — use it after compacting the conversation, after `/cook`'s fan pathway halts, or whenever the user wants to drive the pipeline by hand from cleared context. Resolve the argument through the `/wheypoint resolve --ref <absolute-path | work-id | slug>` capability and dispatch only the validated authoritative current revision it returns, with its deterministic legacy-note fallback; never pick a note by modification time, session, or slug recency, and never commit or publish to Git to make a resume work. Ambiguity, unresolved lineage, integrity failures, and `status: gated:` stop automatic dispatch. Before dispatching anything on a `--continue` invocation, read the full resume flow — resolution, `mode:`/`next:` parsing, parallel-task dispatch, gated-status handling, and baseline treatment — in [`references/continue-resume.md`](references/continue-resume.md).
+Use `/cheese --continue <slug-or-note-path>` to resume manually from a fresh context.
+Use it after conversation compaction, a stopped `/cook` fan pathway, or a manual resume request.
+Resolve the argument through `/wheypoint resolve --ref <absolute-path | work-id | slug>`.
+Dispatch only the validated authoritative current revision.
+The runtime provides the deterministic legacy-note fallback.
+Never select a note by modification time, session, or slug recency.
+Never commit or publish to Git to make a resume work.
+Ambiguity, unresolved lineage, integrity failures, and `status: gated:` stop automatic dispatch.
+Read [`references/continue-resume.md`](references/continue-resume.md) before dispatch.
+For a `next:` list, parse the required `order:` through the same reference.
 
 `--continue` does *not* propagate `--auto` — dispatch `/<next> <slug>` in its default interactive mode even with no `--safe`. The user can append `--auto` explicitly (`/cheese --continue <slug> --auto`) to opt back in.
 The durable pipeline is `culture -> mold -> cook -> press -> age -> cure -> plate`. An approved Mold handoff routes to `/cook` (or `/cook --auto` only when auto is explicit) and carries its durable spec pointer in `artifact:`.
@@ -103,7 +151,11 @@ Always emit, in order:
 1. **Detected intent** — one line, e.g. `Intent: cook (clear single-file fix)`.
 2. **Reason** — one line citing the signal (`reason: spec path .cheese/specs/foo.md`).
 3. **Target** — the chosen skill, e.g. `Target: /cook .cheese/specs/foo.md`.
-4. **Wiki hits** — Emit one line for each `handoff_context.wiki_hits` entry: `wiki: <page>:<line> — <why>`. Put these lines before the receipt. This order lets the user identify stale wiki information. Omit these lines when hallouminate is absent.
+4. **Wiki hits** — Emit one line for each `handoff_context.wiki_hits` entry.
+   Use `wiki: <page>:<line> — <why>`.
+   Put these lines before the receipt.
+   This order lets the user identify stale wiki information.
+   Omit these lines when hallouminate is absent.
 5. **Routing receipt** — The last line before dispatch, always emitted, is:
 
    ```text
@@ -112,11 +164,17 @@ Always emit, in order:
 
    This line is the terminal routing boundary. Never put a duration or a timestamp in it. The host timestamps the line. See [`references/routing-receipt.md`](references/routing-receipt.md) for all fields and rules.
 
-Then dispatch in the same turn. Under `--safe`, use the handoff gate. If `clarify` is chosen, replace the dispatch with the single clarifying question. The receipt still prints, with `target=clarify` and the actual probe count.
+Then dispatch in the same turn.
+Under `--safe`, use the handoff gate.
+For `clarify`, replace the dispatch with the single clarifying question.
+The receipt still prints, with `target=clarify` and the actual probe count.
 
 ## Handoff
 
-Without `--safe`, cheese propagates `--auto` to any target that supports it. Under `--safe`, dispatch waits for the user's selection via the handoff gate; the auto variant stays the pre-selected recommended target.
+Without `--safe`, propagate `--auto` only along documented autonomous chains.
+For `--continue`, forward it only when the handoff contains it or the user appends it.
+Under `--safe`, dispatch waits for the user's gate selection.
+The auto variant stays the pre-selected recommended target.
 
 Default targets per intent:
 
@@ -124,14 +182,23 @@ Default targets per intent:
 - **research** — `/briesearch` (recommended). No auto variant.
 - **rubber-duck** — `/culture` (recommended). Only reached when the user explicitly opted out of writes. No auto variant.
 - **mold** — `/mold` (recommended). Safe-mode alternative: `/briesearch first` when external evidence is missing.
-- **cook** — default: `/cook --auto <slug-or-path>`. Safe-mode alternatives: `/cook <slug-or-path>` (no auto), `/mold first` if scope is borderline. A high-blast-radius or decomposable spec triggers cook's own fan pathway automatically — no separate dispatch needed.
+- **cook** — default: `/cook --auto <slug-or-path>`.
+  Safe-mode alternatives are `/cook <slug-or-path>` and `/mold first`.
+  Use `/mold first` when scope is borderline.
+  A large or decomposable specification starts cook's fan pathway automatically.
 - **ultracook (retired)** — `/ultracook <slug-or-path>` resolves to `/cook <slug-or-path>`, carrying forward `--open-pr`/`--resume`/`--auto`.
-- **plate** — `/plate` for commit-only work, ordinary PR publication, or stack publication/maintenance. New PRs infer an obviously cohesive single, recommend and ask for reviewable ordered stacks, and ask when shape is ambiguous; explicit choices win.
+- **plate** — `/plate` handles commits, ordinary pull requests, and pull request stacks.
+  New pull requests infer an obviously cohesive single change.
+  They recommend reviewable ordered stacks and ask when shape is ambiguous.
+  Explicit choices win.
 - **debug** — default: `/pasteurize --auto <input>`. Safe-mode alternatives: `/pasteurize <input>` (no auto), `/culture` only when the user explicitly wants no-write diagnosis.
 - **age** — `/age <ref>` (recommended). Safe-mode alternative: `/age --scope <path>` when the user named a path glob.
 - **age-then-cure** — `/age <slug>` (recommended). Safe-mode alternative: `/cure <slug>` when a fresh report already exists.
 
-Pre-select only the highest-confidence target. Without `--safe`, surface the target as a decision, not a question — dispatch the recommended option directly. With `--safe`, dispatch waits for the user's selection; the captured dispatch packet runs immediately on a non-stop choice.
+Pre-select only the highest-confidence target.
+Without `--safe`, show the target as a decision and dispatch it directly.
+With `--safe`, wait for the user's selection.
+Run the captured dispatch packet immediately after a non-stop choice.
 
 ## Rules
 

@@ -17,13 +17,14 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    It finally checks legacy notes in the current `.cheese/notes/` directory and each sibling worktree.
    Use `git worktree list --porcelain` to identify sibling worktrees.
    Dispatch only the validated authoritative current revision.
-   The Markdown is a generated projection, not the authority.
+   The runtime generates the Markdown as a projection.
+   The runtime does not treat it as authoritative.
    A `.cheese/` parent identifies the original repository root.
    Resolve repository-relative handoff paths from the directory above `.cheese/`.
    A `legacy` result is non-authoritative context.
    Never dispatch a legacy result automatically.
    Any runtime `gated` outcome from a legacy `halt` or `gated` status stops.
-   An artifact failure or integrity finding also stops.
+   Also stop for an artifact failure or integrity finding.
    A live directive cannot waive that runtime gate.
    A clean runtime `legacy` result with `status: ok` needs a separate informed trust gate.
    This gate resumes the named phase with the note as untrusted context.
@@ -34,7 +35,8 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    List each match and its location.
    Ask the user to select one through [`ask-user-question.md`](ask-user-question.md).
    Dispatch nothing until the user answers.
-3. **These conditions stop automatic dispatch.** Report the reason and dispatch nothing for any listed condition:
+3. **These conditions stop automatic dispatch.** Report the reason for each listed condition.
+   Dispatch nothing:
    - ambiguity;
    - an unresolved revision or legacy parent;
    - a missing declared Git object;
@@ -62,7 +64,8 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    Also use `/cook` for a decomposable specification or one with a large blast radius.
    The `/cook` fan pathway starts automatically when needed.
    Stop after you offer these choices.
-5. For a validated result, read the projection and report its orientation line.
+5. For a validated result, read the projection.
+   Report its orientation line.
    This line tells the user the current position.
    Parse `status:`, `next:`, and optional `mode:`.
    - **Parse optional `mode:` first.** A missing value means `mode: single` and preserves existing handoffs.
@@ -92,7 +95,8 @@ Also use it when the user manually resumes the pipeline from a cleared context.
      Ask for a corrected handoff instead of guessing.
      Under `--safe`, offer parallel dispatch as the selected option.
      Put `Stop` last.
-   - **When `status:` starts with `halt` and `next:` names a phase**, report the halt reason and dispatch nothing.
+   - **When `status:` starts with `halt` and `next:` names a phase**, report the halt reason.
+     Dispatch nothing.
      The valid legacy phases are `mold | cook | press | age | cure | affinage`.
      This vocabulary appears only in legacy handwritten notes because the runtime uses `gated`.
      Manual resume answers only that trust gate for a clean runtime `legacy` result with `status: ok`.
@@ -123,7 +127,8 @@ Also use it when the user manually resumes the pipeline from a cleared context.
      Under `--safe`, select the dispatch option first.
      Put `Stop` last.
    - **When `status:` starts with `gated:`**, do not dispatch `next:` automatically.
-     If the accompanying message contains directives or already answers the gate, execute them and surface the gate as one line of plain text.
+     If the accompanying message contains directives or already answers the gate, follow the live-message action.
+     `execute them and surface the gate as one line of plain text`.
      Do not raise the structured question.
      Otherwise, report the decision from `status:` and the open questions or blockers.
      Ask the user which direction to take: research, decide, or build.
@@ -142,7 +147,8 @@ Also use it when the user manually resumes the pipeline from a cleared context.
      Never show a binary design question that assumes the user wants to decide.
    - **When `next:` is a list**, require `order:`.
      The form is `next: [<skill> "<arg>", ...]`.
-     Stop and ask for a corrected handoff when `order:` is missing.
+     If `order:` is missing, stop.
+     Ask for a corrected handoff.
      The list accepts only `briesearch | culture`.
      Reject each write or pipeline skill.
      Direct the user to the `mode: parallel` and `tasks:` block instead.
@@ -151,15 +157,18 @@ Also use it when the user manually resumes the pipeline from a cleared context.
      For `order: sequential`, dispatch the items in the listed order.
      Under `--safe`, select the batch dispatch option first.
      Put `Stop` last.
-   - **When `next:` is `hold`**, report the orientation line and stop.
+   - **When `next:` is `hold`**, report the orientation line.
+     Stop.
      Do not dispatch a command.
      `hold` restores context and waits for instruction.
      It does not identify a runnable command.
      Unlike terminal `done`, `hold` identifies a live session that waits for input.
-   - **When `next:` is missing**, report `malformed handoff: next: required` and stop.
+   - **When `next:` is missing**, report `malformed handoff: next: required`.
+     Stop.
      Do not guess a next step or default phase.
      Use `hold` to specify no action.
-   - **When `next:` is terminal**, report the terminal state and stop.
+   - **When `next:` is terminal**, report the terminal state.
+     Stop.
      A terminal value is `done` from a phase or culture-notes slug.
      Report a non-resumable halt when `status:` starts with `halt`.
      A resumable halt contains a runnable `next:` under the Cook and Press slug contract.
@@ -196,12 +205,12 @@ A handoff records earlier facts.
 This check prevents a resumed phase from using a false premise.
 
 The flag is meaningful only alongside `--continue`.
-Otherwise, say so in one line and classify normally.
-No handoff is available to check.
+Otherwise, use this rule: `say so in one line and classify normally`.
+The router has no handoff to check.
 
 Run it after resolution has produced a dispatchable result and before dispatch.
 A stopped resolution stays stopped.
-`--reground` never rescues one and never softens one.
+Apply the contract: `never rescues one and never softens one`.
 
 ### Bound the window first
 
@@ -211,12 +220,14 @@ Use `git status --porcelain` to list uncommitted changes.
 A claim can decay only inside this window.
 
 An empty window means nothing moved under the handoff.
-Report this state in one line and dispatch unchanged.
+Report this state in one line.
+Dispatch unchanged.
 
 A handoff with no recorded commit has an unbounded window.
 Do not read the complete tree.
 Report the missing baseline.
-Mark each claim `unverifiable` and dispatch.
+Mark each claim `unverifiable`.
+Dispatch the result.
 
 ### Attack the claims with Culture
 

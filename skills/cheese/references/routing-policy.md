@@ -1,12 +1,21 @@
 # Subagent routing policy
 
-> **Provenance:** this file mirrors the wiki-canonical page `architecture/subagent-routing-policy.md` (corpus `repo:dotfiles:wiki` — see `.hallouminate/wiki/architecture/subagent-routing-policy.md` once that page exists). The wiki copy is authoritative; this copy exists so easy-cheese skills can reference routing policy without a wiki round-trip. If the two diverge, the wiki wins — drift should be checked (drift-check tooling is dotfiles-side `/harness-doctor` work, out of scope for this file) and this mirror updated to match.
->
-> Source spec: `subagent-routing-overhaul.md` PR1 workstream item 7.
+> **Provenance:** This file mirrors `architecture/subagent-routing-policy.md` in `repo:dotfiles:wiki`.
+> The wiki copy is authoritative.
+> This mirror lets easy-cheese use the policy without a wiki request.
+> When they differ, update this mirror to match the wiki.
+> Use `/harness-doctor` to check drift.
+> Source specification: `subagent-routing-overhaul.md` PR1 workstream item 7.
 
 ## Goal
 
-Each pipeline entry point sizes its own work at the moment its evidence is free; model tier follows phase; reviewer and coder count scale with size and risk. There is no universal scoper stage: sizing evidence is a byproduct of each phase (mold has the dialogue, cook has the spec, age has the diff, affinage has the PR, pasteurize has the symptom). Strong models spend only at serial bottlenecks (the spec freeze and the fresh review); workers run inside frozen contracts at worker tier.
+Each pipeline entry point sizes its own work when its evidence is available.
+The phase selects the model tier.
+Size and risk select reviewer and coder counts.
+Each phase produces its own size evidence.
+No universal scoper stage exists.
+Use strong models only at serial bottlenecks.
+Workers use frozen contracts at worker tier.
 
 ## The four sizing functions
 
@@ -32,7 +41,7 @@ Scoper: deleted everywhere.
 
 ## Hard risk-overrides
 
-Any one of the following forces strong review and lowers mold's spec bar, regardless of size:
+Any listed condition requires strong review and lowers mold's specification threshold:
 
 - auth/secrets/crypto/tenant isolation
 - payments/ledgers/irreversible effects
@@ -43,7 +52,12 @@ Any one of the following forces strong review and lowers mold's spec bar, regard
 
 ## Cross-cutting contracts
 
-1. **Grounded verdicts** — every reviewer dispatch (age lens, taste, affinage triage) carries the evidence slice it checks against (diff hunks, spec lines, test output) and must cite it in each verdict; a claim no evidence can settle returns `escalate`, never a guessed pass or fail.
+1. **Grounded verdicts** — each reviewer receives the evidence slice for its check.
+   Each verdict cites diff hunks, specification lines, or test output.
+   Return `escalate` when evidence cannot settle a claim.
 2. **Report-everything reviewers** — severity-conservative phrasing is banned in reviewer prompts; filtering happens in the reconcile/verifier pass (Opus 5 recall behavior).
 3. **Fan-in envelope** — fixed schema, `status`/`next`/`artifact`/orientation plus SCOPE (owned/untouched), EVIDENCE, ASSUMPTIONS, RISKS. Workflows validate the envelope mechanically (validation is not routing; thin-wrapper rule holds). See `handoff-gate.md` § Fan-in envelope fields for the documented schema.
-4. **Delegation restraint** (Opus 5 orchestrators) — delegate only genuinely independent, sizeable tracks; never spawn agents to verify your own work (cheaper-writer checks, opus reviewer over sonnet coder, stay); one agent when one suffices; no delegation for handful-of-tool-call work.
+4. **Delegation restraint** — delegate only independent and substantial tracks.
+   Do not delegate verification of your own work.
+   Use one agent when one is sufficient.
+   Do not delegate work that needs only a few tool calls.

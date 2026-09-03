@@ -1,25 +1,34 @@
 # Formatting
 
-Use this reference for any artifact a skill writes to `.cheese/` — specs, findings reports (`/age`, `/cure`, `/press`, `/cook`), and research reports (`/briesearch`). The house style and citation rules are shared; the three canonical shapes are listed at the bottom and cross-referenced to the skill that owns each one.
+Use this reference for every artifact that a skill writes to `.cheese/`.
+It defines the shared style and citation rules.
+It also lists each canonical shape and its owner.
 
 The citation primitive is the standard markdown `[^name]` footnote, which renders natively in GitHub and the easy-cheese Starlight docs site.
 
 ## Reader model
 
-Write for an engineer who picks the report up cold. They know the major skills exist, they have the diff or the spec open in another tab, and they have not memorised which function lives in which file. Every claim must read top-to-bottom for that reader.
+Write for an engineer who reads the report without prior context.
+The engineer knows the major skills and can open the diff or specification.
+The engineer does not know each function location.
+Write each claim so this reader can follow it in order.
 
 Consequences for prose:
 
 - In-scope code addresses (`path/to/file.ts:42`, `path/to/file.ts:42-50`) stay inline. They are locations, not citations.
 - Out-of-scope evidence (external docs, RFCs, blog posts, vendor pages, commits, PRs, prior `.cheese/` reports, GitHub blob URLs that justify a claim) goes in footnotes. See [Citations](#citations).
-- Internal shorthand (a skill name, a cheese term, an acronym) gets expanded on first use or earns a Glossary entry when the report is long enough to need one.
+- Expand internal shorthand on first use.
+  Add a Glossary entry when a long report needs the term again.
 - People are referenced as "a review comment on [PR 42](https://github.com/example/repo/pull/42)," not as bare first names.
 
 Test: hand the report to a teammate who has never opened the diff. They can follow every claim and click through to the code when they want to verify. If a sentence reads only to someone who has memorised the diff, it is not finished.
 
 ## Open with the answer
 
-Each section starts with its strongest claim. No "the previous draft did X." No "this section will do Y." No "we'll explore the trade-offs below." The first sentence of a section is the section's conclusion in compressed form; the rest is evidence.
+Each section starts with its strongest claim.
+Do not describe a previous draft or announce later content.
+The first sentence gives the section's conclusion.
+The remaining sentences give evidence.
 
 During the succinctness pass, read each section's first sentence in isolation. If it does not state a claim, a decision, or a concrete problem, rewrite it.
 
@@ -29,7 +38,8 @@ These rules bind every section, every artifact. The succinctness pass catches vi
 
 - **No em-dashes.** Use periods, colons, commas, parentheses, or rewrite the sentence. An em-dash usually signals one sentence doing two things.
 - **Complete sentences in body prose.** Fragments are fine inside table cells, bullet labels, image captions, and code comments, but not in paragraphs.
-- **No filler.** Cut hype, soft openings, and sign-off appendixes such as "hope this helps" or "let me know if you need anything else." The report ends when the content ends.
+- **No filler.** Remove hype, soft openings, and sign-off text.
+  The report ends when its content ends.
 - **No throat-clearing.** Skip "In this section," "It is important to note," "We will now discuss." Section headers are the transition.
 - **No hedging.** "It might be worth considering" becomes a clear position or moves to Open questions.
 - **No restated context.** The reader has the diff or the spec. Do not re-state what they can see.
@@ -49,16 +59,22 @@ These rules bind every section, every artifact. The succinctness pass catches vi
   | guardrails (abstract) | constraints, checks, limits |
   | blast radius (outside incident context) | affected scope, reach, impact |
 
-- **Calibrated tags sit on the claim, not at sentence boundaries.** Use `` `<certain>` ``, `` `<speculating>` ``, or `` `<don't know>` `` inline next to the specific assertion. Never as a blanket disclaimer at the top of a section. Never in front of a fragment. Adjacent claims with different calibrations split into two sentences, each carrying its own tag. The three tokens are exact label values: write them verbatim, never as synonyms.
+- **Put calibrated tags on the claim.** Use `` `<certain>` ``, `` `<speculating>` ``, or `` `<don't know>` `` beside the assertion.
+  Do not use a blanket disclaimer or place a tag before a fragment.
+  Split adjacent claims when their calibrations differ.
+  Use the three exact label values.
 - **Diagrams over prose.** Prefer Mermaid flowcharts and sequence diagrams for control-flow, data-flow, and integration shapes. Mermaid renders in GitHub and in the Starlight docs site.
 - **No semicolons in Mermaid.** Newlines are the convention and render more reliably. One statement per line, no trailing `;`. This includes node definitions, edges, and class assignments.
-- **Pseudocode for algorithms, signatures for data shapes.** Pseudocode is clearest when the point is the algorithm; real signatures (typed function declarations, schemas) are clearest when the point is the data shape. One form per idea; the same content does not appear in two.
+- **Use pseudocode for algorithms and signatures for data shapes.** Use one form for each idea.
+  Do not repeat the same content in both forms.
 - **Cite, don't restate.** Link prior `.cheese/` reports, specs, and PRs rather than summarising them, unless the summary is genuinely shorter than the link target. Use the footnote form below.
 - **One voice.** When two skills compose into one artifact (e.g. `/age` then `/cure`), the second skill edits toward a single voice rather than appending a second author's tone.
 
 ## Citations
 
-The citation primitive is the standard markdown footnote: `[^1]` (or any kebab-case name like `[^retry-rfc]`), with the definition at the bottom of the artifact under a `## References` heading.
+Use standard Markdown footnotes for citations.
+Use `[^1]` or a kebab-case name such as `[^retry-rfc]`.
+Put each definition under the artifact's `## References` heading.
 
 GitHub, the Starlight docs site, and pandoc all render this form as a superscript marker with a back-link to the reference list.
 
@@ -92,17 +108,36 @@ At the bottom of the artifact, under `## References`:
 [^press-2026-05-12]: `.cheese/press/auth-retry.md` (commit `f9f2973`).
 ```
 
-One line per footnote. URLs absolute. For external sources, include a fetch date when freshness matters ("as of 2026-05-18"). For internal artifacts, include the commit hash or the path so the citation is reproducible even after the artifact moves.
+Write one footnote per line.
+Use absolute URLs.
+Add a fetch date when source freshness matters.
+For internal artifacts, add a commit or path that remains reproducible after moves.
 
-Reserve plain parenthetical hyperlinks (`see [name](URL)`) for cases where the link text itself carries information the reader needs inline — glossary terms, named proposals, vendor doc titles. Audit-trail evidence uses footnotes.
+Use plain parenthetical links only when the link text gives required inline information.
+Use footnotes for audit evidence.
 
 ## Canonical shapes
 
 Three shapes are written often enough to deserve a single owner each. The owner skill holds the authoritative shape; this file lists the entry point and the cross-cutting rules.
 
-**Corpus location.** Two roots hold artifacts. Durable, project-scoped knowledge — specs and research reports — anchors at a stable XDG path so it survives branch switches and clones and stays out of git: `$XDG_DATA_HOME/cheese/<project>/` (default `~/.local/share/cheese/<project>/`), where `<project>` matches the git repository (origin `owner/repo`, sanitized; falls back to the toplevel dir name). Transient pipeline handoffs — `cook`/`press`/`age`/`cure` reports, `notes`, `hard` — stay repo-local under `.cheese/` so they travel with the branch and surface in the PR. Override the base with `EASY_CHEESE_HOME` and the project key with `EASY_CHEESE_PROJECT`. The path math is owned by `src/easy_cheese/shared/paths.py`: `artifact_path` builds flat-phase paths (specs, transient reports), and `project_corpus_root` gives the durable root that `/briesearch` composes the nested `research/<slug>/<slug>.md` report path under. This is the target layout: skills are being migrated onto these helpers, and per-skill docs that still name `.cheese/specs/<slug>.md` predate the durable/transient split and have not yet been updated.
+**Corpus location.** Two roots hold artifacts.
+Durable specifications and research reports use `$XDG_DATA_HOME/cheese/<project>/`.
+The default is `~/.local/share/cheese/<project>/`.
+The sanitized project key uses the Git origin or top-level directory name.
+Transient pipeline reports and notes stay under `.cheese/`.
+This location keeps them with the branch and pull request.
+Override the base with `EASY_CHEESE_HOME`.
+Override the project key with `EASY_CHEESE_PROJECT`.
+`src/easy_cheese/shared/paths.py` owns the path logic.
+`artifact_path` builds flat phase paths.
+`project_corpus_root` gives `/briesearch` its nested research report root.
+This is the target layout.
+Some older skill documents still use `.cheese/specs/<slug>.md`.
 
-**Interop contract for external spec-producing skills.** A third-party or host-level skill that produces specs outside this pipeline (e.g. an external `/spec` skill) must persist them through this same contract — `artifact-path specs <slug>` or, when the resolver is unavailable, the legacy repo-local fallback (`.cheese/specs/<slug>.md`) — so `/cook`-family skills can discover them. A spec written to a skill-private location (e.g. `.claude/specs/`) is invisible to `/cook`, `/mold`, and `/ultracook` regardless of content quality.
+**External specification contract.** External skills must store specifications through this contract.
+Use `artifact-path specs <slug>`.
+When the resolver is unavailable, use `.cheese/specs/<slug>.md`.
+Private locations such as `.claude/specs/` are invisible to `/cook`, `/mold`, and `/ultracook`.
 
 Portable host-capability wording for helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions lives in [`harness-portability.md`](harness-portability.md).
 
@@ -113,14 +148,19 @@ A spec captures a design decision and its rationale before code is written.
 - **Owner:** `/mold` → curdle stage.
 - **Path:** `$XDG_DATA_HOME/cheese/<project>/specs/<slug>.md` (durable corpus; see **Corpus location** above).
 - **Shape:** see `skills/mold/references/curdle.md` § Spec template.
-- **Sections (required, in order):** frontmatter, `# <Title>`, Problem, Goals, Non-goals, Approach, Decisions, Interface sketches, Risks, Open questions, Quality gates, Reproduction (Diagnose only), References (when out-of-scope citations are used).
+- **Required sections, in order:** frontmatter, title, Problem, Goals, Non-goals, Approach, Decisions, Interface sketches, Risks, Open questions, and Quality gates.
+  Add Reproduction only for Diagnose.
+  Add References when the document uses external citations.
 - **Length budget:** 50–200 lines. Past 300 lines means a decision is buried; split or cut.
 
 Specs that touch existing systems open Approach with one diagram (flowchart or sequence) of the end state before any subsections.
 
 ### Findings report
 
-A findings report is the output of a review skill — `/age`, `/cure`, `/press`, or `/cook` taste-test. Each skill owns its own variant; the cross-cutting rules below apply to all of them.
+A review skill produces a findings report.
+The review skills are `/age`, `/cure`, `/press`, and `/cook` taste-test.
+Each skill owns its variant.
+The following rules apply to all variants.
 
 - **Owners and paths:**
   - `/age` → `.cheese/age/<slug>.md` (review findings, severity-grouped). See `skills/age/SKILL.md` § Output.
@@ -136,7 +176,9 @@ A findings report is the output of a review skill — `/age`, `/cure`, `/press`,
   <one-line orientation: what changed or what was reviewed>
   ```
 
-- **Section shape:** owned by each skill's `## Output` section (see the per-owner paths above). The cross-cutting rule is that whatever sections an owner template defines, the same handoff slug sits at the top and a `## References` block sits at the bottom whenever footnotes are used.
+- **Section shape:** each skill's `## Output` section owns its shape.
+  Every shape starts with the same handoff slug.
+  Add `## References` at the end when the report uses footnotes.
 - **Findings format.** Each finding is one bullet:
 
   ```markdown
@@ -152,7 +194,9 @@ A findings report is the output of a review skill — `/age`, `/cure`, `/press`,
 A research report is the output of `/briesearch` when the question warranted a deep look.
 
 - **Owner:** `/briesearch` synthesis stage.
-- **Paths:** short form returned inline to the caller; long form written to the durable corpus (see **Corpus location** above) at `$XDG_DATA_HOME/cheese/<project>/research/<slug>/<slug>.md` with raw bodies under `…/research/<slug>/raw/`.
+- **Paths:** return the short form to the caller.
+  Write the long form to `$XDG_DATA_HOME/cheese/<project>/research/<slug>/<slug>.md`.
+  Store raw bodies under `…/research/<slug>/raw/`.
 - **Shape:** see `skills/briesearch/references/synthesis.md` § Output shape.
 - **Required sections (long form):** `## Research: <Question>`, Finding, Evidence (claim-level table), Open questions, Confidence, Next step, References.
 - **Claim-level evidence table.** One row per material claim, not per source:
@@ -170,7 +214,9 @@ A research report is the output of `/briesearch` when the question warranted a d
 
 ## Succinctness pass
 
-Every artifact runs the pass before it is written to disk. The pass runs in two directions: every sentence carries weight or it goes, and every reader-required claim names its mechanism or one gets added.
+Run the succinctness pass before writing an artifact.
+Remove each sentence without useful content.
+Add the mechanism for each claim that a reader must verify.
 
 Cut:
 
@@ -185,7 +231,8 @@ Cut:
 
 Add:
 
-- The mechanism behind any architectural or causal claim where the prose leaves the reader to guess. A reader who has not read the diff should be able to reproduce the conclusion from the report.
+- Add the mechanism behind each architectural or causal claim.
+  A reader who has not read the diff must reproduce the conclusion.
 
 ### Rewrite examples
 

@@ -1,18 +1,16 @@
 # Handback contract
 
-One contract governs every phase dispatch and every handback in the pipeline.
-The in-session handback a worker returns and the durable `.cheese/` artifact
-it writes carry the *same* preamble block, routed by the *same* status
-vocabulary. `hard-cheese`'s receipt (`skills/hard-cheese/SKILL.md:100`,
-`status: PASS | FAIL | FAILED | LOGGED`) is a distinct artifact vocabulary —
-a grading record, not a handback — and neither extends nor competes with this
-one.
+One contract governs every phase dispatch and handback.
+The returned handback and durable `.cheese/` artifact use the same preamble and status vocabulary.
+The `hard-cheese` receipt uses `status: PASS | FAIL | FAILED | LOGGED`.
+It is a grading record, not a handback.
+Neither vocabulary extends the other.
 
-The machine source of truth is `easy_cheese_schemas.phase_contracts` — the
-status vocabulary, its wire grammar, and the phase-transition registry — staged
-into every skill bundle. This file is that module's prose face; nothing here
-restates a rule the module does not enforce, and no producer or consumer
-re-derives the grammar locally.
+`easy_cheese_schemas.phase_contracts` is the machine source of truth.
+It defines the status vocabulary, wire grammar, and phase transition registry.
+Each skill bundle contains this module.
+This file describes only rules that the module enforces.
+Producers and consumers must not derive the grammar again.
 
 ## The preamble
 
@@ -23,11 +21,11 @@ artifact: <path-to-prior-report-if-any>     # key always present, value may be e
 <one-line orientation: what changed or what was reviewed>
 ```
 
-Optional keyed lines sit between `artifact:` and the orientation line:
-`taste_test:`, `durable_flags:`, `baseline:`. A fan-in barrier extends the same
-block with `scope` / `evidence` / `assumptions` / `risks`
-(see [`handoff-gate.md`](handoff-gate.md) § Fan-in envelope fields) — an
-extension of this preamble, never a second shape.
+Optional keyed lines sit between `artifact:` and the orientation line.
+They are `taste_test:`, `durable_flags:`, and `baseline:`.
+A fan-in barrier adds `scope`, `evidence`, `assumptions`, and `risks`.
+See [`handoff-gate.md`](handoff-gate.md) section Fan-in envelope fields.
+These fields extend the preamble and do not create a second shape.
 
 `artifact:` names the **prior** report this dispatch consumed, not the file
 being written. It is empty (`artifact:` with nothing after it) when the
@@ -109,30 +107,23 @@ The two must never tell different stories.
 
 ## CLI and router behavior
 
-- **Exit codes.** A CLI (`handoff_cli`, `write_handoff_artifact`,
-  `phase_decision`) exits `3` for a contract violation (a bad status, an
-  illegal transition, a newline in a preamble field) and `2` for any other
-  `CliError` (I/O, a bad path). Contract-violation messages are prefixed with
-  the dispatch context that raised them — `<phase> (phase N)`, `--phase X
-  --slug Y`, or `--file P` — so the operator can attribute the failure.
-- **The fan router's verdict carries the full vocabulary.** `phase_decision`'s
-  `Verdict` reports `status`, `disposition`, and `reason` on every branch, not
-  just an `action`. A `gated` status routes to its own `gated` action, never
-  folded into `halt`; an `ok-with-concerns` concern is appended to the
-  `exit_message` on the spawn branch, not dropped.
-- **`needs-context` requires a reason and is capped.** The router rejects a
-  bare `needs-context` (no gap named); it accepts `--retry-count <int>`
-  (default 0), so a first `needs-context` re-dispatches the same phase and a
-  second one at the same phase halts with "retry cap (1) reached" instead of
-  retrying again.
+- **Exit codes.** A contract violation exits with code 3.
+  Other `CliError` failures exit with code 2.
+  The CLI includes the dispatch context in each contract violation.
+  This context identifies the phase, slug, or file.
+- **The fan router verdict carries the full vocabulary.** `Verdict` always reports `status`, `disposition`, and `reason`.
+  A `gated` status uses the `gated` action.
+  An `ok-with-concerns` branch adds its concern to `exit_message`.
+- **`needs-context` requires a reason and has a limit.** The router rejects a reasonless value.
+  The first value re-dispatches the same phase.
+  A second value at that phase stops with `retry cap (1) reached`.
 - **`next:` is informational under `stop`.** Only a `proceed` disposition
   walks the transition table on `next:`; under `gated` or `halt` the router
   ignores whatever `next:` names and ends the run on the reason instead.
 
 ## Dispatch names its contracts
 
-Every worker dispatch states, explicitly, the input contract it is handed and
-the output contract it must return — by name, in the prompt. Output shape is
-never inferred from wording in the brief: a worker that is not told which
-contract to return has been underspecified, and returning a shape the consumer
-does not accept is a contract violation, not a style difference.
+Every worker dispatch names its input and output contracts.
+Do not infer output shape from the brief.
+A missing output contract means the dispatch is incomplete.
+An unsupported returned shape is a contract violation.

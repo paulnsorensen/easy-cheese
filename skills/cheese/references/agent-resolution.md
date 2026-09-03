@@ -1,16 +1,23 @@
 # Agent resolution
 
-Resolve agent capabilities before dispatch. Agent names are hints; the runnable contract is the requested work, tools, permissions, isolation, minimum power, effort, and topology.
+Resolve agent capabilities before dispatch.
+Agent names are hints.
+The runnable contract defines the work, tools, permissions, isolation, minimum power, effort, and topology.
 
 ## Resolution order
 
 Apply these gates in order for every requested agent:
 
-1. **Capability floor.** Reject candidates missing a required tool, write capability, permission boundary, or isolation property. Missing required tools or required write capability halts the dispatch; do not pretend prompting supplies them.
+1. **Capability floor.** Reject candidates that lack a required tool, write capability, permission boundary, or isolation property.
+   Missing required tools or write capability stops dispatch.
+   Do not pretend that prompting supplies them.
 2. **Minimum power.** Power is `cheap | default | powerful`; effort is `low | medium | high`. Reject a candidate known to be below the requested power. A candidate whose power is unknown is eligible only as the final fallback and sets `degraded: true`.
 3. **Specificity.** Among eligible candidates choose an exact easy-cheese specialist, then a compatible specialist, then a general worker.
 
-A general worker may fill a read-only role when the host cannot restrict tools: make the no-write constraint explicit in the prompt, record `permission_enforcement: prompt-only`, and set `degraded: true`. Prompt-only enforcement never qualifies a worker for a role that requires write capability or stronger isolation than the host provides.
+A general worker can fill a read-only role when the host cannot restrict tools.
+Make the no-write constraint explicit.
+Record `permission_enforcement: prompt-only` and set `degraded: true`.
+Prompt-only enforcement cannot satisfy write work or stronger isolation.
 
 ## Required artifact block
 
@@ -43,7 +50,17 @@ agent_resolution:
   permission_enforcement: tool-restricted | prompt-only
 ```
 
-`request.required_tools` and `request.preferred_types` are nonempty. `attempts` is ordered and contains exactly one accepted entry; its type, model, and power match `resolved`. Power ranks `cheap < default < powerful`: known underpowered candidates are rejected, while unknown power may be accepted only as the final attempt and sets `degraded: true`. `fallback_reason` is null when the first preferred type is accepted and a nonempty reason for every lower-specificity selection. `permission_enforcement: prompt-only` requires both `degraded: true` and a read-only request. All artifacts for one dispatch share the same resolution facts; do not rewrite the story differently in a phase report and its handoff.
+`request.required_tools` and `request.preferred_types` are nonempty.
+`attempts` contains exactly one accepted entry.
+Its type, model, and power match `resolved`.
+Power ranks `cheap < default < powerful`.
+Reject known underpowered candidates.
+Accept unknown power only as the final attempt and set `degraded: true`.
+Set `fallback_reason` to null when the first preferred type is accepted.
+Give every lower-specificity selection a nonempty reason.
+`permission_enforcement: prompt-only` requires a read-only request and `degraded: true`.
+All artifacts for one dispatch share the same resolution facts.
+Do not change those facts between a phase report and its handoff.
 
 ## Halt conditions
 
@@ -70,7 +87,10 @@ A local skill table's `Effort` column defaults to this table for the matching ro
 
 ## Phases x roles (per-phase model selection)
 
-Model and effort are selected **per phase**, from the phase's role — not inherited from whatever model the dispatching orchestrator happens to be running. `{model}` / `{effort}` are never left unsubstituted — an unsubstituted `{model}` makes the spawn fall through to the parent's model.
+Select model and effort **per phase** from the phase role.
+Do not inherit them from the dispatching orchestrator.
+Always substitute `{model}` and `{effort}`.
+An unsubstituted `{model}` makes the spawn use the parent model.
 
 | Phase | Role | Minimum power | Effort |
 |---|---|---|---|
@@ -81,7 +101,11 @@ Model and effort are selected **per phase**, from the phase's role — not inher
 | cure | coder | default | medium |
 | wiring task | coder | default | low — single-file glue, capped at ~20 tool calls |
 
-Resolve each phase against this table, run the resolution order above over the result, and record the resolved `model`, `power`, and `effort` in that phase's own `agent_resolution` block. A phase that resolves to a different model than the phase before it is normal; a phase whose `resolved.model` is `unknown` because nobody chose one is a degraded dispatch and carries `degraded: true`.
+Resolve each phase against this table.
+Apply the resolution order.
+Record the resolved `model`, `power`, and `effort` in that phase's `agent_resolution` block.
+Different models in consecutive phases are normal.
+An unknown `resolved.model` is a degraded dispatch and requires `degraded: true`.
 
 ## Local skill tables
 
