@@ -7,6 +7,7 @@ the crash and the retry must be rejected as :class:`CorruptLeftoverError`,
 not silently overwritten -- and the rejection must clean the tampered file so
 a further retry starts clean.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -73,7 +74,13 @@ def _publish_canonical(
     _before_reveal: object = None,
 ) -> PublishedArtifact:
     return publication.publish_canonical(
-        request_digest=publication.request_digest("raw", {"operation_id": operation_id}),
+        request_digest=publication.request_digest(
+            "raw",
+            {"operation_id": operation_id},
+            source_phase="mold",
+            destination_phase="cook",
+            payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+        ),
         source_phase="mold",
         destination_phase="cook",
         payload_schema_uri=CURD_PLAN_SCHEMA_URI,

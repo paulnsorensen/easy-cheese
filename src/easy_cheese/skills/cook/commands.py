@@ -5,8 +5,6 @@ from __future__ import annotations
 import sys
 
 from easy_cheese.shared.bundle_commands import (
-    Command,
-    CommandHandler,
     bundle_command,
     derive_command,
     dispatch,
@@ -188,88 +186,74 @@ def _render_html(argv: list[str]) -> int:
     return main(argv)
 
 
-def _command(handler: CommandHandler, summary: str) -> Command:
-    command = derive_command(handler)
-    return Command(command.name, command.target, summary)
-
-
 COMMANDS = (
-    _command(
+    derive_command(
         _artifact_path,
         "Resolve the durable or transient artifact path for a phase and slug",
     ),
-    _command(
+    derive_command(
         _age_route,
         "Size an /age review into single-pass or fan-out lanes (JSON in, JSON out)",
     ),
-    _command(
-        _baseline,
-        "Classify a current test-failure list against a stored baseline",
+    derive_command(
+        _baseline, "Classify a current test-failure list against a stored baseline"
     ),
-    _command(
+    derive_command(
         _phase_decision,
         "Decide what the fan-out pathway does after a phase sub-agent returns",
     ),
-    _command(_milknado, "Probe the milknado engine seam used by parallel mode"),
-    _command(_mode, "Select the fan-out mode from the canonical size thresholds"),
-    _command(
-        _worktree,
-        "Create, harvest, and tear down isolated sub-agent worktrees",
+    derive_command(_milknado, "Probe the milknado engine seam used by parallel mode"),
+    derive_command(_mode, "Select the fan-out mode from the canonical size thresholds"),
+    derive_command(
+        _worktree, "Create, harvest, and tear down isolated sub-agent worktrees"
     ),
-    _command(_validate_decomposition, "Validate a fan-out decomposition manifest"),
-    _command(_validate_manifest, "Validate a fan-out run manifest"),
-    _command(_validate_pr_plan, "Validate a fan-out PR-plan document"),
-    _command(
+    derive_command(
+        _validate_decomposition, "Validate a fan-out decomposition manifest"
+    ),
+    derive_command(_validate_manifest, "Validate a fan-out run manifest"),
+    derive_command(_validate_pr_plan, "Validate a fan-out PR-plan document"),
+    derive_command(
         _manifest_update,
         "Apply an atomic, schema-validated update to a fan-out run manifest",
     ),
-    _command(
-        _wiring_topo_sort,
-        "Topologically sort a manifest's wiring into ordered waves",
+    derive_command(
+        _wiring_topo_sort, "Topologically sort a manifest's wiring into ordered waves"
     ),
-    _command(
+    derive_command(
         _pr_plan_to_branches,
         "Convert a fan-out PR plan into branch, cherry-pick, and PR commands",
     ),
-    _command(
+    derive_command(
         _curd_block,
         "Validate a curd block against the spec-locked decomposition schema",
     ),
-    _command(_normalize, "Normalize a typed contract payload on the host"),
-    _command(
-        _validate,
-        "Validate a typed contract payload against its registered schema",
+    derive_command(_normalize, "Normalize a typed contract payload on the host"),
+    derive_command(
+        _validate, "Validate a typed contract payload against its registered schema"
     ),
-    _command(_accept, "Validate and accept a canonical Mold handoff pointer"),
-    _command(
-        _slugify,
-        "Derive a kebab-case slug and durable spec path from task text",
+    derive_command(_accept, "Validate and accept a canonical Mold handoff pointer"),
+    derive_command(
+        _slugify, "Derive a kebab-case slug and durable spec path from task text"
     ),
-    _command(
+    derive_command(
         _write_handoff_artifact,
         "Write a handoff preamble plus optional body atomically",
     ),
-    _command(
-        _read_handoff_slug,
-        "Read the handoff preamble back from a phase artifact",
+    derive_command(
+        _read_handoff_slug, "Read the handoff preamble back from a phase artifact"
     ),
-    _command(
+    derive_command(
         _findings_cli,
         "Render an /age report's selection table and resolve selection verbs",
     ),
-    _command(
-        _gates_cli,
-        "Map a quality-gate scoreboard's booleans to a readiness verdict",
+    derive_command(
+        _gates_cli, "Map a quality-gate scoreboard's booleans to a readiness verdict"
     ),
-    _command(
-        _paths_cli,
-        "Slugify, validate, resolve, and list .cheese artifact paths",
+    derive_command(
+        _paths_cli, "Slugify, validate, resolve, and list .cheese artifact paths"
     ),
-    _command(
-        _handoff_cli,
-        "Render, parse, and dispatch-split handoff preambles",
-    ),
-    _command(
+    derive_command(_handoff_cli, "Render, parse, and dispatch-split handoff preambles"),
+    derive_command(
         _render_html,
         "Render a markdown report into one self-contained offline HTML file",
     ),

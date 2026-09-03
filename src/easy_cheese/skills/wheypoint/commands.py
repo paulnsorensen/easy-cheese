@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 
-from dataclasses import replace
 
 from easy_cheese.shared.bundle_commands import (
     bundle_command,
@@ -49,26 +48,13 @@ def _lint(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    replace(
-        derive_command(_checkpoint),
-        summary="Build a delta from a semantic intent and commit it",
+    derive_command(_checkpoint, "Build a delta from a semantic intent and commit it"),
+    derive_command(
+        _commit, "Commit a handoff delta and write the generated projection"
     ),
-    replace(
-        derive_command(_commit),
-        summary="Commit a handoff delta and write the generated projection",
-    ),
-    replace(
-        derive_command(_resolve),
-        summary="Resolve a slug, work id, or path to the current record",
-    ),
-    replace(
-        derive_command(_show),
-        summary="Print the current record for a work id",
-    ),
-    replace(
-        derive_command(_lint),
-        summary="Lint a generated projection against the record",
-    ),
+    derive_command(_resolve, "Resolve a slug, work id, or path to the current record"),
+    derive_command(_show, "Print the current record for a work id"),
+    derive_command(_lint, "Lint a generated projection against the record"),
 )
 
 

@@ -11,6 +11,7 @@ route validation, idempotency, content-addressed persistence, and
 pointer-last reveal are the same machinery :func:`easy_cheese.shared.
 publication.publish` uses -- no duplicated reveal logic.
 """
+
 from __future__ import annotations
 
 import json
@@ -74,7 +75,9 @@ def migrate(
     ``ingress_kind=IngressKind.LEGACY_ARTIFACT`` with the source schema and
     version, never a heuristic guess at what changed.
     """
-    check_adapter_sunsets(reference_date if reference_date is not None else date.today())
+    check_adapter_sunsets(
+        reference_date if reference_date is not None else date.today()
+    )
     adapter = adapter_for(source_schema_uri, source_major, source_minor)
     if adapter is None:
         raise UnsupportedLegacySourceError(
@@ -89,6 +92,9 @@ def migrate(
             "source_major": source_major,
             "source_minor": source_minor,
         },
+        source_phase=source_phase,
+        destination_phase=destination_phase,
+        payload_schema_uri=adapter.target_schema_uri,
     )
 
     def _prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
@@ -143,7 +149,10 @@ def _convert_curd(item: Mapping[str, object]) -> dict[str, object]:
     return {
         "curd_id": item["key"],
         "outcome": item["goal"],
-        "scope": {"paths": list(cast("list[str]", item.get("paths", []))), "excluded_paths": []},
+        "scope": {
+            "paths": list(cast("list[str]", item.get("paths", []))),
+            "excluded_paths": [],
+        },
         "inputs": [],
         "outputs": list(cast("list[str]", item.get("outputs", []))),
         "dependencies": [],
@@ -183,7 +192,9 @@ def _convert_curd_plan_v0_9(payload: Mapping[str, object]) -> dict[str, object]:
 
 def _register_legacy_adapters() -> None:
     if (
-        adapter_for(CURD_PLAN_SCHEMA_URI, _LEGACY_CURD_PLAN_MAJOR, _LEGACY_CURD_PLAN_MINOR)
+        adapter_for(
+            CURD_PLAN_SCHEMA_URI, _LEGACY_CURD_PLAN_MAJOR, _LEGACY_CURD_PLAN_MINOR
+        )
         is not None
     ):
         return

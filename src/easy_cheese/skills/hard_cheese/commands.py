@@ -5,8 +5,6 @@ from __future__ import annotations
 import sys
 
 from easy_cheese.shared.bundle_commands import (
-    Command,
-    CommandHandler,
     bundle_command,
     derive_command,
     dispatch,
@@ -27,19 +25,12 @@ def _freshness_check(argv: list[str]) -> int:
     return main(argv)
 
 
-def _command(handler: CommandHandler, summary: str) -> Command:
-    command = derive_command(handler)
-    return Command(command.name, command.target, summary)
-
-
 COMMANDS = (
-    _command(
-        _append_attempt,
-        "Atomically append an attempt row to the audit trail",
+    derive_command(
+        _append_attempt, "Atomically append an attempt row to the audit trail"
     ),
-    _command(
-        _freshness_check,
-        "Decide whether a prior attempt is fresh, stale, or new",
+    derive_command(
+        _freshness_check, "Decide whether a prior attempt is fresh, stale, or new"
     ),
 )
 

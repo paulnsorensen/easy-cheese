@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import replace
 
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
@@ -30,17 +29,13 @@ def _repro_rerun(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    replace(
-        derive_command(_debug_tag_sweep),
-        summary="Scan a tree for surviving instrumentation tags",
+    derive_command(_debug_tag_sweep, "Scan a tree for surviving instrumentation tags"),
+    derive_command(
+        _pasteurize_route,
+        "Size a /pasteurize investigation into fan-out lanes (JSON in, JSON out)",
     ),
-    replace(
-        derive_command(_pasteurize_route),
-        summary="Size a /pasteurize investigation into fan-out lanes (JSON in, JSON out)",
-    ),
-    replace(
-        derive_command(_repro_rerun),
-        summary="Re-run a repro command N times and emit a structured verdict",
+    derive_command(
+        _repro_rerun, "Re-run a repro command N times and emit a structured verdict"
     ),
 )
 

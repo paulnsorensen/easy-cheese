@@ -13,7 +13,7 @@ from typing import cast
 _COMMAND_RE = re.compile(r"[a-z0-9][a-z0-9_-]*")
 # Use one trimmed line without pipes.
 # scripts/render_generated_regions.py inserts the summary into a Markdown table cell.
-_SUMMARY_RE = re.compile(r"[^\s|][^\n|]*")
+_SUMMARY_RE = re.compile(r"[^\s|][^\r\n\v\f|]*")
 CommandHandler = Callable[[list[str]], int]
 
 
@@ -75,12 +75,12 @@ def bundle_command(name: str) -> Callable[[CommandHandler], CommandHandler]:
     return decorator
 
 
-def derive_command(fn: CommandHandler) -> Command:
-    """Compile a `@bundle_command`-decorated handler into its dispatcher `Command`."""
+def derive_command(fn: CommandHandler, summary: str) -> Command:
+    """Compile a decorated handler and its summary into one command."""
     name = cast("str | None", getattr(fn, "__bundle_command_name__", None))
     if name is None:
         raise ValueError(f"{fn!r} is not decorated with @bundle_command")
-    return Command(name, f"{fn.__module__}:{fn.__qualname__}", name)
+    return Command(name, f"{fn.__module__}:{fn.__qualname__}", summary)
 
 
 def compiled_commands(module: ModuleType) -> tuple[Command, ...]:
@@ -93,7 +93,15 @@ def compiled_commands(module: ModuleType) -> tuple[Command, ...]:
         and getattr(value, "__bundle_command_name__", None) is not None
     )
     return tuple(
-        sorted((derive_command(fn) for fn in declared), key=lambda command: command.name)
+        sorted(
+            (
+                derive_command(
+                    fn, cast("str", getattr(fn, "__bundle_command_name__"))
+                )
+                for fn in declared
+            ),
+            key=lambda command: command.name,
+        )
     )
 
 

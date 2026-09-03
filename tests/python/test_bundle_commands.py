@@ -24,7 +24,7 @@ class _BundleCommandsSurface(Protocol):
         self, name: str
     ) -> Callable[[_CommandHandler], _CommandHandler]: ...
 
-    def derive_command(self, handler: _CommandHandler) -> bc.Command: ...
+    def derive_command(self, handler: _CommandHandler, summary: str) -> bc.Command: ...
 
     def validate_command_surface(
         self, module: ModuleType, commands: tuple[bc.Command, ...]
@@ -46,7 +46,9 @@ def command(
 
 
 @pytest.fixture
-def target_module(monkeypatch: pytest.MonkeyPatch) -> tuple[list[list[str]], ModuleType]:
+def target_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[list[str]], ModuleType]:
     calls: list[list[str]] = []
     module = ModuleType("test_bundle_target")
 
@@ -79,6 +81,10 @@ def test_invalid_command_target_rejected(target: str) -> None:
         " leading space",
         "trailing space ",
         "two\nlines",
+        "two\rlines",
+        "two\r\nlines",
+        "two\vlines",
+        "two\flines",
         "table | breaker",
         "|",
     ],
@@ -93,11 +99,16 @@ def test_duplicate_command_rejected() -> None:
         _ = bc.command_map((command(), command()))
 
 
-@pytest.mark.parametrize("commands", [
-    (command("foo-bar"), command("foo_bar")),
-    (command("foo_bar"), command("foo-bar")),
-])
-def test_normalized_alias_collision_rejected(commands: tuple[bc.Command, bc.Command]) -> None:
+@pytest.mark.parametrize(
+    "commands",
+    [
+        (command("foo-bar"), command("foo_bar")),
+        (command("foo_bar"), command("foo-bar")),
+    ],
+)
+def test_normalized_alias_collision_rejected(
+    commands: tuple[bc.Command, bc.Command],
+) -> None:
     with pytest.raises(ValueError, match="alias collision"):
         _ = bc.command_map(commands)
 
@@ -121,7 +132,12 @@ def test_dispatch_accepts_legacy_underscore_alias(
     target_module: tuple[list[list[str]], ModuleType],
 ) -> None:
     calls, _ = target_module
-    assert bc.dispatch((command("write-handoff-artifact"),), ["write_handoff_artifact", "x"]) == 7
+    assert (
+        bc.dispatch(
+            (command("write-handoff-artifact"),), ["write_handoff_artifact", "x"]
+        )
+        == 7
+    )
     assert calls == [["x"]]
 
 
@@ -205,7 +221,7 @@ def test_validate_command_surface_rejects_unreferenced_declaration() -> None:
     bar = cast(_CommandHandler, module._bar)
     with pytest.raises(ValueError, match="declares unreferenced bundle command.*foo"):
         _bundle_commands.validate_command_surface(
-            module, (_bundle_commands.derive_command(bar),)
+            module, (_bundle_commands.derive_command(bar, "Bar command"),)
         )
 
 
@@ -215,7 +231,7 @@ def test_validate_command_surface_rejects_undeclared_reference() -> None:
     stray = command("stray")
     with pytest.raises(ValueError, match="references undeclared bundle command.*stray"):
         _bundle_commands.validate_command_surface(
-            module, (_bundle_commands.derive_command(foo), stray)
+            module, (_bundle_commands.derive_command(foo, "Foo command"), stray)
         )
 
 
@@ -262,7 +278,9 @@ def test_skill_manifests_are_literal_tuples() -> None:
                 else isinstance(node.target, ast.Name) and node.target.id == "COMMANDS"
             )
         ]
-        assert len(bindings) == 1, f"{module.__name__}.COMMANDS must have one top-level binding"
+        assert len(bindings) == 1, (
+            f"{module.__name__}.COMMANDS must have one top-level binding"
+        )
         assert isinstance(bindings[0].value, ast.Tuple), (
             f"{module.__name__}.COMMANDS must be a literal tuple"
         )
@@ -297,7 +315,9 @@ def test_render_skill_commands_projects_the_manifest_verbatim(
     )
 
 
-def test_rendering_command_docs_never_resolves_targets(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rendering_command_docs_never_resolves_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from scripts import build_pyz
     from scripts import render_generated_regions as rgr
 
@@ -306,7 +326,9 @@ def test_rendering_command_docs_never_resolves_targets(monkeypatch: pytest.Monke
 
     monkeypatch.setattr(bc, "_handler", explode)
     for skill in build_pyz.SKILLS:
-        assert rgr.render_skill_commands(skill).startswith(f"# `/{skill}` bundle commands\n")
+        assert rgr.render_skill_commands(skill).startswith(
+            f"# `/{skill}` bundle commands\n"
+        )
 
 
 def test_checked_in_command_docs_match_the_manifests() -> None:

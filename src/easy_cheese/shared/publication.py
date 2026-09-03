@@ -10,6 +10,7 @@ route, writes the payload (and, if any syntax repair happened, its receipt)
 as immutable content-addressed files, and only then atomically reveals one
 idempotent ``HandoffPointer`` -- the boundary a consumer is allowed to act on.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -255,15 +256,23 @@ def _digest_bytes(content: bytes) -> str:
     return f"sha256:{hashlib.sha256(content).hexdigest()}"
 
 
-def request_digest(raw_text: str, invocation: Mapping[str, object]) -> str:
-    """Digest binding a request to its exact raw text and invocation context.
-
-    Two publications sharing an ``operation_id`` are the same request only if
-    this digest matches; both :func:`publish` and
-    ``easy_cheese.shared.migrate.migrate`` bind idempotency to it.
-    """
+def request_digest(
+    raw_text: str,
+    invocation: Mapping[str, object],
+    *,
+    source_phase: str,
+    destination_phase: str,
+    payload_schema_uri: str,
+) -> str:
+    """Digest the request text, invocation, route, and payload schema."""
     envelope = json.dumps(
-        {"invocation": invocation, "raw_text": raw_text},
+        {
+            "destination_phase": destination_phase,
+            "invocation": invocation,
+            "payload_schema_uri": payload_schema_uri,
+            "raw_text": raw_text,
+            "source_phase": source_phase,
+        },
         sort_keys=True,
         ensure_ascii=False,
         separators=(",", ":"),
@@ -390,6 +399,38 @@ def _rehydrate(
     )
 
 
+def _pointer_path(root: Path, operation_id: str) -> Path:
+    if (
+        not isinstance(operation_id, str)  # pyright: ignore[reportUnnecessaryIsInstance]
+        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", operation_id) is None
+    ):
+        raise PublicationError("invalid operation_id")
+    pointer_dir = (root / "pointers").resolve()
+    pointer_path = pointer_dir / f"{operation_id}.json"
+    if pointer_path.parent != pointer_dir:
+        raise PublicationError("invalid operation_id")
+    return pointer_path
+
+
+def _validate_replay(
+    pointer: HandoffPointer,
+    *,
+    request_digest: str,
+    source_phase: str,
+    destination_phase: str,
+    payload_schema_uri: str,
+) -> None:
+    if (
+        pointer.request_digest != request_digest
+        or pointer.source_phase != source_phase
+        or pointer.destination_phase != destination_phase
+        or pointer.payload.schema_uri != payload_schema_uri
+    ):
+        raise IdempotencyConflictError(
+            f"operation {pointer.operation_id!r} was already published with a different request"
+        )
+
+
 def publish_canonical(
     *,
     request_digest: str,
@@ -413,19 +454,25 @@ def publish_canonical(
     duplicating pointer-reveal logic.
     """
     root = Path(artifact_root)
-    pointer_path = root / "pointers" / f"{operation_id}.json"
+    pointer_path = _pointer_path(root, operation_id)
+    _ = validate_transition(
+        COMPILED_TRANSITION_REGISTRY,
+        source_phase,
+        destination_phase,
+        payload_schema_uri,
+    )
     if pointer_path.exists():
         existing = _read_pointer(pointer_path)
-        if existing.request_digest != request_digest:
-            raise IdempotencyConflictError(
-                f"operation {operation_id!r} was already published with a different request"
-            )
+        _validate_replay(
+            existing,
+            request_digest=request_digest,
+            source_phase=source_phase,
+            destination_phase=destination_phase,
+            payload_schema_uri=payload_schema_uri,
+        )
         return _rehydrate(existing, payload_schema_uri, root)
 
     validated, receipt = prepare()
-    _ = validate_transition(
-        COMPILED_TRANSITION_REGISTRY, source_phase, destination_phase, payload_schema_uri
-    )
 
     payload_digest = canonical_digest(validated.value)
     payload_path = _retain_content(
@@ -473,10 +520,13 @@ def publish_canonical(
         _atomic_reveal(pointer_path, canonical_bytes(pointer))
     except FileExistsError:
         existing = _read_pointer(pointer_path)
-        if existing.request_digest != request_digest:
-            raise IdempotencyConflictError(
-                f"operation {operation_id!r} was already published with a different request"
-            ) from None
+        _validate_replay(
+            existing,
+            request_digest=request_digest,
+            source_phase=source_phase,
+            destination_phase=destination_phase,
+            payload_schema_uri=payload_schema_uri,
+        )
         return _rehydrate(existing, payload_schema_uri, root)
     return PublishedArtifact(
         pointer=pointer, canonical=validated, normalization_receipt=receipt_ref
@@ -503,7 +553,13 @@ def publish(
     same request returns the same :class:`PublishedArtifact`; a replay with a
     different request raises :class:`IdempotencyConflictError`.
     """
-    req_digest = request_digest(raw_text, invocation)
+    req_digest = request_digest(
+        raw_text,
+        invocation,
+        source_phase=source_phase,
+        destination_phase=destination_phase,
+        payload_schema_uri=payload_schema_uri,
+    )
 
     def _prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
         normalized_text, actions = syntax_normalize(raw_text)
@@ -581,7 +637,11 @@ def accept(
     path = Path(pointer_path)
     if not path.is_file():
         raise PointerNotFoundError(f"pointer not found at {path}")
-    root = Path(artifact_root) if artifact_root is not None else path.resolve().parent.parent
+    root = (
+        Path(artifact_root)
+        if artifact_root is not None
+        else path.resolve().parent.parent
+    )
     pointer = _read_pointer(path)
 
     if pointer.destination_phase != destination_phase:

@@ -1,4 +1,5 @@
 """Unit coverage for the shared Mold-to-Cook publication gateway."""
+
 from __future__ import annotations
 
 import json
@@ -10,10 +11,12 @@ import pytest
 from easy_cheese_schemas import (
     ContractValidationError,
     PublishedArtifact,
+    TransitionError,
     normalize_agent_output,
 )
 
 from easy_cheese.shared import publication
+from easy_cheese.skills.mold.contract_handlers import publish_main
 
 CURD_PLAN_SCHEMA_URI = "https://schemas.easy-cheese.dev/curd-plan"
 
@@ -54,14 +57,17 @@ def _publish(
     raw_text: str,
     invocation: dict[str, object] = INVOCATION,
     operation_id: str = "op-1",
+    source_phase: str = "mold",
+    destination_phase: str = "cook",
+    payload_schema_uri: str = CURD_PLAN_SCHEMA_URI,
     _before_reveal: Callable[[], None] | None = None,
 ) -> PublishedArtifact:
     return publication.publish(
         raw_text,
         invocation,
-        source_phase="mold",
-        destination_phase="cook",
-        payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+        source_phase=source_phase,
+        destination_phase=destination_phase,
+        payload_schema_uri=payload_schema_uri,
         operation_id=operation_id,
         artifact_root=tmp_path,
         _before_reveal=_before_reveal,
@@ -172,11 +178,77 @@ def test_publish_is_idempotent_on_replay(tmp_path: Path) -> None:
 def test_publish_rejects_conflicting_replay(tmp_path: Path) -> None:
     _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-conflict")
     doc_payload = cast("dict[str, object]", DOC["payload"])
-    other_doc = {**DOC, "payload": {**doc_payload, "objective": "A different objective"}}
+    other_doc = {
+        **DOC,
+        "payload": {**doc_payload, "objective": "A different objective"},
+    }
     with pytest.raises(publication.IdempotencyConflictError):
         _ = _publish(
             tmp_path, raw_text=json.dumps(other_doc), operation_id="op-conflict"
         )
+
+
+@pytest.mark.parametrize(
+    ("override", "value"),
+    [
+        ("source_phase", "invalid-source"),
+        ("destination_phase", "invalid-destination"),
+        ("payload_schema_uri", "https://schemas.easy-cheese.dev/unknown"),
+    ],
+)
+def test_publish_validates_changed_replay_route(
+    tmp_path: Path, override: str, value: str
+) -> None:
+    raw_text = json.dumps(DOC)
+    _ = _publish(tmp_path, raw_text=raw_text, operation_id="op-route")
+    kwargs = {override: value}
+    with pytest.raises(TransitionError):
+        _ = _publish(
+            tmp_path,
+            raw_text=raw_text,
+            operation_id="op-route",
+            **kwargs,  # pyright: ignore[reportArgumentType]
+        )
+
+
+@pytest.mark.parametrize("operation_id", ["", ".", "..", "a/b", r"a\b", "a/../b"])
+def test_publish_rejects_unsafe_operation_id(tmp_path: Path, operation_id: str) -> None:
+    with pytest.raises(publication.PublicationError, match="invalid operation_id"):
+        _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id=operation_id)
+    assert not (tmp_path / "pointers").exists()
+
+
+def test_publish_accepts_safe_operation_id(tmp_path: Path) -> None:
+    artifact = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="safe_ID-1.0")
+    assert artifact.pointer.operation_id == "safe_ID-1.0"
+    assert (tmp_path / "pointers" / "safe_ID-1.0.json").is_file()
+
+
+@pytest.mark.parametrize("operation_id", ["", "..", "a/b", r"a\b", "a/../../escaped"])
+def test_publish_cli_rejects_unsafe_operation_id(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    operation_id: str,
+) -> None:
+    document = tmp_path / "document.json"
+    invocation = tmp_path / "invocation.json"
+    _ = document.write_text(json.dumps(DOC), encoding="utf-8")
+    _ = invocation.write_text(json.dumps(INVOCATION), encoding="utf-8")
+
+    assert publish_main(
+        [
+            str(document),
+            "--invocation",
+            str(invocation),
+            "--operation-id",
+            operation_id,
+            "--artifact-root",
+            str(tmp_path / "artifacts"),
+        ]
+    ) == 1
+    assert capsys.readouterr().err == "ERROR: invalid operation_id\n"
+    assert not (tmp_path / "artifacts" / "pointers").exists()
+    assert not (tmp_path / "escaped.json").exists()
 
 
 def test_publish_rejects_tampered_payload_on_replay(tmp_path: Path) -> None:
@@ -190,7 +262,10 @@ def test_publish_rejects_tampered_payload_on_replay(tmp_path: Path) -> None:
     )
     tampered_doc = {
         **DOC,
-        "payload": {**cast("dict[str, object]", DOC["payload"]), "objective": "Tampered"},
+        "payload": {
+            **cast("dict[str, object]", DOC["payload"]),
+            "objective": "Tampered",
+        },
     }
     other_canonical = normalize_agent_output(json.dumps(tampered_doc), INVOCATION)
     _ = payload_path.write_bytes(other_canonical.canonical_bytes)
@@ -257,8 +332,6 @@ def test_publish_receipt_only_when_syntax_actions_nonempty(tmp_path: Path) -> No
 
     # NBSP (U+00A0): json.loads rejects it as whitespace, str.strip removes it
     repaired_raw = chr(0xA0) + json.dumps(DOC) + chr(0xA0)
-    repaired = _publish(
-        tmp_path, raw_text=repaired_raw, operation_id="op-repaired"
-    )
+    repaired = _publish(tmp_path, raw_text=repaired_raw, operation_id="op-repaired")
     assert repaired.normalization_receipt is not None
     assert repaired.pointer.normalization_receipt is not None

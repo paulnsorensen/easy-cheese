@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 
-from dataclasses import replace
 
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
@@ -108,61 +107,50 @@ def _render_html(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    replace(
-        derive_command(_artifact_path),
-        summary="Resolve the durable or transient artifact path for a phase and slug",
+    derive_command(
+        _artifact_path,
+        "Resolve the durable or transient artifact path for a phase and slug",
     ),
-    replace(
-        derive_command(_html_report),
-        summary="Render an /age markdown report into one offline HTML file",
+    derive_command(
+        _html_report, "Render an /age markdown report into one offline HTML file"
     ),
-    replace(
-        derive_command(_age_route),
-        summary="Size an /age review into single-pass or fan-out lanes (JSON in, JSON out)",
+    derive_command(
+        _age_route,
+        "Size an /age review into single-pass or fan-out lanes (JSON in, JSON out)",
     ),
-    replace(
-        derive_command(_review_surface),
-        summary="Score the reviewable git surface that routing sizes against (JSON out)",
+    derive_command(
+        _review_surface,
+        "Score the reviewable git surface that routing sizes against (JSON out)",
     ),
-    replace(
-        derive_command(_severity),
-        summary="Compute per-finding severity and fix-cost-now buckets",
+    derive_command(_severity, "Compute per-finding severity and fix-cost-now buckets"),
+    derive_command(
+        _slugify, "Derive a kebab-case slug and durable spec path from task text"
     ),
-    replace(
-        derive_command(_slugify),
-        summary="Derive a kebab-case slug and durable spec path from task text",
+    derive_command(
+        _review_lock,
+        "Record or verify the production tree digest that keeps /age review-only",
     ),
-    replace(
-        derive_command(_review_lock),
-        summary="Record or verify the production tree digest that keeps /age review-only",
+    derive_command(
+        _write_handoff_artifact,
+        "Write an age handoff atomically after the review lock verifies the tree",
     ),
-    replace(
-        derive_command(_write_handoff_artifact),
-        summary="Write an age handoff atomically after the review lock verifies the tree",
+    derive_command(
+        _read_handoff_slug, "Read the handoff preamble back from a phase artifact"
     ),
-    replace(
-        derive_command(_read_handoff_slug),
-        summary="Read the handoff preamble back from a phase artifact",
+    derive_command(
+        _findings_cli,
+        "Render an /age report's selection table and resolve selection verbs",
     ),
-    replace(
-        derive_command(_findings_cli),
-        summary="Render an /age report's selection table and resolve selection verbs",
+    derive_command(
+        _gates_cli, "Map a quality-gate scoreboard's booleans to a readiness verdict"
     ),
-    replace(
-        derive_command(_gates_cli),
-        summary="Map a quality-gate scoreboard's booleans to a readiness verdict",
+    derive_command(
+        _paths_cli, "Slugify, validate, resolve, and list .cheese artifact paths"
     ),
-    replace(
-        derive_command(_paths_cli),
-        summary="Slugify, validate, resolve, and list .cheese artifact paths",
-    ),
-    replace(
-        derive_command(_handoff_cli),
-        summary="Render, parse, and dispatch-split handoff preambles",
-    ),
-    replace(
-        derive_command(_render_html),
-        summary="Render a markdown report into one self-contained offline HTML file",
+    derive_command(_handoff_cli, "Render, parse, and dispatch-split handoff preambles"),
+    derive_command(
+        _render_html,
+        "Render a markdown report into one self-contained offline HTML file",
     ),
 )
 
