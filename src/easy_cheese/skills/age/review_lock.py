@@ -10,10 +10,10 @@ Step 1 of the age flow records a digest of the production tree
 Applying a fix inline moves the digest, so the report cannot be written from a
 context that applied one.
 
-Digest scope: tracked-file *content* (``git diff`` against ``HEAD``) plus
-untracked-file *paths*, both excluding ``.cheese/`` — the phase's own scratch
-directory, which age is expected to write. Untracked-file content is not
-hashed. Outside a git work tree there is no production tree to compare, so both
+Digest scope: tracked-file content (``git diff`` against ``HEAD``) plus
+untracked-file paths and content. Both checks exclude ``.cheese/``, which is the
+phase's own scratch directory. Outside a git work tree, no production tree
+exists for comparison, so both
 capture and verification degrade to a no-op rather than blocking the review.
 
 The gate raises the cost of the boundary; it does not make it unbypassable. An
@@ -64,13 +64,27 @@ def tree_digest(root: Path) -> str | None:
     diff_args += ["--", ".", exclude]
     tracked = _git_text(diff_args, root)
     untracked = _git_text(
-        ["ls-files", "--others", "--exclude-standard", "--", ".", exclude], root
+        ["ls-files", "--others", "--exclude-standard", "-z", "--", ".", exclude],
+        root,
     )
     digest = hashlib.sha256()
     digest.update(tracked.encode("utf-8", "replace"))
     digest.update(b"\x00")
-    for name in sorted(untracked.splitlines()):
+    for name in sorted(filter(None, untracked.split("\x00"))):
         digest.update(name.encode("utf-8", "replace"))
+        digest.update(b"\x00")
+        path = root / name
+        try:
+            if path.is_symlink():
+                digest.update(b"link\x00")
+                digest.update(str(path.readlink()).encode("utf-8", "replace"))
+            else:
+                digest.update(b"file\x00")
+                with path.open("rb") as stream:
+                    while chunk := stream.read(128 * 1024):
+                        digest.update(chunk)
+        except OSError as exc:
+            raise cli.CliError(f"cannot hash untracked path {name!r}: {exc}") from exc
         digest.update(b"\x00")
     return digest.hexdigest()
 

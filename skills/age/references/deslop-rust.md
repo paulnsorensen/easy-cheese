@@ -1,6 +1,11 @@
 # Rust De-slop Catalog
 
-Per-language evidence for the `age` `deslop` dimension. Each pattern is a Rust-specific AI tell to look for during review; most map to a clippy lint, giving a citable rule name to attach to a finding. Use alongside `dimensions.md`'s `deslop` rubric — this is the "Look for" detail, not a separate severity scale.
+This catalog provides Rust-specific evidence for the `age` `deslop` dimension.
+Each pattern identifies a Rust-specific AI tell for review.
+Most patterns map to a clippy lint.
+The lint provides a citable rule name for each finding.
+Use this catalog with the `deslop` rubric in `dimensions.md`.
+This catalog provides the "Look for" details, not a separate severity scale.
 
 ## 1. Excessive `.clone()` to silence the borrow checker
 
@@ -11,7 +16,7 @@ LLMs reach for `.clone()` as a universal fix for ownership errors.
 - Use borrowing (`&` and `&mut`) instead
 - Take `&str` instead of `String` in function parameters
 - Use `.as_ref()` on `Option`/`Result` instead of cloning to unwrap
-- Rule: `.clone()` is banned unless you can explain why you need owned data
+- Ban `.clone()` unless you can explain why you need owned data
 
 ```rust
 // SLOP
@@ -26,14 +31,14 @@ greet(&my_string);
 
 ## 2. `.unwrap()` everywhere
 
-Creates runtime panics scattered throughout the codebase.
+Excessive `.unwrap()` calls create runtime panics throughout the codebase.
 
 **Fix:**
 
-- Use `?` operator for error propagation
+- Use the `?` operator to propagate errors
 - Use `anyhow` or `thiserror` for structured errors
 - Use `if let Some(x)` or `match` for `Option` types
-- `.unwrap()` only for compile-time guarantees (hardcoded regex, constants)
+- Use `.unwrap()` only with compile-time guarantees, such as hardcoded regex and constants
 
 ```rust
 // SLOP
@@ -47,13 +52,13 @@ let config: Config = toml::from_str(&contents)?;
 
 ## 3. Treating everything as `String`
 
-Losing type safety and adding unnecessary allocations.
+Using `String` for every value loses type safety and adds unnecessary allocations.
 
 **Fix:**
 
-- Accept `&str` or `impl AsRef<str>` in function parameters
-- Use `Cow<'_, str>` when sometimes owned, sometimes borrowed
-- Create newtypes for domain concepts: `struct UserId(String)`
+- Accept `&str` or `impl AsRef<str>` as function parameters
+- Use `Cow<'_, str>` when a value may be owned or borrowed
+- Create newtypes for domain concepts, such as `struct UserId(String)`
 
 ```rust
 // SLOP
@@ -97,15 +102,14 @@ When ownership gets complex, AI reaches for interior mutability or `unsafe`.
 
 ## 6. Weak assertions — the #1 AI test smell
 
-`assert!(result.is_ok())` and `assert!(result.is_err())` swallow the actual
-error/value on failure, printing only `false`.
+The assertions `assert!(result.is_ok())` and `assert!(result.is_err())` hide the actual error or value when they fail and print only `false`.
 
 **Fix:**
 
-- Propagate with `.expect("context")` or `?` to see the real error
+- Propagate errors with `.expect("context")` or `?` to reveal the real error
 - Check actual values, not just existence
 - For errors, verify the specific variant with `matches!` or check the message
-- Every `assert_eq!`/`assert!` with non-obvious operands needs a failure message
+- Add a failure message to every `assert_eq!`/`assert!` with non-obvious operands
 
 ```rust
 // SLOP
@@ -135,7 +139,7 @@ assert_eq!(count, 3, "expected 3 active workers after spawn");
 
 ## 7. `is_none()` / `is_some()` without value context
 
-`assert!(x.is_none())` prints `assertion failed: false`. `assert_eq!` shows what was actually there.
+The assertion `assert!(x.is_none())` prints `assertion failed: false`, while `assert_eq!` shows the actual value.
 
 **Fix:**
 
@@ -154,12 +158,12 @@ assert_eq!(ping["result"]["host_type"].as_str(), Some("daemon"));
 
 ## 8. Async timing slop
 
-Raw `tokio::time::sleep` before assertions is fragile — passes on fast machines, flakes in CI.
+A raw `tokio::time::sleep` call before assertions is fragile: it passes on fast machines and flakes in CI.
 
 **Fix:**
 
-- Use a `wait_until_async` polling pattern with timeout
-- Sleep-then-assert is only acceptable for testing actual timing behavior
+- Use a `wait_until_async` polling pattern with a timeout
+- Use sleep-then-assert only to test actual timing behavior
 
 ```rust
 // SLOP
@@ -174,8 +178,7 @@ wait_until_async(Duration::from_secs(2), || async {
 
 ## 9. `#[should_panic]` without `expected`
 
-A bare `#[should_panic]` passes on *any* panic — including unrelated ones from
-refactoring. Always pin the expected message.
+A bare `#[should_panic]` accepts *any* panic, including unrelated panics caused by refactoring. Always pin the expected message.
 
 **Fix:**
 
@@ -199,12 +202,12 @@ fn rejects_empty_input() {
 
 ## 10. No-crash-is-success tests
 
-Tests with zero assertions only prove the code doesn't panic — not that it works.
+Tests with zero assertions prove only that the code does not panic, not that it works.
 
 **Fix:**
 
 - Add assertions on return values or side effects
-- If intentionally testing "no panic", add an explicit comment documenting why
+- If you intentionally test "no panic", add a comment that explains why
 
 ```rust
 // SLOP
@@ -223,12 +226,12 @@ fn stamp_activity_nonexistent_is_noop() {
 
 ## 11. Lint suppression as band-aid (`#[allow(...)]`)
 
-AI sprinkles `#[allow(...)]` to silence warnings instead of fixing root causes.
-The compiler is telling you something — listen, don't muzzle it.
+AI adds `#[allow(...)]` attributes to silence warnings instead of fixing their causes.
+Treat each compiler warning as a problem to fix, not a message to suppress.
 
 ### Crate-level nuclear options (instant fail)
 
-These suppress warnings globally and are never legitimate in production code:
+These attributes suppress warnings globally and do not belong in production code:
 
 ```rust
 // SLOP — the nuclear option
@@ -241,12 +244,13 @@ These suppress warnings globally and are never legitimate in production code:
 #![allow(unused_variables)]
 ```
 
-**Fix:** Delete the allows and fix each warning individually. If there are too
-many warnings, the code has bigger problems than lint noise.
+**Fix:** Delete the allows.
+Fix each warning individually.
+Numerous warnings indicate broader code problems, not mere lint noise.
 
 ### The AI scaffold cluster
 
-These five attributes appearing together are the highest-confidence AI signal:
+These five attributes together provide the strongest AI signal:
 
 | Attribute | AI excuse | Real fix |
 |-----------|-----------|----------|
@@ -256,12 +260,14 @@ These five attributes appearing together are the highest-confidence AI signal:
 | `allow(unused_mut)` | Added `mut` preemptively | Remove unnecessary `mut` |
 | `allow(unused_assignments)` | Assign then overwrite | Remove dead assignment |
 
-**Fix:** Each has a specific fix — the allow hides which one is needed.
-Remove the allow, read the warning, apply the real fix.
+**Fix:** Each attribute has a specific fix, but the allow hides which fix you need.
+Remove the allow.
+Read the warning.
+Apply the appropriate fix.
 
 ### Clippy suppression smells
 
-**Red Flag (almost always slop — these suppress restrictions for a reason):**
+**Red Flag:** These attributes almost always indicate slop because they suppress restrictions.
 
 ```rust
 // SLOP — hiding panic risks
@@ -302,7 +308,7 @@ tracing::info!("event happened");
 fn parse_config(s: &str) -> Result<Config, ConfigError> { ... }
 ```
 
-**Yellow Flag (often slop, but context-dependent — check before removing):**
+**Yellow Flag:** These attributes often indicate slop; check the context before removing them.
 
 ```rust
 // SLOP (often) — hiding complexity debt
@@ -320,7 +326,7 @@ fn parse_config(s: &str) -> Result<Config, ConfigError> { ... }
 // Check: does the suppression hide a real refactoring opportunity?
 ```
 
-**Blue Flag (style preference, not necessarily slop):**
+**Blue Flag:** These attributes express style preferences and do not necessarily indicate slop.
 
 ```rust
 // Acceptable — pedantic lints are opt-in for a reason
@@ -335,7 +341,7 @@ fn parse_config(s: &str) -> Result<Config, ConfigError> { ... }
 
 ### Naming convention suppressions
 
-Three together = author came from Python/Java, not Rust:
+Three together suggest that the author came from Python/Java, not Rust:
 
 ```rust
 // SLOP
@@ -347,12 +353,11 @@ Three together = author came from Python/Java, not Rust:
 // snake_case for functions, CamelCase for types, SCREAMING for constants
 ```
 
-**Exception:** FFI modules wrapping C libraries may legitimately need
-`non_snake_case` or `non_camel_case_types` to match the C API.
+**Exception:** FFI modules that wrap C libraries may need `non_snake_case` or `non_camel_case_types` to match the C API.
 
 ### The "debug and print" tells
 
-Three patterns that almost certainly indicate hastily generated code:
+These three patterns almost certainly indicate hastily generated code:
 
 ```rust
 // SLOP — debug macro left in source
@@ -399,7 +404,7 @@ fn load_config(path: &str) -> Result<Config, ConfigError> {
 
 ### Redundant allows
 
-An allow that duplicates what the language already provides:
+This allow duplicates behavior that the language already provides:
 
 ```rust
 // SLOP — `_name` already suppresses unused_variables
@@ -416,7 +421,7 @@ fn process(_name: &str, _config: &Config) { ... }
 
 ### Scope matters
 
-The further an allow reaches, the worse it smells:
+A wider allow scope increases the risk of hidden problems:
 
 | Scope | Severity | Example |
 |-------|----------|---------|
@@ -425,8 +430,8 @@ The further an allow reaches, the worse it smells:
 | Function-level | Low | Targeted, possibly legitimate |
 | Statement-level | Lowest | Precise suppression with clear reason |
 
-**Rule:** If you must allow, scope it to the narrowest possible target and
-add a comment explaining why.
+**Rule:** Scope each allow to the narrowest possible target.
+Add a comment that explains why.
 
 ```rust
 // Acceptable — narrow scope, clear reason
@@ -436,7 +441,7 @@ fn ffi_create_window(x: i32, y: i32, w: i32, h: i32, flags: u32) -> *mut Window 
 
 ### Tier system for evaluation
 
-Clippy groups lints into categories. Use these groupings as a heuristic when judging whether suppression is legitimate:
+Clippy groups lints into categories. Use these categories as a heuristic when you judge whether a suppression is legitimate:
 
 | Category | Philosophy | Example | Suppression OK? |
 |----------|-----------|---------|-----------------|
@@ -447,8 +452,9 @@ Clippy groups lints into categories. Use these groupings as a heuristic when jud
 | **style** | "Use X instead" | `let_and_return`, `wildcard_imports` | 🟡 Preference |
 | **pedantic** | "Extra strict" | `cast_possible_truncation`, `module_name_repetitions` | 🟢 Usually OK |
 
-**Rule:** Never suppress `restriction` lints casually. `Pedantic` lints are opt-in,
-so suppressing them is more defensible. `Complexity` lints need justification.
+**Rule:** Do not suppress `restriction` lints casually.
+Treat `Pedantic` lints as more defensible because they are opt-in.
+Justify each `Complexity` lint suppression.
 
 ### Legitimate uses (don't flag these)
 
@@ -480,13 +486,12 @@ so suppressing them is more defensible. `Complexity` lints need justification.
 - Macro-generated code inside the macro itself
 - `#[cfg_attr(feature = "generated", allow(...))]` for optional generated modules
 
-**Red flag check:** If the allow targets a **restriction** lint (unwrap, panic, todo, print)
-in these contexts, it's still slop. Only pedantic/style/perf lints are genuinely legitimate here.
+**Red flag check:** If an allow targets a **restriction** lint (unwrap, panic, todo, print) in these contexts, treat it as slop.
+Only pedantic, style, and perf lints are genuinely legitimate here.
 
 ## 12. Hallucinated APIs and deprecated syntax
 
-AI generates functions that don't exist or uses outdated API patterns
-(e.g., `clap` `App::new` instead of derive macros).
+AI generates nonexistent functions or uses outdated API patterns, such as `clap` `App::new` instead of derive macros.
 
 **Fix:**
 
@@ -497,8 +502,7 @@ AI generates functions that don't exist or uses outdated API patterns
 
 ## 13. Deref polymorphism (fake inheritance)
 
-Implementing `Deref` on a wrapper so it "inherits" the inner type's methods —
-simulating the OO inheritance Rust deliberately doesn't have.
+Implementing `Deref` on a wrapper so it "inherits" the inner type's methods simulates OO inheritance, which Rust deliberately lacks.
 
 ```rust
 // SLOP
@@ -514,13 +518,12 @@ impl AppConfig {
 }
 ```
 
-`Deref` is for smart pointers. No clippy lint catches this — review by hand.
-(rust-unofficial/patterns, anti-patterns chapter.)
+Use `Deref` for smart pointers.
+No clippy lint catches this pattern, so review it by hand (`rust-unofficial/patterns`, anti-patterns chapter).
 
 ## 14. Boxing reflex
 
-`Box`/`Arc` where plain ownership or a borrow works — indirection reached for
-to make the borrow checker go away.
+Using `Box` or `Arc` when plain ownership or a borrow works adds unnecessary indirection to avoid borrow-checker errors.
 
 ```rust
 // SLOP
@@ -534,14 +537,14 @@ struct Registry { items: Vec<String> }
 let cfg = Config::default();
 ```
 
-clippy: `borrowed_box`, `vec_box`, `box_collection`, `box_default`.
-Inverse case: a very large enum variant SHOULD be boxed
-(`large_enum_variant`) — boxing isn't wrong, unmotivated boxing is.
+`clippy` reports `borrowed_box`, `vec_box`, `box_collection`, and `box_default`.
+In the inverse case, you SHOULD box a very large enum variant (`large_enum_variant`).
+Boxing is not inherently wrong, but unmotivated boxing is wrong.
 
 ## 15. `async fn` with no `.await`
 
-Functions marked async by habit. An async fn that never awaits forces every
-caller into the async machinery for nothing.
+Functions marked `async` by habit add unnecessary async behavior.
+An `async fn` that never awaits forces every caller into async machinery for no reason.
 
 ```rust
 // SLOP
@@ -553,12 +556,12 @@ async fn config_path() -> PathBuf {
 fn config_path() -> PathBuf { ... }
 ```
 
-clippy: `unused_async` (has false-negative gaps — also check by hand).
+`unused_async` has false-negative gaps, so check async functions by hand.
 
 ## 16. `#![deny(warnings)]`
 
-Turns every future compiler warning into a build break — the crate stops
-compiling on a new toolchain that added a lint.
+`#![deny(warnings)]` turns every future compiler warning into a build break.
+The crate then stops compiling when a new toolchain adds a lint.
 
 ```rust
 // SLOP
@@ -568,12 +571,12 @@ compiling on a new toolchain that added a lint.
 // RUSTFLAGS="-D warnings" cargo build
 ```
 
-(rust-unofficial/patterns, anti-patterns chapter.)
+The `rust-unofficial/patterns` anti-patterns chapter documents this pattern.
 
 ## 17. `anyhow::Error` in a library's public API
 
-`anyhow` is for applications. A library returning `anyhow::Error` gives
-callers nothing to match on.
+Use `anyhow` in applications, not in public library APIs.
+Libraries that return `anyhow::Error` give callers no concrete error type to match.
 
 ```rust
 // SLOP (in a lib crate)
@@ -593,10 +596,11 @@ flagging. `anyhow` in binaries and tests is fine.
 
 ## 18. `unsafe` to make it compile
 
-Agent-speed pressure produces `unsafe` as a borrow-checker escape hatch.
-Bun's audit of its AI-assisted Zig→Rust port found 13,365 unsafe call sites
-needing review. For every `unsafe` block ask: is there a safe alternative, is
-the invariant documented, is it tested?
+Pressure to move quickly causes agents to use `unsafe` to escape the borrow checker.
+Bun's audit of its AI-assisted Zig→Rust port found 13,365 `unsafe` call sites that required review.
+For every `unsafe` block, ask whether a safe alternative exists.
+Confirm that the code documents the invariant.
+Confirm that tests cover the block.
 
 ```rust
 // SLOP — no SAFETY comment, no bounds reasoning

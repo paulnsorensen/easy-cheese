@@ -95,6 +95,21 @@ def test_a_new_untracked_production_file_after_the_lock_blocks_the_report(
     assert not _report(repo, "demo").exists()
 
 
+def test_editing_an_existing_untracked_file_after_the_lock_blocks_the_report(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    patch = repo / "patch.py"
+    _ = patch.write_text("# pending review\n", encoding="utf-8")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+
+    _ = patch.write_text("# applied inline\n", encoding="utf-8")
+
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    assert "production tree changed" in capsys.readouterr().err
+    assert not _report(repo, "demo").exists()
+
+
 def test_writing_the_phases_own_scratch_directory_never_trips_the_lock(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

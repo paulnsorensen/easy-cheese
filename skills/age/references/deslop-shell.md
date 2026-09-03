@@ -1,11 +1,10 @@
 # Shell / Bash De-slop Catalog
 
-Per-language evidence for the `age` `deslop` dimension. Each pattern is a shell-specific AI tell to look for during review; most map to a ShellCheck code, giving a citable rule name to attach to a finding. Use alongside `dimensions.md`'s `deslop` rubric — this is the "Look for" detail, not a separate severity scale.
+This catalog provides per-language evidence for the `age` `deslop` dimension. Each pattern identifies a shell-specific AI tell for review. Most patterns map to a ShellCheck code. Each code supplies a citable rule name for a finding. Use this catalog with `dimensions.md`'s `deslop` rubric. This catalog supplies the "Look for" detail. It does not define a separate severity scale.
 
 ## 1. Unquoted variables
 
-The #1 shell bug. Breaks on spaces, globs, and empty values.
-
+This pattern causes the number-one shell bug. Unquoted variables break on spaces, globs, and empty values.
 ```bash
 # SLOP
 for file in $files; do
@@ -18,13 +17,11 @@ for file in "${files[@]}"; do
 done
 ```
 
-Quote every variable expansion: `"$var"`, `"${array[@]}"`, `"$(command)"`.
-The `--` stops option parsing (protects against filenames starting with `-`).
+Quote every variable expansion: `"$var"`, `"${array[@]}"`, `"$(command)"`. The `--` stops option parsing and protects against filenames that start with `-`.
 
 ## 2. Missing or incomplete `set -euo pipefail`
 
-AI scripts either omit strict mode entirely or use partial `set -e` without
-`-u` and `-o pipefail`. Both are dangerous.
+AI scripts either omit strict mode or use only `set -e`, without `-u` and `-o pipefail`. Both patterns are dangerous.
 
 ```bash
 # SLOP — no strict mode
@@ -46,17 +43,15 @@ cd /some/directory
 rm -rf build/
 ```
 
-- `-e`: Exit on error
-- `-u`: Error on undefined variables (catches typos like `$UESR` instead of `$USER`)
-- `-o pipefail`: Pipeline fails if any command fails (not just the last)
+- The `-e` option makes the shell exit after an error.
+- The `-u` option reports undefined variables and catches typos such as `$UESR` instead of `$USER`.
+- The `-o pipefail` option makes a pipeline fail when any command fails, not only the last command.
 
-All three flags together. `set -e` alone is a half-measure — especially
-dangerous in scripts that pipe through `jq`/`yq`/`grep` where a failure
-on the left side is silently swallowed.
+Use all three flags together. `set -e` alone is a half-measure. A script can silently swallow a left-side failure when it pipes through `jq`/`yq`/`grep`.
 
 ### Strict mode is not a cure-all
 
-`set -e` has sharp edges (BashFAQ/105) — don't assume it catches everything:
+`set -e` has sharp edges (BashFAQ/105). Do not assume it catches every failure:
 
 ```bash
 # MASKED — `local`'s own success hides the command's failure
@@ -72,8 +67,7 @@ if my_func; then ...             # failures inside my_func won't exit
 
 ## 3. Parsing `ls` output
 
-`ls` output is not machine-readable. Filenames with spaces, newlines,
-or special characters break everything.
+The `ls` output is not machine-readable. Filenames with spaces, newlines, or special characters break parsers.
 
 ```bash
 # SLOP
@@ -104,7 +98,7 @@ wc -l < file.txt
 
 ## 5. Backticks instead of `$()`
 
-Backticks don't nest and are harder to read.
+Backticks do not nest and are harder to read.
 
 ```bash
 # SLOP
@@ -118,7 +112,7 @@ nested=$(echo "$(date)")
 
 ## 6. `[ ]` instead of `[[ ]]`
 
-`[[ ]]` is safer: no word splitting, supports regex, no quoting surprises.
+`[[ ]]` is safer because it prevents word splitting, supports regular expressions, and avoids quoting surprises.
 
 ```bash
 # SLOP
@@ -132,7 +126,7 @@ if [[ -z "${maybe_empty:-}" ]]; then
 
 ## 7. Hardcoded paths
 
-AI writes absolute paths or assumes CWD.
+AI writes absolute paths or assumes `CWD`.
 
 ```bash
 # SLOP
@@ -159,7 +153,7 @@ readonly BASE_URL="https://api.example.com"
 
 ## 9. Using `echo` for error messages
 
-Errors go to stderr, not stdout.
+Write errors to stderr, not stdout.
 
 ```bash
 # SLOP
@@ -195,12 +189,11 @@ if ! some_command; then
 fi
 ```
 
-ShellCheck: SC2181.
+ShellCheck rule `SC2181` flags this pattern.
 
 ## 11. `cd` without a fallback
 
-The highest-consequence tell: a failed `cd` (typo, permissions) lets every
-following command — including `rm -rf` — run in the wrong directory.
+This pattern has the highest consequence. A failed `cd` caused by a typo or permission issue lets every following command, including `rm -rf`, run in the wrong directory.
 
 ```bash
 # SLOP
@@ -212,11 +205,11 @@ cd "$build_dir" || exit 1
 rm -rf ./*
 ```
 
-ShellCheck: SC2164.
+ShellCheck rule `SC2164` flags this pattern.
 
 ## 12. Iterating command output with `for`
 
-`for x in $(cmd)` splits on whitespace, not lines — breaks on spaces and globs.
+`for x in $(cmd)` splits output on whitespace instead of lines. This behavior breaks on spaces and globs.
 
 ```bash
 # SLOP
@@ -233,11 +226,11 @@ done
 readarray -t lines < <(cmd)
 ```
 
-ShellCheck: SC2044 (find loops), SC2046 (unquoted `$(...)` generally).
+ShellCheck rule `SC2044` covers find loops. ShellCheck rule `SC2046` covers unquoted `$(...)` generally.
 
 ## 13. Piping into `while read` and losing variables
 
-Each side of a pipe runs in a subshell — assignments inside the loop vanish.
+Each side of a pipe runs in a subshell. Assignments inside the loop disappear when the subshell exits.
 
 ```bash
 # SLOP — prints 0
@@ -256,8 +249,7 @@ done < file
 
 ## 14. `echo -e` / `echo -n`
 
-`echo`'s flag behavior differs between the bash builtin and `/bin/echo` and
-isn't POSIX-portable.
+`echo` flags behave differently in the Bash builtin and `/bin/echo`. These flags are not POSIX-portable.
 
 ```bash
 # SLOP
@@ -271,7 +263,7 @@ printf '%s' "no newline"
 
 ## 15. `expr`, `let`, `$[ ]` arithmetic
 
-External processes and deprecated syntax for what the shell does natively.
+These forms start external processes or use deprecated syntax for operations the shell performs natively.
 
 ```bash
 # SLOP
@@ -284,11 +276,11 @@ result=$[ a + b ]
 result=$(( a + b ))
 ```
 
-Google Shell Style Guide: always `(( ))` / `$(( ))`.
+The Google Shell Style Guide says to always use `(( ))` or `$(( ))` for arithmetic.
 
 ## 16. Bare `$@` / `$*` for argument forwarding
 
-Unquoted, both split on internal spaces and drop empty arguments.
+Unquoted `$@` and `$*` split on internal spaces and drop empty arguments.
 
 ```bash
 # SLOP
@@ -300,6 +292,6 @@ my_func "$@"
 
 ## Sources
 
-- ShellCheck wiki (shellcheck.net/wiki/SCxxxx) — canonical slop→fix rationale per code
-- Greg's Wiki: BashPitfalls + BashFAQ/105 — the `set -e` calibration source
-- Google Shell Style Guide — arithmetic, quoting, loop idioms, when not to use bash at all
+- The ShellCheck wiki (shellcheck.net/wiki/SCxxxx) provides canonical slop-to-fix rationale for each code.
+- Greg's Wiki, including BashPitfalls and BashFAQ/105, provides calibration guidance for `set -e`.
+- The Google Shell Style Guide covers arithmetic, quoting, loop idioms, and when not to use Bash.

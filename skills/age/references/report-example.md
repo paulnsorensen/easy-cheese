@@ -1,6 +1,6 @@
 # Worked report example
 
-Read this alongside `SKILL.md § Output` for a concrete rendering of the report skeleton.
+Read this with `SKILL.md § Output` for a concrete report skeleton.
 
 ```markdown
 ## Blocker

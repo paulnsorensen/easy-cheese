@@ -1,11 +1,10 @@
 # TypeScript / JavaScript De-slop Catalog
 
-Per-language evidence for the `age` `deslop` dimension. Each pattern is a TS/JS-specific AI tell to look for during review; most map to a typescript-eslint rule, giving a citable rule name to attach to a finding. Use alongside `dimensions.md`'s `deslop` rubric — this is the "Look for" detail, not a separate severity scale.
+This catalog provides per-language evidence for the `age` `deslop` dimension. Each pattern identifies a TS/JS-specific AI tell for review. Most patterns map to a typescript-eslint rule. Each mapped rule provides a citable rule name for a finding. Use this catalog with `dimensions.md`'s `deslop` rubric. This catalog supplies the "Look for" detail. It does not define a separate severity scale.
 
 ## 1. `any` as escape hatch
 
-When types get complex, AI gives up and uses `any`, throwing away
-everything TypeScript provides.
+When types become complex, AI gives up and uses `any`, which discards TypeScript's type safety.
 
 ```typescript
 // SLOP
@@ -27,7 +26,7 @@ function processData(data: unknown): unknown {
 
 ## 2. `.then()` chains instead of `async/await`
 
-AI mixes paradigms or uses promise chains where async/await is cleaner.
+AI mixes paradigms or uses promise chains when `async/await` provides clearer code.
 
 ```typescript
 // SLOP
@@ -48,7 +47,7 @@ async function fetchUser(id: string): Promise<User> {
 
 ## 3. `console.log` debugging left in
 
-AI adds debug logging that never gets removed.
+AI adds debug logging and leaves it in the code.
 
 ```typescript
 // SLOP
@@ -58,13 +57,11 @@ console.log("User fetched:", user);
 console.log("Processing...");
 ```
 
-**Fix:** Delete all `console.log` debug statements. Use a proper logger
-if observability is needed, or remove entirely if the code is
-self-evident.
+**Fix:** Delete all `console.log` debug statements. Use a proper logger when you need observability. Remove the statements when the code is self-evident.
 
 ## 4. `Array.forEach` with async callbacks
 
-`forEach` doesn't await — async callbacks fire and are silently dropped.
+`forEach` does not await asynchronous callbacks. Those callbacks run, but their promises become unobserved.
 
 ```typescript
 // SLOP — these await calls do nothing useful
@@ -100,8 +97,7 @@ function greet(name: string | null): string {
 }
 ```
 
-Lint: `@typescript-eslint/no-unnecessary-condition` — catches provably
-true/false conditions in general, not just null checks.
+Lint rule `@typescript-eslint/no-unnecessary-condition` catches conditions that always evaluate to true or false, not only null checks.
 
 ## 6. `JSON.parse(JSON.stringify())` for deep cloning
 
@@ -144,8 +140,7 @@ import { UserService } from "./users";
 
 ## 9. Non-null assertion as narrowing substitute
 
-`!` tells the compiler to shut up; a guard tells it something true. AI-authored
-PRs use `!` and `as` at a much higher rate than human PRs (arXiv 2602.17955).
+The `!` operator suppresses compiler checks. A guard establishes a true condition for the compiler. AI-authored PRs use `!` and `as` far more often than human PRs (arXiv 2602.17955).
 
 ```typescript
 // SLOP
@@ -158,12 +153,11 @@ if (!user) throw new Error(`unknown user: ${id}`);
 processUser(user);
 ```
 
-Lint: `@typescript-eslint/no-non-null-assertion`.
+Lint rule `@typescript-eslint/no-non-null-assertion` detects non-null assertions.
 
 ## 10. Double assertion to force a type
 
-`as unknown as T` makes any value claim any type — it erases the type system
-at exactly the spot most likely to be wrong.
+The assertion `as unknown as T` lets any value claim type `T`. It bypasses the type system at the location most likely to contain an error.
 
 ```typescript
 // SLOP
@@ -175,8 +169,7 @@ const config = configSchema.parse(JSON.parse(raw)); // zod or similar
 
 ## 11. `@ts-ignore` instead of `@ts-expect-error`
 
-`@ts-ignore` silences forever — when the underlying error is fixed, the stale
-directive stays. `@ts-expect-error` fails when it no longer suppresses anything.
+`@ts-ignore` permanently suppresses a diagnostic. The stale directive remains after you fix the underlying error. `@ts-expect-error` fails when no diagnostic remains to suppress.
 
 ```typescript
 // SLOP
@@ -188,11 +181,11 @@ legacyCall(data);
 legacyCall(data);
 ```
 
-Lint: `@typescript-eslint/ban-ts-comment` (set `minimumDescriptionLength`).
+Configure the lint rule `@typescript-eslint/ban-ts-comment` with `minimumDescriptionLength`.
 
 ## 12. Floating promises
 
-Fire-and-forget async calls — rejections vanish, ordering is accidental.
+Fire-and-forget asynchronous calls can lose rejections and create accidental ordering.
 
 ```typescript
 // SLOP
@@ -207,12 +200,11 @@ await Promise.all(items.map(i => process(i)));
 void saveUser(user);
 ```
 
-Lint: `@typescript-eslint/no-floating-promises`, `@typescript-eslint/no-misused-promises`.
+Relevant lint rules include `@typescript-eslint/no-floating-promises` and `@typescript-eslint/no-misused-promises`.
 
 ## 13. `enum` where a union suffices
 
-Enums imported from other languages' habits. Literal unions are erasable,
-serializable, and need no runtime object.
+Enums often reflect habits from other languages. Literal unions erase during compilation, serialize directly, and need no runtime object.
 
 ```typescript
 // SLOP
@@ -228,8 +220,7 @@ type Status = (typeof STATUSES)[number];
 
 ## 14. Catch-block slop
 
-`catch (e: any)` plus log-and-rethrow: the error is logged at every level and
-handled at none.
+A `catch (e: any)` block can log and rethrow the error at every level. No level handles the error.
 
 ```typescript
 // SLOP
@@ -254,7 +245,7 @@ Lint: `@typescript-eslint/only-throw-error`,
 
 ## 15. `useEffect` for derived state (React)
 
-Effects reached for to compute values or chain fetches.
+AI often uses effects to compute values or chain fetches.
 
 ```typescript
 // SLOP — derived state via effect
@@ -265,11 +256,10 @@ useEffect(() => { setFullName(`${first} ${last}`); }, [first, last]);
 const fullName = `${first} ${last}`;
 ```
 
-No lint catches this (`react-hooks/exhaustive-deps` doesn't) — review by hand.
-See react.dev "You Might Not Need an Effect".
+No lint rule catches this pattern. `react-hooks/exhaustive-deps` does not catch it. Review it manually. See the react.dev article "You Might Not Need an Effect".
 
 ## Sources
 
-- typescript-eslint `strict-type-checked` config + rule docs — ground truth for every rule named above
-- Effective TypeScript, 2nd ed. (Vanderkam, 2024) — ch. 5 on narrowing `any`'s scope
-- arXiv 2602.17955 — empirical AI-vs-human PR comparison (`!`/`as` overuse)
+- The typescript-eslint `strict-type-checked` configuration and rule documentation provide the source of truth for every rule named above.
+- Chapter 5 of Effective TypeScript, 2nd ed. (Vanderkam, 2024), covers narrowing `any`'s scope.
+- The arXiv 2602.17955 study provides an empirical AI-versus-human PR comparison of `!`/`as` overuse.
