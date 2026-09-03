@@ -37,6 +37,11 @@ BROWSER_MARKER = re.compile(
 )
 
 REFLECTIONS = ("approach", "interface", "acceptance", "test-contract")
+# A `not-applicable` spec cannot contain a `Test Contracts` section.
+# The other three sections contain the complete fork.
+NOT_APPLICABLE_REFLECTIONS = tuple(
+    location for location in REFLECTIONS if location != "test-contract"
+)
 _REFLECTION_ALIASES = {
     "approach": "approach",
     "interface": "interface",
@@ -651,12 +656,13 @@ def _has_browser_seam(contract: TestContract) -> bool:
     )
 
 
-def parse_gate_applicability(
-    spec: object, *, require_ui_surface: bool = False
-) -> GateApplicability:
+def _gate_context(
+    spec: object,
+) -> tuple[str, dict[str, object], Mapping[str, object] | None]:
+    """Spec text, merged frontmatter/object fields, and the gate declaration."""
     text, raw_spec = _spec_text(spec)
     front = _frontmatter(text)
-    merged = {**front, **raw_spec}
+    merged: dict[str, object] = {**front, **raw_spec}
     declaration = merged.get("gate_applicability")
     if not isinstance(declaration, Mapping):
         inline = re.search(r"(?im)^gate_applicability:\s*\{([^}]*)\}\s*$", text)
@@ -669,8 +675,32 @@ def parse_gate_applicability(
                 key.strip(): value.strip().strip("'\"") for key, value in pairs
             }
     if not isinstance(declaration, Mapping):
+        return text, merged, None
+    return text, merged, cast(Mapping[str, object], declaration)
+
+
+def required_reflections(spec: object) -> tuple[str, ...]:
+    """Return the required reflection sections for a settled consequential fork.
+
+    A `red-required` spec uses all four sections.
+    A `not-applicable` spec cannot contain a Test Contracts section.
+    It uses the other three sections.
+    A spec without a declaration uses all four sections.
+    """
+    _, _, declaration = _gate_context(spec)
+    if declaration is None:
+        return REFLECTIONS
+    if declaration.get("disposition") == "not-applicable":
+        return NOT_APPLICABLE_REFLECTIONS
+    return REFLECTIONS
+
+
+def parse_gate_applicability(
+    spec: object, *, require_ui_surface: bool = False
+) -> GateApplicability:
+    text, merged, declaration = _gate_context(spec)
+    if declaration is None:
         raise ApplicabilityError("gate-applicability-declaration-required")
-    declaration = cast(Mapping[str, object], declaration)
     disposition = declaration.get("disposition")
     work_class = declaration.get("work_class")
     ui_surface = declaration.get("ui_surface")
@@ -891,6 +921,7 @@ def taste_test(
         additions["acceptance_gaps"].append("stale-draft-digest")
     seen: set[str] = set()
     sections = _draft_sections(draft)
+    required = required_reflections(draft)
     for fork in candidate.forks:
         if fork.id in seen:
             additions["orphaned_decisions"].append(f"duplicate-fork:{fork.id}")
@@ -902,7 +933,7 @@ def taste_test(
             continue
         if _canonical(fork.decision) != _canonical(entry.decision):
             additions["contradictions"].append(f"decision-mismatch:{fork.id}")
-        for location in REFLECTIONS:
+        for location in required:
             if location not in fork.reflected_in:
                 additions["acceptance_gaps"].append(
                     f"missing-reflection:{fork.id}:{location}"

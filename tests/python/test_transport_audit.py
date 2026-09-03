@@ -151,6 +151,14 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         + "shown — mechanical fast-path, no undiscussed design option",
     ),
     (
+        "skills/mold/references/grounding.md",
+        "the first structured question does not fire until the ledger carries "
+        + "a probe result",
+        "precondition on when a question may fire, not a question-asking site "
+        + "— the ask itself stays in mold/SKILL.md, which routes through the "
+        + "transport chokepoint",
+    ),
+    (
         "skills/mold/references/handshake.md",
         "ask the user to choose the action: **create/link now** or "
         + "**leave prepared**",
