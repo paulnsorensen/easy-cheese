@@ -14,9 +14,11 @@ metadata: {dispatches-agents: true}
 ---
 
 # /cook
+
 ## Contract
 
 `cook(spec_ref, correction = false) -> handoff(next = press | age)`.
+
 A `red-required` gate disposition identifies behavior work.
 Run the inner RED → GREEN TDD loop against the approved spec before you change production code.
 A closed `not-applicable` disposition identifies non-behavior work.
@@ -27,9 +29,9 @@ Do not weaken an existing test.
 
 ## Inputs
 
-Accept a pasted spec/issue, focused acceptance criteria, or an unambiguous task.
-Read explicit spec paths verbatim. Resolve a bare slug with
-`SPEC=$(python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>)`.
+Accept a pasted spec or issue, focused acceptance criteria, or an unambiguous task.
+Read explicit spec paths verbatim.
+Resolve a bare slug with `SPEC=$(python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>)`.
 Use `python3 skills/cook/scripts/cook.pyz accept <pointer>` for a Mold handoff pointer.
 This command verifies the route and referenced artifacts before execution.
 
@@ -53,18 +55,18 @@ Route the task to `/mold` if an ambiguity check fails.
 
 ## Flow
 
-1. **Contract** — confirm behavior, non-goals, scope, gates, and applicability.
+1. **Contract** — Confirm behavior, non-goals, scope, gates, and applicability.
    If `.cheese/glossary/<slug>.md` exists, use its canonical terms.
-2. **Implement** — use inner RED → GREEN for behavior changes.
+2. **Implement** — Use inner RED → GREEN for behavior changes.
    Use the requested non-behavior path for closed N/A work.
-   Change only the surface that applies.
-3. **Validate** — run the relevant quality gates fresh and read the output.
+   Change only the applicable surface.
+3. **Validate** — Run the relevant quality gates again and read the output.
    For closed N/A, verify the requested non-behavior path.
-4. **Taste-test** — use a fresh-context review for multi-file or public-surface diffs.
+4. **Taste-test** — Use a fresh-context review for multi-file or public-surface diffs.
    Otherwise, use an inline review.
    Limit the review to two rounds.
    Read `references/tdd-loop.md` for details.
-5. **Hand off** — write the package report and slug.
+5. **Hand off** — Write the package report and slug.
    Route behavior work through `/press → /age → /cure`.
    A closed N/A change has no adversarial contract for Press.
    Route it directly through `/age → /cure`.
@@ -75,8 +77,7 @@ Route the task to `/mold` if an ambiguity check fails.
 The available typed planner result selects the shape.
 Read [`references/fan-pathway.md`](references/fan-pathway.md) for the complete topology.
 
-**Fast path.** When the curd-count hint is `1` with low or medium blast radius,
-use the ordinary single-coder path.
+**Fast path.** Use the ordinary single-coder path when the curd-count hint is `1` with low or medium blast radius.
 
 **Curded.** Load the typed `PlannerResult` or `CurdPlan`.
 Run `validate_curd_plan`.
@@ -85,14 +86,15 @@ Run behavior curds through `cook(CurdPlan) → reviewer(age) → cure(CurdPlan, 
 After you wire the curds, run one global `/press → /age → /cure` chain.
 Closed N/A bypasses Press.
 
-Worktree cleanup uses `python3 skills/cook/scripts/cook.pyz worktree teardown`; the fan-pathway reference owns its arguments and lifecycle.
+Use `python3 skills/cook/scripts/cook.pyz worktree teardown` for worktree cleanup.
+The fan-pathway reference defines its arguments and lifecycle.
 
-**Un-curded.** Small work stays single-coder. Big work asks
-"12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
-Waves remain capped at four. Legacy decomposition is a lossless projection
-only, never live workflow state.
-Sizing and decomposition follow
-[`decomposer.md`](../cheese/references/decomposer.md).
+**Un-curded.** Keep small work in the single-coder path.
+For big work, ask "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
+Keep waves at a maximum of four.
+Legacy decomposition is only a lossless projection.
+It is never live workflow state.
+Follow [`decomposer.md`](../cheese/references/decomposer.md) for sizing and decomposition.
 
 Before orchestration, read [`references/fan-pathway.md`](references/fan-pathway.md).
 It defines sizing, topology, phase execution, recovery, resume, Milknado integration, worktree teardown, and resolution provenance.
@@ -100,17 +102,12 @@ Propagate `--auto` through each dispatched phase when it is active.
 
 ## Baseline capture
 
-Fan mode records its quality-debt comparison before any curd cooks;
-bare mode records it on the pre-change tree.
-Exact capture, classification, intentional-RED exclusion, and
-`manifest.yaml` rules live in
-[`references/quality-gates.md`](references/quality-gates.md).
+Fan mode records its quality-debt comparison before any curd cooks.
+Bare mode records it on the pre-change tree.
+[`references/quality-gates.md`](references/quality-gates.md) defines exact capture, classification, intentional-RED exclusion, and `manifest.yaml` rules.
 
-For source changes, follow
-[`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md)
-and [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md).
-`slash commands are host renderings, not the control model`; invoke the
-equivalent installed capability.
+For source changes, follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) and [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md).
+`slash commands are host renderings, not the control model`; invoke the equivalent installed capability.
 
 ## Quality gates
 
@@ -119,7 +116,7 @@ Run the most relevant tests for the changed area.
 Also run lint, type, and build commands when the project defines them.
 Do not remove, skip, or weaken unrelated tests to make the change pass.
 
-Gate failures use the baseline.
+Use the baseline for gate failures.
 [`references/quality-gates.md`](references/quality-gates.md) defines the policy, classification terms, and `baseline:` block.
 Each downstream phase links to this reference instead of repeating it.
 
@@ -153,7 +150,7 @@ baseline: none | <block — shape in references/quality-gates.md § Baseline blo
 The [handback contract](../cheese/references/handback-contract.md) defines the canonical `status:` grammar, including `ok` and `halt`.
 Only `next:` and the additional keyed lines are specific to a phase.
 
-When you emit this handoff for the typed fan result, use the canonical boundary writer.
+Use the canonical boundary writer when you emit this handoff for the typed fan result.
 Carry the result schema explicitly:
 
 ```text
@@ -235,6 +232,7 @@ Do not silently downgrade the result.
 Read [`references/auto-mode.md`](references/auto-mode.md) before you run or dispatch auto mode.
 It defines the complete phase chain and the limit controls.
 It also defines fan-path isolation and Cure failure handling.
+
 ## No-chain isolation directive
 
 A spawned phase agent does not chain forward by itself.
@@ -248,7 +246,7 @@ The reference also contains the final report template.
 
 - Keep changes scoped to the accepted contract.
 - Prefer existing dependencies and patterns.
-- Do not invent architecture already rejected by the spec.
+- Do not invent architecture that the spec already rejected.
 - Stop and ask when implementation reveals a design decision that the spec does not answer.
 - Stop if the spec or fast-path request uses a false premise.
 - Show the false premise before you write code.
@@ -257,7 +255,7 @@ The reference also contains the final report template.
 - Start the report with the answer.
 - Name loaded assumptions in the contract.
 - Mark residual risk as `certain | speculating | don't know`.
-- **Verification before `status: ok`:** identify the gate command.
+- **Verification before `status: ok`:** Identify the gate command.
 - Run the gate command during the current turn.
 - Read the complete output before you make the claim.
 - Do not use `should`, `probably`, or `I think`.
@@ -265,14 +263,14 @@ The reference also contains the final report template.
 
 ## Discipline
 
-Iron Law, Red Flags, and the TDD Rationalization table live in
-[`references/cook-discipline.md`](references/cook-discipline.md).
+Iron Law, Red Flags, and the TDD Rationalization table are in [`references/cook-discipline.md`](references/cook-discipline.md).
 
 ## Agent resolution
 
-Resolve through
-[`agent-resolution.md`](../cheese/references/agent-resolution.md). Implementation
-uses a coder, taste-test uses a reviewer, and harvest and plate stay parent-owned.
+Resolve through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
+Implementation uses a coder.
+Taste-test uses a reviewer.
+Harvest and plate stay parent-owned.
 
 | Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
 | --- | --- | --- | --- | --- | --- |

@@ -1,6 +1,14 @@
 # Cook writer-view schemas
 
-Cook's writer agents emit `AgentWriterView` documents (`kind` + `payload`) that the host normalizes and structurally validates against the catalog contracts before persisting. The payload shapes below, refreshed by `scripts/render_generated_regions.py` from `src/easy_cheese_schemas/contracts.py`, are what a writer agent must produce for each `WriterViewKind`. Do not hand-edit the generated region.
+Cook writer agents emit `AgentWriterView` documents that contain `kind` and `payload`.
+
+Before the host persists each document, it normalizes the document and validates its structure against the catalog contracts.
+
+For each `WriterViewKind`, a writer agent must produce the applicable payload shape below.
+
+The `scripts/render_generated_regions.py` script refreshes these shapes from `src/easy_cheese_schemas/contracts.py`.
+
+Do not edit the generated region manually.
 
 <!-- BEGIN GENERATED: cook-writer-views -->
 type AgentWriterView {

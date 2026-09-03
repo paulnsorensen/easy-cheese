@@ -1,8 +1,16 @@
 # Package-ready report
 
-Before opening a PR or handing off to `/age`, cook produces a package-ready report.
+Before Cook opens a PR or hands off to `/age`, Cook produces a package-ready report.
 
-Cross-cutting house style and citation form: [`formatting.md`](../../cheese/references/formatting.md). This file owns the package-report shape; formatting.md owns the voice rules and the footnote primitive. Quality-gate failure handling (baseline classification, the three-way policy, the `baseline:` block) is owned by [`quality-gates.md`](quality-gates.md) — this file only shapes how that policy renders in the report.
+[`formatting.md`](../../cheese/references/formatting.md) defines the cross-cutting house style and citation format.
+
+This file defines the package report structure.
+
+`formatting.md` defines the voice rules and the footnote primitive.
+
+[`quality-gates.md`](quality-gates.md) defines quality-gate failure handling, baseline classification, the three-way policy, and the `baseline:` block.
+
+This file defines only how the report shows that policy.
 
 ## Output shape
 
@@ -29,7 +37,7 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 
 ### Self-eval
 - [x] A failing test existed before production changes.
-- [x] Cook made tests pass without speculative behaviour.
+- [x] Cook made tests pass without speculative behavior.
 - [x] Taste-test passed.
 - [x] Quality gates pass, or all remaining red is recorded baseline failure (see Baseline section).
 
@@ -41,17 +49,26 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 
 ## Honesty rules
 
-- **Never claim green on partial work.** If a test is skipped, list the command and the reason.
-- **Never hide a failed gate.** If lint failed and you didn't fix it, the report says so and recommends a follow-up.
-- **Never claim "ready for /age" if any taste-test lens returned `revise` and you didn't address it.** That's the cardinal sin.
-- **When the Baseline section lists any recorded failures, the final summary states plainly that the full suite is not green** and lists those failures — loud, never hidden, per [`quality-gates.md`](quality-gates.md).
+- **Never claim green on partial work.** If you skip a test, list the command and the reason.
+- **Never hide a failed gate.**
+  If lint fails, report the failure when you do not fix it.
+  Recommend follow-up work.
+- **Never claim "ready for /age" when an unresolved taste-test lens returns `revise`.**
+  This claim is the cardinal sin.
+- **When the Baseline section lists any recorded failures, state in the final summary that the full suite is not green.**
+  The final summary lists those failures clearly, as [`quality-gates.md`](quality-gates.md) requires.
 
 ## Stop conditions
 
-Cook stops (does not produce a "ready" report) when:
-- A spec decision was missing and the user has not answered.
-- Tests cannot be made to fail for the expected reason.
-- The two-round taste-test cap was hit and findings remain.
-- A quality gate fails on new or changed behaviour and the fix requires a design decision outside the spec (identical-to-baseline failures are recorded, not a stop condition — see [`quality-gates.md`](quality-gates.md)).
+Cook stops and does not produce a "ready" report in these conditions:
 
-In each case, the report says "blocked" with the precise reason.
+- The specification requires a decision, and the user has not answered.
+- Cook cannot make the tests fail for the expected reason.
+- Cook reaches the two-round taste-test limit, and findings remain.
+- A quality gate fails because of new or changed behavior, and the fix requires a design decision outside the specification.
+
+Policy: identical-to-baseline failures are recorded, not a stop condition.
+
+Record these failures as [`quality-gates.md`](quality-gates.md) specifies.
+
+For each stop condition, the report says "blocked" and gives the precise reason.
