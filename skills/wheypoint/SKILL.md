@@ -31,8 +31,8 @@ Direct invocations run, return output, and **STOP** before checkpoint writing. `
 1. **Derive a slug** from the task (e.g. `auth-retry-backoff`). Reuse an existing slug if this session already owns one under `.cheese/`.
 2. **Inventory what already exists.** List the `.cheese/` artifacts, specs, PRs, issues, commits, and diffs this session produced or touched. These get referenced, never re-summarised.
 3. **Rehydrate.** `python3 skills/wheypoint/scripts/wheypoint.pyz show --work-id <id>` returns the record. Mandatory after a compaction: a compaction-marked delta is rejected unless the revision it declares as rehydrated is the current one.
-4. **Build a semantic `WheypointDelta`**, not a rewritten document. `expected_revision_id` is the revision you rehydrated, or the genesis sentinel when this work has no record yet — that sentinel creates the first record, so there is no create step. Omitting a protected decision, question, blocker, or artifact link carries it forward; retiring one takes an explicit transition naming its entry ID, action, and rationale. A focus argument is the delta's lens.
-5. **Commit through the runtime.** Pipe the delta as JSON to `python3 skills/wheypoint/scripts/wheypoint.pyz commit`. It assigns the revision, derives `status:`, and writes the immutable revision plus the Markdown `WheypointProjection` at `.cheese/notes/<slug>.md` — a generated projection, never the authority: never hand-edit it, never resume from it. A rejected commit is a real failure: fix the delta and re-commit, never hand-write the note.
+4. **State each change.** Specify the orientation, `next`, artifact, new entries, and transitions. Give a reason for each transition. Omitted data carries forward. Use the focus argument as the lens. See [`references/delta-contract.md`](references/delta-contract.md) for all fields and rules.
+5. **Create the checkpoint through the runtime.** Pipe the intent JSON to `python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint`. The command binds the rehydrated revision as the parent. It uses the genesis sentinel when no record exists. Set `base_revision_id` when the command must reject a changed base. The command assigns the revision and derives `status:`. It writes an immutable revision and a generated `WheypointProjection` at `.cheese/notes/<slug>.md`. The projection is not the authority. Never edit or resume from that projection. Fix a refused intent and run the command again. Never write the note manually. The `commit` command accepts a raw delta with an explicit `expected_revision_id`. Only `commit` accepts a compaction proof.
 6. **Redact** secrets on the way out (`## Redaction`).
 7. **Report durability.** State the durability the commit result reports (`canonical-local`, `repo-snapshot`, or `published`); never run a Git commit, push, or publish to raise it. Point at resumption per `## Handoff`.
 
@@ -58,14 +58,7 @@ Pipeline: `culture -> mold -> cook -> press -> age -> cure -> plate`. Mold `red-
 
 When the checkpointed session carries a recorded `baseline:` block, carry it into the delta unchanged: it is settled state, not something the resumed phase should re-ask about or re-halt on. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 
-### Provenance fields
-
-These optional fields precede the orientation line and come only from the live session; pre-provenance notes remain valid.
-
-- **`session: <harness>:<session-id>`** — active Claude JSONL id, Codex rollout id, or OpenCode session row. Omit when unavailable; Claude's newest-mtime heuristic is `<speculative>`.
-- **`git: <branch>@<short-sha>`** — branch and short commit from a callable, read-only git inspection capability (`git status --short --branch`; `git rev-parse --short HEAD`). Omit the field when git inspection is unavailable, outside git, or incomplete.
-- **`created: <UTC ISO-8601>`** — UTC capture time.
-- **`parents: [<slug>, ...]`** — lineage. Legacy `--join` writes `parents: [<slugA>, <slugB>]`; `--split` children write `parents: [<current-slug>]`. Both remain outside this continuity contract: they rewrite `.cheese/notes/` Markdown and commit no delta.
+The four optional provenance fields and the legacy `--join` / `--split` lineage verbs are in [`references/provenance-fields.md`](references/provenance-fields.md).
 
 ### `status:` values
 
@@ -88,57 +81,7 @@ Single-value `next:` is one of the pipeline phases (`mold | cook | press | age |
 - **`done`** — work genuinely finished; handoff is a record, not a baton. Use only for true terminal completion.
 - **A missing `next:` is a malformed handoff.** `/cheese --continue` flags it (`malformed handoff: next: required`) rather than guessing or defaulting. Declare intent explicitly — `hold` is the value for "no action."
 
-### `next:` list form
-
-To kick off several read-only follow-ups from one handoff, `next:` may be a list with a required `order:`:
-
-```markdown
-next: [briesearch "slug1", briesearch "slug2", culture "slug3"]
-order: parallel | sequential
-```
-
-- Each item is `<skill> "<arg>"`. `order:` is **required** when `next:` is a list.
-- `order: parallel` — `/cheese --continue` fans out concurrent read agents, one per item, in the same turn.
-- `order: sequential` — items run in listed order.
-- The inline list is restricted to read-only skills (`briesearch | culture`). Parallel *write* efforts still require the heavyweight `mode: parallel` + `tasks:` block with worktree/branch isolation below; sequential *pipeline* chaining stays the job of `--auto` / `/cook`'s fan pathway.
-
-For multiple independent next moves, use `mode: parallel`, set `next: tasks`, add a `parallel:` block, and add a `tasks:` list immediately after the orientation line. Each task must carry its exact `command:`; commands may name different skills. Parallel write tasks must never share a checkout. Choose one portable isolation strategy:
-
-| `worktree_strategy` | Use when | Required fields |
-| --- | --- | --- |
-| `existing` | The user already has durable bench checkouts | each write task has distinct `worktree:`, `branch:`, and `branch_from` |
-| `create` | No checkouts exist yet | `worktree_root`, plus each write task has `branch:` and `branch_from` |
-| `harness` | The host can create isolated threads/worktrees | each write task has `branch:` and `branch_from`; the host owns checkout creation |
-
-Example:
-
-```markdown
-status: ok
-next: tasks
-mode: parallel
-artifact: none
-KIP-76 and KIP-77 are ready to run as independent PR efforts.
-parallel:
-  isolation: git-worktree
-  worktree_strategy: existing
-tasks:
-  - slug: kip-77-ai-test-server
-    intent: cook
-    repo: /Users/marcus/Documents/multiplier
-    worktree: /Users/marcus/Documents/multiplier-01
-    branch: marcus/kip-77-ai-test-server
-    branch_from: origin/main
-    command: /cook .cheese/specs/kip-77-ai-test-server.md
-  - slug: kip-76-ai-service-spin-up
-    intent: cook
-    repo: /Users/marcus/Documents/multiplier
-    worktree: /Users/marcus/Documents/multiplier-02
-    branch: marcus/kip-76-ai-service-spin-up
-    branch_from: origin/main
-    command: /cook .cheese/specs/kip-76-ai-service-spin-up.md
-```
-
-For a generic setup without existing benches, use `worktree_strategy: create` and add `worktree_root: ../.cheese-worktrees`; `/cheese --continue` derives one checkout per task from the task slug.
+See [`references/parallel-handoffs.md`](references/parallel-handoffs.md) for read-only follow-ups and isolated parallel write tasks.
 
 ## Document
 

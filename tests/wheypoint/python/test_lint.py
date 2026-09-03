@@ -14,6 +14,7 @@ import pytest
 from attrs import evolve
 from easy_cheese_schemas import (
     ArtifactLink,
+    CompactionRecord,
     Durability,
     EntryKind,
     EntryState,
@@ -23,6 +24,8 @@ from easy_cheese_schemas import (
 )
 
 from easy_cheese.skills.wheypoint import canonical, lint, projection, records, storage
+
+from conftest import Promotion
 
 PROJECT = "paulnsorensen-easy-cheese"
 
@@ -268,6 +271,137 @@ def test_a_legacy_receipt_without_the_pin_is_left_alone(
         legacy,
         second.markdown,
     )
+
+    report = check(store)
+
+    assert report.codes == ()
+
+
+def _compacted(promotion: _PromotionLike, compaction: CompactionRecord) -> Promotion:
+    """Re-seal a promotion around a compaction record.
+
+    The receipt is what changes, so the record's pointer at it has to be
+    restamped; the projection is untouched because the record digest it quotes
+    deliberately excludes that pointer.
+    """
+    revision = evolve(promotion.revision, compaction=compaction)
+    return Promotion(
+        record=evolve(
+            promotion.record, revision_digest=records.revision_digest(revision)
+        ),
+        revision=revision,
+        markdown=promotion.markdown,
+    )
+
+
+def test_a_compaction_that_rehydrated_from_another_revision_blocks(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    """Reconciling against one revision and committing onto another means the
+    state that was reloaded is not the state that was extended."""
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    second = _compacted(
+        make_promotion(2, "rev-0002", parent=first),
+        CompactionRecord(
+            rehydrated_from_revision_id="rev-0000",
+            rehydrated_record_digest=records.record_digest(first.record),
+            reconciled_entry_ids=[],
+        ),
+    )
+    store.promote(second.record, second.revision, second.markdown)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.COMPACTION_PARENT_UNRESOLVED,)
+    assert report.findings[0].detail == (
+        "revision 'rev-0002' rehydrated from 'rev-0000' but was written onto "
+        "parent 'rev-0001'"
+    )
+    assert lint.gates_continuation(report.findings[0])
+
+
+def test_a_prior_compaction_outside_the_proven_ancestry_blocks(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    second = _compacted(
+        make_promotion(2, "rev-0002", parent=first),
+        CompactionRecord(
+            rehydrated_from_revision_id="rev-0001",
+            rehydrated_record_digest=records.record_digest(first.record),
+            reconciled_entry_ids=[],
+            prior_compaction_revision_id="rev-9999",
+        ),
+    )
+    store.promote(second.record, second.revision, second.markdown)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.COMPACTION_PARENT_UNRESOLVED,)
+    assert report.findings[0].detail == (
+        "revision 'rev-0002' chains to prior compaction 'rev-9999', which is "
+        "not in the proven ancestry of this revision"
+    )
+
+
+def test_a_prior_compaction_naming_a_revision_that_never_compacted_blocks(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    """Being an ancestor is not enough: the predecessor has to be a compaction."""
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    second = _compacted(
+        make_promotion(2, "rev-0002", parent=first),
+        CompactionRecord(
+            rehydrated_from_revision_id="rev-0001",
+            rehydrated_record_digest=records.record_digest(first.record),
+            reconciled_entry_ids=[],
+            prior_compaction_revision_id="rev-0001",
+        ),
+    )
+    store.promote(second.record, second.revision, second.markdown)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.COMPACTION_PARENT_UNRESOLVED,)
+    assert report.findings[0].detail == (
+        "revision 'rev-0002' chains to prior compaction 'rev-0001', which "
+        "records no compaction"
+    )
+
+
+def test_a_lineage_that_survived_two_compactions_lints_clean(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    """The chain reads as a history: each compaction rehydrated from the parent
+    it wrote onto, and named the compaction behind it."""
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    second = _compacted(
+        make_promotion(2, "rev-0002", parent=first),
+        CompactionRecord(
+            rehydrated_from_revision_id="rev-0001",
+            rehydrated_record_digest=records.record_digest(first.record),
+            reconciled_entry_ids=[],
+        ),
+    )
+    store.promote(second.record, second.revision, second.markdown)
+    third = _compacted(
+        make_promotion(3, "rev-0003", parent=second),
+        CompactionRecord(
+            rehydrated_from_revision_id="rev-0002",
+            rehydrated_record_digest=records.record_digest(second.record),
+            reconciled_entry_ids=[],
+            prior_compaction_revision_id="rev-0002",
+        ),
+    )
+    store.promote(third.record, third.revision, third.markdown)
 
     report = check(store)
 

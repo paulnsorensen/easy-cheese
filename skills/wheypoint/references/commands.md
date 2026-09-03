@@ -4,6 +4,7 @@
 
 | Command | Purpose |
 | --- | --- |
+| `checkpoint` | Build a delta from a semantic intent and commit it |
 | `commit` | Commit a handoff delta and write the generated projection |
 | `lint` | Lint a generated projection against the record |
 | `resolve` | Resolve a slug, work id, or path to the current record |

@@ -121,7 +121,7 @@ def _fsync_dir(path: Path) -> None:
         os.close(fd)
 
 
-def _write_atomic(path: Path, payload: bytes) -> None:
+def write_atomic(path: Path, payload: bytes) -> None:
     """Write `payload` to a sibling temp file, fsync it, then rename it in.
 
     The rename is the only moment `path` changes, so a reader sees the old
@@ -285,7 +285,7 @@ class WorkStore:
                 # `markdown` too. The pair on disk is this promotion's pair, so
                 # all that is left of it is the pointer.
                 self._check_agreement(record, revision, markdown)
-                _write_atomic(self.record_path, records.canonical_payload(record))
+                write_atomic(self.record_path, records.canonical_payload(record))
                 return
 
         self._check_agreement(record, revision, markdown)
@@ -293,9 +293,9 @@ class WorkStore:
         self.revisions_dir.mkdir(parents=True, exist_ok=True)
         self.projections_dir.mkdir(parents=True, exist_ok=True)
 
-        _write_atomic(revision_path, payload)
-        _write_atomic(projection_path, markdown.encode("utf-8"))
-        _write_atomic(self.record_path, records.canonical_payload(record))
+        write_atomic(revision_path, payload)
+        write_atomic(projection_path, markdown.encode("utf-8"))
+        write_atomic(self.record_path, records.canonical_payload(record))
 
     def _check_agreement(
         self,
