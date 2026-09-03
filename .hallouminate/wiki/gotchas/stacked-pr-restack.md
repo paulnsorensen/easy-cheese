@@ -11,6 +11,7 @@ Recorded 2026-09-03 while restacking the r014 chain (#579 → #589, 11 branches)
 
 1. Rebase each branch bottom-up with `git rebase --onto <new parent tip> <old parent tip> <branch>`, where the bottom branch's old parent is the last merged commit of the old lineage. Record every local tip before a second cascade; `origin/<branch>` tips go stale after the first pass.
 2. Every replayed `build(bundles): refresh archives …` commit conflicts on the `.pyz` archives. Take the replayed side, finish the rebase, run `scripts/build_pyz.py`, and amend the branch's own refresh commit. The system Python lacks `attrs`/`shiv`; build in a Python 3.12 venv with `requirements-build.txt` and `requirements/runtime.txt` installed.
+   Put that venv on a short path (under 128 characters to its `bin/python`): a longer interpreter path makes pip emit the `#!/bin/sh` + `'''exec'` wrapper form for `site-packages/bin/<skill>`, which `scripts/check_bundles.py` does not canonicalize, so CI's `check .pyz bundles are current` fails on `environment.json` and the wrapper even though the local check passes.
 3. Adopt the rebased branches into `gh stack` with `gh stack init --base main <bottom> … <top>`; it finds the open PRs by branch name. Then `gh stack push` (per-branch `--force-with-lease`).
 
 ## Traps
