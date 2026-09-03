@@ -81,7 +81,8 @@ def test_parse_ledger_requires_url_on_an_extraction() -> None:
         _ = parse_ledger(
             {"calls": [{"kind": "extract", "provider": "exa", "tool": "contents"}]}
         )
- 
+
+
 def test_parse_ledger_rejects_url_user_information() -> None:
     with pytest.raises(LedgerError, match="user information"):
         _ = parse_ledger(
@@ -97,7 +98,6 @@ def test_ledger_retains_safe_url_display_and_digest() -> None:
     assert call.url_digest == url_digest(raw)
     assert "secret" not in repr(call)
     assert render_url(raw) == "https://example.com/private"
-
 
 
 def test_parse_ledger_requires_the_provider_tool_that_ran() -> None:
@@ -171,8 +171,8 @@ def test_cited_url_absent_from_the_ledger_is_an_error(tmp_path: Path) -> None:
 
 
 def test_cited_url_retrieved_by_a_provider_tool_passes(tmp_path: Path) -> None:
-    # The manifest spelling differs from the citation only in case and slash.
-    ledger = parse_ledger({"calls": [_extract("https://Example.com/a/")]})
+    # URL identity ignores host case but preserves the resource path.
+    ledger = parse_ledger({"calls": [_extract("https://Example.com/a")]})
     violations, _ = ground_check.check_report(_REPORT, tmp_path, tmp_path, ledger)
     assert violations == []
 
@@ -239,6 +239,7 @@ def test_main_fails_on_an_unreadable_manifest(tmp_path: Path) -> None:
     _ = (tmp_path / "manifest.json").write_text("[]", encoding="utf-8")
     assert ground_check.main([str(report)]) == 1
 
+
 def test_citation_scanner_keeps_balanced_parentheses(tmp_path: Path) -> None:
     url = "https://example.com/wiki/Foo_(bar)"
     report = (
@@ -250,6 +251,7 @@ def test_citation_scanner_keeps_balanced_parentheses(tmp_path: Path) -> None:
     assert tables == 1
     assert violations == []
 
+
 def test_citation_scanner_rejects_url_user_information(tmp_path: Path) -> None:
     report = (
         "## Research: q\n\n| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
@@ -260,6 +262,7 @@ def test_citation_scanner_rejects_url_user_information(tmp_path: Path) -> None:
     rendered = "\n".join(v.render() for v in violations)
     assert "alice" not in rendered
     assert "secret" not in rendered
+
 
 def test_report_builds_retrieved_map_once(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path

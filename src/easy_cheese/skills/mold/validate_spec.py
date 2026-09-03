@@ -23,6 +23,7 @@ Markdown shape rules. The attrs-backed schema types supply typed validation.
 
 ERROR:-line accumulation and exit codes follow .github/scripts/validate_wiki.py.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -67,7 +68,9 @@ def _load_local_module(
         raise import_error
     module_spec = importlib.util.spec_from_file_location(module_name, module_path)
     if module_spec is None or module_spec.loader is None:
-        raise RuntimeError(f"cannot load local module from {module_path}") from import_error
+        raise RuntimeError(
+            f"cannot load local module from {module_path}"
+        ) from import_error
     module = importlib.util.module_from_spec(module_spec)
     sys.modules[module_spec.name] = module
     module_spec.loader.exec_module(module)
@@ -138,11 +141,15 @@ _PROBE_COL = GROUNDING_COLUMNS.index("Probe")
 _OUTCOME_COL = GROUNDING_COLUMNS.index("Outcome")
 _EVIDENCE_COL = GROUNDING_COLUMNS.index("Evidence")
 
-_CROSS_FIELD_RULE_IDS: set[str] = {rule["rule_id"] for rule in RULES["cross_field_rules"]}
+_CROSS_FIELD_RULE_IDS: set[str] = {
+    rule["rule_id"] for rule in RULES["cross_field_rules"]
+}
 
 
 def _rule_id(rule_id: str) -> str:
-    assert rule_id in _CROSS_FIELD_RULE_IDS, f"undeclared cross-field rule id: {rule_id}"
+    assert rule_id in _CROSS_FIELD_RULE_IDS, (
+        f"undeclared cross-field rule id: {rule_id}"
+    )
     return rule_id
 
 
@@ -163,6 +170,13 @@ assert set(PROBE_RULES) == set(ENUMS["grounding_probe"]), (
 
 HEADING_RE = re.compile(r"^##(?!#)\s+(.+?)\s*$")
 ACCEPTANCE_ID_RE = re.compile(r"^-\s*(AC-\d+)\s*:")
+DELIMITER_CELL_RE = re.compile(r"^:?-{3,}:?$")
+
+
+def _canonical_heading(name: str) -> str:
+    return name.strip().rstrip(".!?:;").casefold()
+
+
 def _split_frontmatter(text: str) -> tuple[dict[str, object], str]:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
@@ -301,7 +315,9 @@ def _declared_table_rows(
     """
     parsed = _parse_table(content_lines)
     if parsed is None:
-        errors.append(f"ERROR: {error_id} no table found in {section} section of {path}")
+        errors.append(
+            f"ERROR: {error_id} no table found in {section} section of {path}"
+        )
         return []
     header = parsed[0]
     if tuple(header) != columns:
@@ -311,7 +327,9 @@ def _declared_table_rows(
         )
         return []
     delimiter_row = parsed[1]
-    if not delimiter_row or not all(DELIMITER_CELL_RE.match(cell) for cell in delimiter_row):
+    if not delimiter_row or not all(
+        DELIMITER_CELL_RE.match(cell) for cell in delimiter_row
+    ):
         errors.append(
             f"ERROR: {error_id} {section} table is missing its '---' delimiter "
             + f"row in {path}"
@@ -331,8 +349,6 @@ def _declared_table_rows(
     return rows
 
 
-
-
 def _acceptance_ids(content_lines: list[str]) -> list[str]:
     ids: list[str] = []
     for line in content_lines:
@@ -340,6 +356,8 @@ def _acceptance_ids(content_lines: list[str]) -> list[str]:
         if match:
             ids.append(match.group(1))
     return ids
+
+
 def _schema_module() -> Any:
     try:
         return importlib.import_module("easy_cheese_schemas.contracts")
@@ -381,6 +399,7 @@ def _typed_errors(message: str, path: Path) -> tuple[str, ...]:
         return (f"ERROR: {NOT_APPLICABLE_RULE} {message} in {path}",)
     return (f"ERROR: typed-document-invalid {message} in {path}",)
 
+
 def _typed_frontmatter(
     frontmatter: Mapping[str, object],
     policy: _SpecFormatPolicy,
@@ -390,8 +409,6 @@ def _typed_frontmatter(
     schema = _schema_module()
     gate = frontmatter.get("gate_applicability")
     if gate is None:
-        if policy.requires_gate_applicability():
-            return None
         gate = {
             "disposition": "red-required",
             "work_class": "behavior",
@@ -401,7 +418,11 @@ def _typed_frontmatter(
         return None
 
     enum_values = (
-        ("disposition", "gate_applicability_disposition", "gate-applicability-closed-class"),
+        (
+            "disposition",
+            "gate_applicability_disposition",
+            "gate-applicability-closed-class",
+        ),
         ("work_class", "work_class", "gate-applicability-closed-class"),
         ("ui_surface", "ui_surface", "gate-applicability-closed-class"),
     )
@@ -426,15 +447,11 @@ def _typed_frontmatter(
             status=frontmatter.get("status", "draft"),
             source=frontmatter.get("source", "legacy"),
             created=frontmatter.get("created", "unknown"),
-            confidence=schema.SpecConfidence(
-                frontmatter.get("confidence", "medium")
-            ),
+            confidence=schema.SpecConfidence(frontmatter.get("confidence", "medium")),
             gate_applicability=gate_model,
             gates_overridden=frontmatter.get("gates_overridden", ()),
             agent_introduced_scope=frontmatter.get("agent_introduced_scope", ()),
-            entity_referent_bindings=frontmatter.get(
-                "entity_referent_bindings", ()
-            ),
+            entity_referent_bindings=frontmatter.get("entity_referent_bindings", ()),
         )
     except (TypeError, ValueError) as error:
         errors.extend(_typed_errors(str(error), path))
@@ -485,7 +502,7 @@ def _typed_grounding_rows(
         outcome = row[_OUTCOME_COL]
         if probe not in ENUMS["grounding_probe"]:
             errors.append(
-                f"ERROR: grounding-probe-closed-class Grounding row has unknown "
+                "ERROR: grounding-probe-closed-class Grounding row has unknown "
                 + f"Probe '{probe}' in {path}"
             )
             had_error = True
@@ -534,9 +551,7 @@ def _validate_typed_document(
     if typed_frontmatter is None:
         return
     schema, front_model = typed_frontmatter
-    typed_contracts, contract_errors = _typed_test_rows(
-        schema, test_rows, path, errors
-    )
+    typed_contracts, contract_errors = _typed_test_rows(schema, test_rows, path, errors)
     typed_grounding, grounding_errors = _typed_grounding_rows(
         schema, grounding_rows, path, errors
     )
@@ -666,7 +681,9 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument("spec_path", type=Path, help="Path to the mold spec markdown file.")
+    _ = parser.add_argument(
+        "spec_path", type=Path, help="Path to the mold spec markdown file."
+    )
     _ = parser.add_argument(
         "--strict",
         action="store_true",

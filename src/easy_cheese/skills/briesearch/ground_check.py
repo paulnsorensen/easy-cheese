@@ -72,6 +72,9 @@ _CITATION = re.compile(r"\[\^[^\]]+\]|" + _DIRECT_CITATION.pattern, re.IGNORECAS
 _REMOTE_START = re.compile(r"https?://", re.IGNORECASE)
 _URL_OPENERS = frozenset("([{")
 _URL_CLOSERS = {")": "(", "]": "[", "}": "{"}
+_FOOTNOTE_DEFINITION = re.compile(r"^\[\^([^\]]+)\]:\s*(.*)$")
+_LOCAL_PATH = re.compile(r"(?:^|[\s(])((?:\.cheese|raw)/[^\s|]+)", re.IGNORECASE)
+_LINE_ANCHOR = re.compile(r":(\d+)(?:-(\d+))?$")
 
 # Negation aimed at existence / support / provision — the shape of an absence
 # claim. Whole-word matched so "Cargo" never trips "no".
@@ -303,7 +306,14 @@ def _check_row(
     claim_i, ev_i, conf_i = cols
     width = max(cols) + 1
     if len(cells) < width:
-        return [Violation("error", row_no, "MALFORMED", f"row has {len(cells)} cells, expected ≥ {width}")]
+        return [
+            Violation(
+                "error",
+                row_no,
+                "MALFORMED",
+                f"row has {len(cells)} cells, expected ≥ {width}",
+            )
+        ]
 
     claim = cells[claim_i]
     evidence = cells[ev_i]
@@ -313,7 +323,12 @@ def _check_row(
 
     if not _CITATION.search(evidence):
         out.append(
-            Violation("error", row_no, "CITATION", f"claim has no verifiable citation: {claim!r}")
+            Violation(
+                "error",
+                row_no,
+                "CITATION",
+                f"claim has no verifiable citation: {claim!r}",
+            )
         )
 
     for label in cast("list[str]", _FOOTNOTE_REF.findall(evidence)):
@@ -406,7 +421,12 @@ def check_report(
         if "|" in lines[i]:
             header = _split_row(lines[i])
             cols = _find_columns(header)
-            if cols and i + 1 < n and "|" in lines[i + 1] and _is_separator(_split_row(lines[i + 1])):
+            if (
+                cols
+                and i + 1 < n
+                and "|" in lines[i + 1]
+                and _is_separator(_split_row(lines[i + 1]))
+            ):
                 tables_checked += 1
                 j = i + 2
                 row_no = 0
@@ -446,7 +466,9 @@ def check_report(
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument("report", help="Path to the synthesis report markdown file.")
+    _ = parser.add_argument(
+        "report", help="Path to the synthesis report markdown file."
+    )
     args = parser.parse_args(argv)
 
     report = cast(str, args.report)
@@ -480,7 +502,9 @@ def main(argv: list[str]) -> int:
 
     errors = sum(1 for v in violations if v.level == "error")
     if errors:
-        print(f"\n{errors} grounding error(s) across {tables} table(s)", file=sys.stderr)
+        print(
+            f"\n{errors} grounding error(s) across {tables} table(s)", file=sys.stderr
+        )
         return 1
     print(f"grounding ok: {tables} table(s) checked", file=sys.stderr)
     return 0
