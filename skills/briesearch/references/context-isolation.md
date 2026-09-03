@@ -9,7 +9,7 @@ Apply context isolation when a selected provider operation is likely to return m
 - Search with raw/full content enabled or a broad result set.
 - Multi-URL extraction or content retrieval.
 - Site crawl/map followed by broad extraction.
-- Deep-research/report operations whose underlying sources must be retained.
+- Deep research or report operations that must retain their sources.
 - Any response likely to crowd out the routing plan and claim table.
 
 Provider examples include Tavily crawl or research, Exa contents, and batches of native web opens. Skip isolation for snippet triage. Also skip it for a small set of focused page reads.
@@ -38,12 +38,14 @@ Provider examples include Tavily crawl or research, Exa contents, and batches of
 
 ## Capture manifest
 
-`manifest.json` is machine-read by `ground-check`, so it has a fixed shape:
+`ground-check` and `budget-check` read `manifest.json`. Use this fixed shape:
 
 ```json
 {
   "slug": "hybrid-retrieval-fusion",
   "invocation": "top-level",
+  "budget": {"search": 6, "extract": 8, "spawn": 1},
+  "extensions": [],
   "calls": [
     {"kind": "search", "provider": "tavily", "tool": "tavily_search",
      "query": "reciprocal rank fusion k", "filters": {"days": 30}, "status": "ok"},
@@ -56,9 +58,10 @@ Provider examples include Tavily crawl or research, Exa contents, and batches of
 ```
 
 - `kind` is `search`, `extract`, or `spawn`. `invocation` is `top-level` when the user asks. It is `sidechain` when another skill asks.
-- `provider` and `tool` are required for searches and extractions. These fields prove which provider tool read the page. A search result does not prove this. See `routing.md` § Provider tool sets.
+- Record `provider` and `tool` for each search and extraction. These fields identify the provider tool that read the page. A search result does not prove this. See `routing.md` § Provider tool sets.
 - `status` defaults to `ok`. Record each failure with its actual status. Omit `file` for a failure. A failed fetch is not evidence. `ground-check` rejects citations that use a failed fetch.
 - Set `"refresh": true` when you extract a ledger URL again for freshness. Set `"cached": true` when an earlier run entry supplies the call.
+- Declare `budget` before the first provider call. Add an `extensions` entry before you exceed that budget. See `budgets.md`.
 
 ## Re-extraction in later turns
 
@@ -73,6 +76,6 @@ For a follow-up that needs more detail:
 
 The durable corpus lives outside the repo checkout (default `~/.local/share/cheese/<project>/`), so raw bodies never enter git.
 
-## Don't mistake this for caching
+## Do not treat this process as caching
 
 Do not reuse raw bodies from another slug without a relevance check. The evidence filter is specific to each question.

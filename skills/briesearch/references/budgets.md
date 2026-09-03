@@ -18,7 +18,7 @@ Use these values as starting points, not as rules. A compact freshness check nee
 | Single-subject "how does X work" | 4 | 5 |
 | Comparative / best-practice report | 8 | 10 |
 
-The budget is soft: exceeding it is allowed, unrecorded overspend is not.
+The budget is soft. You can exceed it only when you record the overspend.
 
 ## Extensions
 
@@ -38,7 +38,7 @@ To spend past the budget, append the evidence gap that forces it:
 
 An extension names the gap that the extra calls must close. If the calls do not close it, report this result. Add the result to the open questions block. Do not spend more calls.
 
-## Don't repeat yourself
+## Do not repeat calls
 
 - **Same search twice.** The provider, query, and filters identify a search. Do not issue the same search again. Change the words only when you target a different sub-question.
 - **Same URL twice.** Extract a canonical URL once. Then read the stored body. See `context-isolation.md` § Re-extraction in later turns. When freshness becomes relevant, fetch the URL again and record `"refresh": true`.

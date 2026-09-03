@@ -18,9 +18,9 @@ Examples include the latest stable release, current maintainer, active support s
 
 ## Full plan
 
-Use the full plan when the question is multi-part, comparative, asks for the "best" option or best practice, or requests a report.
+Use the full plan for a multi-part question, a comparison, a best-practice question, or a report.
 
-1. **Restate the decision being supported.** Name what the user will do with the evidence.
+1. **Restate the supported decision.** Name what the user will do with the evidence.
 2. **Extract constraints.** Dates, versions, repository scope, languages, geographies, and deal-breakers become routing inputs.
 3. **Clarify only if it changes the capability plan.** Ask at most one question.
 4. **Decompose into 2-5 focused subqueries.** Each should be answerable from a coherent source set.
@@ -37,7 +37,7 @@ PLAN
 
 ## Query construction
 
-Apply these rules with whichever provider was selected:
+Apply these rules with the selected provider:
 
 - Keep discovery queries focused; do not send the whole report prompt as one search.
 - Decompose once and fan independent subqueries out in one assistant turn where supported. Re-search only thin subqueries.
@@ -64,6 +64,6 @@ Better:
 
 Run independent subqueries in parallel, then extract the strongest evidence per claim.
 
-## When no visible plan is needed
+## When you can omit a visible plan
 
-Skip a visible plan only for a stable, single-source lookup whose scope and authority are already explicit, or a direct local file question that should not have triggered `/briesearch`. Questions the user already decomposed may reuse that decomposition, but still state freshness and stop criteria when current facts are involved.
+Skip a visible plan only for a stable lookup with one clear source, scope, and authority. Also skip it for a direct local file question. Such a question must not trigger `/briesearch`. Reuse a decomposition that the user supplies. State freshness and stop criteria for current facts.

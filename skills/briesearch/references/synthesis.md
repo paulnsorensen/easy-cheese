@@ -23,7 +23,7 @@ Rules:
 
 The tokens `certain`, `speculating`, and `don't know` are exact label values — write them verbatim, never as synonyms.
 
-## Alternatives are open questions, not recommendations
+## Treat alternatives as open questions
 
 A research call **returns evidence**. It does not pick design knobs.
 

@@ -9,10 +9,10 @@ A provider is an implementation detail; the routed capability is the contract. P
 | Library/API documentation | Context7, official vendor docs/`llms.txt`, package docs or README | Lower only if version/authority coverage weakens |
 | Current-web discovery/extraction | Native web open/fetch, Tavily extraction, Exa contents, or direct HTTP fetch | Lower only if freshness or verification coverage weakens |
 | Repository knowledge/wiki | Hallouminate, llm-wiki, bounded Markdown ADR/wiki reads | Lower only if rationale/decision coverage remains incomplete |
-| Local code intelligence | Alternate semantic/LSP/AST/text backends and targeted reads per the [shared routing contract](../../cheese/references/code-intelligence-routing.md) | Lower only if critical local evidence cannot be inspected precisely |
+| Local code intelligence | Use alternate semantic, LSP, AST, or text backends. Follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md). | Lower only if the backend cannot inspect critical local evidence precisely |
 | Git hosting/examples | `gh`, host integration, or host-scoped web search/open | Lower only when hosted state or examples are critical and uncovered |
 
-Direct and user-supplied URLs are candidate sources, not provider operations. Inspect their contents with a real open/fetch/host operation before using them as evidence; the user-supplied URL exemption in `synthesis.md` applies only to link-resolution checks.
+Direct URLs and user URLs are candidate sources, not provider operations. Inspect their content with a provider retrieval tool before you use it. The user URL exemption in `synthesis.md` applies only to link checks.
 
 ## Reporting a substitution
 

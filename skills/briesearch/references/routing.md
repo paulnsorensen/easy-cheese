@@ -103,7 +103,7 @@ Authority depends on the claim type:
 4. **Technical claims:** original papers, standards, and RFCs win.
 5. **Version or freshness claims:** release notes, changelogs, and host metadata win.
 6. **Real-world precedent:** Git-hosted examples support the claim but do not establish correctness.
-7. **Coverage gaps:** blogs, tutorials, and AI-generated content are last resort and must be disclosed.
+7. **Coverage gaps:** use blogs, tutorials, and AI-generated content only as a last resort. Disclose their use.
 
 Run independent capabilities in parallel when the harness supports this work. Claim authority determines which evidence wins. Provider call order does not determine authority.
 
