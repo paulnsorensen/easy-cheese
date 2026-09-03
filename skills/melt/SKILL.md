@@ -131,7 +131,7 @@ python3 skills/melt/scripts/melt.pyz batch-resolve --debug <path>
 ```
 
 The command prints the merged output path, log path, and conflict marker count.
-Inspect the merged output with `cat` or `diff`.
+Inspect the merged output with the selected source-code backend.
 Apply clean output with these commands.
 
 ```bash
