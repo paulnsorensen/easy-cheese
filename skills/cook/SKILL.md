@@ -1,6 +1,14 @@
 ---
 name: cook
-description: Implement an approved spec or focused unambiguous task through stale-safe source edits. Use when the user wants code written — "implement this", "cook this spec", "/cook .cheese/specs/<slug>.md", or "fix this bug" when the fix is clear; also when the user just says "go" or "ship it" with a spec or clear acceptance criteria in scope. Runs standalone on an unambiguous task — a spec helps but is not required. Do NOT use for fuzzy planning (`/mold`), no-write discussion (`/culture`), or review-only work (`/age`).
+description: >-
+  Implement an approved spec or focused task through stale-safe source edits.
+  Use this skill when the user says "implement this", "cook this spec", or "fix this bug".
+  Use it for `/cook .cheese/specs/<slug>.md`.
+  Also use it when the user says "go" or "ship it" with clear acceptance criteria.
+  Run it alone for an unambiguous task.
+  A spec helps but is not required.
+  Do not use it for fuzzy planning (`/mold`).
+  Do not use it for no-write discussion (`/culture`) or review-only work (`/age`).
 license: MIT
 metadata: {dispatches-agents: true}
 ---
@@ -9,13 +17,13 @@ metadata: {dispatches-agents: true}
 ## Contract
 
 `cook(spec_ref, correction = false) -> handoff(next = press | age)`.
-Behavior work (a `red-required` gate disposition) runs the inner RED → GREEN
-TDD loop against the approved spec's test contracts before any production
-mutation. Non-behavior work (a closed `not-applicable` disposition) routes the
-requested docs/refactor/test/appearance change through its non-behavior
-implementation and verification path; N/A never means no requested work.
-`correction = true` is scoped to the active Press corrective loop and may not
-weaken any existing test.
+A `red-required` gate disposition identifies behavior work.
+Run the inner RED → GREEN TDD loop against the approved spec before you change production code.
+A closed `not-applicable` disposition identifies non-behavior work.
+Use its implementation and verification path for the requested documentation, refactor, test, or appearance change.
+N/A does not remove requested work.
+Use `correction = true` only for the active Press correction loop.
+Do not weaken an existing test.
 
 ## Inputs
 
@@ -25,44 +33,57 @@ Read explicit spec paths verbatim. Resolve a bare slug with
 Use `python3 skills/cook/scripts/cook.pyz accept <pointer>` for a Mold handoff pointer.
 This command verifies the route and referenced artifacts before execution.
 
-Flags: `--auto` chains `/press → /age → /cure`; `--hard` propagates through
-`/plate`; `--open-pr` lets terminal `/plate` publish; `--resume <slug>` resumes
-a typed fan handoff and its referenced artifacts. Their policies live in
-`references/auto-mode.md`, `references/fan-pathway.md`, and
-`../cheese/references/formatting.md`.
+Flags:
+
+- `--auto` chains `/press → /age → /cure`.
+- `--hard` propagates through `/plate`.
+- `--open-pr` lets terminal `/plate` publish.
+- `--resume <slug>` resumes a typed fan handoff and its referenced artifacts.
+
+Read `references/auto-mode.md`, `references/fan-pathway.md`, and `../cheese/references/formatting.md` for these policies.
 
 ### Standalone fast-path
 
-`/cook` bypasses `/mold` only when inputs/outputs and scope are clear and verification is obvious: a named bug/callsite in one or two files with a failing test or runnable expected-output check. Derive a slug, then restate the **Contract**. Any failed ambiguity check routes to `/mold`.
+`/cook` bypasses `/mold` only when the inputs, outputs, scope, and verification are clear.
+The task must name a bug or call site in one or two files.
+The task must also have a failing test or an expected-output check.
+Derive a slug.
+Then restate the **Contract**.
+Route the task to `/mold` if an ambiguity check fails.
 
 ## Flow
 
-1. **Contract** — confirm behaviour, non-goals, scope, gates, and applicability.
-2. **Implement** — behavior changes use inner RED → GREEN; closed N/A work
-   uses its requested non-behavior implementation path. Only the applicable
-   path may mutate its requested surface.
+1. **Contract** — confirm behavior, non-goals, scope, gates, and applicability.
+   If `.cheese/glossary/<slug>.md` exists, use its canonical terms.
+2. **Implement** — use inner RED → GREEN for behavior changes.
+   Use the requested non-behavior path for closed N/A work.
+   Change only the surface that applies.
 3. **Validate** — run the relevant quality gates fresh and read the output.
    For closed N/A, verify the requested non-behavior path.
-4. **Taste-test** — fresh-context review for multi-file/public-surface diffs;
-   otherwise inline. Two-round cap; details: `references/tdd-loop.md`.
-5. **Hand off** — write the package report and slug. Behavior work proceeds
-   `/press → /age → /cure`; a closed N/A change has no adversarial contract
-   for Press and proceeds directly `/age → /cure`.
+4. **Taste-test** — use a fresh-context review for multi-file or public-surface diffs.
+   Otherwise, use an inline review.
+   Limit the review to two rounds.
+   Read `references/tdd-loop.md` for details.
+5. **Hand off** — write the package report and slug.
+   Route behavior work through `/press → /age → /cure`.
+   A closed N/A change has no adversarial contract for Press.
+   Route it directly through `/age → /cure`.
 
 ## Fan pathway
 
-`/cook` routes a spec through one of three shapes, gated on whether a typed
-planner result is already available. The complete topology lives in
-[`references/fan-pathway.md`](references/fan-pathway.md).
+`/cook` routes a spec through one of three shapes.
+The available typed planner result selects the shape.
+Read [`references/fan-pathway.md`](references/fan-pathway.md) for the complete topology.
 
 **Fast path.** When the curd-count hint is `1` with low or medium blast radius,
 use the ordinary single-coder path.
 
-**Curded.** Load the typed `PlannerResult` or `CurdPlan`, run
-`validate_curd_plan`, and treat that plan as semantic authority. Behavior
-curds run `cook(CurdPlan) → reviewer(age) → cure(CurdPlan, binding) →
-reviewer(final age)` without Press. After wiring, run one global
-`/press → /age → /cure` chain. Closed N/A bypasses Press.
+**Curded.** Load the typed `PlannerResult` or `CurdPlan`.
+Run `validate_curd_plan`.
+Treat the validated plan as the semantic authority.
+Run behavior curds through `cook(CurdPlan) → reviewer(age) → cure(CurdPlan, binding) → reviewer(final age)` without Press.
+After you wire the curds, run one global `/press → /age → /cure` chain.
+Closed N/A bypasses Press.
 
 Worktree cleanup uses `python3 skills/cook/scripts/cook.pyz worktree teardown`; the fan-pathway reference owns its arguments and lifecycle.
 
@@ -73,11 +94,9 @@ only, never live workflow state.
 Sizing and decomposition follow
 [`decomposer.md`](../cheese/references/decomposer.md).
 
-Before orchestrating, read
-[`references/fan-pathway.md`](references/fan-pathway.md). It owns sizing,
-topology, deterministic phase execution, recovery, resume,
-Milknado integration, worktree teardown, and resolution provenance. Propagate
-`--auto` through dispatched phases when active.
+Before orchestration, read [`references/fan-pathway.md`](references/fan-pathway.md).
+It defines sizing, topology, phase execution, recovery, resume, Milknado integration, worktree teardown, and resolution provenance.
+Propagate `--auto` through each dispatched phase when it is active.
 
 ## Baseline capture
 
@@ -95,19 +114,31 @@ equivalent installed capability.
 
 ## Quality gates
 
-Run existing project commands only — the most relevant tests for the touched area, plus lint/type/build if defined. Never remove, skip, or weaken unrelated tests to make the change pass.
+Run only existing project commands.
+Run the most relevant tests for the changed area.
+Also run lint, type, and build commands when the project defines them.
+Do not remove, skip, or weaken unrelated tests to make the change pass.
 
-Gate failures are baseline-aware. Policy, the classification taxonomy, and the `baseline:` block shape are the shared reference [`references/quality-gates.md`](references/quality-gates.md); every downstream phase links there instead of restating it.
+Gate failures use the baseline.
+[`references/quality-gates.md`](references/quality-gates.md) defines the policy, classification terms, and `baseline:` block.
+Each downstream phase links to this reference instead of repeating it.
 
-Writer-view payload schemas are generated inline in [`references/writer-views.md`](references/writer-views.md); `normalize`/`validate` CLIs structure agent-authored JSON against them before it reaches host-owned identifiers.
+[`references/writer-views.md`](references/writer-views.md) generates schemas for writer-view payloads inline.
+The `normalize` and `validate` CLIs apply these schemas before agent-authored JSON reaches host-owned identifiers.
 
 ## Output
 
-House style: [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Report files, reasons, checks, risks, and next skill using the authoritative [`references/package-report.md`](references/package-report.md).
+Use the house style in [`../cheese/references/formatting.md`](../cheese/references/formatting.md).
+Use [`references/package-report.md`](references/package-report.md) to report files, reasons, checks, risks, and the next skill.
 
 ## Handoff slug
 
-Write a minimum-shape handoff slug at the top of `.cheese/cook/<slug>.md` — same file as the report, no second file — so downstream phases (and cook's own fan pathway when orchestrating a wave) can resume or chain without re-reading it. Schema:
+Write a minimum-shape handoff slug at the top of `.cheese/cook/<slug>.md`.
+Use the same file for the report.
+Do not create a second file.
+This slug lets downstream phases resume or chain without reading the full report again.
+The fan pathway also uses this slug during wave orchestration.
+Use this schema:
 
 ```markdown
 status: <canonical status field>
@@ -119,10 +150,11 @@ baseline: none | <block — shape in references/quality-gates.md § Baseline blo
 <one-line orientation: what cook changed>
 ```
 
-`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
+The [handback contract](../cheese/references/handback-contract.md) defines the canonical `status:` grammar.
+Only `next:` and the additional keyed lines are specific to a phase.
 
-When this handoff is emitted for the typed fan result, use the canonical
-boundary writer and carry the result schema explicitly:
+When you emit this handoff for the typed fan result, use the canonical boundary writer.
+Carry the result schema explicitly:
 
 ```text
 python3 skills/cook/scripts/cook.pyz write-handoff-artifact \
@@ -131,60 +163,100 @@ python3 skills/cook/scripts/cook.pyz write-handoff-artifact \
   --payload-schema https://schemas.easy-cheese.dev/curd-result
 ```
 
-For a deliberate replan handoff, use `--next mold` with the
-`https://schemas.easy-cheese.dev/planner-request` payload instead. These
-`phase`/`next` values route the legacy handoff file only; the live fan state is
-still the validated `CurdPlan` and normalized `CurdResult`.
+For a deliberate replan handoff, use `--next mold` with the `https://schemas.easy-cheese.dev/planner-request` payload.
+These `phase` and `next` values route only the legacy handoff file.
+The validated `CurdPlan` and normalized `CurdResult` remain the live fan state.
 
-In a fan run, read each phase's handoff slug file from disk; never infer the
-handoff from stdout.
+In a fan run, read each phase's handoff slug file from disk.
+Do not infer the handoff from stdout.
 
-`next:` is the next runnable phase: `press` after red-required behavior work,
-`age` after closed N/A, `cook` after a blocker, `mold` after a spec failure, or
-`done` only at true completion. Never send contractless N/A to Press. Omit
-`taste_test:` when its cost gate did not apply.
+Set `next:` to the next runnable phase.
+Use `press` after red-required behavior work.
+Use `age` after closed N/A.
+Use `cook` after a blocker.
+Use `mold` after a spec failure.
+Use `done` only at true completion.
+Do not send contractless N/A to Press.
+Omit `taste_test:` when its cost gate does not apply.
 
-`durable_flags:` defaults to `none`; record only durable
-architecture/protocol/convention/rationale changes and their target wiki page.
-`baseline:` summarizes Cook's optional comparison when current broad gates
-contain baseline-identical debt or new/changed failures; use
-[`references/quality-gates.md`](references/quality-gates.md) § Baseline block
-shape.
+Set `durable_flags:` to `none` by default.
+Record only durable changes to architecture, protocols, conventions, or rationale.
+Record the target wiki page for each change.
+Use `baseline:` to summarize Cook's optional comparison.
+Include baseline-identical debt and new or changed failures from current broad gates.
+Use the baseline block in [`references/quality-gates.md`](references/quality-gates.md).
 
 ## Handoff
 
 **Pipeline:** culture → mold → cook → press → age → cure → plate
 
-After the package-ready report and handoff slug are on disk, ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) (its **Standard forward-step menu**). For behavior work, lead each option with the verb and use:
+After you write the report and slug, use the shared handoff gate.
+Read its **Standard forward-step menu** in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md).
+For behavior work, start each option with the verb.
+Use these options:
 
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
 - **Plate it** — `/press <slug> --auto --open-pr`: run the remaining review chain, then `/plate` resolves topology and publishes.
 
-For closed N/A, Press is structurally inapplicable. Set `next: age` and replace those options with **Review the change** *(recommended)* — `/age <slug>` and **Plate it** — `/age <slug> --auto --open-pr`.
+Press does not apply to closed N/A.
+Set `next: age`.
+Replace the options with **Review the change** *(recommended)* — `/age <slug>`.
+Also offer **Plate it** — `/age <slug> --auto --open-pr`.
 
-Both menus retain **Checkpoint & stop** — `/wheypoint` and **Stop** — dispatch none. Never dispatch before selection; run the selected command immediately. When invoked with `--auto`, skip this gate and take the disposition-specific route directly.
+Both menus retain **Checkpoint & stop** — `/wheypoint` and **Stop** — dispatch none.
+Do not dispatch before selection.
+Run the selected command immediately.
+When the user invokes `--auto`, skip this gate.
+Take the route for the applicable disposition directly.
 
 ## Auto mode
 
-`--auto` never bypasses applicable validation. Behavior work
-runs `/press --auto → /age --auto → /cure --auto --stake medium+`; closed
-N/A skips Press and runs `/age --auto → /cure --auto --stake medium+`. Both
-routes cap Cure at two passes. Cook never invokes `/plate`; terminal Cure owns
-publication.
+`--auto` does not bypass applicable validation.
+Run behavior work through `/press --auto → /age --auto → /cure --auto --stake medium+`.
+Closed N/A skips Press.
+Run it through `/age --auto → /cure --auto --stake medium+`.
+Limit Cure to two passes on both routes.
+Cook does not invoke `/plate`.
+Terminal Cure owns publication.
 
-Auto mode stops early when: a quality gate fails new or changed against baseline and the fix rounds exhaust, the no-progress check trips, or the fix is design-shaped; `/press` returns `blocked`; a cure pass cannot apply any finding; or two cure passes complete (success path). Every early stop surfaces the failing skill's report and states the cap reached or the blocker hit — never a silent downgrade.
+Auto mode stops early in these conditions:
 
-Read [`references/auto-mode.md`](references/auto-mode.md) before running or dispatching auto mode — it owns the full per-step chain, cap-enforcement mechanics, the fan-pathway no-chain isolation directive (a spawned phase sub-agent never chains forward on its own; the orchestrator drives), cure's per-finding failure handling, and the final-report template.
+- A quality gate reports a new or changed failure, and the fix rounds end.
+- The no-progress check stops the run.
+- The fix requires a design change.
+- `/press` returns `blocked`.
+- A Cure pass cannot apply a finding.
+- Two Cure passes complete the success path.
+
+For each early stop, show the failing skill report.
+State which limit or blocker stopped the run.
+Do not silently downgrade the result.
+
+Read [`references/auto-mode.md`](references/auto-mode.md) before you run or dispatch auto mode.
+It defines the complete phase chain and the limit controls.
+It also defines fan-path isolation and Cure failure handling.
+A spawned phase agent does not chain forward by itself.
+The orchestrator controls the chain.
+The reference also contains the final report template.
 
 ## Rules
 
 - Keep changes scoped to the accepted contract.
 - Prefer existing dependencies and patterns.
 - Do not invent architecture already rejected by the spec.
-- Stop and ask when implementation reveals a design decision the spec did not answer.
-- If the spec or fast-path request rests on a false premise, stop and surface it before writing code; do not work the wrong angle to honour the request literally.
-- Apply the shared voice kernel (`../age/references/voice.md`): lead the report with the answer, name loaded assumptions in the contract, flag residual risk as `certain | speculating | don't know`.
-- **Verification before `status: ok`:** identify the gate command, run it fresh this turn, read the full output, only then claim. Hedging words (`should`, `probably`, `I think`) are banned — state what the gate output showed.
+- Stop and ask when implementation reveals a design decision that the spec does not answer.
+- Stop if the spec or fast-path request uses a false premise.
+- Show the false premise before you write code.
+- Do not use an incorrect approach to satisfy the request literally.
+- Apply the shared voice kernel in `../age/references/voice.md`.
+- Start the report with the answer.
+- Name loaded assumptions in the contract.
+- Mark residual risk as `certain | speculating | don't know`.
+- **Verification before `status: ok`:** identify the gate command.
+- Run the gate command during the current turn.
+- Read the complete output before you make the claim.
+- Do not use `should`, `probably`, or `I think`.
+- State what the gate output shows.
 
 ## Discipline
 
@@ -202,6 +274,7 @@ uses a coder, taste-test uses a reviewer, and harvest and plate stay parent-owne
 | Decompose the spec | planner, general | write (manifest only), fresh-context | powerful | high | compatible planner, then general |
 
 The handoff carries the `agent_resolution` block.
-A terminal Age is publishable only with `next: done`; `next: cure` or a missing `next` halts.
+Publish a terminal Age only when it contains `next: done`.
+Stop when it contains `next: cure` or does not contain `next`.
 
 Generated bundle command inventory: [`references/commands.md`](references/commands.md).
