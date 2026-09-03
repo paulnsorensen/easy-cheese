@@ -280,3 +280,87 @@ def test_cli_rejects_extra_request_keys(
 
     assert press_telemetry_cli.main([str(request)]) == 1
     assert "request must contain exactly" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("path", [".", "./", "./."])
+def test_changed_file_naming_nothing_is_rejected(path: str) -> None:
+    with pytest.raises(ValueError, match="must name a file or directory"):
+        _ = press_telemetry.telemetry_record(**_request(changed_files=[path]))
+
+
+def test_classify_path_handles_a_path_with_no_parts() -> None:
+    assert (
+        press_telemetry.classify_path(".")
+        == press_telemetry.FileClass.PRODUCTION_SOURCE
+    )
+
+
+def test_metadata_dir_rule_scans_every_ancestor_part() -> None:
+    assert (
+        press_telemetry.classify_path("backend/docs/architecture")
+        == press_telemetry.FileClass.METADATA
+    )
+
+
+def test_changed_file_with_a_backslash_is_rejected() -> None:
+    with pytest.raises(ValueError, match="repository-relative path"):
+        _ = press_telemetry.telemetry_record(
+            **_request(changed_files=["src\\app.py"])
+        )
+
+
+def test_changed_file_with_a_drive_letter_is_rejected() -> None:
+    with pytest.raises(ValueError, match="repository-relative path"):
+        _ = press_telemetry.telemetry_record(
+            **_request(changed_files=["C:/app.py"])
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("tests/", press_telemetry.FileClass.TESTS),
+        ("docs/", press_telemetry.FileClass.METADATA),
+    ],
+)
+def test_trailing_slash_directory_classifies_by_its_own_name(
+    path: str, expected: press_telemetry.FileClass
+) -> None:
+    assert press_telemetry.classify_path(path) == expected
+
+
+def test_trailing_slash_directories_survive_path_normalization() -> None:
+    record = press_telemetry.telemetry_record(
+        **_request(outcome="green", changed_files=["tests/", "./docs/"])
+    )
+
+    assert record["production_source_files"] == []
+    assert record["changed_file_classes"] == ["metadata", "tests"]
+    assert record["boundary_consistent"] is True
+
+
+def test_operations_normalize_whitespace_and_case_before_aggregating() -> None:
+    record = press_telemetry.telemetry_record(
+        **_request(
+            tool_errors=[
+                {"phase": "attack", "operation": " pytest"},
+                {"phase": "attack", "operation": "PyTest"},
+            ]
+        )
+    )
+    assert record["operations"] == [
+        {"phase": "attack", "operation": "pytest", "errors": 2, "recurring": True}
+    ]
+
+
+def test_whitespace_only_operation_is_rejected() -> None:
+    with pytest.raises(ValueError, match=r"tool_errors\[\]\.operation"):
+        _ = press_telemetry.telemetry_record(
+            **_request(tool_errors=[{"phase": "attack", "operation": "   "}])
+        )
+
+
+def test_max_attempts_is_re_exported_from_press_route() -> None:
+    from easy_cheese.shared.fanout import press_route
+
+    assert press_telemetry.MAX_ATTEMPTS is press_route.MAX_ATTEMPTS

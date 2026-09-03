@@ -57,8 +57,13 @@ def test_press_route_rejects_unknown_outcome() -> None:
 
 
 def test_press_route_rejects_non_string_outcome() -> None:
-    with pytest.raises(TypeError, match="Outcome or string"):
+    with pytest.raises(ValueError, match="outcome must be a string"):
         _ = press_route.press_route(cast(str, cast(object, 7)), 0)
+
+
+def test_press_route_rejects_repair_cycles_at_max_attempts() -> None:
+    with pytest.raises(ValueError, match="must be less than 3"):
+        _ = press_route.press_route("in_contract_red", press_route.MAX_ATTEMPTS)
 
 
 def test_press_route_rejects_negative_repair_cycles() -> None:

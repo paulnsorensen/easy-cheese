@@ -23,12 +23,7 @@ from typing import cast
 
 from easy_cheese.shared.paths import validate_slug
 
-from .press_route import Outcome, coerce_outcome
-
-# Press owns at most three attempts per slug (attempt 3 is the terminal
-# third RED), and `repair_cycles` counts the corrective Cook continuations
-# already completed -- so attempt N always carries N-1 completed cycles.
-MAX_ATTEMPTS = 3
+from .press_route import MAX_ATTEMPTS, Outcome, coerce_outcome
 
 # An operation that failed once inside a single attempt is transient; the same
 # phase/operation pair failing again in that attempt is the recurring,
@@ -78,7 +73,13 @@ _DELEGATION_KEYS = {"role", "purpose"}
 def classify_path(path: str) -> FileClass:
     """Classify one repository-relative path for the Press boundary audit."""
     pure = PurePosixPath(path)
-    if {part.lower() for part in pure.parts[:-1]} & _TEST_DIRS:
+    # A path ending in "/" names a directory: every part is a directory
+    # segment. Otherwise the last part is a filename, excluded from the
+    # ancestor-directory checks below. Empty `parts` (".", "./") is safe
+    # here; every membership test below is against a possibly-empty set.
+    dir_parts = pure.parts if path.endswith("/") else pure.parts[:-1]
+    dirs = {part.lower() for part in dir_parts}
+    if dirs & _TEST_DIRS:
         return FileClass.TESTS
     suffix = pure.suffix.lower()
     stem = pure.stem.lower()
@@ -86,11 +87,7 @@ def classify_path(path: str) -> FileClass:
         return FileClass.TESTS
     if stem.startswith("test_") or stem.endswith(_TEST_STEM_SUFFIXES):
         return FileClass.TESTS
-    if (
-        pure.name in _METADATA_NAMES
-        or suffix in _METADATA_SUFFIXES
-        or pure.parts[0].lower() in _METADATA_DIRS
-    ):
+    if pure.name in _METADATA_NAMES or suffix in _METADATA_SUFFIXES or dirs & _METADATA_DIRS:
         return FileClass.METADATA
     return FileClass.PRODUCTION_SOURCE
 
@@ -159,7 +156,11 @@ def _operations(tool_errors: list[object]) -> list[dict[str, object]]:
     for value in tool_errors:
         entry = _require_entry(value, "tool_errors", _TOOL_ERROR_KEYS)
         phase = _require_phase(entry["phase"])
-        operation = _require_str(entry["operation"], "tool_errors[].operation")
+        operation = (
+            _require_str(entry["operation"], "tool_errors[].operation")
+            .strip()
+            .casefold()
+        )
         counts[(phase.value, operation)] += 1
     return [
         {
@@ -190,11 +191,28 @@ def _changed_paths(changed_files: list[object]) -> list[str]:
     for value in changed_files:
         text = _require_str(value, "changed_files[]")
         pure = PurePosixPath(text)
-        if pure.is_absolute() or ".." in pure.parts:
+        # Backslash and drive-letter checks mirror
+        # easy_cheese_schemas.gates._project_relative_path (private, so the
+        # two extra rules are duplicated here rather than imported).
+        first = text.split("/", 1)[0]
+        if (
+            pure.is_absolute()
+            or ".." in pure.parts
+            or "\\" in text
+            or ":" in first
+        ):
             raise ValueError(
                 f"changed_files entry {text!r} must be a repository-relative path"
             )
-        paths.append(pure.as_posix())
+        if not pure.parts:
+            raise ValueError(
+                f"changed_files entry {text!r} must name a file or directory"
+            )
+        # `as_posix()` drops a trailing "/"; keep it so `classify_path` still
+        # sees a directory entry (the shape `git status --porcelain` prints
+        # for an untracked directory).
+        normalized = pure.as_posix()
+        paths.append(normalized + "/" if text.endswith("/") else normalized)
     return paths
 
 

@@ -40,8 +40,10 @@ action is authoritative. Halt if the bundle does not exist.
 
 Each Press attempt has its own append-only artifact names. Use the same
 `<slug>` for all three attempts, but never reuse an attempt number: the attack
-candidate lives at `.cheese/press/candidates/<slug>.attempt-N.json` and the
-route request at `.cheese/press/<slug>.attempt-N.route.json`. A third
+candidate lives at `.cheese/press/candidates/<slug>.attempt-N.json`, the
+route request at `.cheese/press/<slug>.attempt-N.route.json`, the telemetry
+request at `.cheese/press/<slug>.attempt-N.telemetry-request.json`, and the
+telemetry record at `.cheese/press/<slug>.attempt-N.telemetry.json`. A third
 in-contract RED routes to terminal `Stop("third-red")`; do not create
 attempt-4 names or overwrite any earlier path.
 
@@ -104,6 +106,7 @@ next: age | press | done
 artifact: <evidence-path>
 baseline: none | <Cook baseline block>
 action: continue | dispatch | stop
+telemetry: <telemetry-record-path>
 <one-line orientation>
 ```
 
