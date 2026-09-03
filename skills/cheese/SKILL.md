@@ -138,6 +138,12 @@ Pre-select only the highest-confidence target. Without `--safe`, surface the tar
 - Never paraphrase or summarise downstream skill output — that is the downstream skill's job.
 - A declined question gate is an answer. Do not re-raise it; state the open item as one line and wait for freeform input.
 
+## Baseline-aware routing
+
+Treat each recorded `baseline:` block as settled state. Do not re-ask about identical failures.
+
+See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
+
 ## References
 
 - `references/classification.md` — intent shapes, signals, disambiguation rules.

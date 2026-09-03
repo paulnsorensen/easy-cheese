@@ -80,7 +80,7 @@ Procedure:
    | <noun> | <agent/sub-agent/citation> | <section> |
    ```
 
-4. **The user must explicitly approve each row** before the handshake fires. Acceptable approvals: "yes keep <term>", "drop <term>", "make <term> a follow-up". Vague "looks good" is not approval. "Make <term> a follow-up" records a candidate for the disposition batch; it does not immediately create an issue or other artifact.
+4. **The user must explicitly approve each row** before the handshake fires. Acceptable approvals: "yes keep <term>", "drop <term>", "make <term> a follow-up". Vague "looks good" is not approval. "Make <term> a follow-up" records a candidate within `Decided`. This choice does not create an issue or other artifact.
 5. **When the user explicitly drops a direction** — an approach, design knob, or named feature they decline — write a rejection record to `.cheese/.out-of-scope/<slug>-NNN.md` (format in `curdle.md` § Rejected-directions store). A rejected direction is not a follow-up candidate. Explicit deferrals enter the follow-up candidate set instead.
 6. If any flagged term came from a research citation (briesearch sub-agent, fetched doc, MCP result), it cannot be silently promoted into a design knob — the citation is evidence, not a mandate. See `skills/briesearch/references/synthesis.md` § Alternatives are open questions.
 
@@ -105,24 +105,23 @@ This audit is the `Non-goals audit` coherence gate — the `non_goals_audit` nod
 
 Before the two-key handshake, dispose of every follow-up candidate in one batch. This process extends the existing `Non-goals audit` gate. It does not add or rename a gate.
 
-1. Group related candidates into independent units. Ask the user to approve each group or split.
-2. Search GitHub Issues and Hallouminate roadmap goals when discovery is available. Present each semantic match as possible reuse. The user approves each reuse.
-3. Recommend one destination for each unit:
-   - **non-goal only** — keep the scope boundary and create no follow-up artifact;
-   - **GitHub Issue** — use for discrete and independent work;
-   - **roadmap goal** — use for coordinated work, milestone work, or work with dependencies;
-   - **local issue draft** — use when publication is unavailable or unwanted.
-4. Ask the user to approve the destination. For other destinations, ask the user to select **create/link now** or **leave prepared**.
-5. Record each accepted unit for Curdle. Keep rejected design directions in the rejection store. Do not add them to this batch.
+1. Group related candidates into independently deliverable units. The user approves each grouping or splitting choice.
+2. Search GitHub Issues and Hallouminate roadmap goals when discovery is available. Present each semantic match for possible reuse. The user approves each reuse.
+3. Recommend one destination per unit:
+   - **non-goal only** — keep the scope boundary, create no follow-up artifact, and offer no action choice;
+   - **GitHub Issue** — use for discrete, independently actionable work;
+   - **roadmap goal** — use for coordinated, milestone-scale, or dependency-linked work;
+   - **local issue draft** — use when publication is not desired or available.
+4. The user approves the destination. For other destinations, ask the user to choose the action: **create/link now** or **leave prepared**.
+5. Record accepted units for Curdle. Keep rejected design directions in the rejection store. Do not add them to this batch.
 
-The user approves groups, splits, reused matches, destinations, and applicable actions. Mold makes none of these decisions. Omit this batch when no candidates exist. Preserve the current handshake and Curdle flow.
+The user approves grouping, splitting, semantic-match reuse, destination, and action choices. Mold settles none silently. Omit this batch when no candidates exist. Preserve the current handshake and Curdle flow.
 
-Record each candidate under `Decided` as `[FOLLOW-UP?]`. Include its summary, source, and rationale. A follow-up candidate is dialogue state only. It creates no artifact or future commitment.
+Record each candidate within `Decided` as `[FOLLOW-UP?]`. Include its summary, source, and rationale. A follow-up candidate is dialogue state only. It does not create an artifact or future commitment.
 
-After both keys pass, Curdle first writes the local artifacts and approved curd block. Curdle then publishes approved follow-ups. It reconciles their states and references into the durable spec. It renders the implementation handoff last.
+After both keys pass, Curdle writes local artifacts first. It then publishes approved follow-ups. It reconciles their state and references into the durable spec. It only then renders the implementation handoff.
 
 ## Entity-referent binding
-
 Before curdle, audit the draft for **identity/ownership-role nouns** — any noun the design treats as holding, owning, spanning, or claiming state or lifecycle (owner, run, session, claim-holder, coordinator, worker, lease, tenant, lock-holder, …). The trigger is the *role*, not a fixed word list: domain-specific identities are caught and plain value nouns (formats, algorithms, config knobs) are not flagged.
 
 The mechanism is semantic symbol search, one query per identity noun, following the [shared routing contract](../../cheese/references/code-intelligence-routing.md). The gate is *not* "did search find something" — it is a three-way verdict on what search returns:

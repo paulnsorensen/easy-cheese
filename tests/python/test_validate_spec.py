@@ -137,7 +137,7 @@ def test_fenced_fake_heading_and_table_rows_are_invisible_to_detection(
     fenced impostor must not count, so the spec is still rejected for the
     genuinely missing Risks section."""
     text = BASE_SPEC.replace(
-        "## Risks\n\n- None beyond the usual validator-drift risk.\n\n", "", 1
+        "## Risks\n\n- No other validator drift risks apply.\n\n", "", 1
     )
     text = text.replace(
         "## Interface sketches",
@@ -157,7 +157,7 @@ def test_fenced_fake_heading_and_table_rows_are_invisible_to_detection(
 
 def test_missing_required_section_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "## Risks\n\n- None beyond the usual validator-drift risk.\n\n", "", 1
+        "## Risks\n\n- No other validator drift risks apply.\n\n", "", 1
     )
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
@@ -169,7 +169,7 @@ def test_missing_required_section_is_rejected(tmp_path: Path, _run: _RunFn) -> N
 
 def test_acceptance_id_absent_from_table_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n",
         "",
         1,
@@ -190,16 +190,16 @@ def test_acceptance_id_duplicated_in_table_is_rejected(tmp_path: Path, _run: _Ru
         "",
         1,
     ).replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n",
         "",
         1,
     ).replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |\n",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |\n" +
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |\n",
         1,
     )
@@ -219,14 +219,14 @@ def test_matrix_metadata_on_tracer_row_is_rejected(tmp_path: Path, _run: _RunFn)
         "",
         1,
     ).replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n",
         "",
         1,
     ).replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | v1 | |",
         1,
     )
@@ -248,14 +248,14 @@ def test_contract_matrix_row_missing_interface_version_is_rejected(
         "",
         1,
     ).replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |\n",
         "",
         1,
     ).replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |",
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | | row-a, row-b |",
         1,
     )
@@ -270,9 +270,9 @@ def test_contract_matrix_row_missing_interface_version_is_rejected(
 
 def test_unknown_mode_value_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | Tracer | | |",
         1,
     )
@@ -285,9 +285,9 @@ def test_unknown_mode_value_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
 
 def test_six_cell_row_is_a_shape_error(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | |",
         1,
     )
@@ -396,7 +396,7 @@ def _isolated_gate_applicability_fixture(reason: str | None, rows: bool) -> str:
         1,
     )
     ac2_row = (
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n"
     )
     if rows:
@@ -446,17 +446,17 @@ def test_not_applicable_without_reason_is_rejected(tmp_path: Path, _run: _RunFn)
 
 def test_multiple_violations_accumulate_in_one_run(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "## Risks\n\n- None beyond the usual validator-drift risk.\n\n", "", 1
+        "## Risks\n\n- No other validator drift risks apply.\n\n", "", 1
     ).replace(
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | | |",
-        "| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | tracer | v1 | |",
         1,
     ).replace(
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | v1 | row-a, row-b |",
-        "| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess " +
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess " +
         "| no validator exists yet | contract-matrix | | |",
         1,
     )
@@ -651,8 +651,8 @@ WIKI_ROW = (
     "belong in the validator |\n"
 )
 EXPLORER_ROW = (
-    "| explorer | unavailable | hallouminate absent in this fixture run; read "
-    "validate_spec.py directly |\n"
+    "| explorer | unavailable | This fixture cannot use Hallouminate. It reads "
+    "validate_spec.py directly. |\n"
 )
 
 

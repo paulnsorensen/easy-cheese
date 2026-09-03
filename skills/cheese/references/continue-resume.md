@@ -6,11 +6,11 @@ Also use it when the user manually resumes the pipeline from a cleared context.
 
 ## Flow
 
-0. **Read the complete user message.** Do not read only the `--continue` argument.
-   Treat all other user text as directives.
-   Follow those directives before this protocol.
-   Follow a conflicting live directive instead of this protocol.
-   The handoff file restores state, but the live message overrides that state.
+0. **Read the full user message.** Do not read only the `--continue` argument.
+   Treat all other user text as a directive list.
+   Follow that directive list instead of the handoff protocol when they conflict.
+   The handoff file restores state.
+   The user's live message overrides it.
 1. **Resolve through the runtime, never by hand.** Use `/wheypoint resolve --ref <absolute-path | work-id | slug>`.
    The runtime tries an explicit path first.
    It then tries the exact work ID and a unique slug.
@@ -123,18 +123,17 @@ Also use it when the user manually resumes the pipeline from a cleared context.
      Under `--safe`, select the dispatch option first.
      Put `Stop` last.
    - **When `status:` starts with `gated:`**, do not dispatch `next:` automatically.
-     Follow directives from the accompanying message when they answer the gate.
-     Report the gate as one plain-text line in this case.
-     Do not ask a structured question in this case.
+     If the accompanying message contains directives or already answers the gate, execute them and surface the gate as one line of plain text.
+     Do not raise the structured question.
      Otherwise, report the decision from `status:` and the open questions or blockers.
-     Then ask the user to select **research / decide / build**.
-     Classify each open gate item through [`ask-user-question.md`](ask-user-question.md) section “When to structure.”
-     A mechanical item can go directly to that structured question.
-     First explain both options for a design item that this session has not examined.
-     Include code evidence and invite disagreement.
-     Then converge through conversation.
-     Ask no more than one structured confirmation.
-     Never combine multiple design choices in one prompt.
+     Ask the user which direction to take: research, decide, or build.
+     Classify each open gate item as mechanical or design through [`ask-user-question.md`](ask-user-question.md) section “When to structure.”
+     A mechanical item may go straight to that structured question.
+     A design item whose weighing was not already shown this session must not go straight to a structured question.
+     Re-establish the weighing in prose first: both ends, code-grounded evidence, and pushback invited.
+     Converge conversationally.
+     Ask at most one structured confirm.
+     Never bundle multiple design forks into one prompt.
      Dispatch nothing until the user selects an option.
      Route research to `/briesearch`.
      Route build to the named phase.
@@ -178,6 +177,17 @@ Without `--safe`, run only the named authoritative phase immediately.
 A legacy note remains untrusted context.
 Resolution defines the resumability contract.
 It identifies the pipeline position and the next action.
+
+## Parallel write isolation
+
+For `mode: parallel` with `tasks:`, each write task must use a distinct worktree.
+Set `worktree_strategy` to `existing`, `create`, or `harness`.
+For `existing` and `create`, include `branch:` and `branch_from` metadata.
+Refuse parallel writes in the same checkout or a shared checkout.
+Dispatch all independent tasks in the same turn.
+
+For `status: ok`, auto-dispatch `next: briesearch` or `next: culture`.
+These kickoff skills are read-only.
 
 ## --reground
 

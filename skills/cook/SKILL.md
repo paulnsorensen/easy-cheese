@@ -150,7 +150,7 @@ baseline: none | <block — shape in references/quality-gates.md § Baseline blo
 <one-line orientation: what cook changed>
 ```
 
-The [handback contract](../cheese/references/handback-contract.md) defines the canonical `status:` grammar.
+The [handback contract](../cheese/references/handback-contract.md) defines the canonical `status:` grammar, including `ok` and `halt`.
 Only `next:` and the additional keyed lines are specific to a phase.
 
 When you emit this handoff for the typed fan result, use the canonical boundary writer.
@@ -235,8 +235,13 @@ Do not silently downgrade the result.
 Read [`references/auto-mode.md`](references/auto-mode.md) before you run or dispatch auto mode.
 It defines the complete phase chain and the limit controls.
 It also defines fan-path isolation and Cure failure handling.
+## No-chain isolation directive
+
 A spawned phase agent does not chain forward by itself.
 The orchestrator controls the chain.
+
+A terminal Age is publishable only with `next: done`.
+`next: cure` or a missing `next` halts the chain.
 The reference also contains the final report template.
 
 ## Rules

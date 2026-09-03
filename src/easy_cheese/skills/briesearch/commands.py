@@ -26,6 +26,20 @@ def _ground_check(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("budget-check")
+def _budget_check(argv: list[str]) -> int:
+    from easy_cheese.skills.briesearch.budget import main
+
+    return main(argv)
+
+
+@bundle_command("research-layout")
+def _research_layout(argv: list[str]) -> int:
+    from easy_cheese.skills.briesearch.research_layout import main
+
+    return main(argv)
+
+
 def _with_summary(command: Command, summary: str) -> Command:
     return Command(command.name, command.target, summary)
 
@@ -35,18 +49,16 @@ COMMANDS = (
         derive_command(_artifact_path),
         "Resolve the durable or transient artifact path for a phase and slug",
     ),
-    Command(
-        "budget-check",
-        "easy_cheese.skills.briesearch.budget:main",
+    _with_summary(
+        derive_command(_budget_check),
         "Enforce the search budget and dedup rules from the run ledger",
     ),
     _with_summary(
         derive_command(_ground_check),
         "Lint a synthesis report for grounding and citation violations",
     ),
-    Command(
-        "research-layout",
-        "easy_cheese.skills.briesearch.research_layout:main",
+    _with_summary(
+        derive_command(_research_layout),
         "Print the slug-aware research corpus layout as JSON",
     ),
 )

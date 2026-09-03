@@ -7,11 +7,17 @@ import sys
 from dataclasses import replace
 
 from easy_cheese.shared.bundle_commands import (
-    Command,
     bundle_command,
     derive_command,
     dispatch,
 )
+
+
+@bundle_command("checkpoint")
+def _checkpoint(argv: list[str]) -> int:
+    from easy_cheese.skills.wheypoint.wheypoint import checkpoint_main
+
+    return checkpoint_main(argv)
 
 
 @bundle_command("commit")
@@ -43,10 +49,9 @@ def _lint(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    Command(
-        "checkpoint",
-        "easy_cheese.skills.wheypoint.wheypoint:checkpoint_main",
-        "Build a delta from a semantic intent and commit it",
+    replace(
+        derive_command(_checkpoint),
+        summary="Build a delta from a semantic intent and commit it",
     ),
     replace(
         derive_command(_commit),

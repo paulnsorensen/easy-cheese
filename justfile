@@ -36,7 +36,7 @@ test-skill-overlap:
 
 # Build one self-contained Shiv .pyz archive per Python skill
 bundle:
-    python3 scripts/build_pyz.py
+    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt python3 scripts/build_pyz.py
 
 # Preview the exact tree a release ships (skills + .pyz only, no sources)
 release-preview:

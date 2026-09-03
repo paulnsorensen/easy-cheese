@@ -87,7 +87,7 @@ Press has no global `dispatch: /cook` action. Press owns the corrective Cook `Co
 
 Press preserves baseline-aware readiness for project gates. A Cook `baseline:` block contains the settled state.
 
-Do not report a failure again when its test and signature match the baseline. New or changed failures block the route.
+Do not re-flag a failure when its test and signature match the baseline. New or changed failures block the route.
 
 See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md). Also see [`references/gap-analysis.md`](references/gap-analysis.md).
 
@@ -102,7 +102,8 @@ See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)
 
 Use [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) for source changes.
 
-Use [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for portability. Slash commands are host representations, not the control model.
+Use [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for portability.
+The reference states that slash commands are host renderings, not the control model.
 
 Map `ready for /age` to `status: ok` and `next: age`. Map `follow-up recommended` to `status: ok-with-concerns: <concern>`. Continue after that status.
 

@@ -146,9 +146,19 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
     ),
     (
         "skills/easy-cheese-setup/SKILL.md",
-        "Show the report as evidence, confirm with the user",
+        "Ask the user for confirmation.",
         "mechanical yes/no confirm immediately after the dry-run report is "
         + "shown — mechanical fast-path, no undiscussed design option",
+    ),
+    (
+        "skills/briesearch/references/routing.md",
+        "Is the question about a library API, configuration, or migration?",
+        "decision-tree label for capability routing, not a live question site",
+    ),
+    (
+        "skills/briesearch/references/synthesis.md",
+        "when the question warranted a deep look",
+        "report-shape description, not a live question site",
     ),
     (
         "skills/mold/references/grounding.md",

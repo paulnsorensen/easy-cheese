@@ -16,7 +16,7 @@ gate_applicability:
 
 ## Problem
 
-Something is broken and needs mechanical enforcement.
+The current spec format permits invalid documents. Add a mechanical check.
 
 ## Goals
 
@@ -24,14 +24,14 @@ Something is broken and needs mechanical enforcement.
 
 ## Non-goals
 
-- Nothing else is in scope.
+- Exclude all other changes.
 
 ## Grounding
 
 | Probe | Outcome | Evidence |
 | --- | --- | --- |
 | wiki | hit | adr/spec-format-enforcement-001.md — content-schema rules belong in the validator |
-| explorer | unavailable | hallouminate absent in this fixture run; read validate_spec.py directly |
+| explorer | unavailable | This fixture cannot use Hallouminate. It reads validate_spec.py directly. |
 
 ## Approach
 
@@ -50,8 +50,8 @@ Hand-roll a validator that consumes the generated document rules.
 
 | Acceptance ID | Interface referent | Outermost stable seam | Expected failure | Mode | Interface version | Matrix rows |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC-1 | validate-spec CLI | pytest invoking the CLI as a subprocess | no validator exists yet | tracer | | |
-| AC-2 | validate-spec CLI | pytest invoking the CLI as a subprocess | no validator exists yet | contract-matrix | v1 | row-a, row-b |
+| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess | no validator exists yet | tracer | | |
+| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess | no validator exists yet | contract-matrix | v1 | row-a, row-b |
 
 ## Interface sketches
 
@@ -61,11 +61,11 @@ validate-spec <spec-path> -> exit 0 | exit 1 + ERROR: lines
 
 ## Risks
 
-- None beyond the usual validator-drift risk.
+- No other validator drift risks apply.
 
 ## Open questions
 
-- None.
+- There are no open questions.
 
 ## Quality gates
 

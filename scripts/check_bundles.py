@@ -671,11 +671,22 @@ def _staged_index_rebuild() -> Generator[Path]:
             check=True,
         )
         try:
-            _ = subprocess.run(
-                [sys.executable, str(worktree / "scripts" / "build_pyz.py")],
-                cwd=worktree,
-                check=True,
-            )
+            build_command = [sys.executable, str(worktree / "scripts" / "build_pyz.py")]
+            runtime_requirements = worktree / "requirements" / "runtime.txt"
+            build_requirements = worktree / "requirements-build.txt"
+            if runtime_requirements.is_file() and build_requirements.is_file():
+                build_command = [
+                    "uv",
+                    "run",
+                    "--no-project",
+                    "--with-requirements",
+                    str(runtime_requirements),
+                    "--with-requirements",
+                    str(build_requirements),
+                    "python3",
+                    str(worktree / "scripts" / "build_pyz.py"),
+                ]
+            _ = subprocess.run(build_command, cwd=worktree, check=True)
             yield worktree
         finally:
             _ = subprocess.run(

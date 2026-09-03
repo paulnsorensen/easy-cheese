@@ -216,6 +216,7 @@ def test_not_applicable_document_allows_acceptance_without_test_contracts() -> N
 
     _ = contracts.MoldSpecDocument(
         frontmatter=frontmatter,
+        grounding_rows=_grounding_rows(),
         acceptance_ids=("AC-1",),
         test_contract_rows=(),
     )

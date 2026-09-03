@@ -13,8 +13,8 @@
 | `paths-cli` | Slugify, validate, resolve, and list .cheese artifact paths |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
-| `review-lock` | Record or verify the production tree digest that keeps `/age` review-only |
+| `review-lock` | Record or verify the production tree digest that keeps /age review-only |
 | `review-surface` | Score the reviewable git surface that routing sizes against (JSON out) |
 | `severity` | Compute per-finding severity and fix-cost-now buckets |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text |
-| `write-handoff-artifact` | Write a handoff after the review lock verifies the production tree |
+| `write-handoff-artifact` | Write an age handoff atomically after the review lock verifies the tree |
