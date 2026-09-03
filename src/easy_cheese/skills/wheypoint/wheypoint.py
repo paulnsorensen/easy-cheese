@@ -124,8 +124,7 @@ def _parser(command: str) -> _Parser:
 
 def _findings(findings: tuple[lint_mod.LintFinding, ...]) -> list[dict[str, str]]:
     return [
-        {"code": finding.code.value, "detail": finding.detail}
-        for finding in findings
+        {"code": finding.code.value, "detail": finding.detail} for finding in findings
     ]
 
 
@@ -261,9 +260,7 @@ def _promote(
             "record-unreadable",
             f"work {store.work_id!r} has a record that cannot be read: {exc}",
         ) from exc
-    target = note_dir / (
-        f"{store.work_id if current is None else current.slug}.md"
-    )
+    target = note_dir / (f"{store.work_id if current is None else current.slug}.md")
     pending = _read_pending(store, request_identity)
     if pending is not None:
         revision = store.find_complete_revision(pending.revision_id)
@@ -297,9 +294,7 @@ def _promote(
 
     def finalize(pending_revision: commit_mod.PendingRevision) -> None:
         try:
-            storage.write_atomic(
-                target, pending_revision.markdown.encode("utf-8")
-            )
+            storage.write_atomic(target, pending_revision.markdown.encode("utf-8"))
             store.remove_pending(request_identity)
         except OSError as exc:
             raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
@@ -345,9 +340,10 @@ def _read_pending(
             "storage-error", f"request ledger {path} cannot be read: {exc}"
         ) from exc
     try:
-        payload = json.loads(raw.decode("utf-8"))
-        if not isinstance(payload, dict):
+        decoded = cast(object, json.loads(raw.decode("utf-8")))
+        if not isinstance(decoded, dict):
             raise ValueError("request ledger is not an object")
+        payload = cast(dict[str, object], decoded)
         pending = _PendingMirror(
             request_identity=cast(str, payload["request_identity"]),
             request_digest=cast(str, payload["request_digest"]),
@@ -358,7 +354,10 @@ def _read_pending(
         raise _Refused(
             "pending-corrupt", f"request ledger {path} is invalid: {exc}"
         ) from exc
-    if pending.request_identity != request_identity or not Path(pending.target).is_absolute():
+    if (
+        pending.request_identity != request_identity
+        or not Path(pending.target).is_absolute()
+    ):
         raise _Refused("pending-corrupt", f"request ledger {path} has invalid identity")
     return pending
 
@@ -403,9 +402,7 @@ def _resume_mirror(
 ) -> commit_mod.CommitResult:
     def finalize(pending_revision: commit_mod.PendingRevision) -> None:
         try:
-            storage.write_atomic(
-                target, pending_revision.markdown.encode("utf-8")
-            )
+            storage.write_atomic(target, pending_revision.markdown.encode("utf-8"))
             store.remove_pending(pending.request_identity)
         except OSError as exc:
             raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
@@ -535,9 +532,7 @@ def _emit(stdout: TextIO, payload: dict[str, object]) -> None:
     _ = stdout.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
-def _refuse(
-    stdout: TextIO, command: str, code: str, message: str, status: int
-) -> int:
+def _refuse(stdout: TextIO, command: str, code: str, message: str, status: int) -> int:
     _emit(
         stdout,
         {

@@ -36,7 +36,6 @@ from easy_cheese.skills.wheypoint import commit, records, storage
 from conftest import PLACEHOLDER_DIGEST, WORK_ID, Promotion
 
 
-
 def _entry(entry_id: str, kind: EntryKind, *, gates: bool = False) -> ProtectedEntry:
     return ProtectedEntry(
         entry_id=entry_id,
@@ -111,12 +110,13 @@ def test_commit_promotes_the_next_revision_and_swaps_the_record(
     # The store now reads back exactly what was returned, with both immutable
     # files present and record.json pointing at them.
     assert store.read_record() == result.record
+    assert store.read_revision(2, result.revision.revision_id) == result.revision
     assert (
-        store.read_revision(2, result.revision.revision_id) == result.revision
+        store.projection_path(2, result.revision.revision_id).read_text(
+            encoding="utf-8"
+        )
+        == result.markdown
     )
-    assert store.projection_path(2, result.revision.revision_id).read_text(
-        encoding="utf-8"
-    ) == result.markdown
     assert store.recover().problems == ()
 
 
@@ -212,7 +212,10 @@ def test_transition_settles_the_entry_and_leaves_it_out_of_the_preserved_ledger(
     make_promotion: Callable[..., Promotion],
 ) -> None:
     parent = make_record(
-        decisions=[_entry("d-old", EntryKind.DECISION), _entry("d-new", EntryKind.DECISION)],
+        decisions=[
+            _entry("d-old", EntryKind.DECISION),
+            _entry("d-new", EntryKind.DECISION),
+        ],
         questions=[_entry("q-open", EntryKind.QUESTION)],
     )
     seed = _seed(store, make_promotion, record=parent)
@@ -326,9 +329,7 @@ def test_a_lost_parent_receipt_blocks_the_next_revision(
     store: storage.WorkStore, make_promotion: Callable[..., Promotion]
 ) -> None:
     seed = _seed(store, make_promotion)
-    store.revision_path(
-        seed.record.revision_number, seed.record.revision_id
-    ).unlink()
+    store.revision_path(seed.record.revision_number, seed.record.revision_id).unlink()
 
     with pytest.raises(commit.CommitError, match="has no immutable receipt"):
         _ = commit.commit(
@@ -355,10 +356,12 @@ def test_a_record_quoting_the_wrong_receipt_digest_blocks_the_next_revision(
     assert _revision_files(store) == [
         f"1-{seed.record.revision_id}.json",
     ]
+
+
 def test_a_missing_ancestor_receipt_blocks_the_next_revision(
     store: storage.WorkStore, make_promotion: Callable[..., Promotion]
 ) -> None:
-    seed = _seed(store, make_promotion)
+    _ = _seed(store, make_promotion)
     broken = make_promotion(2, "rev-0002", parent="rev-missing")
     store.promote(broken.record, broken.revision, broken.markdown)
 
@@ -398,7 +401,6 @@ def test_a_parent_receipt_digest_mismatch_blocks_the_next_revision(
             _delta(forged_record.revision_id, orientation="Reject a forged parent."),
             store=store,
         )
-
 
 
 def test_identical_replay_against_the_same_parent_returns_the_existing_revision(
@@ -593,7 +595,9 @@ def test_compaction_rehydrated_from_the_current_revision_is_accepted(
     # session, so nothing downstream can select on one.
     assert "session_provenance" not in {
         field.name
-        for field in cast(tuple["Attribute[object]", ...], attrs.fields(WheypointRecord))
+        for field in cast(
+            tuple["Attribute[object]", ...], attrs.fields(WheypointRecord)
+        )
     }
 
 
@@ -801,9 +805,7 @@ def test_added_artifact_links_append_to_the_ones_already_carried(
     make_promotion: Callable[..., Promotion],
 ) -> None:
     carried = ArtifactLink(path=".cheese/cook/wave-2.md")
-    added = ArtifactLink(
-        path=".cheese/cook/wave-3.md", digest=PLACEHOLDER_DIGEST
-    )
+    added = ArtifactLink(path=".cheese/cook/wave-3.md", digest=PLACEHOLDER_DIGEST)
     seed = _seed(store, make_promotion, record=make_record(artifact_links=[carried]))
 
     result = commit.commit(
@@ -1142,9 +1144,7 @@ def test_a_genesis_delta_cannot_carry_transitions(store: storage.WorkStore) -> N
     assert store.read_record() is None
 
 
-@pytest.mark.parametrize(
-    "missing", ["orientation", "working_context", "next_action"]
-)
+@pytest.mark.parametrize("missing", ["orientation", "working_context", "next_action"])
 def test_a_genesis_delta_must_carry_the_state_it_has_no_parent_for(
     store: storage.WorkStore, missing: str
 ) -> None:
