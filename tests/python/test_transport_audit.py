@@ -68,7 +68,7 @@ ROUTED_FILES = {
     "skills/mold/references/evals.md",
     "skills/mold/SKILL.md",
     "skills/pasteurize/SKILL.md",
-    "skills/plate/SKILL.md",
+    "skills/plate/references/topology.md",  # layout question, moved out of the body
     "skills/press/SKILL.md",
     "skills/wheypoint/SKILL.md",
 }
