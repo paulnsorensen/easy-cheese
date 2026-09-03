@@ -64,14 +64,20 @@ handoff:
 
 The orchestrator **consumes** that handoff on redispatch: the next agent
 receives the completed set as done and starts at the named next action. It
-never restarts the whole finding set. A budget overrun is recorded as its own
-outcome — never folded into a correctness, environment, or tool-call failure —
-so a run that hit its ceiling is not mistaken for a run that broke.
+never restarts the whole finding set. A budget overrun keeps the `BLOCKED`
+disposition every stopped run carries; it is told apart by the
+`writer stopped at its budget:` prefix on `unresolved_work[0]` (or
+`budget checkpoint invalid:` when the checkpoint failed validation), so a run
+that hit its ceiling is not mistaken for a run that broke.
 
 The typed seam behind this is
 `easy_cheese_schemas.workflow.WriterBudgetExceeded`, which carries a
-`WriterCheckpoint` of exactly those four parts. The host finalizes it into a
-partial curd result whose completed criteria keep their disposition and
-evidence and whose unreached criteria are blocked on the overrun reason. A
+`WriterCheckpoint` of those four parts; Blockers ride inside its `reason` text
+next to the budget cause. The host finalizes it into a partial curd result
+whose completed criteria keep their disposition and evidence and whose
+unreached criteria are blocked on the overrun reason. Completed entries may
+only report finished criteria (passed or failed) and are read in criterion
+order, and a checkpoint that fails validation still salvages its readable
+deliverables into the blocked result. A
 checkpoint claiming every criterion is rejected: the review branch is skipped
 on the overrun path, so full coverage would be a pass no reviewer ever saw.

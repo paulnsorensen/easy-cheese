@@ -212,9 +212,7 @@ def test_review_coverage_ledger_is_representation_independent(
         else CoverageDisposition.NOT_COVERED
     )
     expected_reason = (
-        None
-        if expected_disposition is CoverageDisposition.COVERED
-        else reason
+        None if expected_disposition is CoverageDisposition.COVERED else reason
     )
     assert result.coverage == (
         ReviewCoverage("target", expected_disposition, expected_reason),
@@ -245,9 +243,7 @@ def run_complete(root: Path, events: list[str], contexts: list[Mapping[str, obje
                     evidence_keys=["result.txt"],
                 )
             ],
-            deliverables=[
-                DeliverableWriterView("result", "result.txt", "text/plain")
-            ],
+            deliverables=[DeliverableWriterView("result", "result.txt", "text/plain")],
         )
 
     def dispatch_review(request: ReviewRequest) -> ReviewResultWriterView:
@@ -310,9 +306,7 @@ def test_complete_thread_orders_real_callbacks_and_authors_contracts(
     result = results[0]
     assert result.result_id == "workflow-request/plan/revision/1/result/1"
     assert result.disposition is CurdDisposition.PASSED
-    assert result.runtime_refs == (
-        "workflow-request/plan/revision/1/result/1/review",
-    )
+    assert result.runtime_refs == ("workflow-request/plan/revision/1/result/1/review",)
     assert result.source_plan_ref.digest == planner.plan.digest
     assert result.source_curd_ref.curd_id == planner.plan.curds[0].curd_id
     assert result.deliverables[0].digest == digest(b"verified workflow output\n")
@@ -417,9 +411,7 @@ def test_partial_plan_runs_runnable_curd_and_diagnoses_failure(tmp_path: Path) -
                 "The workflow output did not satisfy its criterion",
                 [subject_key],
             ),
-            regression_seam=SourceLocationWriterView(
-                "src/workflow.py", 1, 1
-            ),
+            regression_seam=SourceLocationWriterView("src/workflow.py", 1, 1),
         )
 
     planner, branches, results = run_workflow(
@@ -456,7 +448,6 @@ def test_partial_plan_runs_runnable_curd_and_diagnoses_failure(tmp_path: Path) -
     assert retained_source.digest == source.digest
     assert retained_source.uri != source.uri
     assert Path(retained_source.uri.removeprefix("file://")).is_file()
-
 
 
 def test_multi_curd_branches_keep_subjects_and_evidence_isolated(
@@ -574,9 +565,7 @@ def test_multi_curd_branches_keep_subjects_and_evidence_isolated(
     assert first_branch.diagnosis_id == f"{first_result_id}/diagnosis"
     assert isinstance(second_branch, ReviewResult)
     assert second_branch.review_id == f"{second_result_id}/review"
-    first_evidence_ids = {
-        item.evidence_id for item in diagnosis_requests[0].evidence
-    }
+    first_evidence_ids = {item.evidence_id for item in diagnosis_requests[0].evidence}
     second_evidence_ids = {item.evidence_id for item in review_requests[0].evidence}
     assert first_evidence_ids == {
         "workflow-request/plan/curd/1/evidence/input-1",
@@ -587,12 +576,9 @@ def test_multi_curd_branches_keep_subjects_and_evidence_isolated(
         f"{second_result_id}/subject-evidence",
     }
     assert first_evidence_ids.isdisjoint(second_evidence_ids)
-    assert diagnosis_requests[0].subject.artifact_id == (
-        f"{first_result_id}/subject"
-    )
-    assert review_requests[0].subject.artifact_id == (
-        f"{second_result_id}/subject"
-    )
+    assert diagnosis_requests[0].subject.artifact_id == (f"{first_result_id}/subject")
+    assert review_requests[0].subject.artifact_id == (f"{second_result_id}/subject")
+
 
 def test_invalid_writer_host_field_is_rejected_before_branch_dispatch(
     tmp_path: Path,
@@ -732,9 +718,10 @@ def test_distinct_deliverable_paths_are_all_retained(tmp_path: Path) -> None:
         digest(b"verified workflow output\n"),
         digest(b"verified workflow report\n"),
     ]
-    assert [
-        item.evidence_id for item in results[0].criterion_results[0].evidence
-    ] == [f"{result_id}/evidence/1", f"{result_id}/evidence/2"]
+    assert [item.evidence_id for item in results[0].criterion_results[0].evidence] == [
+        f"{result_id}/evidence/1",
+        f"{result_id}/evidence/2",
+    ]
 
 
 def test_wrong_writer_kind_is_rejected_without_review_or_diagnosis(
@@ -766,7 +753,6 @@ def test_wrong_writer_kind_is_rejected_without_review_or_diagnosis(
     assert len(results) == 1
     assert results[0].disposition is CurdDisposition.BLOCKED
     assert results[0].criterion_results[0].disposition is CriterionDisposition.BLOCKED
-
 
 
 @pytest.mark.parametrize(
@@ -866,9 +852,7 @@ def test_cure_without_bindings_raises_before_any_dispatch(
         events.append("invoked")
         raise AssertionError("cure without bindings must not dispatch")
 
-    with pytest.raises(
-        ValueError, match="cure requires per-curd diagnosis bindings"
-    ):
+    with pytest.raises(ValueError, match="cure requires per-curd diagnosis bindings"):
         _ = run_workflow(
             planner_request(),
             repository_root=tmp_path,
@@ -1095,9 +1079,7 @@ def test_budget_overrun_retains_completed_repairs_and_next_action(
                     evidence_keys=["repair.txt"],
                 )
             ],
-            deliverables=[
-                DeliverableWriterView("repair", "repair.txt", "text/plain")
-            ],
+            deliverables=[DeliverableWriterView("repair", "repair.txt", "text/plain")],
             remaining=["Apply the second repair in src/workflow.py"],
         ),
     )
@@ -1173,9 +1155,73 @@ def test_full_coverage_budget_checkpoint_is_rejected_without_review(
         WriterCheckpoint(
             reason="budget reached",
             completed=[passed, passed],
-            deliverables=[
-                DeliverableWriterView("repair", "repair.txt", "text/plain")
+            deliverables=[DeliverableWriterView("repair", "repair.txt", "text/plain")],
+        ),
+    )
+
+    assert events == ["planner", "writer"]
+    assert branches == ()
+    result = results[0]
+    assert result.disposition is CurdDisposition.BLOCKED
+    assert [item.role for item in result.deliverables] == ["repair"]
+    assert result.deliverables[0].digest == digest(payload)
+    assert result.unresolved_work == (
+        "budget checkpoint invalid: ValueError: budget checkpoint must leave at "
+        + "least one criterion unfinished, not 2 of 2 "
+        + "<- WriterBudgetExceeded: budget reached",
+    )
+
+
+def test_invalid_budget_checkpoint_with_an_unreadable_deliverable_stays_blocked(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    passed = CriterionResultWriterView(
+        CriterionDisposition.PASSED,
+        evidence_keys=["missing.txt"],
+    )
+
+    branches, results = run_overrun(
+        tmp_path,
+        events,
+        WriterCheckpoint(
+            reason="budget reached",
+            completed=[passed, passed],
+            deliverables=[DeliverableWriterView("repair", "missing.txt", "text/plain")],
+        ),
+    )
+
+    assert events == ["planner", "writer"]
+    assert branches == ()
+    result = results[0]
+    assert result.disposition is CurdDisposition.BLOCKED
+    assert result.deliverables == ()
+    assert len(result.unresolved_work) == 1
+    assert result.unresolved_work[0].startswith(
+        "budget checkpoint invalid: ValueError: budget checkpoint must leave at "
+        + "least one criterion unfinished, not 2 of 2 "
+        + "<- WriterBudgetExceeded: budget reached; deliverable salvage failed: "
+    )
+    assert "missing.txt" in result.unresolved_work[0]
+
+
+def test_budget_checkpoint_with_an_unfinished_completed_entry_is_rejected(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+
+    branches, results = run_overrun(
+        tmp_path,
+        events,
+        WriterCheckpoint(
+            reason="budget reached",
+            completed=[
+                CriterionResultWriterView(
+                    CriterionDisposition.SKIPPED,
+                    reason="not attempted yet",
+                )
             ],
+            remaining=["Apply the first repair"],
         ),
     )
 
@@ -1185,10 +1231,38 @@ def test_full_coverage_budget_checkpoint_is_rejected_without_review(
     assert result.disposition is CurdDisposition.BLOCKED
     assert result.deliverables == ()
     assert result.unresolved_work == (
-        "budget checkpoint invalid: ValueError: budget checkpoint must leave at "
-        + "least one criterion unfinished, not 2 of 2 "
+        "budget checkpoint invalid: ValueError: budget checkpoint completed[1] "
+        + "must be finished (passed or failed), not skipped "
         + "<- WriterBudgetExceeded: budget reached",
     )
+
+
+def test_writer_checkpoint_rejects_duplicate_remaining_work() -> None:
+    with pytest.raises(ValueError, match="remaining must not contain duplicate"):
+        _ = WriterCheckpoint(
+            reason="budget reached",
+            remaining=["first step", "second step", "first step"],
+        )
+
+
+def test_writer_checkpoint_rejects_a_bare_string_remaining() -> None:
+    with pytest.raises(TypeError):
+        _ = WriterCheckpoint(reason="budget reached", remaining="Apply the fix")  # pyright: ignore[reportArgumentType]
+
+
+def test_writer_checkpoint_rejects_a_non_criterion_result_in_completed() -> None:
+    with pytest.raises(ValueError, match="completed"):
+        _ = WriterCheckpoint(reason="budget reached", completed=["junk"])  # pyright: ignore[reportArgumentType]
+
+
+def test_writer_checkpoint_rejects_a_non_deliverable_view_in_deliverables() -> None:
+    with pytest.raises(ValueError, match="deliverables"):
+        _ = WriterCheckpoint(reason="budget reached", deliverables=[42])  # pyright: ignore[reportArgumentType]
+
+
+def test_writer_checkpoint_rejects_an_empty_reason() -> None:
+    with pytest.raises(ValueError, match="reason"):
+        _ = WriterCheckpoint(reason="")
 
 
 def test_budget_overrun_is_reported_apart_from_a_plain_writer_failure(
