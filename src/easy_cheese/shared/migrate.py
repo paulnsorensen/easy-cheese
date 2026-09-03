@@ -18,20 +18,16 @@ import json
 from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
-from typing import cast
 
 from easy_cheese_schemas import (
-    CURD_PLAN_SCHEMA_URI,
     CanonicalArtifact,
     ContractVersion,
     IngressKind,
-    LegacyAdapter,
     NormalizationReceipt,
     PublishedArtifact,
     adapter_for,
     canonical_digest,
     check_adapter_sunsets,
-    register_adapter,
     supported_version_for,
     validate_contract,
 )
@@ -132,82 +128,3 @@ def migrate(
     )
 
 
-_LEGACY_CURD_PLAN_MAJOR = "0"
-_LEGACY_CURD_PLAN_MINOR = "9"
-
-
-def _convert_criterion(index: int, item: Mapping[str, object]) -> dict[str, object]:
-    return {
-        "criterion_id": f"legacy-criterion-{index}",
-        "description": item["description"],
-        "check": item["check"],
-    }
-
-
-def _convert_curd(item: Mapping[str, object]) -> dict[str, object]:
-    criteria = cast("list[Mapping[str, object]]", item["criteria"])
-    return {
-        "curd_id": item["key"],
-        "outcome": item["goal"],
-        "scope": {
-            "paths": list(cast("list[str]", item.get("paths", []))),
-            "excluded_paths": [],
-        },
-        "inputs": [],
-        "outputs": list(cast("list[str]", item.get("outputs", []))),
-        "dependencies": [],
-        "criteria": [
-            _convert_criterion(index, criterion)
-            for index, criterion in enumerate(criteria, start=1)
-        ],
-        "lineage": {"identity_action": "new", "source_curd_ids": []},
-    }
-
-
-def _convert_curd_plan_v0_9(payload: Mapping[str, object]) -> dict[str, object]:
-    """The 0.9 curd-plan writer view named the plan's goal ``goal`` and each
-    curd by a bare ``key``/``goal``/``paths`` shape; 1.0 renamed these to
-    ``objective``/``outcome``/``scope.paths`` and requires each curd to carry
-    an identity lineage and a stable criterion id."""
-    curds = [
-        _convert_curd(cast("Mapping[str, object]", curd))
-        for curd in cast("list[object]", payload["curds"])
-    ]
-    unsigned = {
-        "contract_version": {
-            "schema_uri": CURD_PLAN_SCHEMA_URI,
-            "major": "1",
-            "minor": "0",
-        },
-        "plan_id": payload["plan_id"],
-        "revision": payload["revision"],
-        "objective": payload["goal"],
-        "curds": curds,
-        "context": None,
-        "parent_plan_ref": None,
-    }
-    digest = canonical_digest(unsigned)
-    return {**unsigned, "digest": digest}
-
-
-def _register_legacy_adapters() -> None:
-    if (
-        adapter_for(
-            CURD_PLAN_SCHEMA_URI, _LEGACY_CURD_PLAN_MAJOR, _LEGACY_CURD_PLAN_MINOR
-        )
-        is not None
-    ):
-        return
-    register_adapter(
-        LegacyAdapter(
-            source_schema_uri=CURD_PLAN_SCHEMA_URI,
-            source_major=_LEGACY_CURD_PLAN_MAJOR,
-            source_minor=_LEGACY_CURD_PLAN_MINOR,
-            target_schema_uri=CURD_PLAN_SCHEMA_URI,
-            remove_after="2027-06-01",
-            convert=_convert_curd_plan_v0_9,
-        )
-    )
-
-
-_register_legacy_adapters()

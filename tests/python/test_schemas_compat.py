@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date
+import os
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import cast
@@ -19,6 +22,7 @@ from attrs import define, field
 from attrs.exceptions import FrozenInstanceError
 
 from easy_cheese_schemas import (
+    CURD_PLAN_SCHEMA_URI,
     MIN_READABLE,
     SCHEMA_VERSION,
     AdapterSunsetError,
@@ -29,10 +33,13 @@ from easy_cheese_schemas import (
     LegacyAdapter,
     Loaded,
     Provenance,
+    adapter_for,
     check_adapter_sunsets,
     load,
     register_adapter,
+    supported_version_for,
     unregister_adapter,
+    validate_contract,
 )
 from easy_cheese_schemas.compat import STAMP_KEY, classify_stamp
 
@@ -348,3 +355,60 @@ class TestAdapterSunsets:
         )
 
         check_adapter_sunsets(date(2020, 1, 1))
+
+_BUILTIN_MIGRATION_IMPORT_ORDER_PROBE = """
+import sys
+
+from easy_cheese_schemas import (
+    CURD_PLAN_SCHEMA_URI,
+    adapter_for,
+    supported_version_for,
+    validate_contract,
+)
+
+assert "easy_cheese.shared.migrate" not in sys.modules
+adapter = adapter_for(CURD_PLAN_SCHEMA_URI, "0", "9")
+assert adapter is not None
+converted = adapter.convert(
+    {
+        "plan_id": "legacy-plan",
+        "revision": 1,
+        "goal": "Ship the behavior",
+        "curds": [
+            {
+                "key": "runtime",
+                "goal": "Implement validation",
+                "paths": ["src/runtime.py"],
+                "outputs": ["Validated contract"],
+                "criteria": [
+                    {
+                        "description": "Reject unknown fields",
+                        "check": "pytest tests/test_runtime.py",
+                    }
+                ],
+            }
+        ],
+    }
+)
+validated = validate_contract(
+    converted,
+    CURD_PLAN_SCHEMA_URI,
+    supported_version_for(CURD_PLAN_SCHEMA_URI),
+)
+assert validated.value is not None
+assert validated.value.objective == "Ship the behavior"
+assert validated.value.curds[0].curd_id == "runtime"
+"""
+
+
+def test_builtin_migration_adapter_works_before_shared_migrate_import() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", _BUILTIN_MIGRATION_IMPORT_ORDER_PROBE],
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr

@@ -35,6 +35,8 @@ from attrs import Attribute, define, field
 from cattrs.cols import list_structure_factory
 from cattrs.errors import AttributeValidationNote, IterableValidationNote
 from cattrs.gen import make_dict_structure_fn
+from easy_cheese_schemas._schema_catalog import CURD_PLAN_SCHEMA_URI
+
 
 # 2 adds WheypointRevision.parent_revision_digest, which pins each receipt to
 # the exact ancestor it was written against.
@@ -425,6 +427,72 @@ class LegacyAdapter:
 
 _ADAPTERS: dict[tuple[str, str, str], LegacyAdapter] = {}
 
+_LEGACY_CURD_PLAN_MAJOR = "0"
+_LEGACY_CURD_PLAN_MINOR = "9"
+
+
+def _convert_criterion(index: int, item: Mapping[str, object]) -> dict[str, object]:
+    return {
+        "criterion_id": f"legacy-criterion-{index}",
+        "description": item["description"],
+        "check": item["check"],
+    }
+
+
+def _convert_curd(item: Mapping[str, object]) -> dict[str, object]:
+    criteria = cast("list[Mapping[str, object]]", item["criteria"])
+    return {
+        "curd_id": item["key"],
+        "outcome": item["goal"],
+        "scope": {
+            "paths": list(cast("list[str]", item.get("paths", []))),
+            "excluded_paths": [],
+        },
+        "inputs": [],
+        "outputs": list(cast("list[str]", item.get("outputs", []))),
+        "dependencies": [],
+        "criteria": [
+            _convert_criterion(index, criterion)
+            for index, criterion in enumerate(criteria, start=1)
+        ],
+        "lineage": {"identity_action": "new", "source_curd_ids": []},
+    }
+
+
+def _convert_curd_plan_v0_9(payload: Mapping[str, object]) -> dict[str, object]:
+    """Convert the 0.9 curd-plan writer view to the current contract."""
+    curds = [
+        _convert_curd(cast("Mapping[str, object]", curd))
+        for curd in cast("list[object]", payload["curds"])
+    ]
+    unsigned = {
+        "contract_version": {
+            "schema_uri": CURD_PLAN_SCHEMA_URI,
+            "major": "1",
+            "minor": "0",
+        },
+        "plan_id": payload["plan_id"],
+        "revision": payload["revision"],
+        "objective": payload["goal"],
+        "curds": curds,
+        "context": None,
+        "parent_plan_ref": None,
+    }
+    from easy_cheese_schemas.contracts import canonical_digest
+
+    digest = canonical_digest(unsigned)
+    return {**unsigned, "digest": digest}
+
+
+_BUILTIN_CURD_PLAN_ADAPTER = LegacyAdapter(
+    source_schema_uri=CURD_PLAN_SCHEMA_URI,
+    source_major=_LEGACY_CURD_PLAN_MAJOR,
+    source_minor=_LEGACY_CURD_PLAN_MINOR,
+    target_schema_uri=CURD_PLAN_SCHEMA_URI,
+    remove_after="2027-06-01",
+    convert=_convert_curd_plan_v0_9,
+)
+
 
 def _adapter_key(adapter: LegacyAdapter) -> tuple[str, str, str]:
     return (adapter.source_schema_uri, adapter.source_major, adapter.source_minor)
@@ -475,3 +543,8 @@ def check_adapter_sunsets(reference_date: date) -> None:
             for adapter in expired
         )
         raise AdapterSunsetError(f"expired legacy adapters still registered: {names}")
+
+
+# Register schema-owned adapters when the schema package loads.  Migration
+# consumers can therefore resolve built-ins without importing shared.migrate.
+register_adapter(_BUILTIN_CURD_PLAN_ADAPTER)
