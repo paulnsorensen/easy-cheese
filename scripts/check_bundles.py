@@ -62,9 +62,6 @@ def _validate_shiv_names(names: set[str]) -> None:
         raise ValueError("not a Shiv archive: missing site-packages/")
 
 
-def _validate_shiv_archive(archive: zipfile.ZipFile) -> None:
-    _validate_shiv_names(set(archive.namelist()))
-
 
 def _site_packages_members(
     infos: Sequence[zipfile.ZipInfo],
@@ -81,23 +78,6 @@ def _site_packages_members(
     )
 
 
-def _site_packages_hash(
-    archive: zipfile.ZipFile,
-    *,
-    normalize_wrappers: bool,
-    include_record: bool,
-) -> str:
-    digest = hashlib.sha256()
-    for info in _site_packages_members(tuple(archive.infolist())):
-        if not include_record and info.filename.endswith(".dist-info/RECORD"):
-            continue
-        data = archive.read(info)
-        if normalize_wrappers and info.filename.startswith("site-packages/bin/"):
-            data = _canonical_wrapper(data)
-        relative = info.filename.removeprefix("site-packages/")
-        digest.update(data)
-        digest.update(relative.encode())
-    return digest.hexdigest()
 
 
 def _site_packages_hashes(
@@ -329,10 +309,6 @@ def _module_index_from_names(
     return frozenset(files), frozenset(dirs)
 
 
-def _archive_module_index(
-    archive: zipfile.ZipFile,
-) -> tuple[frozenset[str], frozenset[str]]:
-    return _module_index_from_names(set(archive.namelist()))
 
 
 def _command_module_targets(tree: ast.Module) -> set[str]:
@@ -502,10 +478,6 @@ def _declared_command_names_from_trees(
     return sorted(names)
 
 
-def _declared_command_names(archive: zipfile.ZipFile) -> list[str]:
-    """Every command declared by this archive's own first-party sources."""
-    analysis = _ArchiveAnalysis.from_archive(archive, parse_first_party=True)
-    return list(analysis.command_names)
 
 
 def _check_command_dispatch(
@@ -534,10 +506,6 @@ def _check_command_dispatch(
     return problems
 
 
-def check_command_dispatch(pyz: Path, archive: zipfile.ZipFile) -> list[str]:
-    """Check every declared command using one parsed archive analysis."""
-    analysis = _ArchiveAnalysis.from_archive(archive, parse_first_party=True)
-    return _check_command_dispatch(pyz, analysis.command_names)
 
 
 def _canonical_environment_values(
@@ -550,10 +518,6 @@ def _canonical_environment_values(
     return json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()
 
 
-def _canonical_environment(data: bytes, *, canonical_build_id: str) -> bytes:
-    return _canonical_environment_values(
-        cast(dict[str, object], json.loads(data)), canonical_build_id=canonical_build_id
-    )
 
 
 def _canonical_wrapper(data: bytes) -> bytes:
