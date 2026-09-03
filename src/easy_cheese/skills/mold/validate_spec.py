@@ -34,9 +34,26 @@ import re
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Protocol, TypedDict, cast
+from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
+
+if TYPE_CHECKING:
+    from easy_cheese_schemas.contracts import (
+        GateApplicability,
+        GateApplicabilityDisposition,
+        GroundingOutcome,
+        GroundingProbe,
+        GroundingRow,
+        MoldSpecDocument,
+        MoldSpecFrontmatter,
+        SpecConfidence,
+        TestContractMode,
+        TestContractRow,
+        UiSurface,
+        WorkClass,
+    )
 
 
 class _SpecFormatPolicy(Protocol):
@@ -56,13 +73,33 @@ class _SpecFormatPolicyFactory(Protocol):
     ) -> _SpecFormatPolicy: ...
 
 
+class _SpecFormatModule(Protocol):
+    is_hardened_provenance: Callable[[Mapping[str, object]], bool]
+    spec_format_policy: _SpecFormatPolicyFactory
+
+
+class _SchemaModule(Protocol):
+    GateApplicability: type[GateApplicability]
+    GateApplicabilityDisposition: type[GateApplicabilityDisposition]
+    GroundingOutcome: type[GroundingOutcome]
+    GroundingProbe: type[GroundingProbe]
+    GroundingRow: type[GroundingRow]
+    MoldSpecDocument: type[MoldSpecDocument]
+    MoldSpecFrontmatter: type[MoldSpecFrontmatter]
+    SpecConfidence: type[SpecConfidence]
+    TestContractMode: type[TestContractMode]
+    TestContractRow: type[TestContractRow]
+    UiSurface: type[UiSurface]
+    WorkClass: type[WorkClass]
+
+
 is_hardened_provenance: Callable[[Mapping[str, object]], bool]
 spec_format_policy: _SpecFormatPolicyFactory
 
 
 def _load_local_module(
     module_name: str, module_path: Path, import_error: ImportError
-) -> Any:
+) -> ModuleType:
     """Load a source-local module after an installed package import fails."""
     if not module_path.is_file():
         raise import_error
@@ -85,10 +122,16 @@ try:
         spec_format_policy as _spec_format_policy,
     )
 except ImportError as error:
-    spec_format = _load_local_module(
-        "_mold_spec_format",
-        Path(__file__).parents[3] / "easy_cheese_schemas" / "spec_format.py",
-        error,
+    spec_format = cast(
+        _SpecFormatModule,
+        cast(
+            object,
+            _load_local_module(
+                "_mold_spec_format",
+                Path(__file__).parents[3] / "easy_cheese_schemas" / "spec_format.py",
+                error,
+            ),
+        ),
     )
     _is_hardened_provenance = spec_format.is_hardened_provenance
     _spec_format_policy = spec_format.spec_format_policy
@@ -202,7 +245,7 @@ def _frontmatter_scalar(value: str) -> object:
         value.startswith("[") and value.endswith("]")
     ):
         try:
-            return json.loads(value.replace("'", '"'))
+            return cast(object, json.loads(value.replace("'", '"')))
         except json.JSONDecodeError:
             return value.strip('"').strip("'")
     return value.strip('"').strip("'")
@@ -358,15 +401,16 @@ def _acceptance_ids(content_lines: list[str]) -> list[str]:
     return ids
 
 
-def _schema_module() -> Any:
+def _schema_module() -> _SchemaModule:
     try:
-        return importlib.import_module("easy_cheese_schemas.contracts")
+        module = importlib.import_module("easy_cheese_schemas.contracts")
     except ImportError as error:
-        return _load_local_module(
+        module = _load_local_module(
             "_mold_contracts",
             Path(__file__).parents[3] / "easy_cheese_schemas" / "contracts.py",
             error,
         )
+    return cast(_SchemaModule, cast(object, module))
 
 
 def _matrix_rows(value: str) -> tuple[str, ...]:
@@ -384,7 +428,7 @@ def _typed_errors(message: str, path: Path) -> tuple[str, ...]:
         return (f"ERROR: {TRACER_ROW_RULE} {message} in {path}",)
     if "contract-matrix mode" in message:
         return (f"ERROR: {CONTRACT_MATRIX_ROW_RULE} {message} in {path}",)
-    grounding = re.findall(
+    grounding: list[tuple[str, str]] = re.findall(
         r"Grounding table must record the ([a-z-]+) probe exactly once, got (\d+)",
         message,
     )
@@ -402,10 +446,9 @@ def _typed_errors(message: str, path: Path) -> tuple[str, ...]:
 
 def _typed_frontmatter(
     frontmatter: Mapping[str, object],
-    policy: _SpecFormatPolicy,
     path: Path,
     errors: list[str],
-) -> tuple[Any, Any] | None:
+) -> tuple[_SchemaModule, MoldSpecFrontmatter] | None:
     schema = _schema_module()
     gate = frontmatter.get("gate_applicability")
     if gate is None:
@@ -416,6 +459,7 @@ def _typed_frontmatter(
         }
     if not isinstance(gate, Mapping):
         return None
+    gate = cast(Mapping[str, object], gate)
 
     enum_values = (
         (
@@ -437,21 +481,32 @@ def _typed_frontmatter(
 
     try:
         gate_model = schema.GateApplicability(
-            disposition=schema.GateApplicabilityDisposition(gate["disposition"]),
-            work_class=schema.WorkClass(gate["work_class"]),
-            ui_surface=schema.UiSurface(gate["ui_surface"]),
-            reason=gate.get("reason"),
+            disposition=schema.GateApplicabilityDisposition(
+                cast(str, gate["disposition"])
+            ),
+            work_class=schema.WorkClass(cast(str, gate["work_class"])),
+            ui_surface=schema.UiSurface(cast(str, gate["ui_surface"])),
+            reason=cast(str | None, gate.get("reason")),
         )
         front_model = schema.MoldSpecFrontmatter(
-            slug=frontmatter.get("slug", "legacy-spec"),
-            status=frontmatter.get("status", "draft"),
-            source=frontmatter.get("source", "legacy"),
-            created=frontmatter.get("created", "unknown"),
-            confidence=schema.SpecConfidence(frontmatter.get("confidence", "medium")),
+            slug=cast(str, frontmatter.get("slug", "legacy-spec")),
+            status=cast(str, frontmatter.get("status", "draft")),
+            source=cast(str, frontmatter.get("source", "legacy")),
+            created=cast(str, frontmatter.get("created", "unknown")),
+            confidence=schema.SpecConfidence(
+                cast(str, frontmatter.get("confidence", "medium"))
+            ),
             gate_applicability=gate_model,
-            gates_overridden=frontmatter.get("gates_overridden", ()),
-            agent_introduced_scope=frontmatter.get("agent_introduced_scope", ()),
-            entity_referent_bindings=frontmatter.get("entity_referent_bindings", ()),
+            gates_overridden=cast(
+                tuple[str, ...], frontmatter.get("gates_overridden", ())
+            ),
+            agent_introduced_scope=cast(
+                tuple[str, ...], frontmatter.get("agent_introduced_scope", ())
+            ),
+            entity_referent_bindings=cast(
+                tuple[Mapping[str, object], ...],
+                frontmatter.get("entity_referent_bindings", ()),
+            ),
         )
     except (TypeError, ValueError) as error:
         errors.extend(_typed_errors(str(error), path))
@@ -460,9 +515,9 @@ def _typed_frontmatter(
 
 
 def _typed_test_rows(
-    schema: Any, rows: list[list[str]], path: Path, errors: list[str]
-) -> tuple[list[Any], bool]:
-    typed: list[Any] = []
+    schema: _SchemaModule, rows: list[list[str]], path: Path, errors: list[str]
+) -> tuple[list[TestContractRow], bool]:
+    typed: list[TestContractRow] = []
     had_error = False
     for row in rows:
         acceptance_id = row[_AC_ID_COL]
@@ -493,9 +548,9 @@ def _typed_test_rows(
 
 
 def _typed_grounding_rows(
-    schema: Any, rows: list[list[str]], path: Path, errors: list[str]
-) -> tuple[list[Any], bool]:
-    typed: list[Any] = []
+    schema: _SchemaModule, rows: list[list[str]], path: Path, errors: list[str]
+) -> tuple[list[GroundingRow], bool]:
+    typed: list[GroundingRow] = []
     had_error = False
     for row in rows:
         probe = row[_PROBE_COL]
@@ -547,7 +602,7 @@ def _validate_typed_document(
     path: Path,
     errors: list[str],
 ) -> None:
-    typed_frontmatter = _typed_frontmatter(frontmatter, policy, path, errors)
+    typed_frontmatter = _typed_frontmatter(frontmatter, path, errors)
     if typed_frontmatter is None:
         return
     schema, front_model = typed_frontmatter
@@ -569,7 +624,7 @@ def _validate_typed_document(
     if contract_errors or grounding_errors:
         return
     try:
-        schema.MoldSpecDocument(
+        _ = schema.MoldSpecDocument(
             frontmatter=front_model,
             acceptance_ids=tuple(acceptance_ids),
             test_contract_rows=tuple(typed_contracts),
@@ -588,11 +643,12 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     found_sections, duplicate_headings = _find_sections(body)
     source = frontmatter.get("source")
     gate_applicability = frontmatter.get("gate_applicability")
-    disposition = (
-        gate_applicability.get("disposition")
+    gate_mapping = (
+        cast(Mapping[str, object], gate_applicability)
         if isinstance(gate_applicability, Mapping)
         else None
     )
+    disposition = gate_mapping.get("disposition") if gate_mapping else None
 
     if source is not None and not isinstance(source, str):
         errors.append(
