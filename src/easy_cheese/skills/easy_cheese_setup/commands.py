@@ -10,12 +10,12 @@ COMMANDS = (
     Command(
         "global",
         "easy_cheese.shared.hallouminate_setup:global_main",
-        "Register or repair the durable hallouminate corpus",
+        "Register or repair the durable Hallouminate corpus",
     ),
     Command(
         "local",
         "easy_cheese.shared.hallouminate_setup:local_main",
-        "Register or repair this repository's hallouminate tenant",
+        "Register or repair this repository's Hallouminate tenant",
     ),
     Command(
         "doctor",

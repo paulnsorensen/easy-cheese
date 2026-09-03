@@ -5,5 +5,5 @@
 | Command | Purpose |
 | --- | --- |
 | `doctor` | Run both the global and local registration legs |
-| `global` | Register or repair the durable hallouminate corpus |
-| `local` | Register or repair this repository's hallouminate tenant |
+| `global` | Register or repair the durable Hallouminate corpus |
+| `local` | Register or repair this repository's Hallouminate tenant |
