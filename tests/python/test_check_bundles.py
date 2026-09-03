@@ -91,6 +91,7 @@ def test_baseline_blobs_use_one_git_batch(
         Path("skills/demo/scripts/demo.pyz"),
         Path("skills/other/scripts/other.pyz"),
     ]
+    monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
     calls: list[tuple[list[str], bytes]] = []
 
     def fake_run(
@@ -201,7 +202,11 @@ def test_check_bundles_against_index_survives_a_bundle_already_rebuilt_unstaged(
 
     assert bundle.read_bytes() == b"unstaged-local-rebuild"
     stash_list = subprocess.run(
-        ["git", "stash", "list"], cwd=tmp_path, capture_output=True, text=True, check=True
+        ["git", "stash", "list"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     assert stash_list.stdout == ""
 
