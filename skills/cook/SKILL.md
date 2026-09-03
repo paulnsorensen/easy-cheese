@@ -22,6 +22,8 @@ weaken any existing test.
 Accept a pasted spec/issue, focused acceptance criteria, or an unambiguous task.
 Read explicit spec paths verbatim. Resolve a bare slug with
 `SPEC=$(python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>)`.
+Use `python3 skills/cook/scripts/cook.pyz accept <pointer>` for a Mold handoff pointer.
+This command verifies the route and referenced artifacts before execution.
 
 Flags: `--auto` chains `/press → /age → /cure`; `--hard` propagates through
 `/plate`; `--open-pr` lets terminal `/plate` publish; `--resume <slug>` resumes
