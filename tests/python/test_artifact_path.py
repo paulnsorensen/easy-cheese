@@ -94,6 +94,7 @@ def test_main_research_prints_corpus_root(
 ) -> None:
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
+    assert ap.main(["research", "ignored-slug"]) == 0
     assert capsys.readouterr().out.strip() == str(
         tmp_path / "proj" / "research" / "ignored-slug.md"
     )
