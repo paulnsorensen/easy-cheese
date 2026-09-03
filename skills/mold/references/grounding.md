@@ -1,8 +1,8 @@
 # Grounding — hallouminate wiki probe
 
-Throughout a `/mold` dialogue — at **Ground** phase entry and at decision points in any Dialogue mode (see § When to probe) — if hallouminate is available, probe the consumer's wiki corpus before asking the user the next question. Fold any matching rationale or ADR entries into the evidence base. If hallouminate is absent, record `hallouminate: absent` in the ledger once and continue with diff + code evidence only.
+During a `/mold` dialogue, probe the consumer's wiki corpus at **Ground** phase entry if hallouminate is available. Also probe at decision points in any Dialogue mode before asking the next question (see § When to probe). Add matching rationale or ADR entries to the evidence base. If hallouminate is absent, record `hallouminate: absent` in the ledger once. Then continue with only diff and code evidence.
 
-The record is what the `grounding-recorded` coherence gate checks: the first structured question does not fire until the ledger carries a probe result — citations, or that explicit absence note. The degrade path stays cheap; it may not stay invisible.
+The `grounding-recorded` coherence gate checks that the first structured question does not fire until the ledger carries a probe result. The result contains citations or the explicit absence note. Keep the degrade path cheap but visible.
 
 ## Probe shape
 
@@ -28,20 +28,20 @@ ground_wiki(topic):
 
 - The corpus name comes from `list_corpora`, never a literal string — that is the portability invariant (the consumer's repo, not easy-cheese's).
 - If `list_corpora` is unreachable or returns no wiki corpus, fall back to code evidence. Never block the dialogue on the probe.
-- State the absence once per run if the tool is missing, and write it to the ledger once; do not repeat it on every question.
+- State the absence once per run if the tool is missing. Write it to the ledger once. Do not repeat it for every question.
 
 ## When to probe
 
-Probe at **Ground** phase entry and, in the other Modes (Shape/Sketch/Grill), at any decision point — before generating the next question — when any of these are true:
+Probe at **Ground** phase entry. In other Modes (Shape/Sketch/Grill), probe at decision points before the next question when any condition applies:
 
 - The dialogue is about to decide a consequential fork whose options could have prior rationale (e.g. "why not X").
-- The next question to the user is one the wiki may already answer (a settled decision, an ADR, a recorded convention).
+- Probe when the wiki can possibly answer the next user question. Examples include a settled decision, an ADR, or a recorded convention.
 - The dialogue is about to restate rationale for an existing system or module that may have ADRs.
 - The spec being molded overlaps with a prior mold session in this repo.
 
-Skip the probe for pure Explore mode (no named system) and for Diagnose mode (evidence comes from code/logs, not rationale docs).
+Skip the probe in pure Explore mode when there is no named system. Also skip it in Diagnose mode. Diagnose evidence comes from code and logs, not rationale documents.
 
-Cite hits in that round's decision ledger (`Decided / Asking / [AGENT-DECIDED]` — see `../SKILL.md` § Rules): a settled decision found in the wiki lands under `Decided` with its wiki page cited, not reopened as a fresh question.
+Cite hits in that round's decision ledger under `Decided / Asking / [AGENT-DECIDED]`. See `../SKILL.md` § Rules. Put a settled wiki decision under `Decided` and cite its wiki page. Do not reopen it as a new question.
 
 ## Prior-evidence fast path
 
@@ -59,4 +59,4 @@ Always record the intake result. Record `no prior evidence` when the session has
 
 ## Confidence when absent
 
-If hallouminate is absent and design rationale is central to the question at hand, cap at `speculating` and note it inline. See [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md) for the full degrade contract.
+If hallouminate is absent and design rationale is central to the current question, cap the result at `speculating`. Note this limit inline. See [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md) for the full degrade contract.

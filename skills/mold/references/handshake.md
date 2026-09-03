@@ -4,9 +4,9 @@ Curdle (artifact extraction) requires **both** keys. Neither is optional.
 
 ## User key
 
-The user key is explicit extraction intent — approval to write the spec. The direct form is the word `curdle`; `ship it`, `extract`, or `that's enough` work the same, and a clear affirmative such as `ok let's go`, `sounds good`, or `go ahead` also turns the key when it directly answers an agent's extraction question.
+The user key shows explicit extraction intent: approval to write the spec. The direct form is `curdle`. `ship it`, `extract`, or `that's enough` have the same effect. A clear affirmative also turns the key when it directly answers an agent's extraction question. Examples include `ok let's go`, `sounds good`, and `go ahead`.
 
-Judge the key by intent, never by spelling: capitalization, surrounding whitespace, or punctuation never invalidate an otherwise-clear approval, and never demand an exact respelling or a magic string. Do not infer the key from unrelated or ambiguous approval; ask explicitly when the context does not establish that the user is approving Curdle.
+Judge the key by intent, never by spelling. Capitalization, surrounding whitespace, or punctuation never invalidate otherwise-clear approval. Never demand an exact respelling or a magic string. Do not infer the key from unrelated or ambiguous approval. Ask explicitly when the context does not establish that the user approves Curdle.
 
 ## Agent key — coherence self-check
 
@@ -35,7 +35,7 @@ Coherence self-check before curdle:
 
 If any box is unchecked, name it and propose the smallest move to fill it. The user can override with `curdle anyway`.
 
-The last box — **Durable writes** — is a *commitment* checked before the handshake, not a claim the write already happened: it asserts the ADR + domain-model targets are resolved and the write → read-back → completion-record protocol is locked in for the atomic-write step (`curdle.md` § Atomic write). The read-back verify and the visible completion record fire *during* that step, and the hallouminate-absent fallback is noted loud, never silent.
+The last box — **Durable writes** — is a commitment checked before the handshake. It does not claim that the write already occurred. It confirms that the ADR + domain-model targets are resolved. It also locks in the write → read-back → completion-record protocol for the atomic-write step (`curdle.md` § Atomic write). The read-back verification and visible completion record occur during that step. Note the hallouminate-absent fallback clearly, never silently.
 
 These seventeen checklist items match the gates in Mold's machine-readable gate model. See `gate-graph.md`. A passing `fork_taste_test_passed` verdict opens the decomposition gate. A stale, partial, contradictory, or blocker-bearing verdict keeps decomposition closed. A test compares this checklist with the model nodes. Edit both sources together. Render the flow with `mold.pyz gate-graph`.
 
@@ -48,8 +48,8 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
 - **Sketch gate:** mandatory when the chosen option touches more than one module or introduces a new public interface. Skip only for trivial single-function changes (the agent must say so out loud).
 - **Grill gate:** mandatory for high-blast-radius decisions. The shape check (`shape-check.md`) ranks blast radius `low | medium | high` from semantic caller search and `tilth_deps` when available. A `high` verdict — multi-module callers or more than five importers — makes Grill mandatory.
 - **Open hypotheses:** any Validate Cycle launched but unjudged blocks Curdle unless the user accepts it as `[TBD]`.
-- **Agent-introduced scope:** every distinguishing noun in the spec must trace to a user-typed mention or get per-term approval. Full procedure in § Agent-introduced scope below — Curdle is the single chokepoint, since downstream skills trust the resulting frontmatter and do not re-block.
-- **Entity-referent binding:** every identity noun binds to a code referent or is marked NEW ENTITY; an ALIAS must be resolved, not just noted. Full procedure in § Entity-referent binding below.
+- **Agent-introduced scope:** every distinguishing noun in the spec must trace to a user-typed mention or receive per-term approval. See the full procedure in § Agent-introduced scope below. Curdle is the single chokepoint because downstream skills trust the resulting frontmatter and do not re-block.
+- **Entity-referent binding:** bind every identity noun to a code referent or mark it NEW ENTITY. Resolve each ALIAS; do not only note it. See the full procedure in § Entity-referent binding below.
 - **Non-goals audit:** every `Non-goals` bullet traces to a user-stated out-of-scope item or is marked `[AGENT-INTRODUCED]`. Full procedure in § Non-goals audit below.
 - **Fork taste test:** Require a fresh-context verdict before decomposition. The verdict must match the draft SHA256. It must cover each settled consequential decision exactly once. It cannot contain contradictions, orphaned decisions, unsupported assumptions, or acceptance gaps. Mold permits the initial verdict and two corrective rounds. A third failure stops the process.
 - **Spec format gate:** Run `validate-spec --strict` on the draft before Curdle extracts it. The command must exit with status 0. Curdle writes only the current hardened format. It does not use the legacy read grace period.
@@ -61,7 +61,7 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
   `not-applicable`. The taste and curd gates enforce this field without
   changing legacy specs.
 
-These audits — agent-introduced scope, entity-referent binding, and the non-goals audit (below) — fire **inline, per dialogue round**, not only terminally at Curdle: each runs the moment new scope is proposed and is surfaced in that round's decision ledger, so a lean is caught when it happens rather than reverse-engineered at the end. Curdle re-runs all three as the terminal backstop and stays the single chokepoint downstream skills trust (RC3).
+These audits cover agent-introduced scope, entity-referent binding, and the non-goals audit below. Run them **inline, per dialogue round**, not only terminally at Curdle. Run each audit when new scope is proposed. Show its results in that round's decision ledger. This catches a lean when it occurs instead of reverse-engineering it at the end. Curdle reruns all three as the terminal backstop. It remains the single chokepoint that downstream skills trust (RC3).
 
 ## Agent-introduced scope
 
@@ -69,8 +69,8 @@ Before curdle, audit the draft spec for features the user did not type the name 
 
 Procedure:
 
-1. Extract distinguishing nouns from the spec's `Approach`, `Decisions`, and `Interface sketches` blocks — proper-noun-ish terms, library names, algorithm names, Greek letters used as parameters, config keys, knobs.
-2. For each noun, grep the prior user turns of the conversation (the user's typed messages, not the agent's or sub-agents' output) for a literal mention.
+1. Extract distinguishing nouns from the spec's `Approach`, `Decisions`, and `Interface sketches` blocks. Include proper-noun-like terms, library names, algorithm names, Greek parameter letters, config keys, and knobs.
+2. For each noun, grep the prior user turns for a literal mention. Search only the user's typed messages, not agent or sub-agent output.
 3. **Any noun with zero hits is agent-introduced.** Mark it `[AGENT-INTRODUCED]` inline in the draft and present a short table:
 
    ```
@@ -81,12 +81,12 @@ Procedure:
    ```
 
 4. **The user must explicitly approve each row** before the handshake fires. Acceptable approvals: "yes keep <term>", "drop <term>", "make <term> a follow-up". Vague "looks good" is not approval. "Make <term> a follow-up" records a candidate within `Decided`. This choice does not create an issue or other artifact.
-5. **When the user explicitly drops a direction** — an approach, design knob, or named feature they decline — write a rejection record to `.cheese/.out-of-scope/<slug>-NNN.md` (format in `curdle.md` § Rejected-directions store). A rejected direction is not a follow-up candidate. Explicit deferrals enter the follow-up candidate set instead.
-6. If any flagged term came from a research citation (briesearch sub-agent, fetched doc, MCP result), it cannot be silently promoted into a design knob — the citation is evidence, not a mandate. See `skills/briesearch/references/synthesis.md` § Alternatives are open questions.
+5. **When the user explicitly drops a direction**, write a rejection record to `.cheese/.out-of-scope/<slug>-NNN.md`. A direction can be an approach, design knob, or named feature that the user declines. Use the format in `curdle.md` § Rejected-directions store. Do not make a rejected direction a follow-up candidate. Add explicit deferrals to the follow-up candidate set instead.
+6. Do not silently promote a flagged term from a research citation into a design knob. This applies to briesearch sub-agent citations, fetched docs, and MCP results. The citation is evidence, not a mandate. See `skills/briesearch/references/synthesis.md` § Alternatives are open questions.
 
-This gate exists because research sub-agents have historically over-synthesised: a Tavily snippet mentioning "X or Y" became a shipped `[setting].knob = "x" | "y"` flag, copied through curdle → cook without the user typing the distinguishing noun once. The grep heuristic catches that class of drift early.
+This gate exists because research sub-agents have historically over-synthesised. For example, a Tavily snippet mentioning "X or Y" became a shipped `[setting].knob = "x" | "y"` flag. The flag passed through curdle → cook although the user never typed the distinguishing noun. The grep heuristic detects this type of drift early.
 
-Curdle is the single chokepoint for this gate. Downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block — record approved-but-flagged terms in spec frontmatter as `agent_introduced_scope: [<term>, …]` so the paper trail survives.
+Curdle is the single chokepoint for this gate. Downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block. Record approved-but-flagged terms in spec frontmatter as `agent_introduced_scope: [<term>, …]`. This record preserves the paper trail.
 
 ## Non-goals audit
 
@@ -94,12 +94,12 @@ Curdle is the single chokepoint for this gate. Downstream skills (`/cook`, etc.)
 
 Procedure:
 
-1. For each `Non-goals` bullet, grep the prior user turns (the user's typed messages) for the user putting that item out of scope — a "don't bother with X", "leave Y alone", an explicit deferral.
-2. **Any bullet with no such user statement is agent-introduced.** Mark it `[AGENT-INTRODUCED]` inline and present it for decision — the user must explicitly keep, drop, or reword it. A vague "looks good" is not approval.
+1. For each `Non-goals` bullet, grep prior user turns for a statement that puts the item out of scope. Search only the user's typed messages. Examples include "don't bother with X", "leave Y alone", and an explicit deferral.
+2. **Any bullet with no such user statement is agent-introduced.** Mark it `[AGENT-INTRODUCED]` inline. Present it for a decision. The user must explicitly keep, drop, or reword it. A vague "looks good" is not approval.
 3. Record approved-but-flagged non-goals in the same `agent_introduced_scope` frontmatter list, so the paper trail survives downstream.
 4. Add every audited non-goal to the follow-up candidate set, including approved `[AGENT-INTRODUCED]` bullets. Candidate status preserves the scope boundary without accepting future work.
 
-This audit is the `Non-goals audit` coherence gate — the `non_goals_audit` node in the gate model (`gate-graph.md`). It fires **inline per round** as non-goals are proposed and again at Curdle as the terminal backstop, which hard-blocks extraction until every bullet traces to the user or is approved `[AGENT-INTRODUCED]`.
+This audit is the `Non-goals audit` coherence gate. It is the `non_goals_audit` node in the gate model (`gate-graph.md`). Run it **inline per round** as non-goals are proposed. Run it again at Curdle as the terminal backstop. Curdle hard-blocks extraction until every bullet traces to the user or has approved `[AGENT-INTRODUCED]` status.
 
 ## Follow-up disposition (inside the non-goals audit)
 
@@ -122,7 +122,7 @@ Record each candidate within `Decided` as `[FOLLOW-UP?]`. Include its summary, s
 After both keys pass, Curdle writes local artifacts first. It then publishes approved follow-ups. It reconciles their state and references into the durable spec. It only then renders the implementation handoff.
 
 ## Entity-referent binding
-Before curdle, audit the draft for **identity/ownership-role nouns** — any noun the design treats as holding, owning, spanning, or claiming state or lifecycle (owner, run, session, claim-holder, coordinator, worker, lease, tenant, lock-holder, …). The trigger is the *role*, not a fixed word list: domain-specific identities are caught and plain value nouns (formats, algorithms, config knobs) are not flagged.
+Before curdle, audit the draft for **identity/ownership-role nouns**. These nouns identify roles that hold, own, span, or claim state or lifecycle. Examples include owner, run, session, claim-holder, coordinator, worker, lease, tenant, and lock-holder. The role triggers the audit, not a fixed word list. Flag domain-specific identities. Do not flag plain value nouns such as formats, algorithms, or config knobs.
 
 The mechanism is semantic symbol search, one query per identity noun, following the [shared routing contract](../../cheese/references/code-intelligence-routing.md). The gate is *not* "did search find something" — it is a three-way verdict on what search returns:
 
@@ -146,13 +146,13 @@ Procedure:
    | session | NEW ENTITY | — | no symbol; the coordinator session the design needs must be designed |
    ```
 
-4. **An unresolved binding hard-blocks curdle**, exactly as an unapproved `[AGENT-INTRODUCED]` noun does. A search *hit* is not resolution: if the design's usage diverges from the code's existing meaning of the same word, the aliasing must be stated and settled before extraction.
+4. **An unresolved binding hard-blocks curdle**, exactly as an unapproved `[AGENT-INTRODUCED]` noun does. A search *hit* does not resolve the binding. Determine whether the design's usage differs from the code's existing meaning of the same word. If it differs, state and settle the aliasing before extraction.
 
-This gate is the referent-level sibling of Agent-introduced scope — that gate asks *did the user type this noun*, this one asks *does the code have it, with the assumed shape*. A fully handshook spec once declared its goal-claims "owned by the run/session" while the code's `run` was a single task dispatch, not a coordinator session; the aliased noun survived to a re-age blocker and a cure-pass-2 design decision that belonged in mold. Curdle is the single chokepoint; downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block — record bound and flagged nouns in frontmatter as `entity_referent_bindings: [{noun, verdict, referent, citation, note}, …]` (a list of binding records) so the referent and `file:line` citation the trail promises actually survive.
+This gate is the referent-level sibling of Agent-introduced scope. That gate asks *did the user type this noun*. This gate asks *does the code have it, with the assumed shape*. A fully handshook spec once declared its goal-claims "owned by the run/session". However, the code's `run` was one task dispatch, not a coordinator session. The aliased noun survived to a re-age blocker and a cure-pass-2 design decision that belonged in mold. Curdle is the single chokepoint. Downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block. Record bound and flagged nouns in frontmatter as `entity_referent_bindings: [{noun, verdict, referent, citation, note}, …]`. Use a list of binding records. Preserve the referent and promised `file:line` citation in this record.
 
 ## Override semantics
 
-`curdle anyway` overrides the agent key for one extraction. It does not disable future gates. The agent records the override and the unchecked items in the spec frontmatter so the human reviewer can see them. `curdle anyway` does **not** waive the Agent-introduced-scope gate — each flagged term still needs explicit per-term approval, since silent inclusion is the failure mode the gate exists to catch, and downstream skills will not re-check. The same holds for the **Entity-referent gate**: an unbound or aliased identity noun still blocks extraction under `curdle anyway`, since downstream skills trust the frontmatter bindings and do not re-derive them.
+`curdle anyway` overrides the agent key for one extraction. It does not disable future gates. Record the override and unchecked items in the spec frontmatter. This record lets the human reviewer see them. `curdle anyway` does **not** waive the Agent-introduced-scope gate. Each flagged term still requires explicit per-term approval. The gate prevents silent inclusion, and downstream skills do not re-check. The same rule applies to the **Entity-referent gate**. Under `curdle anyway`, an unbound or aliased identity noun still blocks extraction. Downstream skills trust the frontmatter bindings and do not re-derive them.
 
 ## Why both keys
 
