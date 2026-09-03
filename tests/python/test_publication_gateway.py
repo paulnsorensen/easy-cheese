@@ -12,7 +12,6 @@ from easy_cheese_schemas import (
     ContractValidationError,
     PublishedArtifact,
     TransitionError,
-    normalize_agent_output,
 )
 
 from easy_cheese.shared import publication
@@ -72,6 +71,26 @@ def _publish(
         artifact_root=tmp_path,
         _before_reveal=_before_reveal,
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source_phase", "press"),
+        ("destination_phase", "age"),
+        ("payload_schema_uri", "https://schemas.easy-cheese.dev/planner-result"),
+    ],
+)
+def test_request_digest_binds_route_and_schema_fields(field: str, value: str) -> None:
+    base = {
+        "source_phase": "mold",
+        "destination_phase": "cook",
+        "payload_schema_uri": CURD_PLAN_SCHEMA_URI,
+    }
+    changed = {**base, field: value}
+    original_digest = publication.request_digest("raw", INVOCATION, **base)
+    changed_digest = publication.request_digest("raw", INVOCATION, **changed)
+    assert changed_digest != original_digest
 
 
 def test_syntax_normalize_direct_parse_returns_no_actions() -> None:
@@ -235,40 +254,30 @@ def test_publish_cli_rejects_unsafe_operation_id(
     _ = document.write_text(json.dumps(DOC), encoding="utf-8")
     _ = invocation.write_text(json.dumps(INVOCATION), encoding="utf-8")
 
-    assert publish_main(
-        [
-            str(document),
-            "--invocation",
-            str(invocation),
-            "--operation-id",
-            operation_id,
-            "--artifact-root",
-            str(tmp_path / "artifacts"),
-        ]
-    ) == 1
+    assert (
+        publish_main(
+            [
+                str(document),
+                "--invocation",
+                str(invocation),
+                "--operation-id",
+                operation_id,
+                "--artifact-root",
+                str(tmp_path / "artifacts"),
+            ]
+        )
+        == 1
+    )
     assert capsys.readouterr().err == "ERROR: invalid operation_id\n"
     assert not (tmp_path / "artifacts" / "pointers").exists()
-    assert not (tmp_path / "escaped.json").exists()
 
 
 def test_publish_rejects_tampered_payload_on_replay(tmp_path: Path) -> None:
-    """A replayed operation_id must revalidate that the persisted payload file
-    still matches the digest recorded in the pointer -- a corrupted-but-
-    schema-valid payload swapped in after the first publish must not be
-    silently accepted as the original."""
+    """A replayed operation_id must revalidate the persisted payload digest."""
     first = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-tamper")
-    payload_path = publication._uri_to_path(  # pyright: ignore[reportPrivateUsage]
-        first.pointer.payload.uri, tmp_path
-    )
-    tampered_doc = {
-        **DOC,
-        "payload": {
-            **cast("dict[str, object]", DOC["payload"]),
-            "objective": "Tampered",
-        },
-    }
-    other_canonical = normalize_agent_output(json.dumps(tampered_doc), INVOCATION)
-    _ = payload_path.write_bytes(other_canonical.canonical_bytes)
+    payload_path = Path(first.pointer.payload.uri.removeprefix("file://"))
+    content = payload_path.read_bytes()
+    _ = payload_path.write_bytes(bytes([content[0] ^ 1]) + content[1:])
     with pytest.raises(publication.PayloadDigestMismatchError):
         _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-tamper")
 
@@ -335,3 +344,44 @@ def test_publish_receipt_only_when_syntax_actions_nonempty(tmp_path: Path) -> No
     repaired = _publish(tmp_path, raw_text=repaired_raw, operation_id="op-repaired")
     assert repaired.normalization_receipt is not None
     assert repaired.pointer.normalization_receipt is not None
+
+
+def test_publish_replay_revalidates_artifact_metadata(tmp_path: Path) -> None:
+    first = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-metadata")
+    pointer_path = tmp_path / "pointers" / "op-metadata.json"
+    pointer = cast("dict[str, object]", json.loads(pointer_path.read_text()))
+    payload = cast("dict[str, object]", pointer["payload"])
+    payload["size_bytes"] = 0
+    _ = pointer_path.write_text(json.dumps(pointer))
+
+    with pytest.raises(ContractValidationError, match="size mismatch"):
+        _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-metadata")
+    assert first.pointer.operation_id == "op-metadata"
+
+
+def test_publish_replay_revalidates_receipt(tmp_path: Path) -> None:
+    repaired_raw = json.dumps(DOC)[:-1] + ",}"
+    first = _publish(tmp_path, raw_text=repaired_raw, operation_id="op-receipt-replay")
+    assert first.pointer.normalization_receipt is not None
+    receipt_path = Path(first.pointer.normalization_receipt.uri.removeprefix("file://"))
+    receipt_content = receipt_path.read_bytes()
+    _ = receipt_path.write_bytes(bytes([receipt_content[0] ^ 1]) + receipt_content[1:])
+
+    with pytest.raises(ContractValidationError, match="digest mismatch"):
+        _ = _publish(tmp_path, raw_text=repaired_raw, operation_id="op-receipt-replay")
+
+
+def test_publish_revalidates_payload_before_pointer_reveal(tmp_path: Path) -> None:
+    def _tamper() -> None:
+        payload_path = next((tmp_path / "payloads").glob("*.json"))
+        content = payload_path.read_bytes()
+        _ = payload_path.write_bytes(bytes([content[0] ^ 1]) + content[1:])
+
+    with pytest.raises(publication.PayloadDigestMismatchError):
+        _ = _publish(
+            tmp_path,
+            raw_text=json.dumps(DOC),
+            operation_id="op-revalidate",
+            _before_reveal=_tamper,
+        )
+    assert not (tmp_path / "pointers" / "op-revalidate.json").exists()

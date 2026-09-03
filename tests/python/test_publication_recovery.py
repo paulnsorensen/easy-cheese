@@ -131,3 +131,32 @@ def test_crash_tamper_retry_raises_corrupt_leftover_and_cleans(tmp_path: Path) -
     assert (tmp_path / "pointers" / "op-tamper.json").exists()
     assert artifact.pointer.operation_id == "op-tamper"
     assert tampered_path.exists()
+
+
+def test_corrupt_repair_keeps_a_concurrent_valid_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    validated, _ = _prepare()
+    digest = canonical_digest(validated.value)
+    payload_path = tmp_path / "payloads" / f"{digest.replace(':', '-')}.json"
+    payload_path.parent.mkdir()
+    _ = payload_path.write_bytes(b"corrupt")
+    original_read_bytes = Path.read_bytes
+    replaced = False
+
+    def _read_bytes(path: Path) -> bytes:
+        nonlocal replaced
+        content = original_read_bytes(path)
+        if path == payload_path and not replaced:
+            replaced = True
+            publication._atomic_write(  # pyright: ignore[reportPrivateUsage]
+                path, validated.canonical_bytes
+            )
+        return content
+
+    monkeypatch.setattr(Path, "read_bytes", _read_bytes)
+    with pytest.raises(publication.CorruptLeftoverError, match="changed during repair"):
+        _ = publication._retain_content(  # pyright: ignore[reportPrivateUsage]
+            payload_path.parent, digest, validated.canonical_bytes
+        )
+    assert payload_path.read_bytes() == validated.canonical_bytes

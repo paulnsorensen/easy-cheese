@@ -18,9 +18,15 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Generator, Mapping
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None  # type: ignore[assignment]
 
 from easy_cheese_schemas import (
     COMPILED_TRANSITION_REGISTRY,
@@ -36,12 +42,17 @@ from easy_cheese_schemas import (
     NormalizationReceipt,
     PublishedArtifact,
     canonical_bytes,
-    canonical_digest,
     normalize_agent_output,
     supported_version_for,
     validate_contract,
     validate_transition,
 )
+from easy_cheese_schemas.artifacts import (
+    ArtifactDigestMismatchError,
+    ArtifactResolutionError,
+    resolve_artifact,
+)
+
 
 __all__ = [
     "AmbiguousSyntaxRepairError",
@@ -51,7 +62,6 @@ __all__ = [
     "PointerNotFoundError",
     "PublicationError",
     "UnrecoverableSyntaxError",
-    "UnsafeArtifactUriError",
     "accept",
     "publish",
     "publish_canonical",
@@ -98,8 +108,13 @@ class PayloadDigestMismatchError(PublicationError):
     """A previously revealed pointer's payload no longer matches its digest."""
 
 
-class UnsafeArtifactUriError(PublicationError):
-    """An artifact URI is not a ``file://`` URI contained in the artifact root."""
+@dataclass(frozen=True)
+class _PublicationRequest:
+    operation_id: str
+    request_digest: str
+    source_phase: str
+    destination_phase: str
+    payload_schema_uri: str
 
 
 def _trim_whitespace(text: str) -> str:
@@ -334,38 +349,55 @@ def _content_path(directory: Path, digest: str) -> Path:
     return directory / f"{digest.replace(':', '-')}.json"
 
 
+@contextmanager
+def _digest_lock(directory: Path, digest: str) -> Generator[None, None, None]:
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock_path = directory / f".{digest.replace(':', '-')}.lock"
+    descriptor = os.open(
+        str(lock_path),
+        os.O_CREAT | os.O_RDWR,
+        0o600,
+    )
+    locked = False
+    try:
+        if fcntl is not None:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            locked = True
+        yield
+    finally:
+        if fcntl is not None and locked:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
 def _retain_content(directory: Path, digest: str, content: bytes) -> Path:
     """Write ``content`` at its digest-addressed path, revalidating a leftover.
 
-    A file already at this path was fully written by a prior attempt (writes
-    are atomic), so it must match ``digest`` exactly. If it does not --
-    tampered after the fact -- the leftover is removed and rejected rather
-    than silently overwritten, so a caller learns of the corruption instead of
-    a retry quietly proceeding on it.
+    A per-digest lock serializes leftover repair, so a retry cannot remove a
+    valid file that another retry installs after the first retry reads it.
     """
     path = _content_path(directory, digest)
-    if path.exists():
-        existing = path.read_bytes()
-        if _digest_bytes(existing) == digest:
-            return path
-        path.unlink()
-        raise CorruptLeftoverError(
-            f"prepared content at {path} does not match digest {digest}; removed"
-        )
-    _atomic_write(path, content)
-    return path
-
-
-def _uri_to_path(uri: str, artifact_root: Path) -> Path:
-    parts = urlsplit(uri)
-    if parts.scheme != "file":
-        raise UnsafeArtifactUriError(f"artifact uri {uri!r} is not a file:// uri")
-    path = Path(unquote(parts.path)).resolve()
-    root = artifact_root.resolve()
-    if path != root and root not in path.parents:
-        raise UnsafeArtifactUriError(
-            f"artifact uri {uri!r} resolves outside artifact root {root}"
-        )
+    with _digest_lock(directory, digest):
+        if path.exists():
+            before = path.stat()
+            existing = path.read_bytes()
+            if _digest_bytes(existing) == digest:
+                return path
+            try:
+                after = path.stat()
+            except FileNotFoundError as exc:
+                raise CorruptLeftoverError(
+                    f"prepared content at {path} changed during repair"
+                ) from exc
+            if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+                raise CorruptLeftoverError(
+                    f"prepared content at {path} changed during repair; retained"
+                )
+            path.unlink()
+            raise CorruptLeftoverError(
+                f"prepared content at {path} does not match digest {digest}; removed"
+            )
+        _atomic_write(path, content)
     return path
 
 
@@ -379,23 +411,79 @@ def _read_pointer(path: Path) -> HandoffPointer:
     return value
 
 
-def _rehydrate(
-    pointer: HandoffPointer, payload_schema_uri: str, artifact_root: Path
-) -> PublishedArtifact:
-    payload_path = _uri_to_path(pointer.payload.uri, artifact_root)
-    payload_bytes = payload_path.read_bytes()
-    actual_digest = _digest_bytes(payload_bytes)
-    if actual_digest != pointer.payload.digest:
-        raise PayloadDigestMismatchError(
-            f"payload at {pointer.payload.uri!r} has digest {actual_digest!r}, expected {pointer.payload.digest!r}"
+def _resolve_pointer_artifact(
+    ref: ArtifactRef,
+    artifact_root: Path,
+    *,
+    digest_error: Callable[[str], Exception] | None = None,
+) -> bytes:
+    try:
+        resolved = resolve_artifact(
+            ref,
+            repository_root=artifact_root,
+            artifact_directory=artifact_root,
+            allowed_local_root=artifact_root,
         )
-    canonical = validate_contract(
-        payload_bytes, payload_schema_uri, supported_version_for(payload_schema_uri)
+    except ArtifactDigestMismatchError as exc:
+        error = (
+            digest_error(str(exc))
+            if digest_error is not None
+            else ContractValidationError(str(exc))
+        )
+        raise error from exc
+    except ArtifactResolutionError as exc:
+        raise ContractValidationError(str(exc)) from exc
+    return resolved.content
+
+
+def _resolve_pointer(
+    pointer: HandoffPointer,
+    request: _PublicationRequest,
+    artifact_root: Path,
+) -> tuple[CanonicalArtifact, ArtifactRef | None]:
+    if pointer.destination_phase != request.destination_phase:
+        raise ContractValidationError(
+            f"pointer destination {pointer.destination_phase!r} does not match "
+            + f"consumer {request.destination_phase!r}"
+        )
+    _ = validate_transition(
+        COMPILED_TRANSITION_REGISTRY,
+        pointer.source_phase,
+        pointer.destination_phase,
+        request.payload_schema_uri,
     )
+    payload_bytes = _resolve_pointer_artifact(
+        pointer.payload,
+        artifact_root,
+        digest_error=PayloadDigestMismatchError,
+    )
+    canonical = validate_contract(
+        payload_bytes,
+        request.payload_schema_uri,
+        supported_version_for(request.payload_schema_uri),
+    )
+
+    receipt_ref = pointer.normalization_receipt
+    if receipt_ref is not None:
+        receipt_bytes = _resolve_pointer_artifact(receipt_ref, artifact_root)
+        receipt_artifact = validate_contract(receipt_bytes, NormalizationReceipt, None)
+        receipt = receipt_artifact.value
+        assert isinstance(receipt, NormalizationReceipt)
+        if receipt.canonical_digest != _digest_bytes(canonical.canonical_bytes):
+            raise ContractValidationError(
+                "normalization_receipt.canonical_digest does not match the canonical payload"
+            )
+    return canonical, receipt_ref
+
+
+def _rehydrate(
+    pointer: HandoffPointer, request: _PublicationRequest, artifact_root: Path
+) -> PublishedArtifact:
+    canonical, receipt_ref = _resolve_pointer(pointer, request, artifact_root)
     return PublishedArtifact(
         pointer=pointer,
         canonical=canonical,
-        normalization_receipt=pointer.normalization_receipt,
+        normalization_receipt=receipt_ref,
     )
 
 
@@ -412,19 +500,12 @@ def _pointer_path(root: Path, operation_id: str) -> Path:
     return pointer_path
 
 
-def _validate_replay(
-    pointer: HandoffPointer,
-    *,
-    request_digest: str,
-    source_phase: str,
-    destination_phase: str,
-    payload_schema_uri: str,
-) -> None:
+def _validate_replay(pointer: HandoffPointer, request: _PublicationRequest) -> None:
     if (
-        pointer.request_digest != request_digest
-        or pointer.source_phase != source_phase
-        or pointer.destination_phase != destination_phase
-        or pointer.payload.schema_uri != payload_schema_uri
+        pointer.request_digest != request.request_digest
+        or pointer.source_phase != request.source_phase
+        or pointer.destination_phase != request.destination_phase
+        or pointer.payload.schema_uri != request.payload_schema_uri
     ):
         raise IdempotencyConflictError(
             f"operation {pointer.operation_id!r} was already published with a different request"
@@ -442,59 +523,65 @@ def publish_canonical(
     prepare: Callable[[], tuple[CanonicalArtifact, NormalizationReceipt | None]],
     _before_reveal: Callable[[], None] | None = None,
 ) -> PublishedArtifact:
-    """Validate a route, persist canonical content, and reveal one pointer.
+    """Validate, persist, and reveal one canonical publication."""
+    request = _PublicationRequest(
+        operation_id=operation_id,
+        request_digest=request_digest,
+        source_phase=source_phase,
+        destination_phase=destination_phase,
+        payload_schema_uri=payload_schema_uri,
+    )
+    return _publish_canonical(
+        request=request,
+        artifact_root=artifact_root,
+        prepare=prepare,
+        _before_reveal=_before_reveal,
+    )
 
-    The shared second half of every Mold-to-Cook publication: an idempotency
-    check against ``operation_id``, then -- only for a genuinely new request
-    -- ``prepare()`` supplies the already-canonical payload and its optional
-    receipt, the route is validated against the compiled phase registry, both
-    are written as immutable content-addressed files, and the
-    ``HandoffPointer`` is atomically revealed last. :func:`publish` and
-    ``easy_cheese.shared.migrate.migrate`` both call this rather than
-    duplicating pointer-reveal logic.
-    """
+
+def _publish_canonical(
+    *,
+    request: _PublicationRequest,
+    artifact_root: str | Path,
+    prepare: Callable[[], tuple[CanonicalArtifact, NormalizationReceipt | None]],
+    _before_reveal: Callable[[], None] | None = None,
+) -> PublishedArtifact:
+    """Persist a prepared canonical payload and reveal its pointer."""
     root = Path(artifact_root)
-    pointer_path = _pointer_path(root, operation_id)
+    pointer_path = _pointer_path(root, request.operation_id)
     _ = validate_transition(
         COMPILED_TRANSITION_REGISTRY,
-        source_phase,
-        destination_phase,
-        payload_schema_uri,
+        request.source_phase,
+        request.destination_phase,
+        request.payload_schema_uri,
     )
     if pointer_path.exists():
         existing = _read_pointer(pointer_path)
-        _validate_replay(
-            existing,
-            request_digest=request_digest,
-            source_phase=source_phase,
-            destination_phase=destination_phase,
-            payload_schema_uri=payload_schema_uri,
-        )
-        return _rehydrate(existing, payload_schema_uri, root)
+        _validate_replay(existing, request)
+        return _rehydrate(existing, request, root)
 
     validated, receipt = prepare()
 
-    payload_digest = canonical_digest(validated.value)
-    payload_path = _retain_content(
-        root / "payloads", payload_digest, validated.canonical_bytes
-    )
+    payload_bytes = validated.canonical_bytes
+    payload_digest = _digest_bytes(payload_bytes)
+    payload_path = _retain_content(root / "payloads", payload_digest, payload_bytes)
     payload_ref = ArtifactRef(
-        artifact_id=f"payload-{operation_id}",
+        artifact_id=f"payload-{request.operation_id}",
         role="payload",
         uri=payload_path.resolve().as_uri(),
         digest=payload_digest,
-        size_bytes=len(validated.canonical_bytes),
+        size_bytes=len(payload_bytes),
         media_type="application/json",
-        schema_uri=payload_schema_uri,
+        schema_uri=request.payload_schema_uri,
     )
 
     receipt_ref: ArtifactRef | None = None
     if receipt is not None:
         receipt_bytes = canonical_bytes(receipt)
-        receipt_digest = canonical_digest(receipt)
+        receipt_digest = _digest_bytes(receipt_bytes)
         receipt_path = _retain_content(root / "receipts", receipt_digest, receipt_bytes)
         receipt_ref = ArtifactRef(
-            artifact_id=f"receipt-{operation_id}",
+            artifact_id=f"receipt-{request.operation_id}",
             role="normalization_receipt",
             uri=receipt_path.resolve().as_uri(),
             digest=receipt_digest,
@@ -502,32 +589,27 @@ def publish_canonical(
             media_type="application/json",
             schema_uri=NORMALIZATION_RECEIPT_SCHEMA_URI,
         )
-
     handoff_version = supported_version_for(HandoffPointer)
     assert handoff_version is not None
     pointer = HandoffPointer(
         contract_version=handoff_version,
-        operation_id=operation_id,
-        request_digest=request_digest,
-        source_phase=source_phase,
-        destination_phase=destination_phase,
+        operation_id=request.operation_id,
+        request_digest=request.request_digest,
+        source_phase=request.source_phase,
+        destination_phase=request.destination_phase,
         payload=payload_ref,
         normalization_receipt=receipt_ref,
     )
+    pointer_bytes = canonical_bytes(pointer)
     if _before_reveal is not None:
         _before_reveal()
+    _ = _resolve_pointer(pointer, request, root)
     try:
-        _atomic_reveal(pointer_path, canonical_bytes(pointer))
+        _atomic_reveal(pointer_path, pointer_bytes)
     except FileExistsError:
         existing = _read_pointer(pointer_path)
-        _validate_replay(
-            existing,
-            request_digest=request_digest,
-            source_phase=source_phase,
-            destination_phase=destination_phase,
-            payload_schema_uri=payload_schema_uri,
-        )
-        return _rehydrate(existing, payload_schema_uri, root)
+        _validate_replay(existing, request)
+        return _rehydrate(existing, request, root)
     return PublishedArtifact(
         pointer=pointer, canonical=validated, normalization_receipt=receipt_ref
     )
@@ -553,9 +635,15 @@ def publish(
     same request returns the same :class:`PublishedArtifact`; a replay with a
     different request raises :class:`IdempotencyConflictError`.
     """
-    req_digest = request_digest(
-        raw_text,
-        invocation,
+    request = _PublicationRequest(
+        operation_id=operation_id,
+        request_digest=request_digest(
+            raw_text,
+            invocation,
+            source_phase=source_phase,
+            destination_phase=destination_phase,
+            payload_schema_uri=payload_schema_uri,
+        ),
         source_phase=source_phase,
         destination_phase=destination_phase,
         payload_schema_uri=payload_schema_uri,
@@ -566,8 +654,8 @@ def publish(
         canonical = normalize_agent_output(normalized_text, invocation)
         validated = validate_contract(
             canonical.canonical_bytes,
-            payload_schema_uri,
-            supported_version_for(payload_schema_uri),
+            request.payload_schema_uri,
+            supported_version_for(request.payload_schema_uri),
         )
         receipt = None
         if actions:
@@ -575,38 +663,17 @@ def publish(
                 ingress_kind=IngressKind.WRITER_VIEW,
                 normalizer_id="easy_cheese.shared.publication:syntax_normalize",
                 source_digest=_digest_text(raw_text),
-                canonical_digest=canonical_digest(validated.value),
+                canonical_digest=_digest_bytes(validated.canonical_bytes),
                 actions=actions,
             )
         return validated, receipt
 
-    return publish_canonical(
-        request_digest=req_digest,
-        source_phase=source_phase,
-        destination_phase=destination_phase,
-        payload_schema_uri=payload_schema_uri,
-        operation_id=operation_id,
+    return _publish_canonical(
+        request=request,
         artifact_root=artifact_root,
         prepare=_prepare,
         _before_reveal=_before_reveal,
     )
-
-
-def _verify_artifact_ref(ref: ArtifactRef, artifact_root: Path) -> bytes:
-    path = _uri_to_path(ref.uri, artifact_root)
-    try:
-        data = path.read_bytes()
-    except OSError as exc:
-        raise ContractValidationError(
-            f"artifact {ref.artifact_id!r} is missing at {path}"
-        ) from exc
-    digest = _digest_bytes(data)
-    if digest != ref.digest:
-        raise ContractValidationError(
-            f"artifact {ref.artifact_id!r} digest mismatch: "
-            + f"pointer declares {ref.digest}, file hashes to {digest}"
-        )
-    return data
 
 
 def accept(
@@ -643,34 +710,12 @@ def accept(
         else path.resolve().parent.parent
     )
     pointer = _read_pointer(path)
-
-    if pointer.destination_phase != destination_phase:
-        raise ContractValidationError(
-            f"pointer destination {pointer.destination_phase!r} does not match "
-            + f"consumer {destination_phase!r}"
-        )
-    _ = validate_transition(
-        COMPILED_TRANSITION_REGISTRY,
-        pointer.source_phase,
-        pointer.destination_phase,
-        payload_schema_uri,
+    request = _PublicationRequest(
+        operation_id=pointer.operation_id,
+        request_digest=pointer.request_digest,
+        source_phase=pointer.source_phase,
+        destination_phase=destination_phase,
+        payload_schema_uri=payload_schema_uri,
     )
-
-    payload_bytes = _verify_artifact_ref(pointer.payload, root)
-    canonical = validate_contract(
-        payload_bytes, payload_schema_uri, supported_version_for(payload_schema_uri)
-    )
-
-    receipt_ref = pointer.normalization_receipt
-    if receipt_ref is not None:
-        receipt_bytes = _verify_artifact_ref(receipt_ref, root)
-        receipt_artifact = validate_contract(receipt_bytes, NormalizationReceipt, None)
-        receipt = receipt_artifact.value
-        assert isinstance(receipt, NormalizationReceipt)
-        expected_canonical_digest = canonical_digest(canonical.value)
-        if receipt.canonical_digest != expected_canonical_digest:
-            raise ContractValidationError(
-                "normalization_receipt.canonical_digest does not match the canonical payload"
-            )
-
+    canonical, receipt_ref = _resolve_pointer(pointer, request, root)
     return AcceptedArtifact(canonical=canonical, normalization_receipt=receipt_ref)
