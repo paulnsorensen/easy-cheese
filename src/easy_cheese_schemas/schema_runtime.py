@@ -33,6 +33,7 @@ from easy_cheese_schemas.contracts import (
     DiagnosisResult,
     DiagnosisResultWriterView,
     EvidenceRef,
+    HandoffPointer,
     IdentityAction,
     IdentityLineage,
     MAX_CONTRACT_BYTES,
@@ -132,6 +133,19 @@ class CanonicalArtifact:
     value: object
     canonical_bytes: bytes
     source_version: ContractVersion | None
+
+
+@attrs.define(frozen=True)
+class AcceptedArtifact:
+    canonical: CanonicalArtifact
+    normalization_receipt: ArtifactRef | None = None
+
+
+@attrs.define(frozen=True)
+class PublishedArtifact:
+    pointer: HandoffPointer
+    canonical: CanonicalArtifact
+    normalization_receipt: ArtifactRef | None = None
 
 
 def _enum_schema(enum: type[Enum]) -> dict[str, object]:
@@ -1192,11 +1206,13 @@ def normalize_agent_output(
 
 
 __all__ = [
+    "AcceptedArtifact",
     "CanonicalArtifact",
     "ContractValidationError",
     "DRAFT_2020_12",
     "MAX_CONTRACT_BYTES",
     "MAX_CONTRACT_DEPTH",
+    "PublishedArtifact",
     "REGISTERED_CONTRACT_SCHEMA_URIS",
     "SCHEMA_ROOT",
     "canonical_bytes",

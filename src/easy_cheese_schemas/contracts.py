@@ -615,6 +615,82 @@ class SourceCurdRef:
     digest: str = field(validator=_digest)
 
 
+class IngressKind(str, Enum):
+    WRITER_VIEW = "writer_view"
+    LEGACY_ARTIFACT = "legacy_artifact"
+
+
+class NormalizationActionKind(str, Enum):
+    TRIM_WHITESPACE = "trim_whitespace"
+    NORMALIZE_QUOTES = "normalize_quotes"
+    REMOVE_TRAILING_COMMA = "remove_trailing_comma"
+
+
+@define(frozen=True)
+class NormalizationAction:
+    field_path: str = field(validator=_bounded_string)
+    action: NormalizationActionKind = field(
+        validator=validators.instance_of(NormalizationActionKind)
+    )
+
+
+def _normalization_receipt_schema_constraints() -> tuple[dict[str, object], ...]:
+    return (
+        _if_equals(
+            "ingress_kind",
+            IngressKind.LEGACY_ARTIFACT.value,
+            {"required": ["source_schema_uri", "source_version"]},
+        ),
+    )
+
+
+@schema_constraints(*_normalization_receipt_schema_constraints())
+@contract("normalization-receipt")
+@define(frozen=True)
+class NormalizationReceipt:
+    ingress_kind: IngressKind = field(validator=validators.instance_of(IngressKind))
+    normalizer_id: str = field(validator=_identifier)
+    source_digest: str = field(validator=_digest)
+    canonical_digest: str = field(validator=_digest)
+    actions: tuple[NormalizationAction, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(NormalizationAction),
+    )
+    source_schema_uri: str | None = field(default=None, validator=_optional_uri)
+    source_version: ContractVersion | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ContractVersion)),
+    )
+
+    @source_version.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue, reportOptionalMemberAccess]
+    def _validate_legacy_requires_source(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
+        if self.ingress_kind is IngressKind.LEGACY_ARTIFACT and (
+            self.source_schema_uri is None or self.source_version is None
+        ):
+            raise ValueError(
+                "legacy_artifact ingress requires source_schema_uri and source_version"
+            )
+
+
+@contract("handoff-pointer")
+@define(frozen=True)
+class HandoffPointer:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    operation_id: str = field(validator=_identifier)
+    request_digest: str = field(validator=_digest)
+    source_phase: str = field(validator=_identifier)
+    destination_phase: str = field(validator=_identifier)
+    payload: ArtifactRef = field(validator=validators.instance_of(ArtifactRef))
+    normalization_receipt: ArtifactRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ArtifactRef)),
+    )
+
 @schema_constraints(
     _if_equals(
         "identity_action",

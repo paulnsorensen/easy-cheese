@@ -251,6 +251,8 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         f"{SCHEMA_ROOT}/curd-result",
         f"{SCHEMA_ROOT}/diagnosis-request",
         f"{SCHEMA_ROOT}/diagnosis-result",
+        f"{SCHEMA_ROOT}/handoff-pointer",
+        f"{SCHEMA_ROOT}/normalization-receipt",
         f"{SCHEMA_ROOT}/phase-contract",
         f"{SCHEMA_ROOT}/planner-request",
         f"{SCHEMA_ROOT}/planner-result",
