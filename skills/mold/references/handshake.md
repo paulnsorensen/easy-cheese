@@ -15,8 +15,10 @@ Print this checklist and require every box checked before extraction (or an expl
 ```
 Coherence self-check before curdle:
 - [ ] Problem statement: grounded, agreed
+- [ ] Grounding recorded: a wiki probe result — citations or an explicit hallouminate-absent note — preceded the first structured question
 - [ ] At least 2 options weighed (Do Nothing included)
 - [ ] Chosen option grounded in codebase evidence
+- [ ] Exploration delegated: evidence-heavy reads carry an explorer digest, or the parent-context fallback is recorded
 - [ ] Interface sketches: every public seam has a pseudocode signature
 - [ ] Cross-module calls go through public interfaces, not internals
 - [ ] Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)
@@ -35,12 +37,7 @@ If any box is unchecked, name it and propose the smallest move to fill it. The u
 
 The last box — **Durable writes** — is a *commitment* checked before the handshake, not a claim the write already happened: it asserts the ADR + domain-model targets are resolved and the write → read-back → completion-record protocol is locked in for the atomic-write step (`curdle.md` § Atomic write). The read-back verify and the visible completion record fire *during* that step, and the hallouminate-absent fallback is noted loud, never silent.
 
-These fifteen checklist items are the gates in mold's machine-readable gate model
-(`gate-graph.md`). A passing `fork_taste_test_passed` verdict is the mandatory
-decomposition gate; stale, partial, contradictory, or blocker-bearing verdicts
-keep decomposition closed. A test asserts the checklist items here equal the
-model's gate nodes, so a gate cannot be silently dropped from this prose — edit
-the two together. Render the flow with `mold.pyz gate-graph`.
+These seventeen checklist items match the gates in Mold's machine-readable gate model. See `gate-graph.md`. A passing `fork_taste_test_passed` verdict opens the decomposition gate. A stale, partial, contradictory, or blocker-bearing verdict keeps decomposition closed. A test compares this checklist with the model nodes. Edit both sources together. Render the flow with `mold.pyz gate-graph`.
 
 ## Mandatory gates
 
@@ -54,8 +51,8 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
 - **Agent-introduced scope:** every distinguishing noun in the spec must trace to a user-typed mention or get per-term approval. Full procedure in § Agent-introduced scope below — Curdle is the single chokepoint, since downstream skills trust the resulting frontmatter and do not re-block.
 - **Entity-referent binding:** every identity noun binds to a code referent or is marked NEW ENTITY; an ALIAS must be resolved, not just noted. Full procedure in § Entity-referent binding below.
 - **Non-goals audit:** every `Non-goals` bullet traces to a user-stated out-of-scope item or is marked `[AGENT-INTRODUCED]`. Full procedure in § Non-goals audit below.
-- **Fork taste test:** before decomposition, a fresh-context verdict must match the draft SHA256, cover every settled consequential decision exactly once, and carry no contradictions, orphaned decisions, unsupported assumptions, or acceptance gaps. The initial verdict plus two corrective rounds is the hard cap; the third failure halts.
-- **Spec format gate:** `validate-spec --strict` must exit 0 on the draft before curdle extracts it — the handshake cannot extract a spec that fails it. `--strict` is the mint posture: Curdle emits only the current hardened format, so the legacy grace that `validate-spec` grants on *read* is never available on *write*.
+- **Fork taste test:** Require a fresh-context verdict before decomposition. The verdict must match the draft SHA256. It must cover each settled consequential decision exactly once. It cannot contain contradictions, orphaned decisions, unsupported assumptions, or acceptance gaps. Mold permits the initial verdict and two corrective rounds. A third failure stops the process.
+- **Spec format gate:** Run `validate-spec --strict` on the draft before Curdle extracts it. The command must exit with status 0. Curdle writes only the current hardened format. It does not use the legacy read grace period.
 - **UI surface classification:** every Mold-produced spec carries a provenance
   marker and an explicit `ui_surface` value under `gate_applicability`.
   `browser` requires an existing browser/E2E interface and outer seam for every
@@ -106,21 +103,23 @@ This audit is the `Non-goals audit` coherence gate — the `non_goals_audit` nod
 
 ## Follow-up disposition (inside the non-goals audit)
 
-Before the two-key handshake can pass, dispose of every follow-up candidate in one batch. This extends the existing `Non-goals audit` gate; it does not add or rename a gate.
+Before the two-key handshake, dispose of every follow-up candidate in one batch. This process extends the existing `Non-goals audit` gate. It does not add or rename a gate.
 
-1. Group related candidates into independently deliverable units. Propose grouping or splitting rather than assuming it, and obtain user approval.
-2. When discovery is available, search GitHub Issues and hallouminate roadmap goals for related work. Present each semantic match as a possible reuse, never as an equivalence; the user approves any reuse.
-3. Recommend one destination per unit:
-   - **non-goal only** — retain the scope boundary and create no follow-up artifact;
-   - **GitHub Issue** — discrete, independently actionable work;
-   - **roadmap goal** — coordinated, milestone-scale, or dependency-linked work;
-   - **local issue draft** — publication is not desired or available.
-4. The user approves the destination. For every accepted destination except non-goal only, ask the user to choose the action: **create/link now** or **leave prepared**. A non-goal-only unit has no action choice.
-5. Record accepted units for Curdle. Rejected design directions stay in the rejected-directions store and do not enter this batch.
+1. Group related candidates into independent units. Ask the user to approve each group or split.
+2. Search GitHub Issues and Hallouminate roadmap goals when discovery is available. Present each semantic match as possible reuse. The user approves each reuse.
+3. Recommend one destination for each unit:
+   - **non-goal only** — keep the scope boundary and create no follow-up artifact;
+   - **GitHub Issue** — use for discrete and independent work;
+   - **roadmap goal** — use for coordinated work, milestone work, or work with dependencies;
+   - **local issue draft** — use when publication is unavailable or unwanted.
+4. Ask the user to approve the destination. For other destinations, ask the user to select **create/link now** or **leave prepared**.
+5. Record each accepted unit for Curdle. Keep rejected design directions in the rejection store. Do not add them to this batch.
 
-The user approves grouping, splitting, semantic-match reuse, destination, and any applicable action; Mold settles none silently. When no candidates exist, omit the disposition batch and preserve the current handshake and Curdle flow.
+The user approves groups, splits, reused matches, destinations, and applicable actions. Mold makes none of these decisions. Omit this batch when no candidates exist. Preserve the current handshake and Curdle flow.
 
-Record each candidate within `Decided` as `[FOLLOW-UP?]` with its summary, source, and rationale. A follow-up candidate is dialogue state only — collecting one does not create an artifact or future commitment. After both keys pass, Curdle writes local artifacts first (including the same approved curd block), publishes approved follow-ups, and reconciles their state and references into the durable spec, and only then renders the implementation handoff.
+Record each candidate under `Decided` as `[FOLLOW-UP?]`. Include its summary, source, and rationale. A follow-up candidate is dialogue state only. It creates no artifact or future commitment.
+
+After both keys pass, Curdle first writes the local artifacts and approved curd block. Curdle then publishes approved follow-ups. It reconciles their states and references into the durable spec. It renders the implementation handoff last.
 
 ## Entity-referent binding
 

@@ -29,6 +29,7 @@ TASTE_SOURCE = REPO_ROOT / "src" / "easy_cheese" / "shared" / "taste_test.py"
 
 class _MoldTasteTestModule(Protocol):
     REFLECTIONS: tuple[str, ...]
+    NOT_APPLICABLE_REFLECTIONS: tuple[str, ...]
     RED_REQUIRED_EXECUTABLE_PROBLEM: str
     TestContract: type["_TestContract"]
     RedRequired: type["_RedRequired"]
@@ -59,6 +60,7 @@ class _MoldTasteTestModule(Protocol):
     def parse_gate_applicability(
         self, spec: object, *, require_ui_surface: bool = ...
     ) -> "_RedRequired | _NotApplicable": ...
+    def required_reflections(self, spec: object) -> tuple[str, ...]: ...
     def auto_handoff(
         self,
         spec_ref: str | Path,
@@ -240,6 +242,99 @@ def test_each_settled_fork_requires_all_reflection_locations(
         "missing-reflection:F-1:acceptance",
         "missing-reflection:F-1:test-contract",
     } <= set(result.acceptance_gaps)
+
+
+NOT_APPLICABLE_DRAFT = """---
+source: mold-handshake
+gate_applicability:
+  disposition: not-applicable
+  work_class: docs-only
+  ui_surface: not-applicable
+  reason: documentation-only change
+---
+# Docs draft
+
+## Approach
+F-1 outer tracer; F-2 browser seam
+
+## Interface sketches
+F-1 outer tracer; F-2 browser seam
+
+## Acceptance
+F-1 outer tracer; F-2 browser seam
+"""
+
+
+def _verdict_with(
+    taste: _MoldTasteTestModule, draft: str, reflections: tuple[str, ...]
+) -> dict[str, object]:
+    payload = verdict(taste, draft)
+    forks = cast(list[dict[str, object]], payload["forks"])
+    for fork in forks:
+        fork["reflected_in"] = list(reflections)
+    return payload
+
+
+def test_not_applicable_spec_owes_only_the_three_reachable_reflections(
+    taste: _MoldTasteTestModule,
+) -> None:
+    assert taste.required_reflections(NOT_APPLICABLE_DRAFT) == (
+        "approach",
+        "interface",
+        "acceptance",
+    )
+    assert taste.NOT_APPLICABLE_REFLECTIONS == ("approach", "interface", "acceptance")
+
+
+def test_not_applicable_spec_passes_without_a_test_contract_reflection(
+    taste: _MoldTasteTestModule,
+) -> None:
+    result = taste.taste_test(
+        NOT_APPLICABLE_DRAFT,
+        LEDGER,
+        _verdict_with(
+            taste, NOT_APPLICABLE_DRAFT, taste.NOT_APPLICABLE_REFLECTIONS
+        ),
+    )
+    assert result.acceptance_gaps == ()
+    assert result.passed
+    assert taste.decomposition_gate(result).allowed
+
+
+def test_not_applicable_spec_still_owes_the_other_three_reflections(
+    taste: _MoldTasteTestModule,
+) -> None:
+    result = taste.taste_test(
+        NOT_APPLICABLE_DRAFT,
+        LEDGER,
+        _verdict_with(taste, NOT_APPLICABLE_DRAFT, ("approach",)),
+    )
+    assert not result.passed
+    assert {
+        "missing-reflection:F-1:interface",
+        "missing-reflection:F-1:acceptance",
+        "missing-reflection:F-2:interface",
+        "missing-reflection:F-2:acceptance",
+    } <= set(result.acceptance_gaps)
+    assert not any(
+        gap.endswith(":test-contract") for gap in result.acceptance_gaps
+    )
+
+
+def test_red_required_spec_keeps_the_four_reflection_contract(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = red_spec().replace(
+        "## Acceptance\n",
+        "## Approach\nF-1 outer tracer\n\n## Interface sketches\nF-1 outer tracer\n\n## Acceptance\n",
+    )
+    ledger = [LEDGER[0]]
+    payload = _verdict_with(taste, draft, ("approach", "interface", "acceptance"))
+    payload["forks"] = [cast(list[dict[str, object]], payload["forks"])[0]]
+    assert taste.required_reflections(draft) == taste.REFLECTIONS
+    result = taste.taste_test(draft, ledger, payload)
+    assert not result.passed
+    assert "missing-reflection:F-1:test-contract" in result.acceptance_gaps
 
 
 def test_missing_reviewer_fork_reopens_the_named_ledger_fork(

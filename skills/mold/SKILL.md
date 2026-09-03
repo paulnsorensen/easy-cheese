@@ -59,17 +59,17 @@ Beyond source-code routing there are mold-specific tools:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | External validation | `/briesearch` with Context7/Tavily | user-provided docs, repo docs, or note as unverified |
-| Wiki grounding (Ground entry + decision points; scope per `references/grounding.md` § When to probe) | `mcp__hallouminate__list_corpora` + `mcp__hallouminate__ground` on `repo:<repo>:wiki` | skip; proceed with code evidence only; cap at `speculating` when design rationale is central |
+| Wiki grounding (Ground entry + decision points; scope per `references/grounding.md` § When to probe) | `mcp__hallouminate__list_corpora` + `mcp__hallouminate__ground` on `repo:<repo>:wiki` | record `hallouminate: absent` in the ledger, proceed on code evidence, and cap at `speculating` when design rationale is central |
 
-Optional tools accelerate the work but never block the dialogue. When evidence is unavailable, mark the claim `[?]` until settled.
+**The grounding record is a precondition for the first structured question.** Do not ask the question until the ledger contains a probe result. The result contains citations or `hallouminate: absent`. This fallback keeps the evidence visible. Mark each unsupported claim `[?]` until you settle it.
 
 ## Sub-agent context gate
 
-`/mold` owns dialogue, contradictions, and approval state. Delegate evidence-heavy reads or graphs to a fresh-context `explorer`, and external research to a `researcher`; see `references/context-budget.md`.
+`/mold` owns the dialogue, contradictions, and approval state. Do not delegate these items. Delegate evidence-heavy code work to a fresh-context `explorer`. Delegate external research to a `researcher`. **Shape uses an explorer digest as input.** Record parent-context exploration as a degraded path. See `references/context-budget.md` for budgets and required checkpoints.
 
 ### Gate graph
 
-`python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Text targets need no binary; image targets degrade to mermaid without Graphviz. Tests keep gate nodes aligned with the handshake checklist. `fork_taste_test_passed` requires a fresh-context verdict with matching digest and complete ledger coverage; see `references/gate-graph.md`.
+`python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Text targets need no binary. Image targets use Mermaid when Graphviz is unavailable. Tests keep gate nodes aligned with the handshake checklist. `fork_taste_test_passed` requires a fresh-context verdict. The verdict must match the digest and cover the complete ledger. See `references/gate-graph.md`.
 
 ### Gate applicability and Test Contracts
 
@@ -106,7 +106,9 @@ marker remain legacy-compatible and may omit `ui_surface`.
 
 ### Fork taste gate
 
-`mold.pyz taste-test` binds the verdict to the draft SHA256 and every settled consequential ledger fork. Stale/partial coverage or any blocker fails; failures reopen named forks only, with two correction rounds. Approved `red-required` specs hand off unchanged metadata and durable pointer to `/cook --auto`.
+`mold.pyz taste-test` binds the verdict to the draft SHA256. It also binds the verdict to each settled consequential ledger fork. Stale coverage, partial coverage, and blockers fail the gate. A failure reopens only the named forks. Mold permits two correction rounds. Approved `red-required` specs pass unchanged metadata and the durable pointer to `/cook --auto`.
+
+Each settled consequential fork must appear in Approach, Interface sketches, and Acceptance. A `red-required` spec must also include each fork in Test Contracts. A `not-applicable` spec cannot contain Test Contracts. Do not rename a section to simulate the fourth reflection.
 
 ## Approval gate
 
@@ -133,7 +135,7 @@ The digest's `mode` is orientation, not a skill. Render the fixed blast-radius m
 - Dialogue first; artifacts are the by-product.
 - **Tiered lettered options.** Consequential forks use `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md`; never decide them silently. Minor mechanics use `[AGENT-DECIDED]` with a vetoable alternative. A fork is valid only after its depth was contributed in-dialogue first. Precede every structured question with visible prose weighing the fork and evidence, and keep one open picker.
 - **Decision ledger.** Each round prints `Decided / Asking / [AGENT-DECIDED]`. Curdle persists consequential decisions to [ADRs](references/adr.md) and minor ones to the spec. The taste verdict names every settled consequential entry exactly once.
-- **Decision map.** After three consecutive fork questions, or on request, show done forks, required and optional remaining forks, and a ready/blocked verdict. It renders ledger state; it creates no artifact.
+- **Decision map and fork-round cap.** Stop after three consecutive fork rounds that add no new evidence. Also stop when the user requests a decision map. Show completed forks, remaining forks, and a ready or blocked verdict. A fourth round requires new grounding, a delegated digest, or a `/wheypoint` checkpoint. The map shows ledger state. It does not create an artifact.
 - Do not implement code.
 - Do not write production files before the approval gate.
 - Do not silently settle uncertain claims.

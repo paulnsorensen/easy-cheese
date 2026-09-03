@@ -1,59 +1,61 @@
-# Context budget — staying out of the dumb zone
+# Context budget
 
-A long mold dialogue can drift into the model's degraded-attention band (roughly
-~120k–140k tokens), where recall and coherence soften. Mold defends the window
-two ways: **offload heavy work to sub-agents by default**, and **nudge** the user
-toward a checkpoint as the window fills. Both are advisory levers, not hard gates —
-the reliable one is sub-agent offload (ADR-003, Risks).
+A long Mold dialogue can reduce model recall and coherence. This risk increases near 120,000 to 140,000 tokens. Mold controls this risk in three ways. It delegates heavy work, limits active orchestration, and recommends a checkpoint when the context grows. Delegation is the most reliable control. See ADR-003.
 
-## Default: offload heavy work to sub-agents
+## Delegate heavy work by default
 
-The sub-agent context gate (`SKILL.md` § Sub-agent context gate) is the **default** for heavy work, not an exception. Resolve the typed read-only role through `../../cheese/references/agent-resolution.md`: exact specialist, compatible specialist, then a prompt-constrained general worker with `degraded: true`. Use inline work only when dispatch is unavailable:
+Use the sub-agent context gate for heavy work. Resolve the read-only role through `../../cheese/references/agent-resolution.md`. Select the exact specialist first. Then select a compatible specialist. Use a constrained general worker with `degraded: true` only when no specialist is available. Work in the parent context only when dispatch is unavailable.
 
-- **Research:** deep `/briesearch` (3+ doc fetches or 2+ search angles) —
-  the `researcher` phase-agent.
-- **Shape check:** more than 5 symbols, wide module fan-out, large caller/dep
-  traversals — the `explorer` phase-agent.
-- **Prototype Cycle:** the throwaway build always runs in a sub-agent
-  (`prototype-cycle.md`) — the `explorer` phase-agent.
-- **Diagnose:** bulky logs/traces before a concise root-cause hypothesis — the
-  `explorer` phase-agent.
+- **Research:** Delegate deep `/briesearch` work to a `researcher`. Deep work uses at least three document fetches or two search angles.
+- **Shape check:** Delegate wide analysis to an `explorer`. Wide analysis includes more than five symbols or a large caller graph.
+- **Prototype Cycle:** Always run the temporary build in an `explorer`. See `prototype-cycle.md`.
+- **Diagnose:** Delegate large logs and traces to an `explorer`. Keep only the concise root-cause hypothesis in the parent context.
 
-The sub-agent returns a ≤2 KB digest; the raw evidence never enters the parent
-window. The parent keeps only the dialogue, contradictions, approval state, and
-the two-key handshake — those never delegate.
+The sub-agent returns a digest of 2 KB or less. Do not copy raw evidence into the parent context. The parent keeps the dialogue, contradictions, approval state, and two-key handshake. Never delegate these items.
 
-## The nudge — heuristic, not a hard count
+## Orchestration budgets
 
-There is no precise live token count, so the budget is a **heuristic estimate**,
-designed as a nudge:
+Token pressure gives a late warning. Active orchestration consumes the context before this warning occurs. One Mold episode can include bounds, grounding, research, Shape, taste tests, planning, approval, and publication.
+
+The 2026-08 workflow sample contains 16 top-level invocations. The median active time is 35.6 minutes. Large sessions use 100 to 276 tool calls and up to 11 sub-agent spawns.
+
+Each phase has a bound and an exhaustion action. When a phase reaches its bound, stop new work. Record the settled work and take the checkpoint.
+
+| Budget | Bound | On exhaustion |
+| --- | --- | --- |
+| Ground per topic | 1 wiki probe and 1 delegated digest | mark the remainder `[?]`; treat a third probe as repeated work |
+| Shape or Sketch per option set | 1 explorer digest | require a new question before a second dispatch |
+| Fork rounds | 3 consecutive rounds that add no new evidence | show the decision map and stop questions |
+| Parent-context tool calls | approximately 40 calls | run `/wheypoint` before the next heavy step |
+| Sub-agent spawns | 6 spawns per episode | run `/wheypoint`; resume from the digests |
+| Repeated failures | 2 consecutive failures from the same tool or agent | record the degraded path and use a different route |
+
+Count only calls and spawns from the parent context. Do not count internal sub-agent tool calls. Delegation exists to move those calls out of the parent context.
+
+These budgets are not terminal limits. Exhaustion requires a checkpoint or a recorded degraded path. It does not permit a truncated design. Do not make a silent third attempt.
+
+## Context estimate
+
+No precise live token count is available. Use the visible signals to estimate context use.
 
 | Estimate | Action |
 | --- | --- |
-| ~120k tokens | **Advisory:** note the window is filling; prefer sub-agent offload for the next heavy step; tighten questions. |
-| ~140k tokens | **Suggest a re-up:** recommend `/wheypoint` to compact the session into a durable handoff slug, then resume in a fresh context. |
+| approximately 120,000 tokens | advise that the context is filling; delegate the next heavy step and make questions concise |
+| approximately 140,000 tokens | recommend `/wheypoint`; resume in a fresh context |
 
-Estimate from the visible signals — turn count, sub-agent digests folded in,
-large pastes — not a false-precision number. When in doubt, offload before you
-nudge: the sub-agent split is the lever that actually moves the needle.
+Estimate from the turn count, sub-agent digests, and large pasted inputs. Do not report false precision. Delegate before you recommend a checkpoint. Delegation directly reduces parent-context use.
 
-## The wheypoint re-up
+## Wheypoint checkpoint
 
-At the ~140k nudge, recommend (do not auto-run):
+At approximately 140,000 tokens, recommend this action. Do not run it automatically.
 
 ```text
-The dialogue is large enough to risk the model's dumb zone. /wheypoint will
-compact what we've decided into .cheese/notes/<slug>.md so a fresh session can
-resume without losing the handshake state. Resume with /cheese --continue <slug>.
+The dialogue can now reduce model recall. Run /wheypoint to save the settled decisions in .cheese/notes/<slug>.md.
+Resume in a fresh session with /cheese --continue <slug>.
 ```
 
-`/wheypoint` preserves the dialogue, contradictions, approval state, and any open
-Validate/Prototype cycles, so the fresh agent picks up mid-handshake rather than
-re-deriving the design. See `skills/wheypoint/SKILL.md`.
+`/wheypoint` preserves the dialogue, contradictions, approval state, and open Validate or Prototype cycles. The fresh agent resumes at the current handshake state. It does not derive the design again. See `skills/wheypoint/SKILL.md`.
 
-## Why a nudge, not a gate
+## Why Mold recommends a checkpoint
 
-A hard token gate would cut confidence-gathering short — the exact failure
-ADR-003 rejects for cycle caps. The window pressure is real but approximate, so
-mold treats it as a prompt to act (offload or checkpoint), never as a wall that
-ends the dialogue.
+A hard token gate can stop confidence work too early. ADR-003 rejects this behavior for cycle caps. Context pressure is approximate. Therefore, Mold recommends delegation or a checkpoint instead of ending the dialogue.
