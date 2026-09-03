@@ -41,7 +41,7 @@ SKILL_SUBCOMMANDS = {
     ],
     "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
     "mold": ["artifact-path", "curd-count", "gate-graph", "migrate", "publish", "render-html", "taste-test", "validate-spec"],
-    "briesearch": ["artifact-path", "ground-check"],
+    "briesearch": ["artifact-path", "budget-check", "ground-check", "research-layout"],
     "plate": ["stack-tools", "validate-publication"],
     "cook": [
         "artifact-path", "age-route", "baseline", "phase-decision", "milknado", "mode", "worktree",
@@ -557,6 +557,59 @@ def test_artifact_path_rejects_unknown_phase(bundles: Path) -> None:
     assert "unknown phase" in result.stderr
 
 
+def test_research_layout_prints_slug_aware_paths(bundles: Path) -> None:
+    """`artifact-path research <slug>` returns only the corpus root.
+    Each caller derives `research/<slug>/…` from this root.
+    `research-layout` returns the complete nested layout as JSON."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "research-layout",
+        "demo-slug",
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 0, result.stderr
+    layout = cast("dict[str, str]", json.loads(result.stdout))
+    root = f"{_CORPUS_ENV['EASY_CHEESE_HOME']}/{_CORPUS_ENV['EASY_CHEESE_PROJECT']}"
+    assert layout == {
+        "slug": "demo-slug",
+        "corpus_root": root,
+        "dir": f"{root}/research/demo-slug",
+        "report": f"{root}/research/demo-slug/demo-slug.md",
+        "raw_dir": f"{root}/research/demo-slug/raw",
+        "manifest": f"{root}/research/demo-slug/manifest.json",
+    }
+
+
+def test_research_layout_rejects_invalid_slug(bundles: Path) -> None:
+    result = _run(
+        bundles / "briesearch.pyz",
+        "research-layout",
+        "Not A Slug",
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 1
+    assert "kebab-case" in result.stderr
+
+
+def test_artifact_path_research_root_unchanged_by_layout_command(
+    bundles: Path,
+) -> None:
+    """`research-layout` is additive for #492.
+    `artifact-path research <slug>` still prints the bare corpus root.
+    Existing callers use this root in "$ROOT/research/<slug>/"."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "artifact-path",
+        "research",
+        "demo-slug",
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == (
+        f"{_CORPUS_ENV['EASY_CHEESE_HOME']}/{_CORPUS_ENV['EASY_CHEESE_PROJECT']}"
+    )
+
+
 # briesearch ground-check: the mechanical grounding gate behind issue #113. The
 # original failure was a synthesis that concluded "Codex has no static config
 # permission surface" with no citation, contradicting a fact its own raw notes
@@ -731,7 +784,7 @@ def test_ground_check_absence_guard_flags_inferred_absence_without_false_positiv
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
     assert result.returncode == 0, result.stderr
-    assert result.stderr.count("ADVISORY") == 1
+    assert result.stderr.count("ABSENCE") == 1
 
 
 def test_ground_check_rejects_numeric_ratio_as_citation(
@@ -891,6 +944,168 @@ def test_ground_check_rejects_local_path_traversal(
     )
     assert result.returncode == 1, result.stderr
     assert result.stderr.count("outside allowed root") == 2
+
+
+def _manifest(tmp_path: Path, document: object) -> None:
+    _ = (tmp_path / "manifest.json").write_text(json.dumps(document))
+
+
+_REMOTE_REPORT = (
+    "## Research: q\n\n### Evidence\n\n"
+    "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+    "| A holds | https://example.com/a | certain |\n"
+)
+
+
+def test_ground_check_fails_url_the_manifest_never_retrieved(
+    bundles: Path, tmp_path: Path
+) -> None:
+    """A URL in only a search result list is discovery, not inspection.
+    A capture manifest makes this citation a hard failure for #493."""
+    _manifest(
+        tmp_path,
+        {
+            "calls": [
+                {
+                    "kind": "search",
+                    "provider": "tavily",
+                    "tool": "tavily_search",
+                    "query": "example a",
+                }
+            ]
+        },
+    )
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 1, result.stderr
+    assert "REMOTE" in result.stderr
+    assert "https://example.com/a" in result.stderr
+
+
+def test_ground_check_passes_url_retrieved_by_a_provider_tool(
+    bundles: Path, tmp_path: Path
+) -> None:
+    _manifest(
+        tmp_path,
+        {
+            "calls": [
+                {
+                    "kind": "extract",
+                    "provider": "tavily",
+                    "tool": "tavily_extract",
+                    "url": "https://example.com/a/",
+                    "file": "raw/01-example.md",
+                    "fetched": "2026-08-30",
+                }
+            ]
+        },
+    )
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 0, result.stderr
+    assert "grounding ok" in result.stderr
+
+
+def test_ground_check_advises_when_no_manifest_backs_remote_citations(
+    bundles: Path, tmp_path: Path
+) -> None:
+    """Short-form reports do not have a capture directory.
+    The gate stays usable and reports unverified remote citations."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 0, result.stderr
+    assert "MANIFEST" in result.stderr
+    assert "1 remote URL citation(s)" in result.stderr
+
+
+def test_ground_check_rejects_an_untrustworthy_manifest(
+    bundles: Path, tmp_path: Path
+) -> None:
+    _manifest(tmp_path, {"calls": [{"kind": "crawl", "provider": "tavily"}]})
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 1, result.stderr
+    assert "unknown kind 'crawl'" in result.stderr
+
+
+# `budget-check` enforces the #549 spend gate. It reads the same manifest.
+# It rejects repeated calls and overspending without a named gap.
+def _budget_check(
+    bundles: Path, tmp_path: Path, document: object
+) -> subprocess.CompletedProcess[str]:
+    _manifest(tmp_path, document)
+    return _run(bundles / "briesearch.pyz", "budget-check", str(tmp_path))
+
+
+def test_budget_check_fails_a_repeated_search(bundles: Path, tmp_path: Path) -> None:
+    search = {
+        "kind": "search",
+        "provider": "tavily",
+        "tool": "tavily_search",
+        "query": "rrf fusion",
+        "filters": {"days": 30},
+    }
+    result = _budget_check(bundles, tmp_path, {"calls": [search, dict(search)]})
+    assert result.returncode == 1, result.stdout
+    assert "DUPLICATE_SEARCH" in result.stderr
+    assert json.loads(result.stdout)["duplicates"]["search"] == 1
+
+
+def test_budget_check_fails_overspend_with_no_extension(
+    bundles: Path, tmp_path: Path
+) -> None:
+    calls = [
+        {
+            "kind": "search",
+            "provider": "tavily",
+            "tool": "tavily_search",
+            "query": f"q{i}",
+        }
+        for i in range(3)
+    ]
+    result = _budget_check(
+        bundles, tmp_path, {"budget": {"search": 2}, "calls": calls}
+    )
+    assert result.returncode == 1, result.stdout
+    assert "3 search call(s) against a declared budget of 2" in result.stderr
+
+
+def test_budget_check_passes_a_run_within_budget(bundles: Path, tmp_path: Path) -> None:
+    result = _budget_check(
+        bundles,
+        tmp_path,
+        {
+            "invocation": "sidechain",
+            "budget": {"extract": 1},
+            "calls": [
+                {
+                    "kind": "extract",
+                    "provider": "tavily",
+                    "tool": "tavily_extract",
+                    "url": "https://example.com/a",
+                    "file": "raw/01-example.md",
+                    "cached": True,
+                }
+            ],
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "budget ok" in result.stderr
+    metrics = cast(dict[str, object], json.loads(result.stdout))
+    assert metrics["invocation"] == "sidechain"
+    assert metrics["cached"] == 1
 
 
 def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
