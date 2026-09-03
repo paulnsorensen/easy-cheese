@@ -25,3 +25,49 @@ Read this in full before acting on any `/cheese --continue <slug-or-note-path>` 
    - **When the handoff carries a recorded `baseline:` block** — treat it as settled state, not an open question: never re-ask about or re-halt on the failures it records, whether in this reader or in the dispatched phase. See [`../../cook/references/quality-gates.md`](../../cook/references/quality-gates.md).
 
 Under `--safe`, gate authoritative resumption through the handoff gate in [`handoff-gate.md`](handoff-gate.md); legacy resumption always uses the informed gate above. Without `--safe`, run only the named authoritative phase immediately; a legacy note remains untrusted context. Resolution is the resumability contract: it tells the router where the pipeline is and how to move it forward.
+
+## --reground
+
+A handoff records earlier facts. `--reground` checks whether later tree changes falsify those facts. This check prevents a resumed phase from using a false premise.
+
+The flag is meaningful only alongside `--continue`. Otherwise, say so in one line and classify normally. No handoff is available to check.
+
+Run it after resolution has produced a dispatchable result and before dispatch. A stopped resolution stays stopped. `--reground` never rescues one and never softens one.
+
+### Bound the window first
+
+Bound the decay window deterministically from the recorded commit. Use `git diff --name-only <recorded-commit>..HEAD` to list committed changes. Use `git status --porcelain` to list uncommitted changes. A claim can decay only inside this window.
+
+An empty window means nothing moved under the handoff. Report this state in one line and dispatch unchanged.
+
+A handoff with no recorded commit has an unbounded window. Do not read the complete tree. Report the missing baseline, mark each claim `unverifiable`, and dispatch.
+
+### Attack the claims with Culture
+
+Take the load-bearing claims that support `next:`. Attack them, do not confirm them. Delegate one pass to `/culture` in no-write mode. Include all claims in this pass. Tell Culture to look for the evidence that would make it *false*. Limit evidence to files in the window.
+
+- `holds` — Culture searched the applicable files and found no evidence that falsifies the claim.
+- `stale` — Culture found evidence in the window that contradicts the claim.
+- `unverifiable` — The window affects the claim, but Culture cannot settle it. A claim that still sounds plausible is `unverifiable`, never `holds`.
+
+The router does not do this reading itself. Its probe budget is three.
+
+### `stale` gates, `unverifiable` does not
+
+Any `stale` claim stops automatic dispatch. Offer the user a research / decide / build choice. Dispatch nothing until the user picks.
+
+`unverifiable` verdicts are reported but do not stop dispatch. Every resume without this flag already has unchecked premises. Do not penalize the user for this check.
+
+Report one line per claim.
+
+```text
+reground: <holds|stale|unverifiable> — <claim> (<evidence, or the gap>)
+```
+
+A claim checked and cleared is as much of the record as one that failed. Report all verdicts so the user can evaluate the pass.
+
+### Never write or propagate
+
+Never repair the handoff. `--reground` does not edit the note, commit a revision, or rewrite a claim. Only `/wheypoint` authors durable state. Preserve falsified claims as evidence for the user.
+
+The flag is never forwarded to the dispatched phase. It changes only the checks before dispatch. It never becomes a durable flag or a downstream argument.

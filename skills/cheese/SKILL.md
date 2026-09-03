@@ -24,6 +24,7 @@ Optional flags:
 - `--open-pr` — propagate through the implementation chain to terminal `/plate`; a new PR follows `/plate`'s explicit-choice and review-shape policy.
 - `--continue <slug-or-note-path>` — resume an in-flight pipeline from a handoff slug or note.
 - `--hard` — propagate to `/plate`, which runs the final artifact-writing gate before `/hard-cheese` and publication.
+- `--reground` — use with `--continue` only. Adversarially re-check the handoff claims before phase dispatch.
 
 If `$ARGUMENTS` is missing entirely and there is no recent context to lean on, ask one clarifying question through the host routing guide in [`references/handoff-gate.md`](references/handoff-gate.md) before classifying.
 
@@ -93,7 +94,7 @@ Beyond source-code routing there are router-specific tools:
 | PR / issue context | `gh` | the URL or numbers the user provided |
 | Confirming routing target with the user (only under `--safe` or `clarify`) | host-routed structured question per [`references/handoff-gate.md`](references/handoff-gate.md) | a numbered list with explicit dispatch commands |
 
-`/cheese` keeps tool use light. Beyond the single wiki-grounding probe in `## Flow`, treat anything heavier than a single-file read or one search call as a sign the work belongs in the downstream skill, not in the router.
+One evidence probe is one file read, one search call, one `gh` call, or the wiki-grounding probe in `## Flow`. The router spends at most three probes. The fast path spends zero probes. If the router needs more probes, escalate to `/culture` or `/briesearch` in internal mode. See [`references/routing-receipt.md`](references/routing-receipt.md) for the budget, fast path, and receipt fields.
 
 ## Output
 
@@ -102,9 +103,16 @@ Always emit, in order:
 1. **Detected intent** — one line, e.g. `Intent: cook (clear single-file fix)`.
 2. **Reason** — one line citing the signal (`reason: spec path .cheese/specs/foo.md`).
 3. **Target** — the chosen skill, e.g. `Target: /cook .cheese/specs/foo.md`.
-4. **Wiki hits** — when `handoff_context.wiki_hits` is non-empty, one line per hit: `wiki: <page>:<line> — <why>` — always rendered before dispatch so the user sees what memory informed the routing and can challenge stale hits. Omit the section when hallouminate is absent.
+4. **Wiki hits** — Emit one line for each `handoff_context.wiki_hits` entry: `wiki: <page>:<line> — <why>`. Put these lines before the receipt. This order lets the user identify stale wiki information. Omit these lines when hallouminate is absent.
+5. **Routing receipt** — The last line before dispatch, always emitted, is:
 
-Then dispatch in the same turn (or, under `--safe`, via the handoff gate). If `clarify` is chosen, replace the dispatch with the single clarifying question.
+   ```text
+   route: intent=<intent> target=<skill> path=<fast|escalated> probes=<n>
+   ```
+
+   This line is the terminal routing boundary. Never put a duration or a timestamp in it. The host timestamps the line. See [`references/routing-receipt.md`](references/routing-receipt.md) for all fields and rules.
+
+Then dispatch in the same turn. Under `--safe`, use the handoff gate. If `clarify` is chosen, replace the dispatch with the single clarifying question. The receipt still prints, with `target=clarify` and the actual probe count.
 
 ## Handoff
 
@@ -137,4 +145,5 @@ Pre-select only the highest-confidence target. Without `--safe`, surface the tar
 - [`references/handoff-gate.md`](references/handoff-gate.md) — cross-harness post-selection dispatch contract (shared across workflow skills).
 - [`references/handback-contract.md`](references/handback-contract.md) — the one preamble, status vocabulary, and dispatch/handback boundary inventory every phase speaks.
 - `references/escalation.md` — full escalation-tier mechanics and the spec-discovery check.
-- `references/continue-resume.md` — the `--continue` resume flow.
+- `references/continue-resume.md` — the `--continue` resume flow and the `--reground` re-check.
+- `references/routing-receipt.md` — the terminal routing receipt, the probe budget, and the fast path.
