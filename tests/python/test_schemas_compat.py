@@ -1,9 +1,8 @@
 """Tests for src/easy_cheese_schemas/compat.py — the version-compat layer.
 
-Covers every Provenance branch (including PRIOR, unreachable through `load`
-while MIN_READABLE == SCHEMA_VERSION, via the classifier directly), both
-strictness modes, the FUTURE best-effort path, Loaded's immutability, and the
-distribution floors declared in pyproject.toml.
+Covers every Provenance branch, both strictness modes, the FUTURE best-effort
+path, Loaded's immutability, and the distribution floors declared in
+pyproject.toml.
 """
 
 from __future__ import annotations
@@ -31,7 +30,6 @@ from easy_cheese_schemas import (
     Loaded,
     Provenance,
     check_adapter_sunsets,
-    compat,
     load,
     register_adapter,
     unregister_adapter,
@@ -116,13 +114,12 @@ class TestClassifyStamp:
     def test_stamp_above_current_is_future(self) -> None:
         assert classify_stamp(SCHEMA_VERSION + 1) is Provenance.FUTURE
 
-    def test_readable_older_stamp_is_prior(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # PRIOR is unreachable while MIN_READABLE == SCHEMA_VERSION, so widen
-        # the window the way a real schema bump will: the N-1 branch must
-        # classify the previous version as readable, not stale.
-        monkeypatch.setattr(compat, "SCHEMA_VERSION", SCHEMA_VERSION + 1)
-        monkeypatch.setattr(compat, "MIN_READABLE", SCHEMA_VERSION)
-        assert classify_stamp(SCHEMA_VERSION) is Provenance.PRIOR
+    def test_readable_older_stamp_is_prior(self) -> None:
+        # The window is genuinely open (MIN_READABLE < SCHEMA_VERSION), so the
+        # N-1 branch is exercised for real: the floor stamp is readable, not
+        # stale, and not mistaken for the current one.
+        assert MIN_READABLE < SCHEMA_VERSION
+        assert classify_stamp(MIN_READABLE) is Provenance.PRIOR
 
 
 class TestProvenanceThroughLoad:

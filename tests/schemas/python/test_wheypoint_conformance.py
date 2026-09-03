@@ -128,7 +128,7 @@ def revision(**overrides: object) -> dict[str, object]:
             "applied_additions": [],
             "applied_transitions": [],
             "preserved_entry_ids": [],
-            "rehydrated_from_revision_id": None,
+            "compaction": None,
             "session_provenance": None,
             "repository": {"branch": "main", "commit": "a" * 40},
             "projection_path": "projections/3-rev-0003.md",
@@ -388,6 +388,20 @@ def test_revision_accepts_a_genesis_parent_and_bare_repository_provenance() -> N
     assert value.repository.branch is None
 
 
+def test_revision_parent_digest_is_optional_but_must_be_a_digest() -> None:
+    """A receipt written before the pin existed omits the field entirely."""
+    legacy = revision()
+    assert "parent_revision_digest" not in legacy
+    assert structured(legacy, WheypointRevision).parent_revision_digest is None
+
+    pinned = structured(revision(parent_revision_digest=DIGEST), WheypointRevision)
+    assert pinned.parent_revision_digest == DIGEST
+    assert blames(
+        refused(revision(parent_revision_digest="rev-0002"), WheypointRevision),
+        "WheypointRevision.parent_revision_digest",
+    )
+
+
 def test_revision_number_must_be_positive() -> None:
     assert blames(
         refused(revision(revision_number=0), WheypointRevision),
@@ -595,14 +609,38 @@ def test_one_entry_cannot_be_transitioned_twice_in_one_delta() -> None:
 
 
 def test_rehydration_evidence_requires_a_declared_compaction() -> None:
+    evidence = {
+        "rehydrated_from_revision_id": "rev-0002",
+        "rehydrated_record_digest": DIGEST,
+        "reconciled_entry_ids": ["q1"],
+        "reconciliation_source_session_ids": ["s-42"],
+    }
+    problems = refused(delta(compacted=False, compaction=evidence), WheypointDelta)
+    assert blames(problems, "WheypointDelta.compaction")
+    value = structured(delta(compacted=True, compaction=evidence), WheypointDelta)
+    assert value.compaction is not None
+    assert value.compaction.rehydrated_from_revision_id == "rev-0002"
+    assert value.compaction.reconciled_entry_ids == ["q1"]
+    assert value.compaction.reconciliation_source_session_ids == ["s-42"]
+    # Derived by the runtime from the lineage, never carried by the request.
+    assert value.compaction.prior_compaction_revision_id is None
+
+
+def test_a_compaction_record_must_quote_a_digest_of_the_record_it_re_read() -> None:
+    """The digest is what a stale transcript cannot supply, so it is held to the
+    digest shape rather than accepted as free text."""
     problems = refused(
-        delta(compacted=False, rehydrated_from_revision_id="rev-0002"), WheypointDelta
+        delta(
+            compacted=True,
+            compaction={
+                "rehydrated_from_revision_id": "rev-0002",
+                "rehydrated_record_digest": "rev-0002",
+                "reconciled_entry_ids": [],
+            },
+        ),
+        WheypointDelta,
     )
-    assert blames(problems, "WheypointDelta.rehydrated_from_revision_id")
-    value = structured(
-        delta(compacted=True, rehydrated_from_revision_id="rev-0002"), WheypointDelta
-    )
-    assert value.rehydrated_from_revision_id == "rev-0002"
+    assert blames(problems, "WheypointDelta.compaction.rehydrated_record_digest")
 
 
 def test_an_artifact_link_may_declare_a_digest_a_revision_and_coverage() -> None:
