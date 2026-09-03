@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+from dataclasses import replace
+
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
 
@@ -36,10 +38,22 @@ def _lint(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    derive_command(_commit),
-    derive_command(_resolve),
-    derive_command(_show),
-    derive_command(_lint),
+    replace(
+        derive_command(_commit),
+        summary="Commit a handoff delta and write the generated projection",
+    ),
+    replace(
+        derive_command(_resolve),
+        summary="Resolve a slug, work id, or path to the current record",
+    ),
+    replace(
+        derive_command(_show),
+        summary="Print the current record for a work id",
+    ),
+    replace(
+        derive_command(_lint),
+        summary="Lint a generated projection against the record",
+    ),
 )
 
 
