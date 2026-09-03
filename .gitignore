@@ -22,8 +22,9 @@
 
 # milknado optional-plugin runtime data (SQLite task graph)
 .milknado/
-# milknado worker brief written into node worktrees
+# milknado worker brief and node worktrees created inside the project root
 RALPH.md
+milknado-*/
 
 # milknado ultracode workflow, copied in per-session by its SessionStart hook
 .claude/workflows/
