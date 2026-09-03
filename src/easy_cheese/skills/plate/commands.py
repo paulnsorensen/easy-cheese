@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+from dataclasses import replace
+
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
 
@@ -22,8 +24,14 @@ def _validate_publication(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    derive_command(_stack_tools),
-    derive_command(_validate_publication),
+    replace(
+        derive_command(_stack_tools),
+        summary="Detect supported stacked-PR providers without mutating the repo",
+    ),
+    replace(
+        derive_command(_validate_publication),
+        summary="Validate terminal publication evidence",
+    ),
 )
 
 

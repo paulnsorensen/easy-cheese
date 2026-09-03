@@ -1,39 +1,32 @@
 ---
 name: plate
 description: >
-  Turn finished local work into a commit, an ordinary pull request, or a
-  stacked pull-request chain. Use it to commit, save changes, publish a branch,
-  or open or update a PR. Use it to create, sync, restack, or submit a PR stack.
-  You can also run /plate. Owns all staging, committing, pushing, PR creation, and stack-aware
-  mutation. GitHub inspection, review, comments, CI, issues, releases, and
-  repository administration remain /gh.
+  Turn finished local work into a commit, ordinary pull request, or pull-request stack.
+  Use this skill to commit changes or publish a branch. Use it to open or update a PR.
+  Use it to create, sync, restack, or submit a PR stack. You can also run /plate.
+  This skill owns all staging, commits, pushes, PR creation, and stack changes.
+  /gh owns GitHub inspection, reviews, comments, CI, issues, releases, and repository administration.
 license: MIT
 ---
 
 # /plate
 
-Plate is the final local-to-review transaction. It finishes required artifacts, validates, commits safely, and publishes through the correct path.
+Plate completes local work before review. It finishes required artifacts, validates, commits safely, and selects the correct publication path.
 
 ## Routing guard
 
-Check ownership before selecting a mode. `/plate` owns staging, commits,
-pushes, ordinary PR creation and update, and stack creation, update, sync, and
-recovery.
+Check ownership before you select a mode. `/plate` owns staging, commits, pushes, ordinary PR changes, and PR stack changes.
 
-- `/plate` never performs code-quality review and never computes a review
-  surface for its own sake. Review is `/age`.
-- `/gh` owns GitHub inspection, review, comments, CI, ordinary merge, issues, workflows, releases, search, and administration.
-  Use `/gh` when no local publication transaction is required.
-- A request that only reads or judges GitHub or diff state leaves `/plate` before any mode is selected.
+- `/plate` never performs code-quality review and never computes a review surface for its own sake. Review is `/age`.
+- `/gh` owns GitHub inspection, reviews, comments, CI, merges, issues, workflows, releases, search, and administration.
+  Use `/gh` when no local publication transaction is necessary.
+- A request that only reads or assesses GitHub or diff state leaves `/plate` before any mode is selected.
   Thus, routing it here is a plate-owned failure.
-- Destructive deletion, history rewrites, force-push outside a provider's
-  lease-safe stack flow, and protected-branch mutation require explicit user
-  authorization.
+- Destructive deletion, history rewrites, unsafe force-pushes, and protected-branch changes require explicit user authorization.
 
 ## Classify, then load one reference
 
-Classify every invocation into exactly one mode, then load that mode's single
-reference. Do not read the others.
+Classify every invocation into exactly one mode. Load only that mode's reference. Do not read the others.
 
 | Mode | Trigger | Load |
 | --- | --- | --- |
@@ -43,65 +36,52 @@ reference. Do not read the others.
 | Existing PR | Update a PR while preserving its current topology | [`references/ordinary-pr.md`](references/ordinary-pr.md) |
 | Stack maintenance | Create, inspect, sync, restack, submit, recover, or explicitly ship a stack | [`references/stacks.md`](references/stacks.md) |
 
-New-PR work resolves topology first, then continues into the reference that
-resolution names: `references/ordinary-pr.md` for single, `references/stacks.md`
-for stacked. An existing PR whose detected topology is a stack uses
-`references/stacks.md`, never a bare single-branch push. Provider execution
-detail lives in [`gt.md`](references/gt.md),
-[`git-town.md`](references/git-town.md), and
-[`gh-stack.md`](references/gh-stack.md); the stack reference selects among them.
+Resolve topology before you continue new-PR work. Continue with the reference that topology selects.
+Use `references/ordinary-pr.md` for single topology. Use `references/stacks.md` for stacked topology.
+When an existing PR uses a stack, use `references/stacks.md`. Do not use a bare single-branch push.
+Read provider instructions in [`gt.md`](references/gt.md), [`git-town.md`](references/git-town.md), and [`gh-stack.md`](references/gh-stack.md).
+The stack reference selects one provider.
 
-Accept `--hard` to run `/hard-cheese` immediately before the first
-share-for-review operation. Give that gate the final artifact inventory and
-verification rows, not an earlier implementation-only snapshot.
+Accept `--hard` to run `/hard-cheese` immediately before you first share the work for review.
+Give that gate the final artifact inventory and verification rows. Do not give it an earlier implementation snapshot.
 
 ## Tool routing
 
-- Run `python3 skills/plate/scripts/plate.pyz stack-tools` before
-  selecting a stack provider. It probes Graphite, Git Town, and `gh stack`
-  without mutating repository state.
-- Use Git and GitHub or the selected provider CLI for repository, remote, PR,
-  and stack state.
-- Use the repository code-intelligence backend for tracked artifact edits and read-back.
-  Follow the canonical sequence in [`references/durable-writes.md`](references/durable-writes.md): fresh tagged read, one stale-safe write, diff read-back.
-  Use named paths, never shell redirects.
-- Route durable wiki knowledge through `/wiki-ingest`; never hand-edit the
-  Hallouminate tree.
-- Keep transient completion and PR-body files under `.cheese/` and unstaged.
+- Run `python3 skills/plate/scripts/plate.pyz stack-tools` before you select a stack provider.
+  The command detects Graphite, Git Town, and `gh stack`. It does not change repository state.
+- Use Git and GitHub for repository, remote, and PR state. Use the selected provider CLI for stack state.
+- Use the repository code-intelligence backend to edit and read tracked artifacts.
+  Follow this sequence from [`references/durable-writes.md`](references/durable-writes.md): fresh tagged read, one stale-safe write, diff read-back.
+  Use named paths. Do not use shell redirects.
+- Send durable wiki knowledge through `/wiki-ingest`. Do not edit the Hallouminate tree directly.
+- Keep temporary completion and PR-body files under `.cheese/`. Do not stage them.
 
 ## Generic transaction
 
-Commit-only and ordinary PR work use this transaction. Stacked work uses the
-per-layer transaction in `references/stacks.md`.
+Commit-only work and ordinary PR work use this transaction. Stacked work uses the per-layer transaction in `references/stacks.md`.
 
-1. **Final writing gate** — inventory, write, and read back every promised or
-   required artifact using
-   [`references/durable-writes.md`](references/durable-writes.md). Halt if
-   any required write is missing or unverified.
-2. **Validate** — run the repository's shippability gate. In easy-cheese and
-   any repo that defines it, this is `just check`. Never commit or publish on
-   red.
-3. **Inspect** — read status, diff, and recent log; verify the intended file
-   set.
-4. **Stage** — add named files only. Never stage the whole tree. Keep transient
-   `.cheese/` reports unstaged; include tracked wiki/docs writes. When the repo
-   has a hallouminate wiki, sweep `git status` for uncommitted `.hallouminate/wiki/` paths.
-   Include writes from earlier in the session. Stage them unless gitignored.
-   Wiki updates ship with this publication, never after it.
-5. **Commit** — use a Conventional Commit message focused on why. Do not amend
-   unless explicitly requested and do not bypass hooks.
-6. **Verify** — inspect status and the committed file set.
-7. **Publish when requested** — use
-   [`references/ordinary-pr.md`](references/ordinary-pr.md), then read the PR
-   back and verify it.
+1. **Final writing gate** — List every promised or required artifact. Write each artifact and read it back.
+   Follow [`references/durable-writes.md`](references/durable-writes.md). Stop if a required write is missing or unverified.
+2. **Validate** — Run the repository's shippability gate. Use `just check` in easy-cheese or any repository that defines it.
+   Do not commit or publish when the gate fails.
+3. **Inspect** — Read the status, complete diff, and recent log. Verify the intended file set.
+4. **Stage** — Add only named files. Do not stage the full tree.
+   Keep temporary `.cheese/` reports unstaged. Include tracked wiki and documentation changes.
+   If the repository has a Hallouminate wiki, inspect `git status` for uncommitted `.hallouminate/wiki/` paths.
+   Include writes from earlier in the session. Stage these writes unless Git ignores them.
+   Publish wiki updates with this transaction. Do not publish them later.
+5. **Commit** — Use a Conventional Commit message that explains the reason. Do not amend unless the user requests it.
+   Do not bypass hooks.
+6. **Verify** — Inspect the status and the committed file set.
+7. **Publish when requested** — Follow [`references/ordinary-pr.md`](references/ordinary-pr.md). Read the PR after publication. Verify it.
 
-Commit-only mode stops after verification. It never pushes or opens a PR.
+Commit-only mode stops after verification. It does not push or open a PR.
 
 ## Commit contract
 
 Before staging, inspect `git status`, the complete diff, and recent commits.
-Reject credentials, `.env` files, and unexplained large binaries. Stage every
-intended path explicitly. Use:
+Reject credentials, `.env` files, and unexplained large binaries. Stage every intended path explicitly.
+Use this format:
 
 ```text
 type(scope): short description
@@ -109,49 +89,44 @@ type(scope): short description
 Optional body when the rationale needs it.
 ```
 
-Write the message BLUF and newscaster-flat. State the change first in the subject.
-Put only required reviewer facts in the optional body. Keep it short and omit narrative prose, tone, and slang.
+Write the subject first and use a neutral tone. State the change first in the subject.
+Put only required reviewer facts in the optional body. Keep the body short. Omit narrative prose, tone, and slang.
 
-Allowed types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`,
-`style`. If a hook fails, fix it. Re-run the writing and quality gates when artifacts changed.
-Re-stage named files and create a new commit.
+Use these types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, and `style`.
+If a hook fails, fix the failure. Re-run the writing and quality gates when artifacts change.
+Re-stage each named file. Create a new commit.
 
-Use a single-quoted heredoc delimiter for multi-line commit messages so shell
-interpolation cannot alter backticks or dollar signs. An optional
-`Co-Authored-By: <name> <email>` trailer may use the harness identity when the
-project accepts it; otherwise omit it. After staging, inspect the cached diff.
-If the working diff is empty, distinguish "nothing to commit" from "everything
-is staged" by checking the cached diff.
+Use a single-quoted heredoc delimiter for multi-line commit messages. This delimiter protects backticks and dollar signs from shell interpolation.
+Use an optional `Co-Authored-By: <name> <email>` trailer when the project accepts the harness identity. Otherwise, omit the trailer.
+After staging, inspect the cached diff. An empty working diff can mean that all changes are staged.
+Check the cached diff to distinguish this state from no changes.
 
-Structure one commit per review unit: one for a single PR, one per stack
-layer. Do not shape a PR for commit-by-commit review. Per-commit approval state is untracked.
-Quality gates usually run only on the branch tip. Feedback on one commit delays the other commits. Multiple commits in one PR
-are reserved for a short series of simple, non-controversial steps that stay
-small taken together.
+Create one commit for each review unit. Use one commit for a single PR and one commit for each stack layer.
+Do not shape a PR for commit-by-commit review. The system does not track approval for each commit.
+Quality gates usually run only on the branch tip. Feedback on one commit delays the other commits.
+Use multiple commits in one PR only for a short series of simple steps. Keep the combined change small.
 
 ## Halting
 
-Every halt names the mode, the failed step, and who owns the failure. Name the
-step with exactly one of: `classify`, `topology`, `durable write`,
-`quality gate`, `stage/commit`, `publish`, `terminal validation`.
+Every halt names the mode, the failed step, and who owns the failure.
+Name the step with exactly one of: `classify`, `topology`, `durable write`, `quality gate`, `stage/commit`, `publish`, or `terminal validation`.
 
-- **Plate-owned** — this skill shaped a call or route incorrectly.
-  Examples include a malformed write, a stale write, a skipped read, or an unnamed staging path.
-  A whole-tree staging path or a mode and reference mismatch is also Plate-owned.
-  Work for `/age` or `/gh` is also a Plate-owned routing error. Fix the call shape or the routing, then retry that step.
-- **Environment-owner** — authentication, permission, hook, network, provider
-  enablement, or shared-backend failure. Report it with the owning system
-  named. Never retry it as if the call shape were wrong.
-  Also, never weaken a gate, stage unnamed paths, or skip read-back to bypass it.
+- **Plate-owned** — This skill selected an incorrect call shape or route.
+  Examples include a malformed write, stale write, skipped read, or unnamed staging path.
+  A full-tree staging path is also Plate-owned. A mismatch between the mode and reference is also Plate-owned.
+  Work for `/age` or `/gh` is a Plate-owned routing error.
+  Use this recovery rule: `Fix the call shape or the routing, then retry that step`.
+- **Environment-owner** — Authentication, permission, hooks, network, provider enablement, or a shared backend caused the failure.
+  Name the owning system in the report. Never retry it as if the call shape were wrong.
+  Also, never weaken a gate, stage unnamed paths, or skip read-back to bypass the failure.
 
-A red quality gate is environment-neutral evidence that the work is not
-shippable: halt at `quality gate` and fix the work.
+A failed quality gate proves that the work is not shippable. Therefore, halt at `quality gate` and fix the work.
 
 ## Completion
 
-Write the terminal evidence to a transient JSON file, then run
-`python3 skills/plate/scripts/plate.pyz validate-publication <state.json>`.
-Report completion only when it returns normalized evidence with `valid: true`.
+Write the terminal evidence to a temporary JSON file.
+Run `python3 skills/plate/scripts/plate.pyz validate-publication <state.json>`.
+Report completion only when the command returns normalized evidence with `valid: true`.
 
 ```json
 {
@@ -176,5 +151,7 @@ Report completion only when it returns normalized evidence with `valid: true`.
 ```
 
 Use empty `commits` or `prs` lists when the selected mode does not create them.
-Topology preflight uses `gate: {"command": "n/a", "result": "n/a"}` because it
-stops before the publication transaction and quality gate.
+Topology preflight stops before the publication transaction and quality gate.
+Therefore, use `gate: {"command": "n/a", "result": "n/a"}` for topology preflight.
+
+See the generated bundle command inventory in [`references/commands.md`](references/commands.md).
