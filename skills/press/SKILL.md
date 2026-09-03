@@ -109,7 +109,7 @@ Map `ready for /age` to `status: ok` and `next: age`. Map `follow-up recommended
 
 Map `blocked` to `status: gated: <decision>`. Stop after that status.
 
-When `/ultracook` sets its no-chain directive, write the Press handoff and stop. Do not continue to another phase.
+If `/ultracook` sets its no-chain directive, write the Press handoff and stop. Do not start another phase.
 
 ## Output
 
