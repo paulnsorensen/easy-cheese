@@ -152,3 +152,5 @@ Resolve delegates through [`../cheese/references/agent-resolution.md`](../cheese
 | Plan for approval | planner, general | read-only, fresh-context | powerful | high | compatible planner, then general |
 
 The canonical mold spec or mini-spec carries the shared `agent_resolution` block.
+
+Generated bundle command inventory: [`references/commands.md`](references/commands.md).

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
@@ -64,14 +65,38 @@ def _validate_spec(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    derive_command(_artifact_path),
-    derive_command(_curd_count),
-    derive_command(_gate_graph),
-    derive_command(_migrate),
-    derive_command(_publish),
-    derive_command(_render_html),
-    derive_command(_taste_test),
-    derive_command(_validate_spec),
+    replace(
+        derive_command(_artifact_path),
+        summary="Resolve the durable or transient artifact path for a phase and slug",
+    ),
+    replace(
+        derive_command(_curd_count),
+        summary="Count candidate curds in a spec and recommend the next skill",
+    ),
+    replace(
+        derive_command(_gate_graph),
+        summary="Render the gate state machine as dot, svg, png, or mermaid",
+    ),
+    replace(
+        derive_command(_migrate),
+        summary="Migrate a legacy artifact and emit its handoff pointer as canonical JSON",
+    ),
+    replace(
+        derive_command(_publish),
+        summary="Publish a curd plan and emit its handoff pointer as canonical JSON",
+    ),
+    replace(
+        derive_command(_render_html),
+        summary="Render a markdown report into one self-contained offline HTML file",
+    ),
+    replace(
+        derive_command(_taste_test),
+        summary="Run the applicability, contract, and fork-coherence taste gate",
+    ),
+    replace(
+        derive_command(_validate_spec),
+        summary="Check a produced spec's curdle-time SAP posture",
+    ),
 )
 
 
