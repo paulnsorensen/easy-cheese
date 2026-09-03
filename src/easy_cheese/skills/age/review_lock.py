@@ -31,7 +31,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Callable, Protocol, TextIO, cast
+from typing import BinaryIO, Callable, Protocol, TextIO, cast
 
 from easy_cheese.shared import cli, git_utils, write_handoff_artifact
 
@@ -44,8 +44,7 @@ _OUTPUT_PREFIX = f"{SCRATCH_DIR}/{PHASE}/"
 
 
 class _Digest(Protocol):
-    def update(self, data: bytes, /) -> None:
-        ...
+    def update(self, data: bytes, /) -> None: ...
 
 
 def _is_git_worktree(root: Path) -> bool:
@@ -59,11 +58,9 @@ def _is_review_output(name: str) -> bool:
     return name.endswith(LOCK_SUFFIX) or name.endswith(".md")
 
 
-def _stream_git(
-    args: list[str], root: Path, consume: Callable[[bytes], None]
-) -> None:
+def _stream_git(args: list[str], root: Path, consume: Callable[[bytes], None]) -> None:
     try:
-        process = subprocess.Popen(
+        process: subprocess.Popen[bytes] = subprocess.Popen(
             ["git", "-C", str(root), *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -71,12 +68,12 @@ def _stream_git(
     except OSError as exc:
         raise cli.CliError(f"cannot run git {' '.join(args)}: {exc}") from exc
 
-    assert process.stdout is not None
-    assert process.stderr is not None
+    stdout = cast(BinaryIO, process.stdout)
+    stderr_stream = cast(BinaryIO, process.stderr)
     try:
-        while chunk := process.stdout.read(_GIT_CHUNK_SIZE):
+        while chunk := stdout.read(_GIT_CHUNK_SIZE):
             consume(chunk)
-        stderr = process.stderr.read()
+        stderr = stderr_stream.read()
         returncode = process.wait()
     except BaseException:
         try:
@@ -86,8 +83,8 @@ def _stream_git(
         _ = process.wait()
         raise
     finally:
-        process.stdout.close()
-        process.stderr.close()
+        stdout.close()
+        stderr_stream.close()
     if returncode != 0:
         detail = stderr.decode("utf-8", "replace").strip()
         raise cli.CliError(f"git {' '.join(args)} failed: {detail}")
@@ -115,9 +112,7 @@ def _hash_untracked_path(raw_name: bytes, root: Path, digest: _Digest) -> None:
     digest.update(b"\0")
 
 
-def _hash_untracked_listing(
-    args: list[str], root: Path, digest: _Digest
-) -> None:
+def _hash_untracked_listing(args: list[str], root: Path, digest: _Digest) -> None:
     pending = bytearray()
 
     def consume(chunk: bytes) -> None:
@@ -223,7 +218,11 @@ def verify(*, root: Path, slug: str) -> None:
         payload = cast(object, json.loads(target.read_text(encoding="utf-8")))
     except ValueError as exc:
         raise cli.CliError(f"unreadable review lock {target}: {exc}") from exc
-    locked = cast("dict[str, object]", payload).get("digest") if isinstance(payload, dict) else None
+    locked = (
+        cast("dict[str, object]", payload).get("digest")
+        if isinstance(payload, dict)
+        else None
+    )
     if not isinstance(locked, str):
         raise cli.CliError(
             f"review lock {target} recorded no digest: re-run `{_LOCK_COMMAND} {slug}` "
@@ -244,9 +243,13 @@ def _cmd_lock(args: argparse.Namespace) -> None:
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--slug", required=True, help="review slug (lock filename stem)")
     _ = parser.add_argument(
-        "--root", default=None, help="repo root (default: cwd); the lock lands under .cheese/age/"
+        "--slug", required=True, help="review slug (lock filename stem)"
+    )
+    _ = parser.add_argument(
+        "--root",
+        default=None,
+        help="repo root (default: cwd); the lock lands under .cheese/age/",
     )
     parser.set_defaults(func=_cmd_lock)
 
