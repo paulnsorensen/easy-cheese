@@ -61,7 +61,7 @@ It covers helper resolution, agent dispatch, GitHub operations, and handoff tran
 Use the bundle or repository helper first.
 Use `${CLAUDE_SKILL_DIR}` only as an optional host fallback.
 The handoff blocks below define the portable contract.
-slash commands are host renderings, not the control model.
+The phrase "slash commands are host renderings, not the control model" defines the host rule.
 
 ## Flow
 

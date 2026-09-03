@@ -29,7 +29,7 @@ Treat an empty selection as `none`.
 
 Show this gate before every `post-reply` call:
 
-- **Post pushbacks only** *(recommended)* — Post rejected drafts and hold investigation claims.
+- **Post push-back drafts only** *(recommended)* — Post rejected drafts and hold investigation claims.
 - **Investigate now, then post** — Investigate each claim and post its actual result.
   Use `/pasteurize` for a regression test.
   Use `/briesearch` for evidence outside the diff.
