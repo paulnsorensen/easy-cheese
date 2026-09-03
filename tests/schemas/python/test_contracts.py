@@ -1026,27 +1026,46 @@ def test_handoff_pointer_rejects_invalid_request_digest() -> None:
         )
 
 
-def test_normalization_receipt_legacy_ingress_requires_source_fields_at_attrs_level() -> None:
+@pytest.mark.parametrize("missing_field", ("source_schema_uri", "source_version"))
+def test_normalization_receipt_legacy_ingress_requires_each_source_field_at_attrs_level(
+    missing_field: str,
+) -> None:
+    fields: dict[str, object] = {
+        "ingress_kind": IngressKind.LEGACY_ARTIFACT,
+        "normalizer_id": "normalizer-1",
+        "source_digest": DIGEST,
+        "canonical_digest": DIGEST,
+        "source_schema_uri": VERSION.schema_uri,
+        "source_version": VERSION,
+    }
+    _ = fields.pop(missing_field)
+
     with pytest.raises(
         ValueError,
         match="legacy_artifact ingress requires source_schema_uri and source_version",
     ):
-        _ = NormalizationReceipt(
-            ingress_kind=IngressKind.LEGACY_ARTIFACT,
-            normalizer_id="normalizer-1",
-            source_digest=DIGEST,
-            canonical_digest=DIGEST,
-        )
+        _ = NormalizationReceipt(**fields)  # pyright: ignore[reportArgumentType]
 
 
-def test_normalization_receipt_legacy_ingress_requires_source_fields_at_gateway_level() -> None:
+@pytest.mark.parametrize("missing_field", ("source_schema_uri", "source_version"))
+def test_normalization_receipt_legacy_ingress_requires_each_source_field_at_gateway_level(
+    missing_field: str,
+) -> None:
     raw: dict[str, object] = {
         "ingress_kind": IngressKind.LEGACY_ARTIFACT.value,
         "normalizer_id": "normalizer-1",
         "source_digest": DIGEST,
         "canonical_digest": DIGEST,
         "actions": [],
+        "source_schema_uri": VERSION.schema_uri,
+        "source_version": {
+            "schema_uri": VERSION.schema_uri,
+            "major": VERSION.major,
+            "minor": VERSION.minor,
+        },
     }
+    _ = raw.pop(missing_field)
+
     with pytest.raises(
         ContractValidationError,
         match="legacy_artifact ingress requires source_schema_uri and source_version",
