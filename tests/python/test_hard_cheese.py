@@ -153,9 +153,17 @@ def test_hard_flag_mentioned_in_pipeline_skill(skill: str) -> None:
     assert "--hard" in body, f"`--hard` missing from skills/{skill}/SKILL.md"
 
 
-def test_cure_invokes_hard_cheese() -> None:
+def test_cure_forwards_hard_to_plate() -> None:
     body = (SKILLS / "cure" / "SKILL.md").read_text(encoding="utf-8")
-    assert "/hard-cheese" in body, "cure must reference /hard-cheese — it is the gate-firing skill"
+    assert "`/cure --hard` passes `--hard` to `/plate`." in body
+
+
+def test_plate_invokes_hard_cheese_at_publication_boundary() -> None:
+    body = (SKILLS / "plate" / "SKILL.md").read_text(encoding="utf-8")
+    assert (
+        "Accept `--hard` to run `/hard-cheese` immediately before you first "
+        "share the work for review."
+    ) in body
 
 
 def test_cure_documents_auto_puncture() -> None:
