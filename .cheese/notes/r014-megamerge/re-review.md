@@ -73,3 +73,14 @@ The cure applies 24 findings and partly applies six. Most cross-area contracts n
 - Mark `.cheese/plans/release-0-14-decisions.md:12-35` as historical. Update its validator line reference.
 - Make `taste_test` consume the canonical typed Mold document.
 - Make the positive adjacency test reject the `MANIFEST` advisory.
+
+## Second cure
+
+| Finding | State | Commit | Evidence |
+| --- | --- | --- | --- |
+| Publication repair preserves a racing valid replacement. | applied | `e52fc36` | `src/easy_cheese/shared/publication.py:373-415`; `tests/python/test_publication_recovery.py:166-193` |
+| Briesearch rejects query values and correlates redacted URLs. | applied | `2ce4719` | `src/easy_cheese/skills/briesearch/ledger.py:147-164,233-265`; `tests/python/test_briesearch_ledger.py:86-116` |
+| Plate owns the hard-gate invocation boundary. | applied | `1fba358` | `tests/python/test_hard_cheese.py:156-167` |
+| The release record marks legacy rejection as historical. | applied | `eacfd10` | `.cheese/plans/release-0-14-decisions.md:12-45`; `tests/python/test_validate_spec.py:575-584` |
+| Mold taste checks consume `MoldSpecDocument`. | applied | `af41bb2` | `src/easy_cheese/shared/taste_test.py:700-817`; `tests/python/test_mold_taste_test.py:438-453` |
+| The positive manifest test rejects the `MANIFEST` advisory. | applied | `3498207` | `tests/python/test_briesearch_ledger.py:240-249` |
