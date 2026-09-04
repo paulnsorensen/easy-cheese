@@ -435,6 +435,24 @@ gate_applicability:
     assert not not_applicable.contracts
 
 
+def test_applicability_consumes_canonical_mold_document(
+    taste: _MoldTasteTestModule,
+) -> None:
+    spec = red_spec() + """
+
+## Grounding
+| Probe | Outcome | Evidence |
+| --- | --- | --- |
+| wiki | hit | wiki page |
+| wiki | miss | second wiki probe |
+"""
+    with pytest.raises(
+        taste.ApplicabilityError,
+        match="Grounding table must record the wiki probe exactly once",
+    ):
+        _ = taste.parse_gate_applicability(spec)
+
+
 def test_applicability_keeps_green_guards_outside_cut_contracts(
     taste: _MoldTasteTestModule,
 ) -> None:

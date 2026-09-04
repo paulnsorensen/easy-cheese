@@ -2332,6 +2332,7 @@ class SpecConfidence(str, Enum):
 class TestContractMode(str, Enum):
     TRACER = "tracer"
     CONTRACT_MATRIX = "contract-matrix"
+    GUARD = "guard"
 
 
 class GroundingProbe(str, Enum):
@@ -2363,6 +2364,27 @@ class GateApplicability:
     work_class: WorkClass = field(validator=validators.instance_of(WorkClass))
     ui_surface: UiSurface = field(validator=validators.instance_of(UiSurface))
     reason: str | None = field(default=None, validator=_optional_string)
+
+    @ui_surface.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_combination(
+        self, _attribute: _NamedAttribute, value: object
+    ) -> None:  # noqa: V103
+        if self.disposition is GateApplicabilityDisposition.RED_REQUIRED:
+            if self.work_class is not WorkClass.BEHAVIOR:
+                raise ValueError("red-required-work-class-must-be-behavior")
+            if value is UiSurface.NOT_APPLICABLE:
+                raise ValueError(
+                    "red-required-ui-surface-must-be-browser-or-non-browser"
+                )
+        else:
+            if self.work_class is WorkClass.BEHAVIOR:
+                raise ValueError(
+                    "not-applicable-work-class-must-be-closed-non-behavior"
+                )
+            if value is not UiSurface.NOT_APPLICABLE:
+                raise ValueError(
+                    "not-applicable-ui-surface-must-be-not-applicable"
+                )
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_not_applicable_reason(
@@ -2409,14 +2431,18 @@ class TestContractRow:
 
     @matrix_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_mode_cells(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
-        if self.mode is TestContractMode.TRACER:
+        if self.mode in (TestContractMode.TRACER, TestContractMode.GUARD):
             if self.interface_version or value:
                 raise ValueError(
-                    f"Test Contracts row {self.acceptance_id} is tracer mode and must leave Interface version and Matrix rows blank"
+                    f"Test Contracts row {self.acceptance_id} is {self.mode.value} mode and must leave Interface version and Matrix rows blank"
                 )
         elif not self.interface_version or not value:
             raise ValueError(
                 f"Test Contracts row {self.acceptance_id} is contract-matrix mode and requires both Interface version and Matrix rows"
+            )
+        elif len(set(cast(tuple[str, ...], value))) != len(cast(tuple[str, ...], value)):
+            raise ValueError(
+                f"contract-matrix-rows-not-unique:{self.acceptance_id}"
             )
 
 
@@ -2540,6 +2566,15 @@ class MoldSpecDocument:
     sections: ClassVar[tuple[Section, ...]] = MOLD_SPEC_SECTIONS
     cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = MOLD_SPEC_CROSS_FIELD_RULES
     enums: ClassVar[dict[str, tuple[str, ...]]] = MOLD_SPEC_ENUMS
+
+    @acceptance_ids.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_unique_acceptance_ids(
+        self, _attribute: _NamedAttribute, value: object
+    ) -> None:  # noqa: V103
+        assert isinstance(value, tuple)
+        ids = cast(tuple[str, ...], value)
+        if len(set(ids)) != len(ids):
+            raise ValueError("acceptance-ids-not-unique")
 
     @test_contract_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_ac_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103

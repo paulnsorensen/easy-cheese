@@ -18,7 +18,7 @@ DOCUMENT_RULES = {   'mold-spec': {   'cross_field_rules': [   {   'description'
                      'enums': {   'gate_applicability_disposition': ['red-required', 'not-applicable'],
                                   'grounding_outcome': ['hit', 'miss', 'unavailable'],
                                   'grounding_probe': ['wiki', 'explorer'],
-                                  'mode': ['tracer', 'contract-matrix'],
+                                  'mode': ['tracer', 'contract-matrix', 'guard'],
                                   'ui_surface': ['browser', 'non-browser', 'not-applicable'],
                                   'work_class': ['behavior', 'docs-only', 'refactor-only', 'test-only', 'appearance-only']},
                      'sections': [   {'name': 'Problem', 'optional': False, 'table': None},
