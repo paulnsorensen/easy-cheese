@@ -108,7 +108,6 @@ EXECUTABLE_CONTRACT_MODES = frozenset({"tracer", "contract-matrix"})
 RED_REQUIRED_EXECUTABLE_PROBLEM = (
     "red-required-needs-executable-test-contracts"
 )
-UI_SURFACES = frozenset({"browser", "non-browser", "not-applicable"})
 NEW_MOLD_SOURCES = frozenset({"agent-mini-spec", "mold-handshake"})
 BROWSER_MARKER = re.compile(
     r"\b(?:browser|e2e|end[- ]to[- ]end|playwright|cypress|selenium|webdriver|puppeteer)\b",
@@ -818,9 +817,6 @@ def _contracts_from_document(document: MoldSpecDocument) -> tuple[TestContract, 
     )
 
 
-def parse_test_contracts(spec: object) -> tuple[TestContract, ...]:
-    document, _, _ = _typed_mold_document(spec)
-    return _contracts_from_document(document)
 
 
 def _clean_cell(value: object) -> str:
