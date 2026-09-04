@@ -136,9 +136,8 @@ def _string_content_mask(text: str) -> list[bool]:
     tracking); curly quotes never delimit a string for this scan. That makes
     the mask fully deterministic ahead of repair: content between straight
     quotes -- including any curly quotes or commas an agent wrote as prose --
-    is never mistaken for structure, and text with no straight quotes at all
-    (e.g. an agent that curly-quoted every string) is treated as entirely
-    structural, matching the prior whole-text behavior for that case.
+    is never mistaken for structure. Text with no straight quotes remains
+    unchanged because its curly quotes can be either structure or payload data.
     """
     mask = [False] * len(text)
     in_string = False
@@ -161,6 +160,8 @@ def _string_content_mask(text: str) -> list[bool]:
 
 
 def _normalize_quotes(text: str) -> str:
+    if '"' not in text:
+        return text
     mask = _string_content_mask(text)
     return "".join(
         char if mask[index] else _CURLY_QUOTE_MAP.get(char, char)

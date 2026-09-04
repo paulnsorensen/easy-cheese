@@ -137,6 +137,12 @@ def test_select_repair_unrecoverable_raises() -> None:
         _ = publication._select_repair("not json at all")  # pyright: ignore[reportPrivateUsage]
 
 
+def test_select_repair_rejects_all_curly_quotes_as_ambiguous() -> None:
+    raw = '{“a”: “don’t”}'
+    with pytest.raises(publication.UnrecoverableSyntaxError):
+        publication._select_repair(raw)  # pyright: ignore[reportPrivateUsage]
+
+
 def test_normalize_quotes_preserves_curly_quote_inside_string_content() -> None:
     """A curly apostrophe that is prose content of a straight-quoted string
     value must survive untouched -- only curly quotes outside string content
