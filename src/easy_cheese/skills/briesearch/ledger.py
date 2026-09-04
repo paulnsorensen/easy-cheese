@@ -147,16 +147,19 @@ class Ledger:
     def retrieved(self) -> dict[str, Call]:
         """URL digest -> the first successful retrieval that named its tool.
 
-        A URL that was only *discovered* by a search, or whose retrieval failed,
-        is absent: those never satisfy "verify then cite".
+        Each call has its full URL digest and its safe display URL digest. This
+        lets a redacted citation correlate without retaining query values.
         """
         out: dict[str, Call] = {}
         for call in self.calls:
             if call.kind != EXTRACT or not call.ok or not call.tool:
                 continue
-            identity = call.url_digest or call.canonical
-            if identity:
-                _ = out.setdefault(identity, call)
+            identities = {call.url_digest or call.canonical}
+            if call.url:
+                identities.add(url_digest(call.url))
+            for identity in identities:
+                if identity:
+                    _ = out.setdefault(identity, call)
         return out
 
 
@@ -237,12 +240,18 @@ def _url_fields(
             raise LedgerError(f"{what} field 'url_digest' requires a URL")
         return "", "", ""
     try:
+        parts = urlsplit(raw_url)
         computed = url_digest(raw_url)
     except ValueError as exc:
         raise LedgerError(
             f"{what} field 'url' contains forbidden user information at "
             + f"{render_url(raw_url)!r}"
         ) from exc
+    if parts.query:
+        raise LedgerError(
+            f"{what} field 'url' must omit query values; use 'url_digest' "
+            + "for the full URL identity"
+        )
     supplied = _text(entry, "url_digest", what, required=False)
     if supplied:
         digest = supplied.removeprefix("sha256:")
@@ -251,8 +260,6 @@ def _url_fields(
                 f"{what} field 'url_digest' must be a SHA-256 hexadecimal digest"
             )
         digest = digest.casefold()
-        if "?" in raw_url and digest != computed:
-            raise LedgerError(f"{what} field 'url_digest' does not match the URL")
     else:
         digest = computed
     return render_url(raw_url), digest, digest

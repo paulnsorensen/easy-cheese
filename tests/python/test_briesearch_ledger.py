@@ -90,14 +90,27 @@ def test_parse_ledger_rejects_url_user_information() -> None:
         )
 
 
-def test_ledger_retains_safe_url_display_and_digest() -> None:
+def test_parse_ledger_rejects_persisted_query_values() -> None:
     raw = "https://example.com/private?token=secret#details"
-    ledger = parse_ledger({"calls": [_extract(raw)]})
+    with pytest.raises(LedgerError, match="must omit query values"):
+        _ = parse_ledger({"calls": [_extract(raw, url_digest=url_digest(raw))]})
+
+
+def test_redacted_url_and_full_digest_correlate(tmp_path: Path) -> None:
+    raw = "https://example.com/a?token=secret"
+    safe = render_url(raw)
+    ledger = parse_ledger(
+        {"calls": [_extract(safe, url_digest=url_digest(raw))]}
+    )
     call = ledger.calls[0]
-    assert call.url == "https://example.com/private"
+    assert call.url == safe
     assert call.url_digest == url_digest(raw)
-    assert "secret" not in repr(call)
-    assert render_url(raw) == "https://example.com/private"
+    assert url_digest(safe) in ledger.retrieved()
+    violations, tables = ground_check.check_report(
+        _REPORT, tmp_path, tmp_path, ledger
+    )
+    assert tables == 1
+    assert violations == []
 
 
 def test_parse_ledger_requires_the_provider_tool_that_ran() -> None:
