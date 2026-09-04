@@ -64,16 +64,16 @@ parallel:
 tasks:
   - slug: kip-77-ai-test-server
     intent: cook
-    repo: /Users/marcus/Documents/multiplier
-    worktree: /Users/marcus/Documents/multiplier-01
-    branch: marcus/kip-77-ai-test-server
+    repo: /path/to/repository
+    worktree: /path/to/worktree-01
+    branch: user/kip-77-ai-test-server
     branch_from: origin/main
     command: /cook .cheese/specs/kip-77-ai-test-server.md
   - slug: kip-76-ai-service-spin-up
     intent: cook
-    repo: /Users/marcus/Documents/multiplier
-    worktree: /Users/marcus/Documents/multiplier-02
-    branch: marcus/kip-76-ai-service-spin-up
+    repo: /path/to/repository
+    worktree: /path/to/worktree-02
+    branch: user/kip-76-ai-service-spin-up
     branch_from: origin/main
     command: /cook .cheese/specs/kip-76-ai-service-spin-up.md
 ```
