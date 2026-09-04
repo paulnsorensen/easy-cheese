@@ -517,6 +517,8 @@ def _pointer_path(root: Path, operation_id: str) -> Path:
 
 def _validate_replay(pointer: HandoffPointer, request: _PublicationRequest) -> None:
     if (
+        pointer.operation_id != request.operation_id
+        or
         pointer.request_digest != request.request_digest
         or pointer.source_phase != request.source_phase
         or pointer.destination_phase != request.destination_phase

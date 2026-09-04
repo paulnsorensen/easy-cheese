@@ -365,6 +365,17 @@ def test_publish_replay_revalidates_artifact_metadata(tmp_path: Path) -> None:
     assert first.pointer.operation_id == "op-metadata"
 
 
+def test_publish_rejects_replay_with_tampered_operation_id(tmp_path: Path) -> None:
+    _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-identity")
+    pointer_path = tmp_path / "pointers" / "op-identity.json"
+    pointer = cast("dict[str, object]", json.loads(pointer_path.read_text()))
+    pointer["operation_id"] = "other"
+    pointer_path.write_text(json.dumps(pointer))
+
+    with pytest.raises(publication.IdempotencyConflictError, match="different request"):
+        _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-identity")
+
+
 def test_publish_replay_revalidates_receipt(tmp_path: Path) -> None:
     repaired_raw = json.dumps(DOC)[:-1] + ",}"
     first = _publish(tmp_path, raw_text=repaired_raw, operation_id="op-receipt-replay")
