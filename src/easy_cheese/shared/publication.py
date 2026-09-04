@@ -373,27 +373,41 @@ def _digest_lock(directory: Path, digest: str) -> Generator[None, None, None]:
 def _retain_content(directory: Path, digest: str, content: bytes) -> Path:
     """Write ``content`` at its digest-addressed path, revalidating a leftover.
 
-    A per-digest lock serializes leftover repair, so a retry cannot remove a
-    valid file that another retry installs after the first retry reads it.
+    The lock serializes cooperating writers. Atomic quarantine also prevents a
+    lockless writer from losing a valid replacement during corrupt-file repair.
     """
     path = _content_path(directory, digest)
     with _digest_lock(directory, digest):
         if path.exists():
-            before = path.stat()
-            existing = path.read_bytes()
-            if _digest_bytes(existing) == digest:
-                return path
             try:
-                after = path.stat()
+                existing = path.read_bytes()
             except FileNotFoundError as exc:
                 raise CorruptLeftoverError(
                     f"prepared content at {path} changed during repair"
                 ) from exc
-            if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
-                raise CorruptLeftoverError(
-                    f"prepared content at {path} changed during repair; retained"
-                )
-            path.unlink()
+            if _digest_bytes(existing) == digest:
+                return path
+
+            descriptor, quarantine_name = tempfile.mkstemp(
+                prefix=f".{path.name}.", suffix=".corrupt", dir=str(directory)
+            )
+            os.close(descriptor)
+            quarantine = Path(quarantine_name)
+            try:
+                try:
+                    os.replace(path, quarantine)
+                except FileNotFoundError as exc:
+                    raise CorruptLeftoverError(
+                        f"prepared content at {path} changed during repair"
+                    ) from exc
+                quarantined = quarantine.read_bytes()
+                if _digest_bytes(quarantined) == digest:
+                    _atomic_write(path, quarantined)
+                    raise CorruptLeftoverError(
+                        f"prepared content at {path} changed during repair; retained"
+                    )
+            finally:
+                quarantine.unlink(missing_ok=True)
             raise CorruptLeftoverError(
                 f"prepared content at {path} does not match digest {digest}; removed"
             )

@@ -160,3 +160,32 @@ def test_corrupt_repair_keeps_a_concurrent_valid_replacement(
             payload_path.parent, digest, validated.canonical_bytes
         )
     assert payload_path.read_bytes() == validated.canonical_bytes
+
+
+def test_corrupt_repair_restores_a_valid_post_read_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    validated, _ = _prepare()
+    digest = canonical_digest(validated.value)
+    payload_path = tmp_path / "payloads" / f"{digest.replace(':', '-')}.json"
+    payload_path.parent.mkdir()
+    _ = payload_path.write_bytes(b"corrupt")
+    original_replace = publication.os.replace  # pyright: ignore[reportPrivateUsage]
+    replaced = False
+
+    def _replace(source: Path, destination: Path) -> None:
+        nonlocal replaced
+        if source == payload_path and not replaced:
+            replaced = True
+            publication._atomic_write(  # pyright: ignore[reportPrivateUsage]
+                payload_path, validated.canonical_bytes
+            )
+        original_replace(source, destination)
+
+    monkeypatch.setattr(publication.os, "replace", _replace)
+    with pytest.raises(publication.CorruptLeftoverError, match="retained"):
+        _ = publication._retain_content(  # pyright: ignore[reportPrivateUsage]
+            payload_path.parent, digest, validated.canonical_bytes
+        )
+    assert replaced
+    assert payload_path.read_bytes() == validated.canonical_bytes
