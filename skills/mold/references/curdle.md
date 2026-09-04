@@ -98,10 +98,12 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 
 Include this entire section only when `gate_applicability.disposition` is
 `red-required`. Every numbered Acceptance ID appears exactly once in this table.
-`expected_failure` names a deterministic witness and expected red assertion;
-`mode` is `tracer` or `contract-matrix`. The seam is the outer boundary that
-proves the behavior. A matrix names its ratified interface version and every
-unique row identity, separated by `<br>`; a tracer leaves those cells blank.
+`expected_failure` names a deterministic witness and expected red assertion.
+`mode` is `tracer`, `contract-matrix`, or `guard`.
+The seam is the outer boundary that proves the behavior.
+A matrix names its ratified interface version and each unique row identity.
+Separate row identities with `<br>`.
+A guard or tracer leaves those cells blank.
 Add one row for each criterion.
 
 | Acceptance ID | Interface referent | Outermost stable seam | Expected failure | Mode | Interface version | Matrix rows |
@@ -238,7 +240,7 @@ enum GroundingProbe = "wiki" | "explorer"
 
 enum SpecConfidence = "low" | "medium" | "high"
 
-enum TestContractMode = "tracer" | "contract-matrix"
+enum TestContractMode = "tracer" | "contract-matrix" | "guard"
 
 enum UiSurface = "browser" | "non-browser" | "not-applicable"
 
