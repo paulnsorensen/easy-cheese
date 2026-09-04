@@ -188,7 +188,7 @@ class WorkStore:
     def pending_path(self, request_identity: str) -> Path:
         """The durable request ledger entry for one mirror transaction."""
         stem = request_identity.replace(":", "-")
-        if re.fullmatch(r"[a-zA-Z0-9._-]+", stem) is None:
+        if stem.startswith(".") or re.fullmatch(r"[a-zA-Z0-9._-]+", stem) is None:
             raise StorageError("request identity is not a safe path segment")
         return self.pending_dir / f"{stem}.json"
 

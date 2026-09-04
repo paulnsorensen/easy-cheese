@@ -77,6 +77,14 @@ def test_immutable_file_names_pair_number_with_revision_id(
     assert store.projection_path(7, "rev-0007").name == "7-rev-0007.md"
 
 
+@pytest.mark.parametrize("request_identity", [".foo", ".", ".."])
+def test_pending_path_rejects_dot_prefixed_stems(
+    store: storage.WorkStore, request_identity: str
+) -> None:
+    with pytest.raises(storage.StorageError, match="safe path segment"):
+        store.pending_path(request_identity)
+
+
 @pytest.mark.parametrize("work_id", ["../evil", "work/0001", "Work-0001", "", "."])
 def test_a_work_id_that_could_escape_the_corpus_is_refused(
     corpus_root: Path, work_id: str
