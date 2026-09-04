@@ -572,6 +572,16 @@ def test_legacy_v013_spec_is_accepted_on_read(tmp_path: Path, _run: _RunFn) -> N
     ]
 
 
+def test_release_record_labels_legacy_rejection_as_historical() -> None:
+    record = (
+        REPO_ROOT / ".cheese" / "plans" / "release-0-14-decisions.md"
+    ).read_text(encoding="utf-8")
+    section = record.split("## (a) Spec format from #466", 1)[1].split("---", 1)[0]
+    assert "### Historical behavior before PR #592" in section
+    assert "### Verified behavior" not in section
+    assert "validate_spec.py:637-735" in section
+
+
 def test_legacy_v013_spec_is_rejected_under_strict_mint(
     tmp_path: Path, _run: _RunFn
 ) -> None:

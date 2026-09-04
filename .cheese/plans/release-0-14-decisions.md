@@ -9,14 +9,15 @@ A resolved decision names the PR that superseded an earlier recommendation.
 
 ## (a) Spec format from #466
 
-### Verified behavior
+### Historical behavior before PR #592
 
+The following behavior applied before PR #592.
 Version 0.13.0 does not contain `src/easy_cheese_schemas`.
 PR #380 published the schema package after that tag.
 PR #466 added the document contract layer after that tag.
 
-The version 0.13 spec format exists only in `skills/mold/references/curdle.md`.
-A spec from that template fails `skills/mold/scripts/mold.pyz validate-spec`:
+The version 0.13 spec format existed only in `skills/mold/references/curdle.md`.
+Before PR #592, that template failed `skills/mold/scripts/mold.pyz validate-spec`:
 
 ```text
 ERROR: missing-required-section 'Test Contracts' section not found in <spec>
@@ -26,13 +27,13 @@ FAIL: 2 error(s) in <spec>
 EXIT=1
 ```
 
-Both failures always occur.
-The old template has no `## Test Contracts` section.
-It also has no `gate_applicability` frontmatter key.
+Before PR #592, both failures always occurred.
+The old template had no `## Test Contracts` section.
+It also had no `gate_applicability` frontmatter key.
 
-`src/easy_cheese/shared/document_rules.py` requires the Test Contracts section.
-`src/easy_cheese/skills/mold/validate_spec.py:322-327` requires the frontmatter key.
-The `spec-format-valid` gate blocks curdle after either failure.
+At that time, `src/easy_cheese/shared/document_rules.py` required the Test Contracts section.
+The current read and strict-mint policy is in `src/easy_cheese/skills/mold/validate_spec.py:637-735`.
+Before PR #592, the `spec-format-valid` gate blocked curdle after either failure.
 
 ### Resolved decision
 
