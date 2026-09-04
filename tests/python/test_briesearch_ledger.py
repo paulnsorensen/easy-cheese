@@ -237,13 +237,16 @@ def test_local_only_report_gets_no_manifest_advisory(tmp_path: Path) -> None:
     assert violations == []
 
 
-def test_main_reads_the_manifest_beside_the_report(tmp_path: Path) -> None:
+def test_main_reads_the_manifest_beside_the_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     report = tmp_path / "slug.md"
     _ = report.write_text(_REPORT, encoding="utf-8")
     _ = (tmp_path / "manifest.json").write_text(
         json.dumps({"calls": [_extract("https://example.com/a")]}), encoding="utf-8"
     )
     assert ground_check.main([str(report)]) == 0
+    assert "MANIFEST" not in capsys.readouterr().err
 
 
 def test_main_fails_on_an_unreadable_manifest(tmp_path: Path) -> None:
