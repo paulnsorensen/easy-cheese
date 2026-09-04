@@ -10,6 +10,7 @@ a further retry starts clean.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -170,7 +171,7 @@ def test_corrupt_repair_restores_a_valid_post_read_replacement(
     payload_path = tmp_path / "payloads" / f"{digest.replace(':', '-')}.json"
     payload_path.parent.mkdir()
     _ = payload_path.write_bytes(b"corrupt")
-    original_replace = publication.os.replace  # pyright: ignore[reportPrivateUsage]
+    original_replace = os.replace
     replaced = False
 
     def _replace(source: Path, destination: Path) -> None:
@@ -182,7 +183,7 @@ def test_corrupt_repair_restores_a_valid_post_read_replacement(
             )
         original_replace(source, destination)
 
-    monkeypatch.setattr(publication.os, "replace", _replace)
+    monkeypatch.setattr(os, "replace", _replace)
     with pytest.raises(publication.CorruptLeftoverError, match="retained"):
         _ = publication._retain_content(  # pyright: ignore[reportPrivateUsage]
             payload_path.parent, digest, validated.canonical_bytes
