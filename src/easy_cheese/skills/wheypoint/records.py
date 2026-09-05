@@ -67,12 +67,11 @@ _SINCE_KEY = "since"
 _DIGEST_COMPAT_FLOOR = 2
 
 
+# `attrs.Factory` is a class at runtime, but the stub types it as a function
+# returning `_T`, so `isinstance(default, attrs.Factory)` cannot type-check.
+# A structural protocol over its two attributes is the narrowest honest check.
 @runtime_checkable
-class _FactoryDefault(Protocol):
-    """What `attrs.Factory(...)` produces -- checked structurally because the
-    stub types `attrs.Factory` as a function returning `_T`, not a class, so
-    `isinstance(default, attrs.Factory)` cannot type-check."""
-
+class _Factory(Protocol):
     factory: Callable[[], object]
     takes_self: bool
 
@@ -85,11 +84,11 @@ def _added_after_compat(attribute: attrs.Attribute[object]) -> bool:
 
 def _is_declared_default(attribute: attrs.Attribute[object], value: object) -> bool:
     default = attribute.default
-    if isinstance(default, _FactoryDefault):
+    if isinstance(default, _Factory):
         # takes_self=True factories derive from the instance under
         # construction, which is not available here; treat as never-default.
         return False if default.takes_self else value == default.factory()
-    return value is default or (default is None and value is None)
+    return value is default
 
 
 def _omit_post_compat_defaults(attribute: attrs.Attribute[object], value: object) -> bool:

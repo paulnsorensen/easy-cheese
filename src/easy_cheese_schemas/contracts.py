@@ -2666,7 +2666,9 @@ _MAX_ITEMS = 64
 # and a delta may propose an addition of each kind.
 _MAX_LEDGER = 3 * _MAX_ITEMS
 _MAX_ID = 64
-_LOWER_ID_RE = re.compile(rf"[a-z0-9][a-z0-9._-]{{0,{_MAX_ID - 1}}}")
+# Also the public rule for a safe single path segment (storage.py work ids).
+LOWER_IDENTIFIER_RE = re.compile(rf"[a-z0-9][a-z0-9._-]{{0,{_MAX_ID - 1}}}")
+_LOWER_ID_RE = LOWER_IDENTIFIER_RE
 _COMMIT_RE = re.compile(r"[0-9a-f]{7,64}")
 
 
@@ -3485,6 +3487,7 @@ class CheckpointIntent:
 
 __all__ = [
     "registered_contracts",
+    "LOWER_IDENTIFIER_RE",
     "MAX_ARTIFACT_BYTES",
     "MAX_COLLECTION_ITEMS",
     "MAX_CONTEXT_ITEMS",

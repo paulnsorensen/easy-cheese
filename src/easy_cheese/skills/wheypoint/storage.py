@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import cast
 
 from attrs import define
-from easy_cheese_schemas import WheypointRecord, WheypointRevision
+from easy_cheese_schemas import LOWER_IDENTIFIER_RE, WheypointRecord, WheypointRevision
 
 try:
     import fcntl  # POSIX advisory file locks
@@ -55,10 +55,9 @@ PROJECTIONS_DIRNAME = "projections"
 LOCK_FILENAME = "record.lock"
 PENDING_DIRNAME = "pending"
 
-# Mirrors the identifier rule the schema types enforce: a work id is also a
-# path segment here, so anything that could leave the corpus is refused before
-# it is ever joined onto a root.
-_WORK_ID_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
+# A work id is also a path segment here, so anything that could leave the
+# corpus is refused before it is ever joined onto a root.
+_WORK_ID_RE = LOWER_IDENTIFIER_RE
 _LOCK_MODE = 0o600
 
 
@@ -76,6 +75,18 @@ class RevisionFile:
 
 
 @define(frozen=True)
+class RevisionScan:
+    """Every complete immutable revision, oldest first, plus a reason for
+    every receipt or projection that was skipped rather than silently
+    dropped: a caller that only reports the survivors is not the same as
+    a caller that never lost anything.
+    """
+
+    files: tuple[RevisionFile, ...]
+    skipped: tuple[str, ...]
+
+
+@define(frozen=True)
 class RecoveryReport:
     """What the store actually holds, with nothing filled in."""
 
@@ -83,6 +94,7 @@ class RecoveryReport:
     complete: tuple[RevisionFile, ...]
     incomplete: tuple[str, ...]
     problems: tuple[str, ...]
+    stamped_schema_version: int | None = None
 
     @property
     def consistent(self) -> bool:
@@ -239,13 +251,26 @@ class WorkStore:
             stores.append(cls.open(record_path.parent.name, corpus_root=base))
         return stores
 
-    def revisions(self) -> tuple[list[RevisionFile], list[str]]:
+    def revisions(self) -> RevisionScan:
         """Every complete immutable revision, oldest first, plus a reason for
         every receipt or projection that was skipped rather than silently
         dropped: a caller that only reports the survivors is not the same as
         a caller that never lost anything.
         """
-        return self._scan_revisions()
+        complete: list[RevisionFile] = []
+        incomplete: list[str] = []
+        receipts: set[str] = set()
+        if self.revisions_dir.is_dir():
+            for path in sorted(self.revisions_dir.glob("*.json")):
+                receipts.add(path.stem)
+                reason, file = self._inspect_revision(path)
+                if file is not None:
+                    complete.append(file)
+                else:
+                    incomplete.append(f"{path.name}: {reason}")
+        incomplete.extend(self._unclaimed_projections(receipts))
+        complete.sort(key=lambda file: file.revision.revision_number)
+        return RevisionScan(tuple(complete), tuple(incomplete))
 
     def read_record(self) -> WheypointRecord | None:
         try:
@@ -380,32 +405,17 @@ class WorkStore:
 
     def recover(self) -> RecoveryReport:
         """Reconcile what is on disk. Reads only; invents nothing."""
-        complete, incomplete = self._scan_revisions()
-        record, problems = self._read_record_for_recovery()
+        scan = self.revisions()
+        record, problems, stamped_schema_version = self._read_record_for_recovery()
         if record is not None:
-            problems.extend(_record_problems(record, complete))
+            problems.extend(_record_problems(record, list(scan.files)))
         return RecoveryReport(
             record=record,
-            complete=tuple(complete),
-            incomplete=tuple(incomplete),
+            complete=scan.files,
+            incomplete=scan.skipped,
             problems=tuple(problems),
+            stamped_schema_version=stamped_schema_version,
         )
-
-    def _scan_revisions(self) -> tuple[list[RevisionFile], list[str]]:
-        complete: list[RevisionFile] = []
-        incomplete: list[str] = []
-        receipts: set[str] = set()
-        if self.revisions_dir.is_dir():
-            for path in sorted(self.revisions_dir.glob("*.json")):
-                receipts.add(path.stem)
-                reason, file = self._inspect_revision(path)
-                if file is not None:
-                    complete.append(file)
-                else:
-                    incomplete.append(f"{path.name}: {reason}")
-        incomplete.extend(self._unclaimed_projections(receipts))
-        complete.sort(key=lambda file: file.revision.revision_number)
-        return complete, incomplete
 
     def _unclaimed_projections(self, receipts: set[str]) -> list[str]:
         """Projections no receipt on disk names.
@@ -448,19 +458,30 @@ class WorkStore:
             revision=revision, path=path, projection_path=projection_path
         )
 
-    def _read_record_for_recovery(self) -> tuple[WheypointRecord | None, list[str]]:
+    def _read_record_for_recovery(
+        self,
+    ) -> tuple[WheypointRecord | None, list[str], int | None]:
         try:
             raw = self.record_path.read_bytes()
         except FileNotFoundError:
-            return None, []
+            return None, [], None
         try:
             payload = _parse_json(raw)
         except ValueError:
-            return None, [f"{RECORD_FILENAME} is malformed JSON"]
+            return None, [f"{RECORD_FILENAME} is malformed JSON"], None
+        stamped_schema_version = _stamped_version(payload)
         try:
-            return records.structure(payload, WheypointRecord), []
+            return (
+                records.structure(payload, WheypointRecord),
+                [],
+                stamped_schema_version,
+            )
         except records.RecordError as exc:
-            return None, [f"{RECORD_FILENAME} is not a readable record: {exc}"]
+            return (
+                None,
+                [f"{RECORD_FILENAME} is not a readable record: {exc}"],
+                stamped_schema_version,
+            )
 
 
 def _record_problems(
@@ -496,3 +517,11 @@ def _record_problems(
 
 def _parse_json(raw: bytes) -> object:
     return cast(object, json.loads(raw.decode("utf-8")))
+
+
+def _stamped_version(payload: object) -> int | None:
+    """The `schema_version` a raw record claims, read before structuring."""
+    if not isinstance(payload, dict):
+        return None
+    stamped = cast("dict[str, object]", payload).get("schema_version")
+    return stamped if isinstance(stamped, int) else None

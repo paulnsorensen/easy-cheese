@@ -183,11 +183,7 @@ def secret_fields(intent: CheckpointIntent) -> list[str]:
 
 def secret_field(intent: CheckpointIntent) -> str | None:
     """The first secret-carrying field, or None; stops at the first hit."""
-    for field_name, text in _string_fields(attrs.asdict(intent, recurse=True), ""):
-        for label, pattern in _SECRET_PATTERNS:
-            if pattern.search(text):
-                return f"{field_name} ({label})"
-    return None
+    return next(iter(secret_fields(intent)), None)
 
 
 def task_command_problems(intent: CheckpointIntent) -> list[str]:
@@ -217,17 +213,11 @@ def commit_only_fields(payload: object) -> tuple[str, ...]:
     return tuple(name for name in COMMIT_ONLY_FIELDS if name in mapping)
 
 
-def delta_problems(
+def _next_action_problems(
     intent: CheckpointIntent, current: WheypointRecord | None
 ) -> list[str]:
-    """Every problem building a delta against this record, none of them fatal (AC-11).
-
-    `task_command_problems` and the next-action/artifact gates are independent
-    checks, so both run and both contribute; only the deeper `WheypointDelta`
-    invariants -- which need a legal next action to even attempt -- wait on
-    those passing first.
-    """
-    problems = list(task_command_problems(intent))
+    """Every problem with the intent's next-action/artifact coherence."""
+    problems: list[str] = []
     if intent.next is None:
         if current is None:
             problems.append(
@@ -244,6 +234,21 @@ def delta_problems(
             check_move_artifact(intent.next, intent.artifact)
         except IntentError as exc:
             problems.append(str(exc))
+    return problems
+
+
+def delta_problems(
+    intent: CheckpointIntent, current: WheypointRecord | None
+) -> list[str]:
+    """Every problem building a delta against this record, none of them fatal (AC-11).
+
+    `task_command_problems` and the next-action/artifact gates are independent
+    checks, so both run and both contribute; only the deeper `WheypointDelta`
+    invariants -- which need a legal next action to even attempt -- wait on
+    those passing first.
+    """
+    problems = list(task_command_problems(intent))
+    problems.extend(_next_action_problems(intent, current))
     if problems:
         return problems
     try:
@@ -316,23 +321,15 @@ def _next_action(
     record has. `artifact` describes what the next move works on, so it is not
     a thing to set while leaving the move alone.
     """
+    problems = _next_action_problems(intent, current)
+    if problems:
+        raise IntentError(problems[0])
     if intent.next is None:
-        if current is None:
-            raise IntentError(
-                "a first checkpoint has no next action to carry forward, so it "
-                + "must say what comes next"
-            )
-        if intent.artifact is not None:
-            raise IntentError(
-                "artifact belongs to the move it is worked on by, so it cannot "
-                + "be set while next is omitted"
-            )
         return None
     # The orientation the caller gave is what the whole checkpoint is about, so
     # it orients the next move too; without one, the record's standing
     # orientation for that move carries forward rather than being blanked.
     carried = "" if current is None else current.next_action.orientation
-    check_move_artifact(intent.next, intent.artifact)
     try:
         return NextAction(
             move=intent.next,

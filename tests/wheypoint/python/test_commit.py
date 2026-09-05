@@ -900,6 +900,7 @@ def test_artifact_digest_root_is_resolved_lazily_only_when_links_are_present(
         calls.append(None)
         return tmp_path
 
+    commit._digest_root.cache_clear()  # pyright: ignore[reportPrivateUsage]
     monkeypatch.setattr(paths, "git_toplevel", counting_toplevel)
     seed = _seed(store, make_promotion)
 

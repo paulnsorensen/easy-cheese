@@ -59,6 +59,7 @@ from . import checkpoint as checkpoint_mod
 from . import commit as commit_mod
 from . import legacy as legacy_mod
 from . import lint as lint_mod
+from . import projection
 from . import records
 from . import resolve as resolve_mod
 from . import storage
@@ -350,14 +351,7 @@ def _promote(
                     f"request ledger for {request_identity!r} names a different "
                     + f"request than revision {pending.revision_id!r}",
                 )
-            ledger_target = Path(pending.target)
-            # The ledger's absolute target is trusted only when it still lands
-            # under this invocation's note directory: a resume without this
-            # run's --note-dir must not silently write into a directory this
-            # run never named.
-            resume_target = (
-                ledger_target if ledger_target.parent == note_dir.resolve() else target
-            )
+            resume_target = note_dir / pending.target
             result = _resume_mirror(store, revision.revision_id, resume_target, pending)
             return _result_payload(result, str(resume_target))
         try:
@@ -374,7 +368,7 @@ def _promote(
         request_identity=request_identity,
         request_digest=request_digest,
         revision_id=commit_mod.revision_id_for(delta),
-        target=str(target.resolve()),
+        target=target.name,
     )
     _write_pending(store, pending)
 
@@ -442,10 +436,7 @@ def _read_pending(
         raise _Refused(
             "pending-corrupt", f"request ledger {path} is invalid: {exc}"
         ) from exc
-    if (
-        pending.request_identity != request_identity
-        or not Path(pending.target).is_absolute()
-    ):
+    if pending.request_identity != request_identity:
         raise _Refused("pending-corrupt", f"request ledger {path} has invalid identity")
     return pending
 
@@ -595,17 +586,23 @@ def _run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
     """Schema-only dry run: every problem, no store opened (AC-11)."""
     _ = args
     payload = _payload(stdin)
+    if not isinstance(payload, dict):
+        raise _Refused(
+            "invalid-intent",
+            f"a checkpoint intent must be a JSON object, not {type(payload).__name__}",
+        )
+    intent_payload = cast("dict[str, object]", payload)
     problems = [
         f"{name} belongs to the compaction proof or the parent binding: pass it "
         + "through --compacted or let the runtime bind it"
-        for name in checkpoint_mod.commit_only_fields(payload)
+        for name in checkpoint_mod.commit_only_fields(intent_payload)
     ]
     scrubbed = {
         key: value
         for key, value in cast(dict[str, object], payload).items()
         if key not in checkpoint_mod.COMMIT_ONLY_FIELDS
-    } if isinstance(payload, dict) else payload
-    loaded = load(cast(dict[str, object], scrubbed), CheckpointIntent, strict=True, forbid_unknown=True)
+    }
+    loaded = load(scrubbed, CheckpointIntent, strict=True, forbid_unknown=True)
     problems.extend(loaded.problems)
     if loaded.value is not None:
         problems.extend(f"{hit} looks like a credential" for hit in checkpoint_mod.secret_fields(loaded.value))
@@ -636,36 +633,37 @@ def _corpus_root(args: argparse.Namespace) -> Path:
     return Path(root_arg) if root_arg is not None else paths.project_corpus_root()
 
 
-def _tsv_lines(rows: list[dict[str, object]], keys: tuple[str, ...]) -> list[str]:
-    """One tab-separated line per row, escaped so one line is one record."""
-    return ["\t".join(_tsv_escape(str(row[key])) for key in keys) for row in rows]
-
-
-def _tsv_escape(text: str) -> str:
-    """Mirrors `projection._esc`: backslashes, newlines, and tabs are escaped."""
-    return text.replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t")
+def _tsv_lines(
+    items: list[dict[str, object]],
+    columns: tuple[str | tuple[str, Callable[[object], str]], ...],
+) -> list[str]:
+    """One tab-separated line per item; a missing column key renders as `-`."""
+    lines: list[str] = []
+    for item in items:
+        cells: list[str] = []
+        for column in columns:
+            key, formatter = column if isinstance(column, tuple) else (column, str)
+            cell = "-" if key not in item else formatter(item[key])
+            cells.append(projection.escape(cell, tab=True))
+        lines.append("\t".join(cells))
+    return lines
 
 
 def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     """One line per work item under the corpus root (AC-13)."""
     root = _corpus_root(args)
     items: list[dict[str, object]] = []
-    rows: list[dict[str, object]] = []
     for store in storage.WorkStore.enumerate(root):
         work_id = store.work_id
         try:
             record = store.read_record()
         except (storage.StorageError, records.RecordError, ValueError) as exc:
-            items.append({"work_id": work_id, "unreadable": str(exc)})
-            rows.append(
-                {"work_id": work_id, "revision_number": "-", "status": "unreadable", "next": "-", "detail": str(exc)}
+            items.append(
+                {"work_id": work_id, "status": "unreadable", "unreadable": str(exc), "orientation": str(exc)}
             )
             continue
         if record is None:
-            items.append({"work_id": work_id, "no_record": True})
-            rows.append(
-                {"work_id": work_id, "revision_number": "-", "status": "no-record", "next": "-", "detail": ""}
-            )
+            items.append({"work_id": work_id, "status": "no-record", "no_record": True})
             continue
         head = record.orientation.strip().partition("\n")[0]
         items.append(
@@ -677,16 +675,7 @@ def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                 "orientation": head,
             }
         )
-        rows.append(
-            {
-                "work_id": record.work_id,
-                "revision_number": record.revision_number,
-                "status": record.status.value,
-                "next": record.next_action.move.value,
-                "detail": head,
-            }
-        )
-    lines = _tsv_lines(rows, ("work_id", "revision_number", "status", "next", "detail"))
+    lines = _tsv_lines(items, ("work_id", "revision_number", "status", "next", "orientation"))
     return {"corpus_root": str(root), "items": items, "lines": lines}
 
 
@@ -694,7 +683,8 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     """One line per complete revision, oldest first (AC-14)."""
     work_id = cast(str, args.work_id)
     store = _open(work_id, corpus_root=_corpus_root(args))
-    files, skipped = store.revisions()
+    scan = store.revisions()
+    files, skipped = scan.files, scan.skipped
     if not files and store.read_record() is None:
         raise _Refused("record-missing", f"work {work_id!r} has no record at {store.record_path}")
     if not files and skipped:
@@ -703,7 +693,6 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
             f"work {work_id!r} has a record but every revision was dropped: {'; '.join(skipped)}",
         )
     entries: list[dict[str, object]] = []
-    rows: list[dict[str, object]] = []
     for file in files:
         revision = file.revision
         captured = (
@@ -712,31 +701,26 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
             and revision.session_provenance.captured_at is not None
             else "-"
         )
-        compacted = revision.compaction is not None
-        additions = len(revision.applied_additions)
-        transitions = len(revision.applied_transitions)
         entries.append(
             {
                 "revision_number": revision.revision_number,
                 "revision_id": revision.revision_id,
                 "captured_at": captured,
-                "additions": additions,
-                "transitions": transitions,
-                "compacted": compacted,
-            }
-        )
-        rows.append(
-            {
-                "revision_number": revision.revision_number,
-                "revision_id": revision.revision_id,
-                "captured_at": captured,
-                "additions": f"+{additions}",
-                "transitions": f"~{transitions}",
-                "compacted": "compacted" if compacted else "-",
+                "additions": len(revision.applied_additions),
+                "transitions": len(revision.applied_transitions),
+                "compacted": revision.compaction is not None,
             }
         )
     lines = _tsv_lines(
-        rows, ("revision_number", "revision_id", "captured_at", "additions", "transitions", "compacted")
+        entries,
+        (
+            "revision_number",
+            "revision_id",
+            "captured_at",
+            ("additions", lambda n: f"+{n}"),
+            ("transitions", lambda n: f"~{n}"),
+            ("compacted", lambda c: "compacted" if c else "-"),
+        ),
     )
     unreadable = [
         {"path": path, "reason": reason}

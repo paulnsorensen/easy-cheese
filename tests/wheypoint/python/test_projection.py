@@ -429,10 +429,13 @@ def test_cure_a_forged_pins_block_in_the_orientation_cannot_replace_the_pins(
 
 def test_cure_unesc_round_trips_backslashes_and_newlines() -> None:
     for original in ("a\\b", "line1\nline2", "trailing\\", "\\n literal"):
-        assert (
-            projection._unesc(projection._esc(original))  # pyright: ignore[reportPrivateUsage]
-            == original
-        )
+        assert projection.unescape(projection.escape(original)) == original
+
+
+def test_cure_escape_round_trips_tabs_only_when_asked() -> None:
+    original = "a\tb\\c\nd"
+    assert projection.unescape(projection.escape(original, tab=True)) == original
+    assert "\\t" not in projection.escape(original)
 
 
 def test_cure_a_literal_none_leaning_round_trips(
@@ -519,7 +522,7 @@ def test_cure_the_task_and_plan_field_tables_name_real_schema_attributes() -> No
     task_attrs = {f.name for f in task_fields_attrs}
     plan_attrs = {f.name for f in plan_fields_attrs}
 
-    for _key, attr, _required in task_fields:
+    for attr, _required in task_fields:
         assert attr in task_attrs, f"{attr!r} is not a HandoffTask field"
-    for _key, attr, _required in plan_fields:
+    for attr, _required in plan_fields:
         assert attr in plan_attrs, f"{attr!r} is not a ParallelPlan field"

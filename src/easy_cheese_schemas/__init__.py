@@ -87,6 +87,7 @@ from easy_cheese_schemas.manifest import (
 )
 from easy_cheese_schemas.pr_plan import PrGroup, PrPlan, PrShape
 from easy_cheese_schemas.contracts import (  # wheypoint continuity types
+    LOWER_IDENTIFIER_RE,
     MAX_ARTIFACT_BYTES,
     MAX_CONTRACT_BYTES,
     MAX_CONTRACT_DEPTH,
@@ -356,6 +357,7 @@ __all__ = [
     "IdentityLineage",
     "IngressKind",
     "Isolation",
+    "LOWER_IDENTIFIER_RE",
     "LegacyAdapter",
     "LegacyConversionError",
     "Loaded",

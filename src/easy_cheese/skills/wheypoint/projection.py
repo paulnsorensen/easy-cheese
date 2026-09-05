@@ -123,36 +123,37 @@ def status_field(projection: WheypointProjection) -> str:
     )
 
 
-def _esc(text: str) -> str:
-    """One line per field: backslashes and newlines are escaped."""
-    return text.replace("\\", "\\\\").replace("\n", "\\n")
+def escape(text: str, *, tab: bool = False) -> str:
+    """One line per field: backslashes and newlines are escaped, tabs on request."""
+    escaped = text.replace("\\", "\\\\").replace("\n", "\\n")
+    return escaped.replace("\t", "\\t") if tab else escaped
 
 
-def _unesc(text: str) -> str:
-    return re.sub(r"\\(.)", lambda m: "\n" if m[1] == "n" else m[1], text)
+def unescape(text: str) -> str:
+    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m[1], m[1]), text)
 
 
-# One table each drives both the render order in `_tasks` and the field
-# construction in `_parse_tasks`, so a new `HandoffTask`/`ParallelPlan` field
-# needs one edit here instead of two hand-maintained lists.
-_PLAN_FIELDS: tuple[tuple[str, str, bool], ...] = (
-    ("isolation", "isolation", True),
-    ("worktree_strategy", "worktree_strategy", True),
-    ("worktree_root", "worktree_root", False),
+# One table each drives both the render order in `_tasks` and the
+# required-field check in `_parse_tasks`, so a new `HandoffTask`/`ParallelPlan`
+# field needs one edit here instead of two hand-maintained lists.
+_PLAN_FIELDS: tuple[tuple[str, bool], ...] = (
+    ("isolation", True),
+    ("worktree_strategy", True),
+    ("worktree_root", False),
 )
-_TASK_FIELDS: tuple[tuple[str, str, bool], ...] = (
-    ("intent", "intent", True),
-    ("repo", "repo", True),
-    ("worktree", "worktree", False),
-    ("branch", "branch", True),
-    ("branch_from", "branch_from", True),
-    ("command", "command", True),
+_TASK_FIELDS: tuple[tuple[str, bool], ...] = (
+    ("intent", True),
+    ("repo", True),
+    ("worktree", False),
+    ("branch", True),
+    ("branch_from", True),
+    ("command", True),
 )
 
 
 def _field_text(value: str | WorktreeStrategy) -> str:
     """Render one table-driven field value as its escaped line text."""
-    return _esc(value.value if isinstance(value, WorktreeStrategy) else value)
+    return escape(value.value if isinstance(value, WorktreeStrategy) else value)
 
 
 def _render_dossier(forks: Sequence[DecisionFork]) -> list[str]:
@@ -163,19 +164,19 @@ def _render_dossier(forks: Sequence[DecisionFork]) -> list[str]:
     for index, fork in enumerate(forks):
         if index:
             lines.append("")
-        lines.append(f"{_FORK_PREFIX}{_esc(fork.fork)}")
+        lines.append(f"{_FORK_PREFIX}{escape(fork.fork)}")
         if fork.prior_leaning is not None:
-            lines.append(f"{_LEANING_PREFIX}{_esc(fork.prior_leaning)}")
+            lines.append(f"{_LEANING_PREFIX}{escape(fork.prior_leaning)}")
         for option in fork.options:
-            lines.append(f"{_OPTION_PREFIX}{_esc(option.option)}")
+            lines.append(f"{_OPTION_PREFIX}{escape(option.option)}")
             # One line per evidence item: no separator to escape, nothing to split.
-            lines.extend(f"{_EVIDENCE_PREFIX}{_esc(item)}" for item in option.evidence)
-            lines.append(f"{_BREAKS_PREFIX}{_esc(option.breaks)}")
+            lines.extend(f"{_EVIDENCE_PREFIX}{escape(item)}" for item in option.evidence)
+            lines.append(f"{_BREAKS_PREFIX}{escape(option.breaks)}")
     return lines
 
 
 def _entry_line(entry: ProtectedEntry) -> str:
-    return f"- {entry.entry_id} ({entry.kind.value}) \u2014 {_esc(entry.summary)}"
+    return f"- {entry.entry_id} ({entry.kind.value}) — {escape(entry.summary)}"
 
 
 def _body(record: WheypointRecord) -> list[str]:
@@ -193,7 +194,7 @@ def _body(record: WheypointRecord) -> list[str]:
     for entry in decisions:
         lines.append(_entry_line(entry))
         if entry.rationale:
-            lines.append(f"  rationale: {_esc(entry.rationale)}")
+            lines.append(f"  rationale: {escape(entry.rationale)}")
     if not decisions:
         lines.append(_NONE)
     lines += ["", _DIRECTIVES_HEADING, ""]
@@ -211,7 +212,7 @@ def _body(record: WheypointRecord) -> list[str]:
         or [""]
     ) if record.notes else [_NONE]
     lines += ["", _CONTEXT_HEADING, ""]
-    lines += [f"- {_esc(item)}" for item in record.working_context] or [_NONE]
+    lines += [f"- {escape(item)}" for item in record.working_context] or [_NONE]
     lines += ["", _ARTIFACTS_HEADING, ""]
     for link in record.artifact_links:
         detail = [
@@ -220,7 +221,7 @@ def _body(record: WheypointRecord) -> list[str]:
             f"covers: {', '.join(link.covers_entry_ids)}" if link.covers_entry_ids else "",
         ]
         detail_text = ", ".join(part for part in detail if part)
-        lines.append(f"- {_esc(link.path)}" + (f" ({detail_text})" if detail_text else ""))
+        lines.append(f"- {escape(link.path)}" + (f" ({detail_text})" if detail_text else ""))
     if not record.artifact_links:
         lines.append(_NONE)
     return lines
@@ -233,15 +234,15 @@ def _tasks(action: NextAction) -> list[str]:
     lines = ["", _TASKS_HEADING, ""]
     if action.parallel is not None:
         lines.append("parallel:")
-        for key, attr, _required in _PLAN_FIELDS:
-            plan_value = cast("str | WorktreeStrategy | None", getattr(action.parallel, attr))
+        for key, _required in _PLAN_FIELDS:
+            plan_value = cast("str | WorktreeStrategy | None", getattr(action.parallel, key))
             if plan_value is not None:
                 lines.append(f"  {key}: {_field_text(plan_value)}")
     lines.append("tasks:")
     for task in action.tasks:
-        lines.append(f"  - slug: {_esc(task.slug)}")
-        for key, attr, _required in _TASK_FIELDS:
-            task_value = cast("str | None", getattr(task, attr))
+        lines.append(f"  - slug: {escape(task.slug)}")
+        for key, _required in _TASK_FIELDS:
+            task_value = cast("str | None", getattr(task, key))
             if task_value is not None:
                 lines.append(f"    {key}: {_field_text(task_value)}")
     return lines
@@ -282,7 +283,7 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
     if projection.gating_entry_ids:
         for entry_id in projection.gating_entry_ids:
             summary = summaries.get(entry_id)
-            lines.append(f"- {entry_id}" + (f" \u2014 {_esc(summary)}" if summary else ""))
+            lines.append(f"- {entry_id}" + (f" — {escape(summary)}" if summary else ""))
     else:
         lines.append(_NONE)
     lines += ["", *_body(record)]
@@ -430,15 +431,15 @@ def _parse_dossier_markdown(body: list[str]) -> list[DecisionFork]:
     for line in body:
         if line.startswith(_FORK_PREFIX):
             options = []
-            forks.append({"fork": _unesc(line[len(_FORK_PREFIX) :]), "options": options, "prior_leaning": None})
+            forks.append({"fork": unescape(line[len(_FORK_PREFIX) :]), "options": options, "prior_leaning": None})
         elif line.startswith(_LEANING_PREFIX) and forks:
-            forks[-1]["prior_leaning"] = _unesc(line[len(_LEANING_PREFIX) :])
+            forks[-1]["prior_leaning"] = unescape(line[len(_LEANING_PREFIX) :])
         elif line.startswith(_OPTION_PREFIX) and forks:
-            options.append({"option": _unesc(line[len(_OPTION_PREFIX) :]), "evidence": [], "breaks": ""})
+            options.append({"option": unescape(line[len(_OPTION_PREFIX) :]), "evidence": [], "breaks": ""})
         elif line.startswith(_EVIDENCE_PREFIX) and options:
-            cast(list[str], options[-1]["evidence"]).append(_unesc(line[len(_EVIDENCE_PREFIX) :]))
+            cast(list[str], options[-1]["evidence"]).append(unescape(line[len(_EVIDENCE_PREFIX) :]))
         elif line.startswith(_BREAKS_PREFIX) and options:
-            options[-1]["breaks"] = _unesc(line[len(_BREAKS_PREFIX) :])
+            options[-1]["breaks"] = unescape(line[len(_BREAKS_PREFIX) :])
         else:
             raise ProjectionParseError(f"unreadable dossier line {line!r}")
     try:
@@ -485,18 +486,11 @@ def _dossier(lines: list[str], body_start: int) -> list[DecisionFork]:
         raise ProjectionParseError(str(exc)) from exc
 
 
-def _table_kwargs(
-    fields: dict[str, str], table: tuple[tuple[str, str, bool], ...]
-) -> dict[str, str | WorktreeStrategy]:
-    """Build constructor kwargs from a `_PLAN_FIELDS`/`_TASK_FIELDS` table."""
-    kwargs: dict[str, str | WorktreeStrategy] = {}
-    for key, attr, required in table:
-        if key in fields:
-            value = fields[key]
-            kwargs[attr] = WorktreeStrategy(value) if attr == "worktree_strategy" else value
-        elif required:
+def _require_fields(fields: dict[str, str], table: tuple[tuple[str, bool], ...]) -> None:
+    """Raise if a required key from a `_PLAN_FIELDS`/`_TASK_FIELDS` table is missing."""
+    for key, required in table:
+        if required and key not in fields:
             raise KeyError(key)
-    return kwargs
 
 
 def _parse_tasks(
@@ -515,25 +509,36 @@ def _parse_tasks(
         elif line == "tasks:":
             target = None
         elif line.startswith("  - slug: "):
-            tasks.append({"slug": _unesc(line[len("  - slug: ") :])})
+            tasks.append({"slug": unescape(line[len("  - slug: ") :])})
             target = tasks[-1]
-        elif line.startswith("    ") and target is not None and target is not plan_fields:
+        elif target is not None and line.startswith("  " if target is plan_fields else "    "):
             key, _, value = line.strip().partition(": ")
-            target[key] = _unesc(value)
-        elif line.startswith("  ") and target is plan_fields:
-            key, _, value = line.strip().partition(": ")
-            plan_fields[key] = _unesc(value)
+            target[key] = unescape(value)
         else:
             raise ProjectionParseError(f"unreadable tasks line {line!r}")
     try:
-        parallel = (
-            ParallelPlan(**_table_kwargs(plan_fields, _PLAN_FIELDS))  # pyright: ignore[reportArgumentType]
-            if plan_fields
-            else None
-        )
-        handoff_tasks = [
-            HandoffTask(slug=task["slug"], **_table_kwargs(task, _TASK_FIELDS)) for task in tasks
-        ]
+        parallel = None
+        if plan_fields:
+            _require_fields(plan_fields, _PLAN_FIELDS)
+            parallel = ParallelPlan(
+                isolation=plan_fields["isolation"],
+                worktree_strategy=WorktreeStrategy(plan_fields["worktree_strategy"]),
+                worktree_root=plan_fields.get("worktree_root"),
+            )
+        handoff_tasks: list[HandoffTask] = []
+        for task in tasks:
+            _require_fields(task, _TASK_FIELDS)
+            handoff_tasks.append(
+                HandoffTask(
+                    slug=task["slug"],
+                    intent=task["intent"],
+                    repo=task["repo"],
+                    worktree=task.get("worktree"),
+                    branch=task["branch"],
+                    branch_from=task["branch_from"],
+                    command=task["command"],
+                )
+            )
     except (KeyError, ValueError) as exc:
         raise ProjectionParseError(f"tasks block is incomplete: {exc}") from exc
     return handoff_tasks, parallel

@@ -42,6 +42,7 @@ first: an identical genesis resubmission is a replay, not a conflict.
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -546,24 +547,21 @@ def _existing_entries(
     return cast(list[ProtectedEntry], getattr(current, _RECORD_FIELDS[kind]))
 
 
-def _artifact_digest() -> Callable[[str], str | None]:
-    """Digest repo-relative artifact files from the repository root (S3).
+@functools.cache
+def _digest_root() -> Path:
+    """The repository root artifact paths are digested from (S3).
 
     The root is the Git toplevel when there is one, so the digest does not
     depend on which subdirectory the checkpoint was run from; outside a
-    repository the working directory is the root. The root is resolved lazily,
-    on the first path actually digested, so a delta with no artifact links to
-    add never spawns `git rev-parse --show-toplevel`.
+    repository the working directory is the root. Cached so it is resolved
+    lazily, on the first path actually digested, and never spawns
+    `git rev-parse --show-toplevel` more than once per process.
     """
-    digest_of: Callable[[str], str | None] | None = None
+    return paths.git_toplevel() or Path.cwd()
 
-    def digest(path: str) -> str | None:
-        nonlocal digest_of
-        if digest_of is None:
-            digest_of = lint_mod.artifact_digest_in(paths.git_toplevel() or Path.cwd())
-        return digest_of(path)
 
-    return digest
+def _digest_of(path: str) -> str | None:
+    return lint_mod.artifact_digest_in(_digest_root())(path)
 
 
 def _merge_artifact_links(
@@ -763,7 +761,7 @@ def _genesis(
                 delta.add_artifact_links,
                 delta.remove_artifact_links,
                 revision_id=revision_id,
-                digest_of=_artifact_digest(),
+                digest_of=_digest_of,
             ),
             decision_dossier=list(delta.decision_dossier or []),
         )
@@ -873,7 +871,7 @@ def _draft_record(
                 delta.add_artifact_links,
                 delta.remove_artifact_links,
                 revision_id=revision_id,
-                digest_of=_artifact_digest(),
+                digest_of=_digest_of,
             ),
         )
     except ValueError as exc:
