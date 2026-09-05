@@ -40,6 +40,7 @@ from easy_cheese_schemas import (
     load,
     register_adapter,
     unregister_adapter,
+    __version__,
 )
 from easy_cheese_schemas.compat import STAMP_KEY, classify_stamp
 
@@ -320,9 +321,7 @@ class TestDistributionMetadata:
         assert f"cattrs>={pins['cattrs']}" in deps
 
     def test_version_matches_package(self) -> None:
-        import easy_cheese_schemas
-
-        assert self._project()["version"] == easy_cheese_schemas.__version__
+        assert self._project()["version"] == __version__
 
 
 class TestAdapterSunsets:
