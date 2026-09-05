@@ -143,7 +143,7 @@ def test_the_planner_request_kind_is_defined_for_every_failure_class() -> None:
 
     fan = _read(REFERENCES / "fan-pathway.md")
     assert "## Planner request kinds" in fan
-    for kind in PlannerRequestKind:
+    for kind in list(PlannerRequestKind):
         assert f"`{kind.value}`" in fan, kind
     assert "Mold owns planning after a Cook failure." in fan
     assert "at least one `evidence` entry" in fan

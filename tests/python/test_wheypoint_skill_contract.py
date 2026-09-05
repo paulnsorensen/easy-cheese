@@ -184,7 +184,7 @@ def test_the_move_vocabulary_matches_the_schema_and_resume_preserves_flags() -> 
     resume = _read(CONTINUE_RESUME)
     corpus = "\n".join((wheypoint, cheese, resume))
 
-    for move in NextMove:
+    for move in list(NextMove):
         assert move.value in wheypoint, f"undocumented next move: {move.value}"
     assert "culture -> mold -> cook -> press -> age -> cure -> plate" in corpus
     assert "GateReceipt" not in corpus
