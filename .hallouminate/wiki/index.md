@@ -18,6 +18,7 @@ git-tracking axis (`skills/cheese/references/formatting.md:103`).
 - [architecture/](./architecture/index.md) — architecture
 - [decisions/](./decisions/index.md) — decisions
 - [gotchas/](./gotchas/index.md) — gotchas
+- [research/](./research/index.md) — research
 - [specs/](./specs/index.md) — specs
 - [architecture](./architecture.md) — Architecture of easy-cheese
 - [docs-mermaid-rendering](./docs-mermaid-rendering.md) — Docs Mermaid rendering
