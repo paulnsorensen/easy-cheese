@@ -898,6 +898,15 @@ def parse_gate_applicability(
 def _normalize_ledger(
     value: object,
 ) -> tuple[tuple[ForkDecision, ...], tuple[str, ...], str | None]:
+    """Normalize a ledger into (entries, problems, goal).
+
+    Accepts either the `{"goal": ..., "forks": [...]}` shape or an id-keyed
+    mapping shape (each top-level key other than `goal` is a fork id). `goal`
+    is a reserved top-level key on both shapes and never becomes a fork. A
+    blank or non-string `goal` raises `TasteTestError("ledger-goal-empty")`.
+    The forks may also arrive as a bare list, or under `decisions`, `ledger`,
+    or `settled_decisions` instead of `forks`.
+    """
     raw: object
     goal: str | None = None
     if isinstance(value, Mapping):
@@ -975,12 +984,18 @@ def _goal_gaps(sections: Mapping[str, str], goal: str | None) -> list[str]:
     return []
 
 
+def _heading_title(raw: object) -> str:
+    """Normalise a heading or mapping key so the Mapping and markdown branches
+    of `_draft_sections` agree on section names."""
+    return re.sub(r"[^a-z0-9 _-]", "", str(raw).lower()).strip()
+
+
 def _draft_sections(draft: object) -> dict[str, str]:
     if isinstance(draft, Mapping):
         draft_map = cast(Mapping[object, object], draft)
         result: dict[str, str] = {}
         for key, value in draft_map.items():
-            title = str(key).strip().lower()
+            title = _heading_title(key)
             if title in _GOAL_HEADINGS:
                 if GOAL_SECTION not in result:
                     result[GOAL_SECTION] = _canonical(value)
@@ -993,7 +1008,7 @@ def _draft_sections(draft: object) -> dict[str, str]:
     headings = list(re.finditer(r"(?im)^#{1,6}\s+(.+?)\s*$", text))
     result = {}
     for index, heading in enumerate(headings):
-        title = re.sub(r"[^a-z0-9 -]", "", heading.group(1).lower()).strip()
+        title = _heading_title(heading.group(1))
         end = (
             headings[index + 1].start() if index + 1 < len(headings) else len(text)
         )
