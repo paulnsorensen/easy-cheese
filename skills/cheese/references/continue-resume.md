@@ -71,6 +71,7 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    Report its orientation line.
    This line tells the user the current position.
    Parse `status:`, `next:`, and optional `mode:`.
+   `mode:` is a keyed line after `artifact:`; a generated projection renders it only for `next: tasks`.
    **Branch on the disposition, not the status name.**
    [`handback-contract.md`](handback-contract.md) maps each status to `proceed`, `retry`, or `stop`.
    A `proceed` disposition covers `ok` and `ok-with-concerns`.

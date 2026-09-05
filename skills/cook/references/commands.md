@@ -11,7 +11,7 @@
 | `curd-block` | Validate a curd block against the spec-locked decomposition schema |
 | `findings-cli` | Render an /age report's selection table and resolve selection verbs |
 | `gates-cli` | Map a quality-gate scoreboard's booleans to a readiness verdict |
-| `handoff-cli` | Render, parse, and dispatch-split handoff preambles |
+| `handoff` | Render, parse, and dispatch-split handoff preambles |
 | `manifest-update` | Apply an atomic, schema-validated update to a fan-out run manifest |
 | `milknado` | Probe the milknado engine seam used by parallel mode |
 | `mode` | Select the fan-out mode from the canonical size thresholds |

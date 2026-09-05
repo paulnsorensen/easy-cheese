@@ -398,7 +398,7 @@ def test_decomposition_returns_typed_unsupported_for_lossy_fields(
 def test_legacy_migration_api_signatures_remain_unchanged() -> None:
     assert (
         str(inspect.signature(load))
-        == "(raw: 'object', cls: 'type[T]', *, strict: 'bool') -> 'Loaded[T]'"
+        == "(raw: 'object', cls: 'type[T]', *, strict: 'bool', forbid_unknown: 'bool' = False) -> 'Loaded[T]'"
     )
     assert (
         str(inspect.signature(parse_handoff_slug))

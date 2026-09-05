@@ -1,16 +1,19 @@
-"""Tests for shared/scripts/handoff_cli.py — render / parse / dispatch CLI."""
+"""Tests for shared/handoff.py's render / parse / dispatch CLI."""
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
+
+from easy_cheese.shared.bundle_commands import Command
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -23,20 +26,12 @@ class _HandoffCliModule(Protocol):
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
-HANDOFF_CLI = SHARED_SCRIPTS / "handoff_cli.py"
+HANDOFF_CLI = SHARED_SCRIPTS / "handoff.py"
 
 
 @pytest.fixture(scope="module")
 def handoff_cli_mod() -> ModuleType:
-    # Make sibling modules (cli, handoff) importable.
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    spec = importlib.util.spec_from_file_location("handoff_cli", HANDOFF_CLI)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["handoff_cli"] = module
-    spec.loader.exec_module(module)
-    return module
+    return importlib.import_module("easy_cheese.shared.handoff")
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -132,6 +127,8 @@ class TestParse:
             "status": "ok",
             "reason": None,
             "halt_reason": None,
+            "next": "press",
+            "baseline": None,
             "next_skill": "press",
             "artifact": ".cheese/cook/demo.md",
             "orientation": "Cooked the retry path.",
@@ -244,3 +241,105 @@ class TestModuleImports:
         assert callable(handoff_cli_mod._cmd_render)  # pyright: ignore[reportPrivateUsage]
         assert callable(handoff_cli_mod._cmd_parse)  # pyright: ignore[reportPrivateUsage]
         assert callable(handoff_cli_mod._cmd_dispatch)  # pyright: ignore[reportPrivateUsage]
+
+    def test_old_module_is_not_importable(self) -> None:
+        with pytest.raises(ImportError):
+            _ = importlib.import_module("easy_cheese.shared.handoff_cli")
+
+
+def _bundle_commands(bundle: str) -> list[Command]:
+    module = importlib.import_module(f"easy_cheese.skills.{bundle}.commands")
+    return list(cast("tuple[Command, ...]", module.COMMANDS))
+
+
+class TestBundleRegistration:
+    @pytest.mark.parametrize("bundle", ["age", "cure", "cook"])
+    def test_handoff_registered_and_handoff_cli_absent(self, bundle: str) -> None:
+        names = {command.name for command in _bundle_commands(bundle)}
+        assert "handoff" in names
+        assert "handoff-cli" not in names
+
+    def test_render_output_is_byte_identical_across_bundles(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        args = [
+            "render",
+            "--status", "ok",
+            "--next", "cure",
+            "--artifact", "foo",
+            "--orientation", "bar",
+        ]
+        outputs: set[str] = set()
+        for bundle in ("age", "cure", "cook"):
+            handler = next(c for c in _bundle_commands(bundle) if c.name == "handoff")
+            module_name, _, attribute = handler.target.partition(":")
+            handler_fn = cast(
+                "Callable[[list[str]], int]", getattr(importlib.import_module(module_name), attribute)
+            )
+            assert handler_fn(args) == 0
+            outputs.add(capsys.readouterr().out)
+        assert outputs == {"status: ok\nnext: cure\nartifact: foo\nbar\n"}
+
+
+class TestModeCli:
+    def test_render_emits_mode_only_when_given_and_parse_echoes_it(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from easy_cheese.shared import handoff as handoff_mod
+
+        base = ["render", "--status", "ok", "--next", "cook", "--artifact", "", "--orientation", "o"]
+        assert handoff_mod.main(base) == 0
+        plain = capsys.readouterr().out
+        assert handoff_mod.main([*base, "--mode", "parallel"]) == 0
+        with_mode = capsys.readouterr().out
+        assert "mode:" not in plain
+        assert "mode: parallel\n" in with_mode
+
+        preamble = tmp_path / "pre.md"
+        _ = preamble.write_text(with_mode, encoding="utf-8")
+        assert handoff_mod.main(["parse", "--file", str(preamble)]) == 0
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["mode"] == "parallel"
+        _ = preamble.write_text(plain, encoding="utf-8")
+        assert handoff_mod.main(["parse", "--file", str(preamble)]) == 0
+        assert "mode" not in cast(dict[str, object], json.loads(capsys.readouterr().out))
+
+
+class TestBaselineCli:
+    def test_render_emits_baseline_and_parse_returns_it(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from easy_cheese.shared import handoff as handoff_mod
+
+        base = ["render", "--status", "ok", "--next", "cook", "--artifact", "", "--orientation", "o"]
+        assert handoff_mod.main([*base, "--baseline", "suite=pytest test_id=t signature=s"]) == 0
+        rendered = capsys.readouterr().out
+        assert "baseline: suite=pytest test_id=t signature=s\n" in rendered
+
+        preamble = tmp_path / "pre.md"
+        _ = preamble.write_text(rendered, encoding="utf-8")
+        assert handoff_mod.main(["parse", "--file", str(preamble)]) == 0
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["baseline"] == "suite=pytest test_id=t signature=s"
+
+
+class TestSharedEmitter:
+    def test_read_handoff_slug_emits_mode_like_handoff_parse(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from easy_cheese.shared import handoff as handoff_mod
+        from easy_cheese.shared import paths, read_handoff_slug
+
+        artifact = tmp_path / ".cheese" / "age" / "slug.md"
+        artifact.parent.mkdir(parents=True)
+        _ = artifact.write_text("status: ok\nnext: tasks\nartifact: \nmode: parallel\norient\n", encoding="utf-8")
+        def _fixed(_phase: str, _slug: str) -> Path:
+            return artifact
+
+        monkeypatch.setattr(paths, "artifact_path", _fixed)
+        assert read_handoff_slug.main(["--phase", "age", "--slug", "slug"]) == 0
+        via_reader = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert handoff_mod.main(["parse", "--file", str(artifact)]) == 0
+        via_parse = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert via_reader["mode"] == via_parse["mode"] == "parallel"
+        assert set(via_reader) <= set(via_parse)

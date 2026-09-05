@@ -42,6 +42,7 @@ from easy_cheese_schemas import (
 
 from easy_cheese.shared import paths
 
+from . import checkpoint as checkpoint_mod
 from . import legacy as legacy_mod
 from . import lint, records, storage
 
@@ -49,8 +50,6 @@ _IDENTIFIER_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 # A parent may live outside every worktree, but only as a reference someone can
 # actually open: an absolute http(s) URL, never a bare host or a local path.
 _PARENT_URL_RE = re.compile(r"https?://[^\s/]+(?:/\S*)?")
-# The pull request reference both skills document for `next: affinage`.
-_PR_REFERENCE_RE = re.compile(r"PR#\d+")
 
 
 class ResolutionOutcome(str, Enum):
@@ -382,7 +381,7 @@ def _legacy_artifact_gate(
     value = slug_block.artifact
     assert value is not None
     if slug_block.next_skill == "affinage":
-        if _PR_REFERENCE_RE.fullmatch(value) or _PARENT_URL_RE.fullmatch(value):
+        if checkpoint_mod.PR_REFERENCE_RE.fullmatch(value.strip()) or _PARENT_URL_RE.fullmatch(value):
             return None
         return (
             f"declared artifact {value!r} must be 'PR#<n>' or a pull request "

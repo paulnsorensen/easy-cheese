@@ -22,10 +22,11 @@ CHEESE = SKILLS_DIR / "cheese" / "SKILL.md"
 CONTINUE_RESUME = SKILLS_DIR / "cheese" / "references" / "continue-resume.md"
 PROVENANCE = SKILLS_DIR / "wheypoint" / "references" / "provenance-fields.md"
 
-# `checkpoint` is the authoring path and `commit` the kernel it delegates to;
-# the other three are read-only. Genesis is a parent the runtime binds, so a
-# `create` command must never appear.
-COMMANDS = ("checkpoint", "commit", "resolve", "show", "lint")
+# `checkpoint` is the only write path (the wheypoint-ergonomics spec made the
+# kernel's `commit` host-internal); `validate` is its dry run, `schema` prints a
+# contract, and the rest are read-only. Genesis is a parent the runtime binds,
+# so neither a `create` nor a `commit` command may appear.
+COMMANDS = ("checkpoint", "validate", "schema", "resolve", "show", "lint", "list", "log", "turns")
 
 
 def _read(path: Path) -> str:
@@ -95,18 +96,21 @@ def test_legacy_runtime_gates_cannot_be_waived_by_manual_resume() -> None:
     assert "never this halt gate or any other runtime integrity gate" in body
     assert "explicit permission to dispatch the next phase" not in body
 
-def test_the_documented_command_set_is_exactly_the_five_the_spec_fixes() -> None:
+def test_the_documented_command_set_is_exactly_the_nine_the_spec_fixes() -> None:
     """Documented across the continuity docs as a whole: /wheypoint owns the
-    write path (checkpoint, commit, show), the resume flow owns the read path
-    (resolve, lint). What matters is that all five are reachable and no sixth
-    exists."""
+    write path (checkpoint, validate) and the read path (schema, show, list,
+    log, turns), the resume flow owns resolve and lint. All nine are reachable
+    and neither `create` nor the retired `commit` exists."""
     corpus = "\n".join(_read(path) for path in (WHEYPOINT, CHEESE, CONTINUE_RESUME))
     for command in COMMANDS:
         marker = f"wheypoint.pyz {command}"
         portable_marker = f"/wheypoint {command}"
         assert marker in corpus or portable_marker in corpus, f"undocumented command: {command}"
     assert "wheypoint.pyz create" not in corpus, (
-        "genesis is a delta naming the sentinel, not a fifth command"
+        "genesis is an intent the runtime binds, not a separate command"
+    )
+    assert "wheypoint.pyz commit" not in corpus, (
+        "the raw-delta surface is host-internal since the wheypoint-ergonomics spec"
     )
 
 
@@ -120,11 +124,12 @@ def test_wheypoint_invokes_only_its_repo_relative_archive() -> None:
 
 
 def test_the_genesis_sentinel_is_documented_as_the_way_work_starts() -> None:
-    """Without this, a reader finds expected_revision_id required and no way to
-    satisfy it on a first checkpoint."""
+    """Without this, a reader cannot tell how a first checkpoint binds its
+    parent, or how to pin a base revision when replaying one."""
     body = _read(WHEYPOINT)
     assert "genesis" in body.lower()
-    assert "expected_revision_id" in body
+    contract = _read(SKILLS_DIR / "wheypoint" / "references" / "intent-contract.md")
+    assert "base_revision_id" in contract
 
 
 @pytest.mark.parametrize(

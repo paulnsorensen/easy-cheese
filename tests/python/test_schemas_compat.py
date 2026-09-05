@@ -43,6 +43,7 @@ from easy_cheese_schemas import (
     __version__,
 )
 from easy_cheese_schemas.compat import STAMP_KEY, classify_stamp
+from easy_cheese_schemas.contracts import CheckpointIntent
 
 
 GATE_PAYLOAD: dict[str, object] = {
@@ -107,6 +108,17 @@ class Widget:
     name: str
     count: int = 3
     tags: list[str] = field(factory=list)
+
+
+@define
+class Entry:
+    kind: str = "note"
+
+
+@define
+class Ledger:
+    name: str
+    entries: list[Entry] = field(factory=list)
 
 
 class TestClassifyStamp:
@@ -188,8 +200,24 @@ class TestGateReceiptCompatibility:
         assert first.problems == (
             "GateReceipt.work_id must be a string, not int",
             "GateReceipt.guard_receipt_refs must be a list, not tuple",
-            "GateReceipt.contracts[1].mode must be one of: tracer, contract-matrix",
+            "GateReceipt.contracts[1].mode must be valid: unknown value "
+            + "'not-a-mode' (allowed: tracer, contract-matrix)",
         )
+
+    def test_enum_problem_names_field_value_and_allowed_set(self) -> None:
+        payload = deepcopy(GATE_PAYLOAD)
+        cast(list[dict[str, object]], payload["contracts"])[0]["mode"] = "bogus"
+
+        result = load(payload, GateReceipt, strict=True)
+
+        assert result.value is None
+        message = next(
+            problem for problem in result.problems if "contracts[1].mode" in problem
+        )
+        assert "mode" in message
+        assert "bogus" in message
+        assert "tracer" in message
+        assert "contract-matrix" in message
 
 
 class TestStrictMode:
@@ -284,6 +312,83 @@ class TestLoadNeverRaises:
 
     def test_bool_stamp_is_not_mistaken_for_version_one(self) -> None:
         assert classify_stamp(True) is not Provenance.CURRENT
+
+
+class TestForbidUnknown:
+    def test_top_level_and_nested_unknown_keys_are_named_and_value_is_none(
+        self,
+    ) -> None:
+        result = load(
+            {
+                "name": "gouda",
+                "bogus": 1,
+                "entries": [{"kind": "note", "nested_bogus": 2}],
+            },
+            Ledger,
+            strict=True,
+            forbid_unknown=True,
+        )
+
+        assert result.value is None
+        assert "Ledger.bogus: unknown field" in result.problems
+        assert "Ledger.entries[1].nested_bogus: unknown field" in result.problems
+
+    def test_forbid_unknown_false_keeps_the_ignore_and_flag_future_behaviour(
+        self,
+    ) -> None:
+        result = load(
+            {
+                STAMP_KEY: SCHEMA_VERSION + 1,
+                "name": "gouda",
+                "entries": [],
+                "rennet": "vegetarian",
+            },
+            Ledger,
+            strict=False,
+            forbid_unknown=False,
+        )
+
+        assert result.provenance is Provenance.FUTURE
+        assert result.value == Ledger(name="gouda", entries=[])
+        assert not hasattr(result.value, "rennet")
+        assert result.problems == ()
+
+    def test_stamped_payload_on_a_class_without_schema_version_is_not_unknown(
+        self,
+    ) -> None:
+        # CheckpointIntent has no schema_version attribute, but every S6 write
+        # is stamped by the caller -- the stamp itself must not trip the
+        # forbid-extra-keys check it is read alongside.
+        result = load(
+            {STAMP_KEY: SCHEMA_VERSION, "work_id": "w1"},
+            CheckpointIntent,
+            strict=True,
+            forbid_unknown=True,
+        )
+
+        assert result.value == CheckpointIntent(work_id="w1")
+        assert result.problems == ()
+
+    def test_a_genuinely_unknown_key_is_still_reported(self) -> None:
+        result = load(
+            {STAMP_KEY: SCHEMA_VERSION, "work_id": "w1", "bogus": 1},
+            CheckpointIntent,
+            strict=True,
+            forbid_unknown=True,
+        )
+
+        assert result.value is None
+        assert result.problems == ("CheckpointIntent.bogus: unknown field",)
+
+
+class TestSchemaVersionBump:
+    def test_schema_version_is_3(self) -> None:
+        assert SCHEMA_VERSION == 3
+
+    def test_classify_stamp_prior_current_future(self) -> None:
+        assert classify_stamp(2) is Provenance.PRIOR
+        assert classify_stamp(3) is Provenance.CURRENT
+        assert classify_stamp(4) is Provenance.FUTURE
 
 
 class TestLoadedShape:
@@ -491,3 +596,19 @@ def test_builtin_migration_adapter_works_before_shared_migrate_import() -> None:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+class TestStrictConverterParity:
+    def test_forbid_unknown_requires_strict(self) -> None:
+        from easy_cheese_schemas import compat
+
+        with pytest.raises(ValueError, match="forbid_unknown requires strict=True"):
+            _ = cast(object, compat.load({"schema_version": 3}, compat.Loaded, strict=False, forbid_unknown=True))
+
+    def test_strict_and_lenient_converters_share_primitive_rules(self) -> None:
+        from easy_cheese_schemas import compat
+
+        assert compat._strict_converter is not compat._converter  # pyright: ignore[reportPrivateUsage]
+        for primitive in (str, bool, int, float):
+            strict_hook = compat._strict_converter.get_structure_hook(primitive)  # pyright: ignore[reportPrivateUsage]
+            lenient_hook = compat._converter.get_structure_hook(primitive)  # pyright: ignore[reportPrivateUsage]
+            assert strict_hook is lenient_hook, primitive
