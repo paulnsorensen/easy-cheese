@@ -398,7 +398,11 @@ def test_contradictions_orphans_assumptions_and_gaps_reject_pass(
 
 
 GOAL = "Users can resume an interrupted session"
-GOAL_DRAFT = f"# Draft\n\n## Problem statement\n{GOAL}, without re-authenticating.\n" + DRAFT.split("\n", 2)[2]
+GOAL_DRAFT = DRAFT.replace(
+    "# Draft\n",
+    f"# Draft\n\n## Problem statement\n{GOAL}, without re-authenticating.\n",
+    1,
+)
 GOAL_LEDGER: dict[str, object] = {"goal": GOAL, "forks": LEDGER}
 
 
@@ -433,6 +437,57 @@ def test_goal_less_ledger_skips_the_goal_gate(taste: _MoldTasteTestModule) -> No
 def test_blank_goal_is_a_ledger_error(taste: _MoldTasteTestModule) -> None:
     with pytest.raises(taste.TasteTestError, match="ledger-goal-empty"):
         _ = taste.taste_test(DRAFT, {"goal": "  ", "forks": LEDGER}, verdict(taste))
+
+
+def test_id_keyed_ledger_with_goal_passes(taste: _MoldTasteTestModule) -> None:
+    id_keyed_ledger: dict[str, object] = {
+        "goal": GOAL,
+        "F-1": {"decision": "outer tracer", "status": "settled", "consequential": True},
+        "F-2": {"decision": "browser seam", "status": "settled", "consequential": True},
+    }
+    result = taste.taste_test(GOAL_DRAFT, id_keyed_ledger, verdict(taste, GOAL_DRAFT))
+    assert result.passed, result.acceptance_gaps
+
+
+def test_trailing_goal_heading_does_not_override_problem_statement(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = GOAL_DRAFT + "\n## Goal\nsomething else\n"
+    result = taste.taste_test(draft, GOAL_LEDGER, verdict(taste, draft))
+    assert result.passed, result.acceptance_gaps
+
+
+def test_reflected_in_problem_alias_is_rejected(taste: _MoldTasteTestModule) -> None:
+    bad = verdict(taste)
+    forks = cast(list[dict[str, object]], bad["forks"])
+    forks[0]["reflected_in"] = ["problem"]
+    with pytest.raises(
+        taste.TasteTestError, match="fork-invalid-reflection:F-1:problem"
+    ):
+        _ = taste.taste_test(DRAFT, LEDGER, bad)
+
+
+def test_goal_match_is_case_and_whitespace_insensitive(
+    taste: _MoldTasteTestModule,
+) -> None:
+    spaced_goal = "Users  can Resume  an interrupted   session"
+    draft = GOAL_DRAFT.replace(GOAL, "USERS CAN  resume an INTERRUPTED session")
+    ledger: dict[str, object] = {"goal": spaced_goal, "forks": LEDGER}
+    result = taste.taste_test(draft, ledger, verdict(taste, draft))
+    assert result.passed, result.acceptance_gaps
+
+
+def test_goal_alignment_heading_is_not_recognized(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = DRAFT.replace(
+        "# Draft\n",
+        f"# Draft\n\n## Goal alignment\n{GOAL}, without re-authenticating.\n",
+        1,
+    )
+    result = taste.taste_test(draft, GOAL_LEDGER, verdict(taste, draft))
+    assert not result.passed
+    assert result.acceptance_gaps == ("missing-section:goal:problem",)
 
 
 def test_third_failed_verdict_halts_after_two_corrections(taste: _MoldTasteTestModule) -> None:

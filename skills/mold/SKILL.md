@@ -98,7 +98,7 @@ reason, and no contracts. Mold never infers applicability. Row-level rules:
 
 `mold.pyz taste-test` binds the verdict to the draft SHA256 and to each settled consequential ledger fork. Stale or partial coverage and blockers fail the gate; a failure reopens only the named forks, with two correction rounds. Approved `red-required` specs pass unchanged metadata and the published pointer to `/cook --auto`.
 
-Each settled consequential fork must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`; a `not-applicable` spec cannot contain Test Contracts. Do not rename a section to simulate the fourth reflection. The ledger's pinned `goal` must survive verbatim into the draft's Problem statement, or the verdict fails as `goal-drift`; see `references/gate-graph.md` § Fork taste planner gate.
+Each settled consequential fork must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`; a `not-applicable` spec cannot contain Test Contracts. Do not rename a section to simulate the fourth reflection. `goal` must survive unchanged, compared case- and whitespace-insensitively, in Problem statement, else `goal-drift`; see `references/gate-graph.md` § Fork taste planner gate.
 
 ## Approval gate
 
