@@ -49,6 +49,54 @@ def test_plate_owns_commit_stack_and_review_shape_policy() -> None:
     assert "plate-layout" not in skill
 
 
+def test_plate_topology_question_record_is_valid_and_normalized() -> None:
+    """Parse the emitted question record instead of matching phrases."""
+    import yaml
+
+    topology = read("skills/plate/references/topology.md")
+    block = topology.split("```yaml\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
+    question = cast(dict[str, object], yaml.safe_load(block)["question"])
+    assert set(question) == {"id", "prompt", "recommended", "multi", "options"}
+    assert question["id"] == "plate-layout"
+    assert question["multi"] is False
+    assert question["recommended"] == "<single | stacked>"
+    options = cast(list[dict[str, object]], question["options"])
+    assert [option["id"] for option in options] == ["single", "stacked"]
+    for option in options:
+        assert set(option) == {"id", "label", "description"}
+        assert cast(str, option["label"]).strip()
+        assert cast(str, option["description"]).strip()
+
+    normalization = topology.split("## Answer normalization", maxsplit=1)[1].split(
+        "\n## ", maxsplit=1
+    )[0]
+    flat = " ".join(normalization.split())
+    assert "returns free text with an `other:` prefix" in flat
+    assert "only when its text is unambiguous" in flat
+    assert "Ask one clarification question for every other answer" in flat
+    assert "Halt at `topology` when the clarification is also ambiguous" in flat
+    assert "Persist only `single` or `stacked`. Never persist free text." in flat
+    # `--auto` must not bypass the question.
+    assert "unchanged under `--auto`" in topology
+
+
+def test_plate_repair_topology_requires_run_branch_and_one_overlap_rule() -> None:
+    topology = read("skills/plate/references/topology.md")
+    repair = topology.split("## Repair-worktree topology", maxsplit=1)[1]
+    flat = " ".join(repair.split())
+    assert "The repair handoff must carry `run_branch`" in flat
+    assert "Halt at `topology` when `run_branch` is absent" in flat
+    assert "A missing field is not evidence of a deleted branch" in flat
+    assert "git diff --name-only --find-renames" in repair
+    assert "git diff --numstat" in flat
+    assert "Count a rename as its changed lines only" in flat
+    assert "Count a binary path as one changed line" in flat
+    assert "git rev-parse --verify <run-branch>" in flat
+    # The bundled command surface, not the non-existent `worktree_harvest`.
+    assert "cook.pyz worktree harvest --branch" in flat
+    assert "worktree_harvest" not in repair
+
+
 def test_plate_final_writing_gate_precedes_publication() -> None:
     skill = read("skills/plate/SKILL.md")
     durable = read("skills/plate/references/durable-writes.md")
@@ -60,6 +108,42 @@ def test_plate_final_writing_gate_precedes_publication() -> None:
     assert "halt" in durable.lower()
     assert ".cheese" in durable and "unstaged" in durable
     assert "bottom/common branch" in durable
+
+
+def test_plate_hard_gate_defines_its_context_and_status_matrix() -> None:
+    """The `/hard-cheese` seam needs a validated context and every gate status."""
+    skill = read("skills/plate/SKILL.md")
+    durable = read("skills/plate/references/durable-writes.md")
+    gate = skill.split("## Hard gate", maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
+    flat_gate = " ".join(gate.split())
+    for field in ("artifacts", "inventory", "tracked_diff_digest", "gate"):
+        assert f"`{field}`" in durable, field
+    assert "Halt when a field is missing" in durable
+    assert "Do not reuse a digest from an earlier state" in durable
+    assert "tracked artifact diff digest" in flat_gate
+    for status, response in (
+        ("`PASS`", "Continue to publication"),
+        ("`LOGGED`", "Record the logged findings"),
+        ("`ERROR`", "Ask the user before you publish"),
+        ("`FAILED`", "Halt at `quality gate`"),
+    ):
+        assert status in gate, status
+        assert response in gate, response
+
+
+def test_plate_loads_one_reference_at_a_time_in_a_named_sequence() -> None:
+    skill = read("skills/plate/SKILL.md")
+    section = skill.split("## Classify, then load one reference", maxsplit=1)[1]
+    flat = " ".join(section.split())
+    assert "Load one reference at a time" in flat
+    assert "Load each reference alone. Close it before you load the next one." in flat
+    topology = flat.index("Load `references/topology.md`")
+    execution = flat.index("Load `references/ordinary-pr.md` for single topology")
+    provider = flat.index("Load exactly one provider reference")
+    assert topology < execution < provider
+    # Stack inspection without a requested change belongs to `/gh`.
+    assert "Create, sync, restack, submit, recover, or explicitly ship a stack" in skill
+    assert "Route a stack inspection request without a requested change to `/gh`" in flat
 
 
 def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
@@ -98,14 +182,37 @@ def test_plate_stack_references_preserve_absorbed_behavior_and_safety() -> None:
         name: read(f"skills/plate/references/{name}.md")
         for name in ("gt", "git-town", "gh-stack")
     }
-    for body in bodies.values():
+    # Each provider must prohibit the bare Git recovery command by name and
+    # name its own continue/abort pair. A reference that merely mentions
+    # `git rebase --continue` as the recovery path would satisfy a bare
+    # substring check, so assert the prohibition and the replacement.
+    prohibitions = {
+        "gt": "A bare `git rebase --continue` is never the recovery path",
+        "git-town": "A bare `git rebase --continue` is never correct",
+        "gh-stack": "Do not run `git rebase --continue`.",
+    }
+    recoveries = {
+        "gt": ("gt continue", "gt abort"),
+        "git-town": ("git town continue", "git town undo"),
+        "gh-stack": ("gh stack rebase --continue", "gh stack rebase --abort"),
+    }
+    for name, body in bodies.items():
         assert "git add -A" not in body
         assert "git add ." not in body
         assert "--no-verify" not in body
         assert "git commit --amend" not in body
-        assert "git rebase --continue" in body
         assert "git rev-parse --git-dir" in body
         assert ".git/" not in body
+        recovery = body.split("## Conflict recovery", maxsplit=1)[1].split(
+            "\n## ", maxsplit=1
+        )[0]
+        flat_recovery = " ".join(recovery.split())
+        assert prohibitions[name] in flat_recovery, name
+        for command in recoveries[name]:
+            assert f"`{command}`" in flat_recovery, (name, command)
+        assert "git rebase --continue" not in flat_recovery.replace(
+            prohibitions[name], ""
+        ), name
 
     graphite = bodies["gt"]
     for command in ("gt modify", "gt split", "gt absorb", "gt pop", "gt undo"):
@@ -269,7 +376,7 @@ def test_plate_halt_vocabulary_is_fixed_and_splits_ownership() -> None:
     assert "Fix the call shape or the routing, then retry that step" in flat
     assert "Never retry it as if the call shape were wrong" in flat
     assert "never weaken a gate, stage unnamed paths, or skip read-back" in flat
-    assert "halt at `quality gate` and fix the work" in flat
+    assert "halt at `quality gate`. Then fix the work" in flat
     # Prose and contract assertions only -- no telemetry backend.
     for backend in ("otel", "OpenTelemetry", "span", "metric", "emit "):
         assert backend not in halting
@@ -342,6 +449,37 @@ def test_cure_open_pr_dispatch_obeys_plate_policy() -> None:
     )
     assert "explicit topology choices and obviously cohesive work proceed without asking" in cure
     assert "stack-sized or ambiguous work asks before commit or branch-layout mutation" in cure
+
+
+def test_plate_routes_review_to_age_from_both_sides() -> None:
+    """The Plate-to-Age ownership edge, asserted on the producer and consumer."""
+    skill = read("skills/plate/SKILL.md")
+    age = read("skills/age/SKILL.md")
+    evals = cast(dict[str, object], json.loads(read("skills/plate/evals/evals.json")))
+    by_name = {
+        cast(str, case["name"]): case
+        for case in cast(list[dict[str, object]], evals["evals"])
+    }
+
+    # Producer: Plate refuses the review and names the owner.
+    guard = skill.split("## Routing guard", maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
+    assert "`/plate` never performs code-quality review." in guard
+    assert "It never computes a review surface for its own sake." in guard
+    assert "Review is `/age`" in guard
+    assert "Work for `/age` or `/gh` is a Plate-owned routing error" in skill
+
+    # Consumer: Age owns the review and defaults to the current working diff.
+    assert "name: age" in age
+    assert "Review a diff, PR, branch, or path" in age
+    assert "Review the current working diff." in age
+    assert "Do not apply fixes. Route them to /cure." in age
+
+    # The seam's failure mode halts at `classify`, not at a review verdict.
+    surface = cast(str, by_name["review-surface-request"]["expected_output"])
+    assert "Halts at classify" in surface
+    assert "plate-owned" in surface
+    assert "/age" in surface
+    assert "never blending a quality verdict into the completion record" in surface
 
 
 def test_plate_is_installed_and_routed() -> None:

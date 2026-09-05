@@ -1,7 +1,7 @@
 # Durable writes
 
-Do not publish until you write and read back every promised artifact.
-Also write and read back each durable fact that you find during implementation.
+Write every promised artifact. Read each artifact back. Do not publish before both steps finish.
+Also write each durable fact that you find during implementation. Read each fact back.
 
 ## Inventory
 
@@ -36,7 +36,7 @@ Run these three calls in order for each tracked file:
 3. **Diff read-back** — Re-read the written range or diff the file.
    Compare the target, essential contents, and expected revision. Then mark the row as `verified`.
 
-A rejected write means the file drifted. Re-read for a new tag and retry that section.
+A rejected write means the file drifted. Read the file again for a new tag. Then retry that section.
 After a rejection, never retry with the stale tag. Also, never fall back to a shell redirect or a host editor.
 
 ## Verification
@@ -57,5 +57,15 @@ The completion rows must name that placement before you submit the stack.
 
 ## `/hard-cheese` handoff
 
-When `--hard` is active, pass the final inventory, completion rows, tracked
-artifact diff, and quality-gate result into `/hard-cheese` before publication.
+When `--hard` is active, pass one JSON context into `/hard-cheese` before publication.
+The context requires four fields:
+
+| Field | Value |
+| --- | --- |
+| `artifacts` | The completion rows in the exact shape `{target, backend, verified}` |
+| `inventory` | The final required and optional artifact list |
+| `tracked_diff_digest` | The digest of the tracked artifact diff at the reviewed state |
+| `gate` | The quality gate command and its result |
+
+Halt when a field is missing. Halt when a row is unverified.
+Compute `tracked_diff_digest` from the reviewed tracked tree. Do not reuse a digest from an earlier state.

@@ -4,5 +4,5 @@
 
 | Command | Purpose |
 | --- | --- |
-| `stack-tools` | Detect supported stacked-PR providers without mutating the repo |
+| `stack-tools` | Detect supported stacked-PR providers without mutating the repository |
 | `validate-publication` | Validate terminal publication evidence |

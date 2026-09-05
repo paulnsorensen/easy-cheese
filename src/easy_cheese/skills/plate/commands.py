@@ -24,7 +24,8 @@ def _validate_publication(argv: list[str]) -> int:
 
 COMMANDS = (
     derive_command(
-        _stack_tools, "Detect supported stacked-PR providers without mutating the repo"
+        _stack_tools,
+        "Detect supported stacked-PR providers without mutating the repository",
     ),
     derive_command(_validate_publication, "Validate terminal publication evidence"),
 )

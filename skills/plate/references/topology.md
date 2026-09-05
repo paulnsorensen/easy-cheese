@@ -15,7 +15,7 @@ For a **new PR**, resolve topology before any commit or branch-layout mutation:
      Put incidental fixes in a separate change. Never put them in a feature or fix.
      A move or rename is semantics-altering if it changes an externally observable name, path, API, or configuration key.
      Use the same classification for a changed serialized shape, command, or documented contract.
-   - Choose **single** and proceed without asking when the change is one cohesive review unit.
+   - Choose **single** when the change is one cohesive review unit. Then proceed without asking.
      Its implementation, tests, docs, and durable artifacts must serve one behavior or contract.
      A split must not leave incomplete behavior. It must not force reviewers to reconstruct the whole.
    - Recommend **stacked** when the change has independently reviewable ordered layers.
@@ -30,7 +30,7 @@ For a **new PR**, resolve topology before any commit or branch-layout mutation:
    For ambiguity, state the competing evidence. Recommend the best-supported option.
    Do not choose silently.
 
-This policy is unchanged under `--auto`. Transport any required question
+This policy stays unchanged under `--auto`. Transport any required question
 through
 [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md).
 
@@ -49,9 +49,19 @@ question:
       description: Split the named layers into ordered branches and dependent PRs.
 ```
 
+## Answer normalization
+
+The transport preserves an `Other` answer. It returns free text with an `other:` prefix.
+Read the returned answer. Then apply these rules:
+
+- Map the answer to `single` or `stacked` only when its text is unambiguous.
+- Ask one clarification question for every other answer. Offer the same two options.
+- Halt at `topology` when the clarification is also ambiguous. Report the answer.
+- Persist only `single` or `stacked`. Never persist free text.
+
 A supplied `pr_plan` is evidence for a stack recommendation. It can provide explicit commit and file boundaries.
 It cannot override an explicit user choice or another verified topology resolution.
-If stacked is selected without clear user or plan boundaries, ask for the split.
+Ask for the split when stacked has no clear user or plan boundaries.
 Do not invent the boundaries.
 
 A prior `/plate` **topology preflight** for the same run is the resolution.
@@ -69,12 +79,30 @@ It stops before any commit, branch mutation, push, or PR operation.
 
 ## Repair-worktree topology
 
-First, run the repair pathway's mechanical file-overlap check.
+The branch name is `worktree-agent-repair-*`. Apply the policy above to any other branch.
+
+The repair handoff must carry `run_branch`. This field names the verified run branch.
+Halt at `topology` when `run_branch` is absent. A missing field is not evidence of a deleted branch.
+
+Then run the mechanical file-overlap check.
 See [`../../cook/references/quality-gates.md`](../../cook/references/quality-gates.md) § Repair pathway.
-The branch name is `worktree-agent-repair-*`.
-If there are no shared files, publish an ordinary independent PR against `main`.
-Use the same path if the original run branch no longer exists.
-At or below the small-repair threshold, move shared files onto the run branch.
-Do not publish these files independently.
-Above the threshold, restack with the repair as the base PR. Use the stack process in `stacks.md`.
-Apply the policy above to any other branch.
+Compute the overlap with one command:
+
+```bash
+git diff --name-only --find-renames "$(git merge-base <run-branch> <repair-branch>)" <repair-branch>
+```
+
+Compare that path set with the same command run for `<run-branch>`. The shared paths are the overlap.
+Count the changed lines of each shared path with `git diff --numstat` over the same range.
+Count a rename as its changed lines only. Count a binary path as one changed line.
+Halt at `topology` when `--numstat` reports `-` for a path that is not binary.
+
+Then select the topology:
+
+- Publish an ordinary independent pull request against `main` when there are no shared paths.
+- Verify branch deletion with `git rev-parse --verify <run-branch>` before you use the independent path for a missing run branch.
+  Halt at `topology` when the command cannot decide.
+- Move shared files onto the run branch at or below the small-repair threshold. Do not publish these files independently.
+  Use `python3 skills/cook/scripts/cook.pyz worktree harvest --branch <repair-branch> --onto <run-branch> --repo <run-worktree>`.
+  Resolve `<run-worktree>` from verified Git worktree state. Halt at `topology` when the command fails.
+- Restack with the repair as the base pull request above the threshold. Use the stack process in `stacks.md`.

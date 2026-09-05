@@ -14,6 +14,7 @@ from typing import cast
 _TIMEOUT_SECONDS = 5
 _REMOTE_TIMEOUT_SECONDS = 10
 _STATUS_LINE = re.compile(r"^HTTP/[\d.]+\s+(\d{3})\b")
+_STDERR_LIMIT = 2000
 
 
 def _run(
@@ -42,6 +43,12 @@ def _git_dir(cwd: Path) -> Path | None:
     return path if path.is_absolute() else cwd / path
 
 
+def _truncated(text: str) -> str | None:
+    """The trailing `_STDERR_LIMIT` characters of a diagnostic stream, if any."""
+    stripped = text.strip()
+    return stripped[-_STDERR_LIMIT:] if stripped else None
+
+
 def _configured_status(installed: bool, configured: bool) -> str:
     if not installed:
         return "not-installed"
@@ -58,20 +65,7 @@ def _http_status(stdout: str) -> int | None:
     return codes[-1] if codes else None
 
 
-def _gh_stack_enablement(cwd: Path) -> tuple[str, bool | None]:
-    """Classify the documented read-only `gh stack` enablement preflight.
-
-    `GET /repos/{owner}/{repo}/stacks` answers 200 when Stacked PRs is enabled
-    and 404 when it is not. Every other outcome — authentication, service, or
-    an unresolvable repository — stays indeterminate so the caller keeps the
-    exit-code-4 fallback instead of reporting a false enablement verdict.
-    """
-    result = _run(
-        ["gh", "api", "--include", "repos/{owner}/{repo}/stacks"],
-        cwd,
-        timeout=_REMOTE_TIMEOUT_SECONDS,
-    )
-    status = _http_status(result.stdout) if result is not None else None
+def _classify(status: int | None) -> tuple[str, bool | None]:
     if status is None:
         return "remote-check-required", None
     if 200 <= status < 300:
@@ -81,6 +75,34 @@ def _gh_stack_enablement(cwd: Path) -> tuple[str, bool | None]:
     if status in {401, 403}:
         return "auth-required", None
     return "service-error", None
+
+
+def _gh_stack_enablement(cwd: Path) -> dict[str, object]:
+    """Classify the documented read-only `gh stack` enablement preflight.
+
+    `GET /repos/{owner}/{repo}/stacks` answers 200 when Stacked PRs is enabled
+    and 404 when it is not. Every other outcome — authentication, service, or
+    an unresolvable repository — stays indeterminate so the caller keeps the
+    exit-code-4 fallback instead of reporting a false enablement verdict.
+
+    `gh-stack.md` requires the caller to preserve the status and stderr of a
+    service failure, so the probe reports `http_status`, `exit_status`, and
+    `stderr` beside the verdict instead of discarding them.
+    """
+    result = _run(
+        ["gh", "api", "--include", "repos/{owner}/{repo}/stacks"],
+        cwd,
+        timeout=_REMOTE_TIMEOUT_SECONDS,
+    )
+    status = _http_status(result.stdout) if result is not None else None
+    verdict, signal = _classify(status)
+    return {
+        "status": verdict,
+        "repository_signal": signal,
+        "http_status": status,
+        "exit_status": result.returncode if result is not None else None,
+        "stderr": _truncated(result.stderr) if result is not None else None,
+    }
 
 
 def detect_stack_tools(cwd: Path) -> dict[str, object]:
@@ -113,9 +135,18 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
         )
     )
 
-    gh_stack_status, gh_stack_signal = (
-        _gh_stack_enablement(cwd) if gh_stack_installed else ("not-installed", None)
+    gh_stack: dict[str, object] = (
+        _gh_stack_enablement(cwd)
+        if gh_stack_installed
+        else {
+            "status": "not-installed",
+            "repository_signal": None,
+            "http_status": None,
+            "exit_status": None,
+            "stderr": None,
+        }
     )
+    gh_stack_status = cast(str, gh_stack["status"])
 
     providers: dict[str, dict[str, object]] = {
         "graphite": {
@@ -128,11 +159,7 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
             "repository_signal": git_town_signal,
             "status": _configured_status(git_town_installed, git_town_signal),
         },
-        "gh-stack": {
-            "installed": gh_stack_installed,
-            "repository_signal": gh_stack_signal,
-            "status": gh_stack_status,
-        },
+        "gh-stack": {"installed": gh_stack_installed, **gh_stack},
     }
     recommended = next(
         (

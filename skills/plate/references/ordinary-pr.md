@@ -1,7 +1,7 @@
 # Ordinary PR publication
 
-Use this path only after the final writing gate, green project gate, named-file
-staging, commit, and commit verification.
+Use this path only after the final writing gate, the green quality gate, named-file
+staging, the commit, and the commit verification.
 
 ## New PR
 
@@ -17,7 +17,7 @@ staging, commit, and commit verification.
 gh pr create --title "<title>" --body-file <body-path> --base <base> --head <head>
 ```
 
-1. Verify with `gh pr view --json number,url,title,baseRefName,headRefName,state`.
+7. Verify with `gh pr view --json number,url,title,baseRefName,headRefName,state`.
 
 Do not use `--fill` when it would omit artifact or verification details.
 
@@ -39,12 +39,12 @@ Never create a duplicate PR when one already exists.
 Publication-relevant GitHub operations remain here:
 
 - Add `--draft` when explicitly requested.
-- Add `--reviewer <login>` or `--assignee <login>` only from supplied
+- Add `--reviewer <login>` or `--assignee <login>` only from the supplied
   publication metadata.
 - Use `gh pr edit <number> --title <title> --body-file <path>` when verified
   commits make existing metadata inaccurate.
 - Use `gh pr ready <number>` only when asked to publish a draft.
-- `gh pr checks` may verify publication context; CI triage, review, comments,
+- Use `gh pr checks` to verify publication context. CI triage, review, comments,
   and merge remain `/gh`.
 
 Query the current head for an existing PR before creation.
@@ -60,8 +60,8 @@ Write for the reviewer's verification pass:
 
 - A semantics-preserving change says so in its first line. It names the mechanism and states the invariant to verify.
   Examples include a behavior-preserving refactor, an internal move, an internal rename, or a formatting-only change.
-  Verify unchanged behavior and add a mechanism-specific check. For example, verify that a move drops or duplicates nothing. This tells the reviewer
-  to scan for accidental semantic drift rather than infer intent line by line.
+  Verify unchanged behavior. Add a mechanism-specific check. For example, verify that a move drops nothing and duplicates nothing.
+  This check tells the reviewer to scan for accidental semantic drift. The reviewer does not infer intent line by line.
 - A semantics-altering change names the changed behavior or contract. It also names its observable verification.
   This information directs scrutiny to the changed logic.
 - A change that is not self-contained links its context. Link the spike branch, plan, or stack siblings that show the abstraction in use.

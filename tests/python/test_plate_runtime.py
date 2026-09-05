@@ -191,6 +191,9 @@ def test_stack_tools_reports_available_providers(
             "installed": True,
             "repository_signal": True,
             "status": "available",
+            "http_status": 200,
+            "exit_status": 0,
+            "stderr": None,
         },
     }
 
@@ -213,6 +216,9 @@ def test_unrelated_gh_extension_does_not_match_gh_stack(
         "installed": False,
         "repository_signal": None,
         "status": "not-installed",
+        "http_status": None,
+        "exit_status": None,
+        "stderr": None,
     }
 
 
@@ -270,6 +276,90 @@ def test_gh_stack_preflight_classifies_every_response(
     assert providers["gh-stack"]["repository_signal"] is signal
 
 
+def test_gh_stack_service_error_preserves_status_exit_and_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`gh-stack.md` requires the status and stderr of a service failure."""
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(
+            PREFLIGHT,
+            returncode=1,
+            stdout=response("HTTP/2.0 503 Service Unavailable"),
+            stderr="gh: Server Error (HTTP 503)\n",
+        ),
+        tools=GH_ONLY,
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]],
+        stack_tools.detect_stack_tools(tmp_path)["providers"],
+    )
+
+    assert providers["gh-stack"] == {
+        "installed": True,
+        "repository_signal": None,
+        "status": "service-error",
+        "http_status": 503,
+        "exit_status": 1,
+        "stderr": "gh: Server Error (HTTP 503)",
+    }
+
+
+def test_gh_stack_indeterminate_probe_reports_its_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(
+            PREFLIGHT,
+            returncode=1,
+            stderr="none of the git remotes point to a known GitHub host\n",
+        ),
+        tools=GH_ONLY,
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]],
+        stack_tools.detect_stack_tools(tmp_path)["providers"],
+    )
+
+    assert providers["gh-stack"]["status"] == "remote-check-required"
+    assert providers["gh-stack"]["http_status"] is None
+    assert providers["gh-stack"]["exit_status"] == 1
+    assert (
+        providers["gh-stack"]["stderr"]
+        == "none of the git remotes point to a known GitHub host"
+    )
+
+
+def test_gh_stack_stderr_is_capped_at_the_documented_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(
+            PREFLIGHT,
+            returncode=1,
+            stdout=response("HTTP/2.0 500 Internal Server Error"),
+            stderr="A" + "B" * 2500,
+        ),
+        tools=GH_ONLY,
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]],
+        stack_tools.detect_stack_tools(tmp_path)["providers"],
+    )
+
+    stderr = cast(str, providers["gh-stack"]["stderr"])
+    assert len(stderr) == 2000
+    assert stderr == "B" * 2000
+
+
 @pytest.mark.parametrize(
     ("preflight", "recommended"),
     [
@@ -323,6 +413,9 @@ def test_gh_stack_preflight_is_skipped_when_the_extension_is_absent(
         "installed": False,
         "repository_signal": None,
         "status": "not-installed",
+        "http_status": None,
+        "exit_status": None,
+        "stderr": None,
     }
 
 
