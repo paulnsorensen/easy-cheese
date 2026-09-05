@@ -1,7 +1,7 @@
 # Go De-slop Catalog
 
 This section provides Go evidence for the `age` `deslop` dimension.
-Each pattern identifies a Go-specific AI tell for review.
+Each pattern names a Go-specific AI signature for review.
 Most patterns map to a staticcheck or golangci-lint rule.
 These rules give reviewers citable names for findings.
 Use this section with the `deslop` rubric in `dimensions.md`.
@@ -30,8 +30,8 @@ Staticcheck `ST1005` checks error-string capitalization and punctuation.
 
 ## 2. Named returns with bare `return`
 
-AI often generates named returns.
-Named returns obscure the returned values.
+A bare `return` in a long function is the defect. A named result is not.
+Grade the bare `return`, not the declaration.
 
 ```go
 // SLOP
@@ -54,9 +54,12 @@ func getUser(id int) (*User, error) {
 }
 ```
 
-Use named returns only in `defer` recovery patterns.
-
-The `nakedret` and revive `bare-return` linters flag this pattern.
+A named result is correct in several cases that the Go guide permits.
+Use one to recover a panic in a `defer` block.
+Use one to document two results of the same type.
+Use one to modify a result in a `defer` block.
+Keep the explicit `return user, nil` form in every case.
+The `nakedret` and revive `bare-return` linters flag the bare `return`.
 
 ## 3. `context.TODO()` permanently
 
@@ -75,13 +78,16 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-`context.TODO()` means "I haven't decided which context to use yet."
-Choose a context before you ship production code.
+`context.TODO()` records that the caller has not chosen a context yet.
+Replace it with the caller's context before you ship production code.
+`context.Background()` stays correct at the top of `main`, in a test, and in an initializer.
 
 ## 4. Pointer to interface
 
-Avoid pointers to interfaces in almost all cases.
-Interfaces already act as reference types.
+Avoid a pointer to an interface in almost every case.
+An interface value is a two-word pair: a type and a value pointer.
+Passing it by value copies that pair, not the concrete data behind it.
+A pointer to an interface adds one indirection and no benefit.
 
 ```go
 // SLOP

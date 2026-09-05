@@ -1,6 +1,24 @@
 # Shell / Bash De-slop Catalog
 
-This catalog provides per-language evidence for the `age` `deslop` dimension. Each pattern identifies a shell-specific AI tell for review. Most patterns map to a ShellCheck code. Each code supplies a citable rule name for a finding. Use this catalog with `dimensions.md`'s `deslop` rubric. This catalog supplies the "Look for" detail. It does not define a separate severity scale.
+This catalog gives per-language evidence for the `age` `deslop` dimension.
+Each pattern names a shell-specific AI signature for review.
+Most patterns map to a ShellCheck code, which gives a citable rule name for a finding.
+Use this catalog with the `deslop` rubric in `dimensions.md`.
+This catalog supplies the detail. It defines no separate severity scale.
+
+## Detect the shell first
+
+Read the shebang line and the file extension before you grade a pattern.
+These rules are Bash rules unless a pattern says otherwise.
+
+| Shell | Rules that apply |
+| --- | --- |
+| `#!/bin/bash`, `#!/usr/bin/env bash`, `.bash` | Every rule in this catalog |
+| `#!/bin/sh`, `.sh` with no shebang, a POSIX target | Quoting and `cd` rules only. `[[ ... ]]` is a syntax error in POSIX shell. Use `[ ... ]` there |
+| A file that another script sources | See the sourced-file rules under each pattern |
+
+Do not raise a `[[ ... ]]` finding against a POSIX script.
+Do not raise a strict-mode finding against a sourced file.
 
 ## 1. Unquoted variables
 
@@ -47,11 +65,17 @@ rm -rf build/
 - The `-u` option reports undefined variables and catches typos such as `$UESR` instead of `$USER`.
 - The `-o pipefail` option makes a pipeline fail when any command fails, not only the last command.
 
-Use all three flags together. `set -e` alone is a half-measure. A script can silently swallow a left-side failure when it pipes through `jq`/`yq`/`grep`.
+Use all three flags together in an executable script.
+`set -e` alone is a half-measure. A script can silently swallow a left-side failure when it pipes through `jq`, `yq`, or `grep`.
 
-### Strict mode is not a cure-all
+Do not set strict mode in a file that another script sources.
+The options stay set in the calling shell after the source returns.
+An interactive shell can then exit on the next unset variable.
+Set the options inside each function of a sourced file instead.
 
-`set -e` has sharp edges (BashFAQ/105). Do not assume it catches every failure:
+### Strict mode does not catch every failure
+
+`set -e` has documented gaps (BashFAQ/105). Do not assume that it catches every failure:
 
 ```bash
 # MASKED — `local`'s own success hides the command's failure
@@ -80,9 +104,16 @@ for file in *.txt; do
     [[ -f "$file" ]] && process "$file"
 done
 
-# CLEAN — fd for complex searches
+# CLEAN — find for a recursive search
+find . -name '*.txt' -print0 | while IFS= read -r -d '' file; do
+    process "$file"
+done
+
+# CLEAN — fd only when the project already declares it as a dependency
 fd -e txt -x process {}
 ```
+
+Prefer the standard command. Use `fd` only when the project declares it.
 
 ## 4. Useless use of `cat`
 
@@ -112,7 +143,9 @@ nested=$(echo "$(date)")
 
 ## 6. `[ ]` instead of `[[ ]]`
 
-`[[ ]]` is safer because it prevents word splitting, supports regular expressions, and avoids quoting surprises.
+In Bash, `[[ ]]` is safer. It prevents word splitting, supports regular expressions, and avoids quoting surprises.
+`[[ ]]` is a Bash keyword. It fails in POSIX shell with `[[: not found`.
+Grade this pattern only when the shebang names Bash.
 
 ```bash
 # SLOP
@@ -200,11 +233,18 @@ This pattern has the highest consequence. A failed `cd` caused by a typo or perm
 cd "$build_dir"
 rm -rf ./*
 
-# CLEAN
+# CLEAN — in an executable script
 cd "$build_dir" || exit 1
+rm -rf ./*
+
+# CLEAN — in a function of a sourced file
+cd "$build_dir" || return 1
 rm -rf ./*
 ```
 
+Use `exit` only in an executable script.
+`exit` inside a sourced file terminates the calling shell.
+Use `return` in every function of a sourced file.
 ShellCheck rule `SC2164` flags this pattern.
 
 ## 12. Iterating command output with `for`
@@ -226,7 +266,8 @@ done
 readarray -t lines < <(cmd)
 ```
 
-ShellCheck rule `SC2044` covers find loops. ShellCheck rule `SC2046` covers unquoted `$(...)` generally.
+ShellCheck rule `SC2044` covers a `find` loop.
+ShellCheck rule `SC2046` covers an unquoted `$(...)` expansion.
 
 ## 13. Piping into `while read` and losing variables
 

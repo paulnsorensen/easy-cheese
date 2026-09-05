@@ -120,7 +120,7 @@ COMMANDS = (
     ),
     derive_command(
         _review_surface,
-        "Score the reviewable git surface that routing sizes against (JSON out)",
+        "Score the git surface that the age router sizes (JSON out)",
     ),
     derive_command(_severity, "Compute per-finding severity and fix-cost-now buckets"),
     derive_command(
@@ -128,7 +128,7 @@ COMMANDS = (
     ),
     derive_command(
         _review_lock,
-        "Record or verify the production tree digest that keeps /age review-only",
+        "Record the production tree digest that keeps /age review-only",
     ),
     derive_command(
         _write_handoff_artifact,
@@ -142,7 +142,7 @@ COMMANDS = (
         "Render an /age report's selection table and resolve selection verbs",
     ),
     derive_command(
-        _gates_cli, "Map a quality-gate scoreboard's booleans to a readiness verdict"
+        _gates_cli, "Map each quality-gate result to a readiness verdict"
     ),
     derive_command(
         _paths_cli, "Slugify, validate, resolve, and list .cheese artifact paths"

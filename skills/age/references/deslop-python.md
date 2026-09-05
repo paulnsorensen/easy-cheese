@@ -28,17 +28,26 @@ for item in items:
     process(item)
 ```
 
-## 2. Manual `None` checks instead of truthiness
+## 2. Redundant `None` and length checks
+
+A truth test is not a `None` check. It also rejects `""`, `0`, `0.0`, `[]`, `{}`, and `False`.
+Use it only when the empty value and the missing value need the same branch.
 
 ```python
-# SLOP
+# SLOP — three checks where the type allows one
 if user is not None and user.name is not None and len(user.name) > 0:
     greet(user.name)
 
-# CLEAN
+# CLEAN — when an empty name and a missing name take the same branch
 if user and user.name:
     greet(user.name)
+
+# CLEAN — when the branches differ, keep the explicit check
+if user is not None and user.name is not None:
+    greet(user.name)
 ```
+
+Keep `is not None` on any value that can hold `0`, `False`, or an empty container.
 
 ## 3. Old-style string formatting
 
@@ -49,20 +58,28 @@ AI mixes `%`, `.format()`, and f-strings inconsistently.
 message = "Hello, %s! You have %d messages." % (name, count)
 message = "Hello, {}!".format(name)
 
-# CLEAN — f-strings everywhere (Python 3.6+)
+# CLEAN — f-strings for a plain string
 message = f"Hello, {name}! You have {count} messages."
+
+# CLEAN — %-style for a logging call, which formats only when the record emits
+logger.info("Hello, %s! You have %d messages.", name, count)
 ```
+
+Do not use an f-string in a logging call.
+The f-string formats on every call, even when the level filters the record.
+Ruff rule `G004` flags an f-string in a logging call.
 
 ## 4. Silent `except: pass`
 
-Swallowing exceptions without handling creates the largest debugging time sink.
+An unhandled exception that the code swallows leaves no evidence.
+The defect then costs the most time to find.
 
 ```python
 # SLOP
 try:
     risky_operation()
 except Exception:
-    pass  # Silent failure — good luck debugging
+    pass  # Silent failure: no log, no trace, no evidence
 
 # CLEAN — either handle it meaningfully or don't catch it
 # If you truly need to ignore: except SpecificError as e: logger.debug(...)
@@ -70,8 +87,10 @@ except Exception:
 
 ## 5. Raw dicts for structured data
 
-AI returns `{"id": 1, "name": "Alice"}` instead of using a dataclass.
-A dataclass provides type safety, IDE support, and self-documenting code.
+AI returns `{"id": 1, "name": "Alice"}` instead of a declared type.
+A dataclass gives static types, editor support, and a named shape.
+A dataclass does not check a type at run time. It assigns whatever the caller passes.
+Use `pydantic` or `attrs` with validators when the data crosses a trust boundary.
 
 ```python
 # SLOP
@@ -244,4 +263,4 @@ logger.debug("processing %s", item)
 
 - Ruff rule docs (docs.astral.sh/ruff/rules) verify every rule code above.
 - charlax/professional-programming documents error-handling anti-patterns with before-and-after exception examples.
-- The Greg-style caveat uses the PTH123 dispute thread (discuss.python.org/t/106904) to calibrate the pathlib rule.
+- The `pathlib` rule follows the PTH123 dispute thread (discuss.python.org/t/106904).

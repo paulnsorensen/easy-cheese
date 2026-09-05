@@ -7,14 +7,14 @@
 | `age-route` | Size an /age review into single-pass or fan-out lanes (JSON in, JSON out) |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
 | `findings-cli` | Render an /age report's selection table and resolve selection verbs |
-| `gates-cli` | Map a quality-gate scoreboard's booleans to a readiness verdict |
+| `gates-cli` | Map each quality-gate result to a readiness verdict |
 | `handoff-cli` | Render, parse, and dispatch-split handoff preambles |
 | `html-report` | Render an /age markdown report into one offline HTML file |
 | `paths-cli` | Slugify, validate, resolve, and list .cheese artifact paths |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
-| `review-lock` | Record or verify the production tree digest that keeps /age review-only |
-| `review-surface` | Score the reviewable git surface that routing sizes against (JSON out) |
+| `review-lock` | Record the production tree digest that keeps /age review-only |
+| `review-surface` | Score the git surface that the age router sizes (JSON out) |
 | `severity` | Compute per-finding severity and fix-cost-now buckets |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text |
 | `write-handoff-artifact` | Write an age handoff atomically after the review lock verifies the tree |

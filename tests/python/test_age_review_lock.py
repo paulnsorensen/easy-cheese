@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from easy_cheese.shared import git_utils
+from easy_cheese.shared import cli, git_utils
 from easy_cheese.skills.age import review_lock
 
 
@@ -249,7 +249,7 @@ def test_a_malformed_lock_blocks_rather_than_silently_passing(
 def test_outside_a_git_work_tree_the_gate_degrades_to_a_no_op(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert review_lock.tree_digest(tmp_path) is None
+    assert review_lock.tree_digest(tmp_path, slug="demo") is None
     assert review_lock.gated_write_handoff_artifact(_write_args(tmp_path, "demo")) == 0
     assert _report(tmp_path, "demo").is_file()
     _ = capsys.readouterr()
@@ -286,3 +286,113 @@ def test_committed_age_bundle_exposes_the_review_lock_gate(repo: Path) -> None:
     assert blocked.returncode == 2, blocked.stdout
     assert "/cure" in blocked.stderr
     assert not _report(repo, "demo").exists()
+
+
+def test_a_configured_textconv_filter_never_runs_during_the_lock(repo: Path) -> None:
+    """A repository under review must not execute commands as the reviewer."""
+    marker = repo / "textconv-ran"
+    _ = (repo / ".gitattributes").write_text("*.py diff=probe\n", encoding="utf-8")
+    _git(repo, "add", ".gitattributes")
+    _git(repo, "commit", "-m", "attributes")
+    _git(repo, "config", "diff.probe.textconv", f"touch {marker} && cat")
+    _ = (repo / "app.py").write_text("def add(a, b):\n    return a\n", encoding="utf-8")
+
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    assert not marker.exists()
+
+
+def test_a_git_failure_fails_closed_instead_of_disabling_the_gate(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A probe that cannot answer must not read as "no repository"."""
+    missing = repo / "gone"
+    with pytest.raises(cli.CliError):
+        _ = review_lock.tree_digest(missing, slug="demo")
+    assert review_lock.gated_write_handoff_artifact(_write_args(missing, "demo")) == 2
+    assert not (missing / ".cheese" / "age" / "demo.md").exists()
+    _ = capsys.readouterr()
+
+
+def test_staged_content_counts_before_the_first_commit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With no HEAD, plain `git diff` hides the index; the digest must not."""
+    _git(tmp_path, "init", "--initial-branch=main", ".")
+    _git(tmp_path, "config", "user.email", "test@example.com")
+    _git(tmp_path, "config", "user.name", "Test")
+    _ = (tmp_path / ".gitignore").write_text(".cheese/\n", encoding="utf-8")
+    source = tmp_path / "app.py"
+    _ = source.write_text("original\n", encoding="utf-8")
+    _git(tmp_path, "add", "-A")
+
+    first = review_lock.tree_digest(tmp_path, slug="demo")
+    _ = source.write_text("inline fix\n", encoding="utf-8")
+    _git(tmp_path, "add", "app.py")
+
+    assert review_lock.tree_digest(tmp_path, slug="demo") != first
+    _ = capsys.readouterr()
+
+
+def test_changing_the_fan_out_packet_after_the_lock_blocks_the_report(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The packet is review evidence, so it may not move under a live lock."""
+    packet = repo / ".cheese" / "age" / "demo-packet.md"
+    packet.parent.mkdir(parents=True, exist_ok=True)
+    _ = packet.write_text("# packet\n\noriginal evidence\n", encoding="utf-8")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+
+    _ = packet.write_text("# packet\n\nrewritten evidence\n", encoding="utf-8")
+
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    assert "production tree changed" in capsys.readouterr().err
+    assert not _report(repo, "demo").exists()
+
+
+def test_another_slugs_report_still_counts_as_production_state(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    other = repo / ".cheese" / "age" / "other.md"
+    other.parent.mkdir(parents=True, exist_ok=True)
+    _ = other.write_text("# Age Report — other\n", encoding="utf-8")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+
+    _ = other.write_text("# Age Report — other\n\nedited\n", encoding="utf-8")
+
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    assert "production tree changed" in capsys.readouterr().err
+
+
+def test_the_lock_resolves_the_repository_root_from_a_nested_directory(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    nested = repo / "src" / "deep"
+    nested.mkdir(parents=True)
+    _ = (nested / "mod.py").write_text("VALUE = 1\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "nested")
+
+    assert review_lock.main(["--slug", "demo", "--root", str(nested)]) == 0
+    assert review_lock.lock_path(root=repo, slug="demo").is_file()
+    _ = capsys.readouterr()
+
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 0
+
+    _ = (nested / "mod.py").write_text("VALUE = 2\n", encoding="utf-8")
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    assert "production tree changed" in capsys.readouterr().err
+
+
+def test_a_symlinked_lock_directory_is_refused(repo: Path, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    scratch = repo / ".cheese"
+    scratch.mkdir(exist_ok=True)
+    (scratch / "age").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(cli.CliError, match="symlink"):
+        _ = review_lock.lock_path(root=repo, slug="demo")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 2
+    assert not (outside / f"demo{review_lock.LOCK_SUFFIX}").exists()

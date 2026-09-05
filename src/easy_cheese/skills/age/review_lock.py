@@ -10,12 +10,20 @@ Step 1 of the age flow records a digest of the production tree
 Applying a fix inline moves the digest, so the report cannot be written from a
 context that applied one.
 
-Digest scope: the captured ``HEAD`` identity and tracked-file content (the
-working diff against ``HEAD``), plus untracked-file paths and content. Review
-inputs under ``.cheese/`` are included, except for this phase's lock and report
-outputs. Outside a git work tree, no production tree exists for comparison, so
-both capture and verification degrade to a no-op rather than blocking the
-review.
+Digest scope: the captured ``HEAD`` identity and tracked-file content (index and
+worktree), plus untracked-file paths and content. Review inputs under
+``.cheese/`` are included, except for this slug's own lock, report body, report,
+and HTML copy. Every other ``.cheese/age`` file — the fan-out packet included —
+stays in the digest, so a report cannot be certified after its own evidence
+moved.
+
+Git runs with text conversion, external diff drivers, hooks, and the file-system
+monitor disabled, so a repository under review cannot execute a configured
+command with the reviewer's privileges.
+
+Outside a git work tree there is no production tree to compare against, so both
+capture and verification degrade to a no-op. Every other git failure is an
+error: the gate fails closed rather than certifying an unchecked tree.
 
 The gate raises the cost of the boundary; it does not make it unbypassable. An
 agent that captures the lock *after* editing still passes. What it removes is
@@ -38,30 +46,82 @@ from easy_cheese.shared import cli, git_utils, write_handoff_artifact
 PHASE = "age"
 SCRATCH_DIR = ".cheese"
 LOCK_SUFFIX = ".review-lock.json"
+BODY_SUFFIX = "-body.md"
 _LOCK_COMMAND = "python3 skills/age/scripts/age.pyz review-lock --slug"
 _GIT_CHUNK_SIZE = 128 * 1024
 _OUTPUT_PREFIX = f"{SCRATCH_DIR}/{PHASE}/"
+# Git can run repository-configured commands during a diff (textconv filters,
+# external diff drivers, hooks, the fs monitor). The review lock reads a tree it
+# does not trust, so it disables every command-valued helper.
+_GIT_SAFE_CONFIG = (
+    "-c",
+    "diff.external=",
+    "-c",
+    "core.fsmonitor=",
+    "-c",
+    "core.hooksPath=/dev/null",
+)
+_DIFF_BASE = ("diff", "--no-ext-diff", "--no-textconv", "--no-color")
+_NOT_A_REPOSITORY = "not a git repository"
 
 
 class _Digest(Protocol):
     def update(self, data: bytes, /) -> None: ...
 
 
-def _is_git_worktree(root: Path) -> bool:
-    result = git_utils.run_git(["rev-parse", "--is-inside-work-tree"], cwd=root)
-    return result.returncode == 0 and result.stdout.strip() == "true"
+def _run_git(args: list[str], root: Path) -> subprocess.CompletedProcess[str]:
+    try:
+        return git_utils.run_git([*_GIT_SAFE_CONFIG, *args], cwd=root)
+    except OSError as exc:
+        raise cli.CliError(f"cannot run git {' '.join(args)}: {exc}") from exc
 
 
-def _is_review_output(name: str) -> bool:
+def repo_root(root: Path) -> Path | None:
+    """Return the top-level work tree for `root`, or None outside a repository.
+
+    Raises `CliError` for every other git failure. A probe that cannot answer
+    must not read as "no repository": that answer disables the gate.
+    """
+    result = _run_git(["rev-parse", "--show-toplevel"], root)
+    if result.returncode == 0:
+        top = result.stdout.strip()
+        if not top:
+            raise cli.CliError(f"git reported no work tree for {root}")
+        return Path(top)
+    detail = result.stderr.strip() or f"git exited {result.returncode}"
+    if _NOT_A_REPOSITORY in detail.lower():
+        return None
+    raise cli.CliError(f"cannot resolve the git work tree at {root}: {detail}")
+
+
+def _output_stems(slug: str) -> tuple[str, ...]:
+    """This slug's own report outputs — the only files the lock may ignore.
+
+    The fan-out packet (`<slug>-packet.md`) is review *evidence*, not output, so
+    it stays in the digest. Assemble it before the lock.
+    """
+    return (
+        f"{slug}{LOCK_SUFFIX}",
+        f"{slug}.md",
+        f"{slug}.html",
+        f"{slug}{BODY_SUFFIX}",
+    )
+
+
+def _is_review_output(name: str, slug: str) -> bool:
     if not name.startswith(_OUTPUT_PREFIX):
         return False
-    return name.endswith(LOCK_SUFFIX) or name.endswith(".md")
+    return name[len(_OUTPUT_PREFIX) :] in _output_stems(slug)
+
+
+def _exclude_pathspecs(slug: str) -> list[str]:
+    return [f":(exclude,literal){_OUTPUT_PREFIX}{stem}" for stem in _output_stems(slug)]
 
 
 def _stream_git(args: list[str], root: Path, consume: Callable[[bytes], None]) -> None:
     try:
         process: subprocess.Popen[bytes] = subprocess.Popen(
-            ["git", "-C", str(root), *args],
+            ["git", "-C", str(root), *_GIT_SAFE_CONFIG, *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
@@ -90,9 +150,11 @@ def _stream_git(args: list[str], root: Path, consume: Callable[[bytes], None]) -
         raise cli.CliError(f"git {' '.join(args)} failed: {detail}")
 
 
-def _hash_untracked_path(raw_name: bytes, root: Path, digest: _Digest) -> None:
+def _hash_untracked_path(
+    raw_name: bytes, root: Path, digest: _Digest, slug: str
+) -> None:
     name = os.fsdecode(raw_name)
-    if _is_review_output(name):
+    if _is_review_output(name, slug):
         return
     digest.update(b"path\0")
     digest.update(raw_name)
@@ -112,7 +174,9 @@ def _hash_untracked_path(raw_name: bytes, root: Path, digest: _Digest) -> None:
     digest.update(b"\0")
 
 
-def _hash_untracked_listing(args: list[str], root: Path, digest: _Digest) -> None:
+def _hash_untracked_listing(
+    args: list[str], root: Path, digest: _Digest, slug: str
+) -> None:
     pending = bytearray()
 
     def consume(chunk: bytes) -> None:
@@ -121,17 +185,17 @@ def _hash_untracked_listing(args: list[str], root: Path, digest: _Digest) -> Non
         while (end := pending.find(b"\0", offset)) >= 0:
             raw_name = bytes(pending[offset:end])
             if raw_name:
-                _hash_untracked_path(raw_name, root, digest)
+                _hash_untracked_path(raw_name, root, digest, slug)
             offset = end + 1
         if offset:
             del pending[:offset]
 
     _stream_git(args, root, consume)
     if pending:
-        _hash_untracked_path(bytes(pending), root, digest)
+        _hash_untracked_path(bytes(pending), root, digest, slug)
 
 
-def _hash_untracked(root: Path, digest: _Digest) -> None:
+def _hash_untracked(root: Path, digest: _Digest, slug: str) -> None:
     digest.update(b"untracked\0")
     _hash_untracked_listing(
         [
@@ -146,68 +210,96 @@ def _hash_untracked(root: Path, digest: _Digest) -> None:
         ],
         root,
         digest,
+        slug,
     )
     _hash_untracked_listing(
         ["ls-files", "--others", "--full-name", "-z", "--", SCRATCH_DIR],
         root,
         digest,
+        slug,
     )
 
 
-def tree_digest(root: Path) -> str | None:
-    """Hash the captured Git tree and every review input."""
-    if not _is_git_worktree(root):
+def tree_digest(root: Path, *, slug: str) -> str | None:
+    """Hash the captured git tree and every review input for `slug`."""
+    top = repo_root(root)
+    if top is None:
         return None
-    head = git_utils.run_git(
-        ["rev-parse", "--verify", "--quiet", "HEAD"],
-        cwd=root,
-    )
+    head = _run_git(["rev-parse", "--verify", "--quiet", "HEAD"], top)
+    if head.returncode not in (0, 1):
+        raise cli.CliError(
+            f"cannot read HEAD in {top}: {head.stderr.strip() or head.returncode}"
+        )
     digest = hashlib.sha256()
-    digest.update(b"age-review-lock-v2\0head\0")
+    digest.update(b"age-review-lock-v3\0head\0")
     if head.returncode == 0:
         digest.update(head.stdout.strip().encode("ascii", "replace"))
     else:
         digest.update(b"<unborn>")
-    digest.update(b"\0diff\0")
-    diff_args = ["diff", "--no-ext-diff", "--no-color"]
+    excludes = _exclude_pathspecs(slug)
     if head.returncode == 0:
-        diff_args.append("HEAD")
-    diff_args += [
-        "--",
-        ".",
-        f":(exclude,glob){_OUTPUT_PREFIX}*{LOCK_SUFFIX}",
-        f":(exclude,glob){_OUTPUT_PREFIX}*.md",
-    ]
-    _stream_git(diff_args, root, digest.update)
-    _hash_untracked(root, digest)
+        digest.update(b"\0diff\0")
+        _stream_git([*_DIFF_BASE, "HEAD", "--", ".", *excludes], top, digest.update)
+    else:
+        # No HEAD: `git diff` alone compares the worktree to the index and hides
+        # staged content, so hash the index and then the worktree delta.
+        digest.update(b"\0index\0")
+        _stream_git([*_DIFF_BASE, "--cached", "--", ".", *excludes], top, digest.update)
+        digest.update(b"\0worktree\0")
+        _stream_git([*_DIFF_BASE, "--", ".", *excludes], top, digest.update)
+    _hash_untracked(top, digest, slug)
     return digest.hexdigest()
+
+
+def _reject_symlink_components(root: Path, target: Path) -> None:
+    current = root
+    for part in target.relative_to(root).parts:
+        current = current / part
+        if current.is_symlink():
+            raise cli.CliError(
+                f"refusing to follow a symlink in the review-lock path: {current}"
+            )
 
 
 def lock_path(*, root: Path, slug: str) -> Path:
     if not slug:
         raise cli.CliError("--slug must be non-empty")
     cli.reject_path_segment("--slug", slug)
-    return root / SCRATCH_DIR / PHASE / f"{slug}{LOCK_SUFFIX}"
+    target = root / SCRATCH_DIR / PHASE / f"{slug}{LOCK_SUFFIX}"
+    _reject_symlink_components(root, target)
+    return target
+
+
+def _write_no_follow(target: Path, text: str) -> None:
+    """Write `text` to `target` atomically without following a symlink."""
+    scratch = target.with_name(f".{target.name}.tmp")
+    scratch.unlink(missing_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    try:
+        handle = os.open(scratch, flags, 0o600)
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                _ = stream.write(text)
+        except BaseException:
+            scratch.unlink(missing_ok=True)
+            raise
+        os.replace(scratch, target)
+    except OSError as exc:
+        raise cli.CliError(f"cannot write review lock {target}: {exc}") from exc
 
 
 def capture(*, root: Path, slug: str) -> Path:
     """Record the current production-tree digest for `slug`; return the path."""
-    target = lock_path(root=root, slug=slug)
+    top = repo_root(root) or root
+    target = lock_path(root=top, slug=slug)
     target.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"slug": slug, "digest": tree_digest(root)}
-    _ = target.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    _reject_symlink_components(top, target)
+    payload = {"slug": slug, "digest": tree_digest(top, slug=slug)}
+    _write_no_follow(target, json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return target
 
 
-def verify(*, root: Path, slug: str) -> None:
-    """Raise CliError unless the tree still matches `slug`'s review lock."""
-    current = tree_digest(root)
-    if current is None:
-        # No git work tree: no production tree to compare against.
-        return
-    target = lock_path(root=root, slug=slug)
+def _locked_digest(target: Path, slug: str) -> str:
     if not target.is_file():
         raise cli.CliError(
             f"no review lock for {slug!r}: run `{_LOCK_COMMAND} {slug}` at the start "
@@ -228,6 +320,19 @@ def verify(*, root: Path, slug: str) -> None:
             f"review lock {target} recorded no digest: re-run `{_LOCK_COMMAND} {slug}` "
             + "from inside the git work tree under review."
         )
+    return locked
+
+
+def verify(*, root: Path, slug: str) -> None:
+    """Raise CliError unless the tree still matches `slug`'s review lock."""
+    top = repo_root(root)
+    if top is None:
+        # No git work tree: no production tree to compare against.
+        return
+    # Validate the lock before the digest: a missing lock must not pay for the
+    # git walk first.
+    locked = _locked_digest(lock_path(root=top, slug=slug), slug)
+    current = tree_digest(top, slug=slug)
     if locked != current:
         raise cli.CliError(
             f"the production tree changed after {slug!r}'s review lock: /age does not "

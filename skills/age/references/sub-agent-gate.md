@@ -1,18 +1,19 @@
 # Sub-agent context gate (shared kernel)
 
-These cross-skill rules govern work that a skill forks to a sub-agent.
-Anthropic's effective-context-engineering guidance, Tavily's published skills, and cross-harness norms from LangChain DeepAgents and the Skills standard informed them.
+These cross-skill rules govern work that a skill sends to a sub-agent.
 
 Each skill names its own triggers.
 This file is the single source of truth for the rules that every skill shares.
 
 ## Digest contract
 
-The sub-agent returns roughly 2 KB or less.
+The sub-agent returns 2 KB or less of UTF-8 text.
 It returns a structured summary, citations, and gaps.
-It returns no raw bodies, full file dumps, or copy-paste of fetched content.
-Each skill names the digest contents, such as a claim table, orientation paragraph, or root-cause summary.
-The size ceiling never relaxes.
+It returns no raw bodies, no full file dumps, and no copied source text.
+Each skill names the digest contents, such as a claim table, an orientation paragraph, or a root-cause summary.
+One exception exists. An Age lens worker returns full per-finding rows without a size ceiling.
+`fan-out.md` Seam 3 defines that worker.
+The ceiling applies to every other sub-agent.
 
 ## Harness-agnostic sub-agent selection
 
@@ -39,7 +40,7 @@ For code navigation, start with `kind:symbol` to find the definition.
 Then use `kind:callers` for call sites.
 Fall back to `content`/`regex` only when you do not have a symbol name.
 It also owns work that yields mostly raw bodies that the parent will not read line by line.
-Use about 5 K tokens of raw output as the industry rule of thumb for "fork it".
+Send the work to a sub-agent when the raw output is more than 5000 tokens.
 
 ## Parallelism
 
@@ -49,7 +50,8 @@ Do not send one sub-agent to do five sequential tasks; that shape is wrong.
 
 ## Age router as fan-out predicate
 
-`/age` and `/affinage` through it no longer use a size-only threshold to decide fan-out.
-`skills/age/SKILL.md § Sub-agent context gate` calls `src/easy_cheese/shared/fanout/age_route.py`'s `route(score=...)`.
-The router forks according to its `n` value (1 / 2 / 5).
-This file's digest contract, selection rules, and delegation boundaries still apply to every worker that the router spawns.
+`/age` sizes its fan-out with the age router, not with a size-only threshold.
+`skills/age/SKILL.md § Sub-agent fan-out` calls `route(score=...)` in `src/easy_cheese/shared/fanout/age_route.py`.
+The router returns a base tier of 1 / 2 / 5 and can promote above it.
+`fan-out.md § Router call` owns the full router topology. This file does not repeat it.
+This file's digest contract, selection rules, and delegation boundaries apply to every worker that the router starts.

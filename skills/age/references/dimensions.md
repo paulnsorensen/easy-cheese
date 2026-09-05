@@ -21,7 +21,9 @@ blocker > high > medium > low
 
 ## Severity computation
 
-Compute each finding's severity; do not declare it. Merge three independent contributors by their maximum, and cap the result at `blocker`:
+Compute each finding's severity. Do not declare it.
+Start at the base tier. Then apply each bump in the order below.
+Both bumps can apply to one finding. Cap the result at `blocker`.
 
 1. **Base** — Use the dimension's per-tier rubric (see § Per-dimension rubrics below).
 2. **Location bump** — Add one tier when `location = contract` and the dimension is location-sensitive (see § Location sensitivity).
@@ -123,12 +125,14 @@ Per-dimension `structural` anchors:
 | spec | A dropped requirement becomes baked into downstream behavior. Later code depends on it. |
 | complexity | New code keeps landing in a god module. Each addition compounds untangling cost. |
 | deslop | A duplicated block spreads across modules. Each copy diverges and multiplies the eventual merge. |
-| assertions | A test mocks the SUT or uses a weak harness. Other tests copy that pattern. |
+| assertions | A test mocks the system under test or uses a weak harness. Other tests copy that pattern. |
 | nih | Other modules import a reinvented primitive. Replacing it later requires migrating every caller. |
 | efficiency | An unbounded structure runs on a long-running path. Retained references accumulate as callers grow. |
 | telemetry | New code standardizes on a hand-rolled logging shape. Migrating to the real logger later touches every call site. |
 
-The `structural` tag triggers the compounding `+1` bump in the formula. Use the tag to show users "fix now or pay exponentially later" without presenting that message as severity.
+The `structural` tag adds the compounding `+1` bump in the formula.
+Use the tag to record that the repair cost grows over time.
+Do not restate that cost as severity.
 
 ## Per-dimension rubrics
 
@@ -147,7 +151,7 @@ Look for off-by-one errors, ordering errors, null/empty edge cases, silent failu
 
 The diff's new path can exercise an existing race, lost write, or contradictory branch in the caller graph. Expand callers one level before grading clean.
 
-Use telemetry for no-log failures. Use security for access-control findings. Use deslop for silent-failure claims. Use efficiency for TOCTOU wrong-data claims. Use spec for contract commitments and correctness for runtime risks; emit both. Read the full rules in § Dimension boundaries.
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
 
 Recommendation shape: "Add a guard for X" / "Return early when Y" / "Replace `catch (_)` with explicit handling".
 
@@ -185,7 +189,8 @@ Look for cross-module access to internals, public APIs that leak implementation 
 
 Look for a guard inside a slice that only external entry points call. Look for N callers that repeat one check before or after one producer. Look for a public/exported guard whose only consumers sit above the domain layer. Look for callers that apply a check inconsistently. A false-clean result often hides this violation: a private helper becomes public and crust-exported. A diff-scoped pass can grade this clean. Treat the violation as inherited when the diff does not introduce it.
 
-Look for N callers that wrap the same call in the same `try`/`except`. Look for the same literal at the same parameter at every call site. Look for callers that re-derive the same default. Test whether the producer has the information to decide. Treat a parameter as valid when callers legitimately differ. Treat a configuration knob as a finding when callers cannot set it correctly, such as a "voodoo constant" the module should compute itself. Do not flag a knob that expresses genuine caller-specific policy.
+Look for N callers that wrap the same call in the same `try`/`except`. Look for the same literal at the same parameter at every call site. Look for callers that re-derive the same default. Test whether the producer has the information to decide. Treat a parameter as valid when callers legitimately differ. Treat a configuration parameter as a finding when no caller can set it correctly.
+The module should compute that value itself. Do not flag a knob that expresses genuine caller-specific policy.
 
 Use deslop for duplication caused by a misplaced invariant. Use complexity for a boundary-leaking parameter. Read the full rules in § Dimension boundaries.
 
@@ -257,7 +262,17 @@ Use one of these recommendation shapes:
 
 ### deslop
 
-Look for dead code and AI tells. AI tells include generic catches, useless docstrings, "// TODO: implement", and placeholder/apology comments like "// in a real implementation". Look for duplicated logic and copy-paste-over-reuse. Look for vague or container-typed names such as `user_data_dictionary`. Look for convention blindness, including reimplementing an existing repo utility from scratch. Look for fake modularity, such as a single-function utils file or a God class spread thin. Look for lint-suppression band-aids (`# noqa` / `@ts-ignore` / `#[allow(...)]` / `//nolint`) that mask the real fix. Look for phantom edge-case handling for inputs nobody can name. Look for cargo-cult boilerplate, over-abstraction for one consumer, and test bloat. Test bloat includes shallow near-duplicate tests. Look for partial shell strict mode (`set -e` without `-uo pipefail`).
+Look for dead code.
+Look for an AI signature: a generic catch, an empty docstring, a "// TODO: implement" comment, or a placeholder such as "// in a real implementation".
+Look for duplicated logic where a reusable helper exists.
+Look for a vague or container-typed name such as `user_data_dictionary`.
+Look for a reimplementation of an existing repository utility.
+Look for a false module boundary, such as a one-function utility file or a class with no cohesion.
+Look for a lint suppression (`# noqa`, `@ts-ignore`, `#[allow(...)]`, `//nolint`) that hides the real fix.
+Look for an edge-case branch for an input that nobody can name.
+Look for copied boilerplate and an abstraction with one consumer.
+Look for test bloat, which includes a shallow near-duplicate test.
+Look for partial shell strict mode: `set -e` without `-uo pipefail`.
 
 The per-language pattern catalogs and lint-rule mappings live in `deslop-rust.md` / `deslop-typescript.md` / `deslop-python.md` / `deslop-shell.md` / `deslop-go.md` (same directory).
 
@@ -269,7 +284,7 @@ The per-language pattern catalogs and lint-rule mappings live in `deslop-rust.md
 
 The diff can inherit duplicated logic or a dead branch that it copies or leaves beside its change. Read the surrounding block, not only the hunk.
 
-Use correctness for an AI-residue claim or silent-failure claim as appropriate. Use nih when an existing helper handles the task. Use assertions for generic catches in tests. Use encapsulation for a misplaced-invariant duplicate. Use deslop for fake-modularity file sprawl. Use complexity for pass-through and same-abstraction layers. Read the full rules in § Dimension boundaries.
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
 
 Deslop has no default `blocker` row.
 
@@ -343,7 +358,8 @@ Use one of these recommendation shapes:
 
 ### telemetry
 
-This dimension covers logging, metrics, and tracing hygiene. It checks **presence**: does the path have instrumentation? It checks **shape**: does instrumentation use the right structure, levels, context, and cardinality? Non-interactive paths need real telemetry. Examples include servers, daemons, workers, and outbound calls. Interactive paths where the operator watches stdout do not need backend-shipped telemetry on the happy path. Keep secrets-in-logs under `security`. Keep hot-path log-volume cost under `efficiency`. Keep exceptions swallowed without handling under `correctness`.
+This dimension covers logging, metrics, and tracing hygiene. It checks presence: the path has instrumentation.
+It checks shape: the instrumentation uses the correct structure, level, context, and cardinality. Non-interactive paths need real telemetry. Examples include servers, daemons, workers, and outbound calls. Interactive paths where the operator watches stdout do not need backend-shipped telemetry on the happy path. Keep secrets-in-logs under `security`. Keep hot-path log-volume cost under `efficiency`. Keep exceptions swallowed without handling under `correctness`.
 
 | Base | Trigger |
 | --- | --- |
@@ -384,7 +400,11 @@ Use one of these recommendation shapes:
 
 ## Dimension boundaries
 
-When two dimensions could tag the same `path:line`, this table decides the primary. The per-dimension `Boundaries:` lines point here. The grader dedups by `file:line` when writing the report, keeping the higher-base finding and noting the secondary dimension.
+This table is the single ownership rule for the whole file.
+It decides the primary dimension when two dimensions tag the same `path:line`.
+Each per-dimension `Boundaries:` line points here and states no rule of its own.
+The grader deduplicates by `file:line` in the report.
+The grader keeps the higher-base finding and names the secondary dimension.
 
 Look for one primary dimension per finding. Use this table to choose the primary when dimensions overlap.
 
@@ -407,20 +427,3 @@ Look for one primary dimension per finding. Use this table to choose the primary
 | spec / correctness | Emit both with a cross-reference. Spec records the broken contract commitment. Correctness records the runtime risk. The dimensions remain orthogonal. |
 | assertions / telemetry | Tests that assert on log strings belong to telemetry. |
 | complexity / efficiency | Complexity owns the structural cache decision. Efficiency owns the runtime cost of redundant work. |
-
-## Deferred: criticality inference (v2)
-
-v1 defers a fourth severity contributor: a **criticality floor** keyed to the file's path/import/structural fingerprint. When wired, extend the formula with:
-
-```
-sev = max(sev, criticality_floor(file))   # inserted before the cap
-```
-
-The deferred material lives in:
-
-- `.cheese/research/severity-rubric/rubric-draft.md` contains `§ Deferred: criticality inference`. It defines the full inference ladder (critical / high / standard / low) and the four-tier vocabulary. It names two consumers: the severity floor and weighted fix-cost-now. It defines the `.cheese/criticality.toml` override schema.
-- `.cheese/research/critical-pathways/critical-pathways.md` contains 35+ detection rules across six signal classes.
-  The classes cover taint sources and sinks, compliance libraries, framework markers, and production-pathway layouts.
-  They also cover graph signals and empirical Pareto evidence from Walkinshaw 2018 ESEM.
-
-v1 does **not** mine the catalogs, build the override file, or compute the floor. v1 ships without criticality awareness. The deferred material provides read-only context for the v2 ticket.

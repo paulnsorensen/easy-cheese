@@ -1,8 +1,12 @@
 # TypeScript / JavaScript De-slop Catalog
 
-This catalog provides per-language evidence for the `age` `deslop` dimension. Each pattern identifies a TS/JS-specific AI tell for review. Most patterns map to a typescript-eslint rule. Each mapped rule provides a citable rule name for a finding. Use this catalog with `dimensions.md`'s `deslop` rubric. This catalog supplies the "Look for" detail. It does not define a separate severity scale.
+This catalog gives per-language evidence for the `age` `deslop` dimension.
+Each pattern names a TypeScript or JavaScript AI signature for review.
+Most patterns map to a typescript-eslint rule, which gives a citable rule name for a finding.
+Use this catalog with the `deslop` rubric in `dimensions.md`.
+This catalog supplies the detail. It defines no separate severity scale.
 
-## 1. `any` as escape hatch
+## 1. `any` instead of a real type
 
 When types become complex, AI gives up and uses `any`, which discards TypeScript's type safety.
 
@@ -91,13 +95,16 @@ function greet(name: string | null): string {
   return `Hello, ${name}`;
 }
 
-// CLEAN
+// CLEAN — the `undefined` arm is unreachable under the declared type
 function greet(name: string | null): string {
-  return name ? `Hello, ${name}` : "Hello, stranger";
+  return name === null ? "Hello, stranger" : `Hello, ${name}`;
 }
 ```
 
-Lint rule `@typescript-eslint/no-unnecessary-condition` catches conditions that always evaluate to true or false, not only null checks.
+Keep the null semantics. Do not replace a null check with a truth test.
+A truth test also rejects `""`, `0`, `NaN`, and `false`.
+Use `name ?? "stranger"` when you want null and undefined only.
+Lint rule `@typescript-eslint/no-unnecessary-condition` catches a condition that always evaluates to true or false.
 
 ## 6. `JSON.parse(JSON.stringify())` for deep cloning
 
@@ -105,9 +112,14 @@ Lint rule `@typescript-eslint/no-unnecessary-condition` catches conditions that 
 // SLOP
 const cloned = JSON.parse(JSON.stringify(user));
 
-// CLEAN — structuredClone (available in all modern runtimes)
+// CLEAN — when the value holds only structured-cloneable data
 const cloned = structuredClone(user);
 ```
+
+Check the clone requirements first.
+`structuredClone` throws on a function, a class instance method, a `Symbol`, and a DOM node.
+It keeps a `Date`, a `Map`, a `Set`, and a cyclic reference, which the JSON round trip loses.
+Use a library deep clone when the value holds a function or a class instance.
 
 ## 7. Redundant type annotations on initialized variables
 
@@ -128,15 +140,20 @@ const users = getUsers();  // Return type already typed
 const users: User[] = [];
 ```
 
-## 8. Over-importing from barrel files
+## 8. Importing more names than the file uses
 
 ```typescript
-// SLOP — grabs everything, bloats bundle
+// SLOP — five names where the file uses one
 import { UserService, UserModel, UserDTO, UserMapper, UserValidator } from "./users";
 
 // CLEAN — import only what you use
 import { UserService } from "./users";
 ```
+
+A named barrel import does not load every export by itself.
+A bundler drops the unused names when three conditions hold.
+The package sets `"sideEffects": false`, the modules use ECMAScript syntax, and the build runs tree shaking.
+Raise this finding when one of those conditions fails, or when the file imports names it never uses.
 
 ## 9. Non-null assertion as narrowing substitute
 
@@ -196,9 +213,13 @@ items.map(async i => await process(i));  // array of dropped promises
 await saveUser(user);
 await Promise.all(items.map(i => process(i)));
 
-// Intentionally fire-and-forget? Say so:
-void saveUser(user);
+// Intentionally fire-and-forget? Handle the rejection as well:
+void saveUser(user).catch((error: unknown) => logger.error({ error }));
 ```
+
+`void` only marks the intent for the linter. It does not handle a rejection.
+An unhandled rejection still reaches the process handler.
+Attach a `.catch` to every promise that you do not await.
 
 Relevant lint rules include `@typescript-eslint/no-floating-promises` and `@typescript-eslint/no-misused-promises`.
 
@@ -242,6 +263,9 @@ try {
 
 Lint: `@typescript-eslint/only-throw-error`,
 `@typescript-eslint/use-unknown-in-catch-callback-variable`.
+That rule covers a `.catch(callback)` argument only.
+Cite `@typescript-eslint/no-explicit-any` for a `catch (e: any)` clause.
+Set `useUnknownInCatchVariables` in `tsconfig.json` to type the clause as `unknown`.
 
 ## 15. `useEffect` for derived state (React)
 

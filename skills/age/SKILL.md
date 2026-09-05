@@ -4,7 +4,8 @@ description: >-
   Review a diff, PR, branch, or path across ten dimensions. Emit a severity-grouped findings report.
   Use when the user wants a code review. Trigger on "review this", "/age", "is this safe to merge", or "find bugs".
   Also trigger on "spot security issues", "check for slop", "review my PR", or "what's wrong with this code".
-  Scope a single-dimension request to that dimension. Do not apply fixes; route them to /cure.
+  Review every requested dimension. Review all ten dimensions by default.
+  Do not apply fixes. Route them to /cure.
   Do not harden tests; route that work to /press.
 license: MIT
 metadata: {dispatches-agents: true}
@@ -17,9 +18,16 @@ Review a diff or scoped path before merging or after `/press`. Use this skill wh
 ## Inputs
 
 ```text
-/age [<ref-or-range>] [--scope <path>] [--comprehensive] [--full] [--safe] [--open-pr] [--auto] [--html]
-/age <slug> [--full] [--safe] [--open-pr] [--auto] [--html]
+/age [<ref-or-range>] [--scope <path>]... [--slug <slug>] [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
+/age <slug> [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
 ```
+
+Repeat `--scope <path>` for each reviewed path.
+Every report needs a slug.
+Take the slug from the `<slug>` form.
+Take it from `--slug <slug>` on a scoped or range review.
+Derive it with `slugify` only when the caller supplies neither.
+A caller in a pipeline always passes the pipeline slug.
 
 `--full` expands the `## Low` section when ten or more low-severity findings exist.
 The default report collapses that section to a one-line summary.
@@ -35,7 +43,12 @@ Review the current working diff when the user supplies neither input.
 If the base branch is unclear, ask or use the repository's documented default.
 
 `--auto` is the propagated autonomous-mode flag from `/cook --auto`.
-See `## Handoff` and `## Auto mode` for the cap rule and full chain.
+See `## Handoff` and `references/handoff-detail.md` § Auto mode for the cap rule and the full chain.
+
+`handoff_context.wiki_hits` is optional routed input from `/cheese`.
+Each hit carries `page`, `line`, and `why`.
+Reuse each valid hit before you ground the review again.
+Render the reused hits in `## Wiki context`.
 
 `--hard` propagates through `/cure` to `/plate`.
 Age never fires the gate.
@@ -87,11 +100,18 @@ This workflow intentionally omits the git-history/precedent dimension.
    Use its `lenses` list to set the worker count.
    Do not use fan-out when `/age` runs as a sub-agent.
    Pass the router's `effort` value to the reviewer.
-   Run `python3 skills/age/scripts/age.pyz review-lock --slug <slug>` to lock the production tree.
+   Assemble the fan-out packet before the lock.
+   The lock covers the packet, because the packet is review evidence.
+   Then run `python3 skills/age/scripts/age.pyz review-lock --slug <slug>` to lock the production tree.
+   Use the resolved slug from `## Inputs`.
    Step 5 rejects the report when a production file changes.
 2. Gather evidence from the diff, touched files, tests, and callers/imports.
-   If a press report exists for this slug, read it via `python3 skills/age/scripts/age.pyz read-handoff-slug --phase press --slug <slug>`.
-   Summarise unresolved items in a `## Press findings` sub-section.
+   Resolve the upstream report with `python3 skills/age/scripts/age.pyz artifact-path --phase press --slug <slug>`.
+   Validate its preamble with `python3 skills/age/scripts/age.pyz read-handoff-slug --phase press --slug <slug>`.
+   That command returns preamble fields only.
+   Read the resolved file itself for the `## Review follow-ups` section and every unresolved item.
+   Copy each unresolved item into a `## Press findings` sub-section.
+   Keep the `artifact` and `baseline` values from that preamble for step 5.
    `/cure` reads only `.cheese/age/<slug>.md`.
 
 If no press report exists but a cook handoff exists, record `press: skipped` (see `## Output`).
@@ -109,31 +129,18 @@ If `.cheese/glossary/<slug>.md` exists, read it to flag naming drift as a deslop
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`).
    Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`).
    Order findings by file within each severity group.
-5. Write the report as specified in `## Output`.
-   Set `<next>` to `cure` for medium-or-higher findings.
-   Otherwise, set `<next>` to `done`.
-   Run `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --body-file "$report_file"`.
+5. Write the report body to `.cheese/age/<slug>-body.md`.
+   Write the body only. Do not write the handoff preamble into that file.
+   Do not write `.cheese/age/<slug>.md` yourself. The gated writer creates it.
+   Compute the recommended set first (see `## Handoff`).
+   Set `<next>` to `cure` when that set is not empty.
+   Set `<next>` to `done` when that set is empty.
+   Set `<artifact>` to the upstream report path from step 2. Use `""` only when no upstream report exists.
+   Set `<baseline>` to the baseline block from that upstream handoff. Omit `--baseline` only when the upstream handoff has none.
+   Run `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --body-file ".cheese/age/<slug>-body.md"`.
    Print the path.
+   The write fails when the production tree moved after step 1. Do not retry it with a new lock.
 6. Hand off (see `## Handoff` below).
-
-## Preferred tools and fallbacks
-
-Call source-code backends directly according to the shared [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) contract. For caller graphs, use the selected semantic backend's caller query plus `tilth_deps` when available.
-
-| Need | Prefer | Fallback |
-| --- | --- | --- |
-| Diff inspection | `delta` | `git diff --unified=3` |
-| Caller/dependency impact + curated review context | semantic caller search + `tilth_deps` | manual scoping; note the precision loss |
-| Architecture / hotspot framing for large diffs | changed-file map + caller/dependency evidence | skip and note in confidence |
-| Design rationale for encapsulation/spec dimensions (optional) | `mcp__hallouminate__list_corpora` / `mcp__hallouminate__ground` on `repo:<repo>:wiki`, grounding design intent before grading, rendering consulted pages in `## Wiki context` | skip; omit `## Wiki context`; proceed with diff + code evidence only; cap at `speculating` when rationale is the primary evidence |
-| GitHub/PR context | `gh` | local git commands or user-provided PR data |
-| Merge/conflict awareness | mergiraf | manual conflict checks |
-
-**Optional MCPs:** hallouminate and milknado follow the detect-and-degrade contract in [`../cheese/references/optional-plugins.md`](../cheese/references/optional-plugins.md).
-State each absence once.
-Use a fallback when an optional MCP is unavailable.
-Reduce confidence only when evidence quality suffers.
-Never block.
 
 ## Sub-agent fan-out
 
@@ -142,50 +149,40 @@ Never block.
 Use read-only, fresh-context workers.
 See `references/fan-out.md`, `references/packet.md`, and `references/sub-agent-gate.md` for mechanics.
 
+Call each source-code backend through the shared [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) contract.
+`references/packet.md` § Evidence tools and fallbacks lists the tool for each need.
+
 ## Output
 
 Use [`../cheese/references/formatting.md`](../cheese/references/formatting.md) for cross-cutting house style and citation form.
 This section defines the findings-report shape.
 `formatting.md` defines the voice rules and footnote primitive.
 
-Write the report to `.cheese/age/<slug>.md`.
-Put the minimum handoff slug at the top.
-Include `status`, `next`, `artifact`, `durable_flags`, `baseline`, and one-line orientation.
-When a cook artifact exists without a press report, put `press: skipped` first in the body after the blank separator.
-Otherwise, omit it.
-
-Write the body in this order.
-Start with `# Age Report — <slug>`.
-Add `## Orientation` with 1-2 sentences.
-Add `## Press findings` only when a press report exists.
-Add `## Wiki context` only when hallouminate grounding returns a hit.
-Use this format for each severity section: `**[dim:sev]** path:line — claim`.
-Then add `location: <tier> · fix-cost-now: <tier> · fix-cost-later: <tier> · confidence: <tier>`.
-Finish with `recommendation: <action>`.
-End with `## Confidence` and `## Next step`.
-See `references/report-example.md` for the full skeleton and a worked instantiation.
-
-Omit empty severity sections.
-When ten or more `low` findings exist, collapse the `## Low` section to one line:
-
-```markdown
-## Low
-*N low-severity findings suppressed.* Re-run with `--full` (or `/age --full`) to see them.
-```
+The gated writer writes `.cheese/age/<slug>.md`.
+It puts the minimum handoff slug at the top.
+The slug carries `status`, `next`, `artifact`, `durable_flags`, `baseline`, and one-line orientation.
+Supply each value through the step 5 command.
+Write the body below into `.cheese/age/<slug>-body.md`, with no preamble.
+`references/report-example.md` § Body order defines the section order, the exact
+finding format, and the full skeleton. Read it before you write the body.
 
 Use the voice-kernel scale for per-finding `confidence:` (see `references/voice.md` § Reasoning posture).
 Use `certain` for direct evidence from a diff/code read or command output.
 Use `speculating` for an inference from an indirect signal.
 Do not ship a `don't know` grading as a finding row.
 Gather the missing evidence or drop the claim.
+Reserve `don't know` for the report-level `## Confidence` line.
 Add suppressed lows to the cure-selection table only when the user passes `--full`.
 
 Set `status: ok` when the review completes.
 Set `status: halt: <reason>` when the review cannot reach evidence.
 Follow the [handback contract](../cheese/references/handback-contract.md).
-Set `next: cure` when any finding meets the **medium+ floor**.
-Otherwise, set `next: done`.
+Derive `next` from the recommended set that `## Handoff` computes.
+Set `next: cure` when that set is not empty.
+Set `next: done` when that set is empty.
+Keep every finding in the report, whatever `next` says.
 Set `durable_flags:` to `none` by default, as in cook's gate.
+Record the resolved worker types under `## Agent resolution` in the body.
 
 Print `Age report: .cheese/age/<slug>.md`.
 When `press: skipped` is set, print the following warning:
@@ -203,37 +200,30 @@ Also include every `Low` with `fix-cost-now: contained`.
 
 **Decide whether to act or ask.**
 
+This selection is the only one. `## Output` derives `next` from it.
+A review with contained lows and no medium finding has a non-empty set.
+That review sets `next: cure` and keeps every low finding in the report.
+
 - **Empty set** — Set `next: done`. Print the report path. Stop.
 - **Reason to ask** — Ask when a set member has `fix-cost-now: sprawling` or `fix-cost-later: structural`.
-  Also ask when findings conflict or the user passes `--safe`. Read `references/handoff-detail.md`. Render the gate per [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Pre-select the composite and flag heavy rows.
+  Also ask when two findings conflict.
+  Also ask when the user passes `--safe`.
+  Read `references/handoff-detail.md` first.
+  Render the gate per [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md).
+  Pre-select the composite. Mark each heavy row.
 - **Otherwise** — Act. Announce the selection. Dispatch `/cure` per `references/handoff-detail.md` § Dispatch. Do not render a gate.
 
-`--auto` substitutes a severity-floor selection and its own chain. See `SKILL.md § Auto mode`.
-`references/handoff-detail.md` also defines the no-chain override under `/cook`'s fan pathway.
-
-## Auto mode
-
-When you invoke the skill with `--auto`, follow these rules.
-
-- Skip the handoff gate.
-- If two cure passes have already completed (cap reached), stop and surface the final report.
-  Do not invoke `/cure` again, even when findings remain.
-- Otherwise, if any finding meets the **medium+ floor**, invoke `/cure <slug> --auto --stake medium+`.
-  Forward `--open-pr` when it is in scope.
-  Increment the cure-pass count when `/cure` returns.
-- If no finding meets the **medium+ floor**, stop the chain.
-  Print a one-line "auto chain clean" note and the report path.
-
-### Within cook's own fan pathway
-
-The `/cook` fan pathway spawns age as a fresh-context sub-agent and owns the chain itself.
-Read `references/handoff-detail.md` § Within cook's own fan pathway for the no-chain isolation directive before writing the report.
+`--auto` substitutes a severity-floor selection and its own chain.
+Read `references/handoff-detail.md` § Auto mode before an `--auto` run.
+That file also defines the no-chain override under `/cook`'s fan pathway.
 
 ## Rules
 
 Review is not a verdict.
 Explain where to look and why.
-- Do not edit production files. The step 1 review lock enforces this rule. `/cure` applies fixes.
+Do not edit production files.
+The step 1 review lock enforces this rule.
+`/cure` applies each fix.
 Do not raise a finding for a gate failure identical to the diff's recorded `baseline:` block.
 Flag only new/changed failures per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 Default to acting.
@@ -260,7 +250,9 @@ Apply `references/voice.md` (output discipline, reasoning posture, confidence vo
 - Read `references/packet.md` before assembling a fan-out context packet.
 - Read `references/sub-agent-gate.md` before a sub-agent dispatch.
 - Read `references/handoff-detail.md` before the selection gate or a `/cure` dispatch.
-- Read `references/report-example.md` with `## Output`.
+- Read `references/report-example.md` § Body order before writing the report body.
+- Read `references/packet.md` § Evidence tools and fallbacks before gathering evidence.
+- Read `references/handoff-detail.md` § Auto mode before an `--auto` run.
 - Read `references/voice.md` before writing the report.
 - Read the applicable [Rust](references/deslop-rust.md), [TypeScript](references/deslop-typescript.md), [Python](references/deslop-python.md), [Shell](references/deslop-shell.md), or [Go](references/deslop-go.md) catalog before grading `deslop`.
 
@@ -272,4 +264,9 @@ Resolve every dimension worker and fresh-context review through [`../cheese/refe
 | --- | --- | --- | --- | --- | --- |
 | Review a diff or one dimension | reviewer | read-only, fresh-context | powerful | high | compatible reviewer, then general |
 
-The canonical age report/handoff carries the shared `agent_resolution` block.
+The table gives the default effort.
+The router overrides it. Use the `low`, `medium`, or `high` value that `age_route.route(...)` returns.
+Pass that value to every dispatched worker.
+
+The report body carries the shared `agent_resolution` block under `## Agent resolution`.
+`references/report-example.md` shows that section in the full skeleton.

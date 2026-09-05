@@ -38,7 +38,9 @@ Excessive `.unwrap()` calls create runtime panics throughout the codebase.
 - Use the `?` operator to propagate errors
 - Use `anyhow` or `thiserror` for structured errors
 - Use `if let Some(x)` or `match` for `Option` types
-- Use `.unwrap()` only with compile-time guarantees, such as hardcoded regex and constants
+- Use `?` for every error you can propagate
+- Use `.unwrap()` only when the type system proves the value exists, such as a `const` or a checked index
+- A hardcoded regex is not a compile-time guarantee. `Regex::new` parses at run time. Use `LazyLock` plus `expect("static regex")`, or a compile-time macro crate
 
 ```rust
 // SLOP
@@ -100,13 +102,14 @@ When ownership gets complex, AI reaches for interior mutability or `unsafe`.
 - Pass short-lived borrows as method parameters
 - Restructure to avoid holding long-lived references
 
-## 6. Weak assertions — the #1 AI test smell
+## 6. Weak assertions
 
 The assertions `assert!(result.is_ok())` and `assert!(result.is_err())` hide the actual error or value when they fail and print only `false`.
 
 **Fix:**
 
-- Propagate errors with `.expect("context")` or `?` to reveal the real error
+- Propagate the error with `?` and let the test signature return `Result`
+- `.expect("context")` panics. Use it only when the test cannot return `Result`
 - Check actual values, not just existence
 - For errors, verify the specific variant with `matches!` or check the message
 - Add a failure message to every `assert_eq!`/`assert!` with non-obvious operands
@@ -143,8 +146,10 @@ The assertion `assert!(x.is_none())` prints `assertion failed: false`, while `as
 
 **Fix:**
 
-- Use `assert_eq!(x, None)` for better failure messages
-- For `is_some()`, extract and check the inner value
+- Use `assert_eq!(x, None)` when the inner type implements `Debug` and `PartialEq`
+- Use `assert!(matches!(x, None), "got {x:?}")` when it implements only `Debug`
+- Keep `assert!(x.is_none())` when the inner type implements neither trait
+- For `is_some()`, extract the inner value and check it
 
 ```rust
 // SLOP
@@ -224,21 +229,21 @@ fn stamp_activity_nonexistent_is_noop() {
 }
 ```
 
-## 11. Lint suppression as band-aid (`#[allow(...)]`)
+## 11. Lint suppression instead of a fix (`#[allow(...)]`)
 
 AI adds `#[allow(...)]` attributes to silence warnings instead of fixing their causes.
 Treat each compiler warning as a problem to fix, not a message to suppress.
 
-### Crate-level nuclear options (instant fail)
+### Crate-level suppression (always a finding)
 
 These attributes suppress warnings globally and do not belong in production code:
 
 ```rust
-// SLOP — the nuclear option
+// SLOP — suppresses every warning in the crate
 #![allow(warnings)]
 #![allow(clippy::all)]
 
-// SLOP — the scaffold dump (3+ together = AI signature)
+// SLOP — three or more together are an AI signature
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]
@@ -462,7 +467,7 @@ Justify each `Complexity` lint suppression.
 
 - `#[allow(dead_code)]` on test utility functions
 - `#[allow(unused)]` in `mod tests` blocks
-- `#[allow(clippy::unwrap_used)]` in test assertions (idiomatic)
+- `#[allow(clippy::unwrap_used)]` on a test function, scoped to that item
 
 **Framework integration:**
 
@@ -486,8 +491,15 @@ Justify each `Complexity` lint suppression.
 - Macro-generated code inside the macro itself
 - `#[cfg_attr(feature = "generated", allow(...))]` for optional generated modules
 
-**Red flag check:** If an allow targets a **restriction** lint (unwrap, panic, todo, print) in these contexts, treat it as slop.
-Only pedantic, style, and perf lints are genuinely legitimate here.
+**One suppression rule.** Judge each `#[allow(...)]` by its scope and its context.
+
+| Scope | Verdict |
+| --- | --- |
+| Crate level (`#![allow(...)]`) | Slop, except for an opt-in group such as `clippy::pedantic` |
+| Item level in production code | Slop for a restriction lint such as `unwrap_used`, `panic`, `todo`, or `print` |
+| Item level in a test, a generated file, or an FFI binding | Acceptable, including a restriction lint |
+
+Require a comment that names the reason on every allow that this table accepts.
 
 ## 12. Hallucinated APIs and deprecated syntax
 
@@ -567,10 +579,12 @@ The crate then stops compiling when a new toolchain adds a lint.
 // SLOP
 #![deny(warnings)]
 
-// CLEAN — enforce in CI instead:
-// RUSTFLAGS="-D warnings" cargo build
+// CLEAN — leave the crate free of a global deny
 ```
 
+Enforce the warning budget in CI, on a pinned toolchain, with an explicit lint list.
+Do not replace the attribute with `RUSTFLAGS="-D warnings"` on a floating toolchain.
+That replacement breaks the same build for the same reason.
 The `rust-unofficial/patterns` anti-patterns chapter documents this pattern.
 
 ## 17. `anyhow::Error` in a library's public API

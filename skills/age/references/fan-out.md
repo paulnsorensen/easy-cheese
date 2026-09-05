@@ -17,9 +17,12 @@ Treat each hit as a hint, not a guarantee.
 Then call:
 
 ```python
-from src.fanout.age_route import route
+from easy_cheese.shared.fanout.age_route import route
+
 route(score=<float>, risk_flags=[...], entry="age")
 ```
+
+Put the repository `src` directory on `PYTHONPATH` before this import.
 
 If the host only ships the bundle, `echo '{"score": <float>, "risk_flags": [...], "entry": "age"}' | python3 skills/age/scripts/age.pyz age-route` is the fallback (JSON on stdin, route JSON on stdout).
 
@@ -28,7 +31,11 @@ If the host only ships the bundle, `echo '{"score": <float>, "risk_flags": [...]
 The router activates this mode when `n>1` and `/age` is not itself a sub-agent.
 Dispatch one worker per **lens** in the router's returned `lenses` list, not per dimension.
 Dispatch exactly `len(lenses)` workers.
-The router returns `n` in `{1, 2, 5}`.
+The base tier is one value in `{1, 2, 5}`.
+The returned `n` equals the final lens count.
+An override promotion raises `n` above the base tier.
+A promoted `n=5` review can return `6` or `9`.
+Always use the returned `lenses` list, never the base tier.
 The base ladder uses these score bands before any override promotion:
 
 - A score `<60` returns `n=1`.
@@ -53,6 +60,8 @@ Only worker count and each worker's assigned dimension set vary with `n`.
 **Seam 1 — Predicate.** Use the predicate defined at the section opener above.
 
 **Seam 2 — Shared context packet.** The orchestrator assembles the packet once and writes it to `.cheese/age/<slug>-packet.md`.
+Write the packet before the `review-lock` capture in `SKILL.md § Flow` step 1.
+The lock covers the packet, because the packet is review evidence.
 Each worker reads that packet.
 `packet.md` documents its eight components and the review-context digester that supplies the orientation block.
 
@@ -63,9 +72,9 @@ Allow a prompt-constrained general fallback only with `degraded: true`.
 Each worker:
 - Reviews every dimension in its assigned lens. A solo-lens worker reviews one dimension. A multi-dimension lens worker reviews every dimension in its group. For example, the `[correctness, spec, assertions]` worker reviews all three.
 - Computes **full per-finding severity** for every dimension in its lens (base + location bump + compounding bump).
-- Tags each finding with its dimension and an `also-relevant-to: [<dim>, ...]` field when it suspects cross-dimension overlap. Include overlap with a dimension owned by a *different* lens.
+- Tags each finding with its dimension. Adds an `also-relevant-to: [<dim>, ...]` field when a second dimension can own the same line. Includes a dimension that another lens owns.
 - Reports every defect it notices, however minor. It does not perform severity-conservative self-filtering. The verifier pass (Seam 6) and orchestrator reconciliation (Seam 4) filter findings.
-- Returns full per-finding rows in the `SKILL.md § Output` finding format (`**[dim:sev]** path:line — claim` + `location / fix-cost-now / fix-cost-later / confidence` + `recommendation`). This is not an orientation digest. The `§ Digest contract` size ceiling does not apply.
+- Returns full per-finding rows in the exact `SKILL.md § Output` finding format. Each row keeps the list marker and the location backticks. This is not an orientation digest. An Age lens worker is the one exception that `sub-agent-gate.md § Digest contract` names, so the 2 KB ceiling does not apply to it.
 - Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions or lenses, or write the report.
 
 After all workers return, continue at Seam 4 (reconciliation) below.
@@ -89,14 +98,16 @@ Then continue at step 5 (write + print the report path) and `SKILL.md § Handoff
 Workers use that packet instead of rebuilding impact context independently.
 
 **Seam 6 — Verifier pass.** After Seam 4 reconciliation produces the candidate findings list, use a cheap `verifier` role.
-Use the haiku/tiny tier and `effort: low` from the Roles x tiers table.
-Check each reconciled finding against the evidence slice cited in its `recommendation`/location fields.
-Make one verifier call per finding.
-Constrain the schema to "verify exactly one claim".
-Three outcomes:
+Use the small model tier and `effort: low` from the Roles x tiers table.
+Check each reconciled finding against the evidence slice cited in its `recommendation` and location fields.
+Send the findings in batches of up to ten to one verifier call.
+Require one result object for each claim in the batch.
+Each result object carries the finding identifier, the verdict, and the reasoning.
+A verifier never merges two claims into one verdict.
+Each claim gets one of three verdicts:
 - **Confirm** — The cited evidence supports the claimed severity. Ship the finding unchanged.
-- **Downgrade/drop** — The evidence does not support the claimed severity or the claim itself. The verifier lowers the severity tier or drops the finding. The orchestrator records the original claim and the verifier's reasoning in the report's confidence trail.
-- **Escalate** — The evidence given cannot settle the claim either way. Cross-cutting contract 1 states: "a claim no evidence can settle returns `escalate`, never a guessed pass or fail". Keep the finding at its **original** severity and add an `escalate` flag. Never silently drop it or pass it through without a flag.
+- **Downgrade or drop** — The evidence does not support the claimed severity or the claim itself. The verifier lowers the severity tier or drops the finding. The orchestrator records the original claim and the verifier's reasoning in the report's confidence trail.
+- **Escalate** — The cited evidence cannot settle the claim. Do not put an escalated claim in a findings section. `SKILL.md § Output` forbids a `don't know` finding row. List each escalated claim under `## Confidence` with the missing evidence. Promote it to a finding only after new evidence confirms it.
 
 The verifier runs the "cheap severity-filter leg" from the Roles x tiers table whenever `n>1`.
 It does not run at `n=1`.

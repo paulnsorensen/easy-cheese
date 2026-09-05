@@ -31,7 +31,8 @@ This order keeps the gate predictable across every run:
   This option uses the medium severity floor from **Compute the recommended set**.
   It excludes the cheap-lows union.
   Add `cheap` to include contained-fix lows and use the recommended composite.
-  - **Fix high-severity and blockers** — equivalent to `all-high` (floor at high, includes blockers).
+- **Fix high-severity findings and blockers** — use `all-high`.
+  This option floors at high and includes every blocker.
 - **Fix blockers only** *(strict)* — use `all-blocker`.
   Land only the must-fix blockers.
   Defer the rest to a follow-up.
@@ -64,9 +65,9 @@ The non-empty-selection contract in **Dispatch** still holds.
 Dispatch `/cure <slug> [--safe] [--open-pr] [--hard]` immediately when the selection is non-empty.
 Apply this rule to automatic selections and gate selections.
 Pass the selection through context, not a CLI flag.
-Invoke `/cure` instead of repairing files in the review context.
-End the report with `/age`.
-Step 1 review lock rejects a report after inline edits.
+Invoke `/cure` instead of repairing a file in the review context.
+End the Age run after the report.
+The step 1 review lock rejects a report written after an inline edit.
 
 ```yaml
 handoff_context:
@@ -85,13 +86,14 @@ Expand the verb yourself instead of leaving the field empty.
 Propagate `--safe`, `--open-pr`, and `--hard` to `/cure` when they are in scope.
 
 On `none` or Stop (only reachable via the gate), exit cleanly with the report path.
-`--auto` substitutes a severity-floor selection and its own chain. See `SKILL.md § Auto mode`.
+`--auto` substitutes a severity-floor selection and its own chain. See `## Auto mode` below.
 
 ## Within cook's own fan pathway
 
-The `/cook` fan pathway uses its retired-`/ultracook` mechanics, now self-hosted.
-See `../../cook/SKILL.md § Fan pathway`.
-The pathway spawns age as a fresh-context sub-agent and owns the chain.
+`/cook` owns the fan pathway. See `../../cook/SKILL.md § Fan pathway`.
+`/ultracook` is retired. A host that still routes `/ultracook` resolves it to `/cook`.
+The no-chain override below applies to both names.
+The pathway starts age as a fresh-context sub-agent and owns the chain.
 Follow the no-chain isolation directive:
 
 - Write `.cheese/age/<slug>.md` with the handoff slug at the top.
@@ -101,9 +103,29 @@ Follow the no-chain isolation directive:
   Do not infer it from the chain position.
   Set `next: cure` when at least one finding meets the **medium+ floor**.
   Set `next: done` when no finding meets that floor.
-- The fan pathway's fixed chain length enforces the two-cure-pass cap.
-  Age does not count passes.
-  Publish the terminal age only with `next: done`.
-  Treat `next: cure` or a missing `next` as a halt without publishing.
-  Dispatch parallel curds and post-merge review as a top-level fresh-context reviewer.
-  Never dispatch them as nested inline self-review.
+- The fixed chain length of the fan pathway enforces the two-cure-pass cap.
+  Age counts no passes. `## Auto mode` below states the same rule.
+  Publish the terminal age report only with `next: done`.
+  Treat `next: cure` or a missing `next` as a halt. Do not publish.
+  Dispatch each parallel work unit as a top-level fresh-context reviewer.
+  Dispatch the post-merge review the same way.
+  Never dispatch either one as a nested inline self-review.
+
+## Auto mode
+
+When the caller passes `--auto`, follow these rules.
+
+- Skip the selection gate above.
+- Report the result of this run only.
+  Age counts no cure passes and holds no pass state.
+  `/cook`'s phase table owns the two-pass cap through its fixed chain length.
+  See `../../cook/references/auto-mode.md`.
+- If the recommended set is not empty, invoke `/cure <slug> --auto --stake medium+`.
+  Forward `--open-pr` and `--hard` when they are in scope.
+- If the recommended set is empty, stop the chain.
+  Print a one-line "auto chain clean" note and the report path.
+
+### Within cook's own fan pathway
+
+Read `## Within cook's own fan pathway` above for the no-chain isolation directive.
+Follow that directive before you write the report.
