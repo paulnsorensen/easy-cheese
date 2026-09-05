@@ -26,6 +26,7 @@ Each phase has a bound and an exhaustion action. When a phase reaches its bound,
 | Ground per topic | 1 wiki probe and 1 delegated digest | Mark the remainder `[?]`. Treat a third probe as repeated work. |
 | Shape or Sketch per option set | 1 explorer digest | require a new question before a second dispatch |
 | Fork rounds | 3 consecutive rounds that add no new evidence | show the decision map and stop questions |
+| Fork altitude | 3 consecutive forks that move no acceptance criterion, seam, or non-goal | show the decision map; demote the pending fork to `[AGENT-DECIDED]` or a follow-up candidate |
 | Parent-context tool calls | approximately 40 calls | run `/wheypoint` before the next heavy step |
 | Sub-agent spawns | 6 spawns per episode | Run `/wheypoint`. Resume from the digests. |
 | Repeated failures | 2 consecutive failures from the same tool or agent | record the degraded path and use a different route |

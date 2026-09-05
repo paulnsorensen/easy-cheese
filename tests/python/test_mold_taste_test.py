@@ -397,6 +397,44 @@ def test_contradictions_orphans_assumptions_and_gaps_reject_pass(
     assert not taste.decomposition_gate(result).allowed
 
 
+GOAL = "Users can resume an interrupted session"
+GOAL_DRAFT = f"# Draft\n\n## Problem statement\n{GOAL}, without re-authenticating.\n" + DRAFT.split("\n", 2)[2]
+GOAL_LEDGER: dict[str, object] = {"goal": GOAL, "forks": LEDGER}
+
+
+def test_pinned_goal_in_problem_statement_passes(taste: _MoldTasteTestModule) -> None:
+    result = taste.taste_test(GOAL_DRAFT, GOAL_LEDGER, verdict(taste, GOAL_DRAFT))
+    assert result.passed, result.acceptance_gaps
+
+
+def test_goal_missing_from_problem_statement_is_goal_drift(
+    taste: _MoldTasteTestModule,
+) -> None:
+    drifted = GOAL_DRAFT.replace(GOAL, "Sessions have a retry policy")
+    result = taste.taste_test(drifted, GOAL_LEDGER, verdict(taste, drifted))
+    assert not result.passed
+    assert result.acceptance_gaps == ("goal-drift",)
+    assert not taste.decomposition_gate(result).allowed
+
+
+def test_goal_without_problem_section_is_a_missing_section(
+    taste: _MoldTasteTestModule,
+) -> None:
+    result = taste.taste_test(DRAFT, GOAL_LEDGER, verdict(taste))
+    assert not result.passed
+    assert result.acceptance_gaps == ("missing-section:goal:problem",)
+
+
+def test_goal_less_ledger_skips_the_goal_gate(taste: _MoldTasteTestModule) -> None:
+    result = taste.taste_test(DRAFT, {"forks": LEDGER}, verdict(taste))
+    assert result.passed, result.acceptance_gaps
+
+
+def test_blank_goal_is_a_ledger_error(taste: _MoldTasteTestModule) -> None:
+    with pytest.raises(taste.TasteTestError, match="ledger-goal-empty"):
+        _ = taste.taste_test(DRAFT, {"goal": "  ", "forks": LEDGER}, verdict(taste))
+
+
 def test_third_failed_verdict_halts_after_two_corrections(taste: _MoldTasteTestModule) -> None:
     blocked = verdict(taste)
     blocked["verdict"] = "fail"

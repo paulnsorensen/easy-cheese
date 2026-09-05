@@ -9,16 +9,16 @@ metadata: {dispatches-agents: true}
 
 Two modes, by analogy to `/culture`:
 
-1. **User-invoked full ceremony (default).** The user types `/mold`. `/cheese` can also route an explicit fuzzy-design ask straight here. This mode runs the full Explore, Ground, Shape, Sketch, Grill, and Diagnose dialogue. It runs the two-key handshake before it writes any spec. The Flow below describes each step.
+1. **User-invoked full ceremony (default).** The user types `/mold`. `/cheese` can also route an explicit fuzzy-design ask straight here. This mode runs the full Explore, Ground, Shape, Sketch, Grill, and Diagnose dialogue. It runs the two-key handshake before it writes any spec.
 2. **Agent-invoked mini-spec mode.** At tier 1 of its escalation, `/cheese` calls `/mold` when all cook fast-path checks pass. See `skills/cheese/SKILL.md` § Escalation. Mold writes the spec before the gate-applicability route runs. No dialogue occurs. No handshake occurs. See `## Agent-invoked mini-spec mode` below.
 
 ## Flow
 
-1. **Bounds pass** — map every input's goals and **non-goals** before routing; ask the user rather than assume. Open the `Decided / Asking / [AGENT-DECIDED]` ledger. Clear work gets one fast confirm; full-spec work gets an upgrade-tier warning.
+1. **Bounds pass** — map every input's goals and **non-goals** before routing; ask the user rather than assume. Open the `Goal / Decided / Asking / [AGENT-DECIDED]` ledger with the goal pinned as one sentence; only an explicit user fork changes it. Clear work gets one fast confirm; full-spec work gets an upgrade-tier warning.
 2. **Route** — choose the secondary mode from `references/modes.md`, announce it, and correct false premises first.
 3. **Dialogue** — consequential forks are the user's to pick. Supply options, trade-offs, and evidence before you ask. Ground each critical claim through code, the [Validate Cycle](references/validate-cycle.md), or a [Prototype Cycle](references/prototype-cycle.md). Resolve every contradiction. Render the decision map after three consecutive fork questions, or on request.
 4. **Sketch** — For work across modules or with a new public interface, run `references/shape-check.md`. Bind identity and role nouns to code referents. Lock seams as pseudocode signatures.
-5. **Plan for approval** — First, run the fresh-context fork-coherence taste test with `mold.pyz taste-test`. Persist its digest-bound pass. A failure reopens only named forks. Stop after the third failed verdict. Only then, dispatch a typed `PlannerRequest`. Validate its `PlannerResultWriterView`. Retry an invalid result once. If it remains invalid, stop before the handshake. Normalize the valid result on the host. Persist only the typed `PlannerResult` and `CurdPlan` artifacts. Use a legacy projection only for an explicit migration request. Require a lossless projection or `UnsupportedProjection`. At the handshake, present the typed plan's semantic curds and waves. See `references/curdle.md` § "Pre-approval typed planner dispatch".
+5. **Plan for approval** — run the fresh-context fork-coherence taste test with `mold.pyz taste-test` and persist its digest-bound pass; a failure reopens only named forks, and the third failed verdict stops. Then dispatch a typed `PlannerRequest`, validate its `PlannerResultWriterView` (one retry, then stop before the handshake), normalize on the host, and persist only the typed `PlannerResult` and `CurdPlan`. A legacy projection needs an explicit migration request and must be lossless or `UnsupportedProjection`. Present the plan's semantic curds and waves at the handshake. See `references/curdle.md` § "Pre-approval typed planner dispatch".
 6. **Two-key handshake** — Before extraction, the user and agent must agree to the draft spec and displayed typed plan. The user provides an explicit verb. The agent performs a coherence self-check. Neither key changes nor disappears. See `references/handshake.md`.
 7. **Curdle** — Resolve the durable spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>)`. Phase one writes the local artifact and write-ahead prepared state before any external call. It writes the approved spec at `"$SPEC"`. It also writes the host-validated `PlannerResult` and `CurdPlan`. It also writes local issue drafts and the session's non-obvious decisions as durable ADRs. Phase two publishes approved follow-ups. Retain the prepared recovery state when an external capability is unavailable or publication fails. Phase two reconciles their state and references into the durable spec before any handoff.
 8. **Publish and hand off** — after reconciliation, run [`mold.pyz curd-count`](references/curd-count.md). Then publish the approved `CurdPlan` with `mold.pyz publish`. Keep the returned `HandoffPointer` path. Prompt through `## Handoff`. Dispatch only the user's non-stop selection.
@@ -61,7 +61,7 @@ Beyond source-code routing there are mold-specific tools:
 | External validation | `/briesearch` with Context7/Tavily | user-provided docs, repo docs, or note as unverified |
 | Wiki grounding (Ground entry + decision points; scope per `references/grounding.md` § When to probe) | `mcp__hallouminate__list_corpora` + `mcp__hallouminate__ground` on `repo:<repo>:wiki` | record `hallouminate: absent` in the ledger, proceed on code evidence, and cap at `speculating` when design rationale is central |
 
-**The grounding record is a precondition for the first structured question.** Do not ask the question until the ledger contains a probe result. The result contains citations or `hallouminate: absent`. This fallback keeps the evidence visible. Mark each unsupported claim `[?]` until you settle it.
+**The grounding record is a precondition for the first structured question.** Do not ask the question until the ledger contains a probe result. The result contains citations or `hallouminate: absent`. Mark each unsupported claim `[?]` until you settle it.
 
 ## Sub-agent context gate
 
@@ -69,7 +69,7 @@ Beyond source-code routing there are mold-specific tools:
 
 ### Gate graph
 
-`python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Text targets need no binary. Image targets use Mermaid when Graphviz is unavailable. Tests keep gate nodes aligned with the handshake checklist. `fork_taste_test_passed` requires a fresh-context verdict. The verdict must match the digest and cover the complete ledger. See `references/gate-graph.md`.
+`python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Text targets need no binary. Image targets use Mermaid when Graphviz is unavailable. Tests keep gate nodes aligned with the handshake checklist. See `references/gate-graph.md`.
 
 ### Gate applicability and Test Contracts
 
@@ -106,9 +106,9 @@ without a Mold provenance marker stays legacy-compatible and may omit
 
 ### Fork taste gate
 
-`mold.pyz taste-test` binds the verdict to the draft SHA256. It also binds the verdict to each settled consequential ledger fork. Stale coverage, partial coverage, and blockers fail the gate. A failure reopens only the named forks. Mold permits two correction rounds. Approved `red-required` specs pass unchanged metadata and the published pointer to `/cook --auto`.
+`mold.pyz taste-test` binds the verdict to the draft SHA256 and to each settled consequential ledger fork. Stale or partial coverage and blockers fail the gate; a failure reopens only the named forks, with two correction rounds. Approved `red-required` specs pass unchanged metadata and the published pointer to `/cook --auto`.
 
-Each settled consequential fork must appear in Approach, Interface sketches, and Acceptance. A `red-required` spec must also include each fork in Test Contracts. A `not-applicable` spec cannot contain Test Contracts. Do not rename a section to simulate the fourth reflection.
+Each settled consequential fork must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`; a `not-applicable` spec cannot contain Test Contracts. Do not rename a section to simulate the fourth reflection. The ledger's pinned `goal` must survive verbatim into the draft's Problem statement, or the verdict fails as `goal-drift`; see `references/gate-graph.md` § Fork taste planner gate.
 
 ## Approval gate
 
@@ -137,8 +137,9 @@ The digest's `mode` is orientation, not a skill. Render the fixed blast-radius m
 
 - Dialogue first; artifacts are the by-product.
 - **Tiered lettered options.** Consequential forks use `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md`. Never decide them silently. Minor mechanics use `[AGENT-DECIDED]` with a vetoable alternative. A fork is valid only after its depth was contributed in-dialogue first. Precede every structured question with visible prose that weighs the fork and the evidence. Keep one open picker.
-- **Decision ledger.** Each round prints `Decided / Asking / [AGENT-DECIDED]`. Curdle persists consequential decisions to [ADRs](references/adr.md) and minor ones to the spec. The taste verdict names every settled consequential entry exactly once.
-- **Decision map and fork-round cap.** Stop after three consecutive fork rounds that add no new evidence. Also stop when the user requests a decision map. Show completed forks, remaining forks, and a ready or blocked verdict. A fourth round requires new grounding, a delegated digest, or a `/wheypoint` checkpoint. The map shows ledger state. It does not create an artifact.
+- **Altitude tag.** Every `Asking` fork names the acceptance criterion, public seam, or non-goal it moves. A fork that moves none is `[AGENT-DECIDED]` or a follow-up candidate, never a user question.
+- **Decision ledger.** Each round prints `Goal / Decided / Asking / [AGENT-DECIDED]`, the goal verbatim. Curdle persists consequential decisions to [ADRs](references/adr.md) and minor ones to the spec. The taste verdict names every settled consequential entry exactly once.
+- **Decision map and fork-round cap.** Stop after three consecutive fork rounds that add no new evidence, or three consecutive forks that fail the altitude tag, or when the user requests a decision map. Show completed forks, remaining forks, and a ready or blocked verdict. A fourth round requires new grounding, a delegated digest, or a `/wheypoint` checkpoint. The map shows ledger state. It does not create an artifact.
 - Do not implement code.
 - Do not write production files before the approval gate.
 - Do not silently settle uncertain claims.

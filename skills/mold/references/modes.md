@@ -21,7 +21,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 **Job:** collapse ambiguity with high-leverage questions. Borrow the Job-To-Be-Done frame: Why Now, What This Unlocks, Who Has The Pain, Do Nothing. Use lettered options to compress decisions.
 
-**Exit when:** the dialogue states one problem statement and one concrete pain point.
+**Exit when:** the dialogue states one problem statement and one concrete pain point, and the ledger pins that statement on its `Goal:` line.
 
 ### Ground — anti-hallucination
 
@@ -51,7 +51,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Grill — adversarial clarification
 
-**Job:** stress-test the chosen approach and sketched interfaces. Use **one grilled item per turn**, except for the clean-steelman batch below. For each `[AGENT-DECIDED]` item or design decision, produce at most a **steelman + tension statement**. Then present a **user fork**: uphold / amend-as-proposed / user's own call. Invoke the question primitive in [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md). Use a real user turn. Do not render an `A/B/C/D` prose block and answer it yourself. Never self-issue verdicts for items that change the design. When the steelman fails cleanly and grilling finds nothing, you MAY batch-report items as upheld. When grilling produces an amendment, ask through the same primitive before adding the amendment to the ledger. Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption appears.
+**Job:** stress-test the chosen approach and sketched interfaces. Use **one grilled item per turn**, except for the clean-steelman batch below. Tag each grilled item with what it moves: an acceptance criterion, a public seam, or a non-goal. An item that moves none of those is not a user fork. Uphold it in the clean-steelman batch or record it `[AGENT-DECIDED]`. For each `[AGENT-DECIDED]` item or design decision, produce at most a **steelman + tension statement**. Then present a **user fork**: uphold / amend-as-proposed / user's own call. Invoke the question primitive in [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md). Use a real user turn. Do not render an `A/B/C/D` prose block and answer it yourself. Never self-issue verdicts for items that change the design. When the steelman fails cleanly and grilling finds nothing, you MAY batch-report items as upheld. When grilling produces an amendment, ask through the same primitive before adding the amendment to the ledger. Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption appears.
 
 **Exit when:** every branch and contract corner is touched and agent confidence ≥ user confidence.
 
