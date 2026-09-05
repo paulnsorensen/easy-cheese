@@ -130,28 +130,33 @@ def _checked_in_generated_file_bytes(
     return actual
 
 
-def _checked_in_schema_catalog_bytes(expected_source: str) -> bytes:
-    return _checked_in_generated_file_bytes(
-        expected_source, SCHEMA_CATALOG_SOURCE, artifact_name="schema catalog"
-    )
-
-
-def _checked_in_phase_registry_bytes(expected_source: str) -> bytes:
-    return _checked_in_generated_file_bytes(
-        expected_source, PHASE_REGISTRY_SOURCE, artifact_name="phase registry"
-    )
-
-
-def _checked_in_document_rules_bytes(expected_source: str) -> bytes:
-    return _checked_in_generated_file_bytes(
-        expected_source, DOCUMENT_RULES_SOURCE, artifact_name="document rules"
-    )
+# The checked-in runtime sources this build compiles, and the renderer that
+# produces each one. `--write-generated` writes them; the build checks them.
+GENERATED_RUNTIME_SOURCES: tuple[tuple[Path, str, "Callable[[], str]"], ...] = (
+    (PHASE_REGISTRY_SOURCE, "phase registry", lambda: _compiled_phase_registry_source()),
+    (SCHEMA_CATALOG_SOURCE, "schema catalog", lambda: _compiled_schema_catalog_source()),
+    (DOCUMENT_RULES_SOURCE, "document rules", lambda: compiled_document_rules_source()),
+)
 
 
 def _validate_generated_runtime() -> None:
-    _ = _checked_in_phase_registry_bytes(_compiled_phase_registry_source())
-    _ = _checked_in_schema_catalog_bytes(_compiled_schema_catalog_source())
-    _ = _checked_in_document_rules_bytes(compiled_document_rules_source())
+    for source, artifact_name, render in GENERATED_RUNTIME_SOURCES:
+        _ = _checked_in_generated_file_bytes(
+            render(), source, artifact_name=artifact_name
+        )
+
+
+def write_generated_runtime() -> list[Path]:
+    """Write every generated runtime source. Return the paths this call changed."""
+    changed: list[Path] = []
+    for source, _artifact_name, render in GENERATED_RUNTIME_SOURCES:
+        expected = render().encode()
+        current = source.read_bytes() if source.is_file() else None
+        if current == expected:
+            continue
+        _ = source.write_bytes(expected)
+        changed.append(source)
+    return changed
 
 
 def _normalize(name: str) -> str:
@@ -541,8 +546,17 @@ def cached_bundle(skill: str) -> Path:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     _ = parser.add_argument("--out-dir", type=Path)
+    _ = parser.add_argument(
+        "--write-generated",
+        action="store_true",
+        help="write every generated runtime source, then exit without building",
+    )
     _ = parser.add_argument("skills", nargs="*")
     args = parser.parse_args(argv[1:])
+    if cast(bool, args.write_generated):
+        for path in write_generated_runtime():
+            print(f"wrote {path.relative_to(REPO_ROOT)}")
+        return 0
     out_dir = cast(Path | None, args.out_dir)
     skills_arg = cast(list[str] | None, args.skills)
     selected = tuple(skills_arg or SKILLS)

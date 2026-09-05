@@ -458,10 +458,46 @@ def check_isolated_execution(pyz: Path) -> list[str]:
     return problems
 
 
+def _literal_name(node: ast.expr | None) -> str | None:
+    """The string value of one literal argument, or None."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _decorated_command_names(tree: ast.Module) -> set[str]:
+    """Every `@bundle_command("name")` declaration in one source tree.
+
+    Most manifests declare commands with `@bundle_command` plus
+    `derive_command` rather than a `Command(...)` literal, so a literal-only
+    scan finds no commands in those archives.
+    """
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        for decorator in node.decorator_list:
+            if not (
+                isinstance(decorator, ast.Call)
+                and isinstance(decorator.func, ast.Name)
+                and decorator.func.id == "bundle_command"
+                and decorator.args
+            ):
+                continue
+            name = _literal_name(decorator.args[0])
+            if name is not None:
+                names.add(name)
+    return names
+
+
 def _declared_command_names_from_trees(
     trees: Sequence[ast.Module],
 ) -> list[str]:
-    """Every `Command("name", ...)` literal in first-party source trees."""
+    """Every command name declared in first-party source trees.
+
+    Covers both declaration forms: the `Command("name", ...)` literal and the
+    `@bundle_command("name")` decorator.
+    """
     names: set[str] = set()
     for tree in trees:
         for node in ast.walk(tree):
@@ -469,9 +505,10 @@ def _declared_command_names_from_trees(
                 continue
             if node.func.id != "Command" or not node.args:
                 continue
-            first = node.args[0]
-            if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                names.add(first.value)
+            name = _literal_name(node.args[0])
+            if name is not None:
+                names.add(name)
+        names |= _decorated_command_names(tree)
     return sorted(names)
 
 
@@ -560,14 +597,7 @@ class _ArchiveAnalysis:
             names=names,
             files=files,
             dirs=dirs,
-            native_members=tuple(
-                sorted(
-                    name
-                    for name in names
-                    if name.startswith("site-packages/")
-                    and Path(name).suffix.lower() in NATIVE_SUFFIXES
-                )
-            ),
+            native_members=tuple(native_members(archive)),
             info_by_name={info.filename: info for info in infos},
         )
         if validate_shiv:
@@ -629,8 +659,29 @@ class _ArchiveAnalysis:
                 continue
             self.module_trees[relpath] = ast.parse(self.read(info).decode("utf-8"))
         self.command_names = tuple(
-            _declared_command_names_from_trees(tuple(self.module_trees.values()))
+            _declared_command_names_from_trees(self._dispatcher_trees())
         )
+
+    def _dispatcher_trees(self) -> tuple[ast.Module, ...]:
+        """The parsed trees that declare this archive's own command manifest.
+
+        Shiv records the dispatcher module in `environment.json`. An archive
+        also ships other skills' command modules, so a scan of every tree
+        would declare commands this archive does not dispatch. Archives
+        without `environment.json` fall back to every parsed tree.
+        """
+        if "environment.json" not in self.names:
+            return tuple(self.module_trees.values())
+        environment = cast(
+            dict[str, object], json.loads(self.read("environment.json"))
+        )
+        entry_point = environment.get("entry_point")
+        if not isinstance(entry_point, str):
+            return ()
+        module = entry_point.partition(":")[0]
+        relpath = module.replace(".", "/") + ".py"
+        tree = self.module_trees.get(relpath)
+        return () if tree is None else (tree,)
 
 
 def bundle_manifest(data: bytes) -> dict[str, tuple[int, int] | bytes]:
@@ -729,7 +780,9 @@ def _baseline_blobs(against: str, paths: Sequence[Path]) -> dict[Path, bytes]:
         capture_output=True,
     )
     if result.returncode != 0:
-        return {}
+        raise ValueError(
+            "git cat-file --batch failed: " + result.stderr.decode(errors="replace").strip()
+        )
 
     blobs: dict[Path, bytes] = {}
     output = result.stdout
@@ -740,7 +793,7 @@ def _baseline_blobs(against: str, paths: Sequence[Path]) -> dict[Path, bytes]:
             raise ValueError("git cat-file --batch returned malformed output")
         header = output[offset:line_end].split()
         offset = line_end + 1
-        if len(header) >= 2 and header[1] in (b"missing", b"ambiguous"):
+        if len(header) >= 2 and header[1] == b"missing":
             continue
         if len(header) != 3 or header[1] != b"blob":
             raise ValueError("git cat-file --batch returned a non-blob object")
@@ -807,11 +860,19 @@ def _staged_index_rebuild() -> Generator[Path]:
             _ = subprocess.run(build_command, cwd=worktree, check=True)
             yield worktree
         finally:
-            _ = subprocess.run(
+            removal = subprocess.run(
                 ["git", "worktree", "remove", "--force", str(worktree)],
                 cwd=REPO_ROOT,
-                check=False,
+                capture_output=True,
+                text=True,
             )
+            if removal.returncode != 0:
+                detail = removal.stderr.strip()
+                message = f"could not remove the temporary worktree: {detail}"
+                # Never mask the error that caused the early exit.
+                if sys.exception() is None:
+                    raise ValueError(message)
+                print(f"::warning::{message}", file=sys.stderr)
 
 
 def _describe(
@@ -906,10 +967,14 @@ def _run_checks(against: str, bundle_root: Path) -> int:
 
 def main(argv: Sequence[str] = ()) -> int:
     against = _parse_against(argv)
-    if against == "index":
-        with _staged_index_rebuild() as worktree:
-            return _run_checks("index", worktree)
-    return _run_checks("head", REPO_ROOT)
+    try:
+        if against == "index":
+            with _staged_index_rebuild() as worktree:
+                return _run_checks("index", worktree)
+        return _run_checks("head", REPO_ROOT)
+    except ValueError as exc:
+        print(f"::error::could not read the baseline bundles: {exc}")
+        return 1
 
 
 if __name__ == "__main__":

@@ -194,7 +194,7 @@ type GateApplicability {
   disposition GateApplicabilityDisposition
   work_class WorkClass
   ui_surface UiSurface
-  reason str | None
+  reason? str | None = None
 }
 
 type GroundingRow {
@@ -205,9 +205,9 @@ type GroundingRow {
 
 type MoldSpecDocument {
   frontmatter MoldSpecFrontmatter
-  acceptance_ids tuple[str, ...]
-  test_contract_rows tuple[TestContractRow, ...]
-  grounding_rows tuple[GroundingRow, ...]
+  acceptance_ids? tuple[str, ...] = ()
+  test_contract_rows? tuple[TestContractRow, ...] = ()
+  grounding_rows? tuple[GroundingRow, ...] = ()
 }
 
 type MoldSpecFrontmatter {
@@ -217,9 +217,9 @@ type MoldSpecFrontmatter {
   created str
   confidence SpecConfidence
   gate_applicability GateApplicability
-  gates_overridden tuple[str, ...]
-  agent_introduced_scope tuple[str, ...]
-  entity_referent_bindings tuple[Mapping[str, object], ...]
+  gates_overridden? tuple[str, ...] = ()
+  agent_introduced_scope? tuple[str, ...] = ()
+  entity_referent_bindings? tuple[Mapping[str, object], ...] = ()
 }
 
 type TestContractRow {
@@ -228,8 +228,8 @@ type TestContractRow {
   outermost_stable_seam str
   expected_failure str
   mode TestContractMode
-  interface_version str
-  matrix_rows tuple[str, ...]
+  interface_version? str = ''
+  matrix_rows? tuple[str, ...] = ()
 }
 
 enum GateApplicabilityDisposition = "red-required" | "not-applicable"

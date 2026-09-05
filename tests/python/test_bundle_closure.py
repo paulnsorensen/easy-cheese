@@ -9,9 +9,11 @@ skills/*/scripts/*.pyz directly -- no rebuild.
 from __future__ import annotations
 
 import io
-import site
+import subprocess
 import zipfile
 from pathlib import Path
+
+import pytest
 
 from scripts import check_bundles
 
@@ -47,8 +49,10 @@ def test_check_import_closure_flags_unresolved_deferred_import() -> None:
             )
         }
     )
-    problems = check_bundles.check_import_closure(archive)
-    assert any("totally_missing_module" in p for p in problems), problems
+    assert check_bundles.check_import_closure(archive) == [
+        "unresolved import 'totally_missing_module'"
+        + " in site-packages/easy_cheese/demo.py"
+    ]
 
 
 def test_check_import_closure_passes_guarded_import_error_with_stdlib_fallback() -> (
@@ -75,14 +79,17 @@ def test_check_import_closure_flags_cross_skill_style_unresolved_import() -> Non
             )
         }
     )
-    problems = check_bundles.check_import_closure(archive)
-    assert any("easy_cheese.skills.other_skill" in p for p in problems), problems
+    assert check_bundles.check_import_closure(archive) == [
+        "unresolved import 'easy_cheese.skills.other_skill.helper'"
+        + " in site-packages/easy_cheese/demo.py"
+    ]
 
 
 def test_check_import_closure_flags_ambient_third_party_import() -> None:
     archive = _archive({"site-packages/easy_cheese/demo.py": b"import requests\n"})
-    problems = check_bundles.check_import_closure(archive)
-    assert any("requests" in p for p in problems), problems
+    assert check_bundles.check_import_closure(archive) == [
+        "unresolved import 'requests' in site-packages/easy_cheese/demo.py"
+    ]
 
 
 def test_check_import_closure_resolves_command_manifest_target() -> None:
@@ -105,8 +112,10 @@ def test_check_import_closure_flags_unresolved_command_manifest_target() -> None
             )
         }
     )
-    problems = check_bundles.check_import_closure(archive)
-    assert any("easy_cheese.missing" in p for p in problems), problems
+    assert check_bundles.check_import_closure(archive) == [
+        "unresolved Command target 'easy_cheese.missing'"
+        + " in site-packages/easy_cheese/dispatch.py"
+    ]
 
 
 def test_check_import_closure_resolves_relative_import_to_sibling_module() -> None:
@@ -129,8 +138,10 @@ def test_check_import_closure_flags_unresolved_relative_import() -> None:
             ),
         }
     )
-    problems = check_bundles.check_import_closure(archive)
-    assert any("missing_sibling" in p for p in problems), problems
+    assert check_bundles.check_import_closure(archive) == [
+        "unresolved import 'easy_cheese.skills.foo.missing_sibling'"
+        + " in site-packages/easy_cheese/skills/foo/handler.py"
+    ]
 
 
 def test_all_committed_bundles_pass_closure_and_native_checks() -> None:
@@ -153,26 +164,42 @@ def test_isolated_execution_check_passes_on_a_real_committed_bundle() -> None:
 
 
 def test_check_isolated_execution_flags_module_only_in_user_site_packages(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A module reachable only through user site-packages must not resolve.
+
+    The marker lives in a temporary ``PYTHONUSERBASE`` site directory, never in
+    the developer's real user site directory.
+    """
     marker = "easy_cheese_isolation_marker_for_test"
-    user_site = Path(site.getusersitepackages())
+    user_base = tmp_path / "userbase"
+    monkeypatch.setenv("PYTHONUSERBASE", str(user_base))
+    interpreter = check_bundles._isolated_interpreter()  # pyright: ignore[reportPrivateUsage]
+    user_site = Path(
+        subprocess.run(
+            [interpreter, "-c", "import site; print(site.getusersitepackages())"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    assert user_base in user_site.parents, user_site
     user_site.mkdir(parents=True, exist_ok=True)
-    marker_path = user_site / f"{marker}.py"
-    preexisting = marker_path.exists()
-    _ = marker_path.write_text("VALUE = 1\n", encoding="utf-8")
-    try:
-        data = io.BytesIO()
-        with zipfile.ZipFile(data, "w") as archive:
-            archive.writestr("__main__.py", f"import {marker}\n".encode())
-        pyz = tmp_path / "demo.pyz"
-        _ = pyz.write_bytes(data.getvalue())
+    _ = (user_site / f"{marker}.py").write_text("VALUE = 1\n", encoding="utf-8")
 
-        problems = check_bundles.check_isolated_execution(pyz)
-    finally:
-        if not preexisting:
-            marker_path.unlink()
+    data = io.BytesIO()
+    with zipfile.ZipFile(data, "w") as archive:
+        archive.writestr("__main__.py", f"import {marker}\n".encode())
+    pyz = tmp_path / "demo.pyz"
+    _ = pyz.write_bytes(data.getvalue())
 
+    # Control: a non-isolated run resolves the marker from the temporary site.
+    control = subprocess.run(
+        [interpreter, str(pyz)], cwd=tmp_path, capture_output=True, text=True
+    )
+    assert control.returncode == 0, control.stdout + control.stderr
+
+    problems = check_bundles.check_isolated_execution(pyz)
     assert any(marker in p for p in problems), problems
 
 

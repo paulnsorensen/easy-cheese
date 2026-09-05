@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import json
+import importlib
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -14,6 +15,7 @@ from typing import cast
 
 import pytest
 from easy_cheese.shared import paths
+from easy_cheese.shared.bundle_commands import Command
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build_pyz.py"
@@ -31,85 +33,22 @@ pytestmark = pytest.mark.skipif(  # noqa: V107
     reason="bundle integration requires requirements-build.txt",
 )
 
-SKILL_SUBCOMMANDS = {
-    "melt": [
-        "batch-resolve",
-        "conflict-pick",
-        "conflict-summary",
-        "detect-squash-residue",
-        "lockfile-resolve",
-    ],
-    "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
-    "mold": [
-        "artifact-path",
-        "curd-count",
-        "gate-graph",
-        "migrate",
-        "publish",
-        "render-html",
-        "taste-test",
-        "validate-spec",
-    ],
-    "briesearch": ["artifact-path", "budget-check", "ground-check", "research-layout"],
-    "plate": ["stack-tools", "validate-publication"],
-    "cook": [
-        "artifact-path",
-        "age-route",
-        "baseline",
-        "phase-decision",
-        "milknado",
-        "mode",
-        "worktree",
-        "validate-decomposition",
-        "validate-manifest",
-        "validate-pr-plan",
-        "manifest-update",
-        "wiring-topo-sort",
-        "pr-plan-to-branches",
-        "curd-block",
-        "normalize",
-        "validate",
-        "slugify",
-        "write-handoff-artifact",
-        "read-handoff-slug",
-        "findings-cli",
-        "gates-cli",
-        "paths-cli",
-        "handoff-cli",
-        "render-html",
-    ],
-    "cure": [
-        "slugify",
-        "write-handoff-artifact",
-        "read-handoff-slug",
-        "findings-cli",
-        "gates-cli",
-        "paths-cli",
-        "handoff-cli",
-        "render-html",
-    ],
-    "wheypoint": ["checkpoint", "commit", "resolve", "show", "lint"],
-    "easy-cheese-setup": ["global", "local", "doctor"],
-    "age": [
-        "artifact-path",
-        "html-report",
-        "age-route",
-        "review-surface",
-        "severity",
-        "slugify",
-        "review-lock",
-        "write-handoff-artifact",
-        "read-handoff-slug",
-        "findings-cli",
-        "gates-cli",
-        "paths-cli",
-        "handoff-cli",
-        "render-html",
-    ],
-    "hard-cheese": ["append-attempt", "freshness-check"],
-    "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
-    "press": ["press-route", "press-telemetry"],
-}
+def _skill_subcommands() -> dict[str, list[str]]:
+    """Every bundled skill and the command names its own manifest declares.
+
+    Derived from each `COMMANDS` tuple, so a new command joins this matrix
+    without a second hand-written list.
+    """
+    matrix: dict[str, list[str]] = {}
+    for manifest in sorted((REPO_ROOT / "src" / "easy_cheese" / "skills").glob("*/commands.py")):
+        package = manifest.parent.name
+        module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
+        commands = cast("tuple[Command, ...]", module.COMMANDS)
+        matrix[package.replace("_", "-")] = sorted(command.name for command in commands)
+    return matrix
+
+
+SKILL_SUBCOMMANDS = _skill_subcommands()
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
 # (shared/scripts/artifact_path.py) backs them all; each must agree with

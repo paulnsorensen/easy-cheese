@@ -59,6 +59,63 @@ def test_check_and_ci_depend_on_bundle_currency() -> None:
     assert "bundle" in dependencies("check-bundles-ci")
 
 
+@needs_just
+def test_test_environment_installs_the_build_requirements() -> None:
+    """The test interpreter carries the build tools the bundle seam needs.
+
+    Without them, tests/python/test_pyz_bundle.py skips every bundle
+    integration test in a clean environment.
+    """
+    result = subprocess.run(
+        ["just", "--dump", "--dump-format", "json"],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assignments = cast(
+        dict[str, dict[str, object]], json.loads(result.stdout)["assignments"]
+    )
+    value = cast(str, assignments["python"]["value"])
+
+    assert "--with-requirements requirements-build.txt" in value
+    assert "--with-requirements requirements/runtime.txt" in value
+
+
+def test_docs_workflow_matches_the_package_build_command() -> None:
+    """The documentation workflow builds and deploys what the package emits."""
+    workflow = cast(
+        dict[str, object],
+        yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "docs.yml").read_text(encoding="utf-8")
+        ),
+    )
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    scripts = cast(
+        dict[str, str],
+        cast(dict[str, object], json.loads((ROOT / "package.json").read_text()))[
+            "scripts"
+        ],
+    )
+    assert "docs:build" in scripts
+
+    build_steps = cast(list[dict[str, object]], jobs["build"]["steps"])
+    runs = [cast(str, step["run"]) for step in build_steps if "run" in step]
+    assert any("docs:build" in run for run in runs)
+
+    uploads = [
+        step["with"]
+        for step in build_steps
+        if "upload-pages-artifact" in cast(str, step.get("uses", ""))
+    ]
+    assert uploads == [{"path": "dist"}], build_steps
+
+    deploy = jobs["deploy"]
+    assert deploy["needs"] == "build"
+    assert "refs/heads/main" in cast(str, deploy["if"])
+
+
 def test_build_pyz_workflow_runs_the_bundle_currency_matrix() -> None:
     """build-pyz.yml's matrix job runs check_bundles.py -- the full
     isolated-execution + command-dispatch conformance matrix -- across every

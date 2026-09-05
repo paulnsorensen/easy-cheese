@@ -20,6 +20,7 @@ import re
 import sys
 from enum import Enum
 from pathlib import Path
+from collections.abc import Callable
 from types import ModuleType
 from typing import TYPE_CHECKING, ClassVar, Protocol, TypedDict, cast
 
@@ -44,15 +45,9 @@ class _DocumentContract(Protocol):
     cross_field_rules: ClassVar[tuple[contracts.CrossFieldRule, ...]]
 
 
-class _DocumentedCommand(Protocol):
-    name: str
-    target: str
-    summary: str
-
-
 class _ContractVersion(TypedDict):
-    major: int
-    minor: int
+    major: str
+    minor: str
     schema_uri: str
 
 
@@ -148,14 +143,38 @@ def _collect_reachable(
     return classes, enums
 
 
+def _field_default(field: "attrs.Attribute[object]") -> str | None:
+    """The rendered default of one field, or None when the field is required.
+
+    An empty string marks an optional field whose default the reader cannot
+    reproduce, such as a factory that reads the instance.
+    """
+    default = cast(object, field.default)
+    if default is attrs.NOTHING:
+        return None
+    factory = cast("Callable[[], object] | None", getattr(default, "factory", None))
+    if factory is None:
+        return repr(default)
+    if cast(bool, getattr(default, "takes_self", False)):
+        return ""
+    return repr(factory())
+
+
 def render_type_blocks(roots: list[type], module: ModuleType) -> str:
-    """Render compact ``type``/``enum`` blocks for every class reachable from ``roots``."""
+    """Render compact ``type``/``enum`` blocks for every class reachable from ``roots``.
+
+    A ``?`` after a field name marks an optional field. ``= value`` shows the
+    default the host applies when a writer omits that field.
+    """
     classes, enums = _collect_reachable(roots, module)
     lines: list[str] = []
     for name in sorted(classes):
         lines.append(f"type {name} {{")
         for field in classes[name]:
-            lines.append(f"  {field.name} {field.type}")
+            default = _field_default(field)
+            optional = "" if default is None else "?"
+            suffix = f" = {default}" if default else ""
+            lines.append(f"  {field.name}{optional} {field.type}{suffix}")
         lines.append("}")
         lines.append("")
     for name in sorted(enums):
@@ -195,8 +214,22 @@ def render_mold_spec_region() -> str:
 
 
 def render_writer_views_region() -> str:
-    roots = [contracts.AgentWriterView, *contracts.writer_payload_types().values()]
-    return render_type_blocks(roots, contracts)
+    payload_types = contracts.writer_payload_types()
+    mapping = [
+        "// A `?` marks an optional field. `= value` shows the applied default.",
+        "map WriterViewKind -> WriterPayload {",
+        *(
+            f"  {cast(str, kind.value)} -> {payload.__name__}"
+            for kind, payload in sorted(
+                payload_types.items(), key=lambda item: cast(str, item[0].value)
+            )
+        ),
+        "}",
+        "",
+        "",
+    ]
+    roots = [contracts.AgentWriterView, *payload_types.values()]
+    return "\n".join(mapping) + render_type_blocks(roots, contracts)
 
 
 def _slug_from_uri(uri: str) -> str:
@@ -293,7 +326,7 @@ def render_skill_commands(slug: str) -> str:
         "| --- | --- |",
     ]
     lines.extend(
-        f"| `{command.name}` | {cast(_DocumentedCommand, cast(object, command)).summary} |"
+        f"| `{command.name}` | {command.summary} |"
         for command in command_map(skill_commands(slug)).values()
     )
     lines.append("")

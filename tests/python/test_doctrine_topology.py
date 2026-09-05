@@ -13,6 +13,7 @@ not duplicated here.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,18 @@ from scripts import check_bundles
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _init_repo(root: Path) -> None:
+    """Commit everything under `root` so a baseline blob read succeeds."""
+    for command in (
+        ["git", "init", "--quiet"],
+        ["git", "config", "user.email", "t@t.example"],
+        ["git", "config", "user.name", "t"],
+    ):
+        _ = subprocess.run(command, cwd=root, check=True)
+    _ = subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    _ = subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=root, check=True)
+
+
 def test_common_pyz_reintroduction_fails_the_bundle_gate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -29,6 +42,7 @@ def test_common_pyz_reintroduction_fails_the_bundle_gate(
     bundle_dir = tmp_path / "skills" / "demo" / "scripts"
     bundle_dir.mkdir(parents=True)
     _ = (bundle_dir / "common.pyz").write_bytes(b"stale-shared-bundle")
+    _init_repo(tmp_path)
     monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
 
     assert check_bundles.main() == 1
