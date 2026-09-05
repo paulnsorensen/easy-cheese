@@ -31,6 +31,19 @@ These fields extend the preamble and do not create a second shape.
 being written. It is empty (`artifact:` with nothing after it) when the
 dispatch had no upstream report; the key is never omitted.
 
+`artifact:` has exactly one meaning. It never carries another kind of reference.
+Each other reference kind has its own carrier:
+
+| Reference kind | Carrier | Consumer |
+|---|---|---|
+| prior consumed report | `artifact:` | the next phase, `/cheese --continue` |
+| approved specification pointer | the typed `handoff.spec_ref` field that `/mold` emits | `/cook` |
+| pull request reference | the `<pr-ref>` argument of `/affinage` | `/affinage` |
+
+Read the reference kind from its carrier, not from `next:`.
+A legacy handwritten note is the one exception. It can put a pull request reference in `artifact:`.
+See [`continue-resume.md`](continue-resume.md) for that legacy rule.
+
 ## Status vocabulary
 
 | `status:` | Wire form | Disposition | Meaning |
@@ -84,11 +97,18 @@ The two must never tell different stories.
 
 | Boundary | Producer | Consumer | Required fields | Optional fields |
 |---|---|---|---|---|
-| Phase handback | `/cook`, `/press`, `/age`, `/cure`, `/affinage`, `/pasteurize` | the dispatching orchestrator | `status`, `next`, `artifact`, orientation | `taste_test`, `durable_flags`, `baseline` |
+| Phase handback | `/mold`, `/cook`, `/press`, `/age`, `/cure` | the dispatching orchestrator | `status`, `next`, `artifact`, orientation | `taste_test`, `durable_flags`, `baseline` |
 | Durable report | the same phases, via the artifact writer | the next phase, `/cheese --continue` | same preamble + body | same |
+| Unregistered report | `/affinage`, `/pasteurize` | `/cheese --continue` | same preamble, written by hand | same |
 | Fan phase router | a fan-out phase handback | `/cook`'s fan pathway phase decision | `status` (routed by disposition), `next` | — |
 | Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | decision dossier body |
 | Grading receipt (distinct vocabulary, not a handback) | `/hard-cheese` | the attempt log | `status: PASS \| FAIL \| FAILED \| LOGGED` | `attempts` |
+
+`schema-intertwine.md` lists the registered source phases.
+Only a registered phase can use the artifact writer, because the writer validates `phase -> next:` first.
+`/affinage` and `/pasteurize` have no registered transition today.
+They write the same preamble by hand and do not call the writer.
+Register their transitions before you route them through the writer.
 
 ## Wire-format limits
 

@@ -39,12 +39,21 @@ handoff_gate:
         slug: <slug>
         source_report: .cheese/cook/<slug>.md
         flags: []
-    - id: modify-decomposition
-      label: Modify decomposition
-      description: Revise the current decomposition before continuing.
-      continue: ask-for-decomposition-change
+    - id: plate-it
+      label: Plate it
+      description: Run the remaining review chain, then publish through /plate.
+      dispatch: /press <slug> --auto --open-pr
       context:
-        scope: current-skill
+        slug: <slug>
+        source_report: .cheese/cook/<slug>.md
+        flags: [--auto, --open-pr]
+    - id: checkpoint-and-stop
+      label: Checkpoint & stop
+      description: Write a durable checkpoint, then pause the pipeline.
+      dispatch: /wheypoint
+      context:
+        slug: <slug>
+        source_report: .cheese/cook/<slug>.md
     - id: stop
       label: Stop
       description: Leave the pipeline paused without starting another skill.

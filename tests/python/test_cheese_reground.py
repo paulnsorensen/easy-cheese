@@ -109,7 +109,7 @@ def test_stale_gates_and_unverifiable_does_not() -> None:
         "any `stale` claim stops automatic dispatch",
         "research / decide / build",
         "dispatch nothing until the user picks",
-        "`unverifiable` verdicts are reported but do not stop dispatch",
+        "an `unverifiable` verdict does not stop dispatch",
     )
 
 

@@ -55,8 +55,11 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    It does not validate only the slug.
    Therefore, each condition breaks the chain and is not a naming problem.
    Never commit, push, or publish to Git to make a resume work.
-   Run `/wheypoint lint <projection-path>` to inspect integrity findings.
-   This command derives the digests again and checks the lineage without changes.
+   Use the `/wheypoint resolve` findings to inspect a lineage failure.
+   `resolve` is the only command that checks the complete lineage.
+   Run `/wheypoint lint <projection-path>` to check one projection.
+   That command derives the document digest and the status again.
+   It does not check the lineage.
 4. When resolution reports a miss, report every searched location.
    Then offer to start the pipeline again.
    Use `/mold` for a fuzzy specification.
@@ -68,6 +71,16 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    Report its orientation line.
    This line tells the user the current position.
    Parse `status:`, `next:`, and optional `mode:`.
+   **Branch on the disposition, not the status name.**
+   [`handback-contract.md`](handback-contract.md) maps each status to `proceed`, `retry`, or `stop`.
+   A `proceed` disposition covers `ok` and `ok-with-concerns`.
+   Treat `ok-with-concerns` exactly like `ok` for dispatch.
+   Report its concern in one line, and carry that concern into the dispatched phase.
+   A `retry` disposition covers `needs-context`.
+   Re-dispatch the same phase with the named gap, and do not advance to `next:`.
+   Stop after one retry at that phase, and report `retry cap (1) reached`.
+   A `stop` disposition covers `gated` and `halt`, and the branches below handle it.
+   An unrecognized status is an error. Stop and report it. Never treat it as `proceed`.
    - **Parse optional `mode:` first.** A missing value means `mode: single` and preserves existing handoffs.
      In `mode: single`, `next:` remains the runnable phase.
      In `mode: parallel`, `next:` is only the general resume category.
@@ -103,17 +116,25 @@ Also use it when the user manually resumes the pipeline from a cleared context.
      Manual resume answers only that trust gate, never this halt gate or any other runtime integrity gate.
      `affinage` is the exception for a clean and manually approved legacy result.
      It needs a pull request reference instead of a slug.
-     Read that reference from the slug's `artifact:` field.
-     Accept `PR#<n>` or its URL.
-     Use bare `/affinage` only when `artifact:` contains no pull request.
+     Read that reference from the legacy note's `artifact:` field.
+     This legacy note is the only carrier that overloads `artifact:`.
+     A registered phase report keeps the one canonical meaning, the prior consumed report.
+     Accept `PR#<n>`, a bare number, or a full GitHub pull request URL.
+     Normalize the value to a bare number before you emit the command.
+     `/affinage` and its `pr-status` command accept a number or a URL only.
+     Use bare `/affinage` only when the handoff names no pull request.
+     Add `--auto` only together with an explicit `--stake <floor>` value.
+     Stop and ask for the floor when the user requested `--auto` without one.
    - **When `status:` is `ok` and `next:` names a pipeline phase**, dispatch `/\<next\> \<slug\>` directly.
      The valid phases are `mold | cook | press | age | cure | affinage`.
      Apply the same `affinage` exception.
      Under `--safe`, select this dispatch option first.
      Offer `/cook \<slug\> --auto` as an alternative.
      Put `Stop` last.
-   - **When `next: cook` follows a gate handoff**, keep the handoff's `artifact:` authoritative.
-     An approved Mold `red-required` handoff dispatches `/cook` with the same `artifact:` specification pointer.
+   - **When `next: cook` follows a gate handoff**, keep the handoff's specification pointer authoritative.
+     Read that pointer from the typed `spec_ref` field.
+     Read it from `artifact:` only for a legacy note that has no `spec_ref` value.
+     An approved Mold `red-required` handoff dispatches `/cook` with that same pointer.
      Preserve validated optional `mode:` and in-scope `--hard`, `--open-pr`, and `--safe` flags.
      Forward `--auto` only when the handoff contains it.
      Never infer `--auto`.
@@ -252,7 +273,8 @@ Any `stale` claim stops automatic dispatch.
 Offer the user a research / decide / build choice.
 Dispatch nothing until the user picks.
 
-`unverifiable` verdicts are reported but do not stop dispatch.
+Report each `unverifiable` verdict.
+An `unverifiable` verdict does not stop dispatch.
 Every resume without this flag already contains unchecked premises.
 Do not penalize the user for this check.
 

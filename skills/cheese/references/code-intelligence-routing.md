@@ -9,7 +9,7 @@ Workflow skills call the selected source-code backend directly. Route by questio
 | Type-grounded definition, reference, caller, rename, or code action | LSP; use Serena when its symbol tools expose the needed operation. |
 | Broad symbol, caller, content, file, or dependency search and bounded source reads | tilth when available, otherwise an equivalent semantic source-code backend. |
 | Syntax-shaped pattern or repeated structural rewrite | AST search or rewrite such as `sg`; preview every rewrite before applying it. |
-| Ordinary block, line, import, config, or documentation edit | A stale-safe anchored editor such as tilth tag-anchored writes, an LSP workspace edit, or a native snapshot edit. |
+| Ordinary block, line, import, config, or documentation edit | A stale-safe anchored editor. Examples are tilth tag-anchored writes, an LSP workspace edit, and a native snapshot edit. |
 
 Use the smallest capability that answers the question.
 A later edit can change this choice.
@@ -20,8 +20,11 @@ When a symbol read gives no edit anchor, use the backend that validates the writ
 For source changes, keep this order:
 
 1. **Search** — locate the definition, callers, affected files, and immediate dependencies before multi-file changes.
-2. **Fresh bounded read** — read the exact symbol or ranges that will change, plus immediate callers or shared utilities required by the task.
-3. **Stale-safe write** — pass the read's tag, snapshot, or workspace version to a compatible write operation. Never invent an anchor or apply an unbounded blind rewrite.
+2. **Fresh bounded read** — read the exact symbol or ranges that you change.
+   Also read the immediate callers and the shared utilities that the task needs.
+3. **Stale-safe write** — pass the read's tag, snapshot, or workspace version to a compatible write operation.
+   Never invent an anchor.
+   Never apply an unbounded blind rewrite.
 
 Read and write anchors are backend-family contracts.
 A tilth tag belongs to tilth write.

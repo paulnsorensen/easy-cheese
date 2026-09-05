@@ -56,7 +56,7 @@ Its type, model, and power match `resolved`.
 Power ranks `cheap < default < powerful`.
 Reject known underpowered candidates.
 Accept unknown power only as the final attempt and set `degraded: true`.
-Set `fallback_reason` to null when the first preferred type is accepted.
+Set `fallback_reason` to null when the resolution accepts the first preferred type.
 Give every lower-specificity selection a nonempty reason.
 `permission_enforcement: prompt-only` requires a read-only request and `degraded: true`.
 All artifacts for one dispatch share the same resolution facts.
@@ -68,7 +68,8 @@ Do not change those facts between a phase report and its handoff.
 - Halt when write work has no write-capable candidate.
 - Halt when required worktree or fresh-context isolation is unavailable.
 - Do not turn a known underpowered candidate into a fallback.
-- Use unknown power only after every known-power candidate is rejected, and record the degradation.
+- Use unknown power only after you reject every known-power candidate.
+- Record that degradation.
 
 ## Roles x tiers (spawn-primitive power and effort per role)
 
@@ -81,7 +82,16 @@ Each role's spawn-primitive `minimum_power` and `effort` defaults, harness-agnos
 | coder | default | medium | gains the ESCALATE contract; delegation IS the downgrade |
 | verifier | cheap | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
 | reviewer | powerful | low \| medium \| high (dial) | pinned to a powerful model; count and effort follow the age router |
-| planner / integrator | powerful | high (at mold) | never delegated; owns the approval loop |
+| planner / integrator | powerful | high (at mold) | the integrator is parent-owned and never delegated; the planner is a delegated fresh-context worker |
+
+The `planner / integrator` row names two separate jobs at one power and effort setting.
+The **integrator** owns the approval loop and stays with the parent agent.
+Never delegate the integrator.
+The **planner** is a delegated worker.
+Mold dispatches a fresh-context planner on a `PlannerRequest` and validates the returned writer view.
+See [`../../mold/references/curdle.md`](../../mold/references/curdle.md) section Pre-approval typed planner dispatch.
+Resolve the planner through the resolution order above.
+Record its `agent_resolution` block like any other delegated role.
 
 A local skill table's `Effort` column defaults to this table for the matching role; override only with a stated reason (e.g. a router-driven dial).
 

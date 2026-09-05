@@ -4,14 +4,15 @@ Intent shapes for `/cheese`, with the signals that drive each one and the disamb
 
 ## Clarity check (implementation intents)
 
-For `cook` and `mold`, classification feeds cook's fast-path check.
+For a `cook` intent, classification feeds Cook's fast-path check.
 This check drives the three-tier escalation in `skills/cheese/SKILL.md`.
+A `mold` intent skips this check and reaches `/mold`'s user mode.
 
 Use `clarify` only for the tier-3 path.
 Use it when the fast-path check fails before and after tier 2.
 Also use it when intent confidence stays below `medium` after the silent Culture pass.
 
-Other intents bypass the clarity check and dispatch directly.
+Every other intent bypasses the clarity check and dispatches directly.
 The `ultracook` compatibility invocation resolves to `/cook` without the clarity check.
 
 ## Shape index
@@ -24,6 +25,7 @@ The `ultracook` compatibility invocation resolves to `/cook` without the clarity
 | mold | optional `/briesearch` | `/mold` → `/cook` |
 | cook | — | `/cook --auto` (default — propagates through `/press → /age → /cure`) |
 | debug | — | `/pasteurize --auto` (default) → `/cook --auto` |
+| affinage | — | `/affinage` |
 | age | — | `/age` |
 | age-then-cure | — | `/age` → `/cure` |
 | ultracook (retired) | — | `/cook` (compatibility redirect) |
@@ -87,22 +89,25 @@ Optional pre-step: route `/briesearch` first when the user calls out external ev
 
 ### cook (`/cook`)
 
-Clear, scoped implementation request meeting the standalone fast-path checks.
+Clear, scoped implementation request that passes Cook's standalone fast-path check.
+
+`/cook` owns that check. Read it at [`../../cook/SKILL.md`](../../cook/SKILL.md) section Standalone fast-path.
+Do not restate the check here. The signals below only recognize the shape.
 
 | Signal | Example |
 | --- | --- |
 | Spec path under `.cheese/specs/` | `.cheese/specs/dark-mode.md` |
 | Single-file fix with named function or test | "make `tail` count bytes correctly when no trailing newline" |
-| All three of: clear inputs/outputs, bounded scope, obvious verification | the cook fast-path checklist |
+| A request that passes Cook's standalone fast-path check | the check in `skills/cook/SKILL.md` |
 
-When two of the three fast-path checks are clear but the third is borderline, downgrade to `mold`.
+Downgrade to `mold` when any part of Cook's check is borderline.
 
-Before a tier-1 `cook` or `mold` dispatch, run the specification discovery check in `skills/cheese/references/escalation.md`.
+Before a tier-1 `cook` dispatch, run the specification discovery check in `skills/cheese/references/escalation.md`.
 Reuse a matching specification instead of writing a duplicate.
 
 ### debug (`/pasteurize --auto` → `/cook --auto`)
 
-Symptom-driven work where the cause has not been confirmed yet and a code-level fix is expected.
+Symptom-driven work with no confirmed cause. The user expects a code-level fix.
 
 | Signal | Example |
 | --- | --- |
@@ -117,9 +122,26 @@ Route to `/pasteurize` to identify the cause, add a regression test, and apply t
 When the cause and a single-file fix are clear, route directly to `/cook`.
 Route a debug signal to `/culture` only when the user requests no writes.
 
+### affinage (`/affinage`)
+
+Requests about the review feedback that a pull request already carries.
+Match this shape before the generic pull request rules below.
+
+| Signal | Example |
+| --- | --- |
+| Asks to answer or act on review comments | "respond to the PR comments", "handle the review feedback" |
+| Names failing CI on an open pull request | "fix the failing build on PR#142" |
+| Names merge conflicts on an open pull request | "resolve the conflicts and reply" |
+
+`/affinage` triages the existing comments, the failing checks, and the conflicts.
+It accepts a pull request number or a full GitHub pull request URL.
+It uses the current branch when the input names no pull request.
+Route to `/age` instead when the user wants a fresh review of the diff.
+
 ### age (`/age`)
 
 Review-only requests against a diff, branch, PR, or scoped path.
+A pull request reference with no review-feedback signal belongs here, not to `affinage`.
 
 | Signal | Example |
 | --- | --- |
@@ -150,7 +172,7 @@ Use for staging and committing, opening or updating an ordinary PR, or creating,
 
 When two intents are plausible, apply in order:
 
-1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Commit", "publish", or "stack PRs" → `plate`.
+1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Commit", "publish", or "stack PRs" → `plate`. "Respond to comments" or "fix the build" on a pull request → `affinage`.
 2. **Strongest signal wins.** A spec path beats free text. A stack trace beats a feature description. A PR URL beats a path glob.
 3. **Smallest committed scope wins.** Prefer `cook` over `mold` when the fast-path checks pass. Only prefer `culture` over `mold` when the user has explicitly opted out of writes.
 4. **If still tied, clarify.** Ask one question; do not guess.
@@ -172,6 +194,8 @@ When two intents are plausible, apply in order:
 | `.cheese/specs/dark-mode.md` | cook | spec path resolves; fast-path obvious |
 | `add dark mode to the web client` | mold | feature scope, no spec, multi-module likely |
 | `PR#142` | age | PR reference, no fix verb |
+| `respond to the review comments on PR#142` | affinage | review-feedback verb on a pull request |
+| `fix the failing build on PR#142` | affinage | failing checks on an open pull request |
 | `review and fix the high-severity items in PR#142` | age-then-cure | review verb + fix verb + PR ref |
 | stack trace pasted | debug | trace present, cause not stated |
 | `what's the best rate limiter library for fastify` | research | external library question |

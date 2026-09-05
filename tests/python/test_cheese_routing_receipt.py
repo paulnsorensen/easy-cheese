@@ -57,6 +57,30 @@ def test_skill_output_ends_with_the_receipt_then_dispatch() -> None:
     )
 
 
+def test_output_section_defines_exactly_one_receipt() -> None:
+    # An ordered-phrase check alone passes when a second receipt is appended, so
+    # the boundary needs a count and an end-of-list assertion too.
+    section = _output_section()
+    assert section.count(RECEIPT_LINE) == 1, "the Output section defines two receipts"
+    assert section.count("**Routing receipt**") == 1
+    assert "\n6. " not in section, "the receipt is no longer the last numbered item"
+
+
+def test_nothing_follows_the_receipt_before_dispatch() -> None:
+    receipt_rules = RECEIPT.read_text(encoding="utf-8")
+    _assert_in_order(
+        receipt_rules,
+        "exactly one receipt for each route",
+        "never print a second receipt for the same route",
+        "nothing follows the receipt",
+        "print no other router output between this line and the dispatch",
+    )
+    section = _output_section()
+    tail = section[section.index(RECEIPT_LINE) + len(RECEIPT_LINE) :]
+    assert "wiki:" not in tail, "wiki-hit lines must precede the receipt"
+    assert "route: intent=" not in tail, "a second receipt follows the boundary"
+
+
 def test_clarify_still_prints_a_receipt() -> None:
     _assert_in_order(
         _output_section(),
@@ -77,7 +101,7 @@ def test_receipt_carries_no_self_measured_time() -> None:
         RECEIPT.read_text(encoding="utf-8"),
         "never a duration and never a timestamp",
         "the router cannot measure wall-clock time",
-        "analytics take the boundary from when this line was emitted",
+        "analytics take the boundary from the moment the router emits this line",
     )
 
 

@@ -37,14 +37,13 @@ A picker without visible framing is a transport defect.
 Answers *when* a decision may be a structured question; capability-first
 rendering (above) governs *how* once that gate passes.
 
-**Freshness rule.** A structured question may only confirm a trade-off
-already discussed with the user this session. A structured question must
-never introduce an undiscussed design option — anything undiscussed gets
-prose weighing first, before any structured question.
+**Freshness rule.** A structured question can confirm only a trade-off from this session.
+Never introduce an undiscussed design option in a structured question.
+Weigh an undiscussed option in prose first.
 
 **Mechanical fast-path.** A mechanical item is intelligible without
-prior-session context — for example, a branch name or a yes/no dispatch. A
-mechanical item may be asked as a direct structured question.
+prior-session context. A branch name and a yes/no dispatch are examples. Ask a
+mechanical item as a direct structured question.
 
 **Design definition.** A design item is one whose options need session
 context to be intelligible — the tradeoffs cannot be judged without the
@@ -129,6 +128,7 @@ remains an explicit, equally actionable numbered choice.
    `other:` value.
 2. Preserve multiple selections only when `multi: true`.
 3. If the answer is ambiguous, ask one clarifying question through this same
-   transport; do not guess.
-4. Return the normalized value to the calling skill. The caller owns what
-   happens after selection.
+   transport.
+   Do not guess.
+4. Return the normalized value to the calling skill.
+   The caller owns what happens after selection.

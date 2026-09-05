@@ -16,11 +16,14 @@ Do not use the `${CLAUDE_SKILL_DIR}` environment variable in invocation paths.
 Claude Code substitutes it, but Codex CLI does not.
 Codex receives the literal variable and fails.
 
-If a helper path is shown, the doc should say what behavior the helper provides, not imply one absolute path is the only valid transport.
+Name the behavior that a helper provides.
+Do not imply that one absolute path is the only valid transport.
 
 ## Read, search, edit, inspect
 
-Use the host primitive that preserves bounded context. When the host offers multiple primitives, prefer the one that returns fresh line or snapshot context and call out the fallback only as a fallback.
+Use the host primitive that preserves bounded context.
+When the host offers several primitives, prefer the one that returns fresh line or snapshot context.
+Name every other primitive as a fallback only.
 
 ## User interaction
 

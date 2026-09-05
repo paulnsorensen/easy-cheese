@@ -1,7 +1,14 @@
 # Decomposer curd-block schema
 
-The curd block is the specification-locked decomposition artifact.
-Both `/mold` and `/cook` produce it.
+**Scope: explicit migration only.** The curd block is not production state.
+The production path is the typed `PlannerRequest`, `PlannerResult`, `CurdPlan`, and `CurdResult` chain.
+See [`schema-intertwine.md`](schema-intertwine.md) for the registered contracts.
+See [`../../mold/references/curdle.md`](../../mold/references/curdle.md) section Pre-approval typed planner dispatch.
+Use this schema only when an explicit migration consumer asks for the legacy projection.
+Never persist a curd block as the selected production artifact.
+
+The curd block is the specification-locked decomposition artifact of that legacy projection.
+Both `/mold` and `/cook` can produce it under a migration request.
 Consumers cannot identify which skill produced it.
 
 ```yaml
@@ -25,8 +32,9 @@ decomposer: {source: mold | cook, model: <id>, prompt_version: <hash>}
 - **`/cook` fallback decompose gate** — dispatch a fresh-context decomposer for a large un-curded task.
   Gate implementation on the resulting wave plan.
 
-Both producers must emit a block that satisfies the schema above verbatim —
-field names are locked and must not drift per-caller.
+Each producer acts only on an explicit migration request.
+Both producers must emit a block that satisfies the schema above verbatim.
+Field names are locked and must not drift per caller.
 
 ## Validator
 
