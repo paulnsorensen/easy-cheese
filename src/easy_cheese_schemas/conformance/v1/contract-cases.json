@@ -650,7 +650,7 @@
       "expected": {
         "status": "reject",
         "error_type": "ArtifactResolutionError",
-        "message": "artifact schema mismatch: https://schemas.easy-cheese.dev/phase-contract"
+        "message": "artifact schema mismatch: https://schemas.easy-cheese.dev/phase-contract: $.contract_version is required"
       }
     },
     {

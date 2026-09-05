@@ -142,7 +142,16 @@ def test_mold_pyz_migrate_rejects_unsupported_version(
     assert not (artifact_root / "pointers" / "op-migrate-unsupported.json").exists()
 
 
-def test_mold_pyz_migrate_rejects_unprovable_route(tmp_path: Path) -> None:
+@pytest.mark.parametrize("option", ["--source-phase", "--destination-phase"])
+def test_mold_pyz_migrate_refuses_a_caller_selected_phase(
+    tmp_path: Path, option: str
+) -> None:
+    """The bundled route is bound to ``mold -> cook``.
+
+    A caller cannot name either end, so an unprovable route is unreachable
+    rather than merely rejected. The bundle must refuse the option itself and
+    write no pointer.
+    """
     mold_pyz = build_pyz.cached_bundle("mold")
     document = _write_document(tmp_path)
     artifact_root = tmp_path / "artifacts"
@@ -156,15 +165,14 @@ def test_mold_pyz_migrate_rejects_unprovable_route(tmp_path: Path) -> None:
         "0",
         "--source-minor",
         "9",
-        "--destination-phase",
+        option,
         "not-a-real-phase",
         "--operation-id",
         "op-migrate-unprovable",
         "--artifact-root",
         str(artifact_root),
     )
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "ERROR:" in result.stderr
-    assert "not declared" in result.stderr
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert f"unrecognized arguments: {option}" in result.stderr
     assert "Traceback" not in result.stderr
     assert not (artifact_root / "pointers" / "op-migrate-unprovable.json").exists()

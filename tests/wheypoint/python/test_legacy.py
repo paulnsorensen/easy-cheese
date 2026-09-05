@@ -273,3 +273,64 @@ def test_real_git_worktrees_are_searched_through_the_default_runner(
     assert found.outcome is legacy.LegacyOutcome.FOUND
     assert found.note is not None
     assert found.note.path == expected
+
+
+PROVENANCE_PREAMBLE = """status: ok
+next: cook
+artifact: .cheese/age/demo.md
+mode: parallel
+session: claude:abc123
+git: main@0f1e2d3
+created: 2026-09-05T00:00:00Z
+parents: [demo-parent]
+baseline: none
+taste_test: pass
+durable_flags: --hard
+mid-flight on the demo curd
+"""
+
+
+def test_legacy_preamble_decodes_every_provenance_key() -> None:
+    """A handwritten note keeps its provenance between `artifact:` and the
+    orientation. The canonical projection dropped these keys, so the legacy
+    parser is the only thing that still has to accept them."""
+    slug = legacy.parse_legacy_note(PROVENANCE_PREAMBLE)
+
+    assert slug.status == "ok"
+    assert slug.next_skill == "cook"
+    assert slug.artifact == ".cheese/age/demo.md"
+    assert slug.orientation == "mid-flight on the demo curd"
+    assert slug.mode == "parallel"
+    assert slug.session == "claude:abc123"
+    assert slug.git == "main@0f1e2d3"
+    assert slug.created == "2026-09-05T00:00:00Z"
+    assert slug.parents == "[demo-parent]"
+    assert slug.baseline == "none"
+    assert slug.taste_test == "pass"
+    assert slug.durable_flags == "--hard"
+
+
+def test_legacy_preamble_stops_at_the_orientation() -> None:
+    """The orientation is the first non-key line, so a provenance key below it
+    is prose. The parser must not reach past the orientation to collect it."""
+    moved = """status: ok
+next: cook
+artifact: none
+mid-flight on the demo curd
+session: claude:abc123
+"""
+    slug = legacy.parse_legacy_note(moved)
+
+    assert slug.orientation == "mid-flight on the demo curd"
+    assert slug.session is None
+
+
+def test_legacy_preamble_rejects_an_unknown_key() -> None:
+    unknown = """status: ok
+next: cook
+artifact: none
+sesion: claude:abc123
+mid-flight on the demo curd
+"""
+    with pytest.raises(legacy.LegacyDecodeError, match="unknown handoff key 'sesion'"):
+        _ = legacy.parse_legacy_note(unknown)

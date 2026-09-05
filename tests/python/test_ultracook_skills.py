@@ -483,43 +483,40 @@ def _handoff_schema_fence() -> list[str]:
 class TestWheypointProvenance:
     PROVENANCE_KEYS: tuple[str, str, str, str] = ("session:", "git:", "created:", "parents:")
 
-    def test_schema_lists_all_provenance_fields(self) -> None:
-        fence = "\n".join(_handoff_schema_fence())
+    def test_legacy_section_documents_every_provenance_field(self) -> None:
+        # The canonical projection carries the Wheypoint pins after the
+        # orientation and no provenance keys at all; `checkpoint` refuses
+        # them. Provenance survives only in the handwritten legacy note that
+        # `resolve` still reads, so the doc must name every key there.
+        # `tests/wheypoint/python/test_legacy.py` proves the parser itself
+        # accepts them between `artifact:` and the orientation.
+        body = _skill_corpus("wheypoint")
+        section = body.split("### Handwritten legacy notes", 1)
+        assert len(section) == 2, (
+            "wheypoint must keep a `### Handwritten legacy notes` section"
+        )
+        legacy = section[1]
         for key in self.PROVENANCE_KEYS:
-            assert key in fence, (
-                f"wheypoint header schema must document the provenance field `{key}`"
+            assert f"`{key}`" in legacy, (
+                f"the legacy-note section must document the provenance field `{key}`"
             )
+        assert "between `artifact:` and the orientation" in legacy, (
+            "the legacy-note section must state where the provenance keys sit"
+        )
 
-    def test_provenance_fields_sit_between_artifact_and_orientation(self) -> None:
-        # The backward-compat linchpin: orientation stays the first non-key
-        # line, so every provenance field must appear after `artifact:` and
-        # before the orientation placeholder. A reorder pushing a provenance
-        # key below orientation would break /cheese --continue's key-based
-        # parse and silently consume a wrong orientation.
-        lines = _skill("wheypoint").splitlines()
-        orient_i = next(
-            (
-                i
-                for i, ln in enumerate(lines)
-                if ln.lstrip().startswith("<one-line orientation")
-            ),
-            None,
+    def test_canonical_schema_keeps_the_orientation_first(self) -> None:
+        # The backward-compat linchpin: the orientation stays the first
+        # non-key line, so the canonical fence documents exactly the three
+        # shared preamble keys above it and every pin below it.
+        fence = _handoff_schema_fence()
+        head = [ln for ln in fence[:-1] if ln.strip()]
+        assert [ln.split(":", 1)[0] for ln in head] == ["status", "next", "artifact"], (
+            f"canonical preamble must be status/next/artifact, got {head}"
         )
-        assert orient_i is not None, (
-            "wheypoint schema must keep the `<one-line orientation` placeholder"
-        )
-        artifact_positions = [
-            i for i, ln in enumerate(lines[:orient_i]) if ln.startswith("artifact:")
-        ]
-        assert artifact_positions, (
-            "wheypoint schema must document `artifact:` above the orientation line"
-        )
-        artifact_i = max(artifact_positions)
         for key in self.PROVENANCE_KEYS:
-            positions = [i for i, ln in enumerate(lines) if ln.startswith(key)]
-            assert any(artifact_i < i < orient_i for i in positions), (
-                f"provenance field `{key}` must sit between artifact: and the "
-                f"orientation line (orientation stays the first non-key line)"
+            assert not any(ln.startswith(key) for ln in fence), (
+                f"the canonical schema must not document `{key}`; "
+                "the checkpoint command refuses it"
             )
 
     def test_provenance_documented_optional_and_backward_compatible(self) -> None:
@@ -1443,7 +1440,9 @@ class TestCureCanonicalPathway:
     def test_cure_uses_canonical_contracts(self) -> None:
         body = _skill_corpus("cure")
         for helper in (
-            "PlannerResult",
+            # `PlannerResult` is Cook's and Mold's planning artifact. Cure
+            # receives the validated `CurdPlan` itself, so it never names the
+            # wrapper. See the `cure -> schemas` row in hub-schemas.md.
             "CurdPlan",
             "validate_curd_plan",
             "resolve_artifact",

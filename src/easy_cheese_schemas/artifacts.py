@@ -594,8 +594,10 @@ def _validate_registered_schema(content: bytes, schema_uri: str) -> None:
             supported_version=version,
         )
     except ContractValidationError as exc:
+        # Keep the reason. A bare "schema mismatch" hides which rule failed,
+        # so a caller cannot tell a wrong schema from a rejected field.
         raise ArtifactResolutionError(
-            f"artifact schema mismatch: {schema_uri}"
+            f"artifact schema mismatch: {schema_uri}: {exc}"
         ) from exc
 
 

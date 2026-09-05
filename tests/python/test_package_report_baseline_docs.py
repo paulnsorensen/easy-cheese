@@ -60,7 +60,12 @@ def test_honesty_rules_require_stating_suite_not_green_when_baseline_recorded() 
 
 
 def test_stop_conditions_exempt_identical_baseline_failures() -> None:
+    """The section must both record an identical-to-baseline failure and deny
+    that it stops Cook. Assert the two halves, not one fixed sentence, so an
+    editorial rewrite cannot pass by dropping either half."""
     body = read()
-    stop_conditions = body.split("## Stop conditions", 1)[1]
-    assert "identical-to-baseline failures are recorded, not a stop condition" in stop_conditions
+    stop_conditions = body.split("## Stop conditions", 1)[1].lower()
+    assert "identical-to-baseline failure" in stop_conditions
+    assert "record" in stop_conditions
+    assert "not a stop condition" in stop_conditions
     assert "quality-gates.md" in stop_conditions

@@ -92,8 +92,12 @@ def test_plate_repair_topology_requires_run_branch_and_one_overlap_rule() -> Non
     assert "Count a rename as its changed lines only" in flat
     assert "Count a binary path as one changed line" in flat
     assert "git rev-parse --verify <run-branch>" in flat
-    # The bundled command surface, not the non-existent `worktree_harvest`.
-    assert "cook.pyz worktree harvest --branch" in flat
+    # Cook owns the harvest command. Plate routes to it rather than naming
+    # cook.pyz, which the bundle-closure gate forbids in a plate document.
+    assert "Cook owns the harvest command" in flat
+    assert "cook/references/quality-gates.md" in flat
+    assert "cook.pyz" not in repair
+    # Never the non-existent `worktree_harvest` function.
     assert "worktree_harvest" not in repair
 
 

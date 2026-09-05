@@ -63,6 +63,9 @@ Read the gate status. Then apply this matrix:
 | `ERROR` | Ask the user before you publish. Report the gate error |
 | `FAILED` | Halt at `quality gate`. Do not publish. Fix the work |
 
+Ask the `ERROR` question through the shared question transport.
+See [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md).
+
 ## Tool routing
 
 - Run `python3 skills/plate/scripts/plate.pyz stack-tools` before you select a stack provider.

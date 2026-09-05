@@ -688,7 +688,10 @@ class NormalizationReceipt:
         # forged provenance claim, not a redundant field.
         if self.source_schema_uri != self.source_version.schema_uri:
             raise ValueError(
-                "legacy_artifact ingress requires source_schema_uri to equal source_version.schema_uri"
+                "legacy_artifact ingress requires source_schema_uri to equal"
+                + " source_version.schema_uri; the receipt declares two legacy"
+                + f" source identities: {self.source_schema_uri!r} and"
+                + f" {self.source_version.schema_uri!r}"
             )
 
 

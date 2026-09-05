@@ -68,6 +68,7 @@ ROUTED_FILES = {
     "skills/mold/references/evals.md",
     "skills/mold/SKILL.md",
     "skills/pasteurize/SKILL.md",
+    "skills/plate/SKILL.md",  # the gate-`ERROR` ask before publication
     "skills/plate/references/topology.md",  # layout question, moved out of the body
     "skills/press/SKILL.md",
     "skills/wheypoint/SKILL.md",
@@ -140,7 +141,8 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
     ),
     (
         "skills/cure/references/selection.md",
-        "invoke `/age --scope <touched-paths> --auto` directly (no handoff gate)",
+        "invoke `/age <slug> --scope <touched-path> --auto` directly "
+        + "(no handoff gate)",
         "internal auto-mode mechanism note; cure/SKILL.md's own ask site "
         + "already routes through handoff-gate.md",
     ),
@@ -161,9 +163,21 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         "report-shape description, not a live question site",
     ),
     (
+        "skills/briesearch/references/evals.md",
+        "That run does not ask the user a question.",
+        "a rule that forbids a question in a sidechain run, not a question-"
+        + "asking site",
+    ),
+    (
+        "skills/hard-cheese/references/composition.md",
+        "Ask the user before you publish. The fail-open divergence applies.",
+        "a mirror of the Plate publication policy; the ask itself lives in "
+        + "plate/SKILL.md, which routes through the transport chokepoint",
+    ),
+    (
         "skills/mold/references/grounding.md",
-        "the first structured question does not fire until the ledger carries "
-        + "a probe result",
+        "blocks the first structured question until the ledger carries a "
+        + "probe outcome",
         "precondition on when a question may fire, not a question-asking site "
         + "— the ask itself stays in mold/SKILL.md, which routes through the "
         + "transport chokepoint",

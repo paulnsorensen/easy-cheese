@@ -84,6 +84,11 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         REPO_ROOT / "skills/pasteurize/SKILL.md",
     ]
 
+    # The sentence appears both mid-sentence and sentence-initial, so only its
+    # leading letter varies in case. Match case-insensitively; every other
+    # word still has to be exact.
+    portability_line = "slash commands are host renderings, not the control model"
+
     for path in docs:
         text = path.read_text(encoding="utf-8")
         if path.name == "formatting.md":
@@ -91,10 +96,10 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             assert "Portable host-capability wording" in text
         elif path == REPO_ROOT / "skills/cheese/SKILL.md":
             assert "references/harness-portability.md" in text, path
-            assert "slash commands are host renderings, not the control model" in text, path
+            assert portability_line in text.lower(), path
         else:
             assert "cheese/references/harness-portability.md" in text, path
-            assert "slash commands are host renderings, not the control model" in text, path
+            assert portability_line in text.lower(), path
 
 
 

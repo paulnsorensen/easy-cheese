@@ -546,15 +546,8 @@ def _resolve_pointer(
         receipt_artifact = validate_contract(receipt_bytes, NormalizationReceipt, None)
         receipt = receipt_artifact.value
         assert isinstance(receipt, NormalizationReceipt)
-        source_version = receipt.source_version
-        if (
-            source_version is not None
-            and receipt.source_schema_uri != source_version.schema_uri
-        ):
-            raise ContractValidationError(
-                "normalization_receipt declares two legacy source identities: "
-                + f"{receipt.source_schema_uri!r} and {source_version.schema_uri!r}"
-            )
+        # `NormalizationReceipt` itself rejects two disagreeing legacy source
+        # identities, so this layer only checks what the model cannot see.
         if receipt.canonical_digest != _digest_bytes(canonical.canonical_bytes):
             raise ContractValidationError(
                 "normalization_receipt.canonical_digest does not match the canonical payload"

@@ -13,9 +13,9 @@ staging, the commit, and the commit verification.
 5. Push the named branch without force.
 6. Create the PR with an explicit base and head:
 
-```bash
-gh pr create --title "<title>" --body-file <body-path> --base <base> --head <head>
-```
+   ```bash
+   gh pr create --title "<title>" --body-file <body-path> --base <base> --head <head>
+   ```
 
 7. Verify with `gh pr view --json number,url,title,baseRefName,headRefName,state`.
 

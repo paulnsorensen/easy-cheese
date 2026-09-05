@@ -52,7 +52,15 @@ def test_quality_gates_policy_doc_exists() -> None:
     assert "no re-halt, no re-flag of identical entries" in body
 
 
-SCHEMA_CONSUMERS = tuple(c for c in CONSUMERS if c != "skills/cheese/SKILL.md")
+# cheese/SKILL.md has no handoff-slug schema (router doc, prose-only baseline
+# mention). wheypoint/SKILL.md documents the canonical projection, whose record
+# carries no baseline field at all -- `checkpoint` refuses the key rather than
+# drop it -- so it is covered by its own test below instead.
+SCHEMA_CONSUMERS = tuple(
+    c
+    for c in CONSUMERS
+    if c not in {"skills/cheese/SKILL.md", "skills/wheypoint/SKILL.md"}
+)
 
 
 def _handoff_schema_fence(rel_path: str) -> str:
@@ -86,12 +94,31 @@ def _handoff_schema_fence(rel_path: str) -> str:
 
 @pytest.mark.parametrize("rel_path", SCHEMA_CONSUMERS)
 def test_consumer_handoff_schema_carries_baseline_field(rel_path: str) -> None:
-    # cheese/SKILL.md has no handoff-slug schema (router doc, prose-only
-    # baseline mention) so it is excluded from SCHEMA_CONSUMERS above.
     schema_fence = _handoff_schema_fence(rel_path)
     assert any(
         line.strip().startswith("baseline: none |") for line in schema_fence.splitlines()
     ), f"{rel_path} handoff-slug schema fence must carry a `baseline: none |` sentinel line"
+
+
+def test_wheypoint_refuses_a_baseline_key_rather_than_drop_it() -> None:
+    """Wheypoint's canonical record has no baseline field.
+
+    Silently dropping the key would lose settled state, so the checkpoint
+    command must refuse it. The handwritten legacy note still carries a
+    `baseline:` line, and the doc must say both things.
+    """
+    from easy_cheese.skills.wheypoint import legacy
+
+    assert "baseline" in legacy._ALLOWED_HEADER_KEYS  # pyright: ignore[reportPrivateUsage]
+
+    body = read("skills/wheypoint/SKILL.md")
+    schema_fence = _handoff_schema_fence("skills/wheypoint/SKILL.md")
+    assert not any(
+        line.strip().startswith("baseline:") for line in schema_fence.splitlines()
+    ), "the canonical schema must not document a baseline field"
+    assert "refuses a `baseline` key rather than drop it" in body, (
+        "wheypoint must state that checkpoint refuses the key, not drops it"
+    )
 
 
 @pytest.mark.parametrize("rel_path", CONSUMERS)

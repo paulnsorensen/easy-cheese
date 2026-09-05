@@ -125,7 +125,7 @@ When the caller passes `--auto`, follow these rules.
 - If the recommended set is empty, stop the chain.
   Print a one-line "auto chain clean" note and the report path.
 
-### Within cook's own fan pathway
+### Auto mode inside the cook fan pathway
 
 Read `## Within cook's own fan pathway` above for the no-chain isolation directive.
 Follow that directive before you write the report.

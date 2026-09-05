@@ -103,6 +103,7 @@ Then select the topology:
 - Verify branch deletion with `git rev-parse --verify <run-branch>` before you use the independent path for a missing run branch.
   Halt at `topology` when the command cannot decide.
 - Move shared files onto the run branch at or below the small-repair threshold. Do not publish these files independently.
-  Use `python3 skills/cook/scripts/cook.pyz worktree harvest --branch <repair-branch> --onto <run-branch> --repo <run-worktree>`.
-  Resolve `<run-worktree>` from verified Git worktree state. Halt at `topology` when the command fails.
+  Cook owns the harvest command. Run the harvest through `/cook`.
+  See [`../../cook/references/quality-gates.md`](../../cook/references/quality-gates.md).
+  Resolve `<run-worktree>` from verified Git worktree state. Halt at `topology` when the harvest fails.
 - Restack with the repair as the base pull request above the threshold. Use the stack process in `stacks.md`.

@@ -513,25 +513,45 @@ def test_artifact_path_rejects_unknown_phase(bundles: Path) -> None:
     assert "unknown phase" in result.stderr
 
 
+# `research-layout` requires a descriptive 4-6 word slug, so these cases use
+# one instead of the short two-word slug the other commands accept.
+_RESEARCH_SLUG = "demo-nested-research-layout"
+
+
 def test_research_layout_prints_slug_aware_paths(bundles: Path) -> None:
     """`research-layout` returns the complete nested layout as JSON."""
     result = _run(
         bundles / "briesearch.pyz",
         "research-layout",
-        "demo-slug",
+        _RESEARCH_SLUG,
         extra_env=_CORPUS_ENV,
     )
     assert result.returncode == 0, result.stderr
     layout = cast("dict[str, str]", json.loads(result.stdout))
     root = f"{_CORPUS_ENV['EASY_CHEESE_HOME']}/{_CORPUS_ENV['EASY_CHEESE_PROJECT']}"
     assert layout == {
-        "slug": "demo-slug",
+        "slug": _RESEARCH_SLUG,
         "corpus_root": root,
-        "dir": f"{root}/research/demo-slug",
-        "report": f"{root}/research/demo-slug/demo-slug.md",
-        "raw_dir": f"{root}/research/demo-slug/raw",
-        "manifest": f"{root}/research/demo-slug/manifest.json",
+        "dir": f"{root}/research/{_RESEARCH_SLUG}",
+        "report": f"{root}/research/{_RESEARCH_SLUG}/{_RESEARCH_SLUG}.md",
+        "raw_dir": f"{root}/research/{_RESEARCH_SLUG}/raw",
+        "manifest": f"{root}/research/{_RESEARCH_SLUG}/manifest.json",
+        "artifact": f"research/{_RESEARCH_SLUG}/{_RESEARCH_SLUG}.md",
     }
+
+
+def test_research_layout_rejects_a_slug_that_is_not_descriptive(
+    bundles: Path,
+) -> None:
+    """A two-word slug names no research question, so the command refuses it."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "research-layout",
+        "demo-slug",
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 1
+    assert "4-6 kebab-case words" in result.stderr
 
 
 def test_research_layout_rejects_invalid_slug(bundles: Path) -> None:
@@ -550,13 +570,13 @@ def test_research_layout_is_the_nested_layout_interface(bundles: Path) -> None:
     result = _run(
         bundles / "briesearch.pyz",
         "research-layout",
-        "demo-slug",
+        _RESEARCH_SLUG,
         extra_env=_CORPUS_ENV,
     )
     assert result.returncode == 0, result.stderr
     layout = cast("dict[str, str]", json.loads(result.stdout))
     assert layout["report"] == (
-        "/tmp/ec-corpus/demo-project/research/demo-slug/demo-slug.md"
+        f"/tmp/ec-corpus/demo-project/research/{_RESEARCH_SLUG}/{_RESEARCH_SLUG}.md"
     )
 
 
@@ -584,6 +604,20 @@ def _write(tmp_path: Path, body: str) -> Path:
     return report
 
 
+def _write_local_evidence(bundles: Path) -> None:
+    """Create the files that the inline `path:line` citations below name.
+
+    The gate resolves a repository-relative citation against the invocation
+    directory, which `_run` sets to the bundle directory. A cited path must
+    exist and must hold the cited line, so a grounded report has to put real
+    files there.
+    """
+    _ = (bundles / "ref.md").write_text("".join(f"line {n}\n" for n in range(1, 41)))
+    _ = (bundles / "source.py").write_text(
+        "".join(f"# line {n}\n" for n in range(1, 21))
+    )
+
+
 def test_ground_check_fails_uncited_claim(bundles: Path, tmp_path: Path) -> None:
     """The exact #113 failure: an absence claim with no citation. Ask 1 says every
     claim must carry a verifiable citation — this must be a hard, non-zero exit so
@@ -596,10 +630,13 @@ def test_ground_check_fails_uncited_claim(bundles: Path, tmp_path: Path) -> None
     assert "granular approval_policy" in result.stderr
 
 
-def test_ground_check_passes_grounded_report(bundles: Path, tmp_path: Path) -> None:
+def test_ground_check_passes_grounded_report(
+    bundles: Path, tmp_path: Path
+) -> None:
     """A fully-cited report whose only absence claim is hedged (speculating +
     'searched') is clean — the gate enforces grounding, it does not forbid
     well-grounded negatives."""
+    _write_local_evidence(bundles)
     result = _run(
         bundles / "briesearch.pyz",
         "ground-check",
@@ -629,6 +666,7 @@ def test_ground_check_absence_advisory_does_not_fail(
     ADVISORY (feeds the synthesis-fidelity self-check) but does NOT fail the gate:
     observed-vs-inferred absence is not decidable from text, so it is flagged for
     judgement, not auto-rejected. Pins that the advisory stays soft."""
+    _write_local_evidence(bundles)
     body = _GROUNDED_REPORT.replace(
         "| No broader sandbox knob was found in the config reference searched | [^s1] | vendor docs | 2026-06-01 | speculating | only config.toml checked |",
         "| Codex does not expose a global sandbox knob | [^s1] | vendor docs | 2026-06-01 | certain | |",
@@ -654,6 +692,7 @@ def test_ground_check_accepts_nonlocal_and_existing_local_citations(
     bundles: Path, tmp_path: Path
 ) -> None:
     """URLs and inline paths need no lookup; local paths use their defined roots."""
+    _write_local_evidence(bundles)
     raw = tmp_path / "raw"
     raw.mkdir()
     _ = (raw / "01-example.md").write_text("one\ntwo\nthree\nfour\n")
@@ -811,6 +850,7 @@ def test_ground_check_rejects_footnote_definition_without_citation(
 def test_ground_check_accepts_citation_on_footnote_continuation_line(
     bundles: Path, tmp_path: Path
 ) -> None:
+    _write_local_evidence(bundles)
     body = _GROUNDED_REPORT.replace(
         "[^s1]: https://example.com/codex (fetched 2026-06-01).",
         "[^s1]: Vendor documentation\n    https://example.com/codex",
@@ -946,7 +986,7 @@ def test_ground_check_passes_url_retrieved_by_a_provider_tool(
                     "kind": "extract",
                     "provider": "tavily",
                     "tool": "tavily_extract",
-                    "url": "https://example.com/a/",
+                    "url": "https://example.com/a",
                     "file": "raw/01-example.md",
                     "fetched": "2026-08-30",
                 }
