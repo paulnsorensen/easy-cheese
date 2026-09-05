@@ -6,8 +6,11 @@ Use steps 4 through 7 only for the specified conflict types.
 
 ## Step 4 — Select ours or theirs
 
-Use `conflict-pick` for formats that mergiraf does not parse.
-These formats include shell, SQL, YAML, and JSON.
+Use `conflict-pick` for a file that mergiraf cannot merge.
+Read the `mergiraf_supported` field and the `recommendation` field from `conflict-summary`.
+Run `conflict-pick` when the recommendation names that command.
+Do not use a static format list.
+Mergiraf changes its language support between releases.
 
 ```bash
 # Select ours for every hunk.

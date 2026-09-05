@@ -26,8 +26,8 @@ Use this sequence for manual resolutions: search, fresh bounded read, stale-safe
 | Stage | Tool | Purpose | Start condition |
 | --- | --- | --- | --- |
 | 1 | `mergiraf` | Merges syntax trees and preserves independent additions. It uses text merge after a parse failure. | Git starts it as a merge driver, or the user runs `batch-resolve`. |
-| 2 | `git rerere` | Reuses a recorded human resolution for the same conflict signature. | Run it after mergiraf, especially during a rebase with repeated conflicts. |
-| 3 | `kdiff3` | Provides a manual three-way diff for unresolved conflicts. | Start it with `git mergetool`. |
+| 2 | `git rerere` | Reuses a recorded human resolution for the same conflict signature. | Run it after mergiraf when `rerere.enabled` is `true`. |
+| 3 | `kdiff3` | Provides a manual three-way diff for unresolved conflicts. | Start it with `git mergetool --tool=kdiff3`. |
 
 ## Protocol
 
@@ -141,7 +141,19 @@ git add <path>
 
 ### 3. Resolve remaining conflicts
 
-Check rerere before you start the manual tool.
+Run this preflight first.
+It reports whether the host enables each remaining stage.
+
+```bash
+git config --get rerere.enabled
+git config --get merge.tool
+```
+
+Git records and replays a resolution only when `rerere.enabled` is `true`.
+Report the absent setting to the user and name the fix: `git config --global rerere.enabled true`.
+Then skip the rerere stage for this invocation.
+
+Check rerere when the host enables it.
 
 ```bash
 git rerere status
@@ -149,12 +161,17 @@ git rerere diff
 ```
 
 If rerere applied a resolution, treat the conflict as resolved.
-Otherwise, start the manual tool.
+Otherwise, name the manual tool explicitly.
+The explicit flag makes the stage independent of the host `merge.tool` value.
 
 ```bash
-git mergetool
-git mergetool <path>
+git mergetool --tool=kdiff3
+git mergetool --tool=kdiff3 <path>
 ```
+
+Drop the flag when kdiff3 is absent from the host.
+Git then starts the tool that `merge.tool` names.
+Report the substitution to the user.
 
 Stage each manual resolution.
 Then continue the interrupted operation.
@@ -178,9 +195,9 @@ See the generated command inventory in [`references/commands.md`](references/com
 
 ## Exclusions
 
-- Do not push or open a PR. Hand the work to a `gh` skill.
+- Do not push or open a PR directly. The `plate-it` gate option hands publication to `/plate`.
 - Do not run builds or tests. Return to `/cook` or run the project gates.
-- Do not commit resolved files. Use a `commit` skill after staging.
+- Do not commit resolved files. Stage them, then hand the commit to `/plate`.
 - Do not review the merge architecture. Use `/age`.
 
 ## Gotchas
@@ -189,20 +206,71 @@ See the generated command inventory in [`references/commands.md`](references/com
 - Mergiraf supports Markdown, but the repository can require a `.gitattributes` entry.
 - A structural lockfile merge does not prove that the lockfile is valid.
   Regenerate each lockfile after you select one side.
-- Each script handles zdiff3 base markers that start with `|||||||`.
+- `conflict-pick` and `conflict-summary` handle zdiff3 base markers that start with `|||||||`.
+  `detect-squash-residue` reads no conflict markers.
+  `lockfile-resolve` reads the index stages.
 - Mergiraf already ran as a driver when a supported file still has conflicts.
 
 ## Handoff
 
-After resolution, use the shared gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md).
-Add the interrupted operation and upstream invocation to the context packet.
-Then ask the user to select one option:
+After resolution, build one structured gate record.
+Follow the shared contract in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md).
+Fill each placeholder from the current Git state before you render the gate.
 
-- **Resume** — Run the exact continuation command for the current Git operation.
-  Return to the upstream skill after the command succeeds.
-  If the upstream invocation is unknown, stop after you report the Git status.
-- **Re-run gates** — Run the upstream skill invocation that found the conflict.
-- **Stop** — Run no command. Leave the working tree staged for inspection.
+```yaml
+handoff_gate:
+  source_skill: /melt
+  id: post-melt-next-step
+  prompt: The conflicts are resolved. What should happen next?
+  recommended: resume-operation
+  multi: false
+  options:
+    - id: resume-operation
+      label: Resume the Git operation
+      description: Run the continuation command, then return to the upstream skill.
+      continue: run-continuation-then-return
+      context:
+        operation: <merge|rebase|cherry-pick>
+        continuation: git <operation> --continue
+        upstream_invocation: <command|none>
+    - id: rerun-upstream
+      label: Re-run the upstream gate
+      description: Run the upstream skill invocation that found the conflict.
+      dispatch: <upstream_invocation>
+      context:
+        upstream_invocation: <command>
+        flags: [<propagated flags>]
+    - id: plate-it
+      label: Plate it
+      description: Finish the Git operation, then publish through /plate.
+      dispatch: /plate
+      context:
+        operation: <merge|rebase|cherry-pick>
+        continuation: git <operation> --continue
+        flags: [<propagated --hard, --open-pr>]
+    - id: checkpoint-and-stop
+      label: Checkpoint & stop
+      description: Write a durable checkpoint, then pause the pipeline.
+      dispatch: /wheypoint
+      context:
+        operation: <merge|rebase|cherry-pick>
+    - id: stop
+      label: Stop
+      description: Leave the resolved files staged for inspection.
+      dispatch: none
+      context:
+        reason: leave the resolved files staged
+```
+
+Apply these rules to the gate:
+
+- Omit `rerun-upstream` when the upstream invocation is unknown.
+- Set `recommended` to `stop` when the upstream invocation is unknown.
+- Propagate in-scope `--hard` and `--open-pr` to `plate-it`.
+- Run the continuation command first for `plate-it`.
+  Dispatch `/plate` only after `git status` reports no unmerged paths and no interrupted operation.
+  Report the failure and stop when the continuation command fails.
+- Do not commit or push in `/melt`. `/plate` owns every durable write.
 
 `/melt` waits for the user selection.
-After a non-stop selection, run the selected command immediately.
+After a non-stop selection, run the selected action immediately.
