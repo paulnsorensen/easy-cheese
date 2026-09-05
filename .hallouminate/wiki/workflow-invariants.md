@@ -151,6 +151,12 @@ Gotchas the r014 cure settled:
   statuses, but its render path does not yet go through
   `render_status_field` (deferred to the wheypoint stack).
 
+
+
+The preamble key set, the single-line rule, the `--body-file` trap, and the
+phase-registry gate on the canonical writer are recorded in
+[architecture/handoff-preamble-grammar](./architecture/handoff-preamble-grammar.md).
+
 ## Plate is the final writing gate
 
 `/plate` is the only phase that owns the complete transition from finished local work
@@ -199,3 +205,7 @@ axis (`skills/cheese/references/formatting.md:103`) — see
 [wiki-conventions](./wiki-conventions.md) for the full classification
 rule. This invariant exists so later integration seams cannot dump
 transient noise into durable memory.
+
+
+_Source: repository skills and tests; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for the preamble-grammar pointer · Updated: 2026-09-04_
+

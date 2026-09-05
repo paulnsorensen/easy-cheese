@@ -144,6 +144,20 @@ _Code_: NEW ENTITY
 _Avoid_: parsed bare payload
 _Code_: NEW ENTITY
 
+
+
+**CureDiagnosisBinding** - the three-field record (`source_plan_ref`, `source_curd_ref`, `diagnosis`, no defaults) that Cure requires for every curd in the validated plan, including clean curds; a partial set is rejected before dispatch with `missing=[...]`.
+_Avoid_: selective binding, failing-curd-only binding
+_Code_: `src/easy_cheese_schemas/workflow.py:126-143,1142-1211`
+
+**PlannerRequest kind** - the discriminator that changes required fields: `decompose` forbids `source_plan_ref`, `replan` requires it, `remediate` requires it plus `evidence`.
+_Avoid_: one request shape for every planner call
+_Code_: `src/easy_cheese_schemas/contracts.py:1034-1080`
+
+**Domain-model target** - the glossary location returned by `domain_model_target()`: one Markdown file, one split context directory, or one Hallouminate corpus. A consumer that corrects the glossary must define read, selection, write, and read-back for all three shapes and select the bounded-context page before any update.
+_Avoid_: single-file assumption
+_Code_: `src/easy_cheese/shared/paths.py:497-510,555-602`; `skills/mold/references/curdle.md:313-333`
+
 ## Outside-in RED gating
 
 **GateReceipt** - the strict phase-neutral evidence envelope that binds approved work, contract mode, witness disposition, runner argv, protected-file digests, and producer provenance across Cut, Cook, and Press.
@@ -177,3 +191,7 @@ _Code_: `CorrectiveRoute` in `src/fanout/press_route.py:25-31`
 **Gate applicability** - Mold's explicit closed classification of requested work as `red-required` behavior or a named `not-applicable` non-behavior class.
 _Avoid_: filename heuristic, inferred docs-only, UI exemption
 _Code_: `GateApplicability` in `src/mold/taste_test.py:180`
+
+
+_Source: Mold domain-model artifacts; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for CureDiagnosisBinding, PlannerRequest kind, and Domain-model target · Updated: 2026-09-04_
+
