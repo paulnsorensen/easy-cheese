@@ -184,7 +184,10 @@ The map records each cross-area contract from the reconciliation notes.
 - docs -> build: The documentation workflow calls `docs:build`.
 - build -> docs: `scripts/gen_docs.py` generates site content.
 - skills -> docs: Skill prose supplies generated site content.
-- docs -> external: Site components use Brand and Starlight components.
+- docs -> `@cheeselord/design`: `website/components/SiteTitle.astro` uses `Brand.astro`. `website/pages/index.astro` uses `Header.astro`, `styles/cheeselord.css`, and `styles/flavors/easy-cheese.css`.
+- docs -> `@astrojs/starlight`: `website/components/Sidebar.astro` overrides the sidebar component and reads `Astro.locals.starlightRoute`. `website/content.config.ts` uses `docsLoader` and `docsSchema`.
+- docs -> `astro`: `website/content.config.ts` uses `defineCollection` from `astro:content`. `website/pages/index.astro` uses `import.meta.env.BASE_URL` and `Astro.site`.
+- docs -> GitHub Actions: `.github/workflows/docs.yml` pins `actions/checkout`, `actions/setup-python`, `pnpm/action-setup`, `actions/setup-node`, `actions/configure-pages`, `actions/upload-pages-artifact`, and `actions/deploy-pages` by commit.
 
 ## Easy-cheese-setup
 

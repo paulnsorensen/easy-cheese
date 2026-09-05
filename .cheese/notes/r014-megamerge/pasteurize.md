@@ -1,8 +1,8 @@
 ## Summary
 
-- Reconciled the manifest command surface from PRs #581 and #592.
-- Rewrote all pasteurize skill prose for ASD-STE100 compliance.
-- Rebuilt every skill bundle from the integrated source tree.
+- This node reconciles the manifest command surface from PRs #581 and #592.
+- This node rewrites all pasteurize skill prose for ASD-STE100 compliance.
+- This node rebuilds every skill bundle from the integrated source tree.
 
 ## Commits
 
@@ -23,7 +23,7 @@ none
 - `this -> shared`: `_pasteurize_route` calls `shared.fanout.pasteurize_route_cli.main`.
 - `this -> shared`: `debug_tag_sweep.py` and `repro_rerun.py` use `shared.cli`.
 - `other -> this`: the build reads `src/easy_cheese/skills/pasteurize/commands.py` and emits `pasteurize.pyz`.
-- These contracts did not change during reconciliation.
+- These contracts do not change during reconciliation.
 
 ## STE100 status
 

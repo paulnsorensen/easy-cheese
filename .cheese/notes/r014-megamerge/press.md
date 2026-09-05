@@ -1,9 +1,9 @@
 ## Summary
 
-- Reconciled the Press command manifest and route guidance from PR #581.
-- Removed repeated prose and kept one route definition for each outcome.
-- Rewrote all Press skill prose for ASD-STE100 compliance.
-- Rebuilt every skill bundle from the integrated source tree.
+- This node reconciles the Press command manifest and route guidance from PR #581.
+- This node removes repeated prose and keeps one route definition for each outcome.
+- This node rewrites all Press skill prose for ASD-STE100 compliance.
+- This node rebuilds every skill bundle from the integrated source tree.
 
 ## Commits
 
@@ -27,7 +27,7 @@ none
 - `this -> cheese`: Press uses the handback, handoff, portability, and code intelligence contracts.
 - `ultracook -> this`: The no-chain directive makes Press write its handoff and stop.
 - `build -> this`: The bundle build reads the Press command manifest and emits `skills/press/scripts/press.pyz`.
-- PR #581 added required command summaries to the shared `Command` contract. Other listed contracts did not change.
+- PR #581 adds required command summaries to the shared `Command` contract. The other listed contracts do not change.
 
 ## STE100 status
 

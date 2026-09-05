@@ -2,16 +2,16 @@
 
 ## Summary
 
-- Reconciled routing receipts, continuation, regrounding, and generated schema guidance.
-- Removed duplicate routing instructions and kept each detailed contract in its reference file.
-- Rebuilt all shipped Python bundles after the integrated changes.
+- This node reconciles routing receipts, continuation, regrounding, and generated schema guidance.
+- This node removes duplicate routing instructions and keeps each detailed contract in its reference file.
+- This node rebuilds all shipped Python bundles after the integrated changes.
 
 ## Commits
 
-- `554fafb2` ingested the cheese slice from PR #592.
-- `58f01485` ingested the cheese slice from PR #583.
-- `6e537c09` ingested the cheese slice from PR #589.
-- `a3afd0d` reconciled the cheese area and rebuilt the bundles.
+- `554fafb2` ingests the cheese slice from PR #592.
+- `58f01485` ingests the cheese slice from PR #583.
+- `6e537c09` ingests the cheese slice from PR #589.
+- `a3afd0d` reconciles the cheese area and rebuilds the bundles.
 
 ## Source PRs
 
@@ -21,9 +21,9 @@
 
 ## Disagreements
 
-- `skills/cheese/SKILL.md`: PR #583 propagated `--auto` broadly, while PR #589 made continuation opt-in. Kept opt-in continuation because the validated handoff controls resume behavior.
-- `skills/cheese/references/classification.md`: the older router dispatched retired `/ultracook`, while the current compatibility skill redirects it. Kept the `/cook` redirect because it is the active implementation path.
-- `skills/cheese/SKILL.md`: several sections repeated detailed reference rules. Kept short router rules and reference-owned details to prevent future drift.
+- `skills/cheese/SKILL.md`: PR #583 propagates `--auto` broadly, while PR #589 makes continuation opt-in. The integration keeps opt-in continuation because the validated handoff controls resume behavior.
+- `skills/cheese/references/classification.md`: the older router dispatches retired `/ultracook`, while the current compatibility skill redirects it. The integration keeps the `/cook` redirect because it is the active implementation path.
+- `skills/cheese/SKILL.md`: several sections repeat detailed reference rules. The integration keeps short router rules and reference-owned details to prevent future drift.
 
 ## Outward dependencies
 

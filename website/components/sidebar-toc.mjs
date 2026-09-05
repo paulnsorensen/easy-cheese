@@ -1,5 +1,5 @@
 // This pure transform adds the H2 table of contents to the left navigation (ADR-002).
-// Sidebar.astro supplies the tree, TOC items, and active-page predicate.
+// Sidebar.astro supplies the tree and the TOC items.
 // This module only updates the tree. Node's built-in test runner can test it.
 
 // Starlight's generateToC prepends a synthetic depth-2 title node to every page.
@@ -19,7 +19,7 @@ export function isSkillPageHref(href) {
 	return /\/skills\/[^/]+\/?$/.test(href ?? '');
 }
 
-export function injectToc(sidebar, tocItems, isActive) {
+export function injectToc(sidebar, tocItems) {
 	const h2Headings = (tocItems ?? []).filter(
 		(item) => item.depth === 2 && item.slug !== TOC_TITLE_SLUG,
 	);
@@ -31,7 +31,7 @@ export function injectToc(sidebar, tocItems, isActive) {
 			}
 			if (
 				entry.type === 'link' &&
-				isActive(entry) &&
+				entry.isCurrent &&
 				isSkillPageHref(entry.href) &&
 				h2Headings.length > 0
 			) {

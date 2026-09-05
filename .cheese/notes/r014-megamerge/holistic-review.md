@@ -9,10 +9,10 @@ The structural diff covers 253 files and reports 111 modified symbols plus 475 a
 Eight blocker findings prevent merge.
 The strongest failures affect review identity, artifact publication, credential handling, and Wheypoint durability.
 
-Verification used source inspection and two behavioral probes.
-The review-lock probe changed `HEAD` between clean commits and produced the same digest.
-The URL probe collapsed three authorization and path variants into one identity.
-The same probe truncated a parenthesized URL.
+Verification uses source inspection and two behavioral probes.
+The review-lock probe changes `HEAD` between clean commits and produces the same digest.
+The URL probe collapses three authorization and path variants into one identity.
+The same probe truncates a parenthesized URL.
 
 ## Commits
 

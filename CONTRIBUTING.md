@@ -11,16 +11,24 @@ This document explains how to prepare and submit a change.
 
 ## Local setup
 
-Install Python 3.12 or later. Install bats-core and ShellCheck for the Bash tests.
+Install these prerequisites before you run the checks:
+
+- Python 3.12 or later, for the Python suites and the documentation generator.
+- `just` and `uv`, which resolve every Python tool for each recipe.
+- bats-core and ShellCheck, for the Bash suites.
+- yamllint, yamlfmt, and markdownlint-cli2, for the format checks.
+- Node.js 22 or later with Corepack, for the JavaScript suite and the documentation build.
+- Rust and Cargo, for the skill-overlap analyzer tests.
 
 ```sh
 git clone https://github.com/paulnsorensen/easy-cheese.git
 cd easy-cheese
-brew install just uv bats-core shellcheck yamllint yamlfmt markdownlint-cli2
+brew install just uv bats-core shellcheck yamllint yamlfmt markdownlint-cli2 node rust
+corepack enable
 just check
 ```
 
-`just check` uses `uv` to resolve test tools temporarily. It does not install Shiv or rebuild the committed skill archives.
+`just check` uses `uv` to resolve the Python tools temporarily. It does not install Shiv. It does not rebuild the committed skill archives.
 
 ## Rebuild skill archives
 
@@ -39,10 +47,16 @@ It writes the complete external and internal hash-locked closure to a temporary 
 Then it invokes Shiv. The external runtime pins in `requirements/runtime.txt` are the only committed hash lock.
 
 Each Python skill declares its public subcommands in `commands.py`.
-Use an immutable tuple of `Command(name, "module:callable")` values.
-When you add or change a command, make its target accept `list[str]`.
+Declare each handler with the `@bundle_command("<name>")` decorator at its definition site.
+The decorator records the command name on the function. It does not create a mutable registry.
+Compile each decorated handler into a command with `derive_command(handler, "<summary>")`.
+Collect the results in an immutable `COMMANDS` tuple.
+`validate_command_surface` rejects a declared name that `COMMANDS` omits.
+It also rejects a `COMMANDS` entry that no decorator declares.
+Make each handler accept `list[str]`.
 Write result text to stdout. Write diagnostics to stderr. Return an integer process status.
-Do not modify `sys.argv`. Do not run the target through `runpy`. Do not add a decorator-based registry.
+Do not modify `sys.argv`. Do not run the target through `runpy`.
+See `src/easy_cheese/skills/affinage/commands.py` for a complete manifest.
 
 Commit the regenerated `skills/*/scripts/*.pyz` archives with the source change.
 CI rebuilds the archives and compares their canonical member content with the committed artifacts.
@@ -58,19 +72,14 @@ Edit root documents such as `README.md` and `CONTRIBUTING.md`. The documentation
 ## Run tests
 
 ```sh
-# Validate skill YAML and frontmatter.
-python3 .github/scripts/test_validate_skills.py -v
-python3 .github/scripts/validate_skills.py
+# Run every suite: skill validators, Python, JavaScript, Bash, and Rust.
+just test
 
-# Run Python unit tests.
-python3 -m pytest tests/python -q
-
-# Run Bash tests. These tests require bats-core and ShellCheck.
-shellcheck scripts/install.sh
-bats tests/bash/test_install.bats
+# Run the full gate: format, lint, types, tests, documentation, and archives.
+just check
 ```
 
-Run the full test suite before you open a pull request.
+Run `just check` before you open a pull request.
 
 ## Submit a pull request
 

@@ -8,7 +8,7 @@ import { injectToc } from './sidebar-toc.mjs';
 const { starlightRoute } = Astro.locals;
 const { sidebar, toc } = starlightRoute;
 
-starlightRoute.sidebar = injectToc(sidebar, toc?.items, (entry) => entry.isCurrent);
+starlightRoute.sidebar = injectToc(sidebar, toc?.items);
 ---
 
 <Default />

@@ -1,9 +1,9 @@
 ## Summary
 
-- Reconciled the public authoring path around `checkpoint`.
-- Retained `commit` for raw deltas and compaction proofs.
-- Rebuilt all Python skill bundles after the cumulative merge.
-- `just check` passed.
+- This node reconciles the public authoring path around `checkpoint`.
+- This node retains `commit` for raw deltas and compaction proofs.
+- This node rebuilds all Python skill bundles after the cumulative merge.
+- `just check` passes.
 
 ## Commits
 
@@ -20,7 +20,7 @@
 
 ## Disagreements
 
-- `skills/wheypoint/SKILL.md`: Older text made `commit` the only write path. Newer work made `checkpoint` the normal path. This reconciliation keeps `checkpoint` for parent binding. It keeps `commit` for caller-supplied raw deltas and compaction proofs.
+- `skills/wheypoint/SKILL.md`: Older text makes `commit` the only write path. Newer work makes `checkpoint` the normal path. This reconciliation keeps `checkpoint` for parent binding. It keeps `commit` for caller-supplied raw deltas and compaction proofs.
 
 ## Outward dependencies
 

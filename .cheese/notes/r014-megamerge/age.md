@@ -8,7 +8,7 @@ The review lock hashes tracked changes and untracked file content.
 The handoff command derives `next` from the review findings.
 The command manifest remains the only bundle command source.
 
-The reconciliation audits all age Markdown prose for ASD-STE100 compliance.
+This node audits all age Markdown prose for ASD-STE100 compliance.
 `just bundle` rebuilds all 13 skill bundles.
 `just check` passes after the rebuild.
 
@@ -27,9 +27,9 @@ The reconciliation audits all age Markdown prose for ASD-STE100 compliance.
 
 ## Disagreements
 
-- `skills/age/SKILL.md` always passed `--next cure`, but its output contract also required `next: done` for clean reviews. The reconciliation keeps the outcome-derived state because it matches the report contract.
-- `skills/age/references/handoff-detail.md` repeated the bundled command as its own fallback. The reconciliation removes the duplicate because both instructions ran the same command.
-- `src/easy_cheese/skills/age/review_lock.py` promised an unchanged production tree, but it hashed only untracked paths. The reconciliation also hashes untracked content because an inline edit must invalidate the lock.
+- `skills/age/SKILL.md` always passes `--next cure`, but its output contract also requires `next: done` for clean reviews. The reconciliation keeps the outcome-derived state because it matches the report contract.
+- `skills/age/references/handoff-detail.md` repeats the bundled command as its own fallback. The reconciliation removes the duplicate because both instructions run the same command.
+- `src/easy_cheese/skills/age/review_lock.py` promises an unchanged production tree, but it hashes only untracked paths. The reconciliation also hashes untracked content because an inline edit must invalidate the lock.
 
 ## Outward dependencies
 

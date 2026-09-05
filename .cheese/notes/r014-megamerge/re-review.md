@@ -2,7 +2,9 @@
 
 The review covers `origin/main...HEAD`.
 It verifies all 30 findings from `.cheese/notes/r014-megamerge/holistic-review.md`.
-Current state: 24 applied, six partly applied, and none open.
+Current state after the second cure: 30 applied, none partly applied, and none open.
+The verification table records the first-cure state.
+The `Historical` section keeps the first-cure residual list.
 
 ## Verification table
 
@@ -39,16 +41,42 @@ Current state: 24 applied, six partly applied, and none open.
 | The bundle checker hand-parses one option. | Low | applied | `_parse_against` uses `argparse` with constrained choices. Tests cover standard option syntax and help (`scripts/check_bundles.py:832-843`; `tests/python/test_check_bundles.py:41-65`). |
 | Mold uses an undefined abbreviation. | Low | applied | Runtime text and generated prose use `current Mold specification requirements` (`src/easy_cheese/skills/mold/validate_spec.py:2`; `src/easy_cheese/skills/mold/commands.py:91-93`; `skills/mold/references/commands.md:14`). |
 
-## Residual findings
+## Cohesion verdict
+
+approve
+
+The second cure closes every residual finding.
+Both blocker risks in Publication and Briesearch now have a fix and a test.
+All four high residuals now have a fix and a test.
+
+## Second cure
+
+| Finding | State | Commit | Evidence |
+| --- | --- | --- | --- |
+| Publication repair preserves a racing valid replacement. | applied | `e52fc36` | `src/easy_cheese/shared/publication.py:373-415`; `tests/python/test_publication_recovery.py:166-193` |
+| Briesearch rejects query values and correlates redacted URLs. | applied | `2ce4719` | `src/easy_cheese/skills/briesearch/ledger.py:147-164,233-265`; `tests/python/test_briesearch_ledger.py:86-116` |
+| Plate owns the hard-gate invocation boundary. | applied | `1fba358` | `tests/python/test_hard_cheese.py:156-167` |
+| The release record marks legacy rejection as historical. | applied | `eacfd10` | `.cheese/plans/release-0-14-decisions.md:12-45`; `tests/python/test_validate_spec.py:575-584` |
+| Mold taste checks consume `MoldSpecDocument`. | applied | `af41bb2` | `src/easy_cheese/shared/taste_test.py:700-817`; `tests/python/test_mold_taste_test.py:438-453` |
+| The positive manifest test rejects the `MANIFEST` advisory. | applied | `3498207` | `tests/python/test_briesearch_ledger.py:240-249` |
+
+## Follow-ups
+
+none
+
+## Historical: residual findings after the first cure
+
+The second cure closes every item in this section.
+This section records the state that the first cure leaves behind.
 
 ### Blocker
 
-- **[correctness:blocker] Publication repair lacks a non-POSIX lock.** The package declares OS-independent support (`pyproject.toml:15-22`). `_digest_lock` does nothing without `fcntl` (`src/easy_cheese/shared/publication.py:26-29,353-370`). A lockless probe replaced the file after the final stat. `_retain_content` then removed the valid replacement (`src/easy_cheese/shared/publication.py:382-399`).
-- **[security:blocker] Briesearch still accepts raw signed URLs in persisted manifests.** The loader accepts query values, then redacts only its in-memory model (`src/easy_cheese/skills/briesearch/ledger.py:230-258,344-354`). The documented redacted URL and full digest also fail correlation (`src/easy_cheese/skills/briesearch/ledger.py:147-160`; `src/easy_cheese/skills/briesearch/ground_check.py:263-293`). A contract probe returned `REMOTE` for that safe pair.
+- **[correctness:blocker] Publication repair lacks a non-POSIX lock.** The package declares OS-independent support (`pyproject.toml:15-22`). `_digest_lock` does nothing without `fcntl` (`src/easy_cheese/shared/publication.py:26-29,353-370`). A lockless probe replaces the file after the final stat. `_retain_content` then removes the valid replacement (`src/easy_cheese/shared/publication.py:382-399`).
+- **[security:blocker] Briesearch still accepts raw signed URLs in persisted manifests.** The loader accepts query values, then redacts only its in-memory model (`src/easy_cheese/skills/briesearch/ledger.py:230-258,344-354`). The documented redacted URL and full digest also fail correlation (`src/easy_cheese/skills/briesearch/ledger.py:147-160`; `src/easy_cheese/skills/briesearch/ground_check.py:263-293`). A contract probe returns `REMOTE` for that safe pair.
 
 ### High
 
-- **[assertions:high] The hard-gate boundary lacks a correct regression test.** Prose now assigns invocation to Plate (`skills/cure/SKILL.md:227-234`; `skills/plate/SKILL.md:45-46`). The test still calls Cure the gate-firing skill (`tests/python/test_hard_cheese.py:156-158`).
+- **[assertions:high] The hard-gate boundary lacks a correct regression test.** Prose assigns invocation to Plate (`skills/cure/SKILL.md:227-234`; `skills/plate/SKILL.md:45-46`). The test still calls Cure the gate-firing skill (`tests/python/test_hard_cheese.py:156-158`).
 - **[spec:high] The release decision record still mixes current and superseded behavior.** The file labels unconditional legacy rejection as verified behavior before its resolved section (`.cheese/plans/release-0-14-decisions.md:12-45`).
 - **[encapsulation:high] Mold still has an independent invariant parser.** `taste_test` duplicates frontmatter, test-contract, and applicability rules outside `MoldSpecDocument` (`src/easy_cheese/shared/taste_test.py:443-490,586-638,659-758`).
 - **[assertions:high] The positive manifest adjacency test remains weak.** It does not assert that the `MANIFEST` advisory is absent (`tests/python/test_briesearch_ledger.py:227-233`).
@@ -61,11 +89,16 @@ none
 
 none
 
-## Cohesion verdict
+## Historical: cohesion verdict after the first cure
 
-The cure applies 24 findings and partly applies six. Most cross-area contracts now agree. Two blocker risks remain in Publication and Briesearch. Four high residuals affect tests, records, and Mold ownership. The integrated branch remains a reject until the blocker risks close.
+reject
 
-## Follow-ups
+The first cure applies 24 findings and partly applies six.
+Most cross-area contracts agree.
+Two blocker risks remain in Publication and Briesearch.
+Four high residuals affect tests, records, and Mold ownership.
+
+## Historical: follow-ups after the first cure
 
 - Add a non-POSIX digest lock or atomic compare-and-swap repair. Add a post-stat replacement test.
 - Reject query-bearing manifest URLs. Define correlation for the redacted display URL and full digest.
@@ -73,14 +106,3 @@ The cure applies 24 findings and partly applies six. Most cross-area contracts n
 - Mark `.cheese/plans/release-0-14-decisions.md:12-35` as historical. Update its validator line reference.
 - Make `taste_test` consume the canonical typed Mold document.
 - Make the positive adjacency test reject the `MANIFEST` advisory.
-
-## Second cure
-
-| Finding | State | Commit | Evidence |
-| --- | --- | --- | --- |
-| Publication repair preserves a racing valid replacement. | applied | `e52fc36` | `src/easy_cheese/shared/publication.py:373-415`; `tests/python/test_publication_recovery.py:166-193` |
-| Briesearch rejects query values and correlates redacted URLs. | applied | `2ce4719` | `src/easy_cheese/skills/briesearch/ledger.py:147-164,233-265`; `tests/python/test_briesearch_ledger.py:86-116` |
-| Plate owns the hard-gate invocation boundary. | applied | `1fba358` | `tests/python/test_hard_cheese.py:156-167` |
-| The release record marks legacy rejection as historical. | applied | `eacfd10` | `.cheese/plans/release-0-14-decisions.md:12-45`; `tests/python/test_validate_spec.py:575-584` |
-| Mold taste checks consume `MoldSpecDocument`. | applied | `af41bb2` | `src/easy_cheese/shared/taste_test.py:700-817`; `tests/python/test_mold_taste_test.py:438-453` |
-| The positive manifest test rejects the `MANIFEST` advisory. | applied | `3498207` | `tests/python/test_briesearch_ledger.py:240-249` |

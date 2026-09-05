@@ -5,8 +5,8 @@
 The briesearch area now uses one command manifest and one validated research ledger.
 The ledger supports citation checks, duplicate-call checks, call budgets, and budget extensions.
 The research instructions now use one provider retrieval contract.
-`just bundle` rebuilt all 13 skill bundles.
-`just check` passed after the rebuild.
+`just bundle` rebuilds all 13 skill bundles.
+`just check` passes after the rebuild.
 
 ## Commits
 
@@ -24,7 +24,7 @@ The research instructions now use one provider retrieval contract.
 ## Disagreements
 
 - `src/easy_cheese/skills/briesearch/commands.py`: PR #581 adds local `_with_summary` logic. PR #592 supplies shared `derive_command` logic. The reconciliation keeps `derive_command`. This choice removes the duplicate helper and preserves required summaries.
-- `skills/briesearch/SKILL.md`: one instruction required the selected provider tool. The fallback instructions allowed a compatible fetcher. The reconciliation requires an explicit fallback provider and its retrieval tool. This choice keeps fallback support and manifest verification.
+- `skills/briesearch/SKILL.md`: one instruction requires the selected provider tool. The fallback instructions allow a compatible fetcher. The reconciliation requires an explicit fallback provider and its retrieval tool. This choice keeps fallback support and manifest verification.
 
 ## Outward dependencies
 

@@ -4,25 +4,25 @@
 
 - The merged schemas enforce one Grounding table rule for every hardened Mold specification.
 - The valid fixture and its mutation tests use clear STE100 prose.
-- The rebuild updated all 13 skill bundles with the cumulative schema contracts.
-- The focused schema suite passed 769 tests and skipped three tests.
-- The baseline consumer suite passed 10 tests.
-- The full `just check` gate passed.
+- The rebuild updates all 13 skill bundles with the cumulative schema contracts.
+- The focused schema suite passes 769 tests and skips three tests.
+- The baseline consumer suite passes 10 tests.
+- The full `just check` gate passes.
 
 ## Commits
 
-- `a5d04cf` ingested the schemas slice from PR #592.
-- `b649a47` ingested the schemas slice from PR #585.
-- `2425592` ingested the schemas slice from PR #587.
-- `ca4fe57` ingested the schemas slice from PR #588.
-- `8035d9e` reconciled the combined schema behavior and rebuilt the bundles.
-- `ea0ef78` refreshed the generated command references after the bundle rebuild.
-- `2280bbd` rebuilt all skill bundles with the final schema contracts.
-- `1c562f1` isolated the bundle build with the locked requirements.
-- `8d9e677` restored the explicit baseline consumer rules and rebuilt all skill bundles.
-- `a4d5611` restored merged workflow validation contracts and rebuilt all skill bundles.
-- `4288e2f` synchronized the latest Wheypoint reconciliation.
-- `ac48591` restored the merged quality gates and rebuilt all skill bundles.
+- `a5d04cf` ingests the schemas slice from PR #592.
+- `b649a47` ingests the schemas slice from PR #585.
+- `2425592` ingests the schemas slice from PR #587.
+- `ca4fe57` ingests the schemas slice from PR #588.
+- `8035d9e` reconciles the combined schema behavior and rebuilds the bundles.
+- `ea0ef78` refreshes the generated command references after the bundle rebuild.
+- `2280bbd` rebuilds all skill bundles with the final schema contracts.
+- `1c562f1` isolates the bundle build with the locked requirements.
+- `8d9e677` restores the explicit baseline consumer rules and rebuilds all skill bundles.
+- `a4d5611` restores merged workflow validation contracts and rebuilds all skill bundles.
+- `4288e2f` synchronizes the latest Wheypoint reconciliation.
+- `ac48591` restores the merged quality gates and rebuilds all skill bundles.
 
 ## Source PRs
 
@@ -33,7 +33,7 @@
 
 ## Disagreements
 
-- `tests/python/test_document_rules_compiler.py` allowed a hardened, not-applicable specification without Grounding rows.
+- `tests/python/test_document_rules_compiler.py` allows a hardened, not-applicable specification without Grounding rows.
   PR #585 requires both probes for every hardened specification.
   The reconciliation keeps the PR #585 rule because it records the required evidence.
 - `src/easy_cheese/skills/wheypoint/commands.py` declared `checkpoint` separately from the decorated command manifest.

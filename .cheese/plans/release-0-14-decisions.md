@@ -11,13 +11,13 @@ A resolved decision names the PR that superseded an earlier recommendation.
 
 ### Historical behavior before PR #592
 
-The following behavior applied before PR #592.
+This section describes the behavior before PR #592.
 Version 0.13.0 does not contain `src/easy_cheese_schemas`.
 PR #380 published the schema package after that tag.
-PR #466 added the document contract layer after that tag.
+PR #466 adds the document contract layer after that tag.
 
-The version 0.13 spec format existed only in `skills/mold/references/curdle.md`.
-Before PR #592, that template failed `skills/mold/scripts/mold.pyz validate-spec`:
+The version 0.13 spec format exists only in `skills/mold/references/curdle.md`.
+Before PR #592, that template fails `skills/mold/scripts/mold.pyz validate-spec`:
 
 ```text
 ERROR: missing-required-section 'Test Contracts' section not found in <spec>
@@ -27,13 +27,13 @@ FAIL: 2 error(s) in <spec>
 EXIT=1
 ```
 
-Before PR #592, both failures always occurred.
-The old template had no `## Test Contracts` section.
-It also had no `gate_applicability` frontmatter key.
+Before PR #592, both failures always occur.
+The old template has no `## Test Contracts` section.
+It also has no `gate_applicability` frontmatter key.
 
-At that time, `src/easy_cheese/shared/document_rules.py` required the Test Contracts section.
+At that time, `src/easy_cheese/shared/document_rules.py` requires the Test Contracts section.
 The current read and strict-mint policy is in `src/easy_cheese/skills/mold/validate_spec.py:637-735`.
-Before PR #592, the `spec-format-valid` gate blocked curdle after either failure.
+Before PR #592, the `spec-format-valid` gate blocks curdle after either failure.
 
 ### Resolved decision
 
@@ -129,7 +129,7 @@ Three independent gaps caused the failure.
 
 1. **`main` has no required status checks.**
    The branch protection API returned 404.
-   The `build-pyz` job failed on both matrix entries for PR #560.
+   The `build-pyz` job fails on both matrix entries for PR #560.
    The repository still merged the pull request.
    This gap caused #562.
 2. **The bundle suite skips without local build tools.**
@@ -196,7 +196,15 @@ The dedicated CI job already covers this work.
 - The Cook repair pathway defines dispatch, worktree isolation, and the resume link.
 - The tests enforce the repair pathway.
 - Close #304 as complete and cite that section.
-- **#492, #493, and #393:** These issues remain open and unimplemented.
+- **#492, #493, and #393:** The integrated release closes all three issues.
+  `research-layout` prints the slug-aware layout as JSON
+  (`src/easy_cheese/skills/briesearch/commands.py:35-39`).
+  `artifact-path` resolves a phase and a slug
+  (`src/easy_cheese/shared/artifact_path.py:27-37`).
+  `ground-check` reports a `REMOTE` error for a cited URL that the capture
+  manifest omits (`src/easy_cheese/skills/briesearch/ground_check.py:32-37`).
+  `stack-tools` runs the documented enablement preflight
+  (`skills/plate/references/gh-stack.md:50-70`).
 - **#542, #457, #425, #401, and #546:** These issues describe removed `/cut` behavior.
 - Move those issues to the `next` channel.
 - Issue #401 does not reproduce on main because `cut.pyz` no longer ships.
@@ -205,12 +213,11 @@ The dedicated CI job already covers this work.
 
 > #### Known limitations
 >
-> **Skill boundaries are documented, not enforced.**
+> **Skill boundaries are documented, and command surfaces are enforced.**
 > The doctrine in `AGENTS.md` defines one skill for each bundle.
-> Existing violations require migration work.
-> This release does not prevent calls to another archive, loose source, or repository automation.
-> Issue #477 tracks enforced skill boundaries.
-> Use the doctrine as a review checklist, not a guarantee.
+> `validate_command_surface` rejects an undeclared or unreferenced command name.
+> This release does not yet prevent calls to another archive or to loose source.
+> Issue #477 tracks the remaining ownership and import checks.
 >
 > **Spec readers accept version 0.13 files.**
 > `/mold` reports a notice when it reads a legacy spec.
@@ -224,14 +231,6 @@ The dedicated CI job already covers this work.
 > Keep independently installed schemas and skill bundles at matching versions.
 > Add a read window before the first contract minor version change.
 > That window must permit only additive minor changes.
->
-> **Release 0.14 carries open gaps.**
-> - `/briesearch artifact-path` returns the research root (#492).
-> - No slug-aware `research-layout --json` command exists (#492).
-> - `ground-check` does not fetch or verify cited remote URLs (#493).
-> - The selected provider remains responsible for remote URL checks (#493).
-> - `/plate` does not use the documented Stacked PR enablement request (#393).
-> - It discovers that requirement after exit status 4 from the first change (#393).
 >
 > **`/cut` is not in this release.**
 > The main channel no longer contains the RED gate subsystem.

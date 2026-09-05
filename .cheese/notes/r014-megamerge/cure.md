@@ -6,8 +6,8 @@
 - The merged runtime has no duplicate helper or superseded command path.
 - Cure instructions now define one coherent selection, repair, review, and publication flow.
 - All Cure prose uses Simplified Technical English.
-- `just bundle` rebuilt all skill bundles.
-- `just check` passed.
+- `just bundle` rebuilds all skill bundles.
+- `just check` passes.
 
 ## Commits
 

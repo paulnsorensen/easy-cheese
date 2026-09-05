@@ -20,8 +20,8 @@
 
 ## Disagreements
 
-- `src/easy_cheese/skills/affinage/commands.py`: PR #581 added `_with_summary` around each command.
-  The shared reconciliation added `derive_command` for the same purpose.
+- `src/easy_cheese/skills/affinage/commands.py`: PR #581 adds `_with_summary` around each command.
+  The shared reconciliation adds `derive_command` for the same purpose.
   This area keeps `derive_command` because it removes duplicate local code.
 
 ## Outward dependencies

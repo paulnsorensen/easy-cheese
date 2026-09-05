@@ -1,8 +1,8 @@
 ## Summary
 
 The combined build logic keeps one source for each command, closure, documentation, and bundle check.
-The bundle build updated 13 archives.
-`just check` passed.
+The bundle build updates 13 archives.
+`just check` passes.
 
 ## Commits
 

@@ -1,6 +1,17 @@
 # #477 — Enforceable skill boundaries and doctrine-compliant bundles
 
-Status: **suggested**. Base: `bab83ce4` (main, cut-free).
+Status: **partly superseded**. Base: `bab83ce4` (main, cut-free).
+
+## Current state
+
+Release 0.14 lands wave B. Every skill declares its commands with
+`@bundle_command` and compiles them with `derive_command`
+(`src/easy_cheese/skills/affinage/commands.py:14-54`).
+`validate_command_surface` rejects an undeclared or unreferenced name
+(`src/easy_cheese/shared/bundle_commands.py:97-115`).
+
+Waves A, C, and D remain open. The text below records the original plan.
+Read every wave except wave B as a historical proposal.
 
 ## Why this work needs multiple changes
 
@@ -35,7 +46,7 @@ No build check rejects access outside an archive.
 
 ---
 
-## Wave A — derive ownership and reject violations
+## Wave A — derive ownership and reject violations (historical proposal)
 
 Start with this wave.
 The release plan recommends this wave for the first 0.15 cycle.
@@ -43,7 +54,7 @@ The release plan recommends this wave for the first 0.15 cycle.
 ### A1. Derive the skill registry from `src/easy_cheese/skills/`
 
 `scripts/build_pyz.py` contains an explicit skill registry.
-PR #562 had to update this registry after the removal of `/cut`.
+PR #562 updates this registry after the removal of `/cut`.
 That manual update shows the defect.
 
 Replace the registry with a scan of `src/easy_cheese/skills/*/`.
@@ -176,10 +187,12 @@ Waves A and B have stable boundaries and no open pull request dependencies.
 Wave C requires the related pull request decisions.
 Do not start wave C before those decisions.
 
-## Excluded from release 0.14
+## Excluded from release 0.14 (historical proposal)
 
-Release 0.14 must publish the doctrine as documentation.
-It must include the caveat in `../plans/release-0-14-decisions.md`.
+The original plan keeps every wave out of release 0.14.
+It asks the release to publish the doctrine as documentation only.
+Release 0.14 supersedes that plan for wave B.
+Waves A, C, and D keep the original exclusion.
 
-Do not add partial enforcement.
+Do not add partial ownership or import enforcement.
 An incomplete check appears to provide a guarantee that it cannot provide.

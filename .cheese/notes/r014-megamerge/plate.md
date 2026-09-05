@@ -24,13 +24,13 @@ none
 
 ## Outward dependencies
 
-- `this -> shared`: `easy_cheese.shared.bundle_commands` supplies `bundle_command`, `derive_command`, and `dispatch`. The contract did not change.
-- `this -> age`: `/age` owns code-quality review. The contract did not change.
-- `this -> gh`: `/gh` owns GitHub inspection and administration. The contract did not change.
-- `this -> wiki-ingest`: `/wiki-ingest` owns durable wiki updates. The contract did not change.
-- `this -> hard-cheese`: `/hard-cheese` receives final evidence for `--hard`. The contract did not change.
-- `this -> cheese`: `ask-user-question.md` supplies topology question transport. The contract did not change.
-- `this -> cook`: `quality-gates.md` supplies repair-worktree rules. The contract did not change.
+- `this -> shared`: `easy_cheese.shared.bundle_commands` supplies `bundle_command`, `derive_command`, and `dispatch`. The contract does not change.
+- `this -> age`: `/age` owns code-quality review. The contract does not change.
+- `this -> gh`: `/gh` owns GitHub inspection and administration. The contract does not change.
+- `this -> wiki-ingest`: `/wiki-ingest` owns durable wiki updates. The contract does not change.
+- `this -> hard-cheese`: `/hard-cheese` receives final evidence for `--hard`. The contract does not change.
+- `this -> cheese`: `ask-user-question.md` supplies topology question transport. The contract does not change.
+- `this -> cook`: `quality-gates.md` supplies repair-worktree rules. The contract does not change.
 
 ## STE100 status
 

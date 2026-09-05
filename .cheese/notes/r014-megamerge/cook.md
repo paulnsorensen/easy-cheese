@@ -6,8 +6,8 @@
 - The command wrappers map each command to one implementation.
 - No duplicate helper or superseded path remains.
 - All Cook prose uses Simplified Technical English.
-- `just bundle` rebuilt all skill bundles.
-- `just check` passed.
+- `just bundle` rebuilds all skill bundles.
+- `just check` passes.
 
 ## Commits
 

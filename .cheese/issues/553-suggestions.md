@@ -1,4 +1,4 @@
-# #553 — suggestions into gates: what landed, what remains
+# #553 — suggestions into gates: current state and open work
 
 Branch: `fix/r014-gates-conversion` (base `bab83ce4`).
 
@@ -9,10 +9,10 @@ A precondition blocks the next artifact until the requirement passes.
 Therefore, move the requirement from prose into a schema or validator.
 The artifact must satisfy the requirement before its creation.
 
-## Landed (commit `8676654a`)
+## Complete (commit `8676654a`)
 
 Proposals 1 and 2 use one mechanism.
-Both proposals address required probes that agents skipped.
+Both proposals address required probes that agents skip.
 
 - `src/easy_cheese_schemas/contracts.py` defines `GroundingProbe` with `wiki` and `explorer` values.
   It defines `GroundingOutcome` with `hit`, `miss`, and `unavailable` values.
