@@ -11,6 +11,7 @@ through shared, non-drifting paths.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -22,7 +23,6 @@ from easy_cheese_schemas import (
     ContractValidationError,
     TransitionError,
     canonical_bytes,
-    canonical_digest,
     normalize_agent_output,
     supported_version_for,
     validate_contract,
@@ -33,6 +33,10 @@ from easy_cheese.shared.publication import PublicationError, accept
 __all__ = ["accept_main", "normalize_main", "validate_main"]
 
 
+def _digest_of(canonical: bytes) -> str:
+    """Return the canonical digest without re-serializing the value."""
+    return f"sha256:{hashlib.sha256(canonical).hexdigest()}"
+
 
 def _validate_against(raw: bytes | str, schema: str | type) -> None:
     """Validate raw against schema's catalog-supported version.
@@ -42,30 +46,28 @@ def _validate_against(raw: bytes | str, schema: str | type) -> None:
     _ = validate_contract(raw, schema, supported_version_for(schema))
 
 
-def _parse_normalize_args(argv: list[str]) -> argparse.Namespace:
+def normalize_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="normalize.py")
     _ = parser.add_argument("document", type=Path)
     _ = parser.add_argument("--invocation", required=True, type=Path)
-    return parser.parse_args(argv)
-
-
-def normalize_main(argv: list[str]) -> int:
-    args = _parse_normalize_args(argv)
+    args = parser.parse_args(argv)
     document = cast(Path, args.document)
     invocation_path = cast(Path, args.invocation)
+    # Read bytes, not text: the schema runtime converts a decode failure into a
+    # ContractValidationError, while read_text would raise UnicodeDecodeError.
     try:
-        document_raw = document.read_text(encoding="utf-8")
+        document_raw = document.read_bytes()
     except OSError as exc:
         print(f"ERROR: cannot read {document}: {exc}", file=sys.stderr)
         return 1
     try:
-        invocation_raw = invocation_path.read_text(encoding="utf-8")
+        invocation_raw = invocation_path.read_bytes()
     except OSError as exc:
         print(f"ERROR: cannot read {invocation_path}: {exc}", file=sys.stderr)
         return 1
     try:
         invocation = cast(object, json.loads(invocation_raw))
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         print(f"ERROR: invalid invocation JSON: {exc}", file=sys.stderr)
         return 1
     if not isinstance(invocation, dict):
@@ -80,26 +82,22 @@ def normalize_main(argv: list[str]) -> int:
         return 1
     wrapper = {
         "value": artifact.value,
-        "digest": canonical_digest(artifact.value),
+        "digest": _digest_of(artifact.canonical_bytes),
         "version": artifact.source_version,
     }
     _ = sys.stdout.buffer.write(canonical_bytes(wrapper))
     return 0
 
 
-def _parse_validate_args(argv: list[str]) -> argparse.Namespace:
+def validate_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="validate.py")
     _ = parser.add_argument("payload", type=Path)
     _ = parser.add_argument("--schema", required=True)
-    return parser.parse_args(argv)
-
-
-def validate_main(argv: list[str]) -> int:
-    args = _parse_validate_args(argv)
+    args = parser.parse_args(argv)
     payload = cast(Path, args.payload)
     schema = cast(str, args.schema)
     try:
-        raw = payload.read_text(encoding="utf-8")
+        raw = payload.read_bytes()
     except OSError as exc:
         print(f"ERROR: cannot read {payload}: {exc}", file=sys.stderr)
         return 1
@@ -116,14 +114,10 @@ def validate_main(argv: list[str]) -> int:
     return 0
 
 
-def _parse_accept_args(argv: list[str]) -> argparse.Namespace:
+def accept_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="accept.py")
     _ = parser.add_argument("pointer")
-    return parser.parse_args(argv)
-
-
-def accept_main(argv: list[str]) -> int:
-    args = _parse_accept_args(argv)
+    args = parser.parse_args(argv)
     pointer_source = cast(str, args.pointer)
     try:
         accepted = accept(
@@ -136,7 +130,7 @@ def accept_main(argv: list[str]) -> int:
         return 1
     wrapper = {
         "value": accepted.canonical.value,
-        "digest": canonical_digest(accepted.canonical.value),
+        "digest": _digest_of(accepted.canonical.canonical_bytes),
         "normalization_receipt": accepted.normalization_receipt,
     }
     _ = sys.stdout.buffer.write(canonical_bytes(wrapper))

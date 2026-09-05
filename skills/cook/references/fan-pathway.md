@@ -45,9 +45,13 @@ Use `/cheese --continue <slug>` to resume from the latest typed handoff, or
 remove the listed files to start fresh.
 ```
 
-Read a handoff with `python3 skills/cook/scripts/cook.pyz read-handoff-slug <path>`.
+Read a handoff with the phase and the slug, not with a path:
 
-Use the matching `cook.pyz read-handoff-slug` command.
+```text
+python3 skills/cook/scripts/cook.pyz read-handoff-slug --phase <phase> --slug <slug>
+```
+
+The command exits with status 2 when either flag is absent.
 
 ## Canonical planner → Cook → Cure steel thread
 
@@ -60,6 +64,7 @@ Do not pass raw mappings between phases.
 Do not create a preflight helper.
 
 1. Build a `PlannerRequest` from the authored spec.
+   Select the request kind from the failure class, as `## Planner request kinds` defines.
    Dispatch the planner through `easy_cheese_schemas.plan`.
    The planner returns a `PlannerResultWriterView`.
    `plan` materializes this view into one `PlannerResult`.
@@ -104,6 +109,24 @@ The direct `plan` → `cook` → `bind_diagnosis` → `cure` calls define the ca
 Use `phase="cook"` or `phase="cure"` with the same binding requirements.
 
 `run_workflow` does not define a separate semantic path.
+
+## Planner request kinds
+
+Cook emits the validated request. Mold owns planning after a Cook failure.
+Cook never plans on its own after a specification failure.
+
+Select one `PlannerRequestKind` for each failure class:
+
+| Failure class | `kind` | Required fields | Rejected when |
+| --- | --- | --- | --- |
+| The spec has no plan yet | `decompose` | `objective` | `source_plan_ref` is present |
+| A deliberate replan of an approved plan | `replan` | `objective`, `source_plan_ref` | `source_plan_ref` is absent |
+| A specification failure during execution | `remediate` | `objective`, `source_plan_ref`, at least one `evidence` entry | `source_plan_ref` or `evidence` is absent |
+
+Every request also requires `contract_version` and `request_id`.
+Publish the validated request, then name its typed pointer in `artifact:`.
+Write `next: mold` with the `https://schemas.easy-cheese.dev/planner-request` payload schema.
+Use `status: ok`, because `gated` and `halt` stop the chain.
 
 ## Mode selection
 
@@ -151,7 +174,7 @@ Trust the hint only to skip work, never to pick parallel or bypass `validate_cur
 
 ## Publication topology preflight
 
-Run `/plate` in topology-preflight mode when the selected mode is `parallel`, `--open-pr` is present, and no PR exists.
+Run `/plate` in topology-preflight mode when the selected mode is `parallel`, the user supplied `--open-pr`, and no pull request exists.
 
 Complete this decision before Phase 1 seed or any worker commit.
 
@@ -179,7 +202,7 @@ Complete this decision before the Phase 1 seed or any worker commit.
 
 **Seed (coder).**
 
-After topology is fixed, prepare only files that two or more curds share.
+After you fix the topology, prepare only files that two or more curds share.
 
 Do not hide curd-owned behavior in the seed.
 
@@ -245,7 +268,7 @@ The host must materialize and confirm a diagnosis.
 
 Then the host must bind the diagnosis to the exact curd.
 
-Only a terminal age with `next: done` is publishable.
+Publish a terminal age only when it writes `next: done`.
 
 **Projected dispatch count.**
 
@@ -278,7 +301,7 @@ Wiring rows exist in the manifest, not the curd block.
   The host reports the curd.
 
 - **Aggregate-gate conflict.**
-  After all wave results are harvested, run the project gates over the merged tree.
+  After you harvest all wave results, run the project gates over the merged tree.
   Distinguish a real cross-curd conflict from harmless generated drift.
   A real cross-curd conflict occurs when curds pass individually but collide in aggregate.
   The post-merge Cure can absorb harmless generated drift.
@@ -318,7 +341,8 @@ Wiring rows exist in the manifest, not the curd block.
   Then run the one global `press → age → cure → age` integration pass.
 
 - `/cook` alone performs harvest.
-  `/cook` dispatches `/plate` at the end.
+  The Cook fan orchestrator owns the terminal `/plate` dispatch.
+  Terminal Cure owns publication only in the linear chain.
   Never dispatch `/plate` during the run.
 
 After each wave, persist the typed `PlannerResult`, `CurdResult` values, diagnosis bindings, and gate evidence in the handoff artifact.
@@ -384,8 +408,8 @@ The fan pathway and single-coder path use the same final-summary shape.
 
 `SKILL.md` defines this shape in `## Handoff slug` and `## Output`.
 
-A terminal age is publishable only with `next: done`.
+Publish a terminal age only when it writes `next: done`.
 
-A terminal age with `next: cure` is not publishable.
+Do not publish a terminal age that writes `next: cure`.
 
-A terminal age without `next` is not publishable.
+Do not publish a terminal age that omits `next`.

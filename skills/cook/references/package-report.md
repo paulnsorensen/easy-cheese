@@ -67,7 +67,7 @@ Cook stops and does not produce a "ready" report in these conditions:
 - Cook reaches the two-round taste-test limit, and findings remain.
 - A quality gate fails because of new or changed behavior, and the fix requires a design decision outside the specification.
 
-Policy: identical-to-baseline failures are recorded, not a stop condition.
+Record each identical-to-baseline failure. Such a failure is not a stop condition.
 
 Record these failures as [`quality-gates.md`](quality-gates.md) specifies.
 

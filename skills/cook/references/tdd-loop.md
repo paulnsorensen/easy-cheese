@@ -61,7 +61,9 @@ A risk flag is one of these override categories from the bundled age router:
 - production-destructive ops
 - weak integration coverage around a global invariant
 
-`python3 skills/cook/scripts/cook.pyz age-route` consumes the flags. See `skills/age/SKILL.md § Router call` for the exact vocabulary.
+`python3 skills/cook/scripts/cook.pyz age-route` consumes the flags.
+See [`../../age/references/fan-out.md`](../../age/references/fan-out.md#router-call) for the exact tokens and the JSON shape.
+The router ignores an unknown flag, so a spelling error removes a risk promotion.
 
 **Who runs it.**
 
@@ -112,7 +114,7 @@ The **Simplify** lens uses the same three sub-checks as `/simplify`:
   - Inline logic must use an available project helper.
   - New code must not create a near-duplicate of an existing function.
 - **Quality**
-  - Do not add redundant state, such as a cached value that can be derived.
+  - Do not add redundant state, such as a cached value that the code can derive.
   - Do not add parameters when code restructuring is appropriate.
   - Do not use copy-paste-with-variation.
   - Do not create a leaky abstraction that exposes internals across a slice boundary.
@@ -137,11 +139,14 @@ best:    implement → taste-test (all pass) → press
 worst:   implement → taste-test → implement → taste-test → implement (final)
 ```
 
-After the second taste test, allow only one final corrective Cook pass. If the final pass cannot resolve all taste findings, **stop and report blocked**. Do not continue to Press.
+After the second taste test, allow only one final corrective Cook pass.
+Stop when the final pass cannot resolve all taste findings.
+Report the result as **blocked**.
+Do not continue to Press.
 
 ## Self-evaluation before handoff
 
 Confirm every item that the package report asserts (`package-report.md` § Self-eval). Also confirm these two items:
 
 - [ ] Spec or acceptance criteria are clear.
-- [ ] Remaining risks or skipped checks are documented.
+- [ ] The report documents every remaining risk and every skipped check.

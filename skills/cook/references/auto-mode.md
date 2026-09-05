@@ -24,7 +24,10 @@ Cook cannot weaken or bypass existing tests.
 
 1. After Cook completes the inner implementation and green gates, Cook writes the package-ready report.
    Cook then invokes `/press <slug> --auto`.
-   Cook appends `--open-pr` so terminal `/plate` can publish a new PR.
+   Cook appends `--open-pr` only when the user supplied that flag.
+   `--open-pr` is publication permission, and auto mode never creates it.
+   Without that flag, the chain stays commit-only.
+   Cook also forwards `--hard` when the user supplied it.
 
 2. `/press --auto` runs its hardening pass.
    It invokes `/age <slug> --auto` when readiness is `ready for /age` or `follow-up recommended`.
@@ -36,11 +39,15 @@ Cook cannot weaken or bypass existing tests.
 
 3. `/age <slug> --auto` writes the report.
    It then invokes `/cure <slug> --auto --stake medium+`.
+   Every Age dispatch carries the pipeline slug, `--auto`, and any user-supplied `--hard`.
 
 4. `/cure --auto --stake medium+` bypasses the selection gate.
    It applies every finding with `blocker`, `high`, or `medium` severity.
    It also applies every cheap `Low` finding that has a contained fix.
-   It then invokes `/age --scope <touched-paths> --auto` for verification.
+   It then invokes `/age <slug> --scope <touched-paths> --auto` for verification.
+   The scoped call keeps the pipeline slug, because Age needs it for its lock and its report path.
+   Never dispatch `/age --scope <touched-paths> --auto` without the slug.
+   The call also forwards `--hard` when the user supplied it.
 
 5. The age → cure cycle has a maximum of **two cure passes total**.
    Pass 1 fixes the initial findings.
@@ -48,12 +55,13 @@ Cook cannot weaken or bypass existing tests.
    After pass 2, the chain stops and writes a final summary.
    The chain stops even if new findings remain.
 
-6. `/cook` never invokes `/plate`.
-   At the chain terminal, `/cure` dispatches `/plate` for an existing PR.
-   For a new PR, `/cure` dispatches `/plate` only when `--open-pr` is in scope.
+6. In the linear chain, `/cook` never invokes `/plate`.
+   At the chain terminal, `/cure` dispatches `/plate` for an existing pull request.
+   For a new pull request, `/cure` dispatches `/plate` only when the user supplied `--open-pr`.
+   In the fan pathway, the Cook orchestrator owns its own terminal `/plate` dispatch.
    `/plate` honors explicit topology.
    It selects an obviously cohesive single without asking.
-   It asks before mutation when stacked is recommended or the shape is ambiguous.
+   It asks before mutation when it recommends stacked or when the shape is ambiguous.
    This requirement also applies under auto.
 
 ## Cap enforcement
@@ -83,10 +91,11 @@ The orchestrator owns the pass position.
 ## When auto mode stops early
 
 - A quality gate fails **new** or **changed** against baseline, as defined in [`quality-gates.md`](quality-gates.md).
-  Auto mode stops if the 2 fix rounds are exhausted.
-  Auto mode also stops if the no-progress check trips or the fix is design-shaped.
+  Auto mode stops when the two fix rounds end.
+  Auto mode also stops when the no-progress check trips.
+  Auto mode also stops when the fix requires a design decision.
   Record Identical-to-baseline failures outside the cooked contract.
-  These failures never stop auto.
+  These failures never stop auto mode.
 
 - `/press` returns `blocked`.
   See the blocked criteria in [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
@@ -131,11 +140,9 @@ The directive uses `/ultracook`'s original wording verbatim:
 
 "Do not chain forward to the next phase even though your auto-mode contract documents that. Write your handoff slug and stop. `/cook`'s fan pathway is driving the chain. Run in the foreground — do not background yourself, spawn detached processes, or defer work to a later session. If you cannot complete the phase within your context window, write a partial slug with `status: halt: <reason>` and stop; do not silently timeout."
 
-Each phase's own `SKILL.md` `## Auto mode` section honors this directive.
+Each phase applies the directive from its own `## Auto mode` section.
 
-The applicable heading is `### When invoked from /ultracook`, now used when `/cook`'s fan pathway invokes the phase.
-
-See, for example, `skills/press/SKILL.md`, `skills/age/SKILL.md`, and `skills/cure/SKILL.md`.
+See [`../../press/SKILL.md`](../../press/SKILL.md), [`../../age/SKILL.md`](../../age/SKILL.md), and [`../../cure/references/auto-mode.md`](../../cure/references/auto-mode.md).
 
 ## Failure handling inside cure
 

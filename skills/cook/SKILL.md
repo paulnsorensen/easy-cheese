@@ -17,7 +17,9 @@ metadata: {dispatches-agents: true}
 
 ## Contract
 
-`cook(spec_ref, correction = false) -> handoff(next = press | age)`.
+`cook(spec_ref, correction = false) -> handoff(next = press | age | mold)`.
+
+Cook returns `next: mold` only for a specification failure.
 
 A `red-required` gate disposition identifies behavior work.
 Run the inner RED → GREEN TDD loop against the approved spec before you change production code.
@@ -39,8 +41,17 @@ Flags:
 
 - `--auto` chains `/press → /age → /cure`.
 - `--hard` propagates through `/plate`.
-- `--open-pr` lets terminal `/plate` publish.
+- `--open-pr` lets terminal `/plate` publish. Auto mode never adds this flag.
 - `--resume <slug>` resumes a typed fan handoff and its referenced artifacts.
+
+Optional context payload:
+
+- `handoff_context.wiki_hits` carries `{page, line, why}` entries from the repository wiki corpus.
+  The key is optional, and its default is absent.
+  Reject an entry that omits `page`, `line`, or `why`.
+  Show every accepted hit in the **Contract** step, so the user can challenge a stale decision.
+  Prefer these decisions over an invented approach.
+  [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) defines the payload.
 
 Read `references/auto-mode.md`, `references/fan-pathway.md`, and `../cheese/references/formatting.md` for these policies.
 
@@ -60,7 +71,8 @@ Route the task to `/mold` if an ambiguity check fails.
 2. **Implement** — Use inner RED → GREEN for behavior changes.
    Use the requested non-behavior path for closed N/A work.
    Change only the applicable surface.
-3. **Validate** — Run the relevant quality gates again and read the output.
+3. **Validate** — Run the relevant quality gates again.
+   Read the complete gate output.
    For closed N/A, verify the requested non-behavior path.
 4. **Taste-test** — Use a fresh-context review for multi-file or public-surface diffs.
    Otherwise, use an inline review.
@@ -104,7 +116,7 @@ Propagate `--auto` through each dispatched phase when it is active.
 
 Fan mode records its quality-debt comparison before any curd cooks.
 Bare mode records it on the pre-change tree.
-[`references/quality-gates.md`](references/quality-gates.md) defines exact capture, classification, intentional-RED exclusion, and `manifest.yaml` rules.
+[`references/quality-gates.md`](references/quality-gates.md) defines exact capture, classification, intentional-RED exclusion, and baseline-artifact rules.
 
 For source changes, follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) and [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md).
 `slash commands are host renderings, not the control model`; invoke the equivalent installed capability.
@@ -117,7 +129,7 @@ Also run lint, type, and build commands when the project defines them.
 Do not remove, skip, or weaken unrelated tests to make the change pass.
 
 Use the baseline for gate failures.
-[`references/quality-gates.md`](references/quality-gates.md) defines the policy, classification terms, and `baseline:` block.
+[`references/quality-gates.md`](references/quality-gates.md) defines the policy, the classification terms, and the baseline artifact.
 Each downstream phase links to this reference instead of repeating it.
 
 [`references/writer-views.md`](references/writer-views.md) generates schemas for writer-view payloads inline.
@@ -140,15 +152,21 @@ Use this schema:
 ```markdown
 status: <canonical status field>
 next: mold | cook | press | age | done
-artifact: <path-to-richer-report-if-any>
+artifact: <path to the upstream artifact this run consumed, or empty>
 taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
-baseline: none | <block — shape in references/quality-gates.md § Baseline block shape>
+baseline: none | <path to the baseline artifact — shape in references/quality-gates.md § Baseline block shape>
 <one-line orientation: what cook changed>
 ```
 
 The [handback contract](../cheese/references/handback-contract.md) defines the canonical `status:` grammar, including `ok` and `halt`.
 Only `next:` and the additional keyed lines are specific to a phase.
+
+`artifact:` names the upstream artifact that this run consumed.
+For a Mold route, use the approved specification pointer.
+Leave `artifact:` empty when this run consumed no upstream artifact.
+Do not point `artifact:` at this Cook report.
+`/cheese` forwards the same pointer to the next phase.
 
 Use the canonical boundary writer when you emit this handoff for the typed fan result.
 Carry the result schema explicitly:
@@ -157,10 +175,16 @@ Carry the result schema explicitly:
 python3 skills/cook/scripts/cook.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cook --next age \
   --artifact <artifact-path> --orientation "<one-line orientation>" \
-  --payload-schema https://schemas.easy-cheese.dev/curd-result
+  --payload-schema https://schemas.easy-cheese.dev/curd-result \
+  --body-file <path to the package report body>
 ```
 
-For a deliberate replan handoff, use `--next mold` with the `https://schemas.easy-cheese.dev/planner-request` payload.
+The writer replaces the target file.
+Pass `--body-file` to keep the package report in the same file.
+Without that flag, the writer emits the preamble alone and removes the report.
+
+For a replan or a specification failure, use `--next mold` with the `https://schemas.easy-cheese.dev/planner-request` payload.
+[`references/fan-pathway.md`](references/fan-pathway.md) defines the request kind for each failure class.
 These `phase` and `next` values route only the legacy handoff file.
 The validated `CurdPlan` and normalized `CurdResult` remain the live fan state.
 
@@ -179,9 +203,10 @@ Omit `taste_test:` when its cost gate does not apply.
 Set `durable_flags:` to `none` by default.
 Record only durable changes to architecture, protocols, conventions, or rationale.
 Record the target wiki page for each change.
-Use `baseline:` to summarize Cook's optional comparison.
-Include baseline-identical debt and new or changed failures from current broad gates.
-Use the baseline block in [`references/quality-gates.md`](references/quality-gates.md).
+Set `baseline:` to the path of Cook's optional comparison artifact.
+That artifact holds baseline-identical debt and new or changed failures from the current broad gates.
+Use the shape in [`references/quality-gates.md`](references/quality-gates.md).
+The preamble accepts one physical line for each key, so never inline the mapping.
 
 ## Handoff
 
@@ -213,8 +238,10 @@ Run behavior work through `/press --auto → /age --auto → /cure --auto --stak
 Closed N/A skips Press.
 Run it through `/age --auto → /cure --auto --stake medium+`.
 Limit Cure to two passes on both routes.
-Cook does not invoke `/plate`.
-Terminal Cure owns publication.
+In the linear chain, Cook does not invoke `/plate`.
+Terminal Cure then owns publication.
+In the fan pathway, the Cook orchestrator owns its own terminal `/plate` dispatch.
+[`references/fan-pathway.md`](references/fan-pathway.md) defines that dispatch.
 
 Auto mode stops early in these conditions:
 
@@ -247,7 +274,8 @@ The reference also contains the final report template.
 - Keep changes scoped to the accepted contract.
 - Prefer existing dependencies and patterns.
 - Do not invent architecture that the spec already rejected.
-- Stop and ask when implementation reveals a design decision that the spec does not answer.
+- Stop when implementation reveals a design decision that the spec does not answer.
+- Ask the user that decision before you continue.
 - Stop if the spec or fast-path request uses a false premise.
 - Show the false premise before you write code.
 - Do not use an incorrect approach to satisfy the request literally.
