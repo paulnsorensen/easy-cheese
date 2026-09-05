@@ -5,8 +5,7 @@ on:
     branches: [main]
     paths:
       - "skills/**"
-      - "shared/**"
-      - "src/**"
+      - "website/**"
       - "public/**"
       - "astro.config.mjs"
       - "package.json"
@@ -21,8 +20,7 @@ on:
   pull_request:
     paths:
       - "skills/**"
-      - "shared/**"
-      - "src/**"
+      - "website/**"
       - "public/**"
       - "astro.config.mjs"
       - "package.json"
@@ -39,10 +37,10 @@ on:
 permissions:
   contents: read
 
-# PR/build runs are cheap to cancel and re-run; Pages deployments are not —
-# cancelling one mid-flight can leave a stuck deployment that makes later runs
-# fail with "Deployment failed, try again later". So the two jobs use separate
-# concurrency scopes: builds cancel redundant runs, the deploy never does.
+# Cancel and restart duplicate pull request builds.
+# Do not cancel a Pages deployment.
+# A canceled deployment can block later runs with "Deployment failed, try again later".
+# The two jobs use different concurrency scopes.
 jobs:
   build:
     name: build docs

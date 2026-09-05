@@ -7,8 +7,8 @@ A future stamp is not a rejection: recognized fields still parse, unknown ones
 are ignored, and the caller gets ``FUTURE`` so it can decide.
 
 ``load`` never raises. It accumulates every problem it found as
-``where.key must be ...`` strings, the same format shared/scripts/schema.py
-emits, because the fan-out validators report all problems in one pass rather
+``where.key must be ...`` strings, the same format
+src/easy_cheese/shared/schema.py emits, because the fan-out validators report all problems in one pass rather
 than stopping at the first.
 
 Two things make that possible and neither is cattrs' default. Structuring
@@ -25,6 +25,7 @@ possible.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from datetime import date
 from enum import Enum, auto
 from typing import Generic, TypeVar, cast, get_origin
 
@@ -34,8 +35,12 @@ from attrs import Attribute, define, field
 from cattrs.cols import list_structure_factory
 from cattrs.errors import AttributeValidationNote, IterableValidationNote
 from cattrs.gen import make_dict_structure_fn
+from easy_cheese_schemas._schema_catalog import CURD_PLAN_SCHEMA_URI
 
-SCHEMA_VERSION = 1
+
+# 2 adds WheypointRevision.parent_revision_digest, which pins each receipt to
+# the exact ancestor it was written against.
+SCHEMA_VERSION = 2
 MIN_READABLE = 1  # N-1 tolerance; widens as the schema evolves
 STAMP_KEY = "schema_version"
 
@@ -45,10 +50,18 @@ __all__ = [
     "MIN_READABLE",
     "SCHEMA_VERSION",
     "STAMP_KEY",
+    "AdapterSunsetError",
+    "DuplicateAdapterError",
+    "LegacyAdapter",
     "Loaded",
     "Provenance",
+    "adapter_for",
+    "check_adapter_sunsets",
     "classify_stamp",
     "load",
+    "register_adapter",
+    "registered_adapters",
+    "unregister_adapter",
 ]
 
 _StructureHook = Callable[[object, object], object]
@@ -382,3 +395,203 @@ def _house(path: str, name: str | None, message: str) -> str:
     if message.startswith("must be"):
         return f"{path} {message}"
     return f"{path} must be valid: {message}"
+
+
+class DuplicateAdapterError(ValueError):
+    """An exact-version legacy adapter is already registered for this key."""
+
+
+class AdapterSunsetError(ValueError):
+    """An adapter whose declared ``remove_after`` has passed is still registered."""
+
+
+class LegacyConversionError(ValueError):
+    """A legacy payload does not carry the shape its adapter declares.
+
+    Conversion callbacks read persisted, untrusted bytes. A missing or
+    wrongly typed key is a rejected input, not a programming error, so the
+    callback raises this instead of leaking ``KeyError`` or ``TypeError``
+    past the caller's error contract.
+    """
+
+
+@define(frozen=True)
+class LegacyAdapter:
+    """A deterministic, exact-version transform from a persisted legacy
+    artifact shape to a current canonical payload.
+
+    No adapter applies heuristic or semantic coercion: it recognizes exactly
+    one ``(source_schema_uri, source_major, source_minor)`` and maps it to
+    exactly one ``target_schema_uri``. ``remove_after`` is declared at
+    introduction (an ISO ``YYYY-MM-DD`` date) so :func:`check_adapter_sunsets`
+    can fail a build once the adapter has outlived its planned removal.
+    """
+
+    source_schema_uri: str
+    source_major: str
+    source_minor: str
+    target_schema_uri: str
+    remove_after: str
+    convert: Callable[[Mapping[str, object]], Mapping[str, object]]
+
+
+_ADAPTERS: dict[tuple[str, str, str], LegacyAdapter] = {}
+
+_LEGACY_CURD_PLAN_MAJOR = "0"
+_LEGACY_CURD_PLAN_MINOR = "9"
+
+
+def _mapping(where: str, item: object) -> Mapping[str, object]:
+    if not isinstance(item, Mapping):
+        raise LegacyConversionError(f"{where} must be an object")
+    return cast("Mapping[str, object]", item)
+
+
+def _required(
+    where: str, item: Mapping[str, object], key: str, kind: type
+) -> object:
+    if key not in item:
+        raise LegacyConversionError(f"{where}.{key} must be present")
+    value = item[key]
+    if not isinstance(value, kind):
+        raise LegacyConversionError(f"{where}.{key} must be {kind.__name__}")
+    return value
+
+
+def _str_list(where: str, item: Mapping[str, object], key: str) -> list[str]:
+    """Read an optional legacy string list, defaulting to empty."""
+    value = item.get(key, [])
+    if not isinstance(value, list):
+        raise LegacyConversionError(f"{where}.{key} must be list")
+    entries = cast("list[object]", value)
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, str):
+            raise LegacyConversionError(f"{where}.{key}[{index}] must be str")
+    return [cast(str, entry) for entry in entries]
+
+
+def _convert_criterion(where: str, index: int, item: object) -> dict[str, object]:
+    criterion = _mapping(where, item)
+    return {
+        "criterion_id": f"legacy-criterion-{index}",
+        "description": _required(where, criterion, "description", str),
+        "check": _required(where, criterion, "check", str),
+    }
+
+
+def _convert_curd(where: str, item: object) -> dict[str, object]:
+    curd = _mapping(where, item)
+    criteria = cast("list[object]", _required(where, curd, "criteria", list))
+    return {
+        "curd_id": _required(where, curd, "key", str),
+        "outcome": _required(where, curd, "goal", str),
+        "scope": {
+            "paths": _str_list(where, curd, "paths"),
+            "excluded_paths": [],
+        },
+        "inputs": [],
+        "outputs": _str_list(where, curd, "outputs"),
+        "dependencies": [],
+        "criteria": [
+            _convert_criterion(f"{where}.criteria[{index - 1}]", index, criterion)
+            for index, criterion in enumerate(criteria, start=1)
+        ],
+        "lineage": {"identity_action": "new", "source_curd_ids": []},
+    }
+
+
+def _convert_curd_plan_v0_9(payload: Mapping[str, object]) -> dict[str, object]:
+    """Convert the 0.9 curd-plan writer view to the current contract.
+
+    Raises :class:`LegacyConversionError` for any missing or wrongly typed
+    key, so a malformed persisted artifact reaches the caller as a declared
+    conversion failure rather than an uncaught lookup error.
+    """
+    raw_curds = cast("list[object]", _required("curd-plan", payload, "curds", list))
+    curds = [
+        _convert_curd(f"curd-plan.curds[{index}]", curd)
+        for index, curd in enumerate(raw_curds)
+    ]
+    unsigned = {
+        "contract_version": {
+            "schema_uri": CURD_PLAN_SCHEMA_URI,
+            "major": "1",
+            "minor": "0",
+        },
+        "plan_id": _required("curd-plan", payload, "plan_id", str),
+        "revision": _required("curd-plan", payload, "revision", int),
+        "objective": _required("curd-plan", payload, "goal", str),
+        "curds": curds,
+        "context": None,
+        "parent_plan_ref": None,
+    }
+    from easy_cheese_schemas.contracts import canonical_digest
+
+    digest = canonical_digest(unsigned)
+    return {**unsigned, "digest": digest}
+
+
+_BUILTIN_CURD_PLAN_ADAPTER = LegacyAdapter(
+    source_schema_uri=CURD_PLAN_SCHEMA_URI,
+    source_major=_LEGACY_CURD_PLAN_MAJOR,
+    source_minor=_LEGACY_CURD_PLAN_MINOR,
+    target_schema_uri=CURD_PLAN_SCHEMA_URI,
+    remove_after="2027-06-01",
+    convert=_convert_curd_plan_v0_9,
+)
+
+
+def _adapter_key(adapter: LegacyAdapter) -> tuple[str, str, str]:
+    return (adapter.source_schema_uri, adapter.source_major, adapter.source_minor)
+
+
+def register_adapter(adapter: LegacyAdapter) -> None:
+    key = _adapter_key(adapter)
+    if key in _ADAPTERS:
+        raise DuplicateAdapterError(f"adapter already registered for {key}")
+    _ADAPTERS[key] = adapter
+
+
+def unregister_adapter(source_schema_uri: str, source_major: str, source_minor: str) -> None:
+    _ = _ADAPTERS.pop((source_schema_uri, source_major, source_minor), None)
+
+
+def adapter_for(
+    source_schema_uri: str, source_major: str, source_minor: str
+) -> LegacyAdapter | None:
+    """The adapter registered for this exact source schema and version, if any.
+
+    Lookup is exact-match only: an off-by-one minor or an unregistered schema
+    URI returns ``None`` rather than falling back to a nearby version.
+    """
+    return _ADAPTERS.get((source_schema_uri, source_major, source_minor))
+
+
+def registered_adapters() -> tuple[LegacyAdapter, ...]:
+    return tuple(_ADAPTERS.values())
+
+
+def check_adapter_sunsets(reference_date: date) -> None:
+    """Fail when any registered adapter's ``remove_after`` has passed.
+
+    ``reference_date`` is supplied by the caller (a gate script reads today's
+    date from its environment; a test controls it directly) rather than read
+    from an ambient clock here, so this check is deterministic and testable.
+    """
+    expired = tuple(
+        adapter
+        for adapter in _ADAPTERS.values()
+        if date.fromisoformat(adapter.remove_after) <= reference_date
+    )
+    if expired:
+        names = ", ".join(
+            f"{adapter.source_schema_uri}@{adapter.source_major}.{adapter.source_minor}"
+            + f" (remove_after {adapter.remove_after})"
+            for adapter in expired
+        )
+        raise AdapterSunsetError(f"expired legacy adapters still registered: {names}")
+
+
+# Register schema-owned adapters when the schema package loads.  Migration
+# consumers can therefore resolve built-ins without importing shared.migrate.
+register_adapter(_BUILTIN_CURD_PLAN_ADAPTER)

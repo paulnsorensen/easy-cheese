@@ -12,12 +12,14 @@ Resolve the spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact
 | **Spec + Issues** | Accepted follow-ups whose disposition calls for local recovery or tracker payload | spec at `$SPEC`; issues at `.cheese/issues/<slug>-001.md`, `-002.md`, … |
 | **Issues only** | Pure standalone bug tickets, no design | `.cheese/issues/<slug>-001.md`, … |
 
-A spec is the rich container; absorbs problem framing, requirements, approach, decisions, interface sketches, risks, gates. An issue is a separate, GitHub-flavoured item the user can paste into a tracker.
+A spec is the rich container. It absorbs problem framing, requirements, approach, decisions, interface sketches, risks, and gates. An issue is a separate GitHub-flavoured item. The user can paste it into a tracker.
 
 ## Slug rules
 
 - Lowercase the working problem statement, drop stopwords, kebab-case, cap at 5 words.
-- Honour user-passed slugs verbatim.
+- **Validate every slug before any Curdle write.** Run `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>`. The command applies `validate_slug` and returns a nonzero status for an invalid slug. Stop on a nonzero status.
+- Accept a user-passed slug only after that command returns status zero. A slug can otherwise contain `..` or `/` and write outside `.cheese`.
+- Reuse the validated slug for every repo-local path. Repo-local paths include `.cheese/issues/`, `.cheese/glossary/`, and `.cheese/.out-of-scope/`. Never interpolate a raw slug into a path.
 - Match the spec's parent slug for issues (`<slug>-001.md`, `-002.md`).
 
 ## Collisions
@@ -42,6 +44,7 @@ confidence: <low | medium | high>
 gates_overridden: []   # list of unchecked handshake items if `curdle anyway` was used
 agent_introduced_scope: []   # terms in the spec the user did not type — each approved per `handshake.md` § Agent-introduced scope (audit trail; downstream skills trust this list)
 entity_referent_bindings: []   # list of binding records {noun, verdict, referent, citation, note} for identity/ownership-role nouns bound to code referents or marked NEW ENTITY — each resolved per `handshake.md` § Entity-referent binding (audit trail; downstream skills trust this list)
+agent_resolution: []   # the shared agent-resolution block per `../../cheese/references/agent-resolution.md`
 gate_applicability:
   disposition: red-required | not-applicable
   work_class: behavior | docs-only | refactor-only | test-only | appearance-only
@@ -65,6 +68,17 @@ gate_applicability:
   - State: <prepared | linked | created>
   - Reference: <local draft path | URL | durable roadmap reference>
 
+## Grounding
+
+Add exactly one row for each probe. Use `hit`, `miss`, or `unavailable` for `Outcome`.
+Use `unavailable` when a probe cannot run. Record the attempted action in `Evidence`.
+Do not leave `Evidence` blank. You can skip a probe, but do not assume its result.
+
+| Probe | Outcome | Evidence |
+| --- | --- | --- |
+| wiki | <hit \| miss \| unavailable> | <wiki path and one-line finding, or what was attempted> |
+| explorer | <hit \| miss \| unavailable> | <explorer digest path and one-line finding, or what was attempted> |
+
 ## Approach
 <chosen option summary>
 
@@ -87,10 +101,12 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 
 Include this entire section only when `gate_applicability.disposition` is
 `red-required`. Every numbered Acceptance ID appears exactly once in this table.
-`expected_failure` names a deterministic witness and expected red assertion;
-`mode` is `tracer` or `contract-matrix`. The seam is the outer boundary that
-proves the behavior. A matrix names its ratified interface version and every
-unique row identity, separated by `<br>`; a tracer leaves those cells blank.
+`expected_failure` names a deterministic witness and expected red assertion.
+`mode` is `tracer`, `contract-matrix`, or `guard`.
+The seam is the outer boundary that proves the behavior.
+A matrix names its ratified interface version and each unique row identity.
+Separate row identities with `<br>`.
+A guard or tracer leaves those cells blank.
 Add one row for each criterion.
 
 | Acceptance ID | Interface referent | Outermost stable seam | Expected failure | Mode | Interface version | Matrix rows |
@@ -150,6 +166,10 @@ document mold-spec {
   section "Goals"
   section "Non-goals"
   section "Deferred follow-ups"?
+  section "Grounding" {
+    columns: ['Probe', 'Outcome', 'Evidence']
+    per_row: ['Probe and Outcome are drawn from their closed sets', 'Evidence is non-empty, including for unavailable outcomes']
+  }
   section "Approach"
   section "Decisions"
   section "Acceptance"
@@ -169,19 +189,28 @@ document mold-spec {
 rule ac-coverage-exactly-once: "Every Acceptance ID must appear exactly once in the Test Contracts table."
 rule tracer-row-blank-matrix-cells: "Tracer rows must leave Interface version and Matrix rows blank."
 rule contract-matrix-row-requires-both: "Contract-matrix rows require both Interface version and Matrix rows."
+rule grounding-probe-recorded: "The Grounding table must record the wiki probe exactly once with non-empty evidence."
+rule delegation-digest-recorded: "The Grounding table must record the explorer probe exactly once with non-empty evidence."
 rule not-applicable-closed-class: "red-required requires Test Contracts; not-applicable forbids them and requires a reason."
 
 type GateApplicability {
   disposition GateApplicabilityDisposition
   work_class WorkClass
   ui_surface UiSurface
-  reason str | None
+  reason? str | None = None
+}
+
+type GroundingRow {
+  probe GroundingProbe
+  outcome GroundingOutcome
+  evidence str
 }
 
 type MoldSpecDocument {
   frontmatter MoldSpecFrontmatter
-  acceptance_ids tuple[str, ...]
-  test_contract_rows tuple[TestContractRow, ...]
+  acceptance_ids? tuple[str, ...] = ()
+  test_contract_rows? tuple[TestContractRow, ...] = ()
+  grounding_rows? tuple[GroundingRow, ...] = ()
 }
 
 type MoldSpecFrontmatter {
@@ -191,9 +220,9 @@ type MoldSpecFrontmatter {
   created str
   confidence SpecConfidence
   gate_applicability GateApplicability
-  gates_overridden tuple[str, ...]
-  agent_introduced_scope tuple[str, ...]
-  entity_referent_bindings tuple[Mapping[str, object], ...]
+  gates_overridden? tuple[str, ...] = ()
+  agent_introduced_scope? tuple[str, ...] = ()
+  entity_referent_bindings? tuple[Mapping[str, object], ...] = ()
 }
 
 type TestContractRow {
@@ -202,15 +231,19 @@ type TestContractRow {
   outermost_stable_seam str
   expected_failure str
   mode TestContractMode
-  interface_version str
-  matrix_rows tuple[str, ...]
+  interface_version? str = ''
+  matrix_rows? tuple[str, ...] = ()
 }
 
 enum GateApplicabilityDisposition = "red-required" | "not-applicable"
 
+enum GroundingOutcome = "hit" | "miss" | "unavailable"
+
+enum GroundingProbe = "wiki" | "explorer"
+
 enum SpecConfidence = "low" | "medium" | "high"
 
-enum TestContractMode = "tracer" | "contract-matrix"
+enum TestContractMode = "tracer" | "contract-matrix" | "guard"
 
 enum UiSurface = "browser" | "non-browser" | "not-applicable"
 
@@ -245,7 +278,7 @@ Accepted follow-ups use a local-first two-phase Curdle. Each receives a determin
 
 ### Phase one — local write-ahead state
 
-Preserve every existing Curdle by-product: the spec, ADRs, glossary, domain model, and any rejected-direction records. Add a local issue draft for each accepted follow-up that needs recoverable tracker payload, then persist its ID, destination, `prepared` state, and draft reference in `Deferred follow-ups` before any external call.
+Preserve every existing Curdle by-product: the spec, ADRs, glossary, domain model, and all rejected-direction records. Add a local issue draft for each accepted follow-up that needs a recoverable tracker payload. Before any external call, persist its ID, destination, `prepared` state, and draft reference in `Deferred follow-ups`.
 
 `$SPEC` is the authoritative store for prepared follow-up state because the resolver anchors it in the durable project corpus. Local issue drafts are auxiliary publication payloads, not the authoritative record. Stage and move this complete local set under the existing atomic-write rule before phase two begins.
 
@@ -255,15 +288,15 @@ Only units whose approved action is **create/link now** and whose destination is
 
 - For GitHub Issues, use the host GitHub capability first and `gh` as the portable fallback. Discover repository labels and issue forms instead of assuming them.
 - For roadmap goals, run the owned `/wiki-roadmap` workflow when that skill and its required capability are available. New roadmap creation and extension remain owned by that workflow.
-- Put the deterministic follow-up ID in every published item. On every retry, search the exact deterministic follow-up ID before creation; when an exact match exists, link it and SHALL NOT create a duplicate.
+- Put the deterministic follow-up ID in every published item. On every retry, search for the exact deterministic follow-up ID before creation. If an exact match exists, link it. You SHALL NOT create a duplicate.
 - A reused external item becomes `linked`; a newly published item becomes `created`. Reconcile that state and the final URL or durable roadmap reference into `Deferred follow-ups`.
-- When a capability is unavailable or publication fails, retain the recovery draft, keep the follow-up prepared, report the failed action and retry path, and continue without blocking the approved spec.
+- When a capability is unavailable or publication fails, retain the recovery draft. Keep the follow-up prepared. Report the failed action and retry path. Continue without blocking the approved spec.
 
 Finish roadmap publication and all mechanical spec reconciliation before the implementation handoff. Reconciliation records the already-approved result; it does not reopen the design.
 
 ## ADRs (durable by-product)
 
-After both handshake keys pass, write the session's non-obvious decisions as durable ADRs in phase one's local atomic write with the durable spec. Both remain in the durable project corpus: the spec is the approved implementation contract, while ADRs preserve the rationale behind it. The corpus is resolved **dynamically** — probe for the consumer's `repo:<their-repo>:wiki` hallouminate corpus and write there if present, else fall back to a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. Full resolution rule and ADR format in [`adr.md`](adr.md).
+Write the session's non-obvious decisions as durable ADRs after both handshake keys pass. Include them with the durable spec in phase one's local atomic write. Both stay in the durable project corpus. The spec is the approved implementation contract. The ADRs preserve its rationale. Resolve the corpus **dynamically**. Probe for the consumer's `repo:<their-repo>:wiki` hallouminate corpus. Write there when it exists. Otherwise write a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. See [`adr.md`](adr.md) for the full resolution rule and the ADR format.
 
 ## Durable glossary (by-product)
 
@@ -278,11 +311,11 @@ Format:
 | <term> | <one-line definition> | <referent> | <losing synonym, …> |
 ```
 
-The `Avoid` column records the losing synonyms the Ground phase rejected in favour of the canonical term (comma-separated, or `—` when none). Omit the file if no terms were resolved during Ground (no overloaded-term dialogue occurred).
+The `Avoid` column records losing synonyms that the Ground phase rejected in favour of the canonical term. Separate multiple synonyms with commas. Use `—` when none exist. Omit the file if Ground resolved no terms and no overloaded-term dialogue occurred.
 
 ## Domain model (cumulative by-product)
 
-In the same atomic step as the spec, ADRs, and per-slug glossary, merge the session's resolved terms — **with their Avoid synonyms** — into the project-level domain model resolved via `domain_model_target()` (`src/easy_cheese/shared/paths.py`). Unlike the per-slug glossary (a branch-local handoff), the domain model is cumulative cross-session memory: it builds the project's ubiquitous language across every session. Context-specific terms only; general programming concepts never enter.
+During the same atomic step as the spec, ADRs, and per-slug glossary, merge the session's resolved terms with their **Avoid synonyms**. Merge them into the project-level domain model. Resolve it with `domain_model_target()` (`src/easy_cheese/shared/paths.py`). The per-slug glossary is a branch-local handoff. The domain model is cumulative cross-session memory. It builds the project's ubiquitous language across every session. Add only context-specific terms. Never add general programming concepts.
 
 Merge, don't overwrite:
 - **New term** — append an entry.
@@ -304,7 +337,7 @@ Do not pre-split for a single context. This layout is identical across all three
 
 ## Rejected-directions store (by-product)
 
-When the agent-introduced-scope audit or the two-key handshake explicitly **rejects a direction** (the user says "drop <term>" for an approach or design knob, or "not that approach"), write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md`. An explicit deferral becomes a follow-up candidate; a rejected direction is not a follow-up candidate.
+Write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md` when the agent-introduced-scope audit **rejects a direction**. Do the same when the two-key handshake rejects it. Rejections include "drop <term>" for an approach or design knob, and "not that approach." An explicit deferral becomes a follow-up candidate. A rejected direction is not a follow-up candidate.
 
 Format:
 ```markdown
@@ -320,13 +353,13 @@ Format:
 Session: <slug>; rejected at: <handshake | scope-audit>
 ```
 
-This store is consulted by `/cheese` before re-proposing a direction (see `skills/cheese/SKILL.md` § Rejected-directions check). Do not write ordinary scope boundaries or accepted follow-ups here: non-goal-only dispositions create no artifact, while accepted follow-ups use `Deferred follow-ups` plus any auxiliary `.cheese/issues/` recovery draft. Write only direction-level rejections (approaches, design knobs, named features the user explicitly declined). Note: this store is dot-prefixed (`.out-of-scope`) while its sibling stores (`glossary/`, `issues/`, `specs/`) are not — any scan must target the dotted path explicitly; a bare `.cheese/*` glob will not match it.
+`/cheese` consults this store before it proposes a direction again. See `skills/cheese/SKILL.md` § Rejected-directions check. Do not write ordinary scope boundaries or accepted follow-ups here. Non-goal-only dispositions create no artifact. Accepted follow-ups use `Deferred follow-ups` and any auxiliary `.cheese/issues/` recovery draft. Write only direction-level rejections. These include approaches, design knobs, and named features that the user explicitly declined. Note: this store uses the dot-prefixed path `.out-of-scope`. Its sibling stores, `glossary/`, `issues/`, and `specs/`, do not use dot prefixes. Each scan must explicitly target the dotted path. A bare `.cheese/*` glob does not match it.
 
 ## Spec-verify pass (optional)
 
-Before the hand-off, if the `/spec-verify` skill is available in the harness, run it as an independent spec-review pass. If absent, skip silently and note once — this pass is optional and must not block curdle in environments where the skill is not bundled. Never hard-depend on it.
+Run `/spec-verify` as an independent spec-review pass before the hand-off when the harness provides it. Skip it without a warning when it is absent. Note the absence once. This pass is optional. It must not block Curdle in an environment that does not bundle the skill. Never create a hard dependency on it.
 
-Detection is instruction-level, not code: check whether `/spec-verify` appears in the agent's available toolset (the same pattern as `../../cheese/references/optional-plugins.md` § Probe pattern). Do not use `command -v` or any shell probe — `/spec-verify` is a skill, not a `$PATH` executable.
+Detect the skill at the instruction level, not in code. Check whether `/spec-verify` appears in the agent's available toolset. Use the pattern in `../../cheese/references/optional-plugins.md` § Probe pattern. Do not use `command -v` or another shell probe. `/spec-verify` is a skill, not a `$PATH` executable.
 
 ## Atomic write
 
@@ -336,12 +369,12 @@ Stage to a temp directory under `${TMPDIR}` first, then move into place. Never l
 
 This is the runtime home of the **Durable writes** coherence gate (`handshake.md` § Agent key). The gate locks the commitment before the handshake; this step honours it. For each durable write — every ADR and the domain-model merge — run:
 
-1. **Resolve** the target dynamically — the ADR resolution procedure in [`adr.md`](adr.md) § Resolution, the `domain_model_target()` function (`src/easy_cheese/shared/paths.py`) for the model. Both yield `(backend, location)`; `domain_model_target()` returns a third element, `wiki_reachable` — `False` means the wiki probe was never consulted (no hook, or it raised), so a `file` backend there is a degraded fallback, not a confirmed absence. That is the trigger for the loud fallback below.
+1. **Resolve** the target dynamically. For the ADR, use the resolution procedure in [`adr.md`](adr.md) § Resolution. For the model, use `domain_model_target()` in `src/easy_cheese/shared/paths.py`. Both return `(backend, location)`. `domain_model_target()` also returns `wiki_reachable` as a third element. `False` means that the wiki probe was not consulted because no hook existed or the hook raised. Thus, its `file` backend is a degraded fallback, not a confirmed absence. This condition triggers the loud fallback below.
 2. **Write** to that target: `add_markdown` when the backend is `hallouminate`, a staged file write when it is `file`.
-3. **Read back** and confirm the entry landed: `ground` / `read_markdown` for the wiki backend, a re-read of the file for the file backend. A write that cannot be read back is a failure — fail loud, do not claim the write.
+3. **Read back** the entry and confirm that it exists. For the wiki backend, use `ground` or `read_markdown`. For the file backend, read the file again. Treat a write that you cannot read back as a failure. Fail loudly, and do not claim the write.
 4. **Record** it in the curdle completion record printed to the user: one line per durable write naming `<artifact> → <location> (<backend>)`.
 
-**Loud fallback.** When hallouminate is unavailable and the resolver degrades to a file backend (`docs/adr/…`, `docs/domain-model*`, or the XDG corpus), say so in one visible line — never let a write silently go to files when the author expected the wiki. Absent-plugin degrade contract: [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
+**Loud fallback.** If hallouminate is unavailable and the resolver degrades to a file backend, state this in one visible line. File backends include `docs/adr/…`, `docs/domain-model*`, and the XDG corpus. Never write silently to files when the author expected the wiki. See the absent-plugin degrade contract in [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
 
 ## Pre-approval typed planner dispatch
 
@@ -351,9 +384,24 @@ Before this procedure, run the digest-bound fresh-context fork taste test on the
 2. **Validate and normalize** the writer view on the host. The normal selected path is the typed `PlannerResult` containing a typed `CurdPlan`; reject malformed or wrong-kind output before approval.
 3. **Still invalid after one retry** — stop before the two-key handshake. Do not approve or persist an invalid plan.
 4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` with the final approval request. The typed plan is part of what both handshake keys approve.
-5. **During Curdle phase one**, persist the approved spec, typed `PlannerResult`, and typed `CurdPlan` after `## Quality gates` (or the natural equivalent section for this spec's shape). Do not regenerate or mutate them after approval.
+5. **During Curdle phase one**, persist the approved spec, typed `PlannerResult`, and typed `CurdPlan`. Put them after `## Quality gates` or the natural equivalent section for this spec's shape. Do not regenerate or mutate them after approval.
 
 The legacy `CurdBlock`/`Decomposition` projection is not the normal path. Use it only when an explicit migration consumer requests it; the projection must be lossless or return `UnsupportedProjection`. Never invoke the legacy curd-block decomposer or persist its block as the selected production artifact.
+
+## Publication
+
+Publish the approved plan before the hand-off. Run this command after reconciliation:
+
+```bash
+POINTER_JSON=$(python3 skills/mold/scripts/mold.pyz publish "$CURD_PLAN_JSON" \
+  --invocation "$INVOCATION_JSON" \
+  --operation-id "<slug>-<ordinal>" \
+  --artifact-root "$ARTIFACT_ROOT")
+```
+
+The command validates the payload and the `mold -> cook` route. It stores the pointer at `$ARTIFACT_ROOT/pointers/<operation-id>.json`. Stop on a nonzero status. Never hand off an unpublished plan.
+
+Pass that stored pointer path to Cook. Cook runs its own `accept` command before any executor. That command verifies the route, the receipt, and each referenced artifact. See `skills/cook/SKILL.md` § Inputs.
 
 ## Hand-off
 
@@ -362,6 +410,6 @@ After writing, suggest the next step inline. **Never auto-invoke.**
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Red-required Spec | `/cook --auto <durable spec pointer>` (preserve gate and taste metadata) |
-| Spec | `/cook <spec-path>` |
+| Red-required Spec | `/cook --auto <pointer path>` (add `--hard` when the user passed it) |
+| Spec | `/cook <pointer path>` (add `--hard` when the user passed it) |
 | Issues | Paste each into your tracker, or `gh issue create --body-file <path>` |

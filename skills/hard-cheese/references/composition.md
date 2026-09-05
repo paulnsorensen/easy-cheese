@@ -1,6 +1,6 @@
 # Composition — `--hard` and `--auto`
 
-`--hard` and `--auto` are both propagated flags. They may coexist. The gate fires at exactly one named point; everywhere else, each flag's normal semantics apply.
+`--hard` and `--auto` pass through the pipeline. They can operate together. The gate runs at one specified point.
 
 ## Propagation graph
 
@@ -10,33 +10,46 @@
                                                                     └──► /hard-cheese
 ```
 
-Every upstream skill is pass-through. `/plate` is the only pipeline skill that calls `/hard-cheese`, after it inventories, writes, and reads back all required durable artifacts.
+Each upstream skill passes the flags forward. Only `/plate` runs `/hard-cheese`. `/plate` first writes and verifies every required durable artifact.
 
 ## The matrix
 
-| Invocation | Gate fires? | When | Notes |
+| Invocation | Does the gate run? | When | Notes |
 | --- | --- | --- | --- |
-| `/hard-cheese <slug>` standalone | Yes | Immediately. | No pipeline state required. |
+| `/hard-cheese <slug>` standalone | Yes | Immediately. | No pipeline state is required. |
 | `/plate --hard` commit-only | No | n/a | Nothing is shared for review. |
 | `/plate --hard` existing PR | Yes | After final writes and validation, before update. | No layout question. |
-| `/plate --hard` new PR | Yes | After topology resolution, final writes, and validation, before publish. | Explicit choices and cohesive singles skip the question; stack recommendations and ambiguous shapes ask under auto. |
+| `/plate --hard` new PR | Yes | After topology resolution and final validation, before publication. | An explicit choice skips the question. A cohesive single change also skips the question. Other shapes can require a question. |
 | Upstream `--hard` without terminal `/plate` | No | n/a | The flag remains pending. |
 
 ## The single puncture point
 
-`--hard` punctures `--auto` exactly once inside terminal `/plate`, after the final artifact-writing gate and before publication. Intermediate cook, press, age, and cure phases do not pause.
+Terminal `/plate` pauses `--auto` once. It pauses after final artifact verification and before publication. Intermediate phases do not pause.
 
 ## Non-TTY guard
 
-If `/hard-cheese` detects it is running without an interactive input stream (no human can respond to the vibecheck prompt), it fails closed and aborts. The puncture only makes sense when a human is in the loop. A vacuous "auto-pass" with no human present would defeat the entire mechanism.
+`/hard-cheese` stops when it has no interactive input stream. The gate requires a human response.
 
-Auto-driven CI pipelines should not pass `--hard`. If they do, the gate aborts with a clear error: `"--hard requires an interactive TTY; remove --hard or run interactively"`.
+Do not pass `--hard` in automated CI. Otherwise, the gate returns `"--hard requires an interactive TTY; remove --hard or run interactively"`.
+
+## Plate status matrix
+
+`/plate` maps each gate status to one publication decision:
+
+| Gate status | Gate exit status | Plate decision |
+| --- | --- | --- |
+| `PASS` | `0` | Publish. |
+| `LOGGED` | `0` | Publish. The user chose `--no-judge`. |
+| `ERROR` | `0` | Ask the user before you publish. The fail-open divergence applies. |
+| `FAILED` | non-zero | Do not publish. Stop the chain. |
+
+The exit status is the machine contract. The decision column is the Plate policy.
 
 ## Flag precedence summary
 
-- `--auto` without `--hard`: chain runs forward; `/plate` applies its new-PR review-shape policy.
-- `--hard` without publication: no gate.
-- `--auto --hard`: `/plate` resolves topology, verifies final writes, then fires the gate once.
-- `--auto --hard` on a non-TTY: aborts with the documented error.
+- With only `--auto`, run the chain. Then apply the `/plate` policy for a new pull request.
+- With `--hard` and no publication, do not run the gate.
+- With `--auto --hard`, resolve the topology. Verify the final writes. Then run the gate once.
+- With `--auto --hard` and no TTY, return the documented error.
 
-There is no silent precedence. The only point where one flag overrides the other is named here.
+The flags have no hidden precedence. This document identifies the only override point.

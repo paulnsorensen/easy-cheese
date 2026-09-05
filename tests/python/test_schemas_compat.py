@@ -1,15 +1,19 @@
 """Tests for src/easy_cheese_schemas/compat.py — the version-compat layer.
 
-Covers every Provenance branch (including PRIOR, unreachable through `load`
-while MIN_READABLE == SCHEMA_VERSION, via the classifier directly), both
-strictness modes, the FUTURE best-effort path, Loaded's immutability, and the
-distribution floors declared in pyproject.toml.
+Covers every Provenance branch, both strictness modes, the FUTURE best-effort
+path, Loaded's immutability, and the distribution floors declared in
+pyproject.toml.
 """
 
 from __future__ import annotations
 
+import copy
 from copy import deepcopy
+from datetime import date
+import os
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import cast
@@ -19,16 +23,24 @@ from attrs import define, field
 from attrs.exceptions import FrozenInstanceError
 
 from easy_cheese_schemas import (
+    CURD_PLAN_SCHEMA_URI,
     MIN_READABLE,
     SCHEMA_VERSION,
+    AdapterSunsetError,
     EvidenceOrigin,
     GateMode,
     GateProducer,
     GateReceipt,
+    LegacyAdapter,
+    LegacyConversionError,
     Loaded,
     Provenance,
-    compat,
+    adapter_for,
+    check_adapter_sunsets,
     load,
+    register_adapter,
+    unregister_adapter,
+    __version__,
 )
 from easy_cheese_schemas.compat import STAMP_KEY, classify_stamp
 
@@ -110,13 +122,12 @@ class TestClassifyStamp:
     def test_stamp_above_current_is_future(self) -> None:
         assert classify_stamp(SCHEMA_VERSION + 1) is Provenance.FUTURE
 
-    def test_readable_older_stamp_is_prior(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # PRIOR is unreachable while MIN_READABLE == SCHEMA_VERSION, so widen
-        # the window the way a real schema bump will: the N-1 branch must
-        # classify the previous version as readable, not stale.
-        monkeypatch.setattr(compat, "SCHEMA_VERSION", SCHEMA_VERSION + 1)
-        monkeypatch.setattr(compat, "MIN_READABLE", SCHEMA_VERSION)
-        assert classify_stamp(SCHEMA_VERSION) is Provenance.PRIOR
+    def test_readable_older_stamp_is_prior(self) -> None:
+        # The window is genuinely open (MIN_READABLE < SCHEMA_VERSION), so the
+        # N-1 branch is exercised for real: the floor stamp is readable, not
+        # stale, and not mistaken for the current one.
+        assert MIN_READABLE < SCHEMA_VERSION
+        assert classify_stamp(MIN_READABLE) is Provenance.PRIOR
 
 
 class TestProvenanceThroughLoad:
@@ -277,14 +288,18 @@ class TestLoadNeverRaises:
 
 class TestLoadedShape:
     def test_loaded_is_frozen(self) -> None:
-        result = Loaded(value=Widget(name="gouda"), provenance=Provenance.CURRENT, problems=[])
+        result = Loaded(
+            value=Widget(name="gouda"), provenance=Provenance.CURRENT, problems=[]
+        )
         with pytest.raises(FrozenInstanceError):
             result.value = None  # pyright: ignore[reportAttributeAccessIssue]
 
 
 class TestDistributionMetadata:
     def _pyproject(self) -> dict[str, object]:
-        return cast(dict[str, object], tomllib.loads((REPO_ROOT / "pyproject.toml").read_text()))
+        return cast(
+            dict[str, object], tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+        )
 
     def _project(self) -> dict[str, object]:
         return cast(dict[str, object], self._pyproject()["project"])
@@ -306,6 +321,173 @@ class TestDistributionMetadata:
         assert f"cattrs>={pins['cattrs']}" in deps
 
     def test_version_matches_package(self) -> None:
-        import easy_cheese_schemas
+        assert self._project()["version"] == __version__
 
-        assert self._project()["version"] == easy_cheese_schemas.__version__
+
+class TestAdapterSunsets:
+    _SOURCE_SCHEMA_URI: str = (
+        "https://schemas.easy-cheese.dev/test-fixtures/sunset-fixture"
+    )
+
+    def teardown_method(self) -> None:
+        unregister_adapter(self._SOURCE_SCHEMA_URI, "0", "1")
+
+    def test_expired_adapter_blocks_with_injected_reference_date(self) -> None:
+        register_adapter(
+            LegacyAdapter(
+                source_schema_uri=self._SOURCE_SCHEMA_URI,
+                source_major="0",
+                source_minor="1",
+                target_schema_uri=self._SOURCE_SCHEMA_URI,
+                remove_after="2020-01-01",
+                convert=dict,
+            )
+        )
+
+        with pytest.raises(AdapterSunsetError):
+            check_adapter_sunsets(date(2020, 1, 1))
+
+    def test_unexpired_adapter_does_not_block(self) -> None:
+        register_adapter(
+            LegacyAdapter(
+                source_schema_uri=self._SOURCE_SCHEMA_URI,
+                source_major="0",
+                source_minor="1",
+                target_schema_uri=self._SOURCE_SCHEMA_URI,
+                remove_after="2099-01-01",
+                convert=dict,
+            )
+        )
+
+        check_adapter_sunsets(date(2020, 1, 1))
+
+
+_LEGACY_CURD_PLAN_V0_9: dict[str, object] = {
+    "plan_id": "legacy-plan",
+    "revision": 1,
+    "goal": "Ship the behavior",
+    "curds": [
+        {
+            "key": "runtime",
+            "goal": "Implement validation",
+            "paths": ["src/runtime.py"],
+            "outputs": ["Validated contract"],
+            "criteria": [
+                {
+                    "description": "Reject unknown fields",
+                    "check": "pytest tests/test_runtime.py",
+                }
+            ],
+        }
+    ],
+}
+
+
+def _legacy_plan_without(*keys: str) -> dict[str, object]:
+    payload = copy.deepcopy(_LEGACY_CURD_PLAN_V0_9)
+    for key in keys:
+        _ = payload.pop(key)
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    (
+        (_legacy_plan_without("curds"), "curd-plan.curds must be present"),
+        (_legacy_plan_without("plan_id"), "curd-plan.plan_id must be present"),
+        (_legacy_plan_without("goal"), "curd-plan.goal must be present"),
+        ({**_legacy_plan_without(), "revision": "1"}, "curd-plan.revision must be int"),
+        ({**_legacy_plan_without(), "curds": {}}, "curd-plan.curds must be list"),
+    ),
+)
+def test_builtin_curd_plan_adapter_reports_malformed_legacy_input(
+    payload: dict[str, object], message: str
+) -> None:
+    """A persisted legacy artifact is untrusted input, not a caller mistake."""
+    adapter = adapter_for(CURD_PLAN_SCHEMA_URI, "0", "9")
+    assert adapter is not None
+
+    with pytest.raises(LegacyConversionError, match=re.escape(message)):
+        _ = adapter.convert(payload)
+
+
+def test_builtin_curd_plan_adapter_reports_malformed_legacy_curd_fields() -> None:
+    adapter = adapter_for(CURD_PLAN_SCHEMA_URI, "0", "9")
+    assert adapter is not None
+
+    payload = copy.deepcopy(_LEGACY_CURD_PLAN_V0_9)
+    curds = cast("list[dict[str, object]]", payload["curds"])
+    _ = curds[0].pop("criteria")
+
+    with pytest.raises(
+        LegacyConversionError, match=re.escape("curd-plan.curds[0].criteria must be present")
+    ):
+        _ = adapter.convert(payload)
+
+
+def test_builtin_curd_plan_adapter_converts_the_well_formed_legacy_plan() -> None:
+    adapter = adapter_for(CURD_PLAN_SCHEMA_URI, "0", "9")
+    assert adapter is not None
+
+    converted = adapter.convert(copy.deepcopy(_LEGACY_CURD_PLAN_V0_9))
+
+    assert converted["plan_id"] == "legacy-plan"
+    assert converted["objective"] == "Ship the behavior"
+
+
+_BUILTIN_MIGRATION_IMPORT_ORDER_PROBE = """
+import sys
+
+from easy_cheese_schemas import (
+    CURD_PLAN_SCHEMA_URI,
+    adapter_for,
+    supported_version_for,
+    validate_contract,
+)
+
+assert "easy_cheese.shared.migrate" not in sys.modules
+adapter = adapter_for(CURD_PLAN_SCHEMA_URI, "0", "9")
+assert adapter is not None
+converted = adapter.convert(
+    {
+        "plan_id": "legacy-plan",
+        "revision": 1,
+        "goal": "Ship the behavior",
+        "curds": [
+            {
+                "key": "runtime",
+                "goal": "Implement validation",
+                "paths": ["src/runtime.py"],
+                "outputs": ["Validated contract"],
+                "criteria": [
+                    {
+                        "description": "Reject unknown fields",
+                        "check": "pytest tests/test_runtime.py",
+                    }
+                ],
+            }
+        ],
+    }
+)
+validated = validate_contract(
+    converted,
+    CURD_PLAN_SCHEMA_URI,
+    supported_version_for(CURD_PLAN_SCHEMA_URI),
+)
+assert validated.value is not None
+assert validated.value.objective == "Ship the behavior"
+assert validated.value.curds[0].curd_id == "runtime"
+"""
+
+
+def test_builtin_migration_adapter_works_before_shared_migrate_import() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", _BUILTIN_MIGRATION_IMPORT_ORDER_PROBE],
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT / "src")},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr

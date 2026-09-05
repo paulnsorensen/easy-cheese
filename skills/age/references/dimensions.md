@@ -2,7 +2,7 @@
 
 Each dimension has its own rubric.
 
-Dimensions answer **what kind of problem**. Severity answers **how bad this one is**. The two stay orthogonal.
+Each dimension answers **what kind of problem**. Severity answers **how bad this one is**. The two remain orthogonal.
 
 ## Severity vocabulary
 
@@ -14,20 +14,22 @@ blocker > high > medium > low
 
 | Tier | Meaning |
 | --- | --- |
-| `blocker` | Do not merge — contract broken, exposure open, or data at risk |
-| `high` | Fix before merge — risk of incident or rework |
-| `medium` | Real defect — fix before next release |
-| `low` | Annoyance — safe to merge, fix at leisure |
+| `blocker` | Do not merge when the contract breaks, exposure stays open, or data remains at risk |
+| `high` | Fix before merge when the code risks an incident or rework |
+| `medium` | Fix the real defect before the next release |
+| `low` | Merge safely and fix the annoyance later |
 
 ## Severity computation
 
-Each finding's severity is computed, not declared. Three independent contributors, max-merged, capped at `blocker`:
+Compute each finding's severity. Do not declare it.
+Start at the base tier. Then apply each bump in the order below.
+Both bumps can apply to one finding. Cap the result at `blocker`.
 
-1. **Base** — from the dimension's per-tier rubric (see § Per-dimension rubrics below).
-2. **Location bump** — `+1` tier if `location = contract` *and* the dimension is location-sensitive (see § Location sensitivity).
-3. **Compounding bump** — `+1` tier if `fix-cost-later = structural`.
+1. **Base** — Use the dimension's per-tier rubric (see § Per-dimension rubrics below).
+2. **Location bump** — Add one tier when `location = contract` and the dimension is location-sensitive (see § Location sensitivity).
+3. **Compounding bump** — Add one tier when `fix-cost-later = structural`.
 
-Do not compute the formula in-head — invoke `src/easy_cheese/shared/severity.py compute`:
+Do not compute the formula mentally. Invoke `src/easy_cheese/shared/severity.py compute`:
 
 ```bash
 python3 skills/age/scripts/age.pyz severity compute \
@@ -37,7 +39,7 @@ python3 skills/age/scripts/age.pyz severity compute \
 # -> blocker | high | medium | low
 ```
 
-Mental shortcut: a class-private encapsulation leak lands `low`; the same leak at a slice's `index` re-export lands `blocker` (base `high` → contract bump → structural fix-cost bump, capped).
+A class-private encapsulation leak lands at `low`. The same leak at a slice's `index` re-export lands at `blocker` (base `high` → contract bump → structural fix-cost bump, capped).
 
 ## Per-finding fields
 
@@ -57,35 +59,35 @@ Every finding carries these fields:
 
 | Tier | Definition |
 | --- | --- |
-| `class` | Within a single class / type / file's private scope. Caller graph stays inside the file. |
-| `module` | Within a single module / slice. Crosses files but stays inside the slice's internal namespace. |
-| `cross-module` | Reaches into another module's internals (bypasses the public index/crust). |
-| `contract` | Crosses an ingress/egress boundary: slice's public `index` re-exports, HTTP/RPC handler signature, DB schema, language-FFI boundary, plugin extension point, published library API. |
+| `class` | The scope stays inside one class / type / file's private scope. The caller graph stays inside the file. |
+| `module` | The scope stays within one module / slice. Calls cross files but stay inside the slice's internal namespace. |
+| `cross-module` | The caller reaches another module's internals and bypasses the public index/crust. |
+| `contract` | The caller crosses an ingress/egress boundary, such as a public slice `index`, HTTP/RPC handler signature, DB schema, language-FFI boundary, plugin extension point, or published library API. |
 
-Language-agnostic note: in projects without an explicit public-index layer (flat scripts or packages without an `__init__` re-export surface), treat a direct import of another file's internal function across a package boundary as `cross-module`, and CLI `argv` / stdin ingress as `contract`.
+In projects without an explicit public-index layer, classify a direct import of another file's internal function across a package boundary as `cross-module`. This includes flat scripts and packages without an `__init__` re-export surface. Classify CLI `argv` / stdin ingress as `contract`.
 
 ## Location sensitivity
 
-The `contract` bump only applies to dimensions where boundary position genuinely changes how bad a finding is:
+Apply the `contract` bump only to dimensions where boundary position changes finding impact:
 
 | Dimension | Contract bump? | Why |
 | --- | --- | --- |
-| correctness | yes | A bug at the contract leaks into every consumer; internal bugs stay contained |
-| security | yes | Tainted input crossing a trust boundary is the canonical case |
-| encapsulation | yes | The whole dimension is about boundary integrity |
+| correctness | yes | A contract bug reaches every consumer; an internal bug stays contained |
+| security | yes | A tainted input crosses a trust boundary |
+| encapsulation | yes | This dimension measures boundary integrity |
 | spec | yes | Spec drift at the API surface contradicts the published contract |
-| complexity | no | Complexity grades by function/file shape, not boundary position |
-| deslop | no | Dead code is dead code wherever it lives |
-| assertions | no | Test quality doesn't change by where the SUT lives |
-| nih | yes | Reinventing primitives that cross the boundary is worse than internal helpers |
-| efficiency | yes | Hot path on a public handler is the typical blocker shape |
-| telemetry | yes | Silent failure on an outbound call (boundary) is the canonical blocker |
+| complexity | no | Complexity grades function/file shape, not boundary position |
+| deslop | no | Dead code stays dead wherever it lives |
+| assertions | no | Test quality does not change with SUT location |
+| nih | yes | Reinvented primitives that cross the boundary cause more harm than internal helpers |
+| efficiency | yes | A public handler on a hot path shows the typical blocker shape |
+| telemetry | yes | A boundary outbound call with silent failure forms the canonical blocker |
 
 ## Fix-cost-now
 
 > "How hard would it be to fix this *right now*?"
 
-Bucket the blast-radius file count for the proposed fix. Do not bucket in-head — pipe the raw file/module counts through `src/easy_cheese/shared/severity.py bucket`:
+Count files in the proposed fix's blast radius. Do not bucket the count mentally. Pipe raw file/module counts through `src/easy_cheese/shared/severity.py bucket`:
 
 ```bash
 python3 skills/age/scripts/age.pyz severity bucket --files <N> [--modules <M>]
@@ -94,12 +96,12 @@ python3 skills/age/scripts/age.pyz severity bucket --files <N> [--modules <M>]
 
 Source priority for the raw count:
 
-1. **`tilth_deps`** — primary. Returns the file set that would need to change.
+1. **`tilth_deps`** — primary. It returns the file set that needs changes.
 2. **LSP `find-references` / `find-callers`** — fallback when tilth is unavailable.
 
-**Worked recipe.** Given a finding at `path:line`, run `tilth_deps` on the *containing file*. Count the **distinct files** in the imported-by set as `--files` — use the `<N> dependents` header count, since the `Used by` list emits one entry per call site and several entries can map to one file (counting raw entries overcounts). Count the **distinct slice/module roots** among them as `--modules` — the logical package root, so `src/easy_cheese/skills/melt` and `src/easy_cheese/skills/affinage` are two modules, not the shared `src/easy_cheese/skills` parent. Then run `python3 skills/age/scripts/age.pyz severity bucket --files <N> --modules <M>`. Falling back to LSP callers, count the same way (distinct touched files, distinct module dirs) so buckets stay comparable across tools.
+**Worked recipe.** Start with a finding at `path:line`. Run `tilth_deps` on the containing file. Count distinct files in the imported-by set. Use the `<N> dependents` header count for `--files`. The `Used by` list reports one entry per call site. Several entries can identify one file, so raw entries overcount. Use each logical package root to count distinct slice/module roots for `--modules`. For example, `src/easy_cheese/skills/melt` and `src/easy_cheese/skills/affinage` count as two modules. Do not count the shared `src/easy_cheese/skills` parent. Then run `python3 skills/age/scripts/age.pyz severity bucket --files <N> --modules <M>`. If `tilth_deps` is unavailable, use LSP callers. Count distinct touched files and distinct module directories in the same way. This method keeps the buckets comparable.
 
-Fix-cost-now is **reported, not bumped**. Severity decides what to fix; fix-cost-now explains effort and lets triage schedule.
+Report Fix-cost-now; do not bump severity with it. Severity selects fixes. Fix-cost-now explains effort and supports triage scheduling.
 
 ## Fix-cost-later (compounding)
 
@@ -107,261 +109,321 @@ Fix-cost-now is **reported, not bumped**. Severity decides what to fix; fix-cost
 
 | Tier | Meaning |
 | --- | --- |
-| `contained` | Cost stays roughly fixed. A typo in a docstring is the same fix in six months. |
-| `spreading` | Cost grows linearly. New code piles onto the bad pattern; each new caller adds one unit of fix work. |
-| `structural` | Cost grows non-linearly. Consumers *harden* against the current shape — types get re-exported, mocks calcify, downstream APIs build on the leak. Public-API leaks, DB-schema mistakes, and ingress-contract violations live here. |
+| `contained` | Cost stays roughly fixed. A typo in a docstring takes the same effort in six months. |
+| `spreading` | Cost grows linearly. New code extends the bad pattern; each new caller adds one unit of fix work. |
+| `structural` | Cost grows non-linearly. Consumers harden against the current shape. They re-export types, calcify mocks, and build downstream APIs on the leak. Public-API leaks, DB-schema mistakes, and ingress-contract violations belong here. |
 
-**Decision.** `structural` if the changed symbol is re-exported by any consumer or fixing it requires touching a file outside the diff. `spreading` if the fix is local but the diff adds new callers of the bad shape, or the pattern is being copy-pasted. `contained` otherwise. When two tiers apply, take the higher.
+**Decision.** Mark `structural` when a consumer re-exports the changed symbol. Also mark `structural` when the fix touches a file outside the diff. Mark `spreading` when the fix stays local but the diff adds callers of the bad shape. Also mark `spreading` when multiple sites copy the pattern. Otherwise, mark `contained`. When two tiers apply, choose the higher tier.
 
 Per-dimension `structural` anchors:
 
 | Dimension | `structural` looks like |
 | --- | --- |
-| correctness | A race or lost write at a public API boundary; consumers harden retry/mock logic around the broken atomicity. |
-| security | A taint path through a published signature; every consumer must re-validate once the contract leaks the unsafe shape. |
-| encapsulation | A leaked internal type re-exported from a slice `index`; downstream slices build on it. |
-| spec | A dropped requirement now baked into downstream behaviour that later code depends on. |
-| complexity | A god module new code keeps landing in; each addition compounds the untangling cost. |
-| deslop | A duplicated block forked across modules; each copy diverges and multiplies the eventual merge. |
-| assertions | A mocked SUT or weak harness other tests copy as the pattern to follow. |
-| nih | A reinvented primitive other modules import; replacing it later means migrating every caller. |
-| efficiency | An unbounded structure on a long-running path; retained references accumulate as callers grow. |
-| telemetry | A hand-rolled logging shape new code standardises on; migrating to the real logger later touches every call site. |
+| correctness | A race or lost write reaches a public API boundary. Consumers harden retry/mock logic around broken atomicity. |
+| security | A taint path crosses a published signature. Every consumer must validate again after the contract leaks the unsafe shape. |
+| encapsulation | A slice `index` re-exports a leaked internal type. Downstream slices build on it. |
+| spec | A dropped requirement becomes baked into downstream behavior. Later code depends on it. |
+| complexity | New code keeps landing in a god module. Each addition compounds untangling cost. |
+| deslop | A duplicated block spreads across modules. Each copy diverges and multiplies the eventual merge. |
+| assertions | A test mocks the system under test or uses a weak harness. Other tests copy that pattern. |
+| nih | Other modules import a reinvented primitive. Replacing it later requires migrating every caller. |
+| efficiency | An unbounded structure runs on a long-running path. Retained references accumulate as callers grow. |
+| telemetry | New code standardizes on a hand-rolled logging shape. Migrating to the real logger later touches every call site. |
 
-`structural` triggers the compounding `+1` bump in the formula. The point of carrying this tag is to surface "fix now or pay exponentially later" to the user without dressing it up as severity.
+The `structural` tag adds the compounding `+1` bump in the formula.
+Use the tag to record that the repair cost grows over time.
+Do not restate that cost as severity.
 
 ## Per-dimension rubrics
 
-Each dimension's base-severity table — *severity-by-violation-shape*, before modifiers. Modifiers (location, compounding) layer on top per the formula.
+Each dimension uses a base-severity table for each violation shape before modifiers. Apply location and compounding modifiers after the base tier.
 
 ### correctness
 
-Look for: off-by-one, ordering, null/empty edge cases, silent failures, races, contradictory branches, lost writes.
+Look for off-by-one errors, ordering errors, null/empty edge cases, silent failures, races, contradictory branches, and lost writes.
 
 | Base | Trigger |
 | --- | --- |
-| `blocker` | Data loss, data corruption, race in shared concurrent state, lost write, irreversible side effect on wrong input |
-| `high` | Wrong data returned, ordering bug, silent failure with no recovery path |
-| `medium` | Edge case in a flow with a recovery path; null/empty handling that misbehaves on rare input |
-| `low` | Cosmetic edge case in well-bounded leaf code |
+| `blocker` | Assign `blocker` to data loss, data corruption, races in shared concurrent state, lost writes, or irreversible side effects on wrong input |
+| `high` | Assign `high` when code returns wrong data, misorders results, or fails silently without recovery |
+| `medium` | Assign `medium` when a recoverable flow mishandles a rare null/empty input |
+| `low` | Assign `low` to cosmetic edge cases in well-bounded leaf code |
 
-Inherited shape: a race, lost write, or contradictory branch already present in the caller graph that the diff's new path now exercises. Expand callers one level before grading clean.
+The diff's new path can exercise an existing race, lost write, or contradictory branch in the caller graph. Expand callers one level before grading clean.
 
-Boundaries: telemetry (no-log failure to here), security (access-control to security), deslop (silent-failure claim to here), efficiency (TOCTOU wrong-data to here), spec (contract commitment to spec, runtime risk to here; emit both). Full rules in § Dimension boundaries.
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
 
 Recommendation shape: "Add a guard for X" / "Return early when Y" / "Replace `catch (_)` with explicit handling".
 
 ### security
 
-Look for: authN/authZ holes, injection, secrets in source/logs/URLs, tainted inputs reaching dangerous sinks, crypto missteps.
+Look for authN/authZ holes, injection, secrets in source/logs/URLs, tainted inputs reaching dangerous sinks, and crypto missteps.
 
 | Base | Trigger |
 | --- | --- |
-| `blocker` | Injection (SQL/shell/template/deser), authn bypass, secret in source, RCE, plaintext secret on the wire |
-| `high` | Unvalidated input reaches dangerous sink; broken authz on internal route; weak crypto on durable data |
-| `medium` | Tainted input reaches limited surface with secondary validation; missing rate-limit on auth-adjacent route |
-| `low` | Missing defense-in-depth on already-validated input |
+| `blocker` | Assign `blocker` to injection (SQL/shell/template/deser), authn bypass, secrets in source, RCE, or plaintext secrets on the wire |
+| `high` | Assign `high` when unvalidated input reaches a dangerous sink, internal-route authz breaks, or weak crypto protects durable data |
+| `medium` | Assign `medium` when tainted input reaches a limited surface with secondary validation, or an auth-adjacent route lacks a rate limit |
+| `low` | Assign `low` when already-validated input lacks defense in depth |
 
-Inherited shape: a tainted-input path or missing authz that predates the diff, where the change only adds a new caller of the unsafe sink. Trace the input to its boundary before grading clean.
+The diff can add a caller to an existing tainted-input path or missing authz. Trace the input to its boundary before grading clean.
 
-Definitions: a *dangerous sink* is any call that executes, queries, renders, deserialises, or persists its argument (SQL/shell exec, template render, `eval` / `pickle` / `yaml.load`, file-path open, request to an internal service). *Secondary validation* is an independent check downstream of the sink's entry that constrains the value (a schema parse, an allowlist, a parameterised query) so the tainted value cannot reach the sink unconstrained.
+Define a *dangerous sink* as any call that executes, queries, renders, deserializes, or persists its argument. Examples include SQL/shell exec, template render, `eval` / `pickle` / `yaml.load`, file-path open, and requests to an internal service. Define *secondary validation* as an independent check downstream of the sink's entry that constrains the value. Examples include a schema parse, an allowlist, and a parameterized query. These checks prevent unconstrained tainted values from reaching the sink.
 
-Boundaries: telemetry (secrets-in-logs to security), correctness (access-control to security), nih (reinvented crypto/sanitizer to security). Full rules in § Dimension boundaries.
+Use telemetry for secrets-in-logs. Use security for access-control findings. Use nih for reinvented crypto or sanitizers. Read the full rules in § Dimension boundaries.
 
 Recommendation shape: "Validate at the boundary" / "Use the project's existing `<helper>`" / "Move secret to env or vault".
 
 ### encapsulation
 
-Look for: cross-module reach into internals, public APIs leaking implementation types, parameters that take more context than needed, new exports without a use case, the inverse — a domain invariant lifted *out* of the producer and enforced above it by every caller — and error, default, and configuration decisions the producer could absorb but exports to every caller instead.
+Look for cross-module access to internals, public APIs that leak implementation types, and parameters that carry excess context. Look for new exports without a use case. Also look for a domain invariant lifted from its producer and enforced above it by every caller. Check whether the producer could absorb error, default, or configuration decisions instead of exporting them.
 
 | Base | Trigger |
 | --- | --- |
-| `blocker` | **Ingress/egress contract violation** — public API leaks ORM model, infra adapter, framework type, or storage internal across the slice boundary; slice's `index` re-exports an internal type |
-| `high` | Cross-module reach into another slice's internals, bypassing crust/index |
-| `high` | **Caller-shadowed domain invariant** — a guard/validation that all callers must invoke (or redundantly do) lives *outside* the producer; the domain doesn't enforce its own invariant, so a caller can skip it. Especially when a symbol is made public *solely* to be called from above the domain layer. |
-| `high` | **Exported special case** — an error, empty/boundary case, or configuration decision every caller must handle identically, where the producer has the information to absorb it (return an empty result instead of raising; apply the safe default instead of demanding one) |
-| `medium` | Module-internal leak (cross-file inside one slice exposes private detail) |
-| `low` | Class-level — one class touches another's private member within the same file |
+| `blocker` | Assign `blocker` when a public API leaks an ORM model, infra adapter, framework type, or storage internal across the slice boundary. Also assign it when a slice's `index` re-exports an internal type. |
+| `high` | Assign `high` when code reaches another slice's internals and bypasses crust/index |
+| `high` | Assign `high` when callers must invoke or repeat a guard/validation outside the producer. The domain then fails to enforce its invariant, so callers can skip it. Also assign `high` when a symbol is public solely for calls from above the domain layer. |
+| `high` | Assign `high` when every caller must handle an error, empty/boundary case, or configuration decision identically. Use this tier when the producer has the information to absorb that decision, such as returning an empty result instead of raising or applying a safe default instead of demanding one. |
+| `medium` | Assign `medium` to a module-internal leak that exposes private detail across files inside one slice |
+| `low` | Assign `low` when one class touches another class's private member within the same file |
 
-Detection signals for the caller-shadowed invariant: a guard defined inside a slice but never called by that slice (only by external entrypoints); N callers each repeating the same check before/after one producer; a public/exported guard whose only consumers sit above the domain layer; asymmetry where some callers apply the check and others skip it. Beware the false-clean trap — this often reads as good Sliced-Bread hygiene (a private helper promoted to public + crust-exported), so a diff-scoped pass grades it clean. The violation is usually *inherited*, not introduced by the diff under review.
+Look for a guard inside a slice that only external entry points call. Look for N callers that repeat one check before or after one producer. Look for a public/exported guard whose only consumers sit above the domain layer. Look for callers that apply a check inconsistently. A false-clean result often hides this violation: a private helper becomes public and crust-exported. A diff-scoped pass can grade this clean. Treat the violation as inherited when the diff does not introduce it.
 
-Detection signals for the exported special case: N callers wrapping the same call in the same `try`/`except`; the same literal passed for the same parameter at every call site; each caller re-deriving the same default. The test is whether the producer *has the information* to decide — if callers legitimately differ, the parameter is doing real work. The limiting case is a configuration knob the caller cannot set correctly (a "voodoo constant" the module should compute itself); a knob expressing genuine caller-specific policy is not a finding.
+Look for N callers that wrap the same call in the same `try`/`except`. Look for the same literal at the same parameter at every call site. Look for callers that re-derive the same default. Test whether the producer has the information to decide. Treat a parameter as valid when callers legitimately differ. Treat a configuration parameter as a finding when no caller can set it correctly.
+The module should compute that value itself. Do not flag a knob that expresses genuine caller-specific policy.
 
-Boundaries: deslop (misplaced-invariant dup to encapsulation), complexity (boundary-leaking param to encapsulation). Full rules in § Dimension boundaries.
+Use deslop for duplication caused by a misplaced invariant. Use complexity for a boundary-leaking parameter. Read the full rules in § Dimension boundaries.
 
-Note: base tier *is* the location tier here, so the contract bump tends to redundantly raise an already-blocker finding (capped).
+Here, the base tier is also the location tier. The contract bump can raise an already-blocker finding, but the cap stops it.
 
-Recommendation shape: "Import from `<slice>/index` instead of `<slice>/internal/foo`" / "Narrow the public surface to `<minimal-type>`" / "Move the `<invariant>` into `<producer>` so every caller inherits it; drop the external guard and narrow the public surface" / "Return an empty `<result>` instead of raising on the boundary case" / "Absorb `<default>` into `<producer>` and drop the parameter" / "Compute `<constant>` inside the module instead of asking every caller for it".
+Use one of these recommendation shapes:
+
+- "Import from `<slice>/index` instead of `<slice>/internal/foo`"
+- "Narrow the public surface to `<minimal-type>`"
+- "Move the `<invariant>` into `<producer>` so every caller inherits it; drop the external guard and narrow the public surface"
+- "Return an empty `<result>` instead of raising on the boundary case"
+- "Absorb `<default>` into `<producer>` and drop the parameter"
+- "Compute `<constant>` inside the module instead of asking every caller for it"
 
 ### spec
 
-Look for: behaviour in the spec but not in the diff, behaviour in the diff but not in the spec, renamed concepts or relocated boundaries, missing acceptance criteria.
+Look for behavior in the spec but not in the diff.
+Look for behavior in the diff but not in the spec.
+Look for renamed concepts, relocated boundaries, and missing acceptance criteria.
 
 | Base | Trigger |
 | --- | --- |
-| `blocker` | Silent drift on a security/data/correctness requirement the spec explicitly nailed down |
-| `high` | Behavior contradicts spec |
-| `medium` | Acceptance criterion partially implemented |
-| `low` | Naming/style drift the user can re-align in 30s |
+| `blocker` | Assign `blocker` to silent drift on a security, data, or correctness requirement that the spec explicitly fixes |
+| `high` | Assign `high` when behavior contradicts the spec |
+| `medium` | Assign `medium` when the implementation partially meets an acceptance criterion |
+| `low` | Assign `low` to naming or style drift that the user can realign in 30s |
 
-Inherited shape: a requirement dropped in an earlier commit that the current diff neither restores nor violates outright. Compare against the spec, not only the diff.
+The diff can inherit a requirement that an earlier commit dropped without restoring or violating it. Compare the diff against the spec.
 
-Spec resolution: locate the spec before grading. Search order: the durable spec corpus via `python3 skills/age/scripts/age.pyz artifact-path specs <slug>`, falling back to the legacy literal `.cheese/specs/<slug>.md` only when the resolver is unavailable (see `../../cheese/references/formatting.md` § Corpus location; never hardcode `.cheese/specs/`); then unresolved items in `.cheese/press/<slug>.md`, then the PR body or linked issue (`gh pr view`), then a commit-message ticket ref. If none resolves, record "no spec located; searched [list]" and grade spec findings `don't know` rather than clean.
+Locate the spec before grading. Search the durable spec corpus with `python3 skills/age/scripts/age.pyz artifact-path specs <slug>`. If the resolver is unavailable, use the legacy literal `.cheese/specs/<slug>.md`. See `../../cheese/references/formatting.md` § Corpus location. Never hardcode `.cheese/specs/`. Then search unresolved items in `.cheese/press/<slug>.md`. Next, search the PR body or linked issue with `gh pr view`. Finally, search a commit-message ticket ref. If no source resolves, record "no spec located; searched [list]". Grade spec findings `don't know` rather than clean when no source resolves.
 
-Boundaries: correctness (contract commitment to spec, runtime risk to correctness; emit both). Full rules in § Dimension boundaries.
+Use correctness for contract commitments to spec and runtime risk to correctness. Emit both. Read the full rules in § Dimension boundaries.
 
 Recommendation shape: "Restore the X requirement" / "Confirm with the user that Y is intentional" / "Update the spec to reflect Z".
 
 ### complexity
 
-Look for: functions over budget (40 lines / 4 params / 3 nesting), files over 300 lines that grew, speculative abstractions, redundant state, parameter sprawl, stringly-typed code, explanatory-renaming comments, special cases layered on shared infrastructure when generalizing the underlying mechanism costs less (a bandaid-depth fix), and the inverse failure — abstractions whose interface costs more than they hide: pass-through methods, pass-through variables, adjacent layers restating the same abstraction, wrapper types that forward every call.
+Look for functions over budget: 40 lines, 4 parameters, or 3 nesting levels. Look for files over 300 lines that grew. Look for speculative abstractions, redundant state, parameter sprawl, and stringly-typed code. Look for explanatory-renaming comments. Look for special cases layered on shared infrastructure when generalising the underlying mechanism costs less. Treat this as a bandaid-depth fix. Also look for abstractions whose interfaces cost more than they hide. Examples include pass-through methods, pass-through variables, adjacent layers that restate one abstraction, and wrapper types that forward every call.
 
 | Base | Trigger |
 | --- | --- |
-| `high` | God function (3× budget), param sprawl threading through 3+ layers (intermediate layers read or transform it), new god module created in this diff |
-| `high` | **Shallow layer** — a new module, class, or layer whose public interface is nearly as large as the functionality it hides; callers must still know the internals to use it correctly |
-| `medium` | 2× budget, generic helper with one user, redundant cached state |
-| `medium` | **Pass-through method** — forwards to another method with an unchanged signature and adds no functionality; or a **pass-through variable** threaded through 3+ layers to reach one consumer, with no intermediate layer reading it; or adjacent layers whose abstractions are the same |
-| `low` | Few lines over budget, mildly speculative abstraction |
+| `high` | Assign `high` to a god function at 3× budget, parameter sprawl through 3+ layers when intermediate layers read or transform it, or a new god module in this diff |
+| `high` | Assign `high` to a **shallow layer** when a new module, class, or layer exposes an interface nearly as large as the functionality it hides. Callers must still know the internals to use it correctly. |
+| `medium` | Assign `medium` to 2× budget, a generic helper with one user, or redundant cached state |
+| `medium` | Assign `medium` to a **pass-through method** that forwards an unchanged signature without functionality. Also assign it to a **pass-through variable** threaded through 3+ layers to reach one consumer when intermediate layers do not read it. Assign it to adjacent layers whose abstractions are the same. |
+| `low` | Assign `low` to a few lines over budget or a mildly speculative abstraction |
 
-Detection signals for a shallow abstraction: a method body that is one delegating call with an unchanged or near-unchanged signature; a parameter that exists in a function only to be handed to the next call; two adjacent layers whose method names map 1:1; a class whose public method count approaches its count of non-delegating statements. Dispatchers are the deliberate exception — a method that routes to *different* implementations by type or key is doing real work, not passing through.
+Look for a method body that makes one delegating call with an unchanged or nearly unchanged signature. Look for a parameter that exists only to reach the next call. Look for adjacent layers whose method names map 1:1. Look for a class whose public method count approaches its count of non-delegating statements. Treat dispatchers as the deliberate exception. A dispatcher routes to different implementations by type or key, so it does real work.
 
-Inherited shape: a god function or param-sprawl the diff extends by a few lines rather than introduces. Grade the function as it now stands, not only the added lines.
+The diff can extend an inherited god function or parameter sprawl by a few lines. Grade the function as it now stands, not only the added lines.
 
-Boundaries: encapsulation (boundary-leaking param to encapsulation, exported-decision param to encapsulation), deslop (pass-through and same-abstraction layers to complexity, fake-modularity file sprawl to deslop), efficiency (cache decision to complexity, runtime cost to efficiency). Full rules in § Dimension boundaries.
+Route boundary-leaking parameters to encapsulation. Route exported-decision parameters to encapsulation. Route pass-through and same-abstraction layers to complexity. Route fake-modularity file sprawl to deslop. Route cache decisions to complexity. Route runtime cost to efficiency. Read the full rules in § Dimension boundaries.
 
-No default `blocker` row, but complexity still *reaches* `blocker`: a base `high` finding with `fix-cost-later: structural` takes the `+1` compounding bump to `blocker`. "No blocker row" means no *base* blocker, not that complexity caps at high. (Once criticality returns, the floor may push complexity findings up on `critical`-tier paths.)
+Complexity has no default `blocker` row. A base `high` finding with `fix-cost-later: structural` still reaches `blocker` after the `+1` compounding bump. The phrase "No blocker row" means no base blocker. It does not mean complexity caps at high. When criticality returns, its floor may raise complexity findings on `critical`-tier paths.
 
-**The budget is a smell trigger, not a target.** Splitting a coherent function into shallow pieces to get under 40 lines is itself a `complexity` finding — grade the resulting call-depth and interface cost, not the line count. When a function is over budget but has no clean decomposition, grade it clean and record why; the budget rows fire only when a decomposition exists that would leave each piece independently understandable.
+**The budget is a smell trigger, not a target.** Do not split a coherent function into shallow pieces just to stay under 40 lines. That split creates a `complexity` finding. Grade the resulting call depth and interface cost, not only the line count. When a function exceeds the budget but has no clean decomposition, grade it clean and record why. Fire budget rows only when an available decomposition leaves each piece independently understandable.
 
-Recommendation shape: "Extract `<sub-function>`" / "Inline `<one-call helper>`" / "Derive `<value>` instead of caching" / "Replace `<string>` with `<enum>`" / "Replace `<vague-name>` with `<concrete-name>`" / "Inline `<pass-through>` into its caller" / "Collapse `<layer-a>` and `<layer-b>` — same abstraction twice" / "Pass `<context-object>` instead of threading `<param>` through 3 layers" / "Keep `<function>` whole — the split to meet budget fragments one abstraction".
+Use one of these recommendation shapes:
+
+- "Extract `<sub-function>`"
+- "Inline `<one-call helper>`"
+- "Derive `<value>` instead of caching"
+- "Replace `<string>` with `<enum>`"
+- "Replace `<vague-name>` with `<concrete-name>`"
+- "Inline `<pass-through>` into its caller"
+- "Collapse `<layer-a>` and `<layer-b>` — same abstraction twice"
+- "Pass `<context-object>` instead of threading `<param>` through 3 layers"
+- "Keep `<function>` whole — the split to meet budget fragments one abstraction"
 
 ### deslop
 
-Look for: dead code, AI tells (generic catches, useless docstrings, "// TODO: implement", placeholder/apology comments like "// in a real implementation"), duplicated logic, copy-paste-over-reuse, vague or container-typed names (`user_data_dictionary`), convention blindness (reimplementing an existing repo utility from scratch), fake modularity (single-function utils file, God class spread thin), lint-suppression band-aids (`# noqa` / `@ts-ignore` / `#[allow(...)]` / `//nolint`) masking the real fix, phantom edge-case handling for inputs nobody can name, cargo-cult boilerplate, over-abstraction for one consumer, test bloat (shallow near-duplicate tests), partial shell strict mode (`set -e` without `-uo pipefail`).
+Look for dead code.
+Look for an AI signature: a generic catch, an empty docstring, a "// TODO: implement" comment, or a placeholder such as "// in a real implementation".
+Look for duplicated logic where a reusable helper exists.
+Look for a vague or container-typed name such as `user_data_dictionary`.
+Look for a reimplementation of an existing repository utility.
+Look for a false module boundary, such as a one-function utility file or a class with no cohesion.
+Look for a lint suppression (`# noqa`, `@ts-ignore`, `#[allow(...)]`, `//nolint`) that hides the real fix.
+Look for an edge-case branch for an input that nobody can name.
+Look for copied boilerplate and an abstraction with one consumer.
+Look for test bloat, which includes a shallow near-duplicate test.
+Look for partial shell strict mode: `set -e` without `-uo pipefail`.
 
-Per-language pattern catalogs with lint-rule mappings live in `deslop-rust.md` / `deslop-typescript.md` / `deslop-python.md` / `deslop-shell.md` / `deslop-go.md` (same directory).
+The per-language pattern catalogs and lint-rule mappings live in `deslop-rust.md` / `deslop-typescript.md` / `deslop-python.md` / `deslop-shell.md` / `deslop-go.md` (same directory).
 
 | Base | Trigger |
 | --- | --- |
-| `high` | Large duplicated logic with diverging behavior; AI residue actively misshapes flow |
-| `medium` | Dead branch left "for reference", duplicated small block, "// TODO: implement" committed |
-| `low` | Vague name; single weak copy-paste |
+| `high` | Assign `high` to large duplicated logic with diverging behavior or AI residue that actively misshapes flow |
+| `medium` | Assign `medium` to a dead branch left "for reference", a duplicated small block, or a committed "// TODO: implement" |
+| `low` | Assign `low` to a vague name or a single weak copy-paste |
 
-Inherited shape: duplicated logic or a dead branch the diff copies or leaves untouched beside its change. Read the surrounding block, not only the hunk.
+The diff can inherit duplicated logic or a dead branch that it copies or leaves beside its change. Read the surrounding block, not only the hunk.
 
-Boundaries: correctness (AI-residue claim to deslop, silent-failure to correctness), nih (existing helper to nih), assertions (generic catch in tests to assertions), encapsulation (misplaced-invariant dup to encapsulation), complexity (fake-modularity file sprawl to deslop, pass-through and same-abstraction layers to complexity). Full rules in § Dimension boundaries.
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
 
-No default `blocker` row.
+Deslop has no default `blocker` row.
 
-Recommendation shape: "Delete dead branch at <line>" / "Reuse `<existing-helper>`" / "Extract shared `<helper>` from the two near-duplicate blocks" / "Rename `data` to `<noun>`" / "Remove `<allow/noqa/ts-ignore>` and fix the underlying `<lint-rule>`" / "Delete the placeholder comment at <line> and implement the real branch".
+Use one of these recommendation shapes:
+
+- "Delete dead branch at <line>"
+- "Reuse `<existing-helper>`"
+- "Extract shared `<helper>` from the two near-duplicate blocks"
+- "Rename `data` to `<noun>`"
+- "Remove `<allow/noqa/ts-ignore>` and fix the underlying `<lint-rule>`"
+- "Delete the placeholder comment at <line> and implement the real branch"
 
 ### assertions
 
-Look for: existence assertions instead of equality, catch-any-error, no-crash-as-success, mocked SUT, time/random/external coupling.
+Look for existence assertions instead of equality, catch-any-error, no-crash-as-success, mocked SUT, and time/random/external coupling.
 
 | Base | Trigger |
 | --- | --- |
-| `blocker` | SUT itself is mocked; test asserts the bug as correct behavior |
-| `high` | Test passes when the implementation is wrong (no-crash-as-success) |
-| `medium` | Catches generic `Exception`; depends on time/random without bounding |
-| `low` | `toBeDefined` where equality is one line away (`assert x is not None` where `assert x == <expected>` is one line away) |
+| `blocker` | Assign `blocker` when the test mocks the SUT or asserts the bug as correct behaviour |
+| `high` | Assign `high` when the test passes even though the implementation is wrong (no-crash-as-success) |
+| `medium` | Assign `medium` when the test catches generic `Exception` or depends on time/random without bounding |
+| `low` | Assign `low` to `toBeDefined` when equality is one line away (`assert x is not None` when `assert x == <expected>` is one line away) |
 
-Inherited shape: a weak assertion in a touched-but-unmodified test that the diff's behaviour change now leaves under-covering. Read the touched test bodies, not only the diff hunks.
+A touched-but-unmodified test can inherit a weak assertion that the diff's behaviour change leaves under-covering. Read the touched test bodies, not only the diff hunks.
 
-Boundaries: deslop (generic catch in production to deslop, correctness, or telemetry per the claim), telemetry (asserting on log strings to telemetry). Full rules in § Dimension boundaries.
+Use deslop for generic catches in production when the claim concerns residue. Use correctness when the claim concerns a swallowed failure. Use telemetry when the claim concerns missing observability. Use telemetry for assertions on log strings. Read the full rules in § Dimension boundaries.
 
 Recommendation shape: "Replace `toBeTruthy` with `toEqual(<expected>)`" / "Catch `<specific-error>` not `Exception`" / "Replace `assert result` with `assert result == <expected>`" / "Catch `<SpecificError>`, not bare `except:` / `except Exception`".
 
 ### nih
 
-Look for: hand-rolled retry/validation/UUID/debounce/date-parse/argparse/deep-equality/sanitizer when an import exists; in-project utility duplication.
+Look for hand-rolled retry/validation/UUID/debounce/date-parse/argparse/deep-equality/sanitizer when an import exists. Look for in-project utility duplication.
 
 | Base | Trigger |
 | --- | --- |
-| `high` | Reinvented logging/telemetry/concurrency primitives the project already wires; reinvented crypto |
-| `medium` | Reinvented retry, debounce, validation, UUID |
-| `low` | Reinvented small util the stdlib already has |
+| `high` | Assign `high` to reinvented logging, telemetry, or concurrency primitives that the project already wires, or to reinvented crypto |
+| `medium` | Assign `medium` to reinvented retry, debounce, validation, or UUID |
+| `low` | Assign `low` to a reinvented small utility that the stdlib already provides |
 
-Inherited shape: an in-project helper or dependency already does this; the diff re-implements it because the existing one was not visible from the changed file. Check imports and the helper set before grading clean.
+The diff can inherit an in-project helper or dependency that already performs this task. Check imports and the helper set before grading clean.
 
-Boundaries: deslop (diff-internal dup to deslop), security (crypto/sanitizer to security), telemetry (custom logger to telemetry), efficiency (algorithm choice to efficiency). Full rules in § Dimension boundaries.
+Use deslop for duplication inside the diff. Use security for crypto or sanitizer concerns. Use telemetry for custom logger concerns. Use efficiency for algorithm choice. Read the full rules in § Dimension boundaries.
 
-No default `blocker` row.
+Nih has no default `blocker` row.
 
 Recommendation shape: "Replace with `<existing-dep>.<fn>`" / "Use the stdlib `<fn>` instead of the local helper" / "Call the existing `<project-helper>` instead of re-implementing".
 
 ### efficiency
 
-Look for: unnecessary work, missed concurrency, hot-path bloat, no-op updates, TOCTOU pre-checks, memory leaks, long-lived objects built from closures that capture the enclosing scope (the capture keeps the whole scope alive — prefer a type that copies only the fields it needs), overly broad reads.
+Look for unnecessary work, missed concurrency, hot-path bloat, and no-op updates. Look for TOCTOU pre-checks and memory leaks. Look for long-lived objects built from closures that capture the enclosing scope. Such captures keep the whole scope alive. Prefer a type that copies only the fields it needs. Look for overly broad reads.
 
 | Base | Trigger |
 | --- | --- |
-| `blocker` | Unbounded cache/queue, listener/timer leak, retained references after teardown — anything that grows without bound in a long-running process |
-| `high` | Blocking work on per-request / startup / per-render path; N+1 on a high-traffic endpoint |
-| `medium` | N+1 on a moderate endpoint; redundant compute in a non-hot loop |
-| `low` | Redundant compute outside hot paths |
+| `blocker` | Assign `blocker` to an unbounded cache or queue, a listener or timer leak, or retained references after teardown. Use it for anything that grows without bound in a long-running process. |
+| `high` | Assign `high` to blocking work on a per-request, startup, or per-render path, or N+1 work on a high-traffic endpoint |
+| `medium` | Assign `medium` to N+1 work on a moderate endpoint or redundant compute in a non-hot loop |
+| `low` | Assign `low` to redundant compute outside hot paths |
 
-Inherited shape: an N+1, unbounded structure, or hot-path cost already present that the diff's new call site now triggers. Check whether the changed path runs hot or long-running before grading clean.
+The diff can trigger an inherited N+1, unbounded structure, or hot-path cost. Check whether the changed path runs hot or long-running before grading clean.
 
-Boundaries: nih (import exists to nih), correctness (TOCTOU wrong-data to correctness), complexity (cache decision to complexity). Full rules in § Dimension boundaries.
+Use nih when an import exists for the task. Use correctness for TOCTOU wrong-data claims. Use complexity for cache decisions. Read the full rules in § Dimension boundaries.
 
-Recommendation shape: "Hoist `<call>` out of the loop" / "Run `<a>` and `<b>` in parallel with `Promise.all` (or equivalent)" / "Guard the store write on a value change" / "Drop the existence pre-check; handle the error from `<op>` instead" / "Bound `<structure>` or add cleanup on `<teardown>`" / "Read only the needed range/columns".
+Use one of these recommendation shapes:
+
+- "Hoist `<call>` out of the loop"
+- "Run `<a>` and `<b>` in parallel with `Promise.all` (or equivalent)"
+- "Guard the store write on a value change"
+- "Drop the existence pre-check; handle the error from `<op>` instead"
+- "Bound `<structure>` or add cleanup on `<teardown>`"
+- "Read only the needed range/columns"
 
 ### telemetry
 
-Covers logging, metrics, and tracing hygiene — both **presence** (is the path instrumented at all?) and **shape** (structure / levels / context / cardinality). Non-interactive paths need real telemetry (servers, daemons, workers, outbound calls); interactive paths where the operator watches stdout do not need backend-shipped telemetry on the happy path. Secrets-in-logs stays under `security`; hot-path log-volume cost stays under `efficiency`; exceptions swallowed with no handling at all stay under `correctness`.
+This dimension covers logging, metrics, and tracing hygiene. It checks presence: the path has instrumentation.
+It checks shape: the instrumentation uses the correct structure, level, context, and cardinality. Non-interactive paths need real telemetry. Examples include servers, daemons, workers, and outbound calls. Interactive paths where the operator watches stdout do not need backend-shipped telemetry on the happy path. Keep secrets-in-logs under `security`. Keep hot-path log-volume cost under `efficiency`. Keep exceptions swallowed without handling under `correctness`.
 
 | Base | Trigger |
 | --- | --- |
-| `blocker` | Silent failure on critical infra (payments, auth, irreversible side effects) where the operator has nothing to grep |
-| `high` | Silent error branches on outbound calls to external services; un-instrumented new handler on a non-interactive path |
-| `medium` | Silent catch on a non-critical worker; un-instrumented new background loop |
-| `low` | Missing one structured field; wrong level on dev path |
+| `blocker` | Assign `blocker` to silent failure on critical infrastructure (payments, auth, or irreversible side effects) when the operator has nothing to grep |
+| `high` | Assign `high` to silent error branches on outbound calls to external services or an un-instrumented new handler on a non-interactive path |
+| `medium` | Assign `medium` to a silent catch on a non-critical worker or an un-instrumented new background loop |
+| `low` | Assign `low` to one missing structured field or a wrong level on a development path |
 
-Inherited shape: a silent catch or un-instrumented loop in a touched module that the diff extends rather than introduces. Check the surrounding handler, not only the changed branch.
+The diff can extend an inherited silent catch or un-instrumented loop in a touched module. Check the surrounding handler, not only the changed branch.
 
-Boundaries: correctness (no-handling silent failure to correctness), security (secrets-in-logs to security), nih (custom logger to telemetry primary), assertions (log-string asserts to telemetry). Full rules in § Dimension boundaries.
+Look for silent error branches on non-interactive paths and outbound calls without observability. Look for silent daemons, workers, or schedulers. Look for missing request/response instrumentation. Look for hand-rolled logging infrastructure. Look for missing operational hygiene, including rotation/retention on new file logging. Look for unstructured or string-concatenated log messages, wrong log levels, double-logging, and errors logged without context. Look for missing correlation IDs or trace IDs.
+Look for high-cardinality metric labels or span names.
+Look for logs that act as metrics.
+Look for `print()` or `console.log` in production.
+Look for tests that assert log strings.
+Look for unbounded list or object dumps in logs.
 
-Look for: silent error branches on non-interactive paths; outbound calls without observability; silent daemons/workers/schedulers; missing request/response instrumentation; hand-rolled logging infrastructure; missing operational hygiene (rotation/retention) on new file logging; unstructured/string-concat log messages; wrong log levels; double-logging; errors logged without context; missing correlation/trace ids; high-cardinality metric labels or span names; logs-as-metrics; `print()`/`console.log` left in production; tests asserting on log strings; unbounded list/object dumps into logs.
+Use correctness for silent failures with no handling. Use security for secrets-in-logs. Use nih as the primary dimension for custom logger findings. Use assertions for log-string assertions. Read the full rules in § Dimension boundaries.
 
-Recommendation shape: "Emit a structured error log (and a failure counter) in this catch block before re-raising" / "Wrap the outbound `<call>` in a span and add a failure-counter metric" / "Add startup + per-iteration logs to the `<worker>` loop with the failing item id on error" / "Add entry/exit log + latency metric to the new `<handler>`" / "Use the project's existing logger / standard `<stdlib-or-ecosystem-library>` instead of the hand-rolled `<class>`" / "Configure rotation (size + age cap, retention policy) on the new file handler" / "Read log path / level from project config instead of hardcoding" / "Replace string-concat log with structured fields" / "Demote to DEBUG (or drop)" / "Log once at the boundary, not at every catch" / "Add `exc_info=True` (or equivalent) to capture the stack" / "Thread `trace_id` through the log context at the request boundary" / "Move `<high-cardinality-attr>` from metric label to span attribute" / "Emit a counter instead of grepping logs" / "Replace `print()` with the project logger" / "Assert on behavior, not on log text".
+Use one of these recommendation shapes:
+
+- "Emit a structured error log (and a failure counter) in this catch block before re-raising"
+- "Wrap the outbound `<call>` in a span and add a failure-counter metric"
+- "Add startup + per-iteration logs to the `<worker>` loop with the failing item id on error"
+- "Add entry/exit log + latency metric to the new `<handler>`"
+- "Use the project's existing logger / standard `<stdlib-or-ecosystem-library>` instead of the hand-rolled `<class>`"
+- "Configure rotation (size + age cap, retention policy) on the new file handler"
+- "Read log path / level from project config instead of hardcoding"
+- "Replace string-concat log with structured fields"
+- "Demote to DEBUG (or drop)"
+- "Log once at the boundary, not at every catch"
+- "Add `exc_info=True` (or equivalent) to capture the stack"
+- "Thread `trace_id` through the log context at the request boundary"
+- "Move `<high-cardinality-attr>` from metric label to span attribute"
+- "Emit a counter instead of grepping logs"
+- "Replace `print()` with the project logger"
+- "Assert on behavior, not on log text"
 
 ## Dimension boundaries
 
-When two dimensions could tag the same `path:line`, this table decides the primary. The per-dimension `Boundaries:` lines point here. The grader dedups by `file:line` when writing the report, keeping the higher-base finding and noting the secondary dimension.
+This table is the single ownership rule for the whole file.
+It decides the primary dimension when two dimensions tag the same `path:line`.
+Each per-dimension `Boundaries:` line points here and states no rule of its own.
+The grader deduplicates by `file:line` in the report.
+The grader keeps the higher-base finding and names the secondary dimension.
+
+Look for one primary dimension per finding. Use this table to choose the primary when dimensions overlap.
 
 | Pair | Tiebreaker |
 | --- | --- |
-| correctness / telemetry | Silent failure with no logging is correctness; telemetry owns it once the failure is caught and the gap is observability. |
-| security / telemetry | Secrets in logs or URLs are security regardless of surrounding code. |
-| security / correctness | A behavioural bug with an access-control consequence tags security; correctness only when there is no security consequence. |
-| security / nih | Reinvented crypto or a security sanitizer tags security (higher base wins); leave nih off to avoid downgrading a blocker through nih's missing blocker row. |
-| deslop / correctness | Tag by the claim: deslop when the primary claim is AI residue, correctness when it is silent failure. |
-| deslop / nih | nih when a pre-existing helper or import already does it; deslop when the duplication is internal to the diff with no existing helper. |
-| deslop / assertions | Generic catches in test files are assertions; in production code they are deslop, correctness, or telemetry per the claim. |
-| nih / telemetry | Custom loggers tag telemetry primary (richer rubric); note the nih angle in the recommendation; do not double-tag. |
-| efficiency / nih | nih when an import or library exists for the primitive; efficiency when it is an algorithm or concurrency choice with no available import. |
-| efficiency / correctness | TOCTOU as wasted work tags efficiency; TOCTOU that can produce wrong data under a race tags correctness. Split by failure mode. |
-| encapsulation / deslop | Duplication caused by a misplaced invariant tags encapsulation (root cause is ownership), not deslop. |
-| encapsulation / complexity | A parameter that leaks context or type across a boundary tags encapsulation; raw param count or threading with no boundary concern tags complexity. |
-| complexity / encapsulation (exported special case) | Extends the `encapsulation / complexity` row above. When a threaded parameter also carries a decision the producer has the information to make (a voodoo constant), encapsulation wins — misplaced ownership is the root cause. Structural cost alone, with no misplaced decision, stays complexity. |
-| complexity / deslop | Pass-through methods and same-abstraction layers tag complexity; a single-function utils file or one-consumer over-abstraction tags deslop. Both read as fake modularity — split by whether the harm is call-depth or file sprawl. |
-| spec / correctness | Emit both with a cross-reference: spec records the broken contract commitment, correctness records the runtime risk. They are orthogonal. |
-| assertions / telemetry | Tests asserting on log strings are telemetry-owned. |
-| complexity / efficiency | Complexity owns the structural decision to cache; efficiency owns the runtime cost of redundant work. |
-
-## Deferred: criticality inference (v2)
-
-A fourth severity contributor — a **criticality floor** keyed off the file's path/import/structural fingerprint — is bookshelved for v1. When wired, the formula extends with:
-
-```
-sev = max(sev, criticality_floor(file))   # inserted before the cap
-```
-
-Bookshelved material lives in:
-
-- `.cheese/research/severity-rubric/rubric-draft.md` § Deferred: criticality inference — full inference ladder (critical / high / standard / low), four-tier vocabulary, two consumers (severity floor + weighted fix-cost-now), `.cheese/criticality.toml` override schema.
-- `.cheese/research/critical-pathways/critical-pathways.md` — 35+ detection rules across six signal classes (taint sources/sinks, compliance libraries, framework convention markers, production-pathway layout, graph-structural signals, empirical Pareto from Walkinshaw 2018 ESEM).
-
-v1 does **not** mine the catalogs, build the override file, or compute the floor. v1 ships without any criticality awareness; the deferred material is read-only context for the v2 ticket.
+| correctness / telemetry | Silent failure with no logging belongs to correctness. Telemetry owns the finding once the failure is caught and only observability remains missing. |
+| security / telemetry | Secrets in logs or URLs belong to security regardless of surrounding code. |
+| security / correctness | A behavioral bug with an access-control consequence belongs to security. Use correctness only without a security consequence. |
+| security / nih | Reinvented crypto or a security sanitizer belongs to security (higher base wins). Leave nih off to avoid downgrading a blocker through nih's missing blocker row. |
+| deslop / correctness | Tag by the claim. Use deslop for AI residue and correctness for silent failure. |
+| deslop / nih | Use nih when a pre-existing helper or import already does the task. Use deslop when duplication stays internal to the diff and no existing helper exists. |
+| deslop / assertions | Generic catches in test files belong to assertions. In production code, classify them as deslop, correctness, or telemetry according to the claim. |
+| nih / telemetry | Tag custom loggers as telemetry primary because it has the richer rubric. Note the nih angle in the recommendation. Do not double-tag. |
+| efficiency / nih | Use nih when an import or library exists for the primitive. Use efficiency for an algorithm or concurrency choice without an available import. |
+| efficiency / correctness | Tag TOCTOU as efficiency when it wastes work. Tag it as correctness when a race can produce wrong data. Split by failure mode. |
+| encapsulation / deslop | Tag duplication from a misplaced invariant as encapsulation. Ownership forms the root cause, not deslop. |
+| encapsulation / complexity | Tag a parameter that leaks context or type across a boundary as encapsulation. Tag raw parameter count or threading without a boundary concern as complexity. |
+| complexity / encapsulation (exported special case) | Extend the `encapsulation / complexity` row above. When a threaded parameter carries a decision the producer can make (a voodoo constant), choose encapsulation because misplaced ownership causes the problem. Keep structural cost alone in complexity when no decision is misplaced. |
+| complexity / deslop | Tag pass-through methods and same-abstraction layers as complexity. Tag a single-function utils file or one-consumer over-abstraction as deslop. Both show fake modularity; split them by call depth or file sprawl. |
+| spec / correctness | Emit both with a cross-reference. Spec records the broken contract commitment. Correctness records the runtime risk. The dimensions remain orthogonal. |
+| assertions / telemetry | Tests that assert on log strings belong to telemetry. |
+| complexity / efficiency | Complexity owns the structural cache decision. Efficiency owns the runtime cost of redundant work. |

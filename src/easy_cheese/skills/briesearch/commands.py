@@ -4,11 +4,55 @@ from __future__ import annotations
 
 import sys
 
-from easy_cheese.shared.bundle_commands import Command, dispatch
+from easy_cheese.shared.bundle_commands import (
+    bundle_command,
+    derive_command,
+    dispatch,
+)
+
+
+@bundle_command("artifact-path")
+def _artifact_path(argv: list[str]) -> int:
+    from easy_cheese.shared.artifact_path import main
+
+    return main(argv)
+
+
+@bundle_command("ground-check")
+def _ground_check(argv: list[str]) -> int:
+    from easy_cheese.skills.briesearch.ground_check import main
+
+    return main(argv)
+
+
+@bundle_command("budget-check")
+def _budget_check(argv: list[str]) -> int:
+    from easy_cheese.skills.briesearch.budget import main
+
+    return main(argv)
+
+
+@bundle_command("research-layout")
+def _research_layout(argv: list[str]) -> int:
+    from easy_cheese.skills.briesearch.research_layout import main
+
+    return main(argv)
+
 
 COMMANDS = (
-    Command("artifact-path", "easy_cheese.shared.artifact_path:main"),
-    Command("ground-check", "easy_cheese.skills.briesearch.ground_check:main"),
+    derive_command(
+        _artifact_path,
+        "Resolve the durable or transient artifact path for a phase and slug",
+    ),
+    derive_command(
+        _budget_check, "Enforce the search budget and dedup rules from the run ledger"
+    ),
+    derive_command(
+        _ground_check, "Lint a synthesis report for grounding and citation violations"
+    ),
+    derive_command(
+        _research_layout, "Print the slug-aware research corpus layout as JSON"
+    ),
 )
 
 

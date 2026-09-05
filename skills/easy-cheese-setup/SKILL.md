@@ -1,46 +1,68 @@
 ---
 name: easy-cheese-setup
-description: Register and repair the durable cheese hallouminate corpus and the per-repo tenant. Use when the user says "set up cheese corpus", "repair hallouminate corpus", "register durable corpus", "my specs aren't searchable across sessions", "fix cheese-global drift", or invokes /easy-cheese-setup. Runs a detect → report → confirm → fix loop over two legs — a global durable-corpus registration/repair and a local per-repo tenant registration. Do NOT use for general hallouminate wiki authoring (that is the wiki skills) or for MCP server installation (that is scripts/install.sh).
+description: >
+  Register the durable `cheese-durable` Hallouminate corpus.
+  Repair the durable corpus when its configuration changes.
+  Register the repository tenant.
+  Repair the repository tenant when its configuration changes.
+  Use this skill when the user requests durable corpus setup or repair.
+  Use it when the user requests repository tenant registration.
+  Also use it when the user invokes /easy-cheese-setup.
+  Use the wiki skills for general Hallouminate wiki work.
+  Use scripts/install.sh to install the MCP server.
 license: MIT
 ---
 
 # /easy-cheese-setup
 
-Register the durable `cheese-durable` hallouminate corpus (so every project's XDG specs/research are semantically searchable across sessions) and, when asked, register the current repo as a hallouminate tenant. Idempotent and non-destructive: it detects, reports with evidence, asks before mutating, then fixes.
+Register the durable `cheese-durable` Hallouminate corpus. The corpus makes each project's XDG artifacts searchable across sessions.
 
-The engine ships as a self-contained bundle at `scripts/easy-cheese-setup.pyz`, with three `--apply`-gated subcommands (default is dry-run / report-only):
+Register the current repository as a Hallouminate tenant when the user requests it. This process is idempotent. It does not delete data.
+
+The engine is a self-contained bundle at `scripts/easy-cheese-setup.pyz`. It has three commands. Each command changes data only with `--apply`. Without this option, each command only reports.
 
 ```
 python3 <skill>/scripts/easy-cheese-setup.pyz global [--apply]   # durable-corpus registration/repair
-python3 <skill>/scripts/easy-cheese-setup.pyz local  [--apply]   # per-repo tenant registration
+python3 <skill>/scripts/easy-cheese-setup.pyz local  [--apply]   # per-repository tenant registration
 python3 <skill>/scripts/easy-cheese-setup.pyz doctor [--apply]   # both legs
 ```
 
-`install.sh` calls `global --apply` once at install time (guarded on hallouminate ∈ `--mcp`). This skill drives the interactive path.
+At installation, `install.sh` calls `global --apply` when `--mcp` includes `hallouminate`. This skill controls the interactive process.
 
 ## Flow
 
-Run `doctor` (no `--apply`) first — it reports both legs' intended actions without touching anything. Show the report as evidence, confirm with the user, then apply the legs they approve.
+Run `doctor` without `--apply` first. It reports the planned actions for both legs without changes. Show the report as evidence. Ask the user for confirmation. Apply only the approved legs.
 
 ### Global leg — durable corpus
 
-- Ensures `paths.corpus_home()` exists on disk (guards hallouminate's abort-on-missing-path, hallouminate#101), then insert-or-replaces the marked `# >>> easy-cheese:cheese-durable … # <<<` `[[corpus]]` block in `~/.config/hallouminate/config.toml`, pointing at `corpus_home()`. Replace-in-place keeps it idempotent — a second `global --apply` leaves the file byte-identical.
-- Repoints on drift: if the marked block points anywhere other than `corpus_home()`, `--apply` corrects it.
-- **Legacy migration (interactive only).** A pre-existing unmarked `cheese-global → ~/.cheese` block is the stale state this work fixes. After showing the report and receiving confirmation, invoke the explicit opt-in flag (never used by `install.sh`):
+- Create the directory from `paths.corpus_home()` if it does not exist. This action prevents Hallouminate issue #101.
+- Insert or replace the marked `[[corpus]]` block in the Hallouminate configuration file.
+- Read `config_path()` for that file. Its default is `~/.config/hallouminate/config.toml`.
+- `HALLOUMINATE_CONFIG` and `XDG_CONFIG_HOME` override that default. Do not assume the default path.
+- Use `# >>> easy-cheese:cheese-durable` as the start marker.
+- Use `# <<< easy-cheese:cheese-durable` as the end marker. Write the identifier in both markers.
+- An end marker without the identifier does not close the block. The rewrite then replaces the rest of the file.
+- Point the block at `corpus_home()`. A second `global --apply` leaves the file unchanged.
+- Use `--apply` to correct a marked block that points elsewhere.
+- **Legacy migration requires user interaction.** An unmarked `cheese-global → ~/.cheese` block is stale. Show the report. Ask the user for confirmation. Then use the explicit migration option. The installer never uses this option:
 
   ```bash
   python3 <skill>/scripts/easy-cheese-setup.pyz global --migrate-legacy --apply
   ```
 
-  A `cheese-global` block pointing anywhere other than `~/.cheese` is left untouched.
+  Leave a `cheese-global` block unchanged if it points anywhere except `~/.cheese`.
 
-### Local leg — repo tenant
+### Local leg — repository tenant
 
-- Iff the repo has `.cheese/` artifacts and is not already a hallouminate tenant, runs `hallouminate init-repo <name> --path <main-root>`.
-- Registers the **main repo root**, never a worktree — in a Conductor/worktree checkout this avoids stomping the tenant identity onto a throwaway worktree path.
+- Run `hallouminate init-repo <name> --path <main-root>` when both required conditions are true. The repository must have `.cheese/` artifacts. It must not have a Hallouminate tenant.
+- Register the main repository root. Do not register a worktree. This rule prevents a temporary path from replacing the tenant identity.
 
 ## Rules
 
-- Detect and report before mutating; every mutating leg is `--apply`-gated and confirmed.
-- One source of truth for the durable root: the engine imports `paths.corpus_home()` — never hardcode `~/.cheese` or an XDG path.
-- Non-destructive by default: `install.sh` touches only the marked block; legacy-block removal is interactive-only.
+- Detect the current state. Report proposed changes. Ask the user for confirmation. Require `--apply` for each operation that changes data.
+- Use the imported `paths.corpus_home()` as the only source for the durable root. Do not hardcode `~/.cheese` or an XDG path.
+- Do not delete data by default.
+- `global --apply` rewrites the marked block. It also creates the corpus directory.
+- Remove a legacy block only after user confirmation.
+
+See the generated bundle command inventory in [`references/commands.md`](references/commands.md).

@@ -1,31 +1,65 @@
-# Auto mode detail (cure)
+# Automatic mode for Cure
 
-Read this before running `/cure --auto --stake <floor>` for the fan-pathway exceptions, the puncture clause, and the empty-floor case.
+Read this file before `/cure --auto --stake <floor>`.
+It defines worker exceptions, the puncture clause, and the empty selection case.
 
 ## Per-finding flow
 
-- Skip the selection-list rendering and the handoff gate.
-- Auto-select every finding that meets the severity floor. Floor definitions: `selection.md` § Auto-mode selection.
-- Apply findings one at a time. After each fix, run the narrowest test that proves it. If the fix breaks a previously-passing test or any project-wide gate, revert that single finding's edit and record it under `### Deferred` in the cure report with the test name and the failure summary. Continue with the remaining findings.
-- After all selected findings are processed, skip the handoff gate and invoke `/age --scope <touched-paths> --auto` (forward `--open-pr` when it is in scope) so the chain can re-review.
-- `/age --auto` enforces the two-pass cap. Cure does not need to track passes itself — it just keeps applying when invoked.
+- Skip the selection list and the handoff gate.
+- Select every finding that meets the severity floor.
+  Read `selection.md` § Auto-mode selection for floor definitions.
+- Apply one finding at a time.
+  Run the narrowest proving test after each fix.
+  Revert a fix that breaks a passing test or project gate.
+  Put it under `### Deferred` with the test name and failure summary.
+  Continue with the remaining findings.
+- After all findings, invoke `/age <slug> --scope <touched-path> [--scope <touched-path>] --auto`.
+  Repeat `--scope` once for each touched path.
+  Forward `--open-pr` and `--hard` when they are in scope.
+  Skip the handoff gate.
+- Let `/age --auto` enforce the two-pass cap.
+  Cure does not track the pass count.
 
-## Terminal publication
+## Final publication
 
-When the age child returns `next: done`, dispatch `/plate` once. It updates an existing PR automatically or, with `--open-pr`, applies the explicit-choice and review-shape policy before committing a new PR layout. After the publication lands, run the **§ Post-PR learnings write-back** (`post-pr-writeback.md`).
+When Age returns `next: done`, run § Post-PR write-back in `post-pr-writeback.md`.
+Then dispatch `/plate` once.
+It updates an open PR automatically.
+With `--open-pr`, it applies the explicit layout and review rules before a new PR.
 
-- **Orchestrated sub-agent exception.** A phase-only cure dispatched by `/cook`'s fan pathway never invokes `/plate`; the orchestrator owns commit and publication.
-- **`/affinage` chain exception.** When `handoff_context.source_skill` is `/affinage`, suppress this terminal `/plate` — affinage posts its GitHub replies (final writes) and then owns terminal `/plate`.
+A Cure worker from the Cook fan pathway does not invoke `/plate`.
+The orchestrator owns commit and publication.
 
-**`--auto --hard` puncture clause.** When age returns `next: done`, dispatch `/plate --hard` rather than firing `/hard-cheese` directly. `/plate`'s final writing gate makes the completed artifact inventory visible to the metacognitive check. A failed hard gate halts publication; a non-TTY environment reports that `--hard` needs an interactive TTY.
+When `handoff_context.source_skill` is `/affinage`, do not invoke `/plate`.
+Affinage posts its GitHub replies and owns final publication.
 
-If no findings meet the floor, write an empty cure report with `### Applied: (none — no findings meet <floor>)` and skip straight to the auto handoff with a one-line "auto chain clean" note.
+With `--auto --hard`, dispatch `/plate --hard` when Age returns `next: done`.
+Do not invoke `/hard-cheese` directly.
+`/plate` gives the completed artifact list to the metacognitive gate.
+A failed hard gate stops publication.
+In a non-TTY environment, report that `--hard` requires an interactive TTY.
 
-## Within cook's own fan pathway (single-curd chain or a wave curd)
+When no finding meets the floor, write an empty Cure report.
+Use `### Applied: (none — no findings meet <floor>)`.
+Then continue to the automatic handoff.
+Report `auto chain clean`.
 
-When `/cook`'s fan pathway (its retired-`/ultracook` mechanics, now self-hosted — see `skills/cook/SKILL.md` `## Fan pathway`) spawns cure as a phase-only sub-agent and owns the chain itself, honour the no-chain / no-push override:
+## Cook fan pathway
 
-- **Single-curd chain** — the spawn prompt says "for THIS PHASE ONLY" and "do not chain forward to the next phase." Apply the auto-selected findings, write `.cheese/cure/<slug>.md` (handoff slug at the top, `next: age`), and stop. Do not invoke `/age --scope <touched-paths> --auto`. The orchestrator reads the cure slug and spawns the next age itself.
-- **Wave curd worker** — apply findings, write the cure slug, and stop. Do not invoke `/plate` or touch the remote; the fan pathway owns final commit and publication.
+Cook can dispatch Cure as a phase-only worker.
+`/ultracook` is retired, but its no-chain contract remains in this pathway.
+This case includes one curd and a curd in a wave.
+Honor the no-chain and no-push override.
 
-In both cases terminal `/plate` dispatch is suppressed — the orchestrator owns it.
+For one curd, apply the selected findings and write `.cheese/cure/<slug>.md`.
+Put the handoff slug first and set `next: age`.
+Then stop.
+Do not invoke `/age <slug> --scope <touched-path> --auto`.
+The orchestrator reads the slug and dispatches Age.
+
+For a wave curd, apply the findings and write the Cure slug.
+Then stop.
+Do not invoke `/plate` or change the remote.
+The Cook fan pathway owns final commit and publication.
+
+In both cases, suppress final `/plate` dispatch.

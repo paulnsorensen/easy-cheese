@@ -54,6 +54,7 @@ class _NamedAttribute(Protocol):
 
 __all__ = [
     "ArtifactLink",
+    "CompactionRecord",
     "DecisionFork",
     "DossierOption",
     "Durability",
@@ -416,6 +417,39 @@ class SessionProvenance:
 
 
 @define(frozen=True)
+class CompactionRecord:
+    """What a session did to earn the right to write after a compaction.
+
+    A compacted session has lost the context it was holding, so the revision it
+    remembers is a guess. Naming the revision it re-read is not enough on its
+    own -- an id can be copied out of a stale transcript -- so the record also
+    quotes the *digest* of the record it re-read and lists the protected entries
+    it reconciled against. Together those three are a reconciliation report: a
+    claim that can only be made by a session that actually reloaded the durable
+    state, and one a later reader can re-derive rather than take on faith.
+
+    `prior_compaction_revision_id` chains one compaction to the one before it,
+    so a lineage that survived several of them reads as a history rather than as
+    a single most-recent event. It is *derived by the runtime*, never accepted
+    from the delta: the compacted session is the one writer whose memory of the
+    lineage is known to be unreliable, and letting it name its own predecessor
+    would let it name none. `reconciliation_source_session_ids` is provenance in
+    the sense the module docstring means -- it says which sessions the reconciled
+    state was gathered from, and nothing selects on it.
+    """
+
+    rehydrated_from_revision_id: str = field(validator=_identifier)
+    rehydrated_record_digest: str = field(validator=_digest)
+    reconciled_entry_ids: list[str] = field(validator=_identifier_ledger)
+    prior_compaction_revision_id: str | None = field(
+        default=None, validator=validators.optional(_identifier)
+    )
+    reconciliation_source_session_ids: list[str] = field(
+        factory=list, validator=_identifier_list
+    )
+
+
+@define(frozen=True)
 class RepositoryProvenance:
     """Where the repository stood when a revision was written. Absent fields
     mean git could not be inspected, not that the work was clean."""
@@ -465,18 +499,34 @@ def _protected_entries(
     return rule
 
 
-def _record_dossier(
-    instance: WheypointRecord, attribute: _NamedAttribute, value: list[DecisionFork]
+def _dossier_rule(
+    attribute: _NamedAttribute, value: list[DecisionFork], gating: Sequence[str]
 ) -> None:
-    """A gated record without a dossier is the misfire this kernel exists to
-    stop: the resumed session sees a gate and no way to weigh it."""
-    _bounded_list(instance, attribute, value)
-    gating = instance.gating_entry_ids
+    """A dossier and a gate stand or fall together.
+
+    A gated record without a dossier hides the options for an open gate.
+    A dossier without a gate hides an open fork from the derived status.
+    The resumed session can then continue before a human answers the fork.
+    A closed fork removes its gate and dossier entry in the same transition.
+    """
     if gating and not value:
         raise ValueError(
             f"{attribute.name} must describe the open fork for gating entries "
             + f"{', '.join(gating)}"
         )
+    if value and not gating:
+        raise ValueError(
+            f"{attribute.name} describes {len(value)} open fork(s) while nothing "
+            + "blocks continuation: gate the fork with an active blocking "
+            + "question or blocker, or clear the dossier"
+        )
+
+
+def _record_dossier(
+    instance: WheypointRecord, attribute: _NamedAttribute, value: list[DecisionFork]
+) -> None:
+    _bounded_list(instance, attribute, value)
+    _dossier_rule(attribute, value, instance.gating_entry_ids)
 
 
 def _projection_dossier(
@@ -485,11 +535,7 @@ def _projection_dossier(
     value: list[DecisionFork],
 ) -> None:
     _bounded_list(instance, attribute, value)
-    if instance.gating_entry_ids and not value:
-        raise ValueError(
-            f"{attribute.name} must describe the open fork for gating entries "
-            + f"{', '.join(instance.gating_entry_ids)}"
-        )
+    _dossier_rule(attribute, value, instance.gating_entry_ids)
 
 
 @define(frozen=True)
@@ -502,7 +548,8 @@ class WheypointRecord:
     slug: str = field(validator=_identifier)
     title: str = field(validator=_bounded_text)
     created: str = field(validator=_bounded_text)
-    # Produced by shared/scripts/paths.py::project_key; carried, not recomputed.
+    # Produced by src/easy_cheese/shared/paths.py::project_key; carried, not
+    # recomputed.
     project_key: str = field(validator=_bounded_text)
     revision_id: str = field(validator=_identifier)
     revision_number: int = field(validator=validators.ge(1))
@@ -543,8 +590,6 @@ def _rehydration_rule(
         raise ValueError(
             f"{attribute.name} must be null unless the delta declares compaction"
         )
-    if value is not None:
-        _identifier(instance, attribute, value)
 
 
 def _one_transition_per_entry(
@@ -615,7 +660,11 @@ class WheypointDelta:
         default=None, validator=_one_transition_per_entry
     )
     compacted: bool = field(default=False, validator=validators.instance_of(bool))
-    rehydrated_from_revision_id: str | None = field(
+    # Declaring compaction is not the same as surviving it: the flag says the
+    # harness detected one, the record is the evidence that durable state was
+    # reloaded and reconciled first. The runtime refuses the flag without the
+    # record, so a compacted session cannot write until it has rehydrated.
+    compaction: CompactionRecord | None = field(
         default=None, validator=_rehydration_rule
     )
     session_provenance: SessionProvenance | None = None
@@ -637,6 +686,18 @@ class WheypointRevision:
     parent_revision_id: str | None = field(validator=validators.optional(_identifier))
     revision_id: str = field(validator=_identifier)
     revision_number: int = field(validator=validators.ge(1))
+
+    @revision_number.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_genesis_is_revision_one(
+        self, _attribute: object, value: int
+    ) -> None:  # noqa: V103
+        # A null parent means genesis, and genesis is revision one. Any later
+        # revision that names no parent claims an impossible root.
+        if self.parent_revision_id is None and value != 1:
+            raise ValueError(
+                "revision without parent_revision_id must be revision_number 1"
+            )
+
     request_digest: str = field(validator=_digest)
     record_digest: str = field(validator=_digest)
     applied_additions: list[ProtectedEntry] = field(validator=_bounded_ledger)
@@ -647,9 +708,14 @@ class WheypointRevision:
     projection_path: str = field(validator=_bounded_text)
     projection_digest: str = field(validator=_digest)
     repository: RepositoryProvenance
-    rehydrated_from_revision_id: str | None = field(
-        default=None, validator=validators.optional(_identifier)
+    # What the parent receipt hashed to when this one was written. The parent id
+    # names an ancestor; the digest pins *which* ancestor, so a receipt edited
+    # after the fact no longer matches the child that quoted it. Null for the
+    # genesis revision, and for any receipt written before schema version 2.
+    parent_revision_digest: str | None = field(
+        default=None, validator=validators.optional(_digest)
     )
+    compaction: CompactionRecord | None = None
     session_provenance: SessionProvenance | None = None
 
 

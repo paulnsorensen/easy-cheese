@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import json
+import importlib
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -14,6 +15,7 @@ from typing import cast
 
 import pytest
 from easy_cheese.shared import paths
+from easy_cheese.shared.bundle_commands import Command
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build_pyz.py"
@@ -31,41 +33,22 @@ pytestmark = pytest.mark.skipif(  # noqa: V107
     reason="bundle integration requires requirements-build.txt",
 )
 
-SKILL_SUBCOMMANDS = {
-    "melt": [
-        "batch-resolve",
-        "conflict-pick",
-        "conflict-summary",
-        "detect-squash-residue",
-        "lockfile-resolve",
-    ],
-    "affinage": ["pr-status", "post-reply", "age-route", "review-surface"],
-    "mold": ["artifact-path", "curd-count", "gate-graph", "render-html", "taste-test", "validate-spec"],
-    "briesearch": ["artifact-path", "ground-check"],
-    "plate": ["stack-tools", "validate-publication"],
-    "cook": [
-        "artifact-path", "age-route", "baseline", "phase-decision", "milknado", "mode", "worktree",
-        "validate-decomposition", "validate-manifest", "validate-pr-plan", "manifest-update",
-        "wiring-topo-sort", "pr-plan-to-branches", "curd-block",
-        "normalize", "validate", "slugify", "write-handoff-artifact",
-        "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
-        "handoff-cli", "render-html",
-    ],
-    "cure": [
-        "slugify", "write-handoff-artifact", "read-handoff-slug", "findings-cli",
-        "gates-cli", "paths-cli", "handoff-cli", "render-html",
-    ],
-    "wheypoint": ["commit", "resolve", "show", "lint"],
-    "easy-cheese-setup": ["global", "local", "doctor"],
-    "age": [
-        "artifact-path", "html-report", "age-route", "review-surface", "severity", "slugify",
-        "write-handoff-artifact", "read-handoff-slug", "findings-cli", "gates-cli", "paths-cli",
-        "handoff-cli", "render-html",
-    ],
-    "hard-cheese": ["append-attempt", "freshness-check"],
-    "pasteurize": ["debug-tag-sweep", "repro-rerun", "pasteurize-route"],
-    "press": ["press-route", "press-telemetry"],
-}
+def _skill_subcommands() -> dict[str, list[str]]:
+    """Every bundled skill and the command names its own manifest declares.
+
+    Derived from each `COMMANDS` tuple, so a new command joins this matrix
+    without a second hand-written list.
+    """
+    matrix: dict[str, list[str]] = {}
+    for manifest in sorted((REPO_ROOT / "src" / "easy_cheese" / "skills").glob("*/commands.py")):
+        package = manifest.parent.name
+        module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
+        commands = cast("tuple[Command, ...]", module.COMMANDS)
+        matrix[package.replace("_", "-")] = sorted(command.name for command in commands)
+    return matrix
+
+
+SKILL_SUBCOMMANDS = _skill_subcommands()
 
 # Every skill that registers the durable-corpus resolver shim. One shared source
 # (shared/scripts/artifact_path.py) backs them all; each must agree with
@@ -103,7 +86,9 @@ def test_default_batch_builds_every_registered_skill(tmp_path: Path) -> None:
     expected = set(build_pyz.SKILLS)
     assert len(expected) == 13
     assert {path.stem for path in tmp_path.glob("*.pyz")} == expected
-    assert {path.name for path in tmp_path.glob("*.pyz")} == {f"{skill}.pyz" for skill in expected}
+    assert {path.name for path in tmp_path.glob("*.pyz")} == {
+        f"{skill}.pyz" for skill in expected
+    }
 
 
 def _zip_with_shiv_metadata(
@@ -154,16 +139,16 @@ def _zip_with_shiv_metadata(
             ),
         )
         archive.writestr("site-packages/bin/demo", wrapper)
-        archive.writestr("site-packages/easy_cheese/demo.py", members["easy_cheese/demo.py"])
         archive.writestr(
-            "site-packages/easy_cheese-1.0.dist-info/RECORD", record
+            "site-packages/easy_cheese/demo.py", members["easy_cheese/demo.py"]
         )
+        archive.writestr("site-packages/easy_cheese-1.0.dist-info/RECORD", record)
     return data.getvalue()
 
 
 def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
-    baseline = check_bundles._manifest(_zip_with_shiv_metadata())  # pyright: ignore[reportPrivateUsage]
-    host_variation = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    baseline = check_bundles.bundle_manifest(_zip_with_shiv_metadata())
+    host_variation = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(
             built_at="2026-08-26 10:00:00",
             interpreter="/usr/bin/python3",
@@ -172,44 +157,39 @@ def test_bundle_manifest_catches_execution_metadata_tampering() -> None:
     )
     assert baseline == host_variation
 
-    tampered = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    tampered = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(entry_point="evil.module:main")
     )
     assert tampered["environment.json"] != baseline["environment.json"]
 
-    wrapper_tampered = _zip_with_shiv_metadata(
-        wrapper_import="from evil import main"
+    wrapper_tampered = _zip_with_shiv_metadata(wrapper_import="from evil import main")
+    assert (
+        check_bundles.bundle_manifest(wrapper_tampered)["site-packages/bin/demo"]
+        != baseline["site-packages/bin/demo"]
     )
-    assert check_bundles._manifest(wrapper_tampered)["site-packages/bin/demo"] != baseline[  # pyright: ignore[reportPrivateUsage]
-        "site-packages/bin/demo"
-    ]
 
     with pytest.raises(ValueError, match="build_id does not match"):
-        _ = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
-            _zip_with_shiv_metadata(build_id="tampered")
-        )
+        _ = check_bundles.bundle_manifest(_zip_with_shiv_metadata(build_id="tampered"))
 
 
 def test_bundle_manifest_preserves_wrapper_flags() -> None:
-    baseline = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    baseline = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(interpreter="/opt/python/bin/python3 -I")
     )
-    host_variation = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    host_variation = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -I")
     )
     assert baseline == host_variation
 
-    flag_tampered = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    flag_tampered = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(interpreter="/usr/bin/env python3 -X")
     )
-    assert flag_tampered["site-packages/bin/demo"] != baseline[
-        "site-packages/bin/demo"
-    ]
+    assert flag_tampered["site-packages/bin/demo"] != baseline["site-packages/bin/demo"]
 
 
 def test_bundle_manifest_keeps_non_python_shebang_distinct() -> None:
-    python = check_bundles._manifest(_zip_with_shiv_metadata())  # pyright: ignore[reportPrivateUsage]
-    shell = check_bundles._manifest(  # pyright: ignore[reportPrivateUsage]
+    python = check_bundles.bundle_manifest(_zip_with_shiv_metadata())
+    shell = check_bundles.bundle_manifest(
         _zip_with_shiv_metadata(interpreter="/bin/sh")
     )
     assert shell["site-packages/bin/demo"] != python["site-packages/bin/demo"]
@@ -242,7 +222,8 @@ def _bundle_members(pyz: Path) -> set[str]:
         return {
             name.removeprefix("site-packages/")
             for name in archive.namelist()
-            if name.startswith("site-packages/") and not name.startswith("site-packages/bin/")
+            if name.startswith("site-packages/")
+            and not name.startswith("site-packages/bin/")
         }
 
 
@@ -250,7 +231,9 @@ def _extract_site_packages(pyz: Path, root: Path) -> Path:
     package_root = root / "site-packages"
     with zipfile.ZipFile(pyz) as archive:
         for name in archive.namelist():
-            if not name.startswith("site-packages/") or name.startswith("site-packages/bin/"):
+            if not name.startswith("site-packages/") or name.startswith(
+                "site-packages/bin/"
+            ):
                 continue
             relative = Path(name.removeprefix("site-packages/"))
             target = package_root / relative
@@ -283,8 +266,6 @@ def test_subcommand_resolves_inside_bundle(bundles: Path, skill: str, sub: str) 
     assert not dispatcher_fallback, combined
 
 
-
-
 @pytest.mark.parametrize(
     ("skill", "canonical", "legacy"),
     [
@@ -303,6 +284,8 @@ def test_kebab_commands_and_legacy_aliases_dispatch_from_committed_bundles(
         assert "ModuleNotFoundError" not in combined, combined
         assert "Traceback" not in combined, combined
         assert not combined.strip().startswith("usage: <pyz>"), combined
+
+
 @pytest.mark.parametrize("skill", list(SKILL_SUBCOMMANDS))
 def test_unknown_subcommand_is_rejected(bundles: Path, skill: str) -> None:
     result = _run(bundles / f"{skill}.pyz", "no-such-subcommand")
@@ -326,8 +309,6 @@ def test_melt_subcommand_executes_with_forwarded_args(
     assert "THEIRS_LINE" in result.stdout
     assert "OURS_LINE" not in result.stdout
     assert "<<<<<<<" not in result.stdout
-
-
 
 
 def test_plate_bundle_validates_publication_without_source_imports(
@@ -359,7 +340,11 @@ def test_plate_bundle_reports_stack_tools_without_source_imports(
 
     assert result.returncode == 0, result.stderr
     report = cast(dict[str, object], json.loads(result.stdout))
-    assert set(cast(list[object], report["providers"])) == {"graphite", "git-town", "gh-stack"}
+    assert set(cast(list[object], report["providers"])) == {
+        "graphite",
+        "git-town",
+        "gh-stack",
+    }
 
 
 def test_bundle_carries_only_its_own_skill_package(bundles: Path) -> None:
@@ -378,15 +363,14 @@ def test_bundle_carries_only_its_own_skill_package(bundles: Path) -> None:
 
 def test_briesearch_bundle_uses_internal_distributions(bundles: Path) -> None:
     content = {
-        name for name in _bundle_members(bundles / "briesearch.pyz")
+        name
+        for name in _bundle_members(bundles / "briesearch.pyz")
         if ".dist-info/" not in name
     }
     assert "easy_cheese/skills/briesearch/commands.py" in content
     assert "easy_cheese/shared/bundle_commands.py" in content
     assert "easy_cheese_schemas/__init__.py" in content
     assert not any(name.startswith("easy_cheese/skills/mold/") for name in content)
-
-
 
 
 def test_press_bundle_emits_a_telemetry_record(bundles: Path) -> None:
@@ -451,7 +435,9 @@ def test_cook_baseline_rejects_malformed_stdin(bundles: Path) -> None:
 
 
 def test_cook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
-    result = _run(bundles / "cook.pyz", "baseline", stdin='{"baseline": [], "current": {}}')
+    result = _run(
+        bundles / "cook.pyz", "baseline", stdin='{"baseline": [], "current": {}}'
+    )
     assert result.returncode == 2, result.stderr
     assert result.stderr.startswith("ERROR:")
 
@@ -490,9 +476,8 @@ def test_artifact_path_specs_matches_paths_module(bundles: Path, skill: str) -> 
     assert result.stdout.strip() == expected
 
 
-def test_artifact_path_research_returns_corpus_root(bundles: Path) -> None:
-    """research resolves to the bare project corpus root; briesearch composes the
-    nested research/<slug>/<slug>.md layout on top of it."""
+def test_artifact_path_research_uses_generic_phase_resolution(bundles: Path) -> None:
+    """The generic artifact path command does not special-case research."""
     result = _run(
         bundles / "briesearch.pyz",
         "artifact-path",
@@ -501,36 +486,7 @@ def test_artifact_path_research_returns_corpus_root(bundles: Path) -> None:
         extra_env=_CORPUS_ENV,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "/tmp/ec-corpus/demo-project"
-
-
-def test_artifact_path_research_returns_root_and_ignores_slug(bundles: Path) -> None:
-    """research returns the bare corpus root and does NOT validate or embed the slug:
-    paths.artifact_path deliberately does not own the nested research/<slug>/<slug>.md
-    layout, so the shim hands briesearch the root and lets it compose + validate the
-    slug itself. This pins that contract — if the shim ever starts validating or
-    appending the slug for research, that change must be deliberate, not silent."""
-    # A slug that validate_slug would reject is accepted on the research path because
-    # the shim never validates it; the output is the same bare root either way.
-    bad = _run(
-        bundles / "briesearch.pyz",
-        "artifact-path",
-        "research",
-        "Bad_Slug",
-        extra_env=_CORPUS_ENV,
-    )
-    assert bad.returncode == 0, bad.stderr
-    assert bad.stdout.strip() == "/tmp/ec-corpus/demo-project"
-    # The slug is not appended to the path for research (contrast with specs).
-    assert "Bad_Slug" not in bad.stdout
-    other = _run(
-        bundles / "briesearch.pyz",
-        "artifact-path",
-        "research",
-        "totally-different-slug",
-        extra_env=_CORPUS_ENV,
-    )
-    assert other.stdout.strip() == bad.stdout.strip()
+    assert result.stdout.strip() == "/tmp/ec-corpus/demo-project/research/demo-slug.md"
 
 
 def test_artifact_path_rejects_bad_slug(bundles: Path) -> None:
@@ -557,6 +513,73 @@ def test_artifact_path_rejects_unknown_phase(bundles: Path) -> None:
     assert "unknown phase" in result.stderr
 
 
+# `research-layout` requires a descriptive 4-6 word slug, so these cases use
+# one instead of the short two-word slug the other commands accept.
+_RESEARCH_SLUG = "demo-nested-research-layout"
+
+
+def test_research_layout_prints_slug_aware_paths(bundles: Path) -> None:
+    """`research-layout` returns the complete nested layout as JSON."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "research-layout",
+        _RESEARCH_SLUG,
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 0, result.stderr
+    layout = cast("dict[str, str]", json.loads(result.stdout))
+    root = f"{_CORPUS_ENV['EASY_CHEESE_HOME']}/{_CORPUS_ENV['EASY_CHEESE_PROJECT']}"
+    assert layout == {
+        "slug": _RESEARCH_SLUG,
+        "corpus_root": root,
+        "dir": f"{root}/research/{_RESEARCH_SLUG}",
+        "report": f"{root}/research/{_RESEARCH_SLUG}/{_RESEARCH_SLUG}.md",
+        "raw_dir": f"{root}/research/{_RESEARCH_SLUG}/raw",
+        "manifest": f"{root}/research/{_RESEARCH_SLUG}/manifest.json",
+        "artifact": f"research/{_RESEARCH_SLUG}/{_RESEARCH_SLUG}.md",
+    }
+
+
+def test_research_layout_rejects_a_slug_that_is_not_descriptive(
+    bundles: Path,
+) -> None:
+    """A two-word slug names no research question, so the command refuses it."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "research-layout",
+        "demo-slug",
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 1
+    assert "4-6 kebab-case words" in result.stderr
+
+
+def test_research_layout_rejects_invalid_slug(bundles: Path) -> None:
+    result = _run(
+        bundles / "briesearch.pyz",
+        "research-layout",
+        "Not A Slug",
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 1
+    assert "kebab-case" in result.stderr
+
+
+def test_research_layout_is_the_nested_layout_interface(bundles: Path) -> None:
+    """The research layout command owns the nested report paths."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "research-layout",
+        _RESEARCH_SLUG,
+        extra_env=_CORPUS_ENV,
+    )
+    assert result.returncode == 0, result.stderr
+    layout = cast("dict[str, str]", json.loads(result.stdout))
+    assert layout["report"] == (
+        f"/tmp/ec-corpus/demo-project/research/{_RESEARCH_SLUG}/{_RESEARCH_SLUG}.md"
+    )
+
+
 # briesearch ground-check: the mechanical grounding gate behind issue #113. The
 # original failure was a synthesis that concluded "Codex has no static config
 # permission surface" with no citation, contradicting a fact its own raw notes
@@ -581,6 +604,20 @@ def _write(tmp_path: Path, body: str) -> Path:
     return report
 
 
+def _write_local_evidence(bundles: Path) -> None:
+    """Create the files that the inline `path:line` citations below name.
+
+    The gate resolves a repository-relative citation against the invocation
+    directory, which `_run` sets to the bundle directory. A cited path must
+    exist and must hold the cited line, so a grounded report has to put real
+    files there.
+    """
+    _ = (bundles / "ref.md").write_text("".join(f"line {n}\n" for n in range(1, 41)))
+    _ = (bundles / "source.py").write_text(
+        "".join(f"# line {n}\n" for n in range(1, 21))
+    )
+
+
 def test_ground_check_fails_uncited_claim(bundles: Path, tmp_path: Path) -> None:
     """The exact #113 failure: an absence claim with no citation. Ask 1 says every
     claim must carry a verifiable citation — this must be a hard, non-zero exit so
@@ -593,10 +630,13 @@ def test_ground_check_fails_uncited_claim(bundles: Path, tmp_path: Path) -> None
     assert "granular approval_policy" in result.stderr
 
 
-def test_ground_check_passes_grounded_report(bundles: Path, tmp_path: Path) -> None:
+def test_ground_check_passes_grounded_report(
+    bundles: Path, tmp_path: Path
+) -> None:
     """A fully-cited report whose only absence claim is hedged (speculating +
     'searched') is clean — the gate enforces grounding, it does not forbid
     well-grounded negatives."""
+    _write_local_evidence(bundles)
     result = _run(
         bundles / "briesearch.pyz",
         "ground-check",
@@ -626,6 +666,7 @@ def test_ground_check_absence_advisory_does_not_fail(
     ADVISORY (feeds the synthesis-fidelity self-check) but does NOT fail the gate:
     observed-vs-inferred absence is not decidable from text, so it is flagged for
     judgement, not auto-rejected. Pins that the advisory stays soft."""
+    _write_local_evidence(bundles)
     body = _GROUNDED_REPORT.replace(
         "| No broader sandbox knob was found in the config reference searched | [^s1] | vendor docs | 2026-06-01 | speculating | only config.toml checked |",
         "| Codex does not expose a global sandbox knob | [^s1] | vendor docs | 2026-06-01 | certain | |",
@@ -651,6 +692,7 @@ def test_ground_check_accepts_nonlocal_and_existing_local_citations(
     bundles: Path, tmp_path: Path
 ) -> None:
     """URLs and inline paths need no lookup; local paths use their defined roots."""
+    _write_local_evidence(bundles)
     raw = tmp_path / "raw"
     raw.mkdir()
     _ = (raw / "01-example.md").write_text("one\ntwo\nthree\nfour\n")
@@ -731,7 +773,7 @@ def test_ground_check_absence_guard_flags_inferred_absence_without_false_positiv
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
     assert result.returncode == 0, result.stderr
-    assert result.stderr.count("ADVISORY") == 1
+    assert result.stderr.count("ABSENCE") == 1
 
 
 def test_ground_check_rejects_numeric_ratio_as_citation(
@@ -808,6 +850,7 @@ def test_ground_check_rejects_footnote_definition_without_citation(
 def test_ground_check_accepts_citation_on_footnote_continuation_line(
     bundles: Path, tmp_path: Path
 ) -> None:
+    _write_local_evidence(bundles)
     body = _GROUNDED_REPORT.replace(
         "[^s1]: https://example.com/codex (fetched 2026-06-01).",
         "[^s1]: Vendor documentation\n    https://example.com/codex",
@@ -893,6 +936,166 @@ def test_ground_check_rejects_local_path_traversal(
     assert result.stderr.count("outside allowed root") == 2
 
 
+def _manifest(tmp_path: Path, document: object) -> None:
+    _ = (tmp_path / "manifest.json").write_text(json.dumps(document))
+
+
+_REMOTE_REPORT = (
+    "## Research: q\n\n### Evidence\n\n"
+    "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+    "| A holds | https://example.com/a | certain |\n"
+)
+
+
+def test_ground_check_fails_url_the_manifest_never_retrieved(
+    bundles: Path, tmp_path: Path
+) -> None:
+    """A URL in only a search result list is discovery, not inspection.
+    A capture manifest makes this citation a hard failure for #493."""
+    _manifest(
+        tmp_path,
+        {
+            "calls": [
+                {
+                    "kind": "search",
+                    "provider": "tavily",
+                    "tool": "tavily_search",
+                    "query": "example a",
+                }
+            ]
+        },
+    )
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 1, result.stderr
+    assert "REMOTE" in result.stderr
+    assert "https://example.com/a" in result.stderr
+
+
+def test_ground_check_passes_url_retrieved_by_a_provider_tool(
+    bundles: Path, tmp_path: Path
+) -> None:
+    _manifest(
+        tmp_path,
+        {
+            "calls": [
+                {
+                    "kind": "extract",
+                    "provider": "tavily",
+                    "tool": "tavily_extract",
+                    "url": "https://example.com/a",
+                    "file": "raw/01-example.md",
+                    "fetched": "2026-08-30",
+                }
+            ]
+        },
+    )
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 0, result.stderr
+    assert "grounding ok" in result.stderr
+
+
+def test_ground_check_advises_when_no_manifest_backs_remote_citations(
+    bundles: Path, tmp_path: Path
+) -> None:
+    """Short-form reports do not have a capture directory.
+    The gate stays usable and reports unverified remote citations."""
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 0, result.stderr
+    assert "MANIFEST" in result.stderr
+    assert "1 remote URL citation(s)" in result.stderr
+
+
+def test_ground_check_rejects_an_untrustworthy_manifest(
+    bundles: Path, tmp_path: Path
+) -> None:
+    _manifest(tmp_path, {"calls": [{"kind": "crawl", "provider": "tavily"}]})
+    result = _run(
+        bundles / "briesearch.pyz",
+        "ground-check",
+        str(_write(tmp_path, _REMOTE_REPORT)),
+    )
+    assert result.returncode == 1, result.stderr
+    assert "unknown kind 'crawl'" in result.stderr
+
+
+# `budget-check` enforces the #549 spend gate. It reads the same manifest.
+# It rejects repeated calls and overspending without a named gap.
+def _budget_check(
+    bundles: Path, tmp_path: Path, document: object
+) -> subprocess.CompletedProcess[str]:
+    _manifest(tmp_path, document)
+    return _run(bundles / "briesearch.pyz", "budget-check", str(tmp_path))
+
+
+def test_budget_check_fails_a_repeated_search(bundles: Path, tmp_path: Path) -> None:
+    search = {
+        "kind": "search",
+        "provider": "tavily",
+        "tool": "tavily_search",
+        "query": "rrf fusion",
+        "filters": {"days": 30},
+    }
+    result = _budget_check(bundles, tmp_path, {"calls": [search, dict(search)]})
+    assert result.returncode == 1, result.stdout
+    assert "DUPLICATE_SEARCH" in result.stderr
+    assert json.loads(result.stdout)["duplicates"]["search"] == 1
+
+
+def test_budget_check_fails_overspend_with_no_extension(
+    bundles: Path, tmp_path: Path
+) -> None:
+    calls = [
+        {
+            "kind": "search",
+            "provider": "tavily",
+            "tool": "tavily_search",
+            "query": f"q{i}",
+        }
+        for i in range(3)
+    ]
+    result = _budget_check(bundles, tmp_path, {"budget": {"search": 2}, "calls": calls})
+    assert result.returncode == 1, result.stdout
+    assert "3 search call(s) against a declared budget of 2" in result.stderr
+
+
+def test_budget_check_passes_a_run_within_budget(bundles: Path, tmp_path: Path) -> None:
+    result = _budget_check(
+        bundles,
+        tmp_path,
+        {
+            "invocation": "sidechain",
+            "budget": {"extract": 1},
+            "calls": [
+                {
+                    "kind": "extract",
+                    "provider": "tavily",
+                    "tool": "tavily_extract",
+                    "url": "https://example.com/a",
+                    "file": "raw/01-example.md",
+                    "cached": True,
+                }
+            ],
+        },
+    )
+    assert result.returncode == 0, result.stderr
+    assert "budget ok" in result.stderr
+    metrics = cast(dict[str, object], json.loads(result.stdout))
+    assert metrics["invocation"] == "sidechain"
+    assert metrics["cached"] == 1
+
+
 def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
     """The PR freshness check compares raw .pyz bytes after rebuilding, so two
     builds of identical source must produce byte-identical archives."""
@@ -914,7 +1117,7 @@ def test_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
 
 
 def test_skill_bundles_each_ship_shared_slugify(bundles: Path) -> None:
-    for skill in ("cook", "age", "cure"): 
+    for skill in ("cook", "age", "cure"):
         result = _run(
             bundles / f"{skill}.pyz",
             "slugify",
@@ -928,13 +1131,15 @@ def test_skill_bundles_each_ship_shared_slugify(bundles: Path) -> None:
 
 
 def test_schema_wheel_is_staged_in_each_schema_dependent_bundle(bundles: Path) -> None:
-    expected = (REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py").read_bytes()
+    expected = (
+        REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
+    ).read_bytes()
     for skill in TYPED_RUNTIME_BUNDLES:
         with zipfile.ZipFile(bundles / f"{skill}.pyz") as archive:
-            assert archive.read("site-packages/easy_cheese_schemas/_schema_catalog.py") == expected
-
-
-
+            assert (
+                archive.read("site-packages/easy_cheese_schemas/_schema_catalog.py")
+                == expected
+            )
 
 
 @pytest.mark.parametrize("skill", TYPED_RUNTIME_BUNDLES)
@@ -1074,12 +1279,15 @@ def test_no_orphan_committed_bundles():
     assert committed == expected
 
 
-def test_application_metadata_declares_shared_internal_dependency(bundles: Path) -> None:
+def test_application_metadata_declares_shared_internal_dependency(
+    bundles: Path,
+) -> None:
     with zipfile.ZipFile(bundles / "briesearch.pyz") as archive:
         metadata_name = next(
             name
             for name in archive.namelist()
-            if "easy_cheese_briesearch-" in name and name.endswith(".dist-info/METADATA")
+            if "easy_cheese_briesearch-" in name
+            and name.endswith(".dist-info/METADATA")
         )
         metadata = archive.read(metadata_name).decode()
     assert f"Requires-Dist: easy-cheese-shared=={build_pyz.VERSION}" in metadata
@@ -1144,18 +1352,26 @@ def test_age_bundle_carries_html_report_and_findings_imports(bundles: Path) -> N
 
 def test_document_rules_projection_matches_checked_in_source() -> None:
     generated = REPO_ROOT / "src" / "easy_cheese" / "shared" / "document_rules.py"
-    assert build_pyz._compiled_document_rules_source() == generated.read_text(encoding="utf-8")  # pyright: ignore[reportPrivateUsage]
+    assert build_pyz.compiled_document_rules_source() == generated.read_text(
+        encoding="utf-8"
+    )
 
 
-def test_skill_archives_own_shared_commands_and_no_common_archive(bundles: Path) -> None:
+def test_skill_archives_own_shared_commands_and_no_common_archive(
+    bundles: Path,
+) -> None:
     for skill in ("cook", "age", "cure"):
-        assert "easy_cheese/shared/slugify.py" in _bundle_members(bundles / f"{skill}.pyz")
+        assert "easy_cheese/shared/slugify.py" in _bundle_members(
+            bundles / f"{skill}.pyz"
+        )
     assert not any(REPO_ROOT.glob("skills/*/scripts/common.pyz"))
 
 
 def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:
     mold_pyz = build_pyz.cached_bundle("mold")
-    result = _run(mold_pyz, "validate-spec", str(SPEC_FORMAT_FIXTURES / "valid_spec.md"))
+    result = _run(
+        mold_pyz, "validate-spec", str(SPEC_FORMAT_FIXTURES / "valid_spec.md")
+    )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ERROR:" not in result.stderr
 
@@ -1181,7 +1397,10 @@ def test_cook_pyz_dispatches_normalize_end_to_end() -> None:
     )
     assert accepted.returncode == 0, accepted.stdout + accepted.stderr
     canonical = cast(dict[str, object], json.loads(accepted.stdout))
-    assert cast(dict[str, object], canonical["value"])["plan_id"] == "curdplan-cook-cli-normalize-1"
+    assert (
+        cast(dict[str, object], canonical["value"])["plan_id"]
+        == "curdplan-cook-cli-normalize-1"
+    )
     assert cast(str, canonical["digest"]).startswith("sha256:")
 
 

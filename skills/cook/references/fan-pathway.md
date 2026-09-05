@@ -1,24 +1,39 @@
 # /cook — Fan pathway mechanics
 
-Full mechanics for `/cook`'s wave-fan pathway: the existing-handoffs guard,
-typed planner-to-Cook-to-Cure execution, mode selection, publication topology,
-the optional milknado seam, worktree harvest, recovery, and resolution
-provenance. `SKILL.md` keeps the three-shape gate and wave cap; this file owns
-the executable pathway after that gate.
+This file defines the full mechanics for `/cook`'s wave-fan pathway.
 
-The semantic authority is always the canonical `PlannerResult` and its
-validated `CurdPlan`. A handoff file records resumable evidence, but legacy
-manifest state is not live workflow state and is never read to decide which
-phase to execute.
+It covers the existing-handoffs guard, typed Planner-to-Cook-to-Cure execution, mode selection, publication topology, and the optional milknado seam.
+
+It also covers worktree harvest, recovery, and resolution provenance.
+
+`SKILL.md` defines the three-shape gate and wave cap.
+
+This file defines the executable pathway after that gate.
+
+The canonical `PlannerResult` and its validated `CurdPlan` always provide semantic authority.
+
+A handoff file records resumable evidence.
+
+Legacy manifest state is not live workflow state.
+
+Never read legacy manifest state to select the phase to execute.
 
 ## Existing handoffs guard
 
-Before dispatching the planner for an un-curded big spec, check whether any of
-`.cheese/cook/<slug>.md`, `.cheese/press/<slug>.md`,
-`.cheese/age/<slug>.md`, or `.cheese/cure/<slug>.md` already exists. If any do,
-stop — print only the ones present — and tell the user to either run
-`/cheese --continue <slug>` to resume from the latest typed handoff or remove
-the listed files to start fresh. Never wipe an existing handoff silently:
+Before planner dispatch for an un-curded big spec, check these files:
+
+- `.cheese/cook/<slug>.md`
+- `.cheese/press/<slug>.md`
+- `.cheese/age/<slug>.md`
+- `.cheese/cure/<slug>.md`
+
+If any file exists, stop and print only the files that exist.
+
+Tell the user to run `/cheese --continue <slug>` to resume from the latest typed handoff.
+
+Alternatively, tell the user to remove the listed files to start fresh.
+
+Never silently remove an existing handoff:
 
 ```
 Slug `<slug>` has existing handoffs:
@@ -30,106 +45,200 @@ Use `/cheese --continue <slug>` to resume from the latest typed handoff, or
 remove the listed files to start fresh.
 ```
 
-Read a handoff with
-`python3 skills/cook/scripts/cook.pyz read-handoff-slug <path>`;
-the matching `cook.pyz read-handoff-slug` command.
+Read a handoff with the phase and the slug, not with a path:
+
+```text
+python3 skills/cook/scripts/cook.pyz read-handoff-slug --phase <phase> --slug <slug>
+```
+
+The command exits with status 2 when either flag is absent.
 
 ## Canonical planner → Cook → Cure steel thread
 
-The live fan route has one typed path. Do not dispatch the legacy curd-block
-decomposer as the semantic planner, hand raw mappings between phases, or
-invent a preflight helper:
+The live fan route has one typed path.
 
-1. Build a `PlannerRequest` from the authored spec and dispatch the planner
-   through `easy_cheese_schemas.plan`. The planner output is a
-   `PlannerResultWriterView`; `plan` materializes it into one `PlannerResult`.
-   If `PlannerResult.plan` is absent, stop before any worker dispatch and
-   preserve the failure in the handoff.
-2. Take `planner_result.plan`, call
-   `easy_cheese_schemas.validate_curd_plan`, and use that returned `CurdPlan`
-   for every subsequent operation. Validation is the preflight: it completes
-   before the first Cook writer, reviewer, or diagnosis dispatch.
-3. Schedule `CurdPlan.curds` in dependency-respecting topological waves. A
-   blocked prerequisite produces a deterministic blocked `CurdResult` for its
-   dependents; declaration order is never a substitute for the plan's
-   dependency graph.
-4. Call `easy_cheese_schemas.cook` with the validated plan. The host resolves
-   every `ArtifactRef` with `resolve_artifact`, and finalizes exactly one
-   `CurdResult` per selected curd through `normalize_agent_output`. Writer
-   output is observation-only: the host owns identity, digests, provenance,
-   dispositions, and coverage. Executor or normalization failure still yields
-   a host-finalized blocked result rather than zero results.
-5. A failed review is a host-controlled Review → Diagnosis transition. The
-   diagnosis callback returns a `DiagnosisResultWriterView`; the canonical
-   normalizer produces a `DiagnosisResult`. Only a confirmed result may cross
-   into Cure. Bind it to the exact source plan and curd with
-   `easy_cheese_schemas.bind_diagnosis(plan, curd, diagnosis_result)`.
-6. Call `easy_cheese_schemas.cure` with the same validated `CurdPlan` and the
-   complete tuple or mapping of `CureDiagnosisBinding` values. Cure validates
-   each binding's plan reference, curd reference, digest, and confirmed
-   disposition before dispatch, then repeats artifact resolution and
-   host-owned `CurdResult` normalization. A diagnosis from another plan or
-   curd is never accepted.
+Do not use the legacy curd-block decomposer as the semantic planner.
 
-The direct `plan` → `cook` → `bind_diagnosis` → `cure` calls above are the
-canonical steel thread. `run_workflow` is the typed convenience entrypoint
-when a host needs one call, with `phase="cook"` or `phase="cure"` and the same
-binding requirements; it is not a separate semantic path.
+Do not pass raw mappings between phases.
+
+Do not create a preflight helper.
+
+1. Build a `PlannerRequest` from the authored spec.
+   Select the request kind from the failure class, as `## Planner request kinds` defines.
+   Dispatch the planner through `easy_cheese_schemas.plan`.
+   The planner returns a `PlannerResultWriterView`.
+   `plan` materializes this view into one `PlannerResult`.
+   If `PlannerResult.plan` is absent, stop before any worker dispatch.
+   Preserve the failure in the handoff.
+
+2. Take `planner_result.plan`.
+   Call `easy_cheese_schemas.validate_curd_plan`.
+   Use the returned `CurdPlan` for every subsequent operation.
+   Validation is the preflight.
+   Complete validation before the first Cook writer, reviewer, or diagnosis dispatch.
+
+3. Schedule `CurdPlan.curds` in topological waves that respect dependencies.
+   A blocked prerequisite produces a deterministic blocked `CurdResult` for its dependents.
+   Never use declaration order instead of the plan's dependency graph.
+
+4. Call `easy_cheese_schemas.cook` with the validated plan.
+   The host resolves every `ArtifactRef` with `resolve_artifact`.
+   The host finalizes exactly one `CurdResult` for each selected curd through `normalize_agent_output`.
+   Treat writer output only as an observation.
+   The host owns identity, digests, provenance, dispositions, and coverage.
+   Executor or normalization failure still produces a host-finalized blocked result.
+   Never produce zero results for this failure.
+
+5. A failed review starts a host-controlled Review → Diagnosis transition.
+   The diagnosis callback returns a `DiagnosisResultWriterView`.
+   The canonical normalizer produces a `DiagnosisResult`.
+   Only a confirmed result can continue to Cure.
+   Bind the result to the exact source plan and curd.
+   Use `easy_cheese_schemas.bind_diagnosis(plan, curd, diagnosis_result)`.
+
+6. Call `easy_cheese_schemas.cure` with the same validated `CurdPlan`.
+   Supply the complete tuple or mapping of `CureDiagnosisBinding` values.
+   Before dispatch, Cure validates each binding's plan reference, curd reference, digest, and confirmed disposition.
+   Cure then repeats artifact resolution and host-owned `CurdResult` normalization.
+   Never accept a diagnosis from another plan or curd.
+
+The direct `plan` → `cook` → `bind_diagnosis` → `cure` calls define the canonical steel thread.
+
+`run_workflow` is the typed convenience entrypoint when a host requires one call.
+
+Use `phase="cook"` or `phase="cure"` with the same binding requirements.
+
+`run_workflow` does not define a separate semantic path.
+
+## Planner request kinds
+
+Cook emits the validated request. Mold owns planning after a Cook failure.
+Cook never plans on its own after a specification failure.
+
+Select one `PlannerRequestKind` for each failure class:
+
+| Failure class | `kind` | Required fields | Rejected when |
+| --- | --- | --- | --- |
+| The spec has no plan yet | `decompose` | `objective` | `source_plan_ref` is present |
+| A deliberate replan of an approved plan | `replan` | `objective`, `source_plan_ref` | `source_plan_ref` is absent |
+| A specification failure during execution | `remediate` | `objective`, `source_plan_ref`, at least one `evidence` entry | `source_plan_ref` or `evidence` is absent |
+
+Every request also requires `contract_version` and `request_id`.
+Publish the validated request, then name its typed pointer in `artifact:`.
+Write `next: mold` with the `https://schemas.easy-cheese.dev/planner-request` payload schema.
+Use `status: ok`, because `gated` and `halt` stop the chain.
 
 ## Mode selection
 
-Whether a validated plan wave-fans or stays in linear mode is deterministic,
-not a deliberation. `src/easy_cheese/shared/fanout/mode.py` is the single source of truth:
-`PARALLEL_THRESHOLD = 2`, and `select_mode(curds)` returns `"parallel"` when
-`len(curds) >= PARALLEL_THRESHOLD` (2 or more curds), otherwise `"linear"`.
-The same selector is exposed for the installed route as
-`python3 skills/cook/scripts/cook.pyz mode --count <curd-count>`.
-The count comes from the validated `CurdPlan`, never from a legacy phase file.
+Select linear or wave-fan mode deterministically.
 
-**No-plan fallback.** `select_mode_from_score(score)` is only a fallback for a
-PR or fresh branch with no planner handoff. It returns `"linear"` at
-`score <= DECOMPOSE_FIRST_THRESHOLD` (250) and `"decompose-first"` above it;
-it never returns `"parallel"` without a validated plan and disjointness proof.
+Do not use deliberation to select the mode.
 
-**Fast path.** When `/mold`'s curd-count hint = 1 and the blast radius is low
-or medium, skip the decomposer spawn entirely and use the single-coder path:
-the 1-curd spec runs in linear mode. The hint is trusted only to skip work,
-never to pick parallel or bypass `validate_curd_plan`.
+`src/easy_cheese/shared/fanout/mode.py` is the single source of truth.
+
+`PARALLEL_THRESHOLD = 2`.
+
+`select_mode(curds)` returns `"parallel"` when `len(curds) >= PARALLEL_THRESHOLD`.
+
+This condition means 2 or more curds.
+
+Otherwise, `select_mode(curds)` returns `"linear"`.
+
+The installed route exposes the same selector as `python3 skills/cook/scripts/cook.pyz mode --count <curd-count>`.
+
+Get the count from the validated `CurdPlan`.
+
+Never get the count from a legacy phase file.
+
+**No-plan fallback.**
+
+Use `select_mode_from_score(score)` only for a PR or fresh branch without a planner handoff.
+
+It returns `"linear"` when `score <= DECOMPOSE_FIRST_THRESHOLD` (250).
+
+It returns `"decompose-first"` above this threshold.
+
+It never returns `"parallel"` without a validated plan and disjointness proof.
+
+**Fast path.**
+
+Use the fast path when `/mold`'s curd-count hint = 1 and the blast radius is low or medium.
+
+Skip the decomposer spawn.
+
+Use the single-coder path.
+
+The 1-curd spec runs in linear mode.
+
+Trust the hint only to skip work, never to pick parallel or bypass `validate_curd_plan`.
 
 ## Publication topology preflight
 
-When the selected mode is `parallel`, `--open-pr` is present, and no PR exists,
-run `/plate` in topology-preflight mode before the first planner or worker
-dispatch. Apply `/plate`'s review-shape policy: preserve an explicit choice,
-persist `single` without asking for one cohesive review unit. Ask once only when
-stacked is recommended or shape is ambiguous; record `plate_layout` in the typed
-handoff evidence, read it back, and do not ask twice. Do not use a legacy manifest to make this
-decision. Existing PRs preserve their detected topology; runs without
-`--open-pr` remain commit-only.
+Run `/plate` in topology-preflight mode when the selected mode is `parallel`, the user supplied `--open-pr`, and no pull request exists.
 
-This decision completes before Phase 1 seed or any worker commit.
+Complete this decision before Phase 1 seed or any worker commit.
 
-**Seed (coder).** After topology is fixed, prepare only files shared by two or
-more curds; do not hide curd-owned behavior in the seed.
+Apply `/plate`'s review-shape policy.
+
+Preserve an explicit choice.
+
+For one cohesive review unit, persist `single` without asking.
+
+Ask only once when stacked is recommended or shape is ambiguous.
+
+Record `plate_layout` in the typed handoff evidence.
+
+Read `plate_layout` from that evidence.
+
+Apply the policy `do not ask twice`.
+
+Do not use a legacy manifest to make this decision.
+
+Preserve the detected topology for existing PRs.
+
+Keep runs without `--open-pr` commit-only.
+
+Complete this decision before the Phase 1 seed or any worker commit.
+
+**Seed (coder).**
+
+After you fix the topology, prepare only files that two or more curds share.
+
+Do not hide curd-owned behavior in the seed.
 
 ## Milknado seam
 
-Before running any curd, probe which of three roles the available toolset
-supports (`src/easy_cheese/shared/fanout/milknado.py::probe`, exposed as
-`python3 skills/cook/scripts/cook.pyz milknado --tools "<available
-tool names>"`):
+Before any curd runs, probe which role the available toolset supports.
 
-- **`engine`** — both `milknado_todo_claim` and `milknado_node_verify` are
-  present. Milknado owns the DAG, per-node worktrees, and verify-until-green;
+Use `src/easy_cheese/shared/fanout/milknado.py::probe`.
+
+The installed route exposes the probe as `python3 skills/cook/scripts/cook.pyz milknado --tools "<available tool names>"`.
+
+The probe returns one of three roles:
+
+- **`engine`** — Both `milknado_todo_claim` and `milknado_node_verify` are present.
+  Milknado owns the DAG, per-node worktrees, and verify-until-green process.
   `/cook` dispatches the typed curd operation for each claimed node.
-- **`tracker`** — only `milknado_todo_add` is present. Milknado records typed
-  curd status but does not run curds; `/cook` still owns native fan-out.
-- **`none`** — no milknado tools. Native fan-out owns worktrees end to end,
-  and curds self-verify once in-worker.
+- **`tracker`** — Only `milknado_todo_add` is present.
+  Milknado records typed curd status but does not run curds.
+  `/cook` still owns native fan-out.
+- **`none`** — No milknado tools are present.
+  Native fan-out owns worktrees from start to finish.
+  Native curds self-verify once in-worker.
 
-This parity difference is deliberate: native curds self-verify once, while
-milknado (when present) verifies until green. Announce milknado's absence once
-and proceed; `none` is never a blocker and never changes the typed contract.
+This parity difference is deliberate.
+
+Native curds self-verify once.
+
+Milknado verifies until green when it is present.
+
+Announce milknado's absence once.
+
+Then proceed.
+
+`none` never blocks the workflow.
+
+`none` never changes the typed contract.
 
 ## Phase-chain topology
 
@@ -141,73 +250,140 @@ and proceed; `none` is never a blocker and never changes the typed contract.
 | Per curd, closed N/A | `coder(cook) → reviewer(age) → coder(cure) → reviewer(final age)` | `not-applicable-curd` |
 | Post-merge, closed N/A | `age → cure → age` | `not-applicable-postmerge` |
 
-Per-curd workers own incomplete implementation slices: they never run Press
-while sibling curds remain unfinished. After wiring and merge, the
-orchestrator runs the one global Press → Age/Cure chain.
+Per-curd workers own incomplete implementation slices.
 
-The per-curd chain may end early when a review returns a clean completion, but
-the host still records one normalized result and keeps the plan's dependency
-closure consistent. A failed review never jumps directly to Cure: the host
-must materialize and confirm a diagnosis, then bind it to the exact curd.
-Only a terminal age with `next: done` is publishable.
+They never run Press while sibling curds remain unfinished.
 
-**Projected dispatch count.** The upper bound `/cook` shows at the decompose gate is disposition-specific. RED-required: 1 seed + 4 × curds + 4 post-merge = `5 + 4 × curds`. Closed N/A: 1 seed + 4 × curds + 3 post-merge = `4 + 4 × curds`. A first-age `clean_complete` shortens a RED curd to 2 dispatches and an N/A curd to 2. Wiring dispatches are excluded because wiring rows live in the manifest, not the curd block.
+After wiring and merge, the orchestrator runs one global Press → Age/Cure chain.
+
+The per-curd chain can end early when a review returns a clean completion.
+
+The host still records one normalized result.
+
+The host also keeps the plan's dependency closure consistent.
+
+A failed review never continues directly to Cure.
+
+The host must materialize and confirm a diagnosis.
+
+Then the host must bind the diagnosis to the exact curd.
+
+Publish a terminal age only when it writes `next: done`.
+
+**Projected dispatch count.**
+
+The upper bound that `/cook` shows at the decompose gate depends on the disposition.
+
+For RED-required, use 1 seed + 4 × curds + 4 post-merge = `5 + 4 × curds`.
+
+For closed N/A, use 1 seed + 4 × curds + 3 post-merge = `4 + 4 × curds`.
+
+A first-age `clean_complete` shortens a RED curd to 2 dispatches.
+
+A first-age `clean_complete` shortens an N/A curd to 2 dispatches.
+
+Exclude wiring dispatches.
+
+Wiring rows exist in the manifest, not the curd block.
 
 ## Recovery and aggregate gates
 
-- **Worker exhaustion.** A worker that runs out of context or turns writes a
-  partial typed handoff with `status: needs-context: <gap>`. The orchestrator
-  re-dispatches that curd once with the gap folded into context and
-  `--retry-count 1`; a second `needs-context` at that phase halts (the router
-  caps the loop itself), and the host finalizes its blocked `CurdResult`,
-  keeps harvesting the rest, and reports the curd.
-- **Aggregate-gate conflict.** After all waves are harvested, run the project
-  gates over the merged tree. Distinguish a real cross-curd conflict (curds
-  passed individually but collide in aggregate) from harmless generated drift
-  the post-merge Cure can absorb. Never auto-resolve a real conflict.
-- **Compute the verdict** — normalize each typed `CurdResult`; a halted result stops, while a clean first review finalizes that curd without Cure. After wiring and merge, the project gates must pass before the global post-merge chain.
+- **Worker exhaustion.**
+  A worker can run out of context or turns.
+  The worker writes a partial typed handoff with `status: needs-context: <gap>`.
+  The orchestrator re-dispatches that curd once.
+  Fold the gap into the context.
+  Set `--retry-count 1`.
+  A second `needs-context` at that phase halts.
+  The router caps the loop itself.
+  The host finalizes the blocked `CurdResult`.
+  The host continues to harvest the other results.
+  The host reports the curd.
+
+- **Aggregate-gate conflict.**
+  After you harvest all wave results, run the project gates over the merged tree.
+  Distinguish a real cross-curd conflict from harmless generated drift.
+  A real cross-curd conflict occurs when curds pass individually but collide in aggregate.
+  The post-merge Cure can absorb harmless generated drift.
+  Never automatically resolve a real conflict.
+
+- **Compute the verdict** —
+  Normalize each typed `CurdResult`.
+  A halted result stops the workflow.
+  A clean first review finalizes that curd without Cure.
+  After wiring and merge, the project gates must pass before the global post-merge chain.
 
 ## Worktree harvest and teardown
 
-- Give each curd its own worktree; when the host lacks a native worktree-isolated sub-agent primitive, create it first with `python3 skills/cook/scripts/cook.pyz worktree create --slug <id> --base <orchestrator-branch>` (returns `{path, branch}`).
-- Per curd, run the disposition-specific sequential chain and persist one
-  normalized `CurdResult`; per-curd workers never run Press.
-- After every curd returns, harvest commits and tear down each curd worktree.
-- Harvest with `python3 skills/cook/scripts/cook.pyz worktree harvest
-  --branch <curd-branch> --onto <orchestrator-branch>`. On conflict, invoke
-  `/melt`; if it cannot resolve, fall back to per-curd PRs.
-  The worktrees share one object store, so this needs no `git fetch`.
-- Tear down with `python3 skills/cook/scripts/cook.pyz worktree
-  teardown --path <worktree-path> --branch <curd-branch>`. A completed run
-  leaves no `worktree-agent-*` branch or stray worker directory.
-- Run wiring in dependency order, then run
-  the one global `press → age → cure → age` integration pass.
-- `/cook` alone performs harvest and dispatches `/plate` at the end, never
-  mid-run.
+- Give each curd its own worktree.
+  First create the worktree when the host has no native worktree-isolated sub-agent primitive.
+  Use `python3 skills/cook/scripts/cook.pyz worktree create --slug <id> --base <orchestrator-branch>`.
+  The command returns `{path, branch}`.
 
-After each wave, persist the typed `PlannerResult`, `CurdResult` values,
-diagnosis bindings, and gate evidence in the handoff artifact. These records
-are for recovery and publication provenance; they do not become a second
-workflow state machine.
+- Run the disposition-specific sequential chain for each curd.
+  Persist one normalized `CurdResult` for each curd.
+  Per-curd workers never run Press.
+
+- After every curd returns, harvest its commits.
+  Then tear down each curd worktree.
+
+- Harvest with `python3 skills/cook/scripts/cook.pyz worktree harvest --branch <curd-branch> --onto <orchestrator-branch>`.
+  On conflict, invoke `/melt`.
+  If `/melt` cannot resolve the conflict, use per-curd PRs.
+  The worktrees share one object store.
+  Therefore, this operation does not require `git fetch`.
+
+- Tear down with `python3 skills/cook/scripts/cook.pyz worktree teardown --path <worktree-path> --branch <curd-branch>`.
+  A completed run leaves no `worktree-agent-*` branch.
+  It also leaves no stray worker directory.
+
+- Run wiring in dependency order.
+  Then run the one global `press → age → cure → age` integration pass.
+
+- `/cook` alone performs harvest.
+  The Cook fan orchestrator owns the terminal `/plate` dispatch.
+  Terminal Cure owns publication only in the linear chain.
+  Never dispatch `/plate` during the run.
+
+After each wave, persist the typed `PlannerResult`, `CurdResult` values, diagnosis bindings, and gate evidence in the handoff artifact.
+
+These records support recovery and publication provenance.
+
+They do not create a second workflow state machine.
 
 ## --resume <slug>
 
-`--resume <slug>` re-enters a crashed wave-fan run by loading the latest typed
-handoff (`.cheese/cook/<slug>.md` and its referenced artifacts). If the
-handoff or its referenced `PlannerResult`/`CurdPlan` is missing, malformed,
-stale, or cannot be resolved by `resolve_artifact`, fail fast. Re-run
-`validate_curd_plan` before selecting the next dependency wave, and verify
-every retained commit or artifact reference still exists. Resume only curds
-whose typed result is incomplete; never infer progress from an old phase name.
+`--resume <slug>` re-enters a crashed wave-fan run.
 
-A bare re-run (no `--resume`) that finds an existing handoff stops and tells
-the user to resume or remove it; it never silently wipes typed evidence.
+It loads the latest typed handoff from `.cheese/cook/<slug>.md` and its referenced artifacts.
+
+Fail fast if the handoff is missing, malformed, stale, or unresolved.
+
+Also fail fast if its referenced `PlannerResult` or `CurdPlan` has these conditions.
+
+Use `resolve_artifact` to resolve the references.
+
+Run `validate_curd_plan` again before selecting the next dependency wave.
+
+Verify that every retained commit or artifact reference still exists.
+
+Resume only curds whose typed result is incomplete.
+
+Never infer progress from an old phase name.
+
+A bare re-run has no `--resume`.
+
+If a bare re-run finds an existing handoff, stop.
+
+Tell the user to resume or remove the handoff.
+
+Never silently remove typed evidence.
 
 ## Resolution provenance and the output contract
 
-Every planner, curd, review, diagnosis, and Cure dispatch resolves against the
-typed-role table in `SKILL.md`'s `## Agent resolution` section and the shared
-protocol in [`../../cheese/references/agent-resolution.md`](../../cheese/references/agent-resolution.md):
+Resolve every planner, curd, review, diagnosis, and Cure dispatch against the typed-role table in `SKILL.md`'s `## Agent resolution` section.
+
+Also use the shared protocol in [`../../cheese/references/agent-resolution.md`](../../cheese/references/agent-resolution.md):
 
 | Work | Preferred types |
 | --- | --- |
@@ -216,13 +392,24 @@ protocol in [`../../cheese/references/agent-resolution.md`](../../cheese/referen
 | Every age pass | reviewer |
 | Harvest and plate | parent |
 
-The resolver filters required capabilities, tools, permissions, and isolation
-first, then picks minimum power and maximum specificity. A prompt-only
-read-only general fallback may continue with `degraded: true`; a missing
-required tool or write permission halts. Every handoff and final summary
-carries the resulting `agent_resolution` block so role, fallback, and
-degradation stay visible.
+The resolver first filters required capabilities, tools, permissions, and isolation.
 
-The fan pathway and single-coder path keep the same final-summary shape
-(`SKILL.md`'s `## Handoff slug`, `## Output`). A terminal age is publishable
-only with `next: done`; `next: cure` or a missing `next` is not publishable.
+Then the resolver selects minimum power and maximum specificity.
+
+A prompt-only, read-only general fallback can continue with `degraded: true`.
+
+A missing required tool or write permission halts the workflow.
+
+Every handoff and final summary includes the resulting `agent_resolution` block.
+
+This block keeps the role, fallback, and degradation visible.
+
+The fan pathway and single-coder path use the same final-summary shape.
+
+`SKILL.md` defines this shape in `## Handoff slug` and `## Output`.
+
+Publish a terminal age only when it writes `next: done`.
+
+Do not publish a terminal age that writes `next: cure`.
+
+Do not publish a terminal age that omits `next`.

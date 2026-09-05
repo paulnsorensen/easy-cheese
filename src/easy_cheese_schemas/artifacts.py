@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import errno
 import hashlib
 import hmac
@@ -22,6 +23,7 @@ from easy_cheese_schemas.contracts import ArtifactRef, MAX_ARTIFACT_BYTES
 
 __all__ = [
     "MAX_ARTIFACT_BYTES",
+    "ArtifactDigestMismatchError",
     "ArtifactResolutionError",
     "ResolvedAgentArtifact",
     "read_repository_artifact",
@@ -49,11 +51,17 @@ class ArtifactResolutionError(ValueError):
     pass
 
 
+class ArtifactDigestMismatchError(ArtifactResolutionError):
+    """The resolved bytes do not match the artifact's declared digest."""
+
+
 @define(frozen=True)
 class ResolvedAgentArtifact:
     role: str
     path: str
     media_type: str
+    content: bytes
+
 
 def resolve_artifact(
     artifact: ArtifactRef,
@@ -61,7 +69,9 @@ def resolve_artifact(
     repository_root: str | Path = ".",
     artifact_directory: str | Path,
     schema_validator: SchemaValidator | None = None,
+    allowed_local_root: str | Path | None = None,
 ) -> ResolvedAgentArtifact:
+
     if artifact_directory is None:  # pyright: ignore[reportUnnecessaryComparison]
         raise ArtifactResolutionError("artifact_directory is required")  # pyright: ignore[reportUnreachable]
     if not isinstance(artifact, ArtifactRef):  # pyright: ignore[reportUnnecessaryIsInstance]
@@ -85,6 +95,8 @@ def resolve_artifact(
         )
     elif parsed.scheme == "file":
         path = _resolve_file_path(parsed.netloc, parsed.path)
+        if allowed_local_root is not None:
+            path = _restrict_local_path(path, allowed_local_root)
         content, detected_type = _read_local(path, artifact.size_bytes)
     elif parsed.scheme == "https":
         content, detected_type = _read_https(artifact, parsed)
@@ -112,15 +124,17 @@ def resolve_verified_bytes(
     _validate_integrity(artifact, content, detected_type)
     _validate_schema(artifact, content, schema_validator)
     path = _retain_verified_bytes(content, artifact_directory)
-    return _agent_view(artifact, path)
+    return _agent_view(artifact, path, content)
 
 
-
-def _agent_view(artifact: ArtifactRef, path: str) -> ResolvedAgentArtifact:
+def _agent_view(
+    artifact: ArtifactRef, path: str, content: bytes
+) -> ResolvedAgentArtifact:
     return ResolvedAgentArtifact(
         role=artifact.role,
         path=path,
         media_type=artifact.media_type,
+        content=content,
     )
 
 
@@ -196,15 +210,11 @@ def read_repository_artifact(
         ) from exc
     finally:
         for fd in reversed(opened_fds):
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
         if root_fd is not None:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(root_fd)
-            except OSError:
-                pass
 
     detected_type, _encoding = mimetypes.guess_type(display_path.name)
     if detected_type is None:
@@ -221,6 +231,16 @@ def _resolve_file_path(authority: str, uri_path: str) -> Path:
     if not path.is_absolute():
         raise ArtifactResolutionError("file URI must name an absolute path")
     return path
+
+
+def _restrict_local_path(path: Path, allowed_root: str | Path) -> Path:
+    resolved_path = path.resolve()
+    resolved_root = Path(allowed_root).resolve()
+    if resolved_path != resolved_root and resolved_root not in resolved_path.parents:
+        raise ArtifactResolutionError(
+            f"local file artifact escapes allowed root: {resolved_root}"
+        )
+    return resolved_path
 
 
 def _read_local(path: Path, expected_size: int) -> tuple[bytes, str]:
@@ -240,10 +260,8 @@ def _read_local(path: Path, expected_size: int) -> tuple[bytes, str]:
         raise ArtifactResolutionError(f"artifact is not readable: {path}") from exc
     finally:
         if fd is not None:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
 
     detected_type, _encoding = mimetypes.guess_type(path.name)
     if detected_type is None:
@@ -267,9 +285,7 @@ def _read_descriptor(
             f"artifact is not readable: {display_path}"
         ) from exc
     if not stat.S_ISREG(metadata.st_mode):
-        raise ArtifactResolutionError(
-            f"artifact is not a regular file: {display_path}"
-        )
+        raise ArtifactResolutionError(f"artifact is not a regular file: {display_path}")
     _require_artifact_size(metadata.st_size)
     if expected_size is not None:
         _require_size(expected_size, metadata.st_size)
@@ -371,10 +387,8 @@ def _read_https(artifact: ArtifactRef, parsed: SplitResult) -> tuple[bytes, str]
                     ) from exc
                 redirects += 1
             finally:
-                try:
+                with contextlib.suppress(OSError):
                     exc.close()
-                except OSError:
-                    pass
             continue
         except ArtifactResolutionError:
             raise
@@ -430,9 +444,7 @@ def _response_uri(response: object, fallback: str) -> str:
 
 def _redirect_uri(current_uri: str, location: str | None) -> str:
     if not isinstance(location, str) or not location:
-        raise ArtifactResolutionError(
-            "HTTPS artifact redirected outside URI policy"
-        )
+        raise ArtifactResolutionError("HTTPS artifact redirected outside URI policy")
     try:
         target = urljoin(current_uri, location)
         parsed = urlsplit(target)
@@ -450,9 +462,7 @@ def _validate_https_location(parsed: SplitResult) -> None:
     try:
         parsed.port
     except ValueError as exc:
-        raise ArtifactResolutionError(
-            "HTTPS artifact URI has an invalid port"
-        ) from exc
+        raise ArtifactResolutionError("HTTPS artifact URI has an invalid port") from exc
     if (
         parsed.scheme != "https"
         or parsed.hostname is None
@@ -477,6 +487,7 @@ def _response_media_type(headers: Message) -> str:
         )
     return detected_type
 
+
 def _validate_integrity(
     artifact: ArtifactRef, content: bytes, detected_type: str
 ) -> None:
@@ -486,7 +497,7 @@ def _validate_integrity(
 
     actual_digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
     if not hmac.compare_digest(actual_digest, artifact.digest):
-        raise ArtifactResolutionError(
+        raise ArtifactDigestMismatchError(
             f"artifact digest mismatch: expected {artifact.digest}, got {actual_digest}"
         )
 
@@ -517,7 +528,9 @@ def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]
     document: dict[str, object] = {}
     for key, value in pairs:
         if key in document:
-            raise ArtifactResolutionError(f"schema artifact contains duplicate key {key!r}")
+            raise ArtifactResolutionError(
+                f"schema artifact contains duplicate key {key!r}"
+            )
         document[key] = value
     return document
 
@@ -535,7 +548,9 @@ def _validate_schema(
             "schema validation requires a JSON artifact media type"
         )
     try:
-        document = cast(object, json.loads(content, object_pairs_hook=_reject_duplicate_keys))
+        document = cast(
+            object, json.loads(content, object_pairs_hook=_reject_duplicate_keys)
+        )
     except ArtifactResolutionError:
         raise
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -566,22 +581,20 @@ def _validate_registered_schema(content: bytes, schema_uri: str) -> None:
         raise ArtifactResolutionError(f"artifact schema mismatch: {schema_uri}")
     try:
         version = supported_version_for(schema_uri)
-        if version is None:
-            raise KeyError(schema_uri)
         _ = validate_contract(
             content,
             schema_uri,
             supported_version=version,
         )
-    except (ContractValidationError, KeyError) as exc:
+    except ContractValidationError as exc:
+        # Keep the reason. A bare "schema mismatch" hides which rule failed,
+        # so a caller cannot tell a wrong schema from a rejected field.
         raise ArtifactResolutionError(
-            f"artifact schema mismatch: {schema_uri}"
+            f"artifact schema mismatch: {schema_uri}: {exc}"
         ) from exc
 
 
-def _snapshot_matches(
-    path: Path, content: bytes, expected_digest: bytes
-) -> bool:
+def _snapshot_matches(path: Path, content: bytes, expected_digest: bytes) -> bool:
     flags = (
         os.O_RDONLY
         | getattr(os, "O_BINARY", 0)
@@ -697,15 +710,11 @@ def _retain_verified_bytes(content: bytes, artifact_directory: str | Path) -> st
         ) from exc
     finally:
         if temp_fd is not None:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(temp_fd)
-            except OSError:
-                pass
         if temp_path is not None:
-            try:
+            with contextlib.suppress(OSError):
                 temp_path.unlink()
-            except OSError:
-                pass
 
 
 def _base_media_type(media_type: str) -> str:

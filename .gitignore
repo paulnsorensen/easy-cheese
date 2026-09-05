@@ -22,6 +22,9 @@
 
 # milknado optional-plugin runtime data (SQLite task graph)
 .milknado/
+# milknado worker brief and node worktrees created inside the project root
+RALPH.md
+milknado-*/
 
 # milknado ultracode workflow, copied in per-session by its SessionStart hook
 .claude/workflows/
@@ -45,9 +48,9 @@ tools/skill-overlap/target/
 # Starlight build output and generated docs
 dist/
 .astro/
-src/sidebar.mjs
-src/content/docs/**
-!src/content/docs/
+website/sidebar.mjs
+website/content/docs/**
+!website/content/docs/
 
 # `just release-preview` staging output (hidden so validate_skills.py skips it)
 .release-preview/

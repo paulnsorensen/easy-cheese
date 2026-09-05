@@ -1,6 +1,11 @@
 # Python De-slop Catalog
 
-Per-language evidence for the `age` `deslop` dimension. Each pattern is a Python-specific AI tell to look for during review; most map to a Ruff rule code, giving a citable rule name to attach to a finding. Use alongside `dimensions.md`'s `deslop` rubric — this is the "Look for" detail, not a separate severity scale.
+This section provides Python evidence for the `age` `deslop` dimension.
+Each pattern identifies a Python-specific AI tell for review.
+Most patterns map to a Ruff rule code.
+The rule code gives reviewers a citable name for a finding.
+Use this section with the `deslop` rubric in `dimensions.md`.
+This section provides review details, not a separate severity scale.
 
 ## 1. `range(len())` instead of `enumerate`
 
@@ -16,24 +21,33 @@ for i, item in enumerate(items):
     print(i, item)
 ```
 
-When you don't need the index at all, just iterate directly:
+Iterate directly when you do not need the index:
 
 ```python
 for item in items:
     process(item)
 ```
 
-## 2. Manual `None` checks instead of truthiness
+## 2. Redundant `None` and length checks
+
+A truth test is not a `None` check. It also rejects `""`, `0`, `0.0`, `[]`, `{}`, and `False`.
+Use it only when the empty value and the missing value need the same branch.
 
 ```python
-# SLOP
+# SLOP — three checks where the type allows one
 if user is not None and user.name is not None and len(user.name) > 0:
     greet(user.name)
 
-# CLEAN
+# CLEAN — when an empty name and a missing name take the same branch
 if user and user.name:
     greet(user.name)
+
+# CLEAN — when the branches differ, keep the explicit check
+if user is not None and user.name is not None:
+    greet(user.name)
 ```
+
+Keep `is not None` on any value that can hold `0`, `False`, or an empty container.
 
 ## 3. Old-style string formatting
 
@@ -44,20 +58,28 @@ AI mixes `%`, `.format()`, and f-strings inconsistently.
 message = "Hello, %s! You have %d messages." % (name, count)
 message = "Hello, {}!".format(name)
 
-# CLEAN — f-strings everywhere (Python 3.6+)
+# CLEAN — f-strings for a plain string
 message = f"Hello, {name}! You have {count} messages."
+
+# CLEAN — %-style for a logging call, which formats only when the record emits
+logger.info("Hello, %s! You have %d messages.", name, count)
 ```
+
+Do not use an f-string in a logging call.
+The f-string formats on every call, even when the level filters the record.
+Ruff rule `G004` flags an f-string in a logging call.
 
 ## 4. Silent `except: pass`
 
-Swallowing exceptions without handling is the #1 debugging time-sink.
+An unhandled exception that the code swallows leaves no evidence.
+The defect then costs the most time to find.
 
 ```python
 # SLOP
 try:
     risky_operation()
 except Exception:
-    pass  # Silent failure — good luck debugging
+    pass  # Silent failure: no log, no trace, no evidence
 
 # CLEAN — either handle it meaningfully or don't catch it
 # If you truly need to ignore: except SpecificError as e: logger.debug(...)
@@ -65,8 +87,10 @@ except Exception:
 
 ## 5. Raw dicts for structured data
 
-AI returns `{"id": 1, "name": "Alice"}` where a dataclass gives you
-type safety, IDE support, and self-documenting code.
+AI returns `{"id": 1, "name": "Alice"}` instead of a declared type.
+A dataclass gives static types, editor support, and a named shape.
+A dataclass does not check a type at run time. It assigns whatever the caller passes.
+Use `pydantic` or `attrs` with validators when the data crosses a trust boundary.
 
 ```python
 # SLOP
@@ -138,11 +162,11 @@ def append_item(item, items=None):
     return items
 ```
 
-Ruff: `B006`.
+Ruff identifies this pattern with `B006`.
 
 ## 10. HTTP calls without a timeout
 
-`requests`/`httpx` calls with no `timeout=` hang forever when the server does.
+`requests` and `httpx` calls without `timeout=` can hang forever when the server hangs.
 
 ```python
 # SLOP
@@ -152,11 +176,11 @@ response = requests.get(url)
 response = requests.get(url, timeout=10)
 ```
 
-Ruff: `S113`.
+Ruff identifies this pattern with `S113`.
 
 ## 11. try/except shape slop
 
-Oversized `try` blocks with logging noise — the tryceratops family.
+The tryceratops family covers oversized `try` blocks with logging noise.
 
 ```python
 # SLOP — log-and-raise duplicates the traceback up the stack
@@ -189,11 +213,11 @@ else:
     return transform(data)
 ```
 
-Ruff: `TRY300`, `TRY301`, `TRY400`, `TRY401`.
+Ruff identifies this shape with `TRY300`, `TRY301`, `TRY400`, and `TRY401`.
 
 ## 12. Deprecated typing forms
 
-Models trained on pre-3.9 code emit `typing.List`/`Optional`/`Union`.
+Models that learn from pre-3.9 code emit `typing.List`/`Optional`/`Union`.
 
 ```python
 # SLOP
@@ -204,11 +228,11 @@ def find(ids: List[int]) -> Optional[Dict[str, Union[int, str]]]: ...
 def find(ids: list[int]) -> dict[str, int | str] | None: ...
 ```
 
-Ruff: `UP006`, `UP007`, `UP045`.
+Ruff identifies this pattern with `UP006`, `UP007`, and `UP045`.
 
 ## 13. os.path / pathlib mixing
 
-`os.path.join`, `os.path.exists`, and `Path` interleaved in the same module.
+A module interleaves `os.path.join`, `os.path.exists`, and `Path`.
 
 ```python
 # SLOP
@@ -220,8 +244,10 @@ path = Path(base) / "config.yaml"
 if path.exists(): ...
 ```
 
-Ruff: `PTH` family. Caveat: `open(path)` on a `Path` is fine — `PTH123`
-(force `Path.open()`) is contested among core devs; don't "fix" it.
+Ruff uses the `PTH` family for this pattern.
+`open(path)` on a `Path` is valid.
+Core developers contest the `PTH123` rule, which forces `Path.open()`.
+Do not fix `open(path)` on a `Path` solely to satisfy `PTH123`.
 
 ## 14. print() debugging in library code
 
@@ -235,6 +261,6 @@ logger.debug("processing %s", item)
 
 ## Sources
 
-- Ruff rule docs (docs.astral.sh/ruff/rules) — every rule code above is verifiable there
-- charlax/professional-programming, error-handling anti-patterns — before/after exception examples
-- Greg-style caveat: PTH123 dispute thread (discuss.python.org/t/106904) — calibration for the pathlib rule
+- Ruff rule docs (docs.astral.sh/ruff/rules) verify every rule code above.
+- charlax/professional-programming documents error-handling anti-patterns with before-and-after exception examples.
+- The `pathlib` rule follows the PTH123 dispute thread (discuss.python.org/t/106904).

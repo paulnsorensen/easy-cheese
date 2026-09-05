@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypedDict, cast
@@ -17,6 +18,7 @@ from typing import TypedDict, cast
 import pytest
 from easy_cheese_schemas import (
     ArtifactLink,
+    CompactionRecord,
     DecisionFork,
     EntryKind,
     EntryTransition,
@@ -60,7 +62,7 @@ class _DeltaFields(TypedDict):
     add_artifact_links: list[ArtifactLink] | None
     transitions: list[EntryTransition] | None
     compacted: bool
-    rehydrated_from_revision_id: str | None
+    compaction: CompactionRecord | None
     session_provenance: SessionProvenance | None
 
 
@@ -92,6 +94,20 @@ def _get(container: object, *path: str) -> object:
     return value
 
 
+@pytest.fixture(autouse=True)
+def _cwd_outside_a_repository(  # pyright: ignore[reportUnusedFunction]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run every command from a directory that is not a git worktree.
+
+    `commit` mirrors its projection into the repository it is invoked from, so
+    a suite that stayed in the checkout would write notes into the working tree
+    it is testing. Outside a repository there is no default mirror at all,
+    which is also the state the durability assertions below are about.
+    """
+    monkeypatch.chdir(tmp_path)
+
+
 @pytest.fixture
 def store(corpus_root: Path) -> storage.WorkStore:
     """The store the CLI itself will open, via the same env contract."""
@@ -117,6 +133,9 @@ def test_commit_creates_the_first_record_from_a_genesis_delta_on_stdin(
     assert payload["revision_number"] == 1
     assert payload["parent_revision_id"] is None
     assert payload["status"] == "ok"
+    # The checkpoint has travelled nowhere; the caller is told so rather than
+    # having to lint the store to find out.
+    assert payload["durability"] == "canonical-local"
     revision_id = payload["revision_id"]
     assert payload["projection_path"] == f"projections/1-{revision_id}.md"
     assert _get(payload, "record", "revision_id") == revision_id
@@ -237,6 +256,115 @@ def test_commit_refuses_a_work_id_that_is_not_a_safe_path_segment() -> None:
 
     assert status == 1
     assert _get(payload, "error", "code") in {"invalid-delta", "storage-error"}
+
+
+def test_commit_mirrors_the_projection_into_an_explicit_note_dir(
+    store: storage.WorkStore, tmp_path: Path
+) -> None:
+    notes = tmp_path / "handoffs"
+
+    status, payload = _run(
+        "commit", "--note-dir", str(notes), stdin=_delta_json(_genesis_delta())
+    )
+
+    assert status == 0
+    mirror = notes / f"{WORK_ID}.md"
+    assert payload["note_path"] == str(mirror)
+    markdown = cast(str, payload["markdown"])
+    # The mirror is a byte-for-byte copy of the projection the corpus holds,
+    # not a second rendering that could drift from the digest in the receipt.
+    assert mirror.read_text(encoding="utf-8") == markdown
+    stored = store.projection_path(1, cast(str, payload["revision_id"]))
+    assert stored.read_text(encoding="utf-8") == markdown
+    # The durability the caller is told is the one the document itself carries.
+    assert payload["durability"] == "repo-snapshot"
+    assert "durability: repo-snapshot" in markdown
+
+
+@pytest.mark.usefixtures("store")
+def test_commit_replay_rewrites_the_identical_mirror(tmp_path: Path) -> None:
+    notes = tmp_path / "handoffs"
+    body = _delta_json(_genesis_delta())
+
+    first_status, first = _run("commit", "--note-dir", str(notes), stdin=body)
+    mirror = notes / f"{WORK_ID}.md"
+    written = mirror.read_bytes()
+    second_status, second = _run("commit", "--note-dir", str(notes), stdin=body)
+
+    assert (first_status, second_status) == (0, 0)
+    assert first["replayed"] is False
+    assert second["replayed"] is True
+    assert second["note_path"] == first["note_path"]
+    assert mirror.read_bytes() == written
+
+
+@pytest.mark.usefixtures("store")
+def test_commit_no_note_overrides_an_explicit_note_dir(tmp_path: Path) -> None:
+    notes = tmp_path / "handoffs"
+
+    status, payload = _run(
+        "commit",
+        "--note-dir",
+        str(notes),
+        "--no-note",
+        stdin=_delta_json(_genesis_delta()),
+    )
+
+    assert status == 0
+    assert payload["note_path"] is None
+    assert not notes.exists()
+    assert payload["durability"] == "canonical-local"
+    assert "durability: canonical-local" in cast(str, payload["markdown"])
+
+
+@pytest.mark.usefixtures("store")
+def test_commit_outside_a_repository_writes_no_mirror(tmp_path: Path) -> None:
+    status, payload = _run("commit", stdin=_delta_json(_genesis_delta()))
+
+    assert status == 0
+    assert payload["note_path"] is None
+    assert payload["durability"] == "canonical-local"
+    assert not (tmp_path / ".cheese").exists()
+
+
+@pytest.mark.usefixtures("store")
+def test_commit_defaults_the_mirror_to_the_enclosing_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    _ = subprocess.run(["git", "init", "--quiet"], cwd=checkout, check=True)
+    monkeypatch.chdir(checkout)
+
+    status, payload = _run("commit", stdin=_delta_json(_genesis_delta()))
+
+    assert status == 0
+    assert payload["durability"] == "repo-snapshot"
+    note_path = Path(cast(str, payload["note_path"]))
+    assert note_path.parts[-3:] == (".cheese", "notes", f"{WORK_ID}.md")
+    mirror = checkout / ".cheese" / "notes" / f"{WORK_ID}.md"
+    assert mirror.read_text(encoding="utf-8") == payload["markdown"]
+
+
+@pytest.mark.usefixtures("store")
+def test_commit_refuses_when_the_note_dir_cannot_be_created(tmp_path: Path) -> None:
+    blocker = tmp_path / "blocker"
+    _ = blocker.write_text("not a directory\n", encoding="utf-8")
+
+    status, payload = _run(
+        "commit",
+        "--note-dir",
+        str(blocker / "notes"),
+        stdin=_delta_json(_genesis_delta()),
+    )
+
+    assert status == 1
+    assert payload["ok"] is False
+    assert _get(payload, "error", "code") == "note-unwritable"
+    # The refusal lands before the promotion, so nothing was committed either.
+    show_status, show_payload = _run("show", "--work-id", WORK_ID)
+    assert show_status == 1
+    assert _get(show_payload, "error", "code") == "record-missing"
 
 
 @pytest.mark.usefixtures("store")
@@ -415,6 +543,6 @@ def test_every_reply_is_one_line_of_sorted_json() -> None:
     assert json.dumps(payload, sort_keys=True) + "\n" == text
 
 
-def test_the_command_surface_is_exactly_four_commands() -> None:
-    assert wheypoint.COMMANDS == ("commit", "resolve", "show", "lint")
+def test_the_command_surface_is_exactly_five_commands() -> None:
+    assert wheypoint.COMMANDS == ("checkpoint", "commit", "resolve", "show", "lint")
     assert "create" not in wheypoint.COMMANDS

@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from easy_cheese_schemas import NextMove
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "skills"
@@ -19,10 +20,12 @@ SKILLS_DIR = REPO_ROOT / "skills"
 WHEYPOINT = SKILLS_DIR / "wheypoint" / "SKILL.md"
 CHEESE = SKILLS_DIR / "cheese" / "SKILL.md"
 CONTINUE_RESUME = SKILLS_DIR / "cheese" / "references" / "continue-resume.md"
+PROVENANCE = SKILLS_DIR / "wheypoint" / "references" / "provenance-fields.md"
 
-# The spec fixes the command set at exactly four. Genesis is a delta whose
-# expected_revision_id is the sentinel, so a `create` command must never appear.
-COMMANDS = ("commit", "resolve", "show", "lint")
+# `checkpoint` is the authoring path and `commit` the kernel it delegates to;
+# the other three are read-only. Genesis is a parent the runtime binds, so a
+# `create` command must never appear.
+COMMANDS = ("checkpoint", "commit", "resolve", "show", "lint")
 
 
 def _read(path: Path) -> str:
@@ -92,10 +95,11 @@ def test_legacy_runtime_gates_cannot_be_waived_by_manual_resume() -> None:
     assert "never this halt gate or any other runtime integrity gate" in body
     assert "explicit permission to dispatch the next phase" not in body
 
-def test_the_documented_command_set_is_exactly_the_four_the_spec_fixes() -> None:
+def test_the_documented_command_set_is_exactly_the_five_the_spec_fixes() -> None:
     """Documented across the continuity docs as a whole: /wheypoint owns the
-    write path (commit, show), the resume flow owns the read path (resolve,
-    lint). What matters is that all four are reachable and no fifth exists."""
+    write path (checkpoint, commit, show), the resume flow owns the read path
+    (resolve, lint). What matters is that all five are reachable and no sixth
+    exists."""
     corpus = "\n".join(_read(path) for path in (WHEYPOINT, CHEESE, CONTINUE_RESUME))
     for command in COMMANDS:
         marker = f"wheypoint.pyz {command}"
@@ -162,20 +166,27 @@ def test_split_and_join_are_marked_outside_the_continuity_contract() -> None:
     """The spec's non-goals exclude split/join from this kernel. They survive as
     pre-existing note-level verbs, so the docs must say they commit no delta
     rather than leave a reader assuming the runtime handles them."""
-    body = _read(WHEYPOINT)
+    body = _read(PROVENANCE)
     assert "--join" in body and "--split" in body, "the legacy verbs still exist elsewhere"
     assert "outside this continuity contract" in body
     assert "commit no delta" in body
 
-def test_pipeline_omits_cut_and_resume_preserves_flags() -> None:
+def test_the_move_vocabulary_matches_the_schema_and_resume_preserves_flags() -> None:
+    """`NextMove` declares `cut`, so an authoritative record can carry it.
+
+    A record the schema accepts and the prose omits is a handoff no reader is
+    told how to take. The behaviour side of this contract lives in
+    `tests/wheypoint/python/test_shared_handoff_seam.py`, which round-trips
+    every declared move through the shared parser.
+    """
     wheypoint = _read(WHEYPOINT)
     cheese = _read(CHEESE)
     resume = _read(CONTINUE_RESUME)
     corpus = "\n".join((wheypoint, cheese, resume))
 
-    assert "next: mold | cook" in wheypoint
+    for move in list(NextMove):
+        assert move.value in wheypoint, f"undocumented next move: {move.value}"
     assert "culture -> mold -> cook -> press -> age -> cure -> plate" in corpus
-    assert "next: cut" not in corpus
     assert "GateReceipt" not in corpus
     for flag in ("mode:", "--auto", "--hard", "--open-pr", "--safe"):
         assert flag in corpus

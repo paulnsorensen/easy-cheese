@@ -1,6 +1,6 @@
 # Capability routing
 
-Decide once which research capabilities will run, then commit. Every capability marked `YES` must execute through its selected provider, an explicit fallback, or a surfaced unavailable/empty result.
+Select the required research capabilities once. Then use that selection. Run each capability marked `YES` through its selected provider. Otherwise, use an explicit fallback or report an unavailable or empty result.
 
 ## Decision tree
 
@@ -34,44 +34,64 @@ Is it multi-part, comparative, a "best" question, or a cited report?
 
 | Capability | Best for | Provider selection |
 | --- | --- | --- |
-| Library/API documentation | APIs, configuration, migration guidance, supported versions | Prefer the native documentation helper. Otherwise use one authoritative equivalent such as Context7, official docs/`llms.txt`, or package docs. |
-| Current-web discovery/extraction | Current facts, announcements, recent maintenance signals, locating and reading public pages | Prefer the native web backend. Otherwise use one search/extract pair such as Tavily or Exa. |
-| Repository knowledge/wiki | Prior decisions, rationale, ADRs, conventions recorded as prose | Prefer the repository's configured wiki backend; examples include Hallouminate, llm-wiki, or bounded Markdown ADR/wiki reads. |
-| Local code intelligence | Existing usage, implementations, local constraints | Follow the [shared source-code routing contract](../../cheese/references/code-intelligence-routing.md). |
-| Git hosting/examples | Issues, releases, commits, pull requests, and OSS usage patterns | Use `gh`, a host integration, or host-scoped web discovery. Treat examples as supporting evidence unless precedent is the question. |
+| Library/API documentation | APIs, configuration, migration guidance, supported versions | Prefer the native documentation helper. Otherwise, use Context7, official documentation, `llms.txt`, or package documentation. |
+| Current-web discovery/extraction | Current facts, announcements, maintenance signals, public pages | Prefer the native web backend. Otherwise, use one search and extraction pair, such as Tavily or Exa. |
+| Repository knowledge/wiki | Prior decisions, rationale, ADRs, recorded conventions | Prefer the configured wiki backend. Examples include Hallouminate, llm-wiki, and limited Markdown ADR or wiki reads. |
+| Local code intelligence | Existing use, implementations, local constraints | Follow the [shared source code routing contract](../../cheese/references/code-intelligence-routing.md). |
+| Git hosting/examples | Issues, releases, commits, pull requests, and OSS use patterns | Use `gh`, a host integration, or host-specific web discovery. Treat examples as support unless the question asks about precedent. |
 
-Prefer native easy-cheese helpers/backends when present. Otherwise select one equivalent provider per capability. Use multiple providers for one capability only when independent verification or coverage requires it, not because a named service appears in this document.
+Prefer native easy-cheese helpers and backends when they are available. Otherwise, select one equivalent provider for each capability. Use multiple providers only when independent verification or coverage requires them. Do not select a provider only because this file names it.
+
+## Provider tool sets
+
+A provider selection includes its complete tool set. Evidence collection has discovery and retrieval operations. Discovery finds candidates. Retrieval reads a page before you cite it. Use both operations from the same provider when possible. A search snippet is discovery, not inspection. `ground-check` reports citations that do not have retrieval evidence.
+
+| Provider (example) | Discovery | Retrieval (what you cite from) | Coverage / extras |
+| --- | --- | --- | --- |
+| Context7 | `resolve-library-id` | `query-docs` (version-scoped) | Resolve only when the library id is ambiguous |
+| Tavily | `tavily_search` (topic, day/date filters) | `tavily_extract` | Crawl/map for broad section coverage; research for a public-web report |
+| Exa | `search` | `contents` | `find_similar` widens a thin result set |
+| Native web | web search | web fetch/open | — |
+| Hallouminate | `ground` | `read_markdown` (cite path + lines) | `backlinks`, `list_tree` for neighbouring decisions |
+| Git hosting (`gh`) | `gh search` (code/issues/prs) | `gh api`, `gh <noun> view` | Release/tag metadata for freshness claims |
+| Local code intelligence | shared [routing contract](../../cheese/references/code-intelligence-routing.md) search | bounded read at the cited `file:line` | Dependency inspection for callers |
+
+Rules:
+
+- **Do not use a generic wrapper without a clear need.** Use the selected provider retrieval tool when it is available. Otherwise, record the substitution as `unavailable.md` specifies.
+- **Record the provider and tool for every call.** Use the capture manifest in `context-isolation.md` § Capture manifest. A provider name does not prove that its retrieval tool read a page.
+- **Treat discovery-only execution as committed-but-skipped.** Apply this status to claims that require page content.
 
 ## Provider-selected methods
 
 ### Library/API documentation
 
-Ask a focused, version-aware question. If a documentation index is available, resolve the library only when needed, then query it. If it is absent or incomplete, read official vendor documentation, `llms.txt`/`llms-full.txt`, package docs, or the repository README.
+Ask one focused question that includes the version. Resolve the library only when the documentation index requires it. Then query the index. If the index is absent or incomplete, read an authoritative source. Sources include vendor documentation, `llms.txt`, package documentation, and the repository README.
 
-A documentation provider is unsuitable when the question concerns private application logic, repository-specific architecture, or a just-released behavior its indexed material does not cover. Route those parts to local code, repository knowledge, release notes, or current web instead.
+Do not use a documentation provider for private application logic or repository architecture. It can also omit a new behavior. Route these parts to local code, repository knowledge, release notes, or the current web.
 
 ### Current-web discovery and extraction
 
 Use a durable two-step pattern:
 
 1. **Discover** authoritative candidate URLs with the selected search provider.
-2. **Extract or open** only the strongest candidates with the same provider or a compatible fetcher, focused on the claim being checked.
+2. **Extract or open** only the strongest candidates. Use the same provider or a compatible fetcher. Focus on the claim under review.
 
-Examples: Tavily search then extract, Exa search then contents, or native web search then open. For a large site, map/search its structure before extracting a few relevant pages; crawl only when broad section coverage is required. A deep-research operation may serve a public-web comparative/report question, but it does not replace repository knowledge or local code evidence.
+Examples include Tavily search with extract, Exa search with contents, and native web search with open. For a large site, search or map its structure first. Then extract only the relevant pages. Crawl the site only when the question requires broad coverage. Deep research can support a comparative public web report. It does not replace repository knowledge or local code evidence.
 
-For freshness-sensitive facts, apply the provider's date/window controls when available and record an absolute as-of date. For literal errors or API names, use exact-phrase search when supported. Filter for authority and relevance before extraction.
+Use provider date controls for freshness-sensitive facts when they are available. Record an absolute date. Use exact phrase search for literal errors or API names when possible. Filter candidates for authority and relevance before extraction.
 
 ### Repository knowledge/wiki
 
-Query the repository's configured knowledge source before treating absence from code as absence of a decision. Hallouminate `ground`, llm-wiki queries, and targeted reads of Markdown ADR/wiki files are equivalent provider shapes. Cite the returned wiki/ADR path and relevant lines when possible.
+Query the configured repository knowledge source before you infer that a decision is absent. Suitable sources include Hallouminate, llm-wiki, and limited Markdown ADR or wiki reads. Cite the wiki or ADR path and relevant lines when possible.
 
 ### Local code intelligence
 
-Use semantic/structural search, bounded reads, and dependency inspection through the shared routing contract. Local code is authoritative for current repository behavior; repository knowledge is authoritative for recorded rationale. Route both when the question asks why the current code has its shape.
+Use semantic search, structural search, limited reads, and dependency inspection through the shared contract. Local code defines current repository behavior. Repository knowledge defines recorded rationale. Route both capabilities when the question asks why the current code has its structure.
 
 ### Git hosting/examples
 
-Use host-native search for repository metadata and code examples when available. Fall back to a host integration or web search scoped to the host. Distinguish maintained upstream state from third-party examples, and do not treat example frequency as correctness.
+Use host-native search for repository metadata and code examples when it is available. Otherwise, use a host integration or host-specific web search. Separate maintained upstream state from third-party examples. Do not treat example frequency as proof of correctness.
 
 ## Source priority
 
@@ -83,9 +103,9 @@ Authority depends on the claim type:
 4. **Technical claims:** original papers, standards, and RFCs win.
 5. **Version or freshness claims:** release notes, changelogs, and host metadata win.
 6. **Real-world precedent:** Git-hosted examples support the claim but do not establish correctness.
-7. **Coverage gaps:** blogs, tutorials, and AI-generated content are last resort and must be disclosed.
+7. **Coverage gaps:** use blogs, tutorials, and AI-generated content only as a last resort. Disclose their use.
 
-Run independent routed capabilities in parallel when the harness supports it. Claim-scoped authority governs which evidence wins, not a mandatory provider call order.
+Run independent capabilities in parallel when the harness supports this work. Claim authority determines which evidence wins. Provider call order does not determine authority.
 
 ## Routing block
 
@@ -101,12 +121,14 @@ ROUTING DECISION:
 SOURCE PRIORITY: checkout code for local behavior; vendor docs/releases for external API/freshness
 ```
 
-Use `YES` or `NO` for every capability even when the answer is obvious. The provider detail may name any selected equivalent; it does not require the examples above.
+Use `YES` or `NO` for each capability. Do this even when the answer is clear. The provider field can name any equivalent provider. It does not require a provider from the examples.
 
 ## Verify then cite
 
-Confirm that each cited URL covers the claim with the selected provider's extraction/open/fetch operation. Tavily extract, Exa contents, and native web open are examples. If the selected search provider cannot read the page, use one compatible fetcher and record the substitution. The exemptions in `synthesis.md` waive only link-resolution checks for user-supplied URLs and inline `file:line` references; they never waive content inspection.
+Use the selected provider retrieval operation to inspect each cited URL. Confirm that the source supports the claim. Tavily extract, Exa contents, and native web open are examples. If the provider cannot read the page, select one compatible fetcher. Record the substitution. The `synthesis.md` exemptions omit only link checks for user URLs and inline `file:line` references. They do not omit content inspection.
+
+Record each retrieval in the capture manifest when it occurs. `ground-check` reads this manifest. It rejects each remote citation without a successful retrieval entry and tool name. This check compares citations with fetched sources, not memory.
 
 ## Hard rule
 
-After gather, reconcile the routing block against execution. For each capability marked `YES`, record evidence, an empty result, or an unavailable result with the chosen fallback. A committed capability with no execution is **committed-but-skipped**: flag the gap and apply the confidence rule from `synthesis.md`. A missing named provider is not a gap when an evidence-equivalent provider completed the capability.
+After collection, compare the routing block with the actual calls. Record evidence, an empty result, or an unavailable result for each `YES` capability. Include the selected fallback. Mark a capability without execution as **committed-but-skipped**. Report this gap. Apply the confidence rule from `synthesis.md`. Do not report a gap when an equivalent provider completes the capability.

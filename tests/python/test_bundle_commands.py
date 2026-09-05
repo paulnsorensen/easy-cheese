@@ -7,19 +7,48 @@ import importlib
 import inspect
 import sys
 from types import ModuleType
-from typing import cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
 
 from easy_cheese.shared import bundle_commands as bc
 
 
-def command(name: str = "go", target: str = "test_bundle_target:handler") -> bc.Command:
-    return bc.Command(name, target)
+_CommandHandler = Callable[[list[str]], int]
+_CommandFactory = Callable[[str, str, str], bc.Command]
+
+
+class _BundleCommandsSurface(Protocol):
+    def bundle_command(
+        self, name: str
+    ) -> Callable[[_CommandHandler], _CommandHandler]: ...
+
+    def derive_command(self, handler: _CommandHandler, summary: str) -> bc.Command: ...
+
+    def validate_command_surface(
+        self, module: ModuleType, commands: tuple[bc.Command, ...]
+    ) -> None: ...
+
+
+if TYPE_CHECKING:
+    _bundle_commands: _BundleCommandsSurface
+else:
+    _bundle_commands = bc
+
+
+def command(
+    name: str = "go",
+    target: str = "test_bundle_target:handler",
+    summary: str = "Go somewhere",
+) -> bc.Command:
+    return cast(_CommandFactory, bc.Command)(name, target, summary)
 
 
 @pytest.fixture
-def target_module(monkeypatch: pytest.MonkeyPatch) -> tuple[list[list[str]], ModuleType]:
+def target_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[list[str]], ModuleType]:
     calls: list[list[str]] = []
     module = ModuleType("test_bundle_target")
 
@@ -44,16 +73,42 @@ def test_invalid_command_target_rejected(target: str) -> None:
         _ = command(target=target)
 
 
+@pytest.mark.parametrize(
+    "summary",
+    [
+        "",
+        "   ",
+        " leading space",
+        "trailing space ",
+        "two\nlines",
+        "two\rlines",
+        "two\r\nlines",
+        "two\vlines",
+        "two\flines",
+        "table | breaker",
+        "|",
+    ],
+)
+def test_invalid_command_summary_rejected(summary: str) -> None:
+    with pytest.raises(ValueError, match="invalid command summary"):
+        _ = command(summary=summary)
+
+
 def test_duplicate_command_rejected() -> None:
     with pytest.raises(ValueError, match="duplicate bundle command"):
         _ = bc.command_map((command(), command()))
 
 
-@pytest.mark.parametrize("commands", [
-    (command("foo-bar"), command("foo_bar")),
-    (command("foo_bar"), command("foo-bar")),
-])
-def test_normalized_alias_collision_rejected(commands: tuple[bc.Command, bc.Command]) -> None:
+@pytest.mark.parametrize(
+    "commands",
+    [
+        (command("foo-bar"), command("foo_bar")),
+        (command("foo_bar"), command("foo-bar")),
+    ],
+)
+def test_normalized_alias_collision_rejected(
+    commands: tuple[bc.Command, bc.Command],
+) -> None:
     with pytest.raises(ValueError, match="alias collision"):
         _ = bc.command_map(commands)
 
@@ -77,7 +132,12 @@ def test_dispatch_accepts_legacy_underscore_alias(
     target_module: tuple[list[list[str]], ModuleType],
 ) -> None:
     calls, _ = target_module
-    assert bc.dispatch((command("write-handoff-artifact"),), ["write_handoff_artifact", "x"]) == 7
+    assert (
+        bc.dispatch(
+            (command("write-handoff-artifact"),), ["write_handoff_artifact", "x"]
+        )
+        == 7
+    )
     assert calls == [["x"]]
 
 
@@ -139,6 +199,65 @@ def test_every_skill_declares_a_static_manifest() -> None:
         )
 
 
+def _fake_command_module(*, decorated: tuple[str, ...]) -> ModuleType:
+    module = ModuleType("test_bundle_surface_module")
+
+    def make_handler(name: str) -> _CommandHandler:
+        def handler(argv: list[str]) -> int:
+            del argv
+            return 0
+
+        handler.__module__ = module.__name__
+        handler.__qualname__ = f"_{name.replace('-', '_')}"
+        return _bundle_commands.bundle_command(name)(handler)
+
+    for name in decorated:
+        setattr(module, f"_{name.replace('-', '_')}", make_handler(name))
+    return module
+
+
+def test_validate_command_surface_rejects_unreferenced_declaration() -> None:
+    module = _fake_command_module(decorated=("foo", "bar"))
+    bar = cast(_CommandHandler, module._bar)
+    with pytest.raises(ValueError, match="declares unreferenced bundle command.*foo"):
+        _bundle_commands.validate_command_surface(
+            module, (_bundle_commands.derive_command(bar, "Bar command"),)
+        )
+
+
+def test_validate_command_surface_rejects_undeclared_reference() -> None:
+    module = _fake_command_module(decorated=("foo",))
+    foo = cast(_CommandHandler, module._foo)
+    stray = command("stray")
+    with pytest.raises(ValueError, match="references undeclared bundle command.*stray"):
+        _bundle_commands.validate_command_surface(
+            module, (_bundle_commands.derive_command(foo, "Foo command"), stray)
+        )
+
+
+_SKILLS_ON_THE_DECORATOR_SURFACE = (
+    "age",
+    "affinage",
+    "briesearch",
+    "cure",
+    "melt",
+    "mold",
+    "pasteurize",
+    "plate",
+    "hard-cheese",
+    "wheypoint",
+    "cook",
+)
+
+
+@pytest.mark.parametrize("skill", _SKILLS_ON_THE_DECORATOR_SURFACE)
+def test_validate_command_surface_passes_for_every_skill(skill: str) -> None:
+    package = skill.replace("-", "_")
+    module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
+    commands = cast("tuple[bc.Command, ...]", module.COMMANDS)
+    _bundle_commands.validate_command_surface(module, commands)
+
+
 def test_skill_manifests_are_literal_tuples() -> None:
     from scripts import build_pyz
 
@@ -159,7 +278,72 @@ def test_skill_manifests_are_literal_tuples() -> None:
                 else isinstance(node.target, ast.Name) and node.target.id == "COMMANDS"
             )
         ]
-        assert len(bindings) == 1, f"{module.__name__}.COMMANDS must have one top-level binding"
+        assert len(bindings) == 1, (
+            f"{module.__name__}.COMMANDS must have one top-level binding"
+        )
         assert isinstance(bindings[0].value, ast.Tuple), (
             f"{module.__name__}.COMMANDS must be a literal tuple"
         )
+
+
+def test_render_skill_commands_projects_the_manifest_verbatim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts import render_generated_regions as rgr
+
+    module = ModuleType("easy_cheese.skills.fixture_skill.commands")
+    module.COMMANDS = (  # pyright: ignore[reportAttributeAccessIssue]
+        command("zeta", summary="Run the last step"),
+        command("alpha", summary="Run the first step"),
+    )
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+
+    assert rgr.render_skill_commands("fixture-skill") == (
+        "# `/fixture-skill` bundle commands\n"
+        "\n"
+        "`scripts/render_generated_regions.py` generates this file from the static"
+        " `COMMANDS` manifest in `src/easy_cheese/skills/fixture_skill/commands.py`."
+        " Do not edit this file. Run each command as `python3"
+        " skills/fixture-skill/scripts/fixture-skill.pyz <command> [args...]`. Each command"
+        " returns an integer exit status. Pass `--help` to a command for its arguments and"
+        " output format. Keep worked examples in the skill instructions.\n"
+        "\n"
+        "| Command | Purpose |\n"
+        "| --- | --- |\n"
+        "| `alpha` | Run the first step |\n"
+        "| `zeta` | Run the last step |\n"
+    )
+
+
+def test_rendering_command_docs_never_resolves_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts import build_pyz
+    from scripts import render_generated_regions as rgr
+
+    def explode(target: str) -> bc.CommandHandler:
+        raise AssertionError(f"doc rendering resolved command target {target!r}")
+
+    monkeypatch.setattr(bc, "_handler", explode)
+    for skill in build_pyz.SKILLS:
+        assert rgr.render_skill_commands(skill).startswith(
+            f"# `/{skill}` bundle commands\n"
+        )
+
+
+def test_checked_in_command_docs_match_the_manifests() -> None:
+    from scripts import build_pyz
+    from scripts import render_generated_regions as rgr
+
+    for skill in build_pyz.SKILLS:
+        path = rgr.commands_doc_path(skill)
+        assert path.read_text(encoding="utf-8") == rgr.render_skill_commands(skill), (
+            f"{path} is stale; run scripts/render_generated_regions.py"
+        )
+
+
+def test_command_doc_slugs_match_the_bundled_skills() -> None:
+    from scripts import build_pyz
+    from scripts import render_generated_regions as rgr
+
+    assert rgr.SKILL_SLUGS == build_pyz.SKILLS

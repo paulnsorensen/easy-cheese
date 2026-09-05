@@ -1,17 +1,47 @@
-# Domain-model correction (cure)
+# Domain-model correction for Cure
 
-Read this before Flow step 6 (domain-model correction).
+Read this file before Flow step 6.
 
-After the cook's fixes land, correct the project domain model (ubiquitous language) for terms **touched by the cook's diff** (bounded — diff-touched terms only, never a free rewrite).
+After Cook fixes land, correct domain terms that the Cook diff touches.
+Do not rewrite terms outside that diff.
 
-Resolve the store with `domain_model_target()` (`src/easy_cheese/shared/paths.py`, read-probe cascade wiki → docs → XDG; an existing model always wins). It returns `(backend, location, wiki_reachable)`: when `wiki_reachable` is `False` the wiki probe was never consulted, so say so in one line before correcting a file-backend model — the wiki may hold the real one.
+Resolve the store with `domain_model_target()` from `src/easy_cheese/shared/paths.py`.
+The probe order is wiki, docs, then XDG.
+An existing model always wins.
+The function returns `(backend, location, wiki_reachable)`.
+When `wiki_reachable` is false, the probe did not consult the wiki.
+Report this fact before you correct a file-based model.
+The wiki can contain the authoritative model.
 
-For a diff-touched entry whose definition or `_Code_:` referent no longer matches the code, update it and write a one-line change note per edit. Entry format:
+Read and write each backend with these steps:
 
-```
+- **One file.** Read the whole file. Update the touched entry. Read the file again.
+- **Split directory.** List the context pages. Select the page of the bounded context that owns the term.
+  Read only that page. Update the touched entry there. Read that page again.
+  Stop and report when two pages define the same term.
+- **Hallouminate corpus.** Read the entry with `read_markdown`.
+  Write the updated entry with `add_markdown` and `overwrite: true`.
+  Read the entry again with `read_markdown`.
+
+Report the backend and the exact location in the Cure report.
+
+Update a touched entry when its definition or `_Code_:` target no longer matches the code.
+Write one change note for each edit.
+Use this format:
+
+```text
 **Term** — definition.
 _Avoid_: syn1, syn2
 _Code_: file:line (or NEW ENTITY)
 ```
 
-**HARD rule — flag, don't reverse:** if a correction would REVERSE a mold-decided canonical term (replace the term mold made authoritative, or contradict its definition), do not rewrite — flag it to the user (the term, mold's decision, the conflict) and leave the entry unchanged. mold DECIDES canonical terms at curdle; cure only APPLIES BOUNDED corrections and never overrules the authoritative writer.
+`_Avoid_` is optional.
+Mold omits this line when the term has no synonym.
+Keep that omission, and never create a placeholder synonym.
+
+**Hard rule: Report a reversal, but do not apply it.**
+Do not replace or contradict a canonical term that Mold made authoritative.
+Report the term, the Mold decision, and the conflict.
+Leave the entry unchanged.
+Mold selects canonical terms during Curdle.
+Cure applies only bounded corrections.

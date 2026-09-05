@@ -1,31 +1,92 @@
-# Flow — full command and rationale detail
+# Flow command and reason details
 
-Read this when executing `## Flow` steps 2, 3, 6, or 9 — the exact CLI invocations, exit-code hints, and bucketing rationale the body's numbered list summarizes.
+Use this file for `## Flow` steps 2, 3, 6, and 9.
+It gives exact commands, exit codes, and grading rules.
 
 ## Step 2 — Fetch PR status
 
-Call `python3 skills/affinage/scripts/affinage.pyz pr-status <pr>`. The script returns JSON with build status, per-check failure summaries (last ~10 lines of failed logs + parsed failed-test names), and merge state.
+Run `python3 skills/affinage/scripts/affinage.pyz pr-status <pr>`.
+The command returns JSON with build status, failed check summaries, failed test names, and merge state.
+Each failed check summary includes approximately 10 final log lines.
 
-- **Exit 3** (`logs-expired`) — the build is failing but every failing check's log was unfetchable (typically expired GitHub Actions logs past the retention window), so there is nothing to ground a CI finding on. Write `status: halt: pr-status-logs-expired` and stop with the hint: *"CI is failing but the logs have expired — rerun the failed jobs (`gh run rerun <run-id> --failed`, where `<run-id>` is the `/actions/runs/<id>/` segment of the failing check's `url`, or read it from `gh pr checks`) and re-invoke `/affinage`."*
-- **Any other non-zero** (1 PR/gh API error, 2 missing gh binary) — write `status: halt: pr-status-unavailable` and stop.
+- **Exit 3** means `logs-expired`.
+  CI fails, but no failed check has usable logs.
+  Write `status: halt: pr-status-logs-expired` and stop.
+  Tell the user to rerun failed jobs with `gh run rerun <run-id> --failed`.
+  Read `<run-id>` from the `/actions/runs/<id>/` URL segment or `gh pr checks`.
+  Then tell the user to run `/affinage` again.
+- **Any other nonzero exit** means the PR or GitHub status is unavailable.
+  Exit 1 identifies a PR or API error.
+  Exit 2 identifies a missing `gh` binary.
+  Write `status: halt: pr-status-unavailable` and stop.
 
-## Step 3 — Fresh-window review
+## Step 3 — Fresh review
 
-Compute the PR diff's `review_surface` score via the `review-surface` CLI (source: `src/easy_cheese/shared/fanout/review_surface_cli.py`, wrapping `src/easy_cheese/shared/fanout/review_surface.py::score()`) over the diff's git numstat rows. Run it through the `.pyz` bundle: `python3 skills/affinage/scripts/affinage.pyz review-surface --repo . <base>...HEAD` — the range must be the PR's full diff against its base branch (after `gh pr checkout <pr>`, `origin/<base>...HEAD`), never the CLI's bare `HEAD` default, which scores only the uncommitted delta. Grep the diff's **added lines outside `skills/**` and `.hallouminate/**`** for `age_route.OVERRIDE_FLAGS` risk flags — a missed token means no promoted lens, not a missing security lens — and call `age_route.route(score=<float>, risk_flags=[...], entry="affinage", comments=<unresolved-thread-count>, ci_class=<"failing"|"red"|"flaky"|None from pr-status>)` — the same router `/age` itself calls, but sized with affinage's comment count and CI failure class so a heavily-commented or red-CI PR gets the bigger fan-out even on a small diff. If the host only ships the bundle, `echo '{"score": <float>, "risk_flags": [...], "entry": "affinage", "comments": <n>, "ci_class": <"failing"|"red"|"flaky"|null>}' | python3 skills/affinage/scripts/affinage.pyz age-route` is the fallback for the router call (JSON on stdin, route JSON on stdout). Pass the returned `n`/`lenses`/`effort` into the `/age` dispatch (so `/age` uses affinage's sizing rather than recomputing from `entry="age"` defaults) and treat each finding as an additional input.
+Score the PR diff with the `review-surface` command.
+Run `python3 skills/affinage/scripts/affinage.pyz review-surface --repo . <base>...HEAD`.
+Use the complete PR range against its base branch.
+After checkout, use `origin/<base>...HEAD`.
+Do not use the bare `HEAD` default because it scores only uncommitted changes.
 
-## Step 6 — Grading rationale
+Search added lines outside `skills/**` and `.hallouminate/**` for `age_route.OVERRIDE_FLAGS`.
+A missed token prevents lens promotion.
+It does not remove the security lens.
 
-- **Build failures count, not just test failures.** A failing check is a finding whether the failure is a compile error, a lint/type-check failure, or a failing test — grade the `build.status: failing` checks from `affinage.pyz pr-status` and route them to `/cure` exactly like test failures. Tag CI-sourced items `[from-check:<job>]`.
-- **Fresh `/age` findings** (standalone runs) arrive already dimension-classified and severity-scored; fold them into the buckets tagged `[from-age:<dimension>]`. Dedupe against comment-sourced items echoing the same defect — keep the comment-sourced one (it carries a reviewer to reply to).
-- **Ignore reviewer-asserted urgency for severity computation.** Surface `CHANGES_REQUESTED` as metadata (`reviewer-asserted:` line) but do not let it modify computed severity.
-- Bucket into:
-  - Standard severity sections (`## Blocker / ## High / ## Medium / ## Low`) when the claim is grounded in the diff and its fix is **contained** (`fix-cost-now: contained` — roughly a few lines or a localized refactor). Every such item still maps to a dimension and carries a `[<dimension>:<severity>]` tag — a style or quality nit maps to `deslop` (e.g. `[deslop:low]`). The rule is to route these grounded, contained-fix nits to `/cure` (usually as `Low`) instead of `## Reviewer-rejected`, keeping the `[from-comment:<id>]` tag so `/cure`'s reply still reaches the reviewer; a valid cheap nit is cheaper to fix than to argue, so do not push back on it.
-  - `## Needs-investigation` when the claim is plausible but requires evidence outside the diff (e.g., downstream caller in another repo).
-  - `## Reviewer-rejected` only when the claim is **wrong or ungrounded** (the code is already correct, the reviewer misread it, or there is no real improvement) OR is valid but **a lot of follow-up work** (`fix-cost-now: moderate`/`sprawling` or `fix-cost-later: structural` — a refactor or scope expansion beyond this PR). Reject the wrong ones; defer the expensive ones.
+Call `age_route.route(score=<float>, ...)` with these values:
 
-## Step 9 — Reply drafting rules
+- `score=<float>`
+- `risk_flags=[...]`
+- `entry="affinage"`
+- `comments=<unresolved-thread-count>`
+- `ci_class=<"failing"|"red"|"flaky"|None>`
 
-Post each approved reply with `python3 skills/affinage/scripts/affinage.pyz post-reply` — never a direct `gh api` call, which would bypass the `agent on behalf of <handle>` attribution.
-- **Reviewer-rejected items** → the pre-drafted push-back text from the affinage report.
-- **Needs-investigation items** → do NOT post a bare acknowledgement. The reply must (a) name the specific evidence that would settle the claim — the regression test, throwaway prototype, or out-of-diff file to read — and (b) state that a follow-up will report the result. Before posting, **offer to run that investigation now**: a regression test via `/pasteurize`, or explore the out-of-diff evidence via `/briesearch`. If run, post a reply carrying the actual outcome; if the user declines, post the explicit `"Needs <named test/exploration> to confirm — will follow up with the result."` note — never a blind "investigating".
-- **CI-sourced findings** (`from-check:<job>` tag) and **fresh-review findings** (`from-age:<dimension>` tag) → no reply (no reviewer to notify).
+This route includes comment count and CI class.
+It can increase fan-out for a small PR with many comments or red CI.
+
+If only the bundle exists, pipe JSON to `affinage.pyz age-route`.
+The command reads JSON from standard input and writes route JSON to standard output.
+Pass the returned `n`, `lenses`, and `effort` to `/age`.
+Then treat each `/age` finding as an additional claim.
+
+## Step 6 — Grading rules
+
+- Grade every failed check, including build, compile, lint, type, and test failures.
+- Send failed checks to `/cure` like test failures.
+- Tag each CI finding with `[from-check:<job>]`.
+- Keep the existing dimension and severity for each fresh review finding.
+- Tag each fresh review finding with `[from-age:<dimension>]`.
+- Remove a duplicate fresh review finding when a reviewer reports the same defect.
+- Keep the reviewer claim because it requires a reply.
+- Record `CHANGES_REQUESTED` as `reviewer-asserted:` metadata.
+- Do not use reviewer urgency to calculate severity.
+
+Use these report sections:
+
+- Put grounded claims with contained fixes in `## Blocker`, `## High`, `## Medium`, or `## Low`.
+  Add a `[<dimension>:<severity>]` tag to each claim.
+  Map style and quality claims to `deslop`.
+  Add a `source: from-comment:<id>` line so `/cure` can reply.
+  Prefer a cheap fix to push-back.
+- Put plausible claims that need outside evidence in `## Needs-investigation`.
+- Put wrong or unsupported claims in `## Reviewer-rejected`.
+- Also put valid but large claims in `## Reviewer-rejected`.
+  Large claims have `fix-cost-now: moderate` or `sprawling`.
+  Structural later work is also large.
+  Reject a wrong claim.
+  Defer a large claim.
+
+## Step 9 — Reply rules
+
+Post approved replies with `python3 skills/affinage/scripts/affinage.pyz post-reply`.
+Do not post with `gh api` because it omits the required attribution.
+
+- Post the prepared push-back for `Reviewer-rejected` claims.
+- Do not post a general acknowledgement for `Needs-investigation` claims.
+- Name the exact evidence that can confirm each investigation claim.
+- State that a follow-up will report the result.
+- Offer to run the investigation before you post.
+- Use `/pasteurize` for a regression test.
+- Use `/briesearch` for evidence outside the diff.
+- Post the actual result when the user accepts the investigation.
+- Post the explicit follow-up note when the user declines.
+- Do not reply to `[from-check:<job>]` or `[from-age:<dimension>]` findings.

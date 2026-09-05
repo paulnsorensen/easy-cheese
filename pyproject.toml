@@ -93,3 +93,12 @@ paths = [
   ".github/scripts",
   "tests",
 ]
+# Decorator-registered entry points are invoked only through a compiled
+# dispatcher or registry (bundle commands, phase/schema contracts), never by a
+# directly-visible call vulture's scanner can see. Data-driven here so a new
+# registered entry point never needs an inline `# noqa` at its definition.
+ignore_decorators = [
+  "@bundle_command",
+  "@contract",
+  "@document_contract",
+]

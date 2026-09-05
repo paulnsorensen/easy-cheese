@@ -36,7 +36,7 @@ BINARY_TARGETS = {"svg", "png"}
 class Node:
     id: str
     label: str
-    kind: str  # "mode" | "gate" | "decomposer" | "terminal" | "handshake"
+    kind: str  # "mode" | "gate" | "planner" | "terminal" | "handshake"
 
 
 @dataclass(frozen=True)
@@ -72,13 +72,16 @@ def gate_id(checklist_label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", head.strip().lower()).strip("-")
 
 
-# The 15 coherence-checklist gates, verbatim from handshake.md's checklist (the
+# The coherence-checklist gates, verbatim from handshake.md's checklist (the
 # text before each colon is the gate's name; gate_id() slugs it). Order matches
-# the prose so a diff between the two is legible.
+# the prose so a diff between the two is legible. A test asserts the two sets
+# are equal, so no count is repeated here.
 COHERENCE_GATES: tuple[str, ...] = (
     "Problem statement: grounded, agreed",
+    "Grounding recorded: a wiki probe result — citations or an explicit hallouminate-absent note — preceded the first structured question",
     "At least 2 options weighed (Do Nothing included)",
     "Chosen option grounded in codebase evidence",
+    "Exploration delegated: evidence-heavy reads carry an explorer digest, or the parent-context fallback is recorded",
     "Interface sketches: every public seam has a pseudocode signature",
     "Cross-module calls go through public interfaces, not internals",
     "Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)",
@@ -89,7 +92,7 @@ COHERENCE_GATES: tuple[str, ...] = (
     "Quality gates specified (≥1 runnable command)",
     "Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)",
     "Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)",
-    "Fork taste test passed: fresh-context verdict covers every settled consequential decision before decomposition",
+    "Fork taste test passed: fresh-context verdict covers every settled consequential decision before typed planning",
     "Spec format valid: validate-spec --strict exits 0 on the draft",
 )
 
@@ -103,29 +106,29 @@ MODES: tuple[Node, ...] = (
 )
 
 HANDSHAKE = Node("handshake", "Two-key handshake", "handshake")
-DECOMPOSER = Node("decomposer", "Curd-block decomposer", "decomposer")
+TYPED_PLANNER = Node("typed-planner-stage", "Typed planner stage", "planner")
 CURDLE = Node("curdle", "Curdle (extract spec)", "terminal")
 
 
 def _build_model() -> GateModel:
     gates = tuple(_gate(label) for label in COHERENCE_GATES)
-    nodes = (*MODES, *gates, DECOMPOSER, HANDSHAKE, CURDLE)
+    nodes = (*MODES, *gates, TYPED_PLANNER, HANDSHAKE, CURDLE)
     edges = (
         Edge("explore", "ground"),
         Edge("ground", "shape"),
         Edge("shape", "sketch"),
         Edge("sketch", "grill"),
         Edge("diagnose", "shape"),
-        # Taste must pass before the curd-block decomposer; every other gate
+        # Taste must pass before the typed planner stage; every other gate
         # feeds the handshake directly.
         *(
             Edge(
                 gate.id,
-                DECOMPOSER.id if gate.id == "fork-taste-test-passed" else HANDSHAKE.id,
+                TYPED_PLANNER.id if gate.id == "fork-taste-test-passed" else HANDSHAKE.id,
             )
             for gate in gates
         ),
-        Edge(DECOMPOSER.id, HANDSHAKE.id),
+        Edge(TYPED_PLANNER.id, HANDSHAKE.id),
         Edge("grill", "handshake"),
         Edge("handshake", "curdle", "both keys"),
     )

@@ -7,6 +7,7 @@ no checked-in symbol list; exceptions are explicit owner-qualified identities.
 from __future__ import annotations
 
 import ast
+import contextlib
 import importlib
 import io
 import sys
@@ -85,10 +86,8 @@ def _findings(items: Sequence[_UnusedItem]) -> tuple[_Finding, ...]:
     for i in items:
         path = Path(i.filename)
         if path.is_absolute():
-            try:
+            with contextlib.suppress(ValueError):
                 path = path.relative_to(REPO_ROOT)
-            except ValueError:
-                pass
         findings.append(_Finding(path, i.first_lineno, i.name, i.typ, i.get_report()))
     return tuple(findings)
 
@@ -266,12 +265,10 @@ def _has_definition_noqa(
             continue
         depth = 0
         for index, token in enumerate(tokens[start:], start):
-            if token.type == tokenize.COMMENT and token.string == "# noqa: V103":
-                return True
             if token.type == tokenize.OP:
-                if token.string in "([{":
+                if token.string in {"(", "[", "{"}:
                     depth += 1
-                elif token.string in ")]}":
+                elif token.string in {")", "]", "}"}:
                     depth = max(0, depth - 1)
                 elif token.string == ":" and depth == 0:
                     next_token = tokens[index + 1] if index + 1 < len(tokens) else None

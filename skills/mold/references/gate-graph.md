@@ -1,11 +1,11 @@
 # The gate graph
 
-Mold's gate state machine has one canonical model: `src/easy_cheese/skills/mold/gate_graph.py`'s
-`GATE_MODEL` (bundled into `mold.pyz` as the `gate-graph` subcommand). Both render
-targets derive from that one model, so they cannot drift (ADR-001). The model
-doubles as the gate-prose-sync source: a test asserts the handshake
-coherence-checklist items equal the model's gate nodes, so a gate cannot be
-silently dropped from prose.
+`GATE_MODEL` in `src/easy_cheese/skills/mold/gate_graph.py` holds the one
+canonical model of Mold's gate state machine. `mold.pyz` bundles it as the
+`gate-graph` subcommand. Both render targets derive from that one model, so
+they cannot drift. See ADR-001. The model is also the gate-prose-sync source.
+One test asserts that the handshake coherence-checklist items equal the model's
+gate nodes. No gate can therefore disappear from the prose without a failure.
 
 ## Subcommand
 
@@ -20,8 +20,8 @@ python3 skills/mold/scripts/mold.pyz gate-graph \
 - `--render svg|png`: shells out to Graphviz `dot` when it is on PATH; pass
   `--out <path>` for binary targets. When `dot` is absent it **degrades to
   mermaid** and prints a note to stderr — run-anywhere by construction.
-- `--state`: optional mold `state.json`, validated for shape; the gate model
-  itself is static, so state does not change the graph today.
+- `--state`: an optional Mold `state.json`. The command validates its shape.
+  The gate model stays static, so the state does not change the graph today.
 
 ## When to use it
 
@@ -62,17 +62,15 @@ checklist. It makes the most consequential lean — narrowing scope via `Non-goa
 — a first-class, testable gate rather than a prose-only check (ADR-002). The
 audit procedure lives in `handshake.md` § Non-goals audit.
 
-## Fork taste decomposition gate
+## Fork taste planner gate
+`fork_taste_test_passed` is the only edge into the typed planner stage. Mold
+hashes the exact draft before it accepts a verdict. The strict
+`ForkTasteVerdict` must cover each settled consequential decision exactly once.
 
-`fork_taste_test_passed` is the only edge into the curd-block decomposer. Mold
-must hash the exact draft, then accept a strict `ForkTasteVerdict` whose
-coverage names every settled consequential decision exactly once. The verdict
-has no stale digest, missing reflection, contradiction, orphan, unsupported
-assumption, or acceptance gap; a semantic `pass` carrying blockers is also a
-failure. A failure returns only its named fork ids for reopening. The initial
-verdict and two corrective rounds are the complete budget; the third failure
-halts before decomposition and before the two-key handshake.
+The verdict fails for a stale digest, missing reflection, contradiction, orphan, unsupported assumption, or acceptance gap. A semantic `pass` with blockers also fails.
 
-The corresponding automatic handoff is `/cook --auto <durable spec
-pointer>`. It passes the durable pointer and the approved applicability,
-contract, and taste metadata unchanged.
+The required reflection set depends on the disposition. A `red-required` draft requires Approach, Interface sketches, Acceptance, and Test Contracts. A `not-applicable` draft requires the first three reflections. The applicability gate prohibits Test Contracts in a `not-applicable` draft.
+
+A third failure stops typed planning and the two-key handshake.
+
+The automatic handoff is `/cook --auto <pointer path>`. It passes the published pointer and the approved metadata without changes. This metadata includes applicability, contract, and taste data.

@@ -1,0 +1,4 @@
+{
+  // RALPH.md is a milknado worker artifact written into node worktrees. It is not project markdown.
+  "ignores": ["RALPH.md"]
+}

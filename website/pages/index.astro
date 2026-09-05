@@ -6,7 +6,7 @@ import '@cheeselord/design/styles/flavors/easy-cheese.css';
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const title = '🧀 easy-cheese';
 const description =
-  "Harness-agnostic Agent Skills — the cheese-making pipeline for code review, implementation, refactoring, and PR rescue.";
+  "Harness-agnostic Agent Skills for code review, implementation, refactoring, and pull request repair.";
 const canonicalUrl = new URL(`${base}/`, Astro.site).toString();
 ---
 
@@ -41,10 +41,10 @@ const canonicalUrl = new URL(`${base}/`, Astro.site).toString();
           <p class="eyebrow">agent skills · harness-agnostic</p>
           <h1>Don't know what to do? Just <em>cheese</em> it.</h1>
           <p class="lede">
-            A toolkit of portable Agent Skills built around <code>SKILL.md</code>, ready for any
-            compatible harness to load. One command reads whatever you're holding — an idea, a spec,
-            a stack trace, a PR — announces its routing, and dispatches the right workflow. No agent
-            definitions, no harness-specific compiled bundles, no repo-wide MCP requirement.
+            Easy-cheese provides portable Agent Skills through <code>SKILL.md</code>. Any compatible
+            harness can load them. One command reads an idea, specification, stack trace, or pull
+            request. It announces the selected route and starts the correct workflow. The package
+            needs no agent definitions, harness-specific compiled bundles, or repository-wide MCP server.
           </p>
           <p class="ctas">
             <a class="btn btn-fill" href={`${base}/install/`}>get the skills</a>
@@ -74,15 +74,18 @@ dispatching /pasteurize --auto …
         <div class="wrap band-wrap">
           <h2>~/easy-cheese · the make</h2>
           <div class="steps">
-            <div><strong>/mold</strong><p>shape a fuzzy idea into a grounded spec through dialogue</p></div>
-            <div><strong>/cook</strong><p>implement it — one focused coder, or a fan of fresh-context agents</p></div>
-            <div><strong>/press</strong><p>harden the change with coverage, assertion, and boundary checks</p></div>
-            <div><strong>/age</strong><p>review the diff across ten staff-engineer dimensions</p></div>
-            <div><strong>/cure</strong><p>fix the findings that matter, validate, ready the branch</p></div>
-            <div><strong>/plate</strong><p>final gate — write, commit, and publish the PR</p></div>
+            <div><strong>/mold</strong><p>Turn a general idea into a grounded specification through dialogue.</p></div>
+            <div><strong>/cook</strong><p>Implement the specification with one coder or several independent agents.</p></div>
+            <div><strong>/press</strong><p>Check coverage, assertions, and boundaries.</p></div>
+            <div><strong>/age</strong><p>Review the changes across ten engineering areas.</p></div>
+            <div><strong>/cure</strong><p>Fix important findings. Validate the branch.</p></div>
+            <div><strong>/plate</strong><p>Run the final gate. Commit and publish the pull request.</p></div>
           </div>
           <p class="more">
-            <code>/cheese</code> routes you in; <code>/pasteurize</code> debugs, <code>/briesearch</code> researches, <code>/melt</code> untangles conflicts, <code>/wheypoint</code> checkpoints. <a href={`${base}/skills/`}>Sixteen skills, one vocabulary →</a>
+            <code>/cheese</code> selects a route. <code>/pasteurize</code> diagnoses bugs.
+            <code>/briesearch</code> researches topics. <code>/melt</code> resolves conflicts.
+            <code>/wheypoint</code> records checkpoints.
+            <a href={`${base}/skills/`}>Explore sixteen skills that use one vocabulary →</a>
           </p>
         </div>
       </section>
@@ -163,7 +166,7 @@ dispatching /pasteurize --auto …
     color: var(--dim);
   }
 
-  /* the artifact: an elevated terminal panel on the gouda field */
+  /* This terminal panel appears above the Gouda field. */
   .term-box {
     display: grid;
     place-items: center;

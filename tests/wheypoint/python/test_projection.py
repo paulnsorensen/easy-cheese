@@ -52,19 +52,20 @@ def test_the_rendered_preamble_carries_the_whole_contract(
     built, markdown = projection.build_projection(
         record, durability=Durability.REPO_SNAPSHOT
     )
-    preamble = markdown.splitlines()[:10]
+    preamble = markdown.splitlines()[:11]
 
     assert preamble == [
         "status: ok",
         "next: cook",
         "artifact: .cheese/cook/wheypoint-record-store-projection.md",
+        "Implement the canonical record runtime.",
+        "",
         "work_id: work-0001",
         "revision_id: rev-0001",
         f"record_digest: {built.record_digest}",
         f"projection_digest: {built.projection_digest}",
         "durability: repo-snapshot",
         f"schema_version: {record.schema_version}",
-        "Implement the canonical record runtime.",
     ]
 
 
@@ -76,7 +77,9 @@ def test_an_active_gate_derives_gated_and_shows_its_dossier(
     )
     assert built.status is WheypointStatus.GATED
     assert built.gating_entry_ids == ["q-durability"]
-    assert markdown.splitlines()[0] == "status: gated"
+    assert markdown.splitlines()[0] == (
+        "status: gated: 1 open gating entry: q-durability"
+    )
     assert "- q-durability" in markdown
     assert "Durability default" in markdown
 

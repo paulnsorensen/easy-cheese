@@ -12,7 +12,7 @@ import argparse
 import json
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from io import StringIO
 from pathlib import Path
 from typing import Protocol, TextIO, TypedDict, cast
@@ -42,7 +42,16 @@ class _DebugTagSweepModule(Protocol):
     cli: _CliNamespace
 
     def _setup(self, parser: argparse.ArgumentParser) -> None: ...
-    def sweep(self, root: Path, tags: tuple[str, ...]) -> _SweepResult: ...
+    def main(self, argv: list[str] | None = None) -> int: ...
+    def session_tags(self, sessions: Iterable[str]) -> tuple[str, ...]: ...
+    def changed_files(self, root: Path) -> list[Path]: ...
+    def sweep(
+        self,
+        root: Path,
+        tags: tuple[str, ...],
+        *,
+        files: Sequence[Path] | None = None,
+    ) -> _SweepResult: ...
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -210,3 +219,189 @@ class TestSweepFunction:
             _ = (tmp_path / name).write_text("DEBUG: hit\n")
         result = debug_tag_sweep.sweep(tmp_path, ("DEBUG:",))
         assert result["files"] == ["a.py", "m.py", "z.py"]
+
+
+class TestSessionTags:
+    """Regression: the sweep must match the exact session token, not a prefix.
+
+    `.cheese/notes/r014-megamerge/review-pasteurize.md` records a root probe
+    that reported four files and 398 matches, all of them the scanner's own
+    examples, constants, and tests.
+    """
+
+    def test_session_tag_builds_the_exact_token(
+        self, debug_tag_sweep: _DebugTagSweepModule
+    ) -> None:
+        assert debug_tag_sweep.session_tags(["a4f2"]) == ("[DEBUG-a4f2]",)
+        assert debug_tag_sweep.session_tags(["a4f2", "b7c1"]) == (
+            "[DEBUG-a4f2]",
+            "[DEBUG-b7c1]",
+        )
+
+    @pytest.mark.parametrize("session", ["a4f2 b7", "a/b", "x" * 33, ""])
+    def test_unusable_session_tag_is_rejected(
+        self, debug_tag_sweep: _DebugTagSweepModule, session: str
+    ) -> None:
+        with pytest.raises(ValueError):
+            _ = debug_tag_sweep.session_tags([session])
+
+    def test_another_session_tag_is_not_a_hit(
+        self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path
+    ) -> None:
+        _ = (tmp_path / "mine.py").write_text('print("[DEBUG-a4f2] here")\n')
+        _ = (tmp_path / "theirs.py").write_text('print("[DEBUG-b7c1] here")\n')
+        result = debug_tag_sweep.sweep(
+            tmp_path, debug_tag_sweep.session_tags(["a4f2"])
+        )
+        assert result["files"] == ["mine.py"]
+        assert result["total"] == 1
+
+    def test_prefix_documentation_is_not_a_hit(
+        self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path
+    ) -> None:
+        # The skill and this scanner both name the bare `[DEBUG-` prefix.
+        _ = (tmp_path / "SKILL.md").write_text("Use a tag such as `[DEBUG-\n")
+        result = debug_tag_sweep.sweep(
+            tmp_path, debug_tag_sweep.session_tags(["a4f2"])
+        )
+        assert result == {"files": [], "total": 0}
+
+    def test_cli_rejects_session_tag_with_tags(
+        self,
+        debug_tag_sweep: _DebugTagSweepModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        status = debug_tag_sweep.main(
+            ["--root", str(tmp_path), "--session-tag", "a4f2", "--tags", "X"]
+        )
+        assert status == 2
+        assert "not both" in capsys.readouterr().err
+
+    def test_cli_session_tag_scopes_the_verdict(
+        self,
+        debug_tag_sweep: _DebugTagSweepModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _ = (tmp_path / "noise.py").write_text("# DEBUG unrelated note\n")
+        status = debug_tag_sweep.main(
+            ["--root", str(tmp_path), "--session-tag", "a4f2", "--json"]
+        )
+        assert status == 0
+        assert json.loads(capsys.readouterr().out) == {"files": [], "total": 0}
+
+
+class TestToolArtifactExclusion:
+    """Regression: run logs and tool output are not surviving instrumentation."""
+
+    @pytest.mark.parametrize("directory", [".cheese", ".milknado", ".claude"])
+    def test_tool_directory_is_skipped(
+        self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path, directory: str
+    ) -> None:
+        (tmp_path / directory).mkdir()
+        _ = (tmp_path / directory / "note.md").write_text("[DEBUG-a4f2] logged\n")
+        result = debug_tag_sweep.sweep(
+            tmp_path, debug_tag_sweep.session_tags(["a4f2"])
+        )
+        assert result == {"files": [], "total": 0}
+
+    def test_log_file_is_skipped(
+        self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path
+    ) -> None:
+        _ = (tmp_path / "run.log").write_text("[DEBUG-a4f2] logged\n")
+        result = debug_tag_sweep.sweep(
+            tmp_path, debug_tag_sweep.session_tags(["a4f2"])
+        )
+        assert result == {"files": [], "total": 0}
+
+    def test_explicit_file_list_still_skips_a_tool_path(
+        self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path
+    ) -> None:
+        (tmp_path / ".cheese").mkdir()
+        logged = tmp_path / ".cheese" / "note.md"
+        _ = logged.write_text("[DEBUG-a4f2] logged\n")
+        result = debug_tag_sweep.sweep(
+            tmp_path, debug_tag_sweep.session_tags(["a4f2"]), files=[logged]
+        )
+        assert result == {"files": [], "total": 0}
+
+
+class TestChangedOnly:
+    """Regression: the sweep scopes to the files that this worktree changed."""
+
+    @staticmethod
+    def _git(root: Path, *args: str) -> None:
+        _ = subprocess.run(
+            ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
+        )
+
+    def _repository(self, root: Path) -> None:
+        self._git(root, "init", "-q")
+        self._git(root, "config", "user.email", "sweep@example.test")
+        self._git(root, "config", "user.name", "Sweep Test")
+        _ = (root / "old.py").write_text("[DEBUG-a4f2] committed earlier\n")
+        self._git(root, "add", "-A")
+        self._git(root, "commit", "-q", "-m", "seed")
+
+    def test_changed_files_lists_edits_and_new_files(
+        self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path
+    ) -> None:
+        self._repository(tmp_path)
+        _ = (tmp_path / "new.py").write_text("x = 1\n")
+        _ = (tmp_path / "old.py").write_text("[DEBUG-a4f2] still here\n# edit\n")
+        names = {path.name for path in debug_tag_sweep.changed_files(tmp_path)}
+        assert names == {"new.py", "old.py"}
+
+    def test_changed_only_ignores_an_untouched_file(
+        self,
+        debug_tag_sweep: _DebugTagSweepModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        self._repository(tmp_path)
+        _ = (tmp_path / "new.py").write_text("x = 1\n")
+        status = debug_tag_sweep.main(
+            [
+                "--root", str(tmp_path),
+                "--session-tag", "a4f2",
+                "--changed-only",
+                "--json",
+            ]
+        )
+        assert status == 0, "the committed file is outside this session's scope"
+        assert json.loads(capsys.readouterr().out) == {"files": [], "total": 0}
+
+    def test_changed_only_reports_a_changed_file(
+        self,
+        debug_tag_sweep: _DebugTagSweepModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        self._repository(tmp_path)
+        _ = (tmp_path / "new.py").write_text("[DEBUG-a4f2] left behind\n")
+        status = debug_tag_sweep.main(
+            [
+                "--root", str(tmp_path),
+                "--session-tag", "a4f2",
+                "--changed-only",
+                "--json",
+            ]
+        )
+        assert status == 1
+        assert json.loads(capsys.readouterr().out) == {
+            "files": ["new.py"],
+            "total": 1,
+        }
+
+    def test_changed_only_without_a_repository_exits_two(
+        self,
+        debug_tag_sweep: _DebugTagSweepModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        status = debug_tag_sweep.main(
+            ["--root", str(tmp_path), "--session-tag", "a4f2", "--changed-only"]
+        )
+        assert status == 2
+        assert "Git worktree" in capsys.readouterr().err

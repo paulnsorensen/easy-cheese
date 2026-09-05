@@ -36,6 +36,111 @@ def test_check_and_ci_depend_on_dead_code() -> None:
         assert "lint-py-dead-code" in dependencies
 
 
+@needs_just
+def test_check_and_ci_depend_on_bundle_currency() -> None:
+    """check runs the index-mode bundle check; ci runs the head-mode one."""
+    result = subprocess.run(
+        ["just", "--dump", "--dump-format", "json"],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    recipes = cast(dict[str, object], json.loads(result.stdout)["recipes"])
+
+    def dependencies(name: str) -> set[str]:
+        recipe = cast(dict[str, object], recipes[name])
+        deps = cast(list[dict[str, object]], recipe["dependencies"])
+        return {cast(str, dependency["recipe"]) for dependency in deps}
+
+    assert "check-bundles" in dependencies("check")
+    assert "check-bundles-ci" in dependencies("ci")
+    assert "bundle" in dependencies("check-bundles-ci")
+
+
+@needs_just
+def test_test_environment_installs_the_build_requirements() -> None:
+    """The test interpreter carries the build tools the bundle seam needs.
+
+    Without them, tests/python/test_pyz_bundle.py skips every bundle
+    integration test in a clean environment.
+    """
+    result = subprocess.run(
+        ["just", "--dump", "--dump-format", "json"],
+        cwd=ROOT,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assignments = cast(
+        dict[str, dict[str, object]], json.loads(result.stdout)["assignments"]
+    )
+    value = cast(str, assignments["python"]["value"])
+
+    assert "--with-requirements requirements-build.txt" in value
+    assert "--with-requirements requirements/runtime.txt" in value
+
+
+def test_docs_workflow_matches_the_package_build_command() -> None:
+    """The documentation workflow builds and deploys what the package emits."""
+    workflow = cast(
+        dict[str, object],
+        yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "docs.yml").read_text(encoding="utf-8")
+        ),
+    )
+    jobs = cast(dict[str, dict[str, object]], workflow["jobs"])
+    scripts = cast(
+        dict[str, str],
+        cast(dict[str, object], json.loads((ROOT / "package.json").read_text()))[
+            "scripts"
+        ],
+    )
+    assert "docs:build" in scripts
+
+    build_steps = cast(list[dict[str, object]], jobs["build"]["steps"])
+    runs = [cast(str, step["run"]) for step in build_steps if "run" in step]
+    assert any("docs:build" in run for run in runs)
+
+    uploads = [
+        step["with"]
+        for step in build_steps
+        if "upload-pages-artifact" in cast(str, step.get("uses", ""))
+    ]
+    assert uploads == [{"path": "dist"}], build_steps
+
+    deploy = jobs["deploy"]
+    assert deploy["needs"] == "build"
+    assert "refs/heads/main" in cast(str, deploy["if"])
+
+
+def test_build_pyz_workflow_runs_the_bundle_currency_matrix() -> None:
+    """build-pyz.yml's matrix job runs check_bundles.py -- the full
+    isolated-execution + command-dispatch conformance matrix -- across every
+    pinned Python, not just the justfile's local convenience recipes.
+    """
+    jobs = cast(
+        dict[str, object],
+        yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "build-pyz.yml").read_text(encoding="utf-8")
+        )["jobs"],
+    )
+    build = cast(dict[str, object], jobs["build"])
+    matrix = cast(
+        list[dict[str, str]],
+        cast(dict[str, object], cast(dict[str, object], build["strategy"])["matrix"])[
+            "include"
+        ],
+    )
+    assert {entry["python"] for entry in matrix} >= {"3.12", "3.14"}
+    steps = cast(list[dict[str, object]], build["steps"])
+    runs = [cast(str, step["run"]) for step in steps if "run" in step]
+    assert any("scripts/check_bundles.py" in run for run in runs)
+    assert any("scripts/build_pyz.py" in run for run in runs)
+
+
 def test_ci_jobs_pin_tools() -> None:
     """Test and lint jobs pin uv and install a pinned just from PyPI.
 

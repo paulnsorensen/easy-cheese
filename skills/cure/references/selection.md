@@ -1,14 +1,27 @@
 # Selection gate
 
-The default selection is the **recommended composite** (`all-medium, cheap`) — mediums-and-above plus cheap contained-fix lows. `/cure` applies it without a gate unless `--safe` is passed, a recommended fix is sprawling/structural, or findings conflict — in which cases the gate below is rendered. (This inverts the old "default is empty" contract: gating is now the exception, not the rule, mirroring `/cheese`'s autonomous-by-default routing.)
+The default selection is the **recommended composite**: `all-medium, cheap`.
+It includes medium and higher findings plus inexpensive contained low findings.
+Apply it without a gate by default.
 
-`/age` and `/affinage` are the preferred places to compute this selection — they pass it to `/cure` as a pre-locked handoff so the user sees the work happen, not a "whether to run /cure" prompt. When `/age` / `/affinage` hands off with a pre-locked selection, `/cure` adopts it and skips re-rendering the table; otherwise `/cure` computes the recommended composite itself, gating only on the reasons above.
+Render the gate when `--safe` is present.
+Also render it for a structural fix, a wide fix, or conflicting findings.
+A rendered gate preselects the recommended composite.
+This rule replaces the old empty default.
 
-The `--auto --stake <floor>` flag pair (propagated from `/cook --auto`) substitutes a severity floor for the recommended composite and runs the headless chain. See `## Auto-mode selection` at the bottom of this file.
+`/age` and `/affinage` normally calculate the selection.
+They pass a locked selection to `/cure`.
+This handoff lets the user see the fix work without another prompt.
+If no locked selection exists, Cure calculates the recommended composite.
+
+`--auto --stake <floor>` replaces the composite with a severity floor.
+`/cook --auto` passes this pair.
+Read `## Auto-mode selection` for its rules.
 
 ## Handoff from /age
 
-When `/age` or `/affinage` resolves a non-empty selection — auto-selected by default (the recommended composite) or chosen at the gate — it dispatches `/cure <slug>` with the selection locked in by passing a structured context block alongside the invocation:
+When `/age` or `/affinage` selects findings, it dispatches `/cure <slug>`.
+It passes this block with the invocation:
 
 ```yaml
 handoff_context:
@@ -18,13 +31,20 @@ handoff_context:
   resolved_ids: [1, 3, 5]
 ```
 
-Both `selection` (the verb) and `resolved_ids` (the expanded list) are required. `/age` expands the verb before dispatch so `/cure` never has to interpret it; `/cure` re-confirms the resolved ids against the report and goes straight to apply.
+Both `selection` and `resolved_ids` are required.
+`selection` stores the verb.
+`resolved_ids` stores the expanded identifiers.
+The source skill expands the verb before dispatch.
+Cure checks the identifiers against the report and applies them.
 
-There is no CLI flag (`--select` is not a supported syntax). The selection travels in the handoff context, not as a parsed argument.
+Do not use a `--select` CLI flag.
+The selection moves through the handoff context.
 
-## Rendering the selection list
+## Render the selection list
 
-When invoked with a slug, load `.cheese/age/<slug>.md` and render a numbered table grouped by severity (`blocker` first, then `high → medium → low`):
+With a slug, read `.cheese/age/<slug>.md`.
+Render a numbered table by severity.
+Use blocker, high, medium, then low order.
 
 ```text
 | # | severity | confidence  | dim           | location                  | summary |
@@ -35,70 +55,112 @@ When invoked with a slug, load `.cheese/age/<slug>.md` and render a numbered tab
 | 4 | low      | certain     | deslop        | src/old.ts:55-60          | Unused export `_helper`. |
 ```
 
-If no slug is supplied, accept any of: a pasted findings list, a `.cheese/age/` path, a CI failure summary, or "fix the high-severity age findings" — and re-render as the same table.
+Without a slug, accept a findings list, Age path, CI summary, or scoped fix request.
+Render the same table.
 
 ## Recognized selection verbs
 
-```
+```text
 1,3,5         # specific item ids
-all-blocker   # every blocker-severity item (strict; no high included)
-all-high      # every blocker- or high-severity item (floor at high; matches --stake high auto-floor)
-all-medium    # every blocker-, high-, or medium-severity item (floor at medium; compose `all-medium, cheap` to match the --stake medium+ auto-floor, which also sweeps cheap lows)
-cheap         # every finding where fix-cost-now == contained, regardless of severity
-all           # every item (requires explicit type-out, not assumed)
-none          # explicit opt-out; exit cleanly (the default is the recommended composite — see Hard rules)
-skip N        # drop item N from the change-order
+1-3           # an inclusive range of item ids
+all-blocker   # every blocker item
+all-high      # every blocker or high item
+all-medium    # every blocker, high, or medium item
+cheap         # every contained-cost item
+all           # every item; requires explicit input
+none          # explicit opt-out
+skip N        # remove item N from the application order
 ```
 
-Interactive verbs use **floor** semantics, aligned with auto-mode: `all-blocker` is the only strict selector (because blocker is the top of the ladder, there is nothing above it to include); `all-high` includes blockers + high; `all-medium` includes blockers + high + medium; compose `all-medium, cheap` to match the `medium+` auto-floor, which also sweeps cheap lows. Use composition (`all-blocker, ...`) when you specifically want strict blocker-only behaviour combined with another verb.
+Interactive selectors use floor semantics.
+`all-blocker` contains only blockers because blocker is the highest level.
+`all-high` includes blockers and high findings.
+`all-medium` includes blockers, high findings, and medium findings.
+Combine `all-medium, cheap` to match the `medium+` automatic floor.
 
 ### Verb composition
 
-Verbs may be combined with commas. Set algebra:
+Combine verbs with commas:
 
-- `all-blocker, cheap` = blockers ∪ contained-fix-cost findings; dedup at apply time.
-- `all-high, 7` = every blocker- or high-severity item ∪ item #7.
-- `all-blocker, cheap, skip 4` = (blockers ∪ contained-fix-cost) − item #4.
+- `all-blocker, cheap` selects blockers and contained-cost findings.
+- `all-high, 7` selects blocker and high findings plus item 7.
+- `all-blocker, cheap, skip 4` selects the first two groups without item 4.
 
-`skip N` always applies last. `all` and `none` are mutually exclusive with every other verb.
+Remove duplicates when you apply the selection.
+Apply `skip N` last.
+Do not combine `all` or `none` with another verb.
 
-When an age report lacks the `fix-cost-now` sub-field on its findings (older report shape), treat `cheap` as resolving to the empty set and emit a one-line note in the cure report explaining the older shape; never silently expand `cheap` against missing data.
+Older reports can lack `fix-cost-now`.
+For these reports, resolve `cheap` to the empty set.
+Add one note to the Cure report.
+Do not infer cost from missing data.
 
 ## Hard rules
 
-- **Default is the recommended composite (`all-medium, cheap`).** Applied without a gate unless `--safe`, a sprawling/structural fix, or conflicting findings forces the gate. When the gate *is* rendered, a bare return / "ok" / "go" selects the pre-selected recommended composite.
-- **`all` is opt-in only.** The default sweeps mediums-and-above plus cheap lows, never the expensive lows — `all` still requires an explicit type-out.
-- **Selection is locked once chosen.** If new findings appear during cure (e.g. a fix exposes a new bug), surface them in the report and let the user re-invoke `/cure`.
+- Use `all-medium, cheap` by default.
+  Apply it without a gate unless a gate condition exists.
+  At a rendered gate, bare return, `ok`, or `go` selects it.
+- Require explicit input for `all`.
+  The default excludes costly low findings.
+- Lock the selection after the user or source skill selects it.
+  Report new findings and let the user start another `/cure` run.
 
 ## After selection
 
 For each selected finding:
 
-1. Re-read the cited file/lines through a fresh bounded read to confirm the finding is still accurate (the diff may have moved).
-2. Apply the fix through a stale-safe write compatible with the read anchor; see the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
-3. Run the narrowest test that proves the fix.
-4. Move to the next selected item.
+1. Read the cited location again and confirm that the finding still applies.
+2. Apply a stale-safe edit that matches the read anchor.
+3. Follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
+4. Run the narrowest test that proves the fix.
+5. Continue to the next finding.
 
-If a finding is no longer applicable (file moved, code already fixed), record it in the cure report under "Skipped" with the reason. Do not silently drop it.
+When a finding no longer applies, put it under `Skipped` with the reason.
+Do not remove it silently.
 
 ## Auto-mode selection
 
-When `/cure` is invoked with `--auto --stake <floor>`:
+When `/cure` receives `--auto --stake <floor>`, skip the list and user prompt.
+Calculate the selection from the floor.
 
-- **Skip the selection list and the user prompt entirely.** The selection is computed from the severity floor, not asked for. (The flag literal stays `--stake` for caller stability; the underlying semantics is per-finding severity.)
-- **Severity floors:**
-  - `blocker` — only `blocker` severity findings.
-  - `high` — `blocker` and `high` severity findings.
-  - `medium+` — `blocker`, `high`, and `medium` severity findings, **plus every `Low` whose `fix-cost-now: contained`** (cheap lows — small valid nits cheaper to fix than to defer; `moderate`/`sprawling`/`structural` lows are excluded). This is what `/cook --auto` always passes, so the autonomous chain fixes mediums-and-above and the cheap lows. It is the auto analogue of the recommended interactive selection `all-medium, cheap`.
-  - `all` — every finding regardless of severity.
-- **Cheap lows ride the `medium+` floor only.** There is no standalone `--stake cheap`. The `medium+` floor sweeps contained-fix lows automatically (above); the `blocker` and `high` floors do not (they are strict severity thresholds), and `all` already includes every low. To combine `cheap` with a different floor, invoke `/cure <slug>` interactively and type a composite verb like `all-blocker, cheap`.
-- **Order of application:** blocker first, then high, then medium, then — under the `medium+` floor — the cheap lows, in the order they appear in the age report. Within a severity band, group by file to minimise re-reads.
-- **Per-finding flow:** same as `## After selection`; on test breakage, revert that finding's edit, log it under `### Deferred` with the test name and one-line failure summary, and continue.
-- **On a finding that is no longer applicable** (file moved, code already fixed): record under `### Skipped` exactly as in interactive mode.
-- **After all selected findings are processed:** invoke `/age --scope <touched-paths> --auto` directly (no handoff gate). The pass-cap is enforced inside `/age --auto`, not here — cure keeps applying when called.
+Use these floors:
 
-`--auto` is not a verb the user should type interactively. It exists to make the `/cook --auto` chain coherent. If a user types `/cure --auto` directly without `--stake`, error out with a one-line message pointing them at standard interactive `/cure <slug>` — `--stake` is the contract for auto mode, and without it `/cure --auto` has no inclusion threshold. Do not prompt for a floor; do not silently fall back to interactive selection.
+- `blocker` selects blocker findings.
+- `high` selects blocker and high findings.
+- `medium+` selects blocker, high, and medium findings.
+  It also selects low findings with `fix-cost-now: contained`.
+- `all` selects every finding.
+
+`/cook --auto` always passes `medium+`.
+This floor matches the interactive `all-medium, cheap` selection.
+Do not support a separate `--stake cheap` value.
+Use an interactive composite to combine cheap findings with another floor.
+
+Apply blocker, high, medium, then inexpensive low findings.
+Within one severity, group findings by file to reduce repeated reads.
+For each finding, follow `## After selection`.
+
+When a fix breaks a passing test or project gate, revert that finding's edit.
+Put it under `### Deferred` with the test name and failure summary.
+Continue with the remaining findings.
+
+When a finding no longer applies, put it under `### Skipped`.
+After all findings, invoke `/age <slug> --scope <touched-path> --auto` directly (no handoff gate).
+Repeat `--scope` once for each touched path.
+`/age --auto` enforces the pass cap.
+Cure continues to apply findings when Age calls it.
+
+`--auto` is not an interactive verb.
+If `/cure --auto` lacks `--stake`, return one error line.
+Direct the user to `/cure <slug>`.
+Do not prompt for a floor or fall back to interactive selection.
 
 ## Older report shape
 
-Age reports older than the severity-rubric revision lack the `severity`, `location`, `fix-cost-now`, and `fix-cost-later` sub-fields on each finding. Tolerate the older shape: when a finding has no `severity` field, infer it from the section header (`## High-stake findings` → `high`, `## Medium-stake findings` → `medium`); when `fix-cost-now` is absent, the `cheap` selection verb resolves to the empty set (see `## Recognized selection verbs` above). Never reject a report for missing sub-fields; record any inference in the cure report under `### Notes`. Reports predating the per-finding `confidence:` label simply lack it; treat missing confidence as unspecified — no inference, no rejection.
+Older Age reports can lack `severity`, `location`, `fix-cost-now`, and `fix-cost-later`.
+When `severity` is absent, infer it from the section heading.
+For example, `## High-stake findings` maps to `high`.
+When `fix-cost-now` is absent, resolve `cheap` to the empty set.
+Record each inference under `### Notes` in the Cure report.
+Treat missing `confidence:` as unspecified.
+Do not infer confidence or reject the report.

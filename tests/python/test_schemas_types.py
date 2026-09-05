@@ -1,7 +1,7 @@
 """Tests for the easy-cheese-schemas v0.1 typed surface.
 
 The types mirror contracts that today live in hand-rolled validators
-(src/fanout/*, shared/scripts/*). Where a contract has an executable original
+(src/easy_cheese/shared/fanout/*, src/easy_cheese/shared/*). Where a contract has an executable original
 -- `gates.classify_readiness` and `io.parse_mapping` -- the test imports that
 original by path and asserts the port agrees on every input, so drift is caught
 mechanically instead of by a copied expectation table.
@@ -48,7 +48,7 @@ def _runtime_pins() -> dict[str, str]:
 
 
 def _original(name: str) -> ModuleType:
-    """Import shared/scripts/<name>.py under a private name, so the port is
+    """Import src/easy_cheese/shared/<name>.py under a private name, so the port is
     compared against the running implementation rather than a copy of it."""
     path = REPO_ROOT / "src" / "easy_cheese" / "shared" / f"{name}.py"
     spec = importlib.util.spec_from_file_location(f"_original_{name}", path)
@@ -561,7 +561,8 @@ class TestDecompositionInvariants:
     def test_curds_need_no_run_lifecycle_fields(self) -> None:
         """A decomposition is written before any run exists, so it has no id,
         status, or retry_count to give -- demanding them would make the type
-        unable to read the artifact src/fanout/validate_decomposition.py
+        unable to read the artifact
+        src/easy_cheese/shared/fanout/validate_decomposition.py
         accepts."""
         pre_run = {
             key: value
@@ -880,7 +881,7 @@ class TestGateReceiptTypes:
 
 
 class TestReadinessParity:
-    """The port must agree with shared/scripts/gates.py on all 32 inputs."""
+    """The port must agree with src/easy_cheese/shared/gates.py on all 32 inputs."""
 
     def test_verdicts_match_the_original_on_every_combination(self) -> None:
         original = cast(_GatesOriginal, cast(object, _original("gates")))
@@ -974,6 +975,13 @@ class TestPublicSurface:
             "classify_readiness",
             "classify_stamp",
             "parse_mapping",
+            "AcceptedArtifact",
+            "HandoffPointer",
+            "IngressKind",
+            "NormalizationAction",
+            "NormalizationActionKind",
+            "NormalizationReceipt",
+            "PublishedArtifact",
         ):
             assert name in easy_cheese_schemas.__all__
             assert getattr(easy_cheese_schemas, name) is not None

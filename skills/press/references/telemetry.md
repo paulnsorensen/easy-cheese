@@ -1,19 +1,19 @@
 # Press execution telemetry
 
-Press is the cleanest measured workflow gate, so this records what happened;
-it never changes what Press decides. The record is evidence about a routing
-decision already made by `press-route`.
+Press provides a clean workflow gate for measurement. This record shows what happened. It never changes the Press decision.
+
+The record gives evidence for a route that `press-route` already selected.
 
 ## Request
 
-Run it from the project root, once per attempt, after `press-route`:
+Run the command once for each attempt. Run it from the project root after `press-route`:
 
 ```sh
 python3 "skills/press/scripts/press.pyz" press-telemetry \
   .cheese/press/outer-tdd-gates.attempt-1.telemetry-request.json
 ```
 
-Every field is required; an empty list is how an attempt records "none".
+Include every field. Use an empty list to record no items.
 
 ```json
 {
@@ -32,21 +32,19 @@ Every field is required; an empty list is how an attempt records "none".
 }
 ```
 
-- `slug` and `outcome` are the same values the route request used; `attempt`
-  must equal `repair_cycles + 1` and never exceeds 3.
-- `phase` is one of `read`, `attack`, `classify`, `route`, `report`,
-  `handoff` — the Flow steps. `operation` is the failing tool or command,
-  named consistently so repeats aggregate.
-- `role` is the delegated agent; `purpose` is required, so no delegation is
-  recorded without a reason.
-- `changed_files` are repository-relative paths from `git status --porcelain`
-  for the Press-owned interval.
+- Use the route request values for `slug` and `outcome`.
+- Set `attempt` to `repair_cycles + 1`. Do not use a value greater than 3.
+- Set `phase` to `read`, `attack`, `classify`, `route`, `report`, or `handoff`. These values match the Flow steps.
+- Set `operation` to the failed tool or command. Use the same name for repeated operations.
+- Set `role` to the delegated agent.
+- Include a `purpose` for each delegation. Do not record a delegation without a reason.
+- Use repository-relative paths from `git status --porcelain` for `changed_files`. Include only paths from the Press interval.
 
 ## Record
 
-Save the emitted JSON at
-`.cheese/press/<slug>.attempt-N.telemetry.json` — append-only, like the
-candidate and route artifacts — and cite it from the Press report.
+Save the JSON at `.cheese/press/<slug>.attempt-N.telemetry.json`. Use an append-only file, as you do for candidate and route artifacts.
+
+Cite the telemetry file from the Press report.
 
 ```json
 {
@@ -68,18 +66,13 @@ candidate and route artifacts — and cite it from the Press report.
 }
 ```
 
-- `recurring` is true once the same phase/operation pair fails twice in one
-  attempt: that is an operation-level failure, not a transient tool blip.
-- Each changed path classifies as `tests`, `metadata`, or `production_source`;
-  anything unrecognized counts as production source, so an unfamiliar path is
-  surfaced rather than hidden.
-- `boundary_consistent` is false when an attempt reports production-source
-  paths under any outcome other than `production_changed`. It is an audit
-  flag, not a route: `press-route` still decides the action.
+- `recurring` is true after the same phase and operation fail twice during one attempt. This result marks an operation failure, not a temporary tool failure.
+- Each changed path has the class `tests`, `metadata`, or `production_source`. An unknown path has the `production_source` class. This rule exposes unfamiliar paths.
+- `boundary_consistent` is false when an outcome other than `production_changed` reports production source paths. This audit flag does not control the route. `press-route` still selects the action.
+- The `metadata` class does not make a path boundary-safe. Press writes only tests, fixtures, and test-only harness support. Review each `metadata` path by hand. Classify the attempt as `production_changed` when a `metadata` path is not test support.
 
-## Reading the records
+## Read the records
 
-Treat one attempt as one sample. Reassess only with at least 20 top-level
-invocations or four weeks of records, and change Press behavior only for a
-reproduced recurring cluster — a single `recurring` operation or one coder
-delegation is an audit point, not a defect.
+Treat one attempt as one sample. Wait for 20 top-level invocations or four weeks of records before reassessment.
+
+Change Press behavior only after a repeated cluster occurs. One `recurring` operation or one coder delegation is an audit point, not a defect.

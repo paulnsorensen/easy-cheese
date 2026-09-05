@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Protocol
 
 import pytest
-from easy_cheese_schemas import WheypointRecord, WheypointRevision
+from attrs import evolve
+from easy_cheese_schemas import CompactionRecord, WheypointRecord, WheypointRevision
 
 from easy_cheese.skills.wheypoint import canonical, lint, records, storage
 from easy_cheese.skills.wheypoint import resolve as resolve_mod
@@ -32,7 +33,12 @@ def seed(
     gating: bool = False,
     revision_id: str = "rev-0001",
     number: int = 1,
-) -> storage.WorkStore:
+) -> tuple[storage.WorkStore, _PromotionLike]:
+    """Promote one revision and hand back the store plus that first promotion.
+
+    The promotion comes back so a successor can name it as its real parent,
+    which is what pins the ancestor digest into the child's receipt.
+    """
     record = make_record(
         work_id=work_id,
         slug=slug,
@@ -43,7 +49,7 @@ def seed(
     promotion = make_promotion(number, revision_id, record=record)
     store = storage.WorkStore.open(work_id, corpus_root=corpus_root)
     store.promote(promotion.record, promotion.revision, promotion.markdown)
-    return store
+    return store, promotion
 
 
 def run(
@@ -97,7 +103,9 @@ def test_an_explicit_path_beats_the_corpus_lookups(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="beta")
+    store, _ = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="beta"
+    )
     path = store.projection_path(1, "rev-0001")
 
     found = run(str(path), corpus_root)
@@ -154,7 +162,7 @@ def test_one_slug_on_two_records_is_ambiguous_whichever_is_newer(
 ) -> None:
     """A recency tiebreak would pick the newer record; ambiguity must not."""
     for work_id in ("work-0001", "work-0002"):
-        store = seed(
+        store, _ = seed(
             corpus_root, make_record, make_promotion, work_id=work_id, slug="kernel"
         )
         stamp = 2_000_100_000 if work_id == newer else 2_000_000_000
@@ -209,12 +217,14 @@ def test_a_superseded_projection_path_does_not_dispatch(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="beta")
+    store, first = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="beta"
+    )
     stale = store.projection_path(1, "rev-0001")
     second = make_promotion(
         2,
         "rev-0002",
-        parent="rev-0001",
+        parent=first,
         record=make_record(
             work_id="alpha", slug="beta", revision_id="rev-0002", revision_number=2
         ),
@@ -257,7 +267,7 @@ def test_a_tampered_record_gates_instead_of_dispatching(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    store = seed(
+    store, _ = seed(
         corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel"
     )
     forged = records.unstructure(store.read_record())
@@ -332,6 +342,25 @@ def write_note(root: Path, slug: str, *, artifact: str = "") -> Path:
     return path
 
 
+def test_legacy_parent_validation_reuses_the_initial_worktree_scan(
+    tmp_path: Path,
+) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note(start, "elder")
+    _ = write_note_with_parents(start, "child", "elder")
+    calls: list[tuple[Sequence[str], Path]] = []
+
+    def run_git(args: Sequence[str], cwd: Path) -> str:
+        calls.append((args, cwd))
+        return porcelain(start)
+
+    found = resolve_mod.resolve_legacy("child", start=start, run=run_git)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+    assert len(calls) == 1
+
+
 def test_a_unique_sibling_legacy_note_resolves_without_dispatching(
     tmp_path: Path,
 ) -> None:
@@ -396,6 +425,117 @@ def test_a_legacy_note_whose_artifact_resolves_is_returned(tmp_path: Path) -> No
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
 
 
+def write_note_with_parents(root: Path, slug: str, parents: str) -> Path:
+    path = root / ".cheese" / "notes" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(
+        "status: ok\nnext: cook\nartifact: \n"
+        + f"parents: {parents}\nPick the loop back up.\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_a_legacy_note_whose_parent_names_no_note_gates(tmp_path: Path) -> None:
+    """Lineage is followed off the note, so a dangling parent is a dangling
+    pointer dressed as provenance -- the same failure as a dangling artifact."""
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note_with_parents(start, "child", "[gone-forever]")
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert found.detail is not None
+    assert "'gone-forever'" in found.detail
+
+
+def test_a_legacy_parent_in_a_sibling_worktree_resolves(tmp_path: Path) -> None:
+    start, sibling = tmp_path / "start", tmp_path / "sibling"
+    start.mkdir()
+    sibling.mkdir()
+    _ = write_note(sibling, "elder")
+    _ = write_note_with_parents(start, "child", '["elder"]')
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start, sibling))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+    assert found.legacy_slug is not None
+    assert found.legacy_slug.parents == '["elder"]'
+
+
+@pytest.mark.parametrize(
+    "parents",
+    ["[elder, other]", "elder,other", "['elder', \"other\"]", "[ elder , other ]"],
+)
+def test_parent_lists_are_read_tolerantly(tmp_path: Path, parents: str) -> None:
+    """The field is hand-written Markdown, not JSON: brackets, quotes, and
+    stray whitespace all describe the same lineage."""
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note(start, "elder")
+    _ = write_note(start, "other")
+    _ = write_note_with_parents(start, "child", parents)
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY, found.detail
+
+
+def test_a_join_gates_on_the_one_parent_that_is_missing(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note(start, "elder")
+    _ = write_note_with_parents(start, "child", "[elder, vanished]")
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert found.detail is not None
+    assert "'vanished'" in found.detail
+    assert "'elder'" not in found.detail
+
+
+def test_an_absolute_http_parent_is_accepted_and_a_bare_path_is_not(
+    tmp_path: Path,
+) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note_with_parents(
+        start, "child", "[https://github.com/o/r/pull/1]"
+    )
+    linked = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+    assert linked.outcome is resolve_mod.ResolutionOutcome.LEGACY
+
+    _ = write_note_with_parents(start, "child", "[.cheese/notes/elder.md]")
+    pathy = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+    assert pathy.outcome is resolve_mod.ResolutionOutcome.GATED
+
+
+def test_an_empty_parent_list_is_not_a_gate(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    _ = write_note_with_parents(start, "child", "[]")
+
+    found = resolve_mod.resolve_legacy(
+        "child", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+
+
 def test_an_unparsable_legacy_note_is_an_error(tmp_path: Path) -> None:
     start = tmp_path / "start"
     start.mkdir()
@@ -436,7 +576,9 @@ def test_an_orphaned_revision_is_reported_but_does_not_block_continuation(
     reader can have quoted it and the identical retry overwrites it, so it is
     surroundings, not authority: gating on it would strand a valid current
     record in exactly the crash it just survived."""
-    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha")
+    store, _ = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
+    )
     orphan = store.revision_path(2, "rev-0002")
     _ = orphan.write_text(store.revision_path(1, "rev-0001").read_text(), encoding="utf-8")
 
@@ -454,7 +596,9 @@ def test_a_real_integrity_failure_still_blocks_continuation(
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     """The advisory carve-out must not leak: tampering still gates."""
-    store = seed(corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha")
+    store, _ = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
+    )
     path = store.projection_path(1, "rev-0001")
     _ = path.write_text(path.read_text(encoding="utf-8").replace("cook", "press"), encoding="utf-8")
 
@@ -462,6 +606,47 @@ def test_a_real_integrity_failure_still_blocks_continuation(
 
     assert found.dispatchable is False
     assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+
+def test_an_unresolved_compaction_lineage_blocks_continuation(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """A compaction claim a reader cannot re-derive is not resumable state: the
+    session reconciled against something other than the revision it extended,
+    so what it carried forward was never reconciled at all."""
+    store, first = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
+    )
+    second = make_promotion(
+        2,
+        "rev-0002",
+        parent=first,
+        record=make_record(
+            work_id="alpha", slug="alpha", revision_id="rev-0002", revision_number=2
+        ),
+    )
+    revision = evolve(
+        second.revision,
+        compaction=CompactionRecord(
+            rehydrated_from_revision_id="rev-0000",
+            rehydrated_record_digest=records.record_digest(first.record),
+            reconciled_entry_ids=[],
+        ),
+    )
+    store.promote(
+        evolve(second.record, revision_digest=records.revision_digest(revision)),
+        revision,
+        second.markdown,
+    )
+
+    found = run("alpha", corpus_root)
+
+    codes = tuple(finding.code for finding in found.findings)
+    assert lint.LintCode.COMPACTION_PARENT_UNRESOLVED in codes, codes
+    assert found.dispatchable is False
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+
 
 WRAPPED_NOTE = """## Handoff slug
 
@@ -473,7 +658,7 @@ artifact: .cheese/notes/context.md
 session: codex:test-session
 git: branch@deadbeef
 created: 2026-08-02T00:00:00Z
-parents: [parent]
+parents: [context]
 baseline: none
 Resume the parent protocol.
 ~~~
@@ -500,7 +685,7 @@ def test_real_wrapped_legacy_note_decodes_additive_header(tmp_path: Path) -> Non
     assert found.legacy_slug.next_skill == "mold"
     assert found.legacy_slug.mode == "single"
     assert found.legacy_slug.session == "codex:test-session"
-    assert found.legacy_slug.parents == "[parent]"
+    assert found.legacy_slug.parents == "[context]"
 
 
 def test_normal_resolve_falls_back_to_a_legacy_slug(tmp_path: Path) -> None:

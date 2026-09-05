@@ -33,6 +33,7 @@ def test_shared_source_routing_contract_is_linked_and_complete():
         "skills/melt/SKILL.md",
         "skills/mold/SKILL.md",
         "skills/pasteurize/SKILL.md",
+        "skills/plate/SKILL.md",
         "skills/press/SKILL.md",
         "skills/ultracook/SKILL.md",
     )
@@ -82,7 +83,14 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         REPO_ROOT / "skills/affinage/SKILL.md",
         REPO_ROOT / "skills/hard-cheese/SKILL.md",
         REPO_ROOT / "skills/pasteurize/SKILL.md",
+        REPO_ROOT / "skills/plate/SKILL.md",
+        REPO_ROOT / "skills/wheypoint/SKILL.md",
     ]
+
+    # The sentence appears both mid-sentence and sentence-initial, so only its
+    # leading letter varies in case. Match case-insensitively; every other
+    # word still has to be exact.
+    portability_line = "slash commands are host renderings, not the control model"
 
     for path in docs:
         text = path.read_text(encoding="utf-8")
@@ -91,10 +99,10 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             assert "Portable host-capability wording" in text
         elif path == REPO_ROOT / "skills/cheese/SKILL.md":
             assert "references/harness-portability.md" in text, path
-            assert "slash commands are host renderings, not the control model" in text, path
+            assert portability_line in text.lower(), path
         else:
             assert "cheese/references/harness-portability.md" in text, path
-            assert "slash commands are host renderings, not the control model" in text, path
+            assert portability_line in text.lower(), path
 
 
 
@@ -309,6 +317,7 @@ def test_question_routing_is_native_first_and_lossless():
         "mold",
         "pasteurize",
         "press",
+        "wheypoint",
     ),
 )
 def test_core_workflow_question_sites_reference_shared_handoff_gate(skill: str):
@@ -336,7 +345,10 @@ def test_core_cheese_questions_use_the_shared_handoff_gate():
 
 
 def test_wheypoint_git_provenance_is_capability_based_and_optional():
-    body = (REPO_ROOT / "skills/wheypoint/SKILL.md").read_text(encoding="utf-8")
+    # `checkpoint` now routes the common path. The guard follows the provenance prose.
+    body = (REPO_ROOT / "skills/wheypoint/references/provenance-fields.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "callable, read-only git inspection capability" in body
     assert "git status --short --branch" in body

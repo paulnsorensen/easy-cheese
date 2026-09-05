@@ -1,20 +1,19 @@
-"""Deterministic lookup of a pre-Wheypoint `.cheese/notes/<slug>.md` note.
+"""Find a pre-Wheypoint `.cheese/notes/<slug>.md` note deterministically.
 
-A legacy note is a fallback, not an authority, and the only way it stays safe
-is that finding one is a *pure function of which files exist*:
+A legacy note is a fallback and not an authority.
+File existence alone determines each result.
 
-* Every worktree `git worktree list --porcelain` reports is searched, not just
-  the one the caller happens to stand in -- that omission is what let a
-  checkpoint written in a sibling worktree disappear on resume.
-* Two notes for one slug are an ambiguity, full stop. Nothing here compares
-  modification times, session ids, or slug recency, because a slug is an alias
-  and the newer file is not thereby the right one.
-* A miss reports the exact candidate paths that were probed, so the caller can
-  say where it looked instead of guessing that nothing exists anywhere.
+* Search each worktree that `git worktree list --porcelain` reports.
+  This search finds checkpoints in sibling worktrees.
+* Search each directory from the caller through the repository root.
+  This search finds notes from subdirectories when Git is unavailable.
+* Report multiple notes for one slug as ambiguous.
+  Do not compare modification times, session IDs, or slug age.
+  A slug is an alias, so the newest file is not necessarily correct.
+* Report each candidate path after an unsuccessful search.
 
-When git cannot be listed the scan degrades to the starting worktree alone and
-says so: a partial search that reports itself as complete would turn a missing
-sibling into a confident "no note".
+Report an error when Git cannot list worktrees.
+This error identifies a partial search and prevents an incorrect `not-found` result.
 """
 
 from __future__ import annotations
@@ -31,6 +30,9 @@ from easy_cheese_schemas import phase_contracts
 
 NOTES_DIR_PARTS = (".cheese", "notes")
 WORKTREE_LIST_ARGS = ("git", "worktree", "list", "--porcelain")
+# `.git` is a directory in a primary checkout and a file in a linked worktree
+# or a submodule, so its mere existence -- not its type -- marks the root.
+GIT_MARKER = ".git"
 _GIT_TIMEOUT_SECONDS = 5
 # A slug is joined onto a worktree root, so it has to be a single safe segment
 # before it ever touches the filesystem.
@@ -220,6 +222,7 @@ class LegacyLookup:
     matches: tuple[LegacyNote, ...] = field(default=())
     searched: tuple[str, ...] = field(default=())
     error: str | None = None
+    roots: tuple[Path, ...] = field(default=())
 
     @property
     def note(self) -> LegacyNote | None:
@@ -294,6 +297,23 @@ def worktree_roots(start: Path | str, *, run: Runner | None = None) -> WorktreeS
     return WorktreeScan(roots=(base, *siblings))
 
 
+def repository_chain(start: Path | str) -> tuple[Path, ...]:
+    """Return `start` and each ancestor through the enclosing repository root.
+
+    The nearest directory with a `.git` entry ends the walk.
+    This limit prevents a search in an unrelated parent `.cheese/` directory.
+    If no ancestor contains a repository root, return only `start`.
+    A walk to the filesystem root only adds noise to the search list.
+    """
+    base = Path(start).resolve()
+    chain: list[Path] = []
+    for directory in (base, *base.parents):
+        chain.append(directory)
+        if (directory / GIT_MARKER).exists():
+            return tuple(chain)
+    return (base,)
+
+
 def find_legacy_note(
     slug: str, *, start: Path | str, run: Runner | None = None
 ) -> LegacyLookup:
@@ -333,9 +353,13 @@ def find_legacy_note(
             + f"{_SLUG_RE.pattern}"
         )
     scan = worktree_roots(start, run=run)
+    seen: set[Path] = set()
     searched: list[str] = []
     matches: list[LegacyNote] = []
-    for root in scan.roots:
+    for root in (*repository_chain(start), *scan.roots):
+        if root in seen:
+            continue
+        seen.add(root)
         candidate = root.joinpath(*NOTES_DIR_PARTS, f"{slug}.md")
         searched.append(str(candidate))
         if candidate.is_file():
@@ -351,4 +375,5 @@ def find_legacy_note(
         matches=tuple(matches),
         searched=tuple(searched),
         error=scan.error,
+        roots=scan.roots,
     )

@@ -1,45 +1,145 @@
 #!/usr/bin/env python3
-"""Curdle-time SAP-posture validator for mold-produced specs.
+"""Validator for the current Mold specification requirements.
 
 Lenient acceptance (nothing is rewritten): heading case, heading trailing
 punctuation, table cell whitespace, and fence dialect (``` vs ~~~) do not
 affect validation; fenced code blocks are invisible to heading and table
 detection regardless of dialect.
 
-Strict semantic rejection: every mandatory section present with no duplicate
-tracked heading; Test Contracts table has the seven declared columns and a
-'---' delimiter row, and every row matches the column count; every
-Acceptance ID appears exactly once in the table and vice versa; Mode is
-drawn from its closed enum set; tracer rows leave Interface version/Matrix
-rows blank; contract-matrix rows require both; frontmatter gate_applicability
-must be present and parseable, with disposition/work_class/ui_surface drawn
-from their closed enum sets; not-applicable requires a reason and zero
-Test Contracts rows.
+Markdown shape checks reject missing or duplicate tracked headings, malformed
+tables, and rows with the wrong number of cells. Fenced code blocks do not count
+as headings or table rows. The parsed frontmatter and table rows are then passed
+once to ``MoldSpecDocument``. Its typed validators enforce document invariants.
 
-Legacy acceptance: the default (read) posture accepts v0.13-era specs — those
-without a Mold provenance marker — indefinitely, waiving only the two parts the
-hardened format added after v0.13 (the Test Contracts section and the
-gate_applicability block) and printing a one-line NOTICE. ``--strict`` is the
-mint/rewrite posture: the hardened format unconditionally, plus the provenance
-marker itself. The policy lives once in ``easy_cheese_schemas.spec_format`` so
-every release channel inherits it.
+Legacy acceptance: the default read posture accepts v0.13-era specs without a
+Mold provenance marker. It waives only the Test Contracts section, the Grounding
+section, and the ``gate_applicability`` block that the current format added.
+``--strict`` requires the current format and its provenance marker. The policy
+lives once in ``easy_cheese_schemas.spec_format`` so every release channel uses
+the same rule.
 
-Rules are consumed from the generated, dependency-free ``_document_rules``
-projection (built from the ``@document_contract("mold-spec")`` models in
-contracts.py) so the rule data never drags the attrs-based model stack in.
+The generated, dependency-free ``document_rules`` projection supplies the
+Markdown shape rules. The attrs-backed schema types supply typed validation.
 
 ERROR:-line accumulation and exit codes follow .github/scripts/validate_wiki.py.
 """
+
 from __future__ import annotations
 
 import argparse
+import importlib
+import importlib.util
+import json
 import re
 import sys
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TypedDict, cast
+from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
-from easy_cheese_schemas.spec_format import is_hardened_provenance, spec_format_policy
+
+if TYPE_CHECKING:
+    from easy_cheese_schemas.contracts import (
+        GateApplicability,
+        GateApplicabilityDisposition,
+        GroundingOutcome,
+        GroundingProbe,
+        GroundingRow,
+        MoldSpecDocument,
+        MoldSpecFrontmatter,
+        SpecConfidence,
+        TestContractMode,
+        TestContractRow,
+        UiSurface,
+        WorkClass,
+    )
+
+
+class _SpecFormatPolicy(Protocol):
+    @property
+    def notice(self) -> str | None: ...
+
+    def requires_gate_applicability(self) -> bool: ...
+
+    def requires_section(
+        self, section_name: str, *, default_required: bool
+    ) -> bool: ...
+
+
+class _SpecFormatPolicyFactory(Protocol):
+    def __call__(
+        self, frontmatter: Mapping[str, object], *, strict: bool
+    ) -> _SpecFormatPolicy: ...
+
+
+class _SpecFormatModule(Protocol):
+    is_hardened_provenance: Callable[[Mapping[str, object]], bool]
+    spec_format_policy: _SpecFormatPolicyFactory
+
+
+class _SchemaModule(Protocol):
+    GateApplicability: type[GateApplicability]
+    GateApplicabilityDisposition: type[GateApplicabilityDisposition]
+    GroundingOutcome: type[GroundingOutcome]
+    GroundingProbe: type[GroundingProbe]
+    GroundingRow: type[GroundingRow]
+    MoldSpecDocument: type[MoldSpecDocument]
+    MoldSpecFrontmatter: type[MoldSpecFrontmatter]
+    SpecConfidence: type[SpecConfidence]
+    TestContractMode: type[TestContractMode]
+    TestContractRow: type[TestContractRow]
+    UiSurface: type[UiSurface]
+    WorkClass: type[WorkClass]
+
+
+is_hardened_provenance: Callable[[Mapping[str, object]], bool]
+spec_format_policy: _SpecFormatPolicyFactory
+
+
+def _load_local_module(
+    module_name: str, module_path: Path, import_error: ImportError
+) -> ModuleType:
+    """Load a source-local module after an installed package import fails."""
+    if not module_path.is_file():
+        raise import_error
+    module_spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if module_spec is None or module_spec.loader is None:
+        raise RuntimeError(
+            f"cannot load local module from {module_path}"
+        ) from import_error
+    module = importlib.util.module_from_spec(module_spec)
+    sys.modules[module_spec.name] = module
+    module_spec.loader.exec_module(module)
+    return module
+
+
+try:
+    from easy_cheese_schemas.spec_format import (
+        is_hardened_provenance as _is_hardened_provenance,
+    )
+    from easy_cheese_schemas.spec_format import (
+        spec_format_policy as _spec_format_policy,
+    )
+except ImportError as error:
+    spec_format = cast(
+        _SpecFormatModule,
+        cast(
+            object,
+            _load_local_module(
+                "_mold_spec_format",
+                Path(__file__).parents[3] / "easy_cheese_schemas" / "spec_format.py",
+                error,
+            ),
+        ),
+    )
+    _is_hardened_provenance = spec_format.is_hardened_provenance
+    _spec_format_policy = spec_format.spec_format_policy
+
+is_hardened_provenance = cast(
+    Callable[[Mapping[str, object]], bool], _is_hardened_provenance
+)
+spec_format_policy = cast(_SpecFormatPolicyFactory, _spec_format_policy)
 
 
 class _CrossFieldRule(TypedDict):
@@ -76,11 +176,23 @@ _MODE_COL = TABLE_COLUMNS.index("Mode")
 _INTERFACE_VERSION_COL = TABLE_COLUMNS.index("Interface version")
 _MATRIX_ROWS_COL = TABLE_COLUMNS.index("Matrix rows")
 
-_CROSS_FIELD_RULE_IDS: set[str] = {rule["rule_id"] for rule in RULES["cross_field_rules"]}
+_GROUNDING_SECTION = next(s for s in SECTIONS if s["name"] == "Grounding")
+_GROUNDING_TABLE = _GROUNDING_SECTION["table"]
+assert _GROUNDING_TABLE is not None
+GROUNDING_COLUMNS: tuple[str, ...] = tuple(_GROUNDING_TABLE["columns"])
+_PROBE_COL = GROUNDING_COLUMNS.index("Probe")
+_OUTCOME_COL = GROUNDING_COLUMNS.index("Outcome")
+_EVIDENCE_COL = GROUNDING_COLUMNS.index("Evidence")
+
+_CROSS_FIELD_RULE_IDS: set[str] = {
+    rule["rule_id"] for rule in RULES["cross_field_rules"]
+}
 
 
 def _rule_id(rule_id: str) -> str:
-    assert rule_id in _CROSS_FIELD_RULE_IDS, f"undeclared cross-field rule id: {rule_id}"
+    assert rule_id in _CROSS_FIELD_RULE_IDS, (
+        f"undeclared cross-field rule id: {rule_id}"
+    )
     return rule_id
 
 
@@ -89,17 +201,26 @@ TRACER_ROW_RULE = _rule_id("tracer-row-blank-matrix-cells")
 CONTRACT_MATRIX_ROW_RULE = _rule_id("contract-matrix-row-requires-both")
 NOT_APPLICABLE_RULE = _rule_id("not-applicable-closed-class")
 
+# Each declared probe carries its own cross-field rule id so a skipped wiki
+# probe and a skipped explorer delegation fail under distinct identifiers.
+PROBE_RULES: dict[str, str] = {
+    "wiki": _rule_id("grounding-probe-recorded"),
+    "explorer": _rule_id("delegation-digest-recorded"),
+}
+assert set(PROBE_RULES) == set(ENUMS["grounding_probe"]), (
+    "every grounding probe needs a cross-field rule id"
+)
+
 HEADING_RE = re.compile(r"^##(?!#)\s+(.+?)\s*$")
 ACCEPTANCE_ID_RE = re.compile(r"^-\s*(AC-\d+)\s*:")
-DELIMITER_CELL_RE = re.compile(r"^:?-+:?$")
+DELIMITER_CELL_RE = re.compile(r"^:?-{3,}:?$")
 
 
-def _canonical_heading(raw: str) -> str:
-    """Lenient heading match: case-insensitive, trailing punctuation stripped."""
-    return raw.strip().rstrip(".,;:!?").strip().lower()
+def _canonical_heading(name: str) -> str:
+    return name.strip().rstrip(".!?:;").casefold()
 
 
-def _split_frontmatter(text: str) -> tuple[dict[str, str | dict[str, str]], str]:
+def _split_frontmatter(text: str) -> tuple[dict[str, object], str]:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}, text
@@ -114,9 +235,25 @@ def _split_frontmatter(text: str) -> tuple[dict[str, str | dict[str, str]], str]
     return data, body
 
 
-def _parse_yaml_block(lines: list[str]) -> dict[str, str | dict[str, str]]:
-    """Minimal key: value / nested-mapping parser for mold frontmatter."""
-    data: dict[str, str | dict[str, str]] = {}
+def _frontmatter_scalar(value: str) -> object:
+    value = value.strip()
+    if value in {"{}", "[]"}:
+        return {} if value == "{}" else []
+    if value.lower() in {"true", "false"}:
+        return value.lower() == "true"
+    if (value.startswith("{") and value.endswith("}")) or (
+        value.startswith("[") and value.endswith("]")
+    ):
+        try:
+            return cast(object, json.loads(value.replace("'", '"')))
+        except json.JSONDecodeError:
+            return value.strip('"').strip("'")
+    return value.strip('"').strip("'")
+
+
+def _parse_yaml_block(lines: list[str]) -> dict[str, object]:
+    """Parse the scalar and nested-map subset used by Mold frontmatter."""
+    data: dict[str, object] = {}
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -130,16 +267,16 @@ def _parse_yaml_block(lines: list[str]) -> dict[str, str | dict[str, str]]:
         key = key.strip()
         value = value.strip()
         if value:
-            data[key] = value.strip('"').strip("'")
+            data[key] = _frontmatter_scalar(value)
             i += 1
             continue
-        nested: dict[str, str] = {}
+        nested: dict[str, object] = {}
         j = i + 1
         while j < len(lines) and (lines[j].startswith("  ") or not lines[j].strip()):
             nested_line = lines[j].strip()
             if nested_line and ":" in nested_line and not nested_line.startswith("-"):
                 nk, _, nv = nested_line.partition(":")
-                nested[nk.strip()] = nv.strip().strip('"').strip("'")
+                nested[nk.strip()] = _frontmatter_scalar(nv)
             j += 1
         data[key] = nested
         i = j
@@ -206,6 +343,55 @@ def _parse_table(content_lines: list[str]) -> list[list[str]] | None:
     return rows
 
 
+def _declared_table_rows(
+    content_lines: list[str],
+    columns: tuple[str, ...],
+    section: str,
+    error_id: str,
+    path: Path,
+    errors: list[str],
+) -> list[list[str]]:
+    """Parse a declared section table, appending ``error_id`` shape errors.
+
+    Returns only the body rows whose cell count matches ``columns``; a missing
+    table or a header that does not match the declared columns yields no rows.
+    """
+    parsed = _parse_table(content_lines)
+    if parsed is None:
+        errors.append(
+            f"ERROR: {error_id} no table found in {section} section of {path}"
+        )
+        return []
+    header = parsed[0]
+    if tuple(header) != columns:
+        errors.append(
+            f"ERROR: {error_id} {section} table columns {header} do not match the "
+            + f"required columns {list(columns)} in {path}"
+        )
+        return []
+    delimiter_row = parsed[1]
+    if not delimiter_row or not all(
+        DELIMITER_CELL_RE.match(cell) for cell in delimiter_row
+    ):
+        errors.append(
+            f"ERROR: {error_id} {section} table is missing its '---' delimiter "
+            + f"row in {path}"
+        )
+        candidate_rows = parsed[1:]
+    else:
+        candidate_rows = parsed[2:]
+    rows: list[list[str]] = []
+    for row in candidate_rows:
+        if len(row) != len(columns):
+            errors.append(
+                f"ERROR: {error_id} {section} row {row} has {len(row)} cells, "
+                + f"expected {len(columns)} in {path}"
+            )
+        else:
+            rows.append(row)
+    return rows
+
+
 def _acceptance_ids(content_lines: list[str]) -> list[str]:
     ids: list[str] = []
     for line in content_lines:
@@ -215,8 +401,241 @@ def _acceptance_ids(content_lines: list[str]) -> list[str]:
     return ids
 
 
+def _schema_module() -> _SchemaModule:
+    try:
+        module = importlib.import_module("easy_cheese_schemas.contracts")
+    except ImportError as error:
+        module = _load_local_module(
+            "_mold_contracts",
+            Path(__file__).parents[3] / "easy_cheese_schemas" / "contracts.py",
+            error,
+        )
+    return cast(_SchemaModule, cast(object, module))
+
+
+def _matrix_rows(value: str) -> tuple[str, ...]:
+    return tuple(
+        row.strip()
+        for row in re.split(r"\s*(?:<br\s*/?>|[,;])\s*", value, flags=re.I)
+        if row.strip()
+    )
+
+
+def _typed_errors(message: str, path: Path) -> tuple[str, ...]:
+    if "Test Contracts table must cover" in message:
+        return (f"ERROR: {AC_COVERAGE_RULE} {message} in {path}",)
+    if "tracer mode" in message:
+        return (f"ERROR: {TRACER_ROW_RULE} {message} in {path}",)
+    if "contract-matrix mode" in message:
+        return (f"ERROR: {CONTRACT_MATRIX_ROW_RULE} {message} in {path}",)
+    grounding: list[tuple[str, str]] = re.findall(
+        r"Grounding table must record the ([a-z-]+) probe exactly once, got (\d+)",
+        message,
+    )
+    if grounding:
+        return tuple(
+            f"ERROR: {PROBE_RULES.get(probe, 'grounding-probe-recorded')} "
+            + f"Grounding table must record the {probe} probe exactly once, got "
+            + f"{count} in {path}"
+            for probe, count in grounding
+        )
+    if "gate_applicability.reason is required" in message:
+        return (f"ERROR: {NOT_APPLICABLE_RULE} {message} in {path}",)
+    return (f"ERROR: typed-document-invalid {message} in {path}",)
+
+
+def _typed_frontmatter(
+    frontmatter: Mapping[str, object],
+    path: Path,
+    errors: list[str],
+) -> tuple[_SchemaModule, MoldSpecFrontmatter] | None:
+    schema = _schema_module()
+    gate = frontmatter.get("gate_applicability")
+    if gate is None:
+        gate = {
+            "disposition": "red-required",
+            "work_class": "behavior",
+            "ui_surface": "non-browser",
+        }
+    if not isinstance(gate, Mapping):
+        return None
+    gate = cast(Mapping[str, object], gate)
+
+    enum_values = (
+        (
+            "disposition",
+            "gate_applicability_disposition",
+            "gate-applicability-closed-class",
+        ),
+        ("work_class", "work_class", "gate-applicability-closed-class"),
+        ("ui_surface", "ui_surface", "gate-applicability-closed-class"),
+    )
+    for key, enum_name, error_id in enum_values:
+        value = gate.get(key)
+        if value not in ENUMS[enum_name]:
+            errors.append(
+                f"ERROR: {error_id} gate_applicability.{key} '{value}' is "
+                + f"not a recognized {key.replace('_', ' ')} in {path}"
+            )
+            return None
+
+    try:
+        gate_model = schema.GateApplicability(
+            disposition=schema.GateApplicabilityDisposition(
+                cast(str, gate["disposition"])
+            ),
+            work_class=schema.WorkClass(cast(str, gate["work_class"])),
+            ui_surface=schema.UiSurface(cast(str, gate["ui_surface"])),
+            reason=cast(str | None, gate.get("reason")),
+        )
+        front_model = schema.MoldSpecFrontmatter(
+            slug=cast(str, frontmatter.get("slug", "legacy-spec")),
+            status=cast(str, frontmatter.get("status", "draft")),
+            source=cast(str, frontmatter.get("source", "legacy")),
+            created=cast(str, frontmatter.get("created", "unknown")),
+            confidence=schema.SpecConfidence(
+                cast(str, frontmatter.get("confidence", "medium"))
+            ),
+            gate_applicability=gate_model,
+            gates_overridden=cast(
+                tuple[str, ...], frontmatter.get("gates_overridden", ())
+            ),
+            agent_introduced_scope=cast(
+                tuple[str, ...], frontmatter.get("agent_introduced_scope", ())
+            ),
+            entity_referent_bindings=cast(
+                tuple[Mapping[str, object], ...],
+                frontmatter.get("entity_referent_bindings", ()),
+            ),
+        )
+    except (TypeError, ValueError) as error:
+        errors.extend(_typed_errors(str(error), path))
+        return None
+    return schema, front_model
+
+
+def _typed_test_rows(
+    schema: _SchemaModule, rows: list[list[str]], path: Path, errors: list[str]
+) -> tuple[list[TestContractRow], bool]:
+    typed: list[TestContractRow] = []
+    had_error = False
+    for row in rows:
+        acceptance_id = row[_AC_ID_COL]
+        mode = row[_MODE_COL]
+        if mode not in ENUMS["mode"]:
+            errors.append(
+                f"ERROR: mode-closed-class Test Contracts row '{acceptance_id}' "
+                + f"has unknown Mode '{mode}' in {path}"
+            )
+            had_error = True
+            continue
+        try:
+            typed.append(
+                schema.TestContractRow(
+                    acceptance_id=acceptance_id,
+                    interface_referent=row[1],
+                    outermost_stable_seam=row[2],
+                    expected_failure=row[3],
+                    mode=schema.TestContractMode(mode),
+                    interface_version=row[_INTERFACE_VERSION_COL],
+                    matrix_rows=_matrix_rows(row[_MATRIX_ROWS_COL]),
+                )
+            )
+        except (TypeError, ValueError) as error:
+            errors.extend(_typed_errors(str(error), path))
+            had_error = True
+    return typed, had_error
+
+
+def _typed_grounding_rows(
+    schema: _SchemaModule, rows: list[list[str]], path: Path, errors: list[str]
+) -> tuple[list[GroundingRow], bool]:
+    typed: list[GroundingRow] = []
+    had_error = False
+    for row in rows:
+        probe = row[_PROBE_COL]
+        outcome = row[_OUTCOME_COL]
+        if probe not in ENUMS["grounding_probe"]:
+            errors.append(
+                "ERROR: grounding-probe-closed-class Grounding row has unknown "
+                + f"Probe '{probe}' in {path}"
+            )
+            had_error = True
+            continue
+        if outcome not in ENUMS["grounding_outcome"]:
+            errors.append(
+                f"ERROR: grounding-outcome-closed-class Grounding row '{probe}' "
+                + f"has unknown Outcome '{outcome}' in {path}"
+            )
+            had_error = True
+            continue
+        try:
+            typed.append(
+                schema.GroundingRow(
+                    probe=schema.GroundingProbe(probe),
+                    outcome=schema.GroundingOutcome(outcome),
+                    evidence=row[_EVIDENCE_COL],
+                )
+            )
+        except (TypeError, ValueError) as error:
+            rule = PROBE_RULES[probe]
+            message = str(error)
+            if "evidence" in message:
+                message = (
+                    f"Grounding row '{probe}' records no evidence; an unavailable "
+                    + "probe still records what was attempted"
+                )
+                errors.append(f"ERROR: {rule} {message} in {path}")
+            else:
+                errors.extend(_typed_errors(message, path))
+            had_error = True
+    return typed, had_error
+
+
+def _validate_typed_document(
+    frontmatter: Mapping[str, object],
+    policy: _SpecFormatPolicy,
+    acceptance_ids: list[str],
+    test_rows: list[list[str]],
+    grounding_rows: list[list[str]],
+    grounding_present: bool,
+    path: Path,
+    errors: list[str],
+) -> None:
+    typed_frontmatter = _typed_frontmatter(frontmatter, path, errors)
+    if typed_frontmatter is None:
+        return
+    schema, front_model = typed_frontmatter
+    typed_contracts, contract_errors = _typed_test_rows(schema, test_rows, path, errors)
+    typed_grounding, grounding_errors = _typed_grounding_rows(
+        schema, grounding_rows, path, errors
+    )
+    if not grounding_present and not policy.requires_section(
+        "Grounding", default_required=True
+    ):
+        typed_grounding = [
+            schema.GroundingRow(
+                probe=probe,
+                outcome=schema.GroundingOutcome.UNAVAILABLE,
+                evidence="Grounding is not required by this Mold format policy",
+            )
+            for probe in schema.GroundingProbe
+        ]
+    if contract_errors or grounding_errors:
+        return
+    try:
+        _ = schema.MoldSpecDocument(
+            frontmatter=front_model,
+            acceptance_ids=tuple(acceptance_ids),
+            test_contract_rows=tuple(typed_contracts),
+            grounding_rows=tuple(typed_grounding),
+        )
+    except (TypeError, ValueError) as error:
+        errors.extend(_typed_errors(str(error), path))
+
+
 def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None]:
-    """Return accumulated ``ERROR:`` lines plus a legacy NOTICE when one applies."""
+    """Return Markdown-shape errors and an optional legacy-format notice."""
     errors: list[str] = []
     text = path.read_text(encoding="utf-8")
     frontmatter, body = _split_frontmatter(text)
@@ -224,11 +643,12 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     found_sections, duplicate_headings = _find_sections(body)
     source = frontmatter.get("source")
     gate_applicability = frontmatter.get("gate_applicability")
-    disposition = (
-        gate_applicability.get("disposition")
-        if isinstance(gate_applicability, dict)
+    gate_mapping = (
+        cast(Mapping[str, object], gate_applicability)
+        if isinstance(gate_applicability, Mapping)
         else None
     )
+    disposition = gate_mapping.get("disposition") if gate_mapping else None
 
     if source is not None and not isinstance(source, str):
         errors.append(
@@ -255,153 +675,71 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
         required = policy.requires_section(name, default_required=default_required)
         if name == "Test Contracts" and disposition == "not-applicable":
             required = False
-        if not required:
-            continue
-        canonical = _canonical_heading(name)
-        if canonical not in found_sections:
+        if required and _canonical_heading(name) not in found_sections:
             errors.append(
                 f"ERROR: missing-required-section '{name}' section not "
                 + f"found in {path}"
             )
 
     test_contracts_lines = found_sections.get(_canonical_heading("Test Contracts"))
-    rows: list[list[str]] = []
+    test_rows: list[list[str]] = []
     if disposition == "not-applicable" and test_contracts_lines is not None:
         errors.append(
             f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.disposition="
             + f"not-applicable requires no Test Contracts section in {path}"
         )
     elif test_contracts_lines is not None:
-        parsed = _parse_table(test_contracts_lines)
-        if parsed is None:
-            errors.append(
-                "ERROR: test-contracts-table-shape no table found in Test "
-                + f"Contracts section of {path}"
-            )
-        else:
-            header = parsed[0]
-            if tuple(header) != TABLE_COLUMNS:
-                errors.append(
-                    "ERROR: test-contracts-table-shape Test Contracts table columns "
-                    + f"{header} do not match the required seven columns {list(TABLE_COLUMNS)} "
-                    + f"in {path}"
-                )
-            else:
-                delimiter_row = parsed[1]
-                if not delimiter_row or not all(
-                    DELIMITER_CELL_RE.match(cell) for cell in delimiter_row
-                ):
-                    errors.append(
-                        "ERROR: test-contracts-table-shape Test Contracts table is "
-                        + f"missing its '---' delimiter row in {path}"
-                    )
-                    candidate_rows = parsed[1:]
-                else:
-                    candidate_rows = parsed[2:]
-                for row in candidate_rows:
-                    if len(row) != len(TABLE_COLUMNS):
-                        errors.append(
-                            "ERROR: test-contracts-table-shape Test Contracts row "
-                            + f"{row} has {len(row)} cells, expected {len(TABLE_COLUMNS)} "
-                            + f"in {path}"
-                        )
-                    else:
-                        rows.append(row)
+        test_rows = _declared_table_rows(
+            test_contracts_lines,
+            TABLE_COLUMNS,
+            "Test Contracts",
+            "test-contracts-table-shape",
+            path,
+            errors,
+        )
+
+    grounding_lines = found_sections.get(_canonical_heading("Grounding"))
+    grounding_rows: list[list[str]] = []
+    if grounding_lines is not None:
+        grounding_rows = _declared_table_rows(
+            grounding_lines,
+            GROUNDING_COLUMNS,
+            "Grounding",
+            "grounding-table-shape",
+            path,
+            errors,
+        )
 
     acceptance_lines = found_sections.get(_canonical_heading("Acceptance"), [])
-    declared_ids = (
+    acceptance_ids = (
         [] if disposition == "not-applicable" else _acceptance_ids(acceptance_lines)
     )
 
-    counts: dict[str, int] = {}
-    for row in rows:
-        acceptance_id = row[_AC_ID_COL]
-        counts[acceptance_id] = counts.get(acceptance_id, 0) + 1
-
-    for acceptance_id in declared_ids:
-        count = counts.get(acceptance_id, 0)
-        if count == 0:
-            errors.append(
-                f"ERROR: {AC_COVERAGE_RULE} acceptance ID '{acceptance_id}' is "
-                + f"absent from the Test Contracts table in {path}"
-            )
-        elif count > 1:
-            errors.append(
-                f"ERROR: {AC_COVERAGE_RULE} acceptance ID '{acceptance_id}' "
-                + f"appears {count} times in the Test Contracts table in {path}"
-            )
-    for acceptance_id in sorted(set(counts) - set(declared_ids)):
-        errors.append(
-            f"ERROR: {AC_COVERAGE_RULE} acceptance ID '{acceptance_id}' appears "
-            + f"in the Test Contracts table but is not declared in Acceptance in {path}"
-        )
-
-    for row in rows:
-        acceptance_id = row[_AC_ID_COL]
-        mode = row[_MODE_COL]
-        interface_version = row[_INTERFACE_VERSION_COL]
-        matrix_rows = row[_MATRIX_ROWS_COL]
-        if mode not in ENUMS["mode"]:
-            errors.append(
-                f"ERROR: mode-closed-class Test Contracts row '{acceptance_id}' has "
-                + f"unknown Mode '{mode}' in {path}"
-            )
-            continue
-        if mode == "tracer":
-            if interface_version or matrix_rows:
-                errors.append(
-                    f"ERROR: {TRACER_ROW_RULE} Test Contracts row "
-                    + f"'{acceptance_id}' is tracer mode and must leave Interface "
-                    + f"version and Matrix rows blank in {path}"
-                )
-        elif mode == "contract-matrix":
-            if not interface_version or not matrix_rows:
-                errors.append(
-                    f"ERROR: {CONTRACT_MATRIX_ROW_RULE} Test Contracts row "
-                    + f"'{acceptance_id}' is contract-matrix mode and requires both "
-                    + f"Interface version and Matrix rows in {path}"
-                )
-
-    if not isinstance(gate_applicability, dict):
+    if not isinstance(gate_applicability, Mapping):
         if "gate_applicability" in frontmatter or policy.requires_gate_applicability():
             errors.append(
                 "ERROR: gate-applicability-required frontmatter gate_applicability is "
                 + f"missing or unparseable in {path}"
             )
-    else:
-        disposition = gate_applicability.get("disposition")
-        work_class = gate_applicability.get("work_class")
-        ui_surface = gate_applicability.get("ui_surface")
-        reason = gate_applicability.get("reason")
-        if disposition not in ENUMS["gate_applicability_disposition"]:
-            errors.append(
-                "ERROR: gate-applicability-closed-class gate_applicability.disposition "
-                + f"'{disposition}' is not a recognized disposition in {path}"
-            )
-        if work_class not in ENUMS["work_class"]:
-            errors.append(
-                "ERROR: gate-applicability-closed-class gate_applicability.work_class "
-                + f"'{work_class}' is not a recognized work class in {path}"
-            )
-        if ui_surface not in ENUMS["ui_surface"]:
-            errors.append(
-                "ERROR: gate-applicability-closed-class gate_applicability.ui_surface "
-                + f"'{ui_surface}' is not a recognized UI surface in {path}"
-            )
-        if disposition == "not-applicable":
-            if not reason:
-                errors.append(
-                    f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.reason is "
-                    + f"required when disposition is not-applicable in {path}"
-                )
 
-
+    _validate_typed_document(
+        frontmatter,
+        policy,
+        acceptance_ids,
+        test_rows,
+        grounding_rows,
+        grounding_lines is not None,
+        path,
+        errors,
+    )
     return errors, policy.notice
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument("spec_path", type=Path, help="Path to the mold spec markdown file.")
+    _ = parser.add_argument(
+        "spec_path", type=Path, help="Path to the mold spec markdown file."
+    )
     _ = parser.add_argument(
         "--strict",
         action="store_true",

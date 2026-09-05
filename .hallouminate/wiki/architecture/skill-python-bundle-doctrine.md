@@ -73,6 +73,14 @@ The build must:
 - exercise bundled interfaces without repository imports or ambient site packages;
 - compare rebuilt archive member names, CRCs, and sizes with the committed artifacts.[^7]
 
+
+
+### Command discovery and generated regions (r014)
+
+Skills declare commands only through `@bundle_command` and `derive_command` into an immutable `COMMANDS` tuple (`src/easy_cheese/shared/bundle_commands.py:20-58,108-127`); `validate_command_surface` rejects an undeclared or unreferenced name. Literal `Command(...)` construction is a rejected pattern. `scripts/check_bundles.py:461-499` once discovered only literal `Command(...)` calls and found zero commands in 11 of 13 archives, including every Wheypoint handler; it now imports the decorator path. The `build_pyz.SKILLS` roster is still a hand-maintained list, not a scan of `src/easy_cheese/skills/*/` (#477 wave A1).
+
+`src/easy_cheese_schemas` is the source of truth for catalog URIs, phase contracts, and document rules. `_schema_catalog_compiler.py` and `_phase_registry_compiler.py` compile them into `_schema_catalog.py` and `_compiled_phase_registry.py`; `scripts/render_generated_regions.py` projects the same models into `skills/mold/references/curdle.md`, `skills/cook/references/writer-views.md`, and `skills/cheese/references/schema-intertwine.md`. Never hand-edit a generated region; fix the generator and rerun it. `build_pyz.py --check` exits `1` on stale or missing generated output, and `package.json` chains the docs generator before Astro with `&&`, so a generator error blocks the docs deploy. Two known renderer gaps: `writer-views.md` does not mark which fields have defaults, and `_ContractVersion.major`/`.minor` are declared `int` while the registry emits `str`. `document_rules.py` has no regeneration CLI; regenerate with `python3 -c "...b._compiled_document_rules_source()..."` because `just bundle` only detects staleness.
+
 ## Superseded topology
 
 This doctrine supersedes the split runtime roots under `src/<skill>/` and `shared/scripts/`, multi-consumer `common.pyz` archives, cross-skill archive calls, `vendor_deps.py`, the custom ZIP writer, and AST-based closure inference. [[pyz-bundling-pipeline]] records the implemented pipeline.
@@ -87,4 +95,4 @@ This doctrine supersedes the split runtime roots under `src/<skill>/` and `share
 [^8]: src/easy_cheese/shared/bundle_commands.py:`Command`; src/easy_cheese/skills/*/commands.py
 [^9]: src/easy_cheese/shared/bundle_commands.py:`dispatch`; tests/python/test_bundle_commands.py
 
-_Source: implemented repository architecture · Updated: 2026-08-28 · Supersedes: committed internal-wheel hashes, split runtime roots, custom closure inference, vendored trees, and shared common archives_
+_Source: implemented repository architecture; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for the command-discovery section · Updated: 2026-09-04 · Supersedes: committed internal-wheel hashes, split runtime roots, custom closure inference, vendored trees, shared common archives, and literal `Command(...)` discovery in `check_bundles.py`_

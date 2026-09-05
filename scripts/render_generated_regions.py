@@ -3,8 +3,10 @@
 Projects the mold-spec document contract and the cook writer-view payload
 shapes (both declared on the attrs models in
 ``src/easy_cheese_schemas/contracts.py``) into compact, BAML-inspired type
-blocks (Python type syntax), and joins the phase registry with the schema catalog and the
-registered contract models into ``skills/cheese/references/schema-intertwine.md``.
+blocks (Python type syntax), joins the phase registry with the schema catalog and the
+registered contract models into ``skills/cheese/references/schema-intertwine.md``,
+and projects each Python-backed skill's static ``COMMANDS`` manifest into
+``skills/<skill>/references/commands.md``.
 
 Running with no arguments refreshes every generated region in place. Pass
 ``--check`` to fail (exit 1) instead of writing, for CI drift detection.
@@ -13,10 +15,12 @@ Running with no arguments refreshes every generated region in place. Pass
 from __future__ import annotations
 
 import argparse
+import importlib
 import re
 import sys
 from enum import Enum
 from pathlib import Path
+from collections.abc import Callable
 from types import ModuleType
 from typing import TYPE_CHECKING, ClassVar, Protocol, TypedDict, cast
 
@@ -29,6 +33,7 @@ for _extra in (REPO_ROOT / "vendor", REPO_ROOT / "src"):
 
 import attrs  # noqa: E402
 
+from easy_cheese.shared.bundle_commands import Command, command_map  # noqa: E402
 from easy_cheese_schemas import contracts  # noqa: E402
 from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
 from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS  # noqa: E402
@@ -41,8 +46,8 @@ class _DocumentContract(Protocol):
 
 
 class _ContractVersion(TypedDict):
-    major: int
-    minor: int
+    major: str
+    minor: str
     schema_uri: str
 
 
@@ -61,6 +66,14 @@ class _Phase(TypedDict):
 CURDLE_PATH = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
 WRITER_VIEWS_PATH = REPO_ROOT / "skills" / "cook" / "references" / "writer-views.md"
 INTERTWINE_PATH = REPO_ROOT / "skills" / "cheese" / "references" / "schema-intertwine.md"
+
+# Same discovery rule as ``scripts/build_pyz.SKILLS``: a skill ships a bundle
+# exactly when it declares a static command manifest. Kept local so the doc
+# projection does not import the bundle builder; a test pins the two equal.
+MANIFEST_ROOT = REPO_ROOT / "src" / "easy_cheese" / "skills"
+SKILL_SLUGS = tuple(
+    sorted(path.parent.name.replace("_", "-") for path in MANIFEST_ROOT.glob("*/commands.py"))
+)
 
 MOLD_SPEC_TAG = "mold-spec-schema"
 WRITER_VIEWS_TAG = "cook-writer-views"
@@ -130,14 +143,38 @@ def _collect_reachable(
     return classes, enums
 
 
+def _field_default(field: "attrs.Attribute[object]") -> str | None:
+    """The rendered default of one field, or None when the field is required.
+
+    An empty string marks an optional field whose default the reader cannot
+    reproduce, such as a factory that reads the instance.
+    """
+    default = cast(object, field.default)
+    if default is attrs.NOTHING:
+        return None
+    factory = cast("Callable[[], object] | None", getattr(default, "factory", None))
+    if factory is None:
+        return repr(default)
+    if cast(bool, getattr(default, "takes_self", False)):
+        return ""
+    return repr(factory())
+
+
 def render_type_blocks(roots: list[type], module: ModuleType) -> str:
-    """Render compact ``type``/``enum`` blocks for every class reachable from ``roots``."""
+    """Render compact ``type``/``enum`` blocks for every class reachable from ``roots``.
+
+    A ``?`` after a field name marks an optional field. ``= value`` shows the
+    default the host applies when a writer omits that field.
+    """
     classes, enums = _collect_reachable(roots, module)
     lines: list[str] = []
     for name in sorted(classes):
         lines.append(f"type {name} {{")
         for field in classes[name]:
-            lines.append(f"  {field.name} {field.type}")
+            default = _field_default(field)
+            optional = "" if default is None else "?"
+            suffix = f" = {default}" if default else ""
+            lines.append(f"  {field.name}{optional} {field.type}{suffix}")
         lines.append("}")
         lines.append("")
     for name in sorted(enums):
@@ -177,8 +214,22 @@ def render_mold_spec_region() -> str:
 
 
 def render_writer_views_region() -> str:
-    roots = [contracts.AgentWriterView, *contracts.writer_payload_types().values()]
-    return render_type_blocks(roots, contracts)
+    payload_types = contracts.writer_payload_types()
+    mapping = [
+        "// A `?` marks an optional field. `= value` shows the applied default.",
+        "map WriterViewKind -> WriterPayload {",
+        *(
+            f"  {cast(str, kind.value)} -> {payload.__name__}"
+            for kind, payload in sorted(
+                payload_types.items(), key=lambda item: cast(str, item[0].value)
+            )
+        ),
+        "}",
+        "",
+        "",
+    ]
+    roots = [contracts.AgentWriterView, *payload_types.values()]
+    return "\n".join(mapping) + render_type_blocks(roots, contracts)
 
 
 def _slug_from_uri(uri: str) -> str:
@@ -196,10 +247,11 @@ def render_schema_intertwine() -> str:
         "# Schema intertwine",
         "",
         (
-            "Generated by `scripts/render_generated_regions.py`; do not hand-edit. Joins"
-            " the phase registry (`_compiled_phase_registry`), the schema catalog"
-            " (`_schema_catalog`), and the registered contract models"
-            " (`contracts.py`) into one map per phase transition."
+            "Run `scripts/render_generated_regions.py` to generate this file. Do not"
+            " edit it manually. The generator joins the phase registry"
+            " (`_compiled_phase_registry`), the schema catalog (`_schema_catalog`),"
+            " and the registered contract models (`contracts.py`) for each phase"
+            " transition."
         ),
         "",
         "## Phase transitions",
@@ -243,6 +295,44 @@ def render_schema_intertwine() -> str:
     return "\n".join(lines)
 
 
+def commands_doc_path(slug: str) -> Path:
+    return REPO_ROOT / "skills" / slug / "references" / "commands.md"
+
+
+def skill_commands(slug: str) -> tuple[Command, ...]:
+    """Import one skill's static manifest without resolving its command targets."""
+    package = slug.replace("-", "_")
+    module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
+    return cast("tuple[Command, ...]", module.COMMANDS)
+
+
+def render_skill_commands(slug: str) -> str:
+    """Render one skill's canonical command inventory from its static manifest."""
+    package = slug.replace("-", "_")
+    lines = [
+        f"# `/{slug}` bundle commands",
+        "",
+        (
+            "`scripts/render_generated_regions.py` generates this file from the static"
+            f" `COMMANDS` manifest in `src/easy_cheese/skills/{package}/commands.py`."
+            " Do not edit this file."
+            f" Run each command as `python3 skills/{slug}/scripts/{slug}.pyz <command>"
+            " [args...]`. Each command returns an integer exit status."
+            " Pass `--help` to a command for its arguments and output format."
+            " Keep worked examples in the skill instructions."
+        ),
+        "",
+        "| Command | Purpose |",
+        "| --- | --- |",
+    ]
+    lines.extend(
+        f"| `{command.name}` | {command.summary} |"
+        for command in command_map(skill_commands(slug)).values()
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _refreshed_region_file(path: Path, tag: str, body: str) -> str:
     text = path.read_text(encoding="utf-8")
     return replace_region(text, tag, body)
@@ -259,6 +349,7 @@ def refresh(check: bool) -> bool:
             WRITER_VIEWS_PATH, WRITER_VIEWS_TAG, render_writer_views_region()
         ),
         INTERTWINE_PATH: render_schema_intertwine(),
+        **{commands_doc_path(slug): render_skill_commands(slug) for slug in SKILL_SLUGS},
     }
 
     clean = True
@@ -270,6 +361,7 @@ def refresh(check: bool) -> bool:
         if check:
             print(f"DRIFT: {path.relative_to(REPO_ROOT)} is stale", file=sys.stderr)
         else:
+            path.parent.mkdir(parents=True, exist_ok=True)
             _ = path.write_text(new_text, encoding="utf-8")
     return clean
 

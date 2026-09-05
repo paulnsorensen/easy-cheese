@@ -1,6 +1,6 @@
 # Synthesis and confidence
 
-After fetchers report, build a claim-level evidence table, verify citations, and apply the confidence cap.
+Build the claim-level evidence table after the fetchers report. Verify each citation. Then apply the confidence cap.
 
 ## Claim-level evidence table
 
@@ -12,41 +12,41 @@ One row per material claim, not per source. A single source can support multiple
 | <one-line claim> | <quote or file:line>[^source-1] | vendor docs / paper / changelog / repository knowledge / repo code / Git host / blog | <date checked or "live"> | `certain` / `speculating` / `don't know` | <if any> |
 ```
 
-The Evidence column uses footnote markers (`[^source-1]`, `[^source-2]`, …); the absolute URLs and fetch dates live in a `## References` block at the bottom of the report per [`../../cheese/references/formatting.md`](../../cheese/references/formatting.md) § Citations. Inline `file:line` references stay raw — they are locations, not citations.
+The Evidence column uses footnote markers, such as `[^source-1]`. Put absolute URLs and fetch dates in the final `## References` block. Follow [`../../cheese/references/formatting.md`](../../cheese/references/formatting.md) § Citations. Keep inline `file:line` references without footnote markers. These references are locations, not citations.
 
 Rules:
 
 - **Each "latest" or "current" claim must include an absolute date** ("latest as of 2026-05-04"), not just "latest".
 - **Versioned claims must include the version** ("Next.js 15.3", not "Next.js latest").
 - **Conflicting evidence is its own row pair**, not silently averaged. Surface disagreement explicitly.
-- **Single-source claims cap at `speculating`** unless the source is authoritative for that claim type (vendor docs for an API, repository knowledge for recorded rationale, or the codebase for current local behavior). Documentation evidence is authoritative only when its version matches the question; a provider name does not make a version-ambiguous excerpt authoritative.
+- **Cap a single-source claim at `speculating`.** An authoritative source for that claim type can remove this cap. Examples include vendor documentation for an API and repository knowledge for recorded rationale. Current code is authoritative for current local behavior. Documentation is authoritative only when its version matches the question. A provider name does not make an ambiguous excerpt authoritative.
 
-The tokens `certain`, `speculating`, and `don't know` are exact label values — write them verbatim, never as synonyms.
+The tokens `certain`, `speculating`, and `don't know` are exact label values. Write each one verbatim. Do not write a synonym or a case variant.
 
-## Alternatives are open questions, not recommendations
+## Treat alternatives as open questions
 
 A research call **returns evidence**. It does not pick design knobs.
 
-When a cited source mentions an alternative ("library X supports A or B", "papers recommend tuning C", "implementations vary between Y and Z"), the alternative becomes an **open question for the user**, not a synthesis recommendation. Never produce output of the form "use both" / "expose a knob to switch" / "add Y as an option alongside the existing X" — those are design choices reserved for `/mold` and the user.
+A source can identify more than one alternative. Add each alternative to the open questions for the user. Do not turn an alternative into a synthesis recommendation. `/mold` and the user make design choices.
 
 Rules:
 
-- **Cap confidence on alternative claims at `speculating`** until the user adjudicates which variant the project should use. A single arxiv citation saying "X or Y works" does not earn `certain` on either branch.
-- **Distinguishing nouns the user did not type (introduced by the agent or by a cited source) must appear in the Open questions block**, not in the Finding paragraph. If the user did not type "convex", "α", "BM42", "hybrid", etc., research output cannot recommend them — only flag them for adjudication.
-- **The Finding paragraph reports what the evidence says, not what to do.** "Paper X recommends tuning k in RRF" is a finding. "We should add convex fusion as a second algorithm" is a design choice — out of scope for `/briesearch`.
+- **Cap alternative claims at `speculating`** until the user selects a variant. One arXiv citation does not make either variant `certain`.
+- **Put new distinguishing terms in Open questions.** This rule applies when the user did not use the terms. Examples include `convex`, `α`, `BM42`, and `hybrid`. Do not recommend these alternatives. Ask the user to select one.
+- **Report evidence in the Finding paragraph.** Do not give design instructions there. `Paper X recommends tuning k in RRF` is a finding. `We should add convex fusion as a second algorithm` is a design choice. `/briesearch` does not make this choice.
 
-Canonical failure to avoid: a Tavily snippet says "hybrid retrieval combines sparse and dense signals via RRF or convex score combination." A correct synthesis reports both as known approaches and lists "RRF vs convex fusion" as an open question. An incorrect synthesis (the one this rule exists to prevent) writes "recommend exposing both via a `[search].fusion` knob" — that's a design choice the research call had no mandate to make.
+Example failure: a Tavily snippet lists RRF and convex score combination for hybrid retrieval. A correct synthesis reports both known methods. It asks the user to select `RRF` or `convex fusion`. An incorrect synthesis recommends a `[search].fusion` setting. The research request does not authorize that design choice.
 
 ## Link / citation verification
 
-**Short form (always returned) — minimum verification:** inspect every cited source that supports a claim with a real extraction/open/fetch/host operation. Also confirm every URL cited in `## References` resolves (HTTP 200 or matched-host redirect), except the inline-file and user-supplied URLs exempted below. Mark unreachable footnote definitions `[unverified]` rather than dropping them. This runs on the always-returned path; it is not deferred to deep reports.
+**Short form requires minimum verification.** Inspect each cited source with a retrieval or host operation. Confirm that each URL in `## References` resolves. Accept HTTP 200 or a redirect to the same host. The exemptions below apply. Mark an unreachable footnote definition with `[unverified]`. Do not remove it. Always do this work for the short form. Do not defer it to a deep report.
 
-Deep reports (anything with a `research/<slug>/<slug>.md` artifact in the durable corpus) add, on top of the above:
+For a deep report in `research/<slug>/<slug>.md`, also complete these checks:
 
-1. Quote tracing: every quoted or paraphrased line traces back to its source (one-click verifiable for the user).
-2. Every "as of <date>" claim has a verified fetch date in the same row.
+1. Trace each quote or paraphrase to its source. Make the trace easy for the user to verify.
+2. Give each dated claim a verified fetch date in the same row.
 
-Skip link-resolution verification only for: (a) inline file references (`file:line`), (b) the user's own supplied URLs. These exemptions do not waive inspection of source content used to support a claim.
+Skip link verification only for inline `file:line` references and URLs that the user supplies. You must still inspect source content that supports a claim.
 
 ## Mechanical confidence cap
 
@@ -60,22 +60,22 @@ Skip link-resolution verification only for: (a) inline file references (`file:li
 | Sources disagree | `don't know` — and surface the disagreement |
 | Single source per claim | cap at `speculating` unless authoritative for that claim |
 
-**"Independent" means distinct origin, not distinct URL or provider.** Before counting sources, collapse pages that share a root domain or repeat the same upstream. Criticality belongs to the claim and capability: library/API documentation is critical for version-specific API claims; current-web evidence is critical for freshness-sensitive facts; local code is critical for current repository behavior; repository knowledge is critical for prior decisions and rationale; Git hosting/examples is usually supporting evidence unless hosted state or real-world precedent is the question. Missing Context7, Tavily, Hallouminate, `gh`, or any other named provider has no confidence effect when an equivalent source covers the same critical evidence.
+**Independent means a separate origin, not a separate URL or provider.** Combine pages that have the same root domain or upstream source. Determine criticality from the claim and capability. Documentation is critical for a version-specific API claim. Current web evidence is critical for a freshness claim. Local code is critical for current repository behavior. Repository knowledge is critical for prior decisions and rationale. Git hosting evidence usually supports other evidence. It becomes critical when the question asks about hosted state or precedent. A missing named provider does not reduce confidence when an equivalent source supplies the required evidence.
 
 ## Absence and negative claims
 
-A claim that something *does not exist* ("X has no Y", "Z doesn't support W") is the most dangerous shape in a synthesis: it is easy to infer from silence, hard to falsify, and an un-grounded one can survive many turns of pushback (issue #113). Hold negatives to a higher bar than positives.
+An absence claim is easy to infer from silence. It is also difficult to disprove. An unsupported absence claim can survive many review turns. Apply a higher standard to an absence claim than to a positive claim.
 
-- **Never assert a bare "doesn't exist" as `certain`.** A `certain` absence claim must either cite a source that *states* the absence, or enumerate the candidate mechanisms that would satisfy it and cite a ruling-out for each.
-- **Otherwise downgrade.** If you only failed to find it, the claim is "not found in `<sources checked>`" at `speculating` — name the sources searched, never "does not exist".
-- **A recorded fact outranks an inferred absence.** If any raw capture or evidence row records the thing existing, the absence claim is the error, not the note.
+- **Do not mark an unsupported absence as `certain`.** Cite a source that states the absence. Otherwise, list each candidate mechanism and cite evidence that excludes it.
+- **Downgrade an incomplete search.** Report `not found in <sources checked>` at `speculating`. Name the searched sources. Do not report `does not exist`.
+- **A recorded fact has priority over an inferred absence.** If evidence records the item, correct the absence claim.
 
 ## Synthesis-fidelity self-check
 
-Before finalizing a deep report (`research/<slug>/<slug>.md`), run the mechanical grounding gate and reconcile the conclusion against what the run actually captured:
+Before you finish a deep report, run the grounding gate. Then compare the conclusion with the captured evidence.
 
-1. **Run `ground-check`:** `python3 skills/briesearch/scripts/briesearch.pyz ground-check "$ROOT/research/<slug>/<slug>.md"`. It exits non-zero on any claim with no verifiable citation or a non-label confidence value, and prints `ADVISORY` lines for `certain` absence claims. Resolve every error before returning; treat each advisory as a prompt to enumerate-and-rule-out or downgrade per the section above.
-2. **Diff the conclusion against the raw capture:** a conclusion may not contradict a fact the run already recorded. Re-read the cited `raw/NN-host.md` lines behind each material claim; if the Finding contradicts a recorded fact, the Finding is wrong — fix it or halt. Do not ship the contradiction.
+1. **Run `ground-check`.** Run `python3 skills/briesearch/scripts/briesearch.pyz ground-check "$ROOT/research/<slug>/<slug>.md"`. The command fails on an unsupported claim, invalid confidence label, or remote citation without a recorded retrieval. It prints `ADVISORY` for each `certain` absence claim. Correct each error before you return the report. For each advisory, add exclusion evidence or reduce confidence.
+2. **Compare the conclusion with the raw capture.** A conclusion must not conflict with a recorded fact. Read the cited `raw/NN-host.md` lines for each material claim. Correct a conflicting Finding or stop. Do not return the conflict.
 
 ## Output shape
 
@@ -111,6 +111,6 @@ Short form (always returned to the caller):
 
 Long form (when the question warranted a deep look):
 
-- Resolve the durable corpus root with `ROOT=$(python3 skills/briesearch/scripts/briesearch.pyz artifact-path research <slug>)` (slug is 4-6 kebab-case words), then write the full report to `"$ROOT/research/<slug>/<slug>.md"`. The root is the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location); briesearch owns the nested `research/<slug>/` layout composed under it.
-- Include the full claim table, raw bodies referenced from `"$ROOT/research/<slug>/raw/"` (see `context-isolation.md`), and the verification log.
-- In the chat reply: a one-paragraph summary, the report path, and the confidence line. Do not paste the full report inline — the user will see only the last collapsed message by default.
+- Resolve each path with `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. Use a slug with four to six kebab-case words. The command prints `corpus_root`, `dir`, `report`, `raw_dir`, `manifest`, and `artifact`. Write the complete report to `report`. Write raw bodies under `raw_dir`. Report `artifact` to a caller that records a corpus-relative path. Do not construct these paths manually.
+- Include the complete claim table and the verification log. Cite each raw body with a path relative to `raw_dir`, such as `raw/01-example.md#Lstart-end`. Never put URL user information, query values, or a fragment in a persisted citation.
+- Return one summary paragraph, the report path, and the confidence line in chat. Do not paste the complete report in chat.

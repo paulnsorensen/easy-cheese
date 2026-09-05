@@ -128,7 +128,7 @@ def revision(**overrides: object) -> dict[str, object]:
             "applied_additions": [],
             "applied_transitions": [],
             "preserved_entry_ids": [],
-            "rehydrated_from_revision_id": None,
+            "compaction": None,
             "session_provenance": None,
             "repository": {"branch": "main", "commit": "a" * 40},
             "projection_path": "projections/3-rev-0003.md",
@@ -381,11 +381,38 @@ def test_revision_rejects_a_non_hex_repository_commit() -> None:
 
 def test_revision_accepts_a_genesis_parent_and_bare_repository_provenance() -> None:
     value = structured(
-        revision(parent_revision_id=None, repository={"branch": None, "commit": None}),
+        revision(
+            parent_revision_id=None,
+            revision_number=1,
+            repository={"branch": None, "commit": None},
+        ),
         WheypointRevision,
     )
     assert value.parent_revision_id is None
+    assert value.revision_number == 1
     assert value.repository.branch is None
+
+
+def test_revision_rejects_a_later_revision_without_a_parent() -> None:
+    """A null parent means genesis, so revision two cannot claim that root."""
+    problems = refused(
+        revision(parent_revision_id=None, revision_number=2), WheypointRevision
+    )
+    assert blames(problems, "WheypointRevision.revision_number")
+
+
+def test_revision_parent_digest_is_optional_but_must_be_a_digest() -> None:
+    """A receipt written before the pin existed omits the field entirely."""
+    legacy = revision()
+    assert "parent_revision_digest" not in legacy
+    assert structured(legacy, WheypointRevision).parent_revision_digest is None
+
+    pinned = structured(revision(parent_revision_digest=DIGEST), WheypointRevision)
+    assert pinned.parent_revision_digest == DIGEST
+    assert blames(
+        refused(revision(parent_revision_digest="rev-0002"), WheypointRevision),
+        "WheypointRevision.parent_revision_digest",
+    )
 
 
 def test_revision_number_must_be_positive() -> None:
@@ -595,14 +622,38 @@ def test_one_entry_cannot_be_transitioned_twice_in_one_delta() -> None:
 
 
 def test_rehydration_evidence_requires_a_declared_compaction() -> None:
+    evidence = {
+        "rehydrated_from_revision_id": "rev-0002",
+        "rehydrated_record_digest": DIGEST,
+        "reconciled_entry_ids": ["q1"],
+        "reconciliation_source_session_ids": ["s-42"],
+    }
+    problems = refused(delta(compacted=False, compaction=evidence), WheypointDelta)
+    assert blames(problems, "WheypointDelta.compaction")
+    value = structured(delta(compacted=True, compaction=evidence), WheypointDelta)
+    assert value.compaction is not None
+    assert value.compaction.rehydrated_from_revision_id == "rev-0002"
+    assert value.compaction.reconciled_entry_ids == ["q1"]
+    assert value.compaction.reconciliation_source_session_ids == ["s-42"]
+    # Derived by the runtime from the lineage, never carried by the request.
+    assert value.compaction.prior_compaction_revision_id is None
+
+
+def test_a_compaction_record_must_quote_a_digest_of_the_record_it_re_read() -> None:
+    """The digest is what a stale transcript cannot supply, so it is held to the
+    digest shape rather than accepted as free text."""
     problems = refused(
-        delta(compacted=False, rehydrated_from_revision_id="rev-0002"), WheypointDelta
+        delta(
+            compacted=True,
+            compaction={
+                "rehydrated_from_revision_id": "rev-0002",
+                "rehydrated_record_digest": "rev-0002",
+                "reconciled_entry_ids": [],
+            },
+        ),
+        WheypointDelta,
     )
-    assert blames(problems, "WheypointDelta.rehydrated_from_revision_id")
-    value = structured(
-        delta(compacted=True, rehydrated_from_revision_id="rev-0002"), WheypointDelta
-    )
-    assert value.rehydrated_from_revision_id == "rev-0002"
+    assert blames(problems, "WheypointDelta.compaction.rehydrated_record_digest")
 
 
 def test_an_artifact_link_may_declare_a_digest_a_revision_and_coverage() -> None:
@@ -728,8 +779,31 @@ def test_a_decision_dossier_fork_needs_options_with_evidence() -> None:
         ),
     ]
     for bad, path in cases:
-        problems = refused(record(decision_dossier=bad), WheypointRecord)
+        problems = refused(
+            record(questions=[entry("q1")], decision_dossier=bad), WheypointRecord
+        )
         assert blames(problems, f"WheypointRecord.decision_dossier[1].{path}"), problems
+
+
+def test_an_ungated_record_cannot_carry_a_decision_dossier() -> None:
+    """An ungated open fork produces `status: ok`.
+
+    The resumed session then skips a decision that requires a human answer.
+    """
+    problems = refused(record(decision_dossier=dossier()), WheypointRecord)
+    assert blames(problems, "WheypointRecord.decision_dossier"), problems
+    resolved = entry("q1", state="resolved", rationale="settled", blocks_continuation=False)
+    assert structured(
+        record(questions=[resolved], decision_dossier=[]), WheypointRecord
+    ).status is WheypointStatus.OK
+
+
+def test_an_ungated_projection_cannot_carry_a_decision_dossier() -> None:
+    problems = refused(
+        projection(gating_entry_ids=[], decision_dossier=dossier()),
+        WheypointProjection,
+    )
+    assert blames(problems, "WheypointProjection.decision_dossier"), problems
 
 
 @pytest.mark.parametrize("level", ["canonical-local", "repo-snapshot", "published"])

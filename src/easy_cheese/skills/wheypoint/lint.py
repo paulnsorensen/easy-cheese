@@ -3,9 +3,10 @@
 Everything a caller would have to trust before acting on a checkpoint is
 re-derived here from the bytes on disk: the projection hashes to the digest it
 carries, the record hashes to the digest its receipt quotes, every parent in
-the chain is present as an immutable local revision, the record belongs to this
-project, the commit it cites still exists, and every artifact coverage claim
-still resolves.
+the chain is present as an immutable local revision, every protected entry that
+chain accounts for is still in the record, the record belongs to this project,
+the commit it cites still exists, and every artifact coverage claim still
+resolves.
 
 A lint finding is a *reason not to dispatch*, never a repair. Nothing in this
 module writes, and nothing removes protected inline state -- an artifact whose
@@ -21,12 +22,22 @@ from enum import Enum
 from pathlib import Path
 
 from attrs import define, field
-from easy_cheese_schemas import WheypointProjection, WheypointRecord, WheypointRevision
+from easy_cheese_schemas import (
+    CompactionRecord,
+    Durability,
+    WheypointProjection,
+    WheypointRecord,
+    WheypointRevision,
+    WheypointStatus,
+)
 
+from . import lineage
 from . import projection as projection_mod
 from . import records, storage
+from .lineage import Lineage
 
 _GIT_TIMEOUT_SECONDS = 5
+
 
 
 class LintCode(str, Enum):
@@ -37,11 +48,17 @@ class LintCode(str, Enum):
     REVISION_INCOMPLETE = "revision-incomplete"
     PROJECTION_UNREADABLE = "projection-unreadable"
     PROJECTION_DIGEST_MISMATCH = "projection-digest-mismatch"
+    PROJECTION_STATUS_MISMATCH = "projection-status-mismatch"
     PROJECTION_RECORD_MISMATCH = "projection-record-mismatch"
     PARENT_UNRESOLVED = "parent-unresolved"
+    PARENT_DIGEST_MISMATCH = "parent-digest-mismatch"
+    PARENT_NOT_CONTIGUOUS = "parent-not-contiguous"
     PROJECT_MISMATCH = "project-mismatch"
     GIT_OBJECT_MISSING = "git-object-missing"
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
+    ENTRY_DROPPED = "entry-dropped"
+    DURABILITY_LOCAL_ONLY = "durability-local-only"
+    COMPACTION_PARENT_UNRESOLVED = "compaction-parent-unresolved"
 
 
 # Findings that describe the store's surroundings rather than the authority of
@@ -51,7 +68,14 @@ class LintCode(str, Enum):
 # spec gates automatic continuation on projection and record digests, the
 # parent chain, project identity, referenced Git objects, and required artifact
 # coverage -- an orphan is none of those, so it is reported, not enforced.
-ADVISORY_CODES = frozenset({LintCode.REVISION_INCOMPLETE})
+#
+# A canonical-local checkpoint over an open gate is likewise not an authority
+# problem: the record is exactly as valid as it says it is. What is at risk is
+# the human-owed state it holds, which no commit or publish has carried
+# anywhere. That is a choice for the operator, so it warns and does not block.
+ADVISORY_CODES = frozenset(
+    {LintCode.REVISION_INCOMPLETE, LintCode.DURABILITY_LOCAL_ONLY}
+)
 
 
 def gates_continuation(finding: LintFinding) -> bool:
@@ -144,6 +168,18 @@ def lint_projection_text(text: str) -> LintReport:
             ),
             projection=parsed,
         )
+    written = projection_mod.declared_status(text)
+    if written != parsed.status.value:
+        return LintReport(
+            findings=(
+                LintFinding(
+                    LintCode.PROJECTION_STATUS_MISMATCH,
+                    f"document is written {written!r} but its gating entries "
+                    + f"derive {parsed.status.value!r}",
+                ),
+            ),
+            projection=parsed,
+        )
     return LintReport(projection=parsed)
 
 
@@ -195,6 +231,9 @@ def lint_work(
 
     current = store.read_revision(record.revision_number, record.revision_id)
     projection = None
+    # No receipt for the current revision means no proven ancestry, so every
+    # revision pin is unresolved rather than resolved against the whole store.
+    ancestry: frozenset[str] = frozenset()
     if current is None:
         findings.append(
             LintFinding(
@@ -207,11 +246,48 @@ def lint_work(
         projection_report = _lint_current_projection(store, record, current)
         findings.extend(projection_report.findings)
         projection = projection_report.projection
-        findings.extend(_chain_findings(recovery, current))
+        chain = lineage.walk(
+            (file.revision for file in recovery.complete), current
+        )
+        ancestry = chain.revision_ids
+        findings.extend(_lineage_finding(issue) for issue in chain.issues)
+        findings.extend(_compaction_findings(chain))
+        findings.extend(_conservation_findings(chain, record))
         findings.extend(_git_findings(current, git_object_exists))
 
-    findings.extend(_coverage_findings(recovery, record, artifact_digest))
+    findings.extend(_coverage_findings(ancestry, record, artifact_digest))
+    if projection is not None:
+        findings.extend(_durability_findings(projection, record))
     return LintReport(findings=tuple(findings), record=record, projection=projection)
+
+
+def _durability_findings(
+    projection: WheypointProjection, record: WheypointRecord
+) -> list[LintFinding]:
+    """Warn when human-owed gating state has never left the local corpus.
+
+    `canonical-local` means the projection exists only in this corpus. That is
+    fine for a settled checkpoint -- it can be regenerated from the record. It
+    is not fine for a gated one: the gates are questions and decisions a person
+    still owes an answer to, and losing the corpus loses them. The runtime
+    cannot fix that itself, because it never commits and never publishes, so
+    this hands the operator the choice rather than making it.
+    """
+    if projection.durability is not Durability.CANONICAL_LOCAL:
+        return []
+    if record.status is not WheypointStatus.GATED:
+        return []
+    gates = ", ".join(record.gating_entry_ids)
+    return [
+        LintFinding(
+            LintCode.DURABILITY_LOCAL_ONLY,
+            f"revision {record.revision_id!r} still gates on {gates} and is "
+            + "canonical-local: that state exists nowhere but this corpus. "
+            + "Preserve it (snapshot the corpus into the repository) or "
+            + "publish it -- this runtime never commits and never publishes, "
+            + "so the choice is yours.",
+        )
+    ]
 
 
 def _incomplete_findings(
@@ -261,40 +337,198 @@ def _lint_current_projection(
     )
 
 
-def _chain_findings(
-    recovery: storage.RecoveryReport, current: WheypointRevision
+def _not_contiguous_detail(issue: lineage.LineageIssue) -> str:
+    """Why a resolvable parent is still not this revision's ancestor."""
+    parent = issue.parent
+    assert parent is not None
+    return (
+        f"revision {issue.revision.revision_id!r} of work "
+        + f"{issue.revision.work_id!r} names parent {issue.parent_revision_id!r} "
+        + f"of work {parent.work_id!r} at revision number "
+        + f"{parent.revision_number}, but its own revision number is "
+        + f"{issue.revision.revision_number}"
+    )
+
+
+def _lineage_finding(issue: lineage.LineageIssue) -> LintFinding:
+    if issue.kind is lineage.LineageIssueKind.PARENT_UNRESOLVED:
+        if issue.cycle:
+            detail = (
+                f"revision {issue.revision.revision_id!r} re-enters the chain at "
+                + f"{issue.parent_revision_id!r}"
+            )
+        else:
+            detail = (
+                f"revision {issue.revision.revision_id!r} names parent "
+                + f"{issue.parent_revision_id!r}, which is not a complete "
+                + "immutable revision"
+            )
+        return LintFinding(LintCode.PARENT_UNRESOLVED, detail)
+    if issue.kind is lineage.LineageIssueKind.PARENT_NOT_CONTIGUOUS:
+        return LintFinding(
+            LintCode.PARENT_NOT_CONTIGUOUS, _not_contiguous_detail(issue)
+        )
+    pinned = issue.expected_digest
+    if pinned is None:
+        detail = (
+            f"revision {issue.revision.revision_id!r} is stamped schema version "
+            + f"{issue.revision.schema_version} and names parent "
+            + f"{issue.parent_revision_id!r} without pinning its digest"
+        )
+    else:
+        detail = (
+            f"revision {issue.revision.revision_id!r} pins parent "
+            + f"{issue.parent_revision_id!r} at {pinned}, but that receipt now "
+            + f"hashes to {issue.actual_digest}"
+        )
+    return LintFinding(LintCode.PARENT_DIGEST_MISMATCH, detail)
+
+
+
+
+def _held_entry_ids(revision: WheypointRevision) -> set[str]:
+    """The protected entries the record held after `revision` was written."""
+    return {addition.entry_id for addition in revision.applied_additions} | set(
+        revision.preserved_entry_ids
+    )
+
+
+def _compaction_proof_findings(
+    revision: WheypointRevision,
+    compaction: CompactionRecord,
+    parent: WheypointRevision | None,
 ) -> list[LintFinding]:
-    """Walk parents back to genesis; every step must be a local revision."""
-    known = {
-        file.revision.revision_id: file.revision for file in recovery.complete
-    }
+    """Re-derive the reconciliation report against the receipt it names."""
+    if compaction.rehydrated_from_revision_id != revision.parent_revision_id:
+        return [
+            LintFinding(
+                LintCode.COMPACTION_PARENT_UNRESOLVED,
+                f"revision {revision.revision_id!r} rehydrated from "
+                + f"{compaction.rehydrated_from_revision_id!r} but was "
+                + f"written onto parent {revision.parent_revision_id!r}",
+            )
+        ]
+    if parent is None:
+        return []
     findings: list[LintFinding] = []
-    seen = {current.revision_id}
-    revision = current
-    while revision.parent_revision_id is not None:
-        parent_id = revision.parent_revision_id
-        if parent_id in seen:
-            findings.append(
-                LintFinding(
-                    LintCode.PARENT_UNRESOLVED,
-                    f"revision {revision.revision_id!r} re-enters the chain at "
-                    + f"{parent_id!r}",
-                )
+    if compaction.rehydrated_record_digest != parent.record_digest:
+        findings.append(
+            LintFinding(
+                LintCode.COMPACTION_PARENT_UNRESOLVED,
+                f"revision {revision.revision_id!r} quotes rehydrated record "
+                + f"digest {compaction.rehydrated_record_digest}, but revision "
+                + f"{parent.revision_id!r} recorded {parent.record_digest}",
             )
-            break
-        parent = known.get(parent_id)
-        if parent is None:
-            findings.append(
-                LintFinding(
-                    LintCode.PARENT_UNRESOLVED,
-                    f"revision {revision.revision_id!r} names parent "
-                    + f"{parent_id!r}, which is not a complete immutable revision",
-                )
+        )
+    unreconciled = sorted(_held_entry_ids(parent) - set(compaction.reconciled_entry_ids))
+    if unreconciled:
+        findings.append(
+            LintFinding(
+                LintCode.COMPACTION_PARENT_UNRESOLVED,
+                f"revision {revision.revision_id!r} reconciled no entry "
+                + f"{', '.join(repr(entry_id) for entry_id in unreconciled)} "
+                + f"that revision {parent.revision_id!r} still carried",
             )
-            break
-        seen.add(parent_id)
-        revision = parent
+        )
     return findings
+
+
+def _compaction_findings(chain: Lineage) -> list[LintFinding]:
+    """Re-derive every compaction claim against the chain it was written into.
+
+    A compaction record is a reconciliation report, and every link in it is
+    checkable from the receipts alone.
+
+    The revision it says it rehydrated from must be the parent it then wrote
+    onto. The digest it quotes must be the digest that parent receipt recorded.
+    The entries it reconciled must cover every protected entry that parent
+    still carried. A session that skips any of the three reconciled against
+    state that is not the state it extended.
+
+    The predecessor it chains to must be a compaction that is genuinely behind
+    it. The chain runs current-first, so a prior compaction must sit at a later
+    position. An id outside the walked ancestry names a compaction this lineage
+    never passed through. An id at the same position or an earlier one names
+    itself or a descendant.
+
+    None of this is repairable here, because the lost context is lost. Each
+    finding gates continuation, because resuming on a checkpoint whose
+    compaction claim does not hold is resuming on state nobody reconciled.
+    """
+    revisions = chain.revisions
+    position = {revision.revision_id: index for index, revision in enumerate(revisions)}
+    findings: list[LintFinding] = []
+    for index, revision in enumerate(revisions):
+        compaction = revision.compaction
+        if compaction is None:
+            continue
+        parent = revisions[index + 1] if index + 1 < len(revisions) else None
+        findings.extend(_compaction_proof_findings(revision, compaction, parent))
+        prior_id = compaction.prior_compaction_revision_id
+        if prior_id is None:
+            continue
+        prior_index = position.get(prior_id)
+        if prior_index is None:
+            findings.append(
+                LintFinding(
+                    LintCode.COMPACTION_PARENT_UNRESOLVED,
+                    f"revision {revision.revision_id!r} chains to prior "
+                    + f"compaction {prior_id!r}, which is not in the proven "
+                    + "ancestry of this revision",
+                )
+            )
+        elif prior_index <= index:
+            findings.append(
+                LintFinding(
+                    LintCode.COMPACTION_PARENT_UNRESOLVED,
+                    f"revision {revision.revision_id!r} chains to prior "
+                    + f"compaction {prior_id!r}, which is not behind it in the "
+                    + "proven ancestry of this revision",
+                )
+            )
+        elif revisions[prior_index].compaction is None:
+            findings.append(
+                LintFinding(
+                    LintCode.COMPACTION_PARENT_UNRESOLVED,
+                    f"revision {revision.revision_id!r} chains to prior "
+                    + f"compaction {prior_id!r}, which records no compaction",
+                )
+            )
+    return findings
+
+
+def _conservation_findings(
+    chain: Lineage, record: WheypointRecord
+) -> list[LintFinding]:
+    """Reconcile the record against every entry its own lineage accounts for.
+
+    A receipt says what one revision added and what it carried forward
+    untouched; together the chain therefore names every protected entry the
+    work has ever held. An entry that lineage accounts for and the record no
+    longer carries was not transitioned out -- there is no transition that
+    removes one -- so it was replaced away, which is the one loss the
+    carry-forward rules cannot catch from a single revision. It is reported
+    against the record, never repaired: nothing here can know what the dropped
+    entry said.
+    """
+    accounted: dict[str, str] = {}
+    for revision in chain.revisions:
+        for entry_id in (
+            *(addition.entry_id for addition in revision.applied_additions),
+            *revision.preserved_entry_ids,
+        ):
+            if entry_id not in accounted:
+                accounted[entry_id] = revision.revision_id
+    held = {entry.entry_id for entry in records.entries(record)}
+    return [
+        LintFinding(
+            LintCode.ENTRY_DROPPED,
+            f"revision {revision_id!r} accounts for entry {entry_id!r}, which "
+            + f"record {record.revision_id!r} no longer carries",
+        )
+        for entry_id, revision_id in sorted(accounted.items())
+        if entry_id not in held
+    ]
 
 
 def _git_findings(
@@ -313,14 +547,14 @@ def _git_findings(
 
 
 def _coverage_findings(
-    recovery: storage.RecoveryReport,
+    ancestry: frozenset[str],
     record: WheypointRecord,
     artifact_digest: Callable[[str], str | None],
 ) -> list[LintFinding]:
     report = records.coverage_report(
         record,
         artifact_digest=artifact_digest,
-        known_revision_ids=recovery.revision_ids,
+        ancestor_revision_ids=ancestry,
     )
     return [
         LintFinding(

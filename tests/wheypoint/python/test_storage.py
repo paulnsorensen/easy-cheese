@@ -77,6 +77,14 @@ def test_immutable_file_names_pair_number_with_revision_id(
     assert store.projection_path(7, "rev-0007").name == "7-rev-0007.md"
 
 
+@pytest.mark.parametrize("request_identity", [".foo", ".", ".."])
+def test_pending_path_rejects_dot_prefixed_stems(
+    store: storage.WorkStore, request_identity: str
+) -> None:
+    with pytest.raises(storage.StorageError, match="safe path segment"):
+        _ = store.pending_path(request_identity)
+
+
 @pytest.mark.parametrize("work_id", ["../evil", "work/0001", "Work-0001", "", "."])
 def test_a_work_id_that_could_escape_the_corpus_is_refused(
     corpus_root: Path, work_id: str
@@ -392,17 +400,23 @@ def test_promotion_refuses_a_triple_that_does_not_agree(
     store: storage.WorkStore, make_promotion: Callable[..., _Promotion], field: str
 ) -> None:
     promotion = make_promotion()
-    broken = {
-        "revision_id": "rev-9999",
-        "revision_number": 9,
-        "work_id": "work-9999",
-        "record_digest": "sha256:" + "9" * 64,
-        "projection_digest": "sha256:" + "9" * 64,
-    }[field]
+    # A receipt that names no parent must stay at revision one, so the
+    # revision_number case also supplies the parent pins the model requires.
+    broken: dict[str, dict[str, object]] = {
+        "revision_id": {"revision_id": "rev-9999"},
+        "revision_number": {
+            "revision_number": 9,
+            "parent_revision_id": "rev-0008",
+            "parent_revision_digest": "sha256:" + "8" * 64,
+        },
+        "work_id": {"work_id": "work-9999"},
+        "record_digest": {"record_digest": "sha256:" + "9" * 64},
+        "projection_digest": {"projection_digest": "sha256:" + "9" * 64},
+    }
     with pytest.raises(storage.StorageError):
         store.promote(
             promotion.record,
-            evolve(promotion.revision, **{field: broken}),
+            evolve(promotion.revision, **broken[field]),
             promotion.markdown,
         )
     assert not store.record_path.exists()
@@ -638,7 +652,7 @@ def _report(
     return records.coverage_report(
         record,
         artifact_digest=lambda path: storage.file_digest(base / path),
-        known_revision_ids=store.revision_ids(),
+        ancestor_revision_ids=store.revision_ids(),
     )
 
 
@@ -765,6 +779,75 @@ def test_a_revision_pinned_claim_needs_that_revision_to_exist(
             path="cook.md", reason="coverage pins unknown revision 'rev-9999'"
         ),
     )
+
+
+def test_a_dual_pinned_claim_checks_both_pins(
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _Promotion],
+) -> None:
+    """A matching digest does not license an unresolvable revision.
+
+    A claim that supplies both pins asserts both. Returning on the digest alone
+    accepted a revision this store never wrote.
+    """
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    artifact = tmp_path / "cook.md"
+    _ = artifact.write_text("the cook report", encoding="utf-8")
+    digest = storage.file_digest(artifact)
+
+    both_valid = _covered_record(
+        make_record,
+        ArtifactLink(
+            path="cook.md",
+            digest=digest,
+            revision_id="rev-0001",
+            covers_entry_ids=["d-store"],
+        ),
+    )
+    assert _report(both_valid, tmp_path, store).failures == ()
+
+    stale_revision = _covered_record(
+        make_record,
+        ArtifactLink(
+            path="cook.md",
+            digest=digest,
+            revision_id="rev-9999",
+            covers_entry_ids=["d-store"],
+        ),
+    )
+    assert _report(stale_revision, tmp_path, store).failures == (
+        records.CoverageFailure(
+            path="cook.md", reason="coverage pins unknown revision 'rev-9999'"
+        ),
+    )
+
+
+def test_a_revision_pinned_claim_needs_the_artifact_to_still_be_there(
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _Promotion],
+) -> None:
+    """A revision pin says what the file was at a revision, which says nothing
+    at all once the file is gone -- the digest branch already refused that, and
+    the revision branch used to wave it through."""
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    record = _covered_record(
+        make_record,
+        ArtifactLink(path="gone.md", revision_id="rev-0001", covers_entry_ids=["d-store"]),
+    )
+
+    report = _report(record, tmp_path, store)
+    assert report.covered_entry_ids == ()
+    assert report.failures == (
+        records.CoverageFailure(path="gone.md", reason="artifact is missing"),
+    )
+    assert [entry.entry_id for entry in record.decisions] == ["d-store"]
 
 
 def test_a_link_without_a_coverage_claim_is_not_a_failure(

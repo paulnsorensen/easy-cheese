@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -11,16 +12,21 @@ from pathlib import Path
 from typing import cast
 
 _TIMEOUT_SECONDS = 5
+_REMOTE_TIMEOUT_SECONDS = 10
+_STATUS_LINE = re.compile(r"^HTTP/[\d.]+\s+(\d{3})\b")
+_STDERR_LIMIT = 2000
 
 
-def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str] | None:
+def _run(
+    args: list[str], cwd: Path, timeout: float = _TIMEOUT_SECONDS
+) -> subprocess.CompletedProcess[str] | None:
     try:
         return subprocess.run(
             args,
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=_TIMEOUT_SECONDS,
+            timeout=timeout,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
@@ -37,10 +43,66 @@ def _git_dir(cwd: Path) -> Path | None:
     return path if path.is_absolute() else cwd / path
 
 
+def _truncated(text: str) -> str | None:
+    """The trailing `_STDERR_LIMIT` characters of a diagnostic stream, if any."""
+    stripped = text.strip()
+    return stripped[-_STDERR_LIMIT:] if stripped else None
+
+
 def _configured_status(installed: bool, configured: bool) -> str:
     if not installed:
         return "not-installed"
     return "available" if configured else "not-configured"
+
+
+def _http_status(stdout: str) -> int | None:
+    """The final HTTP status code in a `gh api --include` response, if any."""
+    codes = [
+        int(match.group(1))
+        for line in stdout.splitlines()
+        if (match := _STATUS_LINE.match(line)) is not None
+    ]
+    return codes[-1] if codes else None
+
+
+def _classify(status: int | None) -> tuple[str, bool | None]:
+    if status is None:
+        return "remote-check-required", None
+    if 200 <= status < 300:
+        return "available", True
+    if status == 404:
+        return "not-enabled", False
+    if status in {401, 403}:
+        return "auth-required", None
+    return "service-error", None
+
+
+def _gh_stack_enablement(cwd: Path) -> dict[str, object]:
+    """Classify the documented read-only `gh stack` enablement preflight.
+
+    `GET /repos/{owner}/{repo}/stacks` answers 200 when Stacked PRs is enabled
+    and 404 when it is not. Every other outcome — authentication, service, or
+    an unresolvable repository — stays indeterminate so the caller keeps the
+    exit-code-4 fallback instead of reporting a false enablement verdict.
+
+    `gh-stack.md` requires the caller to preserve the status and stderr of a
+    service failure, so the probe reports `http_status`, `exit_status`, and
+    `stderr` beside the verdict instead of discarding them.
+    """
+    result = _run(
+        ["gh", "api", "--include", "repos/{owner}/{repo}/stacks"],
+        cwd,
+        timeout=_REMOTE_TIMEOUT_SECONDS,
+    )
+    status = _http_status(result.stdout) if result is not None else None
+    verdict, signal = _classify(status)
+    return {
+        "status": verdict,
+        "repository_signal": signal,
+        "http_status": status,
+        "exit_status": result.returncode if result is not None else None,
+        "stderr": _truncated(result.stderr) if result is not None else None,
+    }
 
 
 def detect_stack_tools(cwd: Path) -> dict[str, object]:
@@ -67,11 +129,24 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
         extension_result
         and extension_result.returncode == 0
         and any(
-            line.split(maxsplit=1)[0] == "github/gh-stack"
+            columns[1].strip() == "github/gh-stack"
             for line in extension_result.stdout.splitlines()
-            if line.split()
+            if len(columns := line.split("\t")) > 1
         )
     )
+
+    gh_stack: dict[str, object] = (
+        _gh_stack_enablement(cwd)
+        if gh_stack_installed
+        else {
+            "status": "not-installed",
+            "repository_signal": None,
+            "http_status": None,
+            "exit_status": None,
+            "stderr": None,
+        }
+    )
+    gh_stack_status = cast(str, gh_stack["status"])
 
     providers: dict[str, dict[str, object]] = {
         "graphite": {
@@ -84,11 +159,7 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
             "repository_signal": git_town_signal,
             "status": _configured_status(git_town_installed, git_town_signal),
         },
-        "gh-stack": {
-            "installed": gh_stack_installed,
-            "repository_signal": None,
-            "status": "remote-check-required" if gh_stack_installed else "not-installed",
-        },
+        "gh-stack": {"installed": gh_stack_installed, **gh_stack},
     }
     recommended = next(
         (
@@ -96,7 +167,7 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
             for name in ("graphite", "git-town")
             if providers[name]["status"] == "available"
         ),
-        "gh-stack" if gh_stack_installed else None,
+        "gh-stack" if gh_stack_installed and gh_stack_status != "not-enabled" else None,
     )
     return {"providers": providers, "recommended": recommended}
 

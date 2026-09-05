@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from easy_cheese.shared import artifact_path as ap
+from easy_cheese.skills.briesearch.research_layout import research_layout
+from easy_cheese.shared import paths
 
 
 def test_non_xdg_phase_resolves_under_cheese() -> None:
@@ -85,7 +87,7 @@ def test_main_reports_error_on_bad_slug(capsys: pytest.CaptureFixture[str]) -> N
     assert "error:" in capsys.readouterr().err
 
 
-def test_main_research_prints_corpus_root(
+def test_main_research_prints_flat_artifact_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -93,4 +95,57 @@ def test_main_research_prints_corpus_root(
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
     assert ap.main(["research", "ignored-slug"]) == 0
-    assert capsys.readouterr().out.strip() == str(tmp_path / "proj")
+    assert capsys.readouterr().out.strip() == str(
+        tmp_path / "proj" / "research" / "ignored-slug.md"
+    )
+
+
+def test_research_layout_composes_nested_artifact_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # `/briesearch` writes one directory for each slug.
+    # Each directory contains the report, cited raw captures, and capture manifest.
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
+    # `/briesearch` sizes a research slug at four to six kebab-case words.
+    slug = "hybrid-retrieval-fusion-study"
+    directory = tmp_path / "proj" / "research" / slug
+    assert research_layout(slug) == {
+        "slug": slug,
+        "corpus_root": str(tmp_path / "proj"),
+        "dir": str(directory),
+        "report": str(directory / f"{slug}.md"),
+        "raw_dir": str(directory / "raw"),
+        "manifest": str(directory / "manifest.json"),
+        "artifact": f"research/{slug}/{slug}.md",
+    }
+
+
+def test_research_layout_root_override_ignores_corpus_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("EASY_CHEESE_HOME", "/never/used")
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
+    slug = "a-short-research-slug"
+    layout = research_layout(slug, root=tmp_path)
+    assert layout["report"] == str(tmp_path / "research" / slug / f"{slug}.md")
+
+
+def test_research_layout_rejects_invalid_slug() -> None:
+    with pytest.raises(ValueError, match="kebab-case"):
+        _ = research_layout("Not A Slug")
+
+
+def test_research_layout_report_is_where_the_resolver_looks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # This test verifies that `research_layout` names the file that `resolve_slug` discovers.
+    # Otherwise, `/cheese --continue` cannot find a report written from the layout.
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
+    slug = "nested-research-report-slug"
+    report = Path(research_layout(slug)["report"])
+    report.parent.mkdir(parents=True)
+    _ = report.write_text("body\n")
+    resolved = paths.resolve_slug(slug, phase_hint="research", repo_root=tmp_path)
+    assert [m["abs_path"] for m in resolved["matches"]] == [str(report)]

@@ -411,8 +411,10 @@ class TestCheeseContinueFlag:
 
 
 class TestWheypointParallelHandoff:
+    # `checkpoint` now routes the common path.
+    # This corpus includes the body and all routed references.
     def test_documents_parallel_continuation_schema(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         assert "mode: single" in body, (
             "wheypoint must document the default single-dispatch mode"
         )
@@ -424,7 +426,7 @@ class TestWheypointParallelHandoff:
         )
 
     def test_documents_parallel_worktree_strategies(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         body_lower = body.lower()
         assert "worktree_strategy" in body, (
             "wheypoint must document portable worktree isolation strategy"
@@ -434,7 +436,7 @@ class TestWheypointParallelHandoff:
                 f"wheypoint must document `{strategy}` parallel isolation"
             )
         assert "worktree_root" in body, (
-            "created worktrees need a documented root directory"
+            "wheypoint must document the root directory for created worktrees"
         )
         assert "branch:" in body and "branch_from" in body, (
             "parallel handoff examples must include branch metadata"
@@ -481,57 +483,54 @@ def _handoff_schema_fence() -> list[str]:
 class TestWheypointProvenance:
     PROVENANCE_KEYS: tuple[str, str, str, str] = ("session:", "git:", "created:", "parents:")
 
-    def test_schema_lists_all_provenance_fields(self) -> None:
-        fence = "\n".join(_handoff_schema_fence())
+    def test_legacy_section_documents_every_provenance_field(self) -> None:
+        # The canonical projection carries the Wheypoint pins after the
+        # orientation and no provenance keys at all; `checkpoint` refuses
+        # them. Provenance survives only in the handwritten legacy note that
+        # `resolve` still reads, so the doc must name every key there.
+        # `tests/wheypoint/python/test_legacy.py` proves the parser itself
+        # accepts them between `artifact:` and the orientation.
+        body = _skill_corpus("wheypoint")
+        section = body.split("### Handwritten legacy notes", 1)
+        assert len(section) == 2, (
+            "wheypoint must keep a `### Handwritten legacy notes` section"
+        )
+        legacy = section[1]
         for key in self.PROVENANCE_KEYS:
-            assert key in fence, (
-                f"wheypoint header schema must document the provenance field `{key}`"
+            assert f"`{key}`" in legacy, (
+                f"the legacy-note section must document the provenance field `{key}`"
             )
+        assert "between `artifact:` and the orientation" in legacy, (
+            "the legacy-note section must state where the provenance keys sit"
+        )
 
-    def test_provenance_fields_sit_between_artifact_and_orientation(self) -> None:
-        # The backward-compat linchpin: orientation stays the first non-key
-        # line, so every provenance field must appear after `artifact:` and
-        # before the orientation placeholder. A reorder pushing a provenance
-        # key below orientation would break /cheese --continue's key-based
-        # parse and silently consume a wrong orientation.
-        lines = _skill("wheypoint").splitlines()
-        orient_i = next(
-            (
-                i
-                for i, ln in enumerate(lines)
-                if ln.lstrip().startswith("<one-line orientation")
-            ),
-            None,
+    def test_canonical_schema_keeps_the_orientation_first(self) -> None:
+        # The backward-compat linchpin: the orientation stays the first
+        # non-key line, so the canonical fence documents exactly the three
+        # shared preamble keys above it and every pin below it.
+        fence = _handoff_schema_fence()
+        head = [ln for ln in fence[:-1] if ln.strip()]
+        assert [ln.split(":", 1)[0] for ln in head] == ["status", "next", "artifact"], (
+            f"canonical preamble must be status/next/artifact, got {head}"
         )
-        assert orient_i is not None, (
-            "wheypoint schema must keep the `<one-line orientation` placeholder"
-        )
-        artifact_positions = [
-            i for i, ln in enumerate(lines[:orient_i]) if ln.startswith("artifact:")
-        ]
-        assert artifact_positions, (
-            "wheypoint schema must document `artifact:` above the orientation line"
-        )
-        artifact_i = max(artifact_positions)
         for key in self.PROVENANCE_KEYS:
-            positions = [i for i, ln in enumerate(lines) if ln.startswith(key)]
-            assert any(artifact_i < i < orient_i for i in positions), (
-                f"provenance field `{key}` must sit between artifact: and the "
-                f"orientation line (orientation stays the first non-key line)"
+            assert not any(ln.startswith(key) for ln in fence), (
+                f"the canonical schema must not document `{key}`; "
+                "the checkpoint command refuses it"
             )
 
     def test_provenance_documented_optional_and_backward_compatible(self) -> None:
-        body = _skill("wheypoint").lower()
-        # Scope the optionality check to the `### Provenance fields` block so
-        # it cannot be satisfied by an unrelated "optional" elsewhere in the
-        # file (the word appears many times outside the provenance section).
-        start = body.find("### provenance fields")
-        assert start != -1, "wheypoint must carry a `### Provenance fields` section"
-        end = body.find("\n### ", start + 1)
+        # The header schema keeps every provenance key (asserted above); the
+        # prose describing them lives in `references/provenance-fields.md`.
+        body = _skill_corpus("wheypoint").lower()
+        # Limit the check to the `## Provenance fields` block.
+        # This scope prevents an unrelated "optional" from satisfying the check.
+        start = body.find("## provenance fields")
+        assert start != -1, "wheypoint must carry a `## Provenance fields` section"
+        end = body.find("\n## ", start + 1)
         section = body[start:end] if end != -1 else body[start:]
         assert "optional" in section, (
-            "provenance fields must be documented as optional in the "
-            "`### Provenance fields` section"
+            "the `## Provenance fields` section must document optional fields"
         )
         assert "pre-provenance" in body, (
             "wheypoint must state pre-provenance notes (none of the new keys) stay valid"
@@ -540,14 +539,14 @@ class TestWheypointProvenance:
 
 class TestWheypointJoinSplitVerbs:
     def test_join_documented_with_both_parent_slugs(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         assert "--join" in body, "wheypoint must document the --join verb"
         assert "parents: [<slugA>, <slugB>]" in body or "parents: [A, B]" in body, (
             "--join must write one note whose parents lists both source slugs"
         )
 
     def test_split_documented_with_current_slug_as_parent(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         assert "--split" in body, "wheypoint must document the --split verb"
         assert (
             "parents: [<current-slug>]" in body or "parents: [<current>]" in body
@@ -1042,8 +1041,10 @@ class TestWheypointNextListForm:
     several read-only follow-ups from one handoff. Restricted to read-only
     skills; parallel writes still need the heavy mode: parallel + tasks:."""
 
+    # `references/parallel-handoffs.md` now contains the list form.
+    # This corpus includes the body and all routed references.
     def test_list_form_documented(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         # The bracketed list shape and the required order: key.
         assert "next: [" in body, (
             "wheypoint must document the inline next: list form `next: [<skill> \"<arg>\", ...]`"
@@ -1054,14 +1055,14 @@ class TestWheypointNextListForm:
         )
 
     def test_order_required_for_list(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         body_lower = body.lower()
         assert "required" in body_lower and "order:" in body, (
             "order: must be documented as required when next: is a list"
         )
 
     def test_list_restricted_to_readonly(self) -> None:
-        body = _skill("wheypoint")
+        body = _skill_corpus("wheypoint")
         body_lower = body.lower()
         # The inline list must be restricted to read-only skills, with the
         # heavy tasks: block named as the path for parallel writes.
@@ -1439,7 +1440,9 @@ class TestCureCanonicalPathway:
     def test_cure_uses_canonical_contracts(self) -> None:
         body = _skill_corpus("cure")
         for helper in (
-            "PlannerResult",
+            # `PlannerResult` is Cook's and Mold's planning artifact. Cure
+            # receives the validated `CurdPlan` itself, so it never names the
+            # wrapper. See the `cure -> schemas` row in hub-schemas.md.
             "CurdPlan",
             "validate_curd_plan",
             "resolve_artifact",

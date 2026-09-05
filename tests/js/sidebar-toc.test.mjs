@@ -1,8 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { injectToc, isSkillPageHref, ANCHOR_CLASS } from '../../src/components/sidebar-toc.mjs';
-
-const isActive = (entry) => entry.isCurrent;
+import { injectToc, isSkillPageHref, ANCHOR_CLASS } from '../../website/components/sidebar-toc.mjs';
 
 function skillLink(href, { isCurrent = false, label = 'label' } = {}) {
 	return { type: 'link', label, href, isCurrent, badge: undefined, attrs: {} };
@@ -22,11 +20,11 @@ test('active skill link with h2s gains indented sibling anchors excluding the sy
 		{ depth: 2, slug: 'formatting', text: 'Formatting' },
 	];
 
-	const result = injectToc(sidebar, tocItems, isActive);
+	const result = injectToc(sidebar, tocItems);
 
 	const entries = result[0].entries;
 	assert.equal(entries.length, 3);
-	// the skill link renders exactly once, still a plain current link
+	// The current skill link remains a plain link and appears once.
 	assert.deepEqual(entries[0], skillLink('/skills/age/', { isCurrent: true, label: '/age' }));
 	assert.equal(entries.filter((e) => e.label === '/age').length, 1);
 	assert.deepEqual(entries[1], {
@@ -57,12 +55,12 @@ test('page with no h2s leaves the tree unchanged', () => {
 		},
 	];
 
-	const result = injectToc(sidebar, [], isActive);
+	const result = injectToc(sidebar, []);
 
 	assert.deepEqual(result, sidebar);
 });
 
-test('undefined toc items does not throw and leaves the tree unchanged', () => {
+test('undefined TOC items do not throw and leave the tree unchanged', () => {
 	const sidebar = [
 		{
 			type: 'group',
@@ -71,7 +69,7 @@ test('undefined toc items does not throw and leaves the tree unchanged', () => {
 		},
 	];
 
-	const result = injectToc(sidebar, undefined, isActive);
+	const result = injectToc(sidebar, undefined);
 
 	assert.deepEqual(result, sidebar);
 });
@@ -86,7 +84,7 @@ test('non-active links stay flat even when h2s exist', () => {
 	];
 	const tocItems = [{ depth: 2, slug: 'voice', text: 'Voice' }];
 
-	const result = injectToc(sidebar, tocItems, isActive);
+	const result = injectToc(sidebar, tocItems);
 
 	assert.deepEqual(result, sidebar);
 });
@@ -101,7 +99,7 @@ test('active README-style page with h2s is not expanded (skill pages only, ADR-0
 	];
 	const tocItems = [{ depth: 2, slug: 'install', text: 'Install' }];
 
-	const result = injectToc(sidebar, tocItems, isActive);
+	const result = injectToc(sidebar, tocItems);
 
 	assert.deepEqual(result, sidebar);
 	assert.equal(isSkillPageHref('/readme/'), false);

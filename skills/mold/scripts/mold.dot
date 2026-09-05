@@ -8,8 +8,10 @@ digraph mold_gates {
   grill [label="Grill", kind="mode"];
   diagnose [label="Diagnose", kind="mode"];
   problem_statement [label="Problem statement: grounded, agreed", kind="gate"];
+  grounding_recorded [label="Grounding recorded: a wiki probe result — citations or an explicit hallouminate-absent note — preceded the first structured question", kind="gate"];
   at_least_2_options_weighed_do_nothing_included [label="At least 2 options weighed (Do Nothing included)", kind="gate"];
   chosen_option_grounded_in_codebase_evidence [label="Chosen option grounded in codebase evidence", kind="gate"];
+  exploration_delegated [label="Exploration delegated: evidence-heavy reads carry an explorer digest, or the parent-context fallback is recorded", kind="gate"];
   interface_sketches [label="Interface sketches: every public seam has a pseudocode signature", kind="gate"];
   cross_module_calls_go_through_public_interfaces_not_internals [label="Cross-module calls go through public interfaces, not internals", kind="gate"];
   identity_nouns [label="Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)", kind="gate"];
@@ -20,9 +22,9 @@ digraph mold_gates {
   quality_gates_specified_1_runnable_command [label="Quality gates specified (≥1 runnable command)", kind="gate"];
   reproduction_loop_captured_if_diagnose_ran_or_blocked_if_no_loop_is_possible [label="Reproduction loop captured if Diagnose ran (or [BLOCKED] if no loop is possible)", kind="gate"];
   durable_writes [label="Durable writes: ADR + domain-model targets resolved and the write, read-back, and completion-record protocol committed for the atomic step (or loud fallback noted)", kind="gate"];
-  fork_taste_test_passed [label="Fork taste test passed: fresh-context verdict covers every settled consequential decision before decomposition", kind="gate"];
+  fork_taste_test_passed [label="Fork taste test passed: fresh-context verdict covers every settled consequential decision before typed planning", kind="gate"];
   spec_format_valid [label="Spec format valid: validate-spec --strict exits 0 on the draft", kind="gate"];
-  decomposer [label="Curd-block decomposer", kind="decomposer"];
+  typed_planner_stage [label="Typed planner stage", kind="planner"];
   handshake [label="Two-key handshake", kind="handshake"];
   curdle [label="Curdle (extract spec)", kind="terminal"];
   explore -> ground;
@@ -31,8 +33,10 @@ digraph mold_gates {
   sketch -> grill;
   diagnose -> shape;
   problem_statement -> handshake;
+  grounding_recorded -> handshake;
   at_least_2_options_weighed_do_nothing_included -> handshake;
   chosen_option_grounded_in_codebase_evidence -> handshake;
+  exploration_delegated -> handshake;
   interface_sketches -> handshake;
   cross_module_calls_go_through_public_interfaces_not_internals -> handshake;
   identity_nouns -> handshake;
@@ -43,9 +47,9 @@ digraph mold_gates {
   quality_gates_specified_1_runnable_command -> handshake;
   reproduction_loop_captured_if_diagnose_ran_or_blocked_if_no_loop_is_possible -> handshake;
   durable_writes -> handshake;
-  fork_taste_test_passed -> decomposer;
+  fork_taste_test_passed -> typed_planner_stage;
   spec_format_valid -> handshake;
-  decomposer -> handshake;
+  typed_planner_stage -> handshake;
   grill -> handshake;
   handshake -> curdle [label="both keys"];
 }

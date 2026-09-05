@@ -1,7 +1,8 @@
 """Acceptance policy for the mold spec format, shared by every release channel.
 
-The hardened spec format — the ``## Test Contracts`` table and the
-``gate_applicability`` frontmatter block — postdates v0.13, and this package did
+The hardened spec format — the ``## Test Contracts`` table, the ``## Grounding``
+table, and the ``gate_applicability`` frontmatter block — postdates v0.13, and
+this package did
 not exist then. v0.13-era specs already sitting in ``.cheese/specs/`` must stay
 readable forever, so a *read* asks for a policy and gets a lenient one for them,
 while every *mint or rewrite* asks for the strict policy and never gets anything
@@ -27,7 +28,7 @@ _HARDENED_SOURCES = frozenset({"agent-mini-spec", "mold-handshake"})
 # The parts of the document the hardened format added after v0.13. Their
 # *presence* is waived for a legacy spec; their *content*, when a legacy spec
 # happens to carry it, is validated exactly as it is for a hardened one.
-_POST_V013_SECTIONS = frozenset({"Test Contracts"})
+_POST_V013_SECTIONS = frozenset({"Test Contracts", "Grounding"})
 
 _MINI_SPEC_REQUIRED_SECTIONS = frozenset(
     {"Contract", "Acceptance", "Test Contracts", "Non-goals"}
@@ -35,8 +36,9 @@ _MINI_SPEC_REQUIRED_SECTIONS = frozenset(
 
 _LEGACY_NOTICE = (
     "NOTICE: legacy-spec-format this spec predates the current format "
-    "(no mold provenance marker, so Test Contracts and gate_applicability are "
-    "not required); accepted on read — re-mint it with /mold to adopt them"
+    "(no mold provenance marker, so Test Contracts, Grounding and "
+    "gate_applicability are not required); accepted on read — re-mint it with "
+    "/mold to adopt them"
 )
 
 

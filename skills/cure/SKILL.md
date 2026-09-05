@@ -1,180 +1,323 @@
 ---
 name: cure
-description: Apply fixes from an /age report, finding list, or CI failure, then run the project's test/lint/build gates and hand a clean cure to /plate for commit/publication. Use when the user wants selected findings resolved. Do NOT use for review (route to /age), test authoring (route to /press), or direct publication (route to /plate).
+description: Apply selected fixes from an /age report, findings list, or CI failure. Run the project gates and hand a clean result to /plate. Use when the user wants selected findings resolved. Do not use for review, test authoring, or direct publication.
 license: MIT
 metadata: {dispatches-agents: true}
 ---
 
 # /cure
 
-Use this skill after `/age`, failed validation, or user-selected review findings need to be fixed and prepared for shipping.
+Use this skill after `/age`, failed validation, or a request to fix selected review findings.
 
 ## Inputs
 
-Accept any of: a `/age` slug (`/cure <slug>` reads `.cheese/age/<slug>.md`), a pasted findings list, a CI failure summary, or a scoped instruction like "fix the high-severity age findings". When `/age` or `/affinage` hands off a pre-locked selection (canonical format: `references/selection.md#handoff-from-age`), adopt it and go straight to apply. Called bare, apply the recommended composite (`all-medium, cheap`) per `references/selection.md`, which also defines the gate conditions.
+Accept an `/age` slug, a pasted findings list, a CI failure summary, or a scoped fix instruction.
 
-Age reports may predate the severity-rubric revision and lack per-finding sub-fields or `confidence`. Read `references/selection.md` § Older report shape before selecting from such a report — it defines the inference and toleration rules; never reject a report for missing sub-fields.
+`/cure <slug>` reads `.cheese/age/<slug>.md`.
+
+Adopt a locked selection from `/age` or `/affinage`.
+The canonical format is in `references/selection.md#handoff-from-age`.
+Otherwise, apply the recommended composite from `references/selection.md`.
+That file also defines the selection gate conditions.
+
+Older Age reports can omit finding fields or `confidence`.
+Read `references/selection.md` § Older report shape before you select from these reports.
+Do not reject a report because it lacks these fields.
 
 Optional flags:
 
-- `--safe` — re-introduce the selection and terminal publication handoff gates.
-- `--open-pr` — after a clean cure, allow terminal `/plate` publication when no PR exists.
-- `--auto` — autonomous mode (propagated from `/cook --auto`). Skips user selection; requires `--stake <floor>`, and `/cook --auto` always passes `medium+`. Auto-selection rules: `references/selection.md`; pass-cap and revert behaviour: `## Auto mode` below.
-- `--stake <floor>` — with `--auto` only, ignored otherwise. Severity floor: `blocker`, `high`, `medium+`, or `all`; definitions and the `medium+` cheap-lows rule live in `references/selection.md` § Auto-mode selection.
-- `--hard` — propagate the metacognitive-gate flag to terminal `/plate`; see `## --hard mode`.
+- `--safe` — Restore the selection gate and the final publication gate.
+- `--open-pr` — Permit `/plate` to publish when no PR exists.
+- `--auto` — Use automatic mode from `/cook --auto`.
+  Skip user selection.
+  Require `--stake <floor>`.
+  `/cook --auto` always passes `medium+`.
+- `--stake <floor>` — Set the severity floor for `--auto`.
+  Accept `blocker`, `high`, `medium+`, or `all`.
+  Ignore this flag without `--auto`.
+- `--hard` — Pass the metacognitive gate flag to `/plate`.
 
-Portability: [`harness-portability.md`](../cheese/references/harness-portability.md);
-slash commands are host renderings, not the control model.
+Read `references/selection.md` for selection rules.
+Read `## Auto mode` for the pass cap and revert behavior.
+Read `## --hard mode` for the metacognitive gate.
+
+Read [`harness-portability.md`](../cheese/references/harness-portability.md) for portability rules.
+Slash commands are host renderings, not the control model.
 
 ## Flow
 
-1. **Load** — read the findings (markdown, not JSON sidecars) and load the
-   upstream typed `PlannerResult` artifact. Extract its `CurdPlan` and call
-   `validate_curd_plan`; if the plan or its digest is absent or invalid, stop
-   before dispatch. Cure never reconstructs a plan from a legacy manifest.
-2. **Select** — adopt any pre-locked handoff from `/age`/`/affinage`; otherwise apply the recommended composite. See `references/selection.md` for the default rule, recognized verbs, and gate conditions. To expand a user-supplied verb to finding ids:
+1. **Load.** Read `handoff_context.source_report` first when the handoff supplies it.
+   Confirm that the file exists and belongs to the named `source_skill`.
+   Stop with `status: halt: unreadable source report` when this check fails.
+   Read `.cheese/age/<slug>.md` when the handoff supplies only a slug.
+   Take the typed path only when the handoff also supplies a `CurdPlan`.
+   Call `validate_curd_plan` on that plan.
+   Stop before dispatch when the plan or its digest is invalid.
+   Do not rebuild a plan from a legacy manifest.
+   Take the report path in every other case.
+2. **Select.** Adopt a locked selection from `/age` or `/affinage`.
+   Otherwise, apply the recommended composite.
+   Read `references/selection.md` for verbs and gate conditions.
+   Expand a user verb with this command:
 
-   ```
+   ```text
    python3 skills/cure/scripts/cure.pyz findings-cli parse-selection --report <path> --selection "<verb>"
    ```
 
-   If the host only ships the bundle, `python3 skills/cure/scripts/cure.pyz findings-cli parse-selection ...` is the fallback.
-3. **Apply** — fix one logical group at a time: re-confirm the anchor through
-   a fresh bounded read, then invoke `easy_cheese_schemas.cure` with the
-   validated plan and a `CureDiagnosisBinding` for every selected curd. Each
-   binding must come from a confirmed `DiagnosisResult` passed to
-   `bind_diagnosis(plan, curd, diagnosis_result)`, point to that exact plan/curd
-   digest, and carry `DiagnosisDisposition.CONFIRMED`;
-   an unrelated or merely plausible confirmed diagnosis does not unlock Cure.
-   `cure` resolves each `ArtifactRef` with `resolve_artifact`, accepts only
-   observation-only `CurdResultWriterView` output, and uses
-   `normalize_agent_output` to host-finalize exactly one `CurdResult` per
-   selected curd, including executor failure.
-4. **Validate** — run the narrowest tests that prove each fix, then any relevant project-wide gates (lint, typecheck, build). When the handoff carries a recorded `baseline:` block, classify gate failures against it per [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md): identical failures do not block a clean cure or trigger a halt; only new or changed failures are cure's to fix.
-5. **Taste-test (behavioural fixes only)** — for a *behavioural* fix (production logic or public surface), run the fresh-context taste-test before the handoff slug: dispatch the read-only `reviewer` phase-agent (model pinned to opus) over the cure diff with cook's lenses, or fall back to the inline self-check if unavailable. *Mechanical* fixes (formatting, comment, import, no-logic rename) skip this. Pipe a `revise` into a bounded corrective pass; a Locked-decision `halt` stops for a human. (A coder-nested cure defers the authoritative pass to the orchestrator.)
-6. **Domain-model correction (diff-touched terms only)** — after the cook's fixes land, correct diff-touched domain-model terms (never a free rewrite). Read `references/domain-model-correction.md` before this step — it defines the store resolution, the entry format, and the hard rule against reversing a mold-locked canonical term.
-7. **Re-review hand-off** — recommend `/age --scope <touched-path>` so review runs through the proper skill rather than reimplementing it inline. `/cure` does not re-grade its own work. If the user picks re-age, the resulting report can feed a fresh `/cure` invocation.
-8. **Ship report** — what changed, checks run, deferred items, residual risks. Write the handoff slug at the top of `.cheese/cure/<slug>.md` (see `## Handoff slug` below) so the chain (and `/cook`'s fan pathway) can read the outcome without re-parsing the full report.
-9. **Plate / hand off** — on a clean cure, dispatch `/plate` per `## Handoff`.
+   Use the same bundle command when the host only ships the bundle.
+3. **Apply.** Fix one logical group at a time.
+   Confirm each anchor with a fresh bounded read.
+   The report path stops here and continues at step 4.
+   The typed path also invokes `easy_cheese_schemas.cure` with the validated plan.
+   Add one `CureDiagnosisBinding` for each selected curd.
+   Create each binding with `bind_diagnosis(plan, curd, diagnosis_result)`.
+   Use only a confirmed `DiagnosisResult`.
+   Point the binding to the exact plan and curd digest.
+   Set `DiagnosisDisposition.CONFIRMED`.
+   A plausible but unrelated diagnosis does not unlock Cure.
+   `cure` resolves each `ArtifactRef` with `resolve_artifact`.
+   It accepts only observation-only `CurdResultWriterView` output.
+   It uses `normalize_agent_output` to finalize one `CurdResult` per selected curd.
+   It also finalizes executor failures.
+4. **Validate.** Run the narrowest test that proves each fix.
+   Then run the relevant project gates.
+   These gates include lint, type checks, and builds.
+   When the handoff has a `baseline:` block, use [`quality-gates.md`](../cook/references/quality-gates.md).
+   Identical baseline failures do not block a clean cure or trigger a halt.
+   Fix only new or changed failures.
+5. **Taste-test behavioral fixes.** Run the fresh-context taste test before you write the handoff slug.
+   Resolve the read-only `reviewer` phase agent through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
+   Request the powerful minimum power and high effort.
+   Use the Cook review lenses over the cure diff.
+   Halt when fresh-context isolation is unavailable.
+   Use an inline self-check only under the small-diff cost gate in [`tdd-loop.md`](../cook/references/tdd-loop.md).
+   Skip this step for formatting, comments, imports, and logic-free renames.
+   Send a `revise` verdict into one bounded correction pass.
+   Stop for a human on a Locked-decision `halt`.
+   A nested coder defers the authoritative review to the orchestrator.
+6. **Correct the domain model.** Correct only terms that the Cook diff touches.
+   Read `references/domain-model-correction.md` first.
+   Do not reverse a canonical term that Mold locked.
+7. **Hand off for review.** Recommend `/age <slug> --scope <touched-path>`.
+   Repeat `--scope` once for each touched path.
+   Send the current slug with every Age dispatch.
+   Forward `--hard` when the run has that flag.
+   Do not duplicate the Age review inside Cure.
+   A new Age report can start a new `/cure` run.
+8. **Write the report.** Record changes, checks, deferred items, and residual risks.
+   Put the handoff slug at the top of `.cheese/cure/<slug>.md`.
+9. **Write back the durable facts.** Run § Post-PR write-back before publication.
+   Give each written path to `/plate` for its artifact inventory.
+10. **Hand off for publication.** Dispatch `/plate` after a clean cure.
+    Follow `## Handoff`.
 
 ## Preferred tools and fallbacks
 
-Route source reads, searches, and edits through
-[`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md).
-Use the documented fallback when a preferred tool is absent; stop only when the
-fallback cannot support a safe fix, and report the precision loss.
+Route source work through [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md).
+Use its fallback when a preferred tool is absent.
+Stop only when the fallback cannot support a safe fix.
+Report the precision loss.
 
 ## Validation
 
-Run the narrowest tests that prove the fix, then any relevant existing wider gates. If a gate is unavailable, record why. Do not declare ready when selected findings remain unresolved.
+Run the narrowest test that proves each fix.
+Then run all relevant existing gates.
+Record why an unavailable gate cannot run.
+Do not declare readiness while selected findings remain unresolved.
 
-Applied requires its proving test green (Iron Law — see `references/cure-discipline.md`).
+Move a finding to Applied only after its proving test passes.
+Read `references/cure-discipline.md` for the Iron Law.
 
-**clean cure** — ≥1 fix applied, all gates green (identical recorded `baseline:` failures don't count against green — see [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)), no false-premise halt. To map the post-cure gate booleans to a readiness verdict (agent judges the booleans; the CLI maps them):
+A **clean cure** has at least one applied fix and all gates pass.
+It also has no false-premise halt.
+Identical `baseline:` failures do not count against green status.
+Read [`quality-gates.md`](../cook/references/quality-gates.md).
 
-   ```
-   python3 skills/cure/scripts/cure.pyz gates-cli classify \
-     --press-status <label> \
-     [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
-   ```
+The agent judges the gate values.
+The CLI maps those values to a readiness verdict:
 
-   If the host only ships the bundle, `python3 skills/cure/scripts/cure.pyz gates-cli classify ...` is the fallback.
+```text
+python3 skills/cure/scripts/cure.pyz gates-cli classify \
+  --press-status <label> \
+  [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
+```
+
+Use the same bundle command when the host only ships the bundle.
 
 ## Handoff slug
 
-Write the cure report to `.cheese/cure/<slug>.md` with a minimum handoff slug at the top so `/cook`'s fan pathway and `/cheese --continue` can chain without re-parsing the full report:
+Write the report to `.cheese/cure/<slug>.md`.
+Put this minimum handoff slug at the top:
 
 ```markdown
 status: <canonical status field>
 next: age | done
-artifact: <path-if-any>
+artifact: <path of the report that this run consumed>
 baseline: none | <recorded baseline block copied from the upstream handoff — see ../cook/references/quality-gates.md>
 <one-line orientation: what cure applied or deferred>
 ```
 
-`status:` grammar is canonical in [handback contract](../cheese/references/handback-contract.md); only `next:` and the extra keyed lines are phase-specific.
+The [handback contract](../cheese/references/handback-contract.md) defines the `status:` grammar.
+Only `next:` and the additional keyed lines are specific to this phase.
+`artifact:` names the source report that this run consumed.
+Use `handoff_context.source_report` for that value, or the resolved `.cheese/age/<slug>.md` path.
 
-Write that legacy handoff projection through the canonical writer, carrying the
-typed Cure result schema at the boundary:
+Write the report body to a separate file.
+Then let the canonical writer create `.cheese/cure/<slug>.md` once.
+Pass every optional field that this run has.
 
 ```text
 python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cure --next age \
-  --artifact <artifact-path> --orientation "<one-line orientation>" \
+  --artifact <consumed-report-path> --orientation "<one-line orientation>" \
+  --baseline "<copied baseline block>" --durable-flags "<one line per flag>" \
+  --body-file <body-path> \
   --payload-schema https://schemas.easy-cheese.dev/curd-result
 ```
 
-The `phase=cure` directory and `next=age` transition are storage routing only;
-the live Cure state remains the validated `CurdPlan`, `CurdResult`, and
-`CureDiagnosisBinding` values above.
+Use a second command for the terminal state.
+Omit `--payload-schema`, because a terminal transition rejects a payload schema.
 
-`status: ok` when at least one finding applied cleanly (or no findings met the severity floor in `--auto` mode); `status: halt: <reason>` when every selected fix failed the revert/keep evaluation or a project-wide gate cannot be made green. `next:` is `age` whenever re-review should follow — that is the autonomous-chain default and the standard interactive recommendation. `next:` is `done` only when invoked interactively without `--auto` *and* the user explicitly opts out of re-review. Cure does not track which pass it is on; the two-cure-pass cap is enforced by `/age --auto`'s third invocation, not by cure.
+```text
+python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
+  --slug <slug> --status <status> --phase cure --next done \
+  --artifact <consumed-report-path> --orientation "<one-line orientation>" \
+  --baseline "<copied baseline block>" --body-file <body-path>
+```
+
+Omit `--baseline` and `--durable-flags` when this run has no such value.
+`phase=cure` controls storage routing.
+`next` declares the following phase, and the writer validates that transition.
+
+Use `status: ok` when at least one finding applies cleanly.
+Use it when no finding meets the `--auto` severity floor.
+Use `status: halt: <reason>` when every selected fix fails evaluation.
+Use it when a project gate cannot pass.
+Use `next: age` when review follows.
+This value is the default for automatic and interactive runs.
+Use `next: done` only for an interactive run without `--auto`.
+The user must also decline review explicitly.
+Cure does not track the current pass.
+`/age --auto` enforces the two-cure-pass cap on its third invocation.
 
 ## Output
 
-Use [`formatting.md`](../cheese/references/formatting.md). Below the handoff slug
-in `.cheese/cure/<slug>.md`, record `Applied`, `Deferred`, `Checks`, and
-`Re-review` sections with finding IDs, evidence, residual risk, and the next
-`/age --scope <touched-path>` or `/plate` step.
+Use [`formatting.md`](../cheese/references/formatting.md).
+Below the slug, add the exact headings `### Applied`, `### Deferred`, `### Checks`, and `### Re-review`.
+Bind `<slug>` to the stem of the consumed source report.
+When `source_skill` is `/affinage`, end each result line with `[from-comment:<id>]`.
+Include finding IDs, evidence, residual risk, and the next command.
+Use `/age <slug> --scope <touched-path>` or `/plate` as that command.
 
 ## Handoff
 
 **Pipeline:** culture → mold → cook → press → age → **[cure]** → plate
 
-After the cure report is rendered, cure decides whether to dispatch `/plate` or ask. On a **clean cure** (see Validation), the default carries work to an already-open PR without another gate. `--safe` re-introduces the handoff gate.
+After the report exists, decide whether to dispatch `/plate` or ask.
+A clean cure updates an open PR without another gate by default.
+`--safe` restores the handoff gate.
 
-When the run was chained from `/affinage` (`handoff_context.source_skill: /affinage`), cure **never** dispatches `/plate` — it applies its fixes, runs the auto-mode `/age --scope` loop where applicable, and returns so `/affinage` can post its GitHub replies (final writes) before owning terminal `/plate`.
+When `/affinage` started the run, never dispatch `/plate` from Cure.
+This state uses `handoff_context.source_skill: /affinage`.
+Apply the fixes and run the automatic Age loop when required.
+Then return control to `/affinage`.
+It posts the GitHub replies before it dispatches `/plate`.
 
-**Default (no `--safe`) — plate the work:**
+**Default without `--safe`:**
 
-- With an open PR (`gh pr view`), dispatch `/plate [--hard]` for its final writing gate, commit, topology-aware update, and publication (Rule 11 authorizes the update).
-- With no open PR: `--open-pr` dispatches `/plate [--hard]` — explicit topology choices and obviously cohesive work proceed without asking, while stack-sized or ambiguous work asks before commit or branch-layout mutation. Without `--open-pr`, leave the remote untouched and finish with `no open PR — pass --open-pr or run /plate`.
-- After publication lands, run **§ Post-PR learnings write-back** below.
-- If the cure was not clean, skip `/plate`; mention the blocker and stop.
+- With an open PR, dispatch `/plate [--hard]`.
+  It performs its final write gate, commit, topology update, and publication.
+- With no open PR, use `--open-pr` to dispatch `/plate [--hard]`.
+  In this case, explicit topology choices and obviously cohesive work proceed without asking.
+  In other cases, stack-sized or ambiguous work asks before commit or branch-layout mutation.
+- Without `--open-pr`, leave the remote unchanged.
+  Report `no open PR — pass --open-pr or run /plate`.
+- Run § Post-PR write-back before every `/plate` dispatch.
+- Skip `/plate` when the cure is not clean.
+  Report the blocker and stop.
 
-**`--safe` — ask via the shared handoff gate** in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Default options:
+With `--safe`, use the shared [handoff gate](../cheese/references/handoff-gate.md).
+Offer these choices:
 
-- **Re-review the touched code** *(recommended when fixes escaped the finding hunk)* — `/age --scope <touched-path>`.
-- **Plate it — commit and open or update the PR** — `/plate [--hard]`.
-- **Checkpoint & stop** (`/wheypoint`) or **Stop** (dispatch none).
+- **Review the touched code.** Run `/age <slug> --scope <touched-path>`.
+  Recommend this choice when fixes extend beyond the finding hunk.
+- **Plate it.** Run `/plate [--hard]` to commit and publish.
+- **Checkpoint and stop.** Run `/wheypoint`.
+- **Stop.** Dispatch nothing.
 
-Pre-select **Plate it** only when all selected findings applied cleanly and gates passed. Never dispatch before selection; run the selected command immediately.
+Preselect **Plate it** only when all selected fixes and gates pass.
+Run the selected command immediately.
 
-### Post-PR learnings write-back
+### Post-PR write-back
 
-After any path that **publishes to a PR** — the default `/plate` dispatch, an `--open-pr` new PR, the `--safe` **Plate it** selection, or the auto-mode terminal publication — read `references/post-pr-writeback.md` before writing back. It defines the write-back candidates (upstream `durable_flags` + new-since-curdle ADRs), the `/wiki-ingest` writer with its file-fallback degrade, the publication-owner exception, and the "nothing to record" case.
+Read `references/post-pr-writeback.md` before any path publishes to a PR.
+This includes default, `--open-pr`, `--safe`, and automatic publication paths.
+The file defines candidates, writers, fallback behavior, ownership, and the empty case.
 
 ## --hard mode
 
-`/cure --hard` propagates `--hard` to `/plate`, which completes and verifies every durable write, then gives `/hard-cheese` the final artifact inventory and proceeds only on pass. Re-review, checkpoint, and stop choices skip the gate. Mechanism: `skills/hard-cheese/SKILL.md`; composition: `../hard-cheese/references/composition.md`.
+`/cure --hard` passes `--hard` to `/plate`.
+`/plate` completes and verifies every durable write.
+It then gives `/hard-cheese` the final artifact inventory.
+Stop publication on a `FAILED` gate result.
+Stop publication when a non-TTY environment blocks the gate.
+An `ERROR` result uses the hard-cheese fail-open policy, and publication continues.
+Review, checkpoint, and stop choices skip this gate.
+Read `skills/hard-cheese/SKILL.md` and `../hard-cheese/references/composition.md`.
 
 ## Auto mode
 
-When invoked with `--auto --stake <floor>`, skip the selection list and the handoff gate, auto-select every finding meeting the severity floor (`references/selection.md` § Auto-mode selection), apply and validate each one — reverting and deferring on breakage — then invoke `/age --scope <touched-paths> --auto` (forwarding `--open-pr` when in scope) so the chain re-reviews; `/age --auto` owns the two-pass cap. On a terminal `next: done`, dispatch `/plate` once and run the **§ Post-PR learnings write-back** above.
+With `--auto --stake <floor>`, skip the selection list and handoff gate.
+Select each finding that meets the floor.
+Apply and validate each finding.
+Revert and defer a finding when its test fails.
+Then invoke `/age <slug> --scope <touched-path> [--scope <touched-path>] --auto`.
+Forward `--open-pr` and `--hard` when they are in scope.
+`/age --auto` owns the two-pass cap.
+On `next: done`, run § Post-PR write-back.
+Then dispatch `/plate` once.
 
-Read `references/auto-mode.md` before running this mode — it defines the empty-floor case, the `--auto --hard` puncture clause, and the cook fan-pathway sub-agent exceptions (single-curd chain and wave-curd worker) that suppress terminal `/plate`.
+Read `references/auto-mode.md` before you use this mode.
+It defines the empty-floor case and the `--auto --hard` puncture clause.
+It also defines Cook worker exceptions that suppress `/plate`.
 
 ## Rules
 
-- Default to the recommended composite (or `/age`/`/affinage`'s locked selection); `--safe` re-introduces the gate. A false-premise or sprawling/structural finding still pauses for a decision regardless of mode.
-- Keep fixes scoped to selected (or auto-selected) findings. Baseline-identical gate failures are never cure's to fix (Flow step 4).
-- Do not hide failed or skipped checks. In auto mode, reverted findings go under `### Deferred`, never silently dropped.
-- Publication contract — existing PR authorization, `--open-pr`, `--safe`, and never publishing an unclean cure: see `## Handoff`.
-- If a selected finding rests on a false premise (the `/age` claim is wrong, or the diff already addresses it), stop and surface the premise before applying. Disagreeing with the report is allowed; silently working around it is not.
-- Apply the shared voice kernel (lives at `../age/references/voice.md`): lead the cure report with what was applied, flag residual risk as `certain | speculating | don't know`, agree when the diff is fine without manufacturing follow-ups.
-- **Verification before `status: ok`:** before writing `status: ok` in the handoff slug, (1) identify the gate command, (2) run it fresh in the same turn, (3) read the full output, (4) only then claim. Hedging words (`should`, `probably`, `I think`) are banned in completion claims — state what the gate output showed, not what you expect it to show.
+- Use the recommended composite or the locked selection by default.
+  `--safe` restores the gate.
+  Pause for false-premise, sprawling, structural, or conflicting findings.
+- Keep fixes within the selected findings.
+  Do not fix failures identical to the baseline.
+- Report failed and skipped checks.
+  Put reverted automatic findings under `### Deferred`.
+- Follow `## Handoff` for every publication decision.
+  Never publish an unclean cure.
+- Stop before you apply a finding that rests on a false premise.
+  Report why the Age claim is wrong or obsolete.
+- Apply the shared voice rules from `../age/references/voice.md`.
+  Lead with the applied changes.
+  Mark residual risk as `certain | speculating | don't know`.
+  Do not invent follow-up work for a correct diff.
+- Identify the gate command before you claim `status: ok`.
+  Run it again in the same turn.
+  Read its full output.
+  Then make the claim.
+  Do not use `should`, `probably`, or `I think` in completion claims.
+  State what the gate output shows.
 
 ## Discipline
 
-Read `references/cure-discipline.md` before applying any fix — it holds the
-Iron Law, Red Flags, and the fix-application Rationalization table.
+Read `references/cure-discipline.md` before you apply any fix.
+It defines the Iron Law, Red Flags, and rationalization table.
 
 ## Agent resolution
 
-Resolve fix application through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+Resolve fix work through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
 
 | Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
 | --- | --- | --- | --- | --- | --- |
-| Apply selected findings | coder | write, isolated-worktree | default | high | compatible coder, then general |
+| Apply selected findings | coder | write, isolated worktree | default | high | compatible coder, then general |
 
-The canonical cure handoff carries the shared `agent_resolution` block.
+The canonical Cure handoff includes the shared `agent_resolution` block.
+
+See the generated command inventory in [`references/commands.md`](references/commands.md).

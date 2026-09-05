@@ -4,11 +4,30 @@ from __future__ import annotations
 
 import sys
 
-from easy_cheese.shared.bundle_commands import Command, dispatch
+
+from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
+
+
+@bundle_command("stack-tools")
+def _stack_tools(argv: list[str]) -> int:
+    from easy_cheese.skills.plate.stack_tools import main
+
+    return main(argv)
+
+
+@bundle_command("validate-publication")
+def _validate_publication(argv: list[str]) -> int:
+    from easy_cheese.skills.plate.publication import main
+
+    return main(argv)
+
 
 COMMANDS = (
-    Command("stack-tools", "easy_cheese.skills.plate.stack_tools:main"),
-    Command("validate-publication", "easy_cheese.skills.plate.publication:main"),
+    derive_command(
+        _stack_tools,
+        "Detect supported stacked-PR providers without mutating the repository",
+    ),
+    derive_command(_validate_publication, "Validate terminal publication evidence"),
 )
 
 

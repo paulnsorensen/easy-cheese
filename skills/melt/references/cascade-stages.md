@@ -1,80 +1,111 @@
 # Cascade stages — branch-specific steps
 
-Steps 0-3 (squash-residue check, diagnose, structural resolution, rerere/manual) run on every invocation and live in the main SKILL.md. Steps 4-7 and special cases below apply only when specific conflict types arise.
+Steps 0 through 3 apply to every invocation.
+The main skill file defines the squash check, diagnosis, structural resolution, and manual resolution.
+Use steps 4 through 7 only for the specified conflict types.
 
-## Step 4 — Pick ours / theirs (mergiraf-unsupported files)
+## Step 4 — Select ours or theirs
 
-For shell, SQL, YAML, JSON, and other formats mergiraf does not parse, use `conflict-pick`:
+Use `conflict-pick` for a file that mergiraf cannot merge.
+Read the `mergiraf_supported` field and the `recommendation` field from `conflict-summary`.
+Run `conflict-pick` when the recommendation names that command.
+Do not use a static format list.
+Mergiraf changes its language support between releases.
 
 ```bash
-# Take ours for every hunk
+# Select ours for every hunk.
 python3 skills/melt/scripts/melt.pyz conflict-pick hooks/session-start.sh --ours
 
-# Take theirs for every hunk
+# Select theirs for every hunk.
 python3 skills/melt/scripts/melt.pyz conflict-pick .gitignore --theirs
 
-# Match by regex; matched hunks resolve, others remain
+# Select ours only for hunks that match the regular expression.
 python3 skills/melt/scripts/melt.pyz conflict-pick config.yaml --grep "timeout" --ours
 ```
 
-## Step 5 — Lockfiles
+The command leaves unmatched hunks unresolved.
 
-Lockfile content has structure that text or AST merge cannot validate. Take one side and regenerate from the manifest:
+## Step 5 — Resolve lockfiles
+
+Text and AST merges cannot validate lockfile content.
+Select one side and regenerate the lockfile from its manifest.
 
 ```bash
-# Auto-detect conflicted lockfiles, take theirs, regenerate, stage
+# Detect lockfile conflicts, select theirs, regenerate each lockfile, and stage it.
 python3 skills/melt/scripts/melt.pyz lockfile-resolve
 
-# Preview
+# Preview the changes.
 python3 skills/melt/scripts/melt.pyz lockfile-resolve --dry-run
 
-# Take ours instead
+# Select ours instead.
 python3 skills/melt/scripts/melt.pyz lockfile-resolve --strategy ours
 ```
 
-Supports `Cargo.lock`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock`, `Pipfile.lock`, `uv.lock`, `Gemfile.lock`, and `go.sum`.
+The command supports these files:
+
+- `Cargo.lock`
+- `package-lock.json`
+- `yarn.lock`
+- `pnpm-lock.yaml`
+- `poetry.lock`
+- `Pipfile.lock`
+- `uv.lock`
+- `Gemfile.lock`
+- `go.sum`
 
 ## Step 6 — Debug mergiraf
 
-When mergiraf is not resolving something it should, start with the `--debug` single-file inspection in step 2 of SKILL.md. Also check:
+First, use the `--debug` inspection from step 2 in `SKILL.md`.
+Then run these checks:
 
 ```bash
-mergiraf languages | grep <extension>   # is the type registered?
-git check-attr merge -- <path>          # should show: merge: mergiraf
+mergiraf languages | grep <extension>   # Confirm that mergiraf supports the file type.
+git check-attr merge -- <path>          # Confirm that Git uses mergiraf.
 ```
 
 Common causes:
 
-- Extension missing from `~/.gitattributes` — regenerate after upgrade.
-- Parse failure on one of the three versions — mergiraf falls back silently.
-- Very large files (>1MB) skip structural merge.
+- The extension is absent from `~/.gitattributes`. Regenerate the file after an upgrade.
+- One of the three versions has a parse failure. Mergiraf then uses text merge.
+- Mergiraf skips files larger than 1 MB.
 
-## Step 7 — Maintenance
+## Step 7 — Maintain resolution data
 
 ```bash
-mergiraf languages --gitattributes > ~/.gitattributes   # after upgrade
+# Regenerate attributes after an upgrade.
+mergiraf languages --gitattributes > ~/.gitattributes
 
-git rerere status              # what is currently tracked
-git rerere diff                # pending resolution diffs
-git rerere forget <path>       # forget a bad resolution
-git rerere gc                  # clean old entries
-ls .git/rr-cache/              # browse the resolution database
+# Show paths with recorded resolutions.
+git rerere status
+
+# Show pending resolution differences.
+git rerere diff
+
+# Remove a bad resolution.
+git rerere forget <path>
+
+# Remove old entries.
+git rerere gc
+
+# List the resolution database.
+ls .git/rr-cache/
 ```
 
 ## Special cases
 
-### Whitespace-only formatting changes
+### Changes that modify only whitespace
 
-If one branch ran a formatter while the other modified content, mergiraf can produce more conflicts because AST positions shifted. Resolution: run the formatter on the merged result after resolving conflicts.
+A formatter on one branch can move AST positions while the other branch changes content.
+Mergiraf can then produce more conflicts.
+Run the formatter on the merged result after you resolve all conflicts.
 
-### Unrecoverable state
+### State that cannot be recovered
 
-If conflict state is unrecoverable, abort and start over:
+Offer an abort when the conflict state cannot be recovered.
+The user decides whether to abort.
 
 ```bash
-git merge --abort        # or
-git rebase --abort       # or
+git merge --abort
+git rebase --abort
 git cherry-pick --abort
 ```
-
-`/melt` surfaces abort as an option; the user decides.

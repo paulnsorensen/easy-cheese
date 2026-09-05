@@ -1,5 +1,7 @@
 set dotenv-load := true
-python := "uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pytest==9.0.3 --with pyyaml==6.0.2 python3"
+# Includes requirements-build.txt so tests/python/test_pyz_bundle.py runs its
+# bundle integration seam instead of skipping it.
+python := "uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
 
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
 # third-party pytest plugins happen to be globally installed. Without this a
@@ -18,13 +20,13 @@ test:
     {{python}} .github/scripts/validate_skills.py
     {{python}} .github/scripts/validate_wiki.py
     {{python}} scripts/render_generated_regions.py --check
-    {{python}} -m pytest tests/python -q
-    {{python}} -m pytest tests/shared/python -q
-    {{python}} -m pytest tests/fanout/python -q
-    {{python}} -m pytest tests/schemas/python -q
+    {{python}} -m pytest tests/python -q -p xdist -n auto
+    {{python}} -m pytest tests/shared/python -q -p xdist -n auto
+    {{python}} -m pytest tests/fanout/python -q -p xdist -n auto
+    {{python}} -m pytest tests/schemas/python -q -p xdist -n auto
     {{python}} -m pytest tests/hard-cheese/python -q
-    {{python}} -m pytest tests/pasteurize/python -q
-    {{python}} -m pytest tests/wheypoint/python -q
+    {{python}} -m pytest tests/pasteurize/python -q -p xdist -n auto
+    {{python}} -m pytest tests/wheypoint/python -q -p xdist -n auto
     node --test 'tests/js/**/*.test.mjs'
     bats tests/bash/test_install.bats
     uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
@@ -36,7 +38,11 @@ test-skill-overlap:
 
 # Build one self-contained Shiv .pyz archive per Python skill
 bundle:
-    python3 scripts/build_pyz.py
+    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt python3 scripts/build_pyz.py
+
+# Write every generated runtime source the bundle build checks for staleness
+update-generated:
+    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt python3 scripts/build_pyz.py --write-generated
 
 # Preview the exact tree a release ships (skills + .pyz only, no sources)
 release-preview:
@@ -94,11 +100,19 @@ lint-py-dead-code *paths="src scripts .github/scripts tests":
 update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
 
+# Verify committed .pyz bundles match the staged index (local/pre-commit)
+check-bundles:
+    python3 scripts/check_bundles.py --against index
+
+# Verify committed .pyz bundles match HEAD after a fresh rebuild (CI)
+check-bundles-ci: bundle
+    python3 scripts/check_bundles.py --against head
+
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build check-bundles
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build
+ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build check-bundles-ci
 
 # Install docs build dependencies
 docs-install:

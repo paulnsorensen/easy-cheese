@@ -1,12 +1,21 @@
-# Affinage report — full annotated template
+# Affinage report template
 
-Read this when writing `.cheese/affinage/pr-<n>.md` — the worked example for every section below the four-line handoff slug (which stays in `SKILL.md` § Output, since downstream skills parse it directly).
+Use this example for `.cheese/affinage/pr-<n>.md`.
+Keep the four-line handoff slug from `SKILL.md` before these sections.
+Downstream skills parse that slug.
+
+Each severity bullet uses the shared finding grammar.
+The bullet holds one `[<dimension>:<severity>]` tag, then the location in backticks, then the summary.
+`/cure` parses that grammar with `findings-cli`.
+Put the provenance tag on an indented `source:` line under the bullet.
+The `## Needs-investigation` and `## Reviewer-rejected` sections do not use this grammar.
+`/cure` does not parse those two sections.
 
 ```markdown
 # Affinage Report — PR #<n>
 
 ## Orientation
-<one or two factual sentences about the PR and what was graded>
+<one or two facts about the PR and the graded claims>
 
 ## PR status
 - Build: passing | failing (N jobs)
@@ -15,52 +24,68 @@ Read this when writing `.cheese/affinage/pr-<n>.md` — the worked example for e
 - Fresh review: ran /age (N findings) | skipped (chained) | skipped (--no-age)
 
 ## Blocker
-- **[from-comment:<id>] [security:blocker]** alice on `src/auth.ts:42` — token parsed without validation.
+- **[security:blocker]** `src/auth.ts:42` — The code parses a token without validation.
+  - source: from-comment:<id> · author: alice
   - location: contract · fix-cost-now: contained · fix-cost-later: structural · confidence: certain
   - reviewer-asserted: changes-requested
-  - recommendation: validate `authorization` header; reject with 401 on missing.
-- **[from-check:test-suite] [correctness:blocker]** CI job `test-suite` — 3 tests failing in `tests/auth.test.ts`.
+  - recommendation: Validate `authorization`. Return 401 when the header is absent.
+- **[correctness:blocker]** `tests/auth.test.ts` — Three tests fail in CI job `test-suite`.
+  - source: from-check:test-suite
   - location: contract · fix-cost-now: contained · fix-cost-later: structural · confidence: certain
-  - recommendation: re-run after fixing the missing null check.
-- **[from-check:build] [correctness:blocker]** CI job `build` — `tsc` fails: `src/auth.ts:42: 'token' is possibly undefined`.
+  - recommendation: Add the absent null check. Then run the tests again.
+- **[correctness:blocker]** `src/auth.ts:42` — `tsc` reports `'token' is possibly undefined` in CI job `build`.
+  - source: from-check:build
   - location: contract · fix-cost-now: contained · fix-cost-later: structural · confidence: certain
-  - recommendation: narrow `token` before use; build is red until this compiles.
-- **[from-age:efficiency] [efficiency:high]** fresh review — `src/api/users.ts:88` re-fetches the user inside the loop body.
-  - location: hot path · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
-  - recommendation: hoist the fetch above the loop.
+  - recommendation: Narrow `token` before use. The build cannot pass until this compiles.
+- **[efficiency:high]** `src/api/users.ts:88` — The fresh review found a user fetch in each loop iteration on the hot path.
+  - source: from-age:efficiency
+  - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
+  - recommendation: Move the fetch before the loop.
 
 ## High
-... (same shape)
+... (use the same format)
 
 ## Medium
-... (same shape)
+... (use the same format)
 
 ## Low
-- **[from-comment:<id>] [deslop:low]** copilot on `src/utils/format.ts:18` — rename `data` to `lineItems` for clarity.
+- **[deslop:low]** `src/utils/format.ts:18` — The name `data` does not state what the value holds.
+  - source: from-comment:<id> · author: copilot
   - location: class · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
-  - recommendation: rename `data` → `lineItems`. Valid cheap nit — fixed via `/cure`, not pushed back.
-... (same shape; collapsible per --full rules)
+  - recommendation: Rename `data` to `lineItems`. Send this cheap fix to `/cure`.
+... (use the same format; collapse it by the --full rules)
 
 ## Needs-investigation
-- **[from-comment:<id>]** bob on `src/api/users.ts:108` — "might break analytics pipeline."
-  - reason: claim plausible but pipeline lives in a different repo; diff cannot confirm.
-  - suggested action: human reads `analytics-svc/consumers/users.ts`.
+- **[from-comment:<id>]** bob on `src/api/users.ts:108` — "This might break the analytics pipeline."
+  - reason: The claim is plausible. The pipeline is in another repository.
+  - suggested action: Read `analytics-svc/consumers/users.ts`.
 
 ## Reviewer-rejected
-- **[from-comment:<id>]** copilot on `src/auth.ts:30` — "missing `await`; this promise is unhandled."
-  - reason: wrong — `parseToken` is synchronous (returns `string`, not a `Promise`, see `src/auth.ts:12`); there is nothing to await.
-  - draft reply: "`parseToken` is synchronous here (returns `string`, `src/auth.ts:12`), so there's no promise to await. Leaving as-is."
-- **[from-comment:<id>]** dana on `src/api/users.ts:60` — "extract this into a generic repository layer."
-  - reason: valid but large — fix-cost-now: sprawling (6 files across 2 slices); scope expansion beyond this PR.
-  - draft reply: "Agreed this would be cleaner, but it's a cross-slice refactor beyond this PR's scope — filing a follow-up rather than growing this change."
+- **[from-comment:<id>]** copilot on `src/auth.ts:30` — "This needs `await`."
+  - reason: `parseToken` returns `string`, not `Promise`. See `src/auth.ts:12`.
+  - draft reply: "`parseToken` returns `string` here. No promise exists, so I will keep the current code."
+- **[from-comment:<id>]** dana on `src/api/users.ts:60` — "Extract a generic repository layer."
+  - reason: The change needs six files in two slices. It exceeds this PR scope.
+  - draft reply: "This cross-slice refactor exceeds this PR scope. I will record it as follow-up work."
 
 ## Confidence
-<certain | speculating | don't know> — <one-line justification>
+<certain | speculating | don't know> — <one reason for the confidence>
 
 ## Next step
-Auto-fixing the recommended set via `/cure`; drafted replies are held for the reply-approval gate before posting (`--auto` posts directly). Replies post before terminal `/plate` publishes cure's fixes. On a reason to ask / `--safe`, the cure-selection prompt renders inline — pick findings to cure or `none` to stop.
+Send the recommended findings to `/cure`.
+Hold prepared replies for the reply approval gate.
+Post directly only in `--auto` mode.
+Post replies before terminal `/plate` publishes fixes.
+Show the cure selection gate when `--safe` is active or an ask reason exists.
 ```
 
-Empty severity sections are omitted entirely. `## Needs-investigation` and `## Reviewer-rejected` are omitted when no items land there.
+Omit empty severity sections.
+Omit `## Needs-investigation` and `## Reviewer-rejected` when they are empty.
 
-Per-finding `confidence:` uses the voice-kernel scale (`../../age/references/voice.md` § Reasoning posture): `certain` — the defect is verified by direct evidence (diff/code read, command output); `speculating` — inferred from indirect signal. A `don't know` grading never ships as a severity row — route it to `## Needs-investigation`.
+Use the confidence scale from `../../age/references/voice.md`.
+Use `certain` when direct evidence confirms the defect.
+Use `speculating` when indirect evidence supports the defect.
+Put a `don't know` claim in `## Needs-investigation`, not a severity section.
+
+Use only `class`, `module`, `cross-module`, or `contract` for `location:`.
+See [`../../age/references/dimensions.md`](../../age/references/dimensions.md).

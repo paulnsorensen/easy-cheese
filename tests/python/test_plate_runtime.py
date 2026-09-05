@@ -116,15 +116,35 @@ def completed(
     return subprocess.CompletedProcess(args, returncode, stdout, stderr)
 
 
-def test_stack_tools_reports_available_providers(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+PREFLIGHT = ["gh", "api", "--include", "repos/{owner}/{repo}/stacks"]
+ALL_TOOLS = frozenset({"git", "gt", "git-town", "gh"})
+GH_ONLY = frozenset({"git", "gh"})
+
+
+def response(status_line: str) -> str:
+    return f"{status_line}\r\nContent-Type: application/json\r\n\r\n[]\n"
+
+
+def install_stack_tool_stubs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    preflight: subprocess.CompletedProcess[str] | None,
+    extension_output: str = "gh stack\tgithub/gh-stack\tv0.1.1\n",
+    tools: frozenset[str] = ALL_TOOLS,
 ) -> None:
+    """Stub every process `detect_stack_tools` shells out to.
+
+    `preflight` is what the `gh api` enablement probe returns; `None` models a
+    probe that never completed (timeout or spawn failure).
+    """
     git_dir = tmp_path / ".git"
-    git_dir.mkdir()
-    _ = (git_dir / ".graphite_repo_config").write_text("{}")
+    git_dir.mkdir(exist_ok=True)
+    if "gt" in tools:
+        _ = (git_dir / ".graphite_repo_config").write_text("{}")
 
     def which(name: str) -> str | None:
-        return f"/bin/{name}" if name in {"git", "gt", "git-town", "gh"} else None
+        return f"/bin/{name}" if name in tools else None
 
     monkeypatch.setattr(shutil, "which", which)
 
@@ -134,10 +154,24 @@ def test_stack_tools_reports_available_providers(
         if args == ["git", "config", "--get", "git-town.main-branch"]:
             return completed(args, stdout="main\n")
         if args == ["gh", "extension", "list"]:
-            return completed(args, stdout="github/gh-stack\tgh stack\n")
+            return completed(args, stdout=extension_output)
+        if args == PREFLIGHT:
+            if preflight is None:
+                raise subprocess.TimeoutExpired(args, 10)
+            return preflight
         raise AssertionError(args)
 
     monkeypatch.setattr(subprocess, "run", run)
+
+
+def test_stack_tools_reports_available_providers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(PREFLIGHT, stdout=response("HTTP/2.0 200 OK")),
+    )
 
     result = stack_tools.detect_stack_tools(tmp_path)
 
@@ -155,9 +189,233 @@ def test_stack_tools_reports_available_providers(
         },
         "gh-stack": {
             "installed": True,
-            "repository_signal": None,
-            "status": "remote-check-required",
+            "repository_signal": True,
+            "status": "available",
+            "http_status": 200,
+            "exit_status": 0,
+            "stderr": None,
         },
+    }
+
+def test_unrelated_gh_extension_does_not_match_gh_stack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(PREFLIGHT, stdout=response("HTTP/2.0 200 OK")),
+        extension_output="gh-stack\tgithub/other-extension\tv0.1.1\n",
+        tools=GH_ONLY,
+    )
+
+    result = stack_tools.detect_stack_tools(tmp_path)
+
+    providers = cast(dict[str, dict[str, object]], result["providers"])
+    assert result["recommended"] is None
+    assert providers["gh-stack"] == {
+        "installed": False,
+        "repository_signal": None,
+        "status": "not-installed",
+        "http_status": None,
+        "exit_status": None,
+        "stderr": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("preflight", "status", "signal"),
+    [
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 404 Not Found")),
+            "not-enabled",
+            False,
+        ),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 401 Unauthorized")),
+            "auth-required",
+            None,
+        ),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 403 Forbidden")),
+            "auth-required",
+            None,
+        ),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 503 Service Unavailable")),
+            "service-error",
+            None,
+        ),
+        (
+            completed(
+                PREFLIGHT,
+                returncode=1,
+                stderr="none of the git remotes point to a known GitHub host\n",
+            ),
+            "remote-check-required",
+            None,
+        ),
+        (None, "remote-check-required", None),
+    ],
+)
+def test_gh_stack_preflight_classifies_every_response(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    preflight: subprocess.CompletedProcess[str] | None,
+    status: str,
+    signal: bool | None,
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch, tmp_path, preflight=preflight, tools=GH_ONLY
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]], stack_tools.detect_stack_tools(tmp_path)["providers"]
+    )
+
+    assert providers["gh-stack"]["status"] == status
+    assert providers["gh-stack"]["repository_signal"] is signal
+
+
+def test_gh_stack_service_error_preserves_status_exit_and_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`gh-stack.md` requires the status and stderr of a service failure."""
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(
+            PREFLIGHT,
+            returncode=1,
+            stdout=response("HTTP/2.0 503 Service Unavailable"),
+            stderr="gh: Server Error (HTTP 503)\n",
+        ),
+        tools=GH_ONLY,
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]],
+        stack_tools.detect_stack_tools(tmp_path)["providers"],
+    )
+
+    assert providers["gh-stack"] == {
+        "installed": True,
+        "repository_signal": None,
+        "status": "service-error",
+        "http_status": 503,
+        "exit_status": 1,
+        "stderr": "gh: Server Error (HTTP 503)",
+    }
+
+
+def test_gh_stack_indeterminate_probe_reports_its_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(
+            PREFLIGHT,
+            returncode=1,
+            stderr="none of the git remotes point to a known GitHub host\n",
+        ),
+        tools=GH_ONLY,
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]],
+        stack_tools.detect_stack_tools(tmp_path)["providers"],
+    )
+
+    assert providers["gh-stack"]["status"] == "remote-check-required"
+    assert providers["gh-stack"]["http_status"] is None
+    assert providers["gh-stack"]["exit_status"] == 1
+    assert (
+        providers["gh-stack"]["stderr"]
+        == "none of the git remotes point to a known GitHub host"
+    )
+
+
+def test_gh_stack_stderr_is_capped_at_the_documented_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(
+            PREFLIGHT,
+            returncode=1,
+            stdout=response("HTTP/2.0 500 Internal Server Error"),
+            stderr="A" + "B" * 2500,
+        ),
+        tools=GH_ONLY,
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]],
+        stack_tools.detect_stack_tools(tmp_path)["providers"],
+    )
+
+    stderr = cast(str, providers["gh-stack"]["stderr"])
+    assert len(stderr) == 2000
+    assert stderr == "B" * 2000
+
+
+@pytest.mark.parametrize(
+    ("preflight", "recommended"),
+    [
+        (completed(PREFLIGHT, stdout=response("HTTP/2.0 200 OK")), "gh-stack"),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 404 Not Found")),
+            None,
+        ),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 503 Service Unavailable")),
+            "gh-stack",
+        ),
+        (None, "gh-stack"),
+    ],
+)
+def test_only_a_404_preflight_withdraws_the_gh_stack_recommendation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    preflight: subprocess.CompletedProcess[str] | None,
+    recommended: str | None,
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch, tmp_path, preflight=preflight, tools=GH_ONLY
+    )
+
+    assert stack_tools.detect_stack_tools(tmp_path)["recommended"] == recommended
+
+
+def test_gh_stack_preflight_is_skipped_when_the_extension_is_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def which(name: str) -> str | None:
+        return f"/bin/{name}" if name in {"git", "gh"} else None
+
+    monkeypatch.setattr(shutil, "which", which)
+
+    def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args == ["git", "rev-parse", "--git-dir"]:
+            return completed(args, stdout=".git\n")
+        if args == ["gh", "extension", "list"]:
+            return completed(args, stdout="github/gh-dash\tgh dash\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+    providers = cast(
+        dict[str, dict[str, object]], stack_tools.detect_stack_tools(tmp_path)["providers"]
+    )
+
+    assert providers["gh-stack"] == {
+        "installed": False,
+        "repository_signal": None,
+        "status": "not-installed",
+        "http_status": None,
+        "exit_status": None,
+        "stderr": None,
     }
 
 

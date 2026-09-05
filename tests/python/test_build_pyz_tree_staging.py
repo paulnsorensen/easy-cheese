@@ -128,7 +128,12 @@ def test_package_trees_keep_their_nesting(ultracook_pyz: Path) -> None:
 def test_schemas_stack_imports_and_round_trips_from_inside_the_zip(ultracook_pyz: Path) -> None:
     """The spec's key verification: the bundle runs on a bare interpreter with no
     site-packages. Every import must resolve inside the .pyz, and a real load()
-    round-trip must work -- not just the import statement."""
+    round-trip must work -- not just the import statement.
+
+    The payload stamps `ecs.SCHEMA_VERSION` rather than a literal, so a
+    version bump keeps proving the current-vintage path instead of silently
+    turning this into a PRIOR-vintage round trip.
+    """
     result = _run_isolated(
         ultracook_pyz,
         "import attrs, cattrs, easy_cheese_schemas as ecs\n"
@@ -136,7 +141,7 @@ def test_schemas_stack_imports_and_round_trips_from_inside_the_zip(ultracook_pyz
         + "    assert mod.__file__.startswith(sys.path[0]), (mod.__name__, mod.__file__)\n"
         + "loaded = ecs.load(\n"
         + "    {\n"
-        + "        'schema_version': 1,\n"
+        + "        'schema_version': ecs.SCHEMA_VERSION,\n"
         + "        'branch': 'claude/pypi',\n"
         + "        'title': 'Ship it',\n"
         + "        'base': 'main',\n"

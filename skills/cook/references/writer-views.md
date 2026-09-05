@@ -1,28 +1,45 @@
 # Cook writer-view schemas
 
-Cook's writer agents emit `AgentWriterView` documents (`kind` + `payload`) that the host normalizes and structurally validates against the catalog contracts before persisting. The payload shapes below, refreshed by `scripts/render_generated_regions.py` from `src/easy_cheese_schemas/contracts.py`, are what a writer agent must produce for each `WriterViewKind`. Do not hand-edit the generated region.
+Cook writer agents emit `AgentWriterView` documents that contain `kind` and `payload`.
+
+Before the host persists each document, it normalizes the document and validates its structure against the catalog contracts.
+
+For each `WriterViewKind`, a writer agent must produce the applicable payload shape below.
+
+The `scripts/render_generated_regions.py` script refreshes these shapes from `src/easy_cheese_schemas/contracts.py`.
+
+Do not edit the generated region manually.
 
 <!-- BEGIN GENERATED: cook-writer-views -->
+// A `?` marks an optional field. `= value` shows the applied default.
+map WriterViewKind -> WriterPayload {
+  curd_plan -> CurdPlanWriterView
+  curd_result -> CurdResultWriterView
+  diagnosis_result -> DiagnosisResultWriterView
+  planner_result -> PlannerResultWriterView
+  review_result -> ReviewResultWriterView
+}
+
 type AgentWriterView {
   kind WriterViewKind
   payload WriterPayload
 }
 
 type BoundedContextWriterView {
-  shared_input_keys tuple[str, ...]
-  constraints tuple[str, ...]
-  invariants tuple[str, ...]
+  shared_input_keys? tuple[str, ...] = ()
+  constraints? tuple[str, ...] = ()
+  invariants? tuple[str, ...] = ()
 }
 
 type BoundedScope {
-  paths tuple[str, ...]
-  excluded_paths tuple[str, ...]
+  paths? tuple[str, ...] = ()
+  excluded_paths? tuple[str, ...] = ()
 }
 
 type CriterionResultWriterView {
   disposition CriterionDisposition
-  evidence_keys tuple[str, ...]
-  reason str | None
+  evidence_keys? tuple[str, ...] = ()
+  reason? str | None = None
 }
 
 type CriterionWriterView {
@@ -33,13 +50,13 @@ type CriterionWriterView {
 type CurdPlanWriterView {
   objective str
   curds tuple[SemanticCurdWriterView, ...]
-  context BoundedContextWriterView | None
+  context? BoundedContextWriterView | None = None
 }
 
 type CurdResultWriterView {
   criterion_results tuple[CriterionResultWriterView, ...]
-  deliverables tuple[DeliverableWriterView, ...]
-  unresolved_work tuple[str, ...]
+  deliverables? tuple[DeliverableWriterView, ...] = ()
+  unresolved_work? tuple[str, ...] = ()
 }
 
 type DeliverableWriterView {
@@ -51,56 +68,56 @@ type DeliverableWriterView {
 type DiagnosisCauseWriterView {
   summary str
   evidence_keys tuple[str, ...]
-  location SourceLocationWriterView | None
+  location? SourceLocationWriterView | None = None
 }
 
 type DiagnosisHypothesisWriterView {
   statement str
   disposition HypothesisDisposition
-  evidence_keys tuple[str, ...]
+  evidence_keys? tuple[str, ...] = ()
 }
 
 type DiagnosisResultWriterView {
   disposition DiagnosisDisposition
   reproduction ReproductionWriterView
   hypotheses tuple[DiagnosisHypothesisWriterView, ...]
-  confirmed_cause DiagnosisCauseWriterView | None
-  regression_seam SourceLocationWriterView | None
-  unresolved_evidence_keys tuple[str, ...]
-  reason str | None
+  confirmed_cause? DiagnosisCauseWriterView | None = None
+  regression_seam? SourceLocationWriterView | None = None
+  unresolved_evidence_keys? tuple[str, ...] = ()
+  reason? str | None = None
 }
 
 type PlannerResultWriterView {
   disposition PlannerDisposition
-  plan CurdPlanWriterView | None
-  unresolved_work tuple[PlannerUncertaintyWriterView, ...]
-  reason str | None
+  plan? CurdPlanWriterView | None = None
+  unresolved_work? tuple[PlannerUncertaintyWriterView, ...] = ()
+  reason? str | None = None
 }
 
 type PlannerUncertaintyWriterView {
   description str
   scope UncertaintyScope
-  evidence_keys tuple[str, ...]
+  evidence_keys? tuple[str, ...] = ()
 }
 
 type ReproductionWriterView {
   status ReproductionDisposition
   steps tuple[str, ...]
-  observed str | None
-  evidence_keys tuple[str, ...]
+  observed? str | None = None
+  evidence_keys? tuple[str, ...] = ()
 }
 
 type ReviewFindingWriterView {
   severity ReviewSeverity
   summary str
   evidence_keys tuple[str, ...]
-  location SourceLocationWriterView | None
+  location? SourceLocationWriterView | None = None
 }
 
 type ReviewResultWriterView {
   disposition ReviewDisposition
   findings tuple[ReviewFindingWriterView, ...]
-  reason str | None
+  reason? str | None = None
 }
 
 type SemanticCurdWriterView {
@@ -109,16 +126,16 @@ type SemanticCurdWriterView {
   scope BoundedScope
   outputs tuple[str, ...]
   criteria tuple[CriterionWriterView, ...]
-  input_keys tuple[str, ...]
-  dependencies tuple[str, ...]
+  input_keys? tuple[str, ...] = ()
+  dependencies? tuple[str, ...] = ()
 }
 
 type SourceLocationWriterView {
   path str
   start_line int
   end_line int
-  start_column int | None
-  end_column int | None
+  start_column? int | None = None
+  end_column? int | None = None
 }
 
 enum CriterionDisposition = "passed" | "failed" | "blocked" | "skipped"

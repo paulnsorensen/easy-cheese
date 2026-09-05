@@ -615,6 +615,102 @@ class SourceCurdRef:
     digest: str = field(validator=_digest)
 
 
+class IngressKind(str, Enum):
+    WRITER_VIEW = "writer_view"
+    LEGACY_ARTIFACT = "legacy_artifact"
+
+
+class NormalizationActionKind(str, Enum):
+    TRIM_WHITESPACE = "trim_whitespace"
+    NORMALIZE_QUOTES = "normalize_quotes"
+    REMOVE_TRAILING_COMMA = "remove_trailing_comma"
+
+
+@define(frozen=True)
+class NormalizationAction:
+    field_path: str = field(validator=_bounded_string)
+    action: NormalizationActionKind = field(
+        validator=validators.instance_of(NormalizationActionKind)
+    )
+
+
+def _normalization_receipt_schema_constraints() -> tuple[dict[str, object], ...]:
+    return (
+        _if_equals(
+            "ingress_kind",
+            IngressKind.LEGACY_ARTIFACT.value,
+            {
+                "required": ["source_schema_uri", "source_version"],
+                # Both fields stay nullable for writer-view ingress, so the
+                # conditional must also reject an explicit null here. Without
+                # it a JSON Schema consumer accepts a receipt that the runtime
+                # model refuses.
+                "properties": {
+                    "source_schema_uri": {"type": "string"},
+                    "source_version": {"type": "object"},
+                },
+            },
+        ),
+    )
+
+
+@schema_constraints(*_normalization_receipt_schema_constraints())
+@contract("normalization-receipt")
+@define(frozen=True)
+class NormalizationReceipt:
+    ingress_kind: IngressKind = field(validator=validators.instance_of(IngressKind))
+    normalizer_id: str = field(validator=_identifier)
+    source_digest: str = field(validator=_digest)
+    canonical_digest: str = field(validator=_digest)
+    actions: tuple[NormalizationAction, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_list_of(NormalizationAction),
+    )
+    source_schema_uri: str | None = field(default=None, validator=_optional_uri)
+    source_version: ContractVersion | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ContractVersion)),
+    )
+
+    @source_version.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue, reportOptionalMemberAccess]
+    def _validate_legacy_requires_source(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
+        if self.ingress_kind is not IngressKind.LEGACY_ARTIFACT:
+            return
+        if self.source_schema_uri is None or self.source_version is None:
+            raise ValueError(
+                "legacy_artifact ingress requires source_schema_uri and source_version"
+            )
+        # One receipt names one source. The flat URI and the nested version
+        # URI are two views of the same identity, so a disagreement is a
+        # forged provenance claim, not a redundant field.
+        if self.source_schema_uri != self.source_version.schema_uri:
+            raise ValueError(
+                "legacy_artifact ingress requires source_schema_uri to equal"
+                + " source_version.schema_uri; the receipt declares two legacy"
+                + f" source identities: {self.source_schema_uri!r} and"
+                + f" {self.source_version.schema_uri!r}"
+            )
+
+
+@contract("handoff-pointer")
+@define(frozen=True)
+class HandoffPointer:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    operation_id: str = field(validator=_identifier)
+    request_digest: str = field(validator=_digest)
+    source_phase: str = field(validator=_identifier)
+    destination_phase: str = field(validator=_identifier)
+    payload: ArtifactRef = field(validator=validators.instance_of(ArtifactRef))
+    normalization_receipt: ArtifactRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ArtifactRef)),
+    )
+
 @schema_constraints(
     _if_equals(
         "identity_action",
@@ -2199,8 +2295,9 @@ class AgentWriterView:
 # Declares the mold spec-template shape as decorated models beside the
 # existing @contract markers.  A build-only compiler in the
 # _schema_catalog_compiler family (_document_rules_compiler.py) projects
-# this declaration into the dependency-free src/mold/_document_rules.py,
-# consumed by the hand-rolled validate-spec CLI.
+# this declaration into the dependency-free
+# src/easy_cheese/shared/document_rules.py, consumed by the hand-rolled
+# src/easy_cheese/skills/mold/validate_spec.py CLI.
 
 
 @define(frozen=True)
@@ -2256,6 +2353,28 @@ class SpecConfidence(str, Enum):
 class TestContractMode(str, Enum):
     TRACER = "tracer"
     CONTRACT_MATRIX = "contract-matrix"
+    GUARD = "guard"
+
+
+class GroundingProbe(str, Enum):
+    """The preconditions a spec may not be curdled without having probed.
+
+    ``wiki`` is the durable-knowledge probe; ``explorer`` is the delegated
+    code-evidence probe.  Both are steps mold's prose already mandated and
+    that runs skipped, so they are recorded as spec rows instead.
+    """
+
+    WIKI = "wiki"
+    EXPLORER = "explorer"
+
+
+class GroundingOutcome(str, Enum):
+    """What the probe returned.  ``unavailable`` keeps the degrade path open
+    while forcing it to leave evidence rather than be assumed."""
+
+    HIT = "hit"
+    MISS = "miss"
+    UNAVAILABLE = "unavailable"
 
 
 @define(frozen=True)
@@ -2266,6 +2385,27 @@ class GateApplicability:
     work_class: WorkClass = field(validator=validators.instance_of(WorkClass))
     ui_surface: UiSurface = field(validator=validators.instance_of(UiSurface))
     reason: str | None = field(default=None, validator=_optional_string)
+
+    @ui_surface.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_combination(
+        self, _attribute: _NamedAttribute, value: object
+    ) -> None:  # noqa: V103
+        if self.disposition is GateApplicabilityDisposition.RED_REQUIRED:
+            if self.work_class is not WorkClass.BEHAVIOR:
+                raise ValueError("red-required-work-class-must-be-behavior")
+            if value is UiSurface.NOT_APPLICABLE:
+                raise ValueError(
+                    "red-required-ui-surface-must-be-browser-or-non-browser"
+                )
+        else:
+            if self.work_class is WorkClass.BEHAVIOR:
+                raise ValueError(
+                    "not-applicable-work-class-must-be-closed-non-behavior"
+                )
+            if value is not UiSurface.NOT_APPLICABLE:
+                raise ValueError(
+                    "not-applicable-ui-surface-must-be-not-applicable"
+                )
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_not_applicable_reason(
@@ -2312,15 +2452,39 @@ class TestContractRow:
 
     @matrix_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_mode_cells(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
-        if self.mode is TestContractMode.TRACER:
+        if self.mode in (TestContractMode.TRACER, TestContractMode.GUARD):
             if self.interface_version or value:
                 raise ValueError(
-                    f"Test Contracts row {self.acceptance_id} is tracer mode and must leave Interface version and Matrix rows blank"
+                    f"Test Contracts row {self.acceptance_id} is {self.mode.value} mode and must leave Interface version and Matrix rows blank"
                 )
         elif not self.interface_version or not value:
             raise ValueError(
                 f"Test Contracts row {self.acceptance_id} is contract-matrix mode and requires both Interface version and Matrix rows"
             )
+        elif len(set(cast(tuple[str, ...], value))) != len(cast(tuple[str, ...], value)):
+            raise ValueError(
+                f"contract-matrix-rows-not-unique:{self.acceptance_id}"
+            )
+
+
+@define(frozen=True)
+class GroundingRow:
+    """One recorded precondition probe standing behind the spec."""
+
+    probe: GroundingProbe = field(validator=validators.instance_of(GroundingProbe))
+    outcome: GroundingOutcome = field(validator=validators.instance_of(GroundingOutcome))
+    evidence: str = field(validator=_bounded_string)
+
+
+GROUNDING_COLUMNS: tuple[str, ...] = ("Probe", "Outcome", "Evidence")
+
+GROUNDING_TABLE_RULE = TableRule(
+    columns=GROUNDING_COLUMNS,
+    per_row=(
+        "Probe and Outcome are drawn from their closed sets",
+        "Evidence is non-empty, including for unavailable outcomes",
+    ),
+)
 
 
 TEST_CONTRACT_COLUMNS: tuple[str, ...] = (
@@ -2346,6 +2510,7 @@ MOLD_SPEC_SECTIONS: tuple[Section, ...] = (
     Section("Goals"),
     Section("Non-goals"),
     Section("Deferred follow-ups", optional=True),
+    Section("Grounding", table=GROUNDING_TABLE_RULE),
     Section("Approach"),
     Section("Decisions"),
     Section("Acceptance"),
@@ -2361,6 +2526,8 @@ MOLD_SPEC_SECTIONS: tuple[Section, ...] = (
 
 MOLD_SPEC_ENUMS: dict[str, tuple[str, ...]] = {
     "mode": tuple(mode.value for mode in TestContractMode),
+    "grounding_probe": tuple(probe.value for probe in GroundingProbe),
+    "grounding_outcome": tuple(outcome.value for outcome in GroundingOutcome),
     "gate_applicability_disposition": tuple(
         disposition.value for disposition in GateApplicabilityDisposition
     ),
@@ -2380,6 +2547,14 @@ MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
     CrossFieldRule(
         rule_id="contract-matrix-row-requires-both",
         description="Contract-matrix rows require both Interface version and Matrix rows.",
+    ),
+    CrossFieldRule(
+        rule_id="grounding-probe-recorded",
+        description="The Grounding table must record the wiki probe exactly once with non-empty evidence.",
+    ),
+    CrossFieldRule(
+        rule_id="delegation-digest-recorded",
+        description="The Grounding table must record the explorer probe exactly once with non-empty evidence.",
     ),
     CrossFieldRule(
         rule_id="not-applicable-closed-class",
@@ -2404,11 +2579,23 @@ class MoldSpecDocument:
     test_contract_rows: tuple[TestContractRow, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_list_of(TestContractRow)
     )
+    grounding_rows: tuple[GroundingRow, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_list_of(GroundingRow)
+    )
 
     slug: ClassVar[str] = "mold-spec"
     sections: ClassVar[tuple[Section, ...]] = MOLD_SPEC_SECTIONS
     cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = MOLD_SPEC_CROSS_FIELD_RULES
     enums: ClassVar[dict[str, tuple[str, ...]]] = MOLD_SPEC_ENUMS
+
+    @acceptance_ids.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_unique_acceptance_ids(
+        self, _attribute: _NamedAttribute, value: object
+    ) -> None:  # noqa: V103
+        assert isinstance(value, tuple)
+        ids = cast(tuple[str, ...], value)
+        if len(set(ids)) != len(ids):
+            raise ValueError("acceptance-ids-not-unique")
 
     @test_contract_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_ac_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
@@ -2434,6 +2621,21 @@ class MoldSpecDocument:
             raise ValueError(
                 f"Test Contracts table must cover every Acceptance ID exactly once: missing={missing} duplicated={duplicated} unexpected={unexpected}"
             )
+
+    @grounding_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_grounding_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
+        assert isinstance(value, tuple)
+        rows = cast(tuple[GroundingRow, ...], value)
+        counts: dict[GroundingProbe, int] = {}
+        for row in rows:
+            counts[row.probe] = counts.get(row.probe, 0) + 1
+        violations = [
+            f"Grounding table must record the {probe.value} probe exactly once, got {counts.get(probe, 0)}"
+            for probe in GroundingProbe
+            if counts.get(probe, 0) != 1
+        ]
+        if violations:
+            raise ValueError("; ".join(violations))
 
 
 __all__ = [
@@ -2480,6 +2682,9 @@ __all__ = [
     "EvidenceRef",
     "GateApplicability",
     "GateApplicabilityDisposition",
+    "GroundingOutcome",
+    "GroundingProbe",
+    "GroundingRow",
     "HypothesisDisposition",
     "IdentityAction",
     "IdentityLineage",
