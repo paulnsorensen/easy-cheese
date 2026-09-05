@@ -23,7 +23,10 @@ For a **new PR**, resolve topology before any commit or branch-layout mutation:
      A lower layer must stand alone. Later layers must build on it without unrelated concerns.
      A change is also stack-sized when one review would combine distinct concerns with clear ordered boundaries.
      Put a semantics-preserving layer below a semantic change that depends on the reorganization.
-     Do not use line-count or file-count thresholds.
+     Line and file counts never decide the shape on their own. They do gate the question.
+     When the semantics-altering surface exceeds roughly 400 changed code lines, recommend **stacked** and ask, even when the change reads as cohesive.
+     Reviewer defect detection falls off sharply past that size; see `.hallouminate/wiki/research/language-reviewability-evidence.md`.
+     Name the candidate layers. When no layer boundary exists, say so and recommend single with the size risk stated.
 3. Ask one single-versus-stacked question when you recommend a stack.
    Ask the same question when the review shape is genuinely ambiguous.
    For a stack recommendation, name the proposed layers. Recommend **Stacked PRs**.

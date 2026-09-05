@@ -282,6 +282,33 @@ const fullName = `${first} ${last}`;
 
 No lint rule catches this pattern. `react-hooks/exhaustive-deps` does not catch it. Review it manually. See the react.dev article "You Might Not Need an Effect".
 
+## 16. Non-exhaustive `switch` over a discriminated union
+
+AI writes a `switch` on a discriminant and omits the `default` arm, or fills it with a silent `break`.
+A new union member then compiles and falls through.
+An `assertNever` default makes the missing case a compile error, so the type checker carries that review.
+typescript-eslint `switch-exhaustiveness-check` flags the missing cases.
+
+```typescript
+// SLOP
+switch (event.kind) {
+  case "open": return onOpen(event);
+  case "close": return onClose(event);
+  default: break;
+}
+
+// CLEAN
+function assertNever(value: never): never {
+  throw new Error(`Unhandled case: ${JSON.stringify(value)}`);
+}
+
+switch (event.kind) {
+  case "open": return onOpen(event);
+  case "close": return onClose(event);
+  default: return assertNever(event);
+}
+```
+
 ## Sources
 
 - The typescript-eslint `strict-type-checked` configuration and rule documentation provide the source of truth for every rule named above.

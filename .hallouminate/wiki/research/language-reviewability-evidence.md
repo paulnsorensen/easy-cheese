@@ -60,11 +60,11 @@ Vendor signals (not peer-reviewed): LinearB 2026 reported ~32.7% acceptance for 
 
 ## Where this touches easy-cheese
 
-- `/plate` topology (`skills/plate/references/topology.md`) forbids line-count thresholds and decides single-vs-stacked purely on review shape. The diff-size evidence argues for a size signal as a _stack recommendation trigger_, not a hard split rule.
-- `/age` sizes fan-out by a router score (`skills/age/references/fan-out.md`), not by diff size. The 200–400-line comprehension ceiling is a candidate input for packet sizing.
-- `/age` `deslop` grades a vague name `low`. The 19% defect-finding-speed result supports raising abbreviated or single-letter identifiers in reviewed hunks.
-- `/cook` taste-test Readability lens (`skills/cook/references/tdd-loop.md`) has no local-reasoning criterion; metaprogramming and action-at-a-distance are unnamed.
-- `/mold` has no language-selection guidance for new components; the tiering table is a ready default.
+- `/plate` topology (`skills/plate/references/topology.md`): review shape still decides single-vs-stacked, but a semantics-altering surface over roughly 400 changed code lines now gates a stack recommendation and the layout question. The PR body contract (`ordinary-pr.md`) requires a `## Non-obvious changes` section.
+- `/age` fan-out (`skills/age/references/fan-out.md`): the router score is already line-derived, so the ladder sizes by diff size. What it cannot do is shrink each worker's read, so a score over 400 records `coverage: degraded` under `## Confidence` and recommends a stacked split.
+- `/age` `deslop` (`dimensions.md`): an abbreviated or single-letter identifier with more than one short block of scope grades `medium`, citing the 19% defect-finding-speed result. `deslop-python.md` and `deslop-typescript.md` gained non-exhaustive `match`/`switch` patterns with `assert_never` / `assertNever`.
+- `/cook` (`skills/cook/references/tdd-loop.md` § Reviewable by construction): the coder builds for the reviewer on the first pass. Full-word identifiers, local reasoning, annotated parameters and returns, exhaustive matches, canonical formatting, and the 400-line ceiling. The taste-test Readability lens names the same anti-patterns.
+- `/mold` Sketch (`skills/mold/references/modes.md`): language default is the incumbent typed language; Go for uniform tooling, Rust only where memory safety or performance is the requirement, Elm/Gleam niche.
 
 ## Caveats
 

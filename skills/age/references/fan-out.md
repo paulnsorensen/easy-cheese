@@ -43,6 +43,13 @@ The base ladder uses these score bands before any override promotion:
 - A score `>250` returns `n=5`.
 - A score `>900` selects high effort.
 
+**Comprehension ceiling.** The score is line-derived: weighted changed lines plus eight per touched file (`review_surface.py`).
+A score above 400 means every lens worker reads more than one reviewer covers at 70–90% defect discovery (`.hallouminate/wiki/research/language-reviewability-evidence.md`).
+The router raises `n`, but it does not shrink what each worker reads.
+When the score exceeds 400, add one line under the report's `## Confidence`: `coverage: degraded — review surface <score> exceeds the 400-line comprehension ceiling`.
+Recommend a stacked split through `/plate` in the handoff.
+Do not skip dimensions to compensate.
+
 The base ladder partitions lenses at `n>1`, before any override promotion:
 
 - `n=2` — `[correctness, spec, assertions, security, telemetry]` / `[encapsulation, complexity, deslop, nih, efficiency]`.

@@ -259,8 +259,36 @@ print(f"processing {item}")
 logger.debug("processing %s", item)
 ```
 
+## 15. Non-exhaustive `match` over a closed union
+
+AI writes a `match` or `if/elif` chain over an enum or `Literal` union and leaves a silent `case _:` or no final branch.
+A new member then falls through without a type error.
+`assert_never` turns the missing case into a mypy or pyright error, so the checker carries that review.
+No Ruff rule covers this. Review it by hand.
+
+```python
+# SLOP
+match status:
+    case Status.ACTIVE:
+        return activate()
+    case Status.INACTIVE:
+        return deactivate()
+    case _:
+        pass
+
+# CLEAN
+match status:
+    case Status.ACTIVE:
+        return activate()
+    case Status.INACTIVE:
+        return deactivate()
+    case _:
+        assert_never(status)
+```
+
 ## Sources
 
 - Ruff rule docs (docs.astral.sh/ruff/rules) verify every rule code above.
+- `typing.assert_never` (Python 3.11+, `typing_extensions` before) documents the exhaustiveness idiom; mypy and pyright both report the unreachable-argument error.
 - charlax/professional-programming documents error-handling anti-patterns with before-and-after exception examples.
 - The `pathlib` rule follows the PTH123 dispute thread (discuss.python.org/t/106904).

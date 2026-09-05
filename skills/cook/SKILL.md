@@ -273,6 +273,7 @@ The reference also contains the final report template.
 
 - Keep changes scoped to the accepted contract.
 - Prefer existing dependencies and patterns.
+- Build for the reviewer on the first pass: `references/tdd-loop.md` § Reviewable by construction.
 - Do not invent architecture that the spec already rejected.
 - Stop when implementation reveals a design decision that the spec does not answer.
 - Ask the user that decision before you continue.
