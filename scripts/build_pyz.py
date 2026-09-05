@@ -133,9 +133,9 @@ def _checked_in_generated_file_bytes(
 # The checked-in runtime sources this build compiles, and the renderer that
 # produces each one. `--write-generated` writes them; the build checks them.
 GENERATED_RUNTIME_SOURCES: tuple[tuple[Path, str, "Callable[[], str]"], ...] = (
-    (PHASE_REGISTRY_SOURCE, "phase registry", lambda: _compiled_phase_registry_source()),
-    (SCHEMA_CATALOG_SOURCE, "schema catalog", lambda: _compiled_schema_catalog_source()),
-    (DOCUMENT_RULES_SOURCE, "document rules", lambda: compiled_document_rules_source()),
+    (PHASE_REGISTRY_SOURCE, "phase registry", _compiled_phase_registry_source),
+    (SCHEMA_CATALOG_SOURCE, "schema catalog", _compiled_schema_catalog_source),
+    (DOCUMENT_RULES_SOURCE, "document rules", compiled_document_rules_source),
 )
 
 

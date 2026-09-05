@@ -340,7 +340,7 @@ class TestAdapterSunsets:
                 source_minor="1",
                 target_schema_uri=self._SOURCE_SCHEMA_URI,
                 remove_after="2020-01-01",
-                convert=lambda payload: dict(payload),
+                convert=dict,
             )
         )
 
@@ -355,7 +355,7 @@ class TestAdapterSunsets:
                 source_minor="1",
                 target_schema_uri=self._SOURCE_SCHEMA_URI,
                 remove_after="2099-01-01",
-                convert=lambda payload: dict(payload),
+                convert=dict,
             )
         )
 
