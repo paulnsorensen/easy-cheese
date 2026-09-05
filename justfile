@@ -21,12 +21,12 @@ test:
     {{python}} .github/scripts/validate_wiki.py
     {{python}} scripts/render_generated_regions.py --check
     {{python}} -m pytest tests/python -q -p xdist -n auto
-    {{python}} -m pytest tests/shared/python -q
-    {{python}} -m pytest tests/fanout/python -q
-    {{python}} -m pytest tests/schemas/python -q
+    {{python}} -m pytest tests/shared/python -q -p xdist -n auto
+    {{python}} -m pytest tests/fanout/python -q -p xdist -n auto
+    {{python}} -m pytest tests/schemas/python -q -p xdist -n auto
     {{python}} -m pytest tests/hard-cheese/python -q
-    {{python}} -m pytest tests/pasteurize/python -q
-    {{python}} -m pytest tests/wheypoint/python -q
+    {{python}} -m pytest tests/pasteurize/python -q -p xdist -n auto
+    {{python}} -m pytest tests/wheypoint/python -q -p xdist -n auto
     node --test 'tests/js/**/*.test.mjs'
     bats tests/bash/test_install.bats
     uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
