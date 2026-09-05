@@ -125,7 +125,7 @@ def test_marker_authority_rejects_duplicate_slugs() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
     contract_type = cast(type, contracts.CurdPlan)
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts._registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
     )
     original_slug = cast(object, getattr(contract_type, "__contract_slug__"))
     try:
@@ -151,7 +151,7 @@ def test_marker_authority_rejects_invalid_registered_markers(slug: object) -> No
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
     contract_type = cast(type, contracts.CurdPlan)
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts._registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
     )
     original_slug = cast(object, getattr(contract_type, "__contract_slug__"))
     try:
@@ -168,7 +168,7 @@ def test_runtime_and_compiler_project_one_marker_authority() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
     runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts._registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
     )
     entries = registered()
     marked_contracts = cast(

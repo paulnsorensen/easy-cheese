@@ -85,3 +85,66 @@ The proof is a `CompactionRecord`: `{rehydrated_from_revision_id, rehydrated_rec
 `reconciled_entry_ids` must include every protected entry in the record.
 
 The runtime derives `prior_compaction_revision_id` from stored receipts and refuses a supplied value.
+
+## Reply envelope
+
+Every command prints exactly one JSON object, on one line, to stdout.
+A success reply is `{"ok": true, "command": "<name>", ...fields}`.
+A failure reply is `{"ok": false, "command": "<name>", "error": {"code": "...", "message": "...", ...extra}}`.
+
+- **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`.
+- **`validate`** returns `valid` and `work_id`.
+- **`schema`** returns `slug` and `schema`.
+- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `detail`.
+- **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`.
+- **`lint`** returns `path`, `clean`, `findings`, `projection`.
+- **`list`** returns `corpus_root`, `items`, and `lines`.
+- **`log`** returns `work_id`, `revisions`, `lines`, and `unreadable`.
+- **`turns`** returns `transcript`, `count`, `skipped_lines`, `turns`, and `lines`.
+
+`lines` is a list of strings, one per row, for a shell caller to read line by line.
+Each `lines` entry is tab-separated columns, in a fixed order per command.
+`list` columns are `work_id`, `revision_number`, `status`, `next`, `detail`.
+`log` columns are `revision_number`, `revision_id`, `captured_at`, `additions`, `transitions`, `compacted`.
+`turns` columns are `timestamp`, `text`.
+A column value escapes a backslash as `\\`.
+A column value escapes a newline as `\n`.
+A column value escapes a tab as `\t`.
+This escaping keeps one line one record.
+
+`items` (from `list`) is one untyped JSON object per work item, carrying `work_id` plus either `unreadable`, `no_record`, or the record's summary fields.
+`revisions` (from `log`) is one untyped JSON object per revision, carrying `revision_number`, `revision_id`, `captured_at`, `additions`, `transitions`, `compacted`.
+`turns` (from `turns`) is one untyped JSON object per user turn, carrying `timestamp` and `text`.
+`unreadable` (from `log`) lists `{path, reason}` for revision files the scan could not parse.
+`skipped_lines` (from `turns`) counts transcript lines that could not be parsed as a turn.
+`count` (from `turns`) is the number of turns returned.
+`corpus_root` (from `list`) is the resolved root directory the listing scanned.
+
+Exit `0` means the command succeeded; the reply carries the command's own fields.
+Exit `1` means the command refused the request; the reply carries `error.code` and `error.message`.
+Exit `2` means the command-line usage was wrong, before any command ran.
+Exit `3` means an unexpected internal error; `error.code` is `internal-error` and a Python traceback goes to stderr, never into the JSON.
+
+Each refusal names a `code`:
+
+- `invalid-json`: stdin was not one JSON value.
+- `storage-error`: the work store could not be opened or read.
+- `commit-only-field`: `checkpoint` was asked to author `compacted`, `compaction`, or `expected_revision_id` directly.
+- `invalid-intent`: the intent payload failed schema or delta validation.
+- `secret-pattern`: a field looked like a credential.
+- `record-unreadable`: the work's record exists but could not be parsed.
+- `compaction-proof-unreadable`: the `--compacted` proof file could not be read or parsed as JSON.
+- `invalid-compaction-proof`: the `--compacted` proof failed schema validation.
+- `genesis-conflict`: a genesis commit collided with an existing record.
+- `stale-parent`: the intent's parent revision has moved on.
+- `commit-refused`: the commit kernel refused the delta for another reason.
+- `note-unwritable`: the note directory or mirror file could not be written.
+- `pending-corrupt`: a pending-mirror ledger entry named a different request than its revision.
+- `unknown-contract`: `schema` was asked for a slug with no registered contract.
+- `record-missing`: `show` or `log` found no record for the work id.
+- `store-inconsistent`: `log` found a record but every revision file was dropped as unreadable.
+- `session-required`: `turns` was given neither `--session` nor `--transcript`.
+- `invalid-session`: the given `--session` id was not a safe file-name segment.
+- `transcript-missing`: no transcript file exists at the resolved path.
+- `invalid-reference`: `resolve` could not interpret the given reference.
+- `internal-error`: an unexpected exception, not a refusal, reached `main`.

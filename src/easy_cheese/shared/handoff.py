@@ -203,13 +203,6 @@ def render_handoff_slug(slug: HandoffSlug) -> str:
 _DISPATCH_RE = re.compile(r"^/(?P<skill>[a-z][a-z-]*)\b\s*(?P<args>.*)$")
 
 
-# The pull-request reference `next: affinage` needs in `artifact:`: `PR#<n>` or
-# a GitHub pull URL. Shared so the wheypoint gate and resolve agree.
-PR_REFERENCE_RE = re.compile(
-    r"(?:^|\s)(?:PR#\d+|https://github\.com/[^/\s]+/[^/\s]+/pull/\d+)(?=[\s/#?)]|$)"
-)
-
-
 def slug_payload(slug: HandoffSlug) -> dict[str, object]:
     """The JSON shape every reader of a preamble emits; one place, two CLIs."""
     payload: dict[str, object] = {
@@ -267,6 +260,7 @@ def _cmd_render(args: argparse.Namespace) -> None:
         taste_test=cast("str | None", args.taste_test),
         durable_flags=cast("str | None", args.durable_flags),
         mode=cast("str | None", args.mode),
+        baseline=cast("str | None", args.baseline),
     )
     try:
         print(render_handoff_slug(slug), file=cast("TextIO", args.stdout))
@@ -315,6 +309,7 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     _ = render.add_argument("--taste-test", default=None, help="optional taste_test: keyed line")
     _ = render.add_argument("--durable-flags", default=None, help="optional durable_flags: keyed line")
     _ = render.add_argument("--mode", default=None, help="optional mode: keyed line (e.g. parallel)")
+    _ = render.add_argument("--baseline", default=None, help="optional baseline: keyed line")
     render.set_defaults(func=_cmd_render)
 
     parse = sub.add_parser("parse", help="parse a handoff preamble from a file")

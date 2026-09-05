@@ -551,9 +551,19 @@ def _artifact_digest() -> Callable[[str], str | None]:
 
     The root is the Git toplevel when there is one, so the digest does not
     depend on which subdirectory the checkpoint was run from; outside a
-    repository the working directory is the root.
+    repository the working directory is the root. The root is resolved lazily,
+    on the first path actually digested, so a delta with no artifact links to
+    add never spawns `git rev-parse --show-toplevel`.
     """
-    return lint_mod.artifact_digest_in(paths.git_toplevel() or Path.cwd())
+    digest_of: Callable[[str], str | None] | None = None
+
+    def digest(path: str) -> str | None:
+        nonlocal digest_of
+        if digest_of is None:
+            digest_of = lint_mod.artifact_digest_in(paths.git_toplevel() or Path.cwd())
+        return digest_of(path)
+
+    return digest
 
 
 def _merge_artifact_links(
@@ -581,7 +591,12 @@ def _merge_artifact_links(
         # caller-supplied value is never honoured.
         if link.path not in by_path:
             order.append(link.path)
-        by_path[link.path] = evolve(link, digest=digest_of(link.path), revision_id=revision_id)
+        digest = digest_of(link.path)
+        if digest is None:
+            raise CommitError(
+                f"add_artifact_links names a path this host cannot digest: {link.path!r}"
+            )
+        by_path[link.path] = evolve(link, digest=digest, revision_id=revision_id)
     for path in remove or ():
         if path not in by_path:
             raise CommitError(

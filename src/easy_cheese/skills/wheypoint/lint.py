@@ -16,10 +16,12 @@ to cover stay exactly where they were.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
+from typing import cast
 
 from attrs import define, field
 from easy_cheese_schemas import (
@@ -195,6 +197,24 @@ def lint_projection_file(path: Path | str) -> LintReport:
     return lint_projection_text(text)
 
 
+def _stamped_schema_version(store: storage.WorkStore) -> int | None:
+    """The `schema_version` the record's raw bytes carry, read before any
+    attempt to structure them: a future record this reader cannot structure
+    must still report its stamp (ADR wheypoint-ergonomics-004)."""
+    try:
+        raw = store.record_path.read_bytes()
+    except OSError:
+        return None
+    try:
+        payload = cast(object, json.loads(raw))
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    version = cast("dict[str, object]", payload).get("schema_version")
+    return version if isinstance(version, int) else None
+
+
 def lint_work(
     store: storage.WorkStore,
     *,
@@ -205,15 +225,19 @@ def lint_work(
     """Validate the whole current checkpoint of one work store."""
     recovery = store.recover()
     record = recovery.record
-    if record is not None and record.schema_version > SCHEMA_VERSION:
+    stamped_schema_version = _stamped_schema_version(store)
+    if stamped_schema_version is not None and stamped_schema_version > SCHEMA_VERSION:
         # A newer runtime wrote this store. Its bytes may not round-trip through
         # this reader's canonical form, so a digest disagreement here says
-        # nothing about the store (ADR wheypoint-ergonomics-004).
+        # nothing about the store (ADR wheypoint-ergonomics-004). The stamp is
+        # read from the raw bytes, not the structured record, because a future
+        # record this reader cannot structure must still be reported as
+        # runtime-behind rather than misattributed to store corruption.
         return LintReport(
             findings=(
                 LintFinding(
                     LintCode.RUNTIME_BEHIND,
-                    f"record is stamped schema version {record.schema_version} but "
+                    f"record is stamped schema version {stamped_schema_version} but "
                     + f"this runtime reads up to {SCHEMA_VERSION}: upgrade the "
                     + "wheypoint bundle before trusting any integrity verdict",
                 ),

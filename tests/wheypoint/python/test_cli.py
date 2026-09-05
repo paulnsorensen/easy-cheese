@@ -199,6 +199,22 @@ def test_checkpoint_refuses_a_work_id_that_is_not_a_safe_path_segment() -> None:
     assert _get(payload, "error", "code") in {"invalid-intent", "storage-error"}
 
 
+@pytest.mark.usefixtures("corpus_root")
+def test_an_unexpected_crash_is_exit_3_with_a_traceback_on_stderr(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def _boom(_args: object, _stdin: object) -> dict[str, object]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setitem(wheypoint._RUNNERS, "show", _boom)  # pyright: ignore[reportPrivateUsage]
+
+    status, payload = _run("show", "--work-id", WORK_ID)
+
+    assert status == wheypoint.EXIT_INTERNAL
+    assert _get(payload, "error", "code") == "internal-error"
+    assert "RuntimeError" in capsys.readouterr().err
+
+
 def test_checkpoint_mirrors_the_projection_into_an_explicit_note_dir(
     store: storage.WorkStore, tmp_path: Path
 ) -> None:
@@ -1024,3 +1040,190 @@ def test_cure_enumerate_ignores_directories_that_are_not_work_ids(corpus_root: P
     status, payload = _run("list")
     assert status == 0
     assert [line.split("\t")[0] for line in cast(list[str], payload["lines"])] == [WORK_ID]
+
+
+# --- cure of pr-621 review findings ----------------------------------------
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_log_survives_a_corrupt_revision_and_names_it_unreadable(
+    store: storage.WorkStore,
+) -> None:
+    first = _run("checkpoint", stdin=_first_intent())[1]
+    _ = _run("checkpoint", stdin=_intent_json(orientation="Second."))
+    corrupt_path = store.revision_path(1, cast(str, first["revision_id"]))
+    _ = corrupt_path.write_text("not json", encoding="utf-8")
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+
+    assert status == 0
+    revisions = cast(list[dict[str, object]], payload["revisions"])
+    assert [r["revision_number"] for r in revisions] == [2]
+    unreadable = cast(list[dict[str, str]], payload["unreadable"])
+    assert len(unreadable) == 1
+    assert unreadable[0]["path"] == corrupt_path.name
+    assert "malformed JSON" in unreadable[0]["reason"]
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_log_survives_a_missing_projection_and_names_it_unreadable(
+    store: storage.WorkStore,
+) -> None:
+    first = _run("checkpoint", stdin=_first_intent())[1]
+    _ = _run("checkpoint", stdin=_intent_json(orientation="Second."))
+    orphan_path = store.projection_path(1, cast(str, first["revision_id"]))
+    orphan_path.unlink()
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+
+    assert status == 0
+    revisions = cast(list[dict[str, object]], payload["revisions"])
+    assert [r["revision_number"] for r in revisions] == [2]
+    unreadable = cast(list[dict[str, str]], payload["unreadable"])
+    assert len(unreadable) == 1
+    assert unreadable[0]["path"] == store.revision_path(1, cast(str, first["revision_id"])).name
+    assert "projection file is missing" in unreadable[0]["reason"]
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_log_refuses_store_inconsistent_when_every_revision_is_lost(
+    store: storage.WorkStore,
+) -> None:
+    first = _run("checkpoint", stdin=_first_intent())[1]
+    second = _run("checkpoint", stdin=_intent_json(orientation="Second."))[1]
+    _ = store.revision_path(1, cast(str, first["revision_id"])).write_text("not json", encoding="utf-8")
+    _ = store.revision_path(2, cast(str, second["revision_id"])).write_text("not json", encoding="utf-8")
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+
+    assert status != 0
+    assert _error(payload)[0] == "store-inconsistent"
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_validate_reports_the_next_action_gate_and_the_task_command_together() -> None:
+    task = {
+        "slug": "s", "intent": "cook", "repo": "r", "branch": "b", "branch_from": "main",
+        "command": "rm -rf /",
+    }
+    status, payload = _run(
+        "validate",
+        stdin=_first_intent(next="affinage", artifact="x", tasks=[task]),
+    )
+
+    assert status == 1
+    problems = cast(list[str], _get(payload, "error", "problems"))
+    assert any("PR#" in p for p in problems)
+    assert any("tasks[0].command is not a skill dispatch" in p for p in problems)
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_ac7_a_non_gating_question_with_a_dossier_renders_open_entries() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[{"kind": "question", "summary": "Bump or migrate?", "blocks_continuation": False}],
+            decision_dossier=[
+                {"fork": "f", "options": [{"option": "o", "evidence": ["e"], "breaks": "x"}], "prior_leaning": None}
+            ],
+        ),
+    )
+
+    assert status == 0, payload
+    assert payload["status"] == "ok"
+    assert "## Open entries" in cast(str, payload["markdown"])
+
+
+def test_cure_turns_lines_escape_a_multiline_user_turn(tmp_path: Path) -> None:
+    transcript = tmp_path / "s.jsonl"
+    entries = [
+        {"type": "user", "timestamp": "t1", "message": {"content": [{"type": "text", "text": "Line one.\nLine two."}]}},
+    ]
+    _ = transcript.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+
+    status, payload = _run("turns", "--transcript", str(transcript))
+
+    assert status == 0
+    assert cast(list[dict[str, str]], payload["turns"]) == [{"timestamp": "t1", "text": "Line one.\nLine two."}]
+    assert cast(list[str], payload["lines"]) == ["t1\tLine one.\\nLine two."]
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_list_and_log_lines_are_the_escaped_tab_join_of_typed_rows() -> None:
+    _ = _run("checkpoint", stdin=_first_intent(orientation="Tab\ttest line.\nSecond line."))
+
+    status, payload = _run("list")
+    assert status == 0
+    items = cast(list[dict[str, object]], payload["items"])
+    lines = cast(list[str], payload["lines"])
+    assert items[0]["orientation"] == "Tab\ttest line."
+    assert lines[0].split("\t")[-1] == "Tab\\ttest line."
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+    assert status == 0
+    revisions = cast(list[dict[str, object]], payload["revisions"])
+    lines = cast(list[str], payload["lines"])
+    row = lines[0].split("\t")
+    assert row[0] == str(revisions[0]["revision_number"])
+    assert row[1] == revisions[0]["revision_id"]
+
+
+def test_cure_turns_lists_a_candidate_even_when_stat_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    cwd = tmp_path / "Dev" / "easy.cheese_x"
+    cwd.mkdir(parents=True)
+    projects = home / ".claude" / "projects" / str(cwd).replace("/", "-").replace(".", "-").replace("_", "-")
+    projects.mkdir(parents=True)
+    _transcript(projects / "aaa.jsonl")
+    _transcript(projects / "bbb.jsonl")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(cwd)
+
+    real_stat = Path.stat
+
+    def flaky_stat(self: Path, *args: object, **kwargs: object) -> object:
+        if self.name == "aaa.jsonl":
+            raise OSError("boom")
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", flaky_stat)
+
+    status, payload = _run("turns")
+
+    assert (status, _error(payload)[0]) == (1, "session-required")
+    candidates = cast(list[dict[str, object]], _get(payload, "error", "candidates"))
+    assert len(candidates) == 2
+    by_session = {cast(str, c["session"]): c["modified"] for c in candidates}
+    assert by_session["aaa"] is None
+    assert by_session["bbb"] is not None
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_a_resumed_promotion_never_reuses_a_prior_note_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    _ = subprocess.run(["git", "init", "--quiet"], cwd=checkout, check=True)
+    monkeypatch.chdir(checkout)
+    prior = tmp_path / "prior-notes"
+    body = _first_intent()
+
+    real_clear = wheypoint._clear_pending  # pyright: ignore[reportPrivateUsage]
+
+    def crash_once(_store: storage.WorkStore, _request_identity: str) -> None:
+        monkeypatch.setattr(wheypoint, "_clear_pending", real_clear)
+        raise RuntimeError("simulated crash before the ledger entry is cleared")
+
+    monkeypatch.setattr(wheypoint, "_clear_pending", crash_once)
+    interrupted_status, _interrupted = _run("checkpoint", "--note-dir", str(prior), stdin=body)
+    assert interrupted_status == wheypoint.EXIT_INTERNAL
+
+    default_notes = checkout / ".cheese" / "notes" / f"{WORK_ID}.md"
+    status, payload = _run("checkpoint", stdin=body)
+
+    assert status == 0
+    assert payload["note_path"] == str(default_notes)
+    assert default_notes.read_text(encoding="utf-8") == payload["markdown"]

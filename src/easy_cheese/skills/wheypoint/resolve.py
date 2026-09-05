@@ -42,8 +42,7 @@ from easy_cheese_schemas import (
 
 from easy_cheese.shared import paths
 
-from easy_cheese.shared.handoff import PR_REFERENCE_RE
-
+from . import checkpoint as checkpoint_mod
 from . import legacy as legacy_mod
 from . import lint, records, storage
 
@@ -382,7 +381,7 @@ def _legacy_artifact_gate(
     value = slug_block.artifact
     assert value is not None
     if slug_block.next_skill == "affinage":
-        if PR_REFERENCE_RE.search(value) or _PARENT_URL_RE.fullmatch(value):
+        if checkpoint_mod.PR_REFERENCE_RE.fullmatch(value.strip()) or _PARENT_URL_RE.fullmatch(value):
             return None
         return (
             f"declared artifact {value!r} must be 'PR#<n>' or a pull request "

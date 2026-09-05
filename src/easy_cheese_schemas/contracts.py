@@ -65,7 +65,7 @@ def contract(slug: str) -> Callable[[_ClsT], _ClsT]:
     return decorate
 
 
-def _registered_contracts() -> tuple[tuple[str, type], ...]:
+def registered_contracts() -> tuple[tuple[str, type], ...]:
     """Return marked contract classes in deterministic slug order."""
     pairs: list[tuple[str, type]] = []
     for value in cast(Iterable[object], globals().values()):
@@ -80,11 +80,6 @@ def _registered_contracts() -> tuple[tuple[str, type], ...]:
         if previous[0] == current[0]:
             raise ValueError(f"duplicate contract marker {current[0]!r}")
     return tuple(pairs)
-
-
-def registered_contracts() -> tuple[tuple[str, type], ...]:
-    """Public accessor for marked contract classes in deterministic slug order."""
-    return _registered_contracts()
 
 
 def _unstructure(value: object) -> object:
@@ -2633,8 +2628,31 @@ class MoldSpecDocument:
 
 # ---------------------------------------------------------------------------
 # Wheypoint continuity types (moved from easy_cheese_schemas.wheypoint; ADR
-# wheypoint-ergonomics-002). Private helpers carry a _wp suffix where they
-# collided with this module's own helpers; behaviour is unchanged.
+# wheypoint-ergonomics-002). No private helper here collided with this
+# module's own names, so none carries a disambiguating suffix; behaviour is
+# unchanged.
+#
+# Three rules made the old module's authority worth trusting, and each is
+# attached to the field that produces it rather than left to every reader to
+# remember:
+#
+# * Status is derived, never stored. Neither the record nor the projection
+#   has a `status` field; both compute it from the protected entries that
+#   are still active and still block continuation. A payload that declares
+#   `status: ok` over an open gate is not repaired -- the key is simply not
+#   read.
+# * Protected state leaves by transition, not by omission. Every delta field
+#   is optional and `None` means "unchanged", which is why an explicit `[]`
+#   is a distinct, deliberate replacement. Entries change state only through
+#   an `EntryTransition` naming the entry, the action, and why; there is no
+#   delete.
+# * Session evidence is provenance, not authority. `SessionProvenance`
+#   records which harness wrote a revision. Nothing in this module selects
+#   on it.
+#
+# `_MAX_TEXT`/`_MAX_ITEMS` below are narrower than this file's own
+# `MAX_TEXT_LENGTH`/`MAX_COLLECTION_ITEMS`; the two validator families keep
+# different bounds on purpose.
 # ---------------------------------------------------------------------------
 
 
@@ -2916,7 +2934,7 @@ def _tasks_move_rule(
             f"{attribute.name} may only be set when move is "
             + f"{NextMove.TASKS.value!r}, not {instance.move.value!r}"
         )
-    if getattr(instance, "parallel", None) is not None and not value:
+    if instance.parallel is not None and not value:
         raise ValueError(f"parallel may only be set alongside a non-empty {attribute.name}")
 
 

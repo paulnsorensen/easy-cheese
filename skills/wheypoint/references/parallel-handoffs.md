@@ -65,6 +65,13 @@ tasks:
     branch: user/kip-77-ai-test-server
     branch_from: origin/main
     command: /cook .cheese/specs/kip-77-ai-test-server.md
+  - slug: kip-76-ai-service-spin-up
+    intent: cook
+    repo: /path/to/repository
+    worktree: /path/to/worktree-02
+    branch: user/kip-76-ai-service-spin-up
+    branch_from: origin/main
+    command: /cook .cheese/specs/kip-76-ai-service-spin-up.md
 ```
 
 For a new setup, use `worktree_strategy: create` and add `worktree_root`.

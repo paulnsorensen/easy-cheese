@@ -79,7 +79,6 @@ _ARTIFACTS_HEADING = "## Artifacts"
 _DOSSIER_HEADING = "## Decision dossier"
 _TASKS_HEADING = "## Tasks"
 _FENCE = "```json"
-_NO_GATES = "none"
 _NONE = "none"
 _FORK_PREFIX = "### Fork: "
 _LEANING_PREFIX = "Prior leaning: "
@@ -130,18 +129,30 @@ def _esc(text: str) -> str:
 
 
 def _unesc(text: str) -> str:
-    out: list[str] = []
-    i = 0
-    while i < len(text):
-        ch = text[i]
-        if ch == "\\" and i + 1 < len(text):
-            nxt = text[i + 1]
-            out.append("\n" if nxt == "n" else nxt)
-            i += 2
-            continue
-        out.append(ch)
-        i += 1
-    return "".join(out)
+    return re.sub(r"\\(.)", lambda m: "\n" if m[1] == "n" else m[1], text)
+
+
+# One table each drives both the render order in `_tasks` and the field
+# construction in `_parse_tasks`, so a new `HandoffTask`/`ParallelPlan` field
+# needs one edit here instead of two hand-maintained lists.
+_PLAN_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("isolation", "isolation", True),
+    ("worktree_strategy", "worktree_strategy", True),
+    ("worktree_root", "worktree_root", False),
+)
+_TASK_FIELDS: tuple[tuple[str, str, bool], ...] = (
+    ("intent", "intent", True),
+    ("repo", "repo", True),
+    ("worktree", "worktree", False),
+    ("branch", "branch", True),
+    ("branch_from", "branch_from", True),
+    ("command", "command", True),
+)
+
+
+def _field_text(value: str | WorktreeStrategy) -> str:
+    """Render one table-driven field value as its escaped line text."""
+    return _esc(value.value if isinstance(value, WorktreeStrategy) else value)
 
 
 def _render_dossier(forks: Sequence[DecisionFork]) -> list[str]:
@@ -153,9 +164,8 @@ def _render_dossier(forks: Sequence[DecisionFork]) -> list[str]:
         if index:
             lines.append("")
         lines.append(f"{_FORK_PREFIX}{_esc(fork.fork)}")
-        lines.append(
-            f"{_LEANING_PREFIX}{_esc(fork.prior_leaning) if fork.prior_leaning else _NONE}"
-        )
+        if fork.prior_leaning is not None:
+            lines.append(f"{_LEANING_PREFIX}{_esc(fork.prior_leaning)}")
         for option in fork.options:
             lines.append(f"{_OPTION_PREFIX}{_esc(option.option)}")
             # One line per evidence item: no separator to escape, nothing to split.
@@ -222,24 +232,18 @@ def _tasks(action: NextAction) -> list[str]:
         return []
     lines = ["", _TASKS_HEADING, ""]
     if action.parallel is not None:
-        plan = action.parallel
-        lines += ["parallel:", f"  isolation: {_esc(plan.isolation)}"]
-        lines.append(f"  worktree_strategy: {plan.worktree_strategy.value}")
-        if plan.worktree_root:
-            lines.append(f"  worktree_root: {_esc(plan.worktree_root)}")
+        lines.append("parallel:")
+        for key, attr, _required in _PLAN_FIELDS:
+            plan_value = cast("str | WorktreeStrategy | None", getattr(action.parallel, attr))
+            if plan_value is not None:
+                lines.append(f"  {key}: {_field_text(plan_value)}")
     lines.append("tasks:")
     for task in action.tasks:
         lines.append(f"  - slug: {_esc(task.slug)}")
-        for key, value in (
-            ("intent", task.intent),
-            ("repo", task.repo),
-            ("worktree", task.worktree),
-            ("branch", task.branch),
-            ("branch_from", task.branch_from),
-            ("command", task.command),
-        ):
-            if value is not None:
-                lines.append(f"    {key}: {_esc(value)}")
+        for key, attr, _required in _TASK_FIELDS:
+            task_value = cast("str | None", getattr(task, attr))
+            if task_value is not None:
+                lines.append(f"    {key}: {_field_text(task_value)}")
     return lines
 
 
@@ -280,7 +284,7 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
             summary = summaries.get(entry_id)
             lines.append(f"- {entry_id}" + (f" \u2014 {_esc(summary)}" if summary else ""))
     else:
-        lines.append(_NO_GATES)
+        lines.append(_NONE)
     lines += ["", *_body(record)]
     lines += ["", _DOSSIER_HEADING, "", *_render_dossier(projection.decision_dossier)]
     lines += _tasks(action)
@@ -308,10 +312,14 @@ def build_projection(
         decision_dossier=list(record.decision_dossier),
         durability=durability,
     )
-    pinned = evolve(
-        draft, projection_digest=projection_digest_of_text(render(draft, record))
-    )
-    return pinned, render(pinned, record)
+    unpinned = render(draft, record)
+    digest = projection_digest_of_text(unpinned)
+    pinned = evolve(draft, projection_digest=digest)
+    # The real pins line is always the last match: any earlier one is a
+    # decoy the orientation's free text injected before the title.
+    match = list(_DIGEST_LINE_RE.finditer(unpinned))[-1]
+    text = f"{unpinned[: match.start()]}projection_digest: {digest}{unpinned[match.end() :]}"
+    return pinned, text
 
 
 def _keyed(lines: list[str], keys: Sequence[str], start: int) -> dict[str, str]:
@@ -332,7 +340,7 @@ _MIN_LINES = _META_LINE + len(_META_KEYS)
 _FIRST_META_PREFIX = f"{_META_KEYS[0]}: "
 
 
-def _meta_start(lines: list[str]) -> int:
+def _meta_start(lines: list[str], body_start: int) -> int:
     """The index of the first metadata line, after the orientation block.
 
     The orientation may hold more than one physical line, so the block ends at
@@ -341,7 +349,7 @@ def _meta_start(lines: list[str]) -> int:
     """
     # The pins are the keyed block directly above the `# Wheypoint` title: a
     # look-alike block inside the orientation text is text, not pins.
-    title = _body_start(lines) - 1
+    title = body_start - 1
     start = title - 1 - len(_META_KEYS)
     if start < _META_LINE or lines[title - 1].strip():
         raise ProjectionParseError("the pins must sit directly above the title, ending in a blank line")
@@ -352,7 +360,7 @@ def _meta_start(lines: list[str]) -> int:
     return start
 
 
-def _preamble(lines: list[str]) -> dict[str, str]:
+def _preamble(lines: list[str], body_start: int) -> dict[str, str]:
     if len(lines) < _MIN_LINES:
         raise ProjectionParseError(
             f"projection needs {_MIN_LINES} preamble lines, got {len(lines)}"
@@ -365,7 +373,7 @@ def _preamble(lines: list[str]) -> dict[str, str]:
             raise ProjectionParseError(f"unknown mode {mode!r}: a projection renders only {_MODE_PARALLEL!r}")
         values["mode"] = mode
         orientation_line += 1
-    start = _meta_start(lines)
+    start = _meta_start(lines, body_start)
     orientation = "\n".join(lines[orientation_line : start - 1]).strip()
     if not orientation:
         raise ProjectionParseError("orientation line must be non-empty")
@@ -388,13 +396,14 @@ def _body_start(lines: list[str]) -> int:
     raise ProjectionParseError("missing the '# Wheypoint' title line")
 
 
-def _section(lines: list[str], heading: str, *legacy: str) -> list[str]:
-    body_start = _body_start(lines)
+def _section(lines: list[str], body_start: int, heading: str, *legacy: str) -> list[str]:
     start = -1
     for candidate in (heading, *legacy):
-        if candidate in lines[body_start:]:
+        try:
             start = lines.index(candidate, body_start) + 1
             break
+        except ValueError:
+            continue
     if start < 0:
         raise ProjectionParseError(f"missing {heading!r} section")
     end = start
@@ -403,13 +412,13 @@ def _section(lines: list[str], heading: str, *legacy: str) -> list[str]:
     return [line for line in lines[start:end] if line.strip()]
 
 
-def _gating_entry_ids(lines: list[str]) -> list[str]:
-    body = _section(lines, _GATES_HEADING, _LEGACY_GATES_HEADING)
-    if body == [_NO_GATES]:
+def _gating_entry_ids(lines: list[str], body_start: int) -> list[str]:
+    body = _section(lines, body_start, _GATES_HEADING, _LEGACY_GATES_HEADING)
+    if body == [_NONE]:
         return []
     if not body or any(not line.startswith("- ") for line in body):
         raise ProjectionParseError(
-            f"{_GATES_HEADING!r} must list '- <entry-id>' lines or {_NO_GATES!r}"
+            f"{_GATES_HEADING!r} must list '- <entry-id>' lines or {_NONE!r}"
         )
     # `- <id>` (legacy) or `- <id> — <summary>`: the id is the first token.
     return [line[2:].strip().split(" ", 1)[0] for line in body]
@@ -423,8 +432,7 @@ def _parse_dossier_markdown(body: list[str]) -> list[DecisionFork]:
             options = []
             forks.append({"fork": _unesc(line[len(_FORK_PREFIX) :]), "options": options, "prior_leaning": None})
         elif line.startswith(_LEANING_PREFIX) and forks:
-            value = line[len(_LEANING_PREFIX) :]
-            forks[-1]["prior_leaning"] = None if value == _NONE else _unesc(value)
+            forks[-1]["prior_leaning"] = _unesc(line[len(_LEANING_PREFIX) :])
         elif line.startswith(_OPTION_PREFIX) and forks:
             options.append({"option": _unesc(line[len(_OPTION_PREFIX) :]), "evidence": [], "breaks": ""})
         elif line.startswith(_EVIDENCE_PREFIX) and options:
@@ -453,12 +461,15 @@ def _parse_dossier_markdown(body: list[str]) -> list[DecisionFork]:
         raise ProjectionParseError(str(exc)) from exc
 
 
-def _dossier(lines: list[str]) -> list[DecisionFork]:
-    body = _section(lines, _DOSSIER_HEADING)
+def _dossier(lines: list[str], body_start: int) -> list[DecisionFork]:
+    body = _section(lines, body_start, _DOSSIER_HEADING)
     if body == [_NONE]:
         return []
     if not body or body[0] != _FENCE:
         return _parse_dossier_markdown(body)
+    # Legacy-only: `_render_dossier` never emits this JSON-fence grammar; it is
+    # read back solely so older projections written before the Markdown
+    # dossier still parse.
     if len(body) < 3 or body[-1] != "```":
         raise ProjectionParseError(f"{_DOSSIER_HEADING!r} must hold one json block")
     try:
@@ -474,11 +485,27 @@ def _dossier(lines: list[str]) -> list[DecisionFork]:
         raise ProjectionParseError(str(exc)) from exc
 
 
-def _parse_tasks(lines: list[str]) -> tuple[list[HandoffTask] | None, ParallelPlan | None]:
+def _table_kwargs(
+    fields: dict[str, str], table: tuple[tuple[str, str, bool], ...]
+) -> dict[str, str | WorktreeStrategy]:
+    """Build constructor kwargs from a `_PLAN_FIELDS`/`_TASK_FIELDS` table."""
+    kwargs: dict[str, str | WorktreeStrategy] = {}
+    for key, attr, required in table:
+        if key in fields:
+            value = fields[key]
+            kwargs[attr] = WorktreeStrategy(value) if attr == "worktree_strategy" else value
+        elif required:
+            raise KeyError(key)
+    return kwargs
+
+
+def _parse_tasks(
+    lines: list[str], body_start: int
+) -> tuple[list[HandoffTask] | None, ParallelPlan | None]:
     """Read the `## Tasks` block back; absent means a single move."""
-    if _TASKS_HEADING not in lines[_body_start(lines) :]:
+    if _TASKS_HEADING not in lines[body_start:]:
         return None, None
-    body = _section(lines, _TASKS_HEADING)
+    body = _section(lines, body_start, _TASKS_HEADING)
     plan_fields: dict[str, str] = {}
     tasks: list[dict[str, str]] = []
     target: dict[str, str] | None = None
@@ -500,25 +527,12 @@ def _parse_tasks(lines: list[str]) -> tuple[list[HandoffTask] | None, ParallelPl
             raise ProjectionParseError(f"unreadable tasks line {line!r}")
     try:
         parallel = (
-            ParallelPlan(
-                isolation=plan_fields["isolation"],
-                worktree_strategy=WorktreeStrategy(plan_fields["worktree_strategy"]),
-                worktree_root=plan_fields.get("worktree_root"),
-            )
+            ParallelPlan(**_table_kwargs(plan_fields, _PLAN_FIELDS))  # pyright: ignore[reportArgumentType]
             if plan_fields
             else None
         )
         handoff_tasks = [
-            HandoffTask(
-                slug=task["slug"],
-                intent=task["intent"],
-                repo=task["repo"],
-                branch=task["branch"],
-                branch_from=task["branch_from"],
-                command=task["command"],
-                worktree=task.get("worktree"),
-            )
-            for task in tasks
+            HandoffTask(slug=task["slug"], **_table_kwargs(task, _TASK_FIELDS)) for task in tasks
         ]
     except (KeyError, ValueError) as exc:
         raise ProjectionParseError(f"tasks block is incomplete: {exc}") from exc
@@ -533,7 +547,8 @@ def declared_status(text: str) -> str:
     caller hold the two against each other and report the lie rather than
     silently discard it.
     """
-    field_value = _preamble(text.splitlines())["status"]
+    lines = text.splitlines()
+    field_value = _preamble(lines, _body_start(lines))["status"]
     # Only the name is read back. A forged `ok` that still carries the gated
     # reason must be reported as the lie it is, not rejected as unreadable.
     written_name, _, _ = field_value.partition(":")
@@ -547,7 +562,8 @@ def declared_status(text: str) -> str:
 def parse(text: str) -> WheypointProjection:
     """Read a projection document back. The written `status:` is ignored."""
     lines = text.splitlines()
-    values = _preamble(lines)
+    body_start = _body_start(lines)
+    values = _preamble(lines, body_start)
     try:
         move = NextMove(values["next"])
     except ValueError as exc:
@@ -562,7 +578,7 @@ def parse(text: str) -> WheypointProjection:
         raise ProjectionParseError(
             f"schema_version must be an integer, got {values['schema_version']!r}"
         )
-    tasks, parallel = _parse_tasks(lines)
+    tasks, parallel = _parse_tasks(lines, body_start)
     try:
         return WheypointProjection(
             schema_version=int(values["schema_version"]),
@@ -577,8 +593,8 @@ def parse(text: str) -> WheypointProjection:
                 tasks=tasks,
                 parallel=parallel,
             ),
-            gating_entry_ids=_gating_entry_ids(lines),
-            decision_dossier=_dossier(lines),
+            gating_entry_ids=_gating_entry_ids(lines, body_start),
+            decision_dossier=_dossier(lines, body_start),
             durability=durability,
         )
     except ValueError as exc:

@@ -32,6 +32,7 @@ from easy_cheese_schemas import (
     WheypointStatus,
 )
 
+from easy_cheese.shared import paths
 from easy_cheese.skills.wheypoint import commit, records, storage
 
 from conftest import PLACEHOLDER_DIGEST, WORK_ID, Promotion
@@ -819,9 +820,17 @@ def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
     store: storage.WorkStore,
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., Promotion],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """S4: links are a set keyed by path; an added link replaces its path's
     carried link and is pinned to the revision being written (S3)."""
+    repo_root = tmp_path / "repo"
+    (repo_root / ".cheese" / "cook").mkdir(parents=True)
+    _ = (repo_root / ".cheese" / "cook" / "wave-2.md").write_text("wave-2", encoding="utf-8")
+    _ = (repo_root / ".cheese" / "cook" / "wave-3.md").write_text("wave-3", encoding="utf-8")
+    monkeypatch.setattr(paths, "git_toplevel", lambda: repo_root)
+
     carried = ArtifactLink(path=".cheese/cook/wave-2.md")
     added = ArtifactLink(path=".cheese/cook/wave-3.md", digest=PLACEHOLDER_DIGEST)
     seed = _seed(store, make_promotion, record=make_record(artifact_links=[carried]))
@@ -829,11 +838,11 @@ def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
     result = commit.commit(
         _delta(seed.record.revision_id, add_artifact_links=[added]), store=store
     )
-    # The digest is host-computed (S3): a path that is not a file under the
-    # repository root carries none, whatever the caller supplied.
+    # The digest is host-computed from the file (S3), never the caller-supplied value.
+    expected_digest = storage.file_digest(repo_root / ".cheese" / "cook" / "wave-3.md")
     assert result.record.artifact_links == [
         carried,
-        evolve(added, digest=None, revision_id=result.record.revision_id),
+        evolve(added, digest=expected_digest, revision_id=result.record.revision_id),
     ]
 
     replaced = ArtifactLink(path=".cheese/cook/wave-2.md", covers_entry_ids=[])
@@ -853,6 +862,63 @@ def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
             _delta(second.record.revision_id, remove_artifact_links=[".cheese/cook/nope.md"]),
             store=store,
         )
+
+
+def test_added_artifact_link_naming_an_undigestable_path_is_refused(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-23: every added link must carry a host-computed digest. A path this
+    host cannot digest (missing, absolute, or outside the root) is refused by
+    name rather than silently stored without one, and the record is left
+    exactly as it was."""
+    monkeypatch.setattr(paths, "git_toplevel", lambda: tmp_path)
+    seed = _seed(store, make_promotion)
+    missing = ArtifactLink(path="reports/missing.md")
+
+    with pytest.raises(commit.CommitError, match="reports/missing.md"):
+        _ = commit.commit(
+            _delta(seed.record.revision_id, add_artifact_links=[missing]), store=store
+        )
+
+    assert store.read_record() == seed.record
+
+
+def test_artifact_digest_root_is_resolved_lazily_only_when_links_are_present(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Git toplevel is spawned only when a path actually needs digesting,
+    never for a delta that adds no artifact links."""
+    calls: list[None] = []
+
+    def counting_toplevel() -> Path:
+        calls.append(None)
+        return tmp_path
+
+    monkeypatch.setattr(paths, "git_toplevel", counting_toplevel)
+    seed = _seed(store, make_promotion)
+
+    no_links = commit.commit(
+        _delta(seed.record.revision_id, orientation="No artifact links here."),
+        store=store,
+    )
+    assert calls == []
+
+    _ = (tmp_path / "report.md").write_text("body", encoding="utf-8")
+    with_link = commit.commit(
+        _delta(
+            no_links.record.revision_id,
+            add_artifact_links=[ArtifactLink(path="report.md")],
+        ),
+        store=store,
+    )
+    assert len(calls) == 1
+    assert with_link.record.artifact_links[0].digest is not None
 
 
 def test_a_held_record_lock_blocks_the_transaction_until_it_is_released(

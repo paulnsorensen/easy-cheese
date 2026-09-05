@@ -63,9 +63,17 @@ from easy_cheese_schemas import (
     WheypointRecord,
 )
 
-from easy_cheese.shared.handoff import PR_REFERENCE_RE, parse_skill_dispatch
+from easy_cheese.shared.handoff import parse_skill_dispatch
 
 from . import commit as commit_mod
+
+# The pull-request reference `next: affinage` needs in `artifact:`: `PR#<n>` or
+# a GitHub pull URL, optionally carrying a trailing route (`/files`), query,
+# or fragment. Matched with `fullmatch` on the stripped value, so anchoring
+# is implicit; `resolve.py` imports this to keep the legacy gate in step.
+PR_REFERENCE_RE = re.compile(
+    r"PR#\d+|https://github\.com/[^/\s]+/[^/\s]+/pull/\d+(?:[/#?]\S*)?"
+)
 
 # The shape `captured_at` already takes everywhere else in the record.
 _TIMESTAMP = "%Y-%m-%dT%H:%M:%SZ"
@@ -87,9 +95,11 @@ class IntentError(ValueError):
 __all__ = [
     "CheckpointIntent",
     "IntentError",
+    "PR_REFERENCE_RE",
     "build_delta",
     "check_move_artifact",
     "commit_only_fields",
+    "delta_problems",
     "secret_field",
     "secret_fields",
     "task_command_problems",
@@ -102,17 +112,38 @@ _ARTIFACT_REQUIRED = frozenset({NextMove.COOK, NextMove.CUT})
 # pasted credential can never be scrubbed later. Each pattern names what it is.
 _SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("GitHub token", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b")),
-    ("AWS access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("AWS access key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
+    (
+        "AWS secret key",
+        re.compile(r"(?i)\baws_secret_access_key\s*[=:]\s*['\"]?[A-Za-z0-9/+=]{40}\b"),
+    ),
     ("private key block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
-    ("OpenAI-style key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b")),
+    # Excludes `-`/`_` from the body so a hyphenated word like
+    # `sk-refactor-transcript-reader-v2` does not read as a key, while still
+    # matching the Anthropic `sk-ant-` shape.
+    ("OpenAI-style key", re.compile(r"\bsk-ant-[A-Za-z0-9]{10,}\b|\bsk-[A-Za-z0-9]{20,}\b")),
+    ("Stripe key", re.compile(r"\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b")),
     ("Slack token", re.compile(r"\bxox[abps]-[A-Za-z0-9-]{10,}\b")),
     ("Slack webhook", re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/]+")),
     ("Google API key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
     ("JWT or bearer token", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
+    (
+        "bearer token",
+        re.compile(r"(?i)\bauthorization\s*:\s*bearer\s+[A-Za-z0-9\-._~+/]{8,}=*"),
+    ),
     ("URL with basic-auth credentials", re.compile(r"\b[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]+@")),
     (
+        "npm auth token",
+        re.compile(r"(?i)_authtoken\s*[=:]\s*['\"]?[A-Za-z0-9_\-./+=]{8,}"),
+    ),
+    (
         "credential assignment",
-        re.compile(r"(?i)\b(?:api[_-]?key|password|passwd|secret[_-]?key|access[_-]?token)\s*[=:]\s*['\"]?[A-Za-z0-9_\-./+]{8,}"),
+        # A 12-character floor (rather than 8) lets an ordinary word like
+        # `environment` pass while still catching placeholder-shaped secrets.
+        re.compile(
+            r"(?i)\b(?:api[_-]?key|password|passwd|secret[_-]?key|access[_-]?token|"
+            + r"token|auth[_-]?token|client[_-]?secret)\s*[=:]\s*['\"]?[A-Za-z0-9_\-./+]{12,}"
+        ),
     ),
 )
 
@@ -151,17 +182,23 @@ def secret_fields(intent: CheckpointIntent) -> list[str]:
 
 
 def secret_field(intent: CheckpointIntent) -> str | None:
-    """The first secret-carrying field, or None (see `secret_fields`)."""
-    hits = secret_fields(intent)
-    return hits[0] if hits else None
+    """The first secret-carrying field, or None; stops at the first hit."""
+    for field_name, text in _string_fields(attrs.asdict(intent, recurse=True), ""):
+        for label, pattern in _SECRET_PATTERNS:
+            if pattern.search(text):
+                return f"{field_name} ({label})"
+    return None
 
 
 def task_command_problems(intent: CheckpointIntent) -> list[str]:
     """Each `tasks[i].command` that is not a dispatchable skill invocation."""
     problems: list[str] = []
     for index, task in enumerate(intent.tasks or []):
+        command: str = (
+            cast(str, task["command"]) if isinstance(task, dict) else task.command
+        )
         try:
-            _ = parse_skill_dispatch(task.command)
+            _ = parse_skill_dispatch(command)
         except ValueError as exc:
             problems.append(f"tasks[{index}].command is not a skill dispatch: {exc}")
     return problems
@@ -178,6 +215,42 @@ def commit_only_fields(payload: object) -> tuple[str, ...]:
         return ()
     mapping = cast(Mapping[str, object], payload)
     return tuple(name for name in COMMIT_ONLY_FIELDS if name in mapping)
+
+
+def delta_problems(
+    intent: CheckpointIntent, current: WheypointRecord | None
+) -> list[str]:
+    """Every problem building a delta against this record, none of them fatal (AC-11).
+
+    `task_command_problems` and the next-action/artifact gates are independent
+    checks, so both run and both contribute; only the deeper `WheypointDelta`
+    invariants -- which need a legal next action to even attempt -- wait on
+    those passing first.
+    """
+    problems = list(task_command_problems(intent))
+    if intent.next is None:
+        if current is None:
+            problems.append(
+                "a first checkpoint has no next action to carry forward, so it "
+                + "must say what comes next"
+            )
+        if intent.artifact is not None:
+            problems.append(
+                "artifact belongs to the move it is worked on by, so it cannot "
+                + "be set while next is omitted"
+            )
+    else:
+        try:
+            check_move_artifact(intent.next, intent.artifact)
+        except IntentError as exc:
+            problems.append(str(exc))
+    if problems:
+        return problems
+    try:
+        _ = build_delta(intent, current)
+    except IntentError as exc:
+        problems.append(str(exc))
+    return problems
 
 
 def build_delta(
@@ -275,7 +348,7 @@ def _next_action(
 def check_move_artifact(move: NextMove, artifact: str | None) -> None:
     """The next/artifact coherence gate that used to be SKILL.md prose (AC-19)."""
     if move is NextMove.AFFINAGE:
-        if artifact is None or not PR_REFERENCE_RE.search(artifact):
+        if artifact is None or not PR_REFERENCE_RE.fullmatch(artifact.strip()):
             raise IntentError(
                 "artifact must name the pull request (PR#<n> or its GitHub URL) "
                 + "when next is 'affinage', so the resume dispatches it explicitly"

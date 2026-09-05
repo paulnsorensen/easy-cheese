@@ -8,7 +8,7 @@
 - **Decision:** Keep `CheckpointIntent` as the only writer view. Add a `--compacted <proof.json>` flag whose payload is validated as a `CompactionRecord` before the host builds the delta. Remove `commit` from the command list; the function stays as the host-side promotion path.
 - **Alternatives:** Keep `commit` public and document it as compaction-only. Rejected: two verbs to teach, and the proof block is a transport detail, not a writer-view field.
 - **Consequences:** The proof stays caller-authored, exactly as the compaction docstring argues it must. One verb in the rewritten SKILL.md.
-- **Implementation note (2026-09-05):** <certain> Every wheypoint verb, including the new `list`, `log`, and `turns`, keeps the bundle's reply contract of exactly one sorted JSON line. Where the spec's acceptance criteria say "print N lines", the reply carries those lines under a `lines` key (plus typed `items`, `revisions`, or `turns`), so a shell caller pipes the JSON and a human reads `lines`. The compaction proof is part of the request identity: an identical intent submitted with `--compacted` is a new revision, never a replay of the uncompacted one.
+- **Implementation note (2026-09-05):** <certain> Every wheypoint verb, including the new `list`, `log`, and `turns`, keeps the bundle's reply contract of exactly one sorted JSON line. Where the spec's acceptance criteria say "print N lines", the reply carries those lines under a `lines` key (plus untyped per-row objects under `items`, `revisions`, or `turns`), so a shell caller pipes the JSON and a human reads `lines`. The compaction proof is part of the request identity: an identical intent submitted with `--compacted` is a new revision, never a replay of the uncompacted one.
 
 ## References
 

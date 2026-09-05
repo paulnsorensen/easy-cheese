@@ -35,6 +35,8 @@ import contextlib
 import datetime as _dt
 import json
 import sys
+import traceback
+from collections.abc import Callable
 from pathlib import Path
 from typing import NoReturn, TextIO, cast, override
 
@@ -77,6 +79,7 @@ COMMANDS = (
 EXIT_OK = 0
 EXIT_REFUSED = 1
 EXIT_USAGE = 2
+EXIT_INTERNAL = 3
 
 
 class _Refused(Exception):
@@ -203,9 +206,9 @@ def _payload(stdin: TextIO) -> object:
         raise _Refused("invalid-json", f"stdin is not one JSON value: {exc}") from exc
 
 
-def _open(work_id: str) -> storage.WorkStore:
+def _open(work_id: str, *, corpus_root: Path | None = None) -> storage.WorkStore:
     try:
-        return storage.WorkStore.open(work_id)
+        return storage.WorkStore.open(work_id, corpus_root=corpus_root)
     except storage.StorageError as exc:
         raise _Refused("storage-error", str(exc)) from exc
 
@@ -275,7 +278,7 @@ def request_identity_for(intent: CheckpointIntent, proof: CompactionRecord | Non
 
 def _compaction_proof(args: argparse.Namespace) -> CompactionRecord | None:
     """The `--compacted` proof, validated before it can touch a delta."""
-    path_arg = cast("str | None", getattr(args, "compacted", None))
+    path_arg = cast("str | None", args.compacted)
     if path_arg is None:
         return None
     path = Path(path_arg)
@@ -299,9 +302,7 @@ def _refusal_for(exc: Exception) -> _Refused:
         return _Refused("stale-parent", str(exc))
     if isinstance(exc, commit_mod.CommitError):
         return _Refused("commit-refused", str(exc))
-    if isinstance(exc, storage.StorageError):
-        return _Refused("storage-error", str(exc))
-    return _Refused("internal-error", f"{type(exc).__name__}: {exc}")
+    return _Refused("storage-error", str(exc))
 
 
 def _promote(
@@ -349,9 +350,16 @@ def _promote(
                     f"request ledger for {request_identity!r} names a different "
                     + f"request than revision {pending.revision_id!r}",
                 )
-            target = Path(pending.target)
-            result = _resume_mirror(store, revision.revision_id, target, pending)
-            return _result_payload(result, str(target))
+            ledger_target = Path(pending.target)
+            # The ledger's absolute target is trusted only when it still lands
+            # under this invocation's note directory: a resume without this
+            # run's --note-dir must not silently write into a directory this
+            # run never named.
+            resume_target = (
+                ledger_target if ledger_target.parent == note_dir.resolve() else target
+            )
+            result = _resume_mirror(store, revision.revision_id, resume_target, pending)
+            return _result_payload(result, str(resume_target))
         try:
             store.remove_pending(request_identity)
         except OSError as exc:
@@ -370,39 +378,37 @@ def _promote(
     )
     _write_pending(store, pending)
 
-    def finalize(pending_revision: commit_mod.PendingRevision) -> None:
-        # The mirror is the durability this projection claims, so it lands
-        # before the record is promoted. The request ledger is cleared only
-        # after the promotion succeeds.
-        try:
-            storage.write_atomic(target, pending_revision.markdown.encode("utf-8"))
-        except OSError as exc:
-            raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
-
     try:
         result = commit_mod.commit(
             delta,
             store=store,
             durability=Durability.REPO_SNAPSHOT,
-            finalize=finalize,
+            finalize=_mirror_finalizer(target),
         )
     except _MirrorError as exc:
         _drop_uncommitted_pending(store, pending)
         raise _Refused("note-unwritable", str(exc)) from exc
-    except commit_mod.GenesisConflictError as exc:
+    except (commit_mod.CommitError, storage.StorageError) as exc:
         _drop_uncommitted_pending(store, pending)
-        raise _Refused("genesis-conflict", str(exc)) from exc
-    except commit_mod.StaleParentError as exc:
-        _drop_uncommitted_pending(store, pending)
-        raise _Refused("stale-parent", str(exc)) from exc
-    except commit_mod.CommitError as exc:
-        _drop_uncommitted_pending(store, pending)
-        raise _Refused("commit-refused", str(exc)) from exc
-    except storage.StorageError as exc:
-        _drop_uncommitted_pending(store, pending)
-        raise _Refused("storage-error", str(exc)) from exc
+        raise _refusal_for(exc) from exc
     _clear_pending(store, request_identity)
     return _result_payload(result, str(target))
+
+
+def _mirror_finalizer(
+    target: Path,
+) -> Callable[[commit_mod.PendingRevision], None]:
+    """The mirror finalizer: the durability this projection claims lands
+    before the record is promoted.
+    """
+
+    def finalize(pending_revision: commit_mod.PendingRevision) -> None:
+        try:
+            storage.write_atomic(target, pending_revision.markdown.encode("utf-8"))
+        except OSError as exc:
+            raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
+
+    return finalize
 
 
 class _MirrorError(OSError):
@@ -491,17 +497,11 @@ def _resume_mirror(
     target: Path,
     pending: _PendingMirror,
 ) -> commit_mod.CommitResult:
-    def finalize(pending_revision: commit_mod.PendingRevision) -> None:
-        try:
-            storage.write_atomic(target, pending_revision.markdown.encode("utf-8"))
-        except OSError as exc:
-            raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
-
     try:
         result = commit_mod.resume_revision(
             revision_id,
             store=store,
-            finalize=finalize,
+            finalize=_mirror_finalizer(target),
         )
     except _MirrorError as exc:
         raise _Refused("note-unwritable", str(exc)) from exc
@@ -532,10 +532,7 @@ def _result_payload(
 
 def _run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     work_id = cast(str, args.work_id)
-    try:
-        store = storage.WorkStore.open(work_id)
-    except storage.StorageError as exc:
-        raise _Refused("storage-error", str(exc)) from exc
+    store = _open(work_id)
     record = store.read_record()
     if record is None:
         raise _Refused(
@@ -614,10 +611,7 @@ def _run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
         problems.extend(f"{hit} looks like a credential" for hit in checkpoint_mod.secret_fields(loaded.value))
         # The same delta the checkpoint would build, against no record: every
         # NextAction and delta invariant fires here, with the store untouched.
-        try:
-            _ = checkpoint_mod.build_delta(loaded.value, None)
-        except checkpoint_mod.IntentError as exc:
-            problems.append(str(exc))
+        problems.extend(checkpoint_mod.delta_problems(loaded.value, None))
     if problems:
         raise _Refused("invalid-intent", "; ".join(problems), {"problems": problems})
     return {"valid": True, "work_id": loaded.value.work_id if loaded.value else None}
@@ -638,28 +632,42 @@ def _run_schema(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
 
 
 def _corpus_root(args: argparse.Namespace) -> Path:
-    root_arg = cast("str | None", getattr(args, "corpus_root", None))
+    root_arg = cast("str | None", args.corpus_root)
     return Path(root_arg) if root_arg is not None else paths.project_corpus_root()
+
+
+def _tsv_lines(rows: list[dict[str, object]], keys: tuple[str, ...]) -> list[str]:
+    """One tab-separated line per row, escaped so one line is one record."""
+    return ["\t".join(_tsv_escape(str(row[key])) for key in keys) for row in rows]
+
+
+def _tsv_escape(text: str) -> str:
+    """Mirrors `projection._esc`: backslashes, newlines, and tabs are escaped."""
+    return text.replace("\\", "\\\\").replace("\n", "\\n").replace("\t", "\\t")
 
 
 def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     """One line per work item under the corpus root (AC-13)."""
     root = _corpus_root(args)
     items: list[dict[str, object]] = []
-    lines: list[str] = []
+    rows: list[dict[str, object]] = []
     for store in storage.WorkStore.enumerate(root):
         work_id = store.work_id
         try:
             record = store.read_record()
         except (storage.StorageError, records.RecordError, ValueError) as exc:
             items.append({"work_id": work_id, "unreadable": str(exc)})
-            lines.append(f"{work_id}\t-\tunreadable\t-\t{exc}")
+            rows.append(
+                {"work_id": work_id, "revision_number": "-", "status": "unreadable", "next": "-", "detail": str(exc)}
+            )
             continue
         if record is None:
             items.append({"work_id": work_id, "no_record": True})
-            lines.append(f"{work_id}\t-\tno-record\t-\t")
+            rows.append(
+                {"work_id": work_id, "revision_number": "-", "status": "no-record", "next": "-", "detail": ""}
+            )
             continue
-        head = record.orientation.strip().splitlines()[0] if record.orientation.strip() else ""
+        head = record.orientation.strip().partition("\n")[0]
         items.append(
             {
                 "work_id": record.work_id,
@@ -669,25 +677,33 @@ def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                 "orientation": head,
             }
         )
-        lines.append(
-            f"{record.work_id}\t{record.revision_number}\t{record.status.value}\t"
-            + f"{record.next_action.move.value}\t{head}"
+        rows.append(
+            {
+                "work_id": record.work_id,
+                "revision_number": record.revision_number,
+                "status": record.status.value,
+                "next": record.next_action.move.value,
+                "detail": head,
+            }
         )
+    lines = _tsv_lines(rows, ("work_id", "revision_number", "status", "next", "detail"))
     return {"corpus_root": str(root), "items": items, "lines": lines}
 
 
 def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     """One line per complete revision, oldest first (AC-14)."""
     work_id = cast(str, args.work_id)
-    try:
-        store = storage.WorkStore.open(work_id, corpus_root=_corpus_root(args))
-    except storage.StorageError as exc:
-        raise _Refused("storage-error", str(exc)) from exc
-    files = store.revisions()
+    store = _open(work_id, corpus_root=_corpus_root(args))
+    files, skipped = store.revisions()
     if not files and store.read_record() is None:
         raise _Refused("record-missing", f"work {work_id!r} has no record at {store.record_path}")
+    if not files and skipped:
+        raise _Refused(
+            "store-inconsistent",
+            f"work {work_id!r} has a record but every revision was dropped: {'; '.join(skipped)}",
+        )
     entries: list[dict[str, object]] = []
-    lines: list[str] = []
+    rows: list[dict[str, object]] = []
     for file in files:
         revision = file.revision
         captured = (
@@ -697,22 +713,36 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
             else "-"
         )
         compacted = revision.compaction is not None
+        additions = len(revision.applied_additions)
+        transitions = len(revision.applied_transitions)
         entries.append(
             {
                 "revision_number": revision.revision_number,
                 "revision_id": revision.revision_id,
                 "captured_at": captured,
-                "additions": len(revision.applied_additions),
-                "transitions": len(revision.applied_transitions),
+                "additions": additions,
+                "transitions": transitions,
                 "compacted": compacted,
             }
         )
-        lines.append(
-            f"{revision.revision_number}\t{revision.revision_id}\t{captured}\t"
-            + f"+{len(revision.applied_additions)}\t~{len(revision.applied_transitions)}\t"
-            + ("compacted" if compacted else "-")
+        rows.append(
+            {
+                "revision_number": revision.revision_number,
+                "revision_id": revision.revision_id,
+                "captured_at": captured,
+                "additions": f"+{additions}",
+                "transitions": f"~{transitions}",
+                "compacted": "compacted" if compacted else "-",
+            }
         )
-    return {"work_id": work_id, "revisions": entries, "lines": lines}
+    lines = _tsv_lines(
+        rows, ("revision_number", "revision_id", "captured_at", "additions", "transitions", "compacted")
+    )
+    unreadable = [
+        {"path": path, "reason": reason}
+        for path, _, reason in (entry.partition(": ") for entry in skipped)
+    ]
+    return {"work_id": work_id, "revisions": entries, "lines": lines, "unreadable": unreadable}
 
 
 def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
@@ -724,20 +754,27 @@ def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     else:
         directory = transcript.projects_dir(Path.cwd())
         if session is None:
-            stamped: list[tuple[float, str]] = []
+            stamped: list[tuple[float | None, str]] = []
             for candidate in directory.glob("*.jsonl"):
                 try:
-                    stamped.append((candidate.stat().st_mtime, candidate.stem))
+                    mtime: float | None = candidate.stat().st_mtime
                 except OSError:
-                    continue
+                    mtime = None
+                stamped.append((mtime, candidate.stem))
             listing = [
                 {
                     "session": stem,
-                    "modified": _dt.datetime.fromtimestamp(mtime, tz=_dt.timezone.utc).strftime(
-                        "%Y-%m-%dT%H:%M:%SZ"
+                    "modified": (
+                        None
+                        if mtime is None
+                        else _dt.datetime.fromtimestamp(mtime, tz=_dt.timezone.utc).strftime(
+                            "%Y-%m-%dT%H:%M:%SZ"
+                        )
                     ),
                 }
-                for mtime, stem in sorted(stamped, reverse=True)
+                for mtime, stem in sorted(
+                    stamped, key=lambda pair: (pair[0] is not None, pair[0] or 0.0), reverse=True
+                )
             ]
             raise _Refused(
                 "session-required",
@@ -751,11 +788,15 @@ def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     if not path.is_file():
         raise _Refused("transcript-missing", f"no transcript at {path}", {"path": str(path)})
     turns, skipped = transcript.user_turns(path)
+    rows: list[dict[str, object]] = [
+        {"timestamp": turn["timestamp"], "text": turn["text"]} for turn in turns
+    ]
     return {
         "transcript": str(path),
         "count": len(turns),
         "skipped_lines": skipped,
-        "lines": [f"{turn['timestamp']}\t{turn['text']}" for turn in turns],
+        "turns": rows,
+        "lines": _tsv_lines(rows, ("timestamp", "text")),
     }
 
 
@@ -840,55 +881,16 @@ def main(
     except _Refused as exc:
         return _refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED, exc.extra)
     except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
+        traceback.print_exc(file=sys.stderr)
         return _refuse(
             stdout2,
             command,
             "internal-error",
             f"{type(exc).__name__}: {exc}",
-            EXIT_REFUSED,
+            EXIT_INTERNAL,
         )
     _emit(stdout2, {"ok": True, "command": command, **payload})
     return EXIT_OK
-
-
-def _bundle_main(command: str, argv: list[str]) -> int:
-    return main([command, *argv])
-
-
-def checkpoint_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("checkpoint", argv)
-
-
-def validate_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("validate", argv)
-
-
-def schema_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("schema", argv)
-
-
-def list_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("list", argv)
-
-
-def log_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("log", argv)
-
-
-def turns_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("turns", argv)
-
-
-def resolve_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("resolve", argv)
-
-
-def show_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("show", argv)
-
-
-def lint_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("lint", argv)
 
 
 if __name__ == "__main__":

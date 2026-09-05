@@ -304,6 +304,25 @@ class TestModeCli:
         assert handoff_mod.main(["parse", "--file", str(preamble)]) == 0
         assert "mode" not in cast(dict[str, object], json.loads(capsys.readouterr().out))
 
+
+class TestBaselineCli:
+    def test_render_emits_baseline_and_parse_returns_it(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from easy_cheese.shared import handoff as handoff_mod
+
+        base = ["render", "--status", "ok", "--next", "cook", "--artifact", "", "--orientation", "o"]
+        assert handoff_mod.main([*base, "--baseline", "suite=pytest test_id=t signature=s"]) == 0
+        rendered = capsys.readouterr().out
+        assert "baseline: suite=pytest test_id=t signature=s\n" in rendered
+
+        preamble = tmp_path / "pre.md"
+        _ = preamble.write_text(rendered, encoding="utf-8")
+        assert handoff_mod.main(["parse", "--file", str(preamble)]) == 0
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["baseline"] == "suite=pytest test_id=t signature=s"
+
+
 class TestSharedEmitter:
     def test_read_handoff_slug_emits_mode_like_handoff_parse(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

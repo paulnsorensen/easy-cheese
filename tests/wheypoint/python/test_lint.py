@@ -846,6 +846,33 @@ def test_artifact_digest_in_rejects_non_regular_paths(tmp_path: Path) -> None:
     assert lint.artifact_digest_in(root)("reports") is None
 
 
+def test_ac16_a_future_record_this_reader_cannot_structure_reports_runtime_behind_only(
+    corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
+) -> None:
+    import json
+
+    from easy_cheese_schemas import SCHEMA_VERSION
+
+    store = make_store(corpus_root)
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    raw = cast(dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8")))
+    raw["schema_version"] = SCHEMA_VERSION + 1
+    # An identifier the schema's own validator refuses: the reader cannot
+    # structure this record at all, so `record` stays None below.
+    raw["work_id"] = "NOT A VALID WORK ID"
+    _ = store.record_path.write_text(json.dumps(raw, sort_keys=True), encoding="utf-8")
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.RUNTIME_BEHIND,)
+    assert lint.LintCode.STORE_INCONSISTENT not in report.codes
+    assert lint.LintCode.RECORD_MISSING not in report.codes
+    assert f"schema version {SCHEMA_VERSION + 1}" in report.findings[0].detail
+    assert report.record is None
+    assert lint.gates_continuation(report.findings[0])
+
+
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 def test_git_object_exists_in_answers_from_a_real_repository(tmp_path: Path) -> None:
     env = {

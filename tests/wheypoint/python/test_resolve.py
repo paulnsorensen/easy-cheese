@@ -426,6 +426,47 @@ def test_a_legacy_note_whose_artifact_resolves_is_returned(tmp_path: Path) -> No
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
 
 
+def test_a_legacy_affinage_artifact_embedded_in_prose_gates(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    path = start / ".cheese" / "notes" / "review.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(
+        "status: ok\nnext: affinage\nartifact: see notes PR#12\n"
+        + "Pick the loop back up.\n",
+        encoding="utf-8",
+    )
+
+    found = resolve_mod.resolve_legacy(
+        "review", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert found.detail is not None
+    assert "must be 'PR#<n>' or a pull request URL" in found.detail
+
+
+@pytest.mark.parametrize(
+    "artifact", ["PR#12", "https://github.com/org/repo/pull/12/files"]
+)
+def test_a_legacy_affinage_artifact_with_a_trailing_route_resolves(
+    tmp_path: Path, artifact: str
+) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    path = start / ".cheese" / "notes" / "review.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(
+        f"status: ok\nnext: affinage\nartifact: {artifact}\nPick the loop back up.\n",
+        encoding="utf-8",
+    )
+
+    found = resolve_mod.resolve_legacy(
+        "review", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+
 def write_note_with_parents(root: Path, slug: str, parents: str) -> Path:
     path = root / ".cheese" / "notes" / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)

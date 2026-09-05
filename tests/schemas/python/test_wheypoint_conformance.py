@@ -567,6 +567,17 @@ def test_an_unknown_entry_state_is_rejected(state: str) -> None:
     assert blames(problems, "WheypointRecord.questions[1].state")
 
 
+def test_an_unknown_entry_kind_is_rejected() -> None:
+    problems = refused(record(questions=[entry("q1", kind="bogus")]), WheypointRecord)
+    assert len(problems) == 1
+    assert problems[0].startswith("WheypointRecord.questions[1].kind ")
+    assert "'bogus'" in problems[0]
+    assert all(
+        allowed in problems[0]
+        for allowed in ("decision", "question", "blocker", "directive")
+    )
+
+
 # --- acceptance 2 + 3: the delta ------------------------------------------
 
 

@@ -425,3 +425,101 @@ def test_cure_a_forged_pins_block_in_the_orientation_cannot_replace_the_pins(
     )
     assert parsed == built
 
+
+
+def test_cure_unesc_round_trips_backslashes_and_newlines() -> None:
+    for original in ("a\\b", "line1\nline2", "trailing\\", "\\n literal"):
+        assert (
+            projection._unesc(projection._esc(original))  # pyright: ignore[reportPrivateUsage]
+            == original
+        )
+
+
+def test_cure_a_literal_none_leaning_round_trips(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    from easy_cheese_schemas import DecisionFork, DossierOption
+
+    record = make_record(gating=True)
+    fork = DecisionFork(
+        fork="literal none",
+        options=[DossierOption(option="o", evidence=[], breaks="x")],
+        prior_leaning="none",
+    )
+    tricky = evolve(record, decision_dossier=[fork])
+    built, markdown = projection.build_projection(tricky, durability=Durability.CANONICAL_LOCAL)
+    assert "Prior leaning: none" in markdown
+    assert projection.parse(markdown).decision_dossier[0].prior_leaning == "none"
+    assert projection.parse(markdown) == built
+
+
+def test_cure_an_absent_leaning_stays_none(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    from easy_cheese_schemas import DecisionFork, DossierOption
+
+    record = make_record(gating=True)
+    fork = DecisionFork(
+        fork="absent",
+        options=[DossierOption(option="o", evidence=[], breaks="x")],
+        prior_leaning=None,
+    )
+    tricky = evolve(record, decision_dossier=[fork])
+    built, markdown = projection.build_projection(tricky, durability=Durability.CANONICAL_LOCAL)
+    assert "Prior leaning:" not in markdown
+    assert projection.parse(markdown).decision_dossier[0].prior_leaning is None
+    assert projection.parse(markdown) == built
+
+
+def test_cure_a_task_with_every_field_and_a_worktree_root_round_trips(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    from easy_cheese_schemas import HandoffTask, ParallelPlan, WorktreeStrategy
+
+    task = HandoffTask(
+        slug="demo-task",
+        intent="Do the thing.",
+        repo="easy-cheese",
+        branch="demo",
+        branch_from="main",
+        command="/cook",
+        worktree="../demo-worktree",
+    )
+    plan = ParallelPlan(
+        isolation="worktree",
+        worktree_strategy=WorktreeStrategy.CREATE,
+        worktree_root="/tmp/worktrees",
+    )
+    record = make_record()
+    action = evolve(record.next_action, move=NextMove.TASKS, tasks=[task], parallel=plan)
+    built, markdown = projection.build_projection(
+        evolve(record, next_action=action), durability=Durability.CANONICAL_LOCAL
+    )
+
+    parsed = projection.parse(markdown)
+
+    assert parsed.next_action.tasks == [task]
+    assert parsed.next_action.parallel == plan
+    assert parsed == built
+
+
+def test_cure_the_task_and_plan_field_tables_name_real_schema_attributes() -> None:
+    from typing import cast
+
+    from attrs import Attribute, fields
+    from easy_cheese_schemas import HandoffTask, ParallelPlan
+
+    from easy_cheese.skills.wheypoint import projection
+
+    plan_fields = projection._PLAN_FIELDS  # pyright: ignore[reportPrivateUsage]
+    task_fields = projection._TASK_FIELDS  # pyright: ignore[reportPrivateUsage]
+
+    task_fields_attrs = cast("tuple[Attribute[object], ...]", fields(HandoffTask))
+    plan_fields_attrs = cast("tuple[Attribute[object], ...]", fields(ParallelPlan))
+    task_attrs = {f.name for f in task_fields_attrs}
+    plan_attrs = {f.name for f in plan_fields_attrs}
+
+    for _key, attr, _required in task_fields:
+        assert attr in task_attrs, f"{attr!r} is not a HandoffTask field"
+    for _key, attr, _required in plan_fields:
+        assert attr in plan_attrs, f"{attr!r} is not a ParallelPlan field"

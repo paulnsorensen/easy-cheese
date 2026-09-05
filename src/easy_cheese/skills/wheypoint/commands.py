@@ -14,65 +14,65 @@ from easy_cheese.shared.bundle_commands import (
 
 @bundle_command("checkpoint")
 def _checkpoint(argv: list[str]) -> int:
-    from easy_cheese.skills.wheypoint.wheypoint import checkpoint_main
+    from easy_cheese.skills.wheypoint import wheypoint
 
-    return checkpoint_main(argv)
+    return wheypoint.main(["checkpoint", *argv])
 
 
 @bundle_command("validate")
 def _validate(argv: list[str]) -> int:
-    from easy_cheese.skills.wheypoint.wheypoint import validate_main
+    from easy_cheese.skills.wheypoint import wheypoint
 
-    return validate_main(argv)
+    return wheypoint.main(["validate", *argv])
 
 
 @bundle_command("schema")
 def _schema(argv: list[str]) -> int:
-    from easy_cheese.skills.wheypoint.wheypoint import schema_main
+    from easy_cheese.skills.wheypoint import wheypoint
 
-    return schema_main(argv)
+    return wheypoint.main(["schema", *argv])
 
 
 @bundle_command("resolve")
 def _resolve(argv: list[str]) -> int:
-    from easy_cheese.skills.wheypoint.wheypoint import resolve_main
+    from easy_cheese.skills.wheypoint import wheypoint
 
-    return resolve_main(argv)
+    return wheypoint.main(["resolve", *argv])
 
 
 @bundle_command("show")
 def _show(argv: list[str]) -> int:
-    from easy_cheese.skills.wheypoint.wheypoint import show_main
+    from easy_cheese.skills.wheypoint import wheypoint
 
-    return show_main(argv)
+    return wheypoint.main(["show", *argv])
 
 
 @bundle_command("lint")
 def _lint(argv: list[str]) -> int:
-    from easy_cheese.skills.wheypoint.wheypoint import lint_main
+    from easy_cheese.skills.wheypoint import wheypoint
 
-    return lint_main(argv)
+    return wheypoint.main(["lint", *argv])
 
 
 @bundle_command("list")
 def _list(argv: list[str]) -> int:
-    from easy_cheese.skills.wheypoint.wheypoint import list_main
+    from easy_cheese.skills.wheypoint import wheypoint
 
-    return list_main(argv)
+    return wheypoint.main(["list", *argv])
 
 
 @bundle_command("log")
 def _log(argv: list[str]) -> int:
-    from easy_cheese.skills.wheypoint.wheypoint import log_main
+    from easy_cheese.skills.wheypoint import wheypoint
 
-    return log_main(argv)
+    return wheypoint.main(["log", *argv])
 
 
 @bundle_command("turns")
 def _turns(argv: list[str]) -> int:
-    from easy_cheese.skills.wheypoint.wheypoint import turns_main
+    from easy_cheese.skills.wheypoint import wheypoint
 
-    return turns_main(argv)
+    return wheypoint.main(["turns", *argv])
 
 
 @bundle_command("handoff")

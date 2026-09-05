@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Container, Sequence
 from enum import Enum
-from typing import TypeVar, cast
+from typing import Protocol, TypeVar, cast, runtime_checkable
 
 import attrs
 from attrs import define, field
@@ -60,28 +60,40 @@ def _serialize(_instance: object, _attribute: object, value: object) -> object:
 # rule is read from the field itself: a new field needs no entry here, and a
 # field without the marker is never omitted.
 _SINCE_KEY = "since"
-_COMPAT_VERSION = 2
+# The permanent v2 digest floor: canonical bytes for a schema_version-2 record
+# must never change, so a field is compat-additive only when declared after
+# this floor. This is fixed by ADR wheypoint-ergonomics-004 and is NOT derived
+# from `SCHEMA_VERSION`, which keeps advancing as the schema grows.
+_DIGEST_COMPAT_FLOOR = 2
 
 
-def _added_after_compat(attribute: object) -> bool:
-    metadata = cast(dict[str, object], getattr(attribute, "metadata", {}) or {})
+@runtime_checkable
+class _FactoryDefault(Protocol):
+    """What `attrs.Factory(...)` produces -- checked structurally because the
+    stub types `attrs.Factory` as a function returning `_T`, not a class, so
+    `isinstance(default, attrs.Factory)` cannot type-check."""
+
+    factory: Callable[[], object]
+    takes_self: bool
+
+
+def _added_after_compat(attribute: attrs.Attribute[object]) -> bool:
+    metadata = attribute.metadata or {}
     since = metadata.get(_SINCE_KEY)
-    return isinstance(since, int) and since > _COMPAT_VERSION
+    return isinstance(since, int) and since > _DIGEST_COMPAT_FLOOR
 
 
-def _is_declared_default(attribute: object, value: object) -> bool:
-    default = cast(object, getattr(attribute, "default", attrs.NOTHING))
-    # attrs represents a factory default as a `Factory` instance; a list factory
-    # means "empty ledger", so only the empty list is the declared default.
-    if type(default).__name__ == "Factory":
-        return value == []
+def _is_declared_default(attribute: attrs.Attribute[object], value: object) -> bool:
+    default = attribute.default
+    if isinstance(default, _FactoryDefault):
+        # takes_self=True factories derive from the instance under
+        # construction, which is not available here; treat as never-default.
+        return False if default.takes_self else value == default.factory()
     return value is default or (default is None and value is None)
 
 
-def _omit_v3_defaults(attribute: object, value: object) -> bool:
-    if _added_after_compat(attribute) and _is_declared_default(attribute, value):
-        return False
-    return True
+def _omit_post_compat_defaults(attribute: attrs.Attribute[object], value: object) -> bool:
+    return not (_added_after_compat(attribute) and _is_declared_default(attribute, value))
 
 
 def unstructure(obj: AttrsInstance) -> dict[str, object]:
@@ -90,7 +102,7 @@ def unstructure(obj: AttrsInstance) -> dict[str, object]:
     Fields marked `since: 3` are dropped while at their declared default.
     """
     return attrs.asdict(
-        obj, recurse=True, value_serializer=_serialize, filter=_omit_v3_defaults
+        obj, recurse=True, value_serializer=_serialize, filter=_omit_post_compat_defaults
     )
 
 

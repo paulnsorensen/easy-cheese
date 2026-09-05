@@ -12,6 +12,7 @@ import hashlib
 from collections.abc import Callable
 from typing import Protocol, cast
 
+import attrs
 import pytest
 from attrs import evolve
 from easy_cheese_schemas import (
@@ -211,6 +212,18 @@ def test_v3_fields_at_their_default_leave_v2_canonical_bytes_untouched(
     assert "notes" in records.unstructure(with_notes)
     assert records.canonical_payload(evolve(with_notes, notes=None)) == records.canonical_payload(record)
 
+def test_a_since3_dict_factory_field_is_omitted_only_while_empty() -> None:
+    """A future field declared with `factory=dict` follows the same rule as
+    `factory=list`: omitted at its declared-empty default, kept once set."""
+
+    @attrs.define(frozen=True)
+    class _WithDictFactory:
+        payload: dict[str, int] = attrs.field(factory=dict, metadata={"since": 3})
+
+    assert records.unstructure(_WithDictFactory()) == {}
+    assert records.unstructure(_WithDictFactory(payload={"a": 1})) == {"payload": {"a": 1}}
+
+
 def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
     import json
     from pathlib import Path
@@ -226,7 +239,7 @@ def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
     )
     bump = (
         f"canonical bytes changed for schema_version {SCHEMA_VERSION}: bump SCHEMA_VERSION "
-        + f"to {SCHEMA_VERSION + 1}, regenerate the golden, and add the new fields to _V3_OPTIONAL"
+        + f"to {SCHEMA_VERSION + 1}, regenerate the golden, and mark the new fields metadata={{'since': N}}"
     )
     assert pins["schema_version"] == SCHEMA_VERSION, bump
     assert records.canonical_payload(record) == raw, bump

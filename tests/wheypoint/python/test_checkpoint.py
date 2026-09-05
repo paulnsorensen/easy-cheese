@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from easy_cheese_schemas import NextMove, WheypointRecord
+from easy_cheese_schemas import HandoffTask, NextMove, WheypointRecord
 
 from easy_cheese.skills.wheypoint import checkpoint, commit, storage, wheypoint
 
@@ -625,6 +625,101 @@ def test_commit_only_fields_reports_them_in_a_stable_order() -> None:
         {"compaction": {}, "expected_revision_id": "rev-1", "work_id": WORK_ID}
     ) == ("expected_revision_id", "compaction")
     assert checkpoint.commit_only_fields(["not", "a", "mapping"]) == ()
+
+
+@pytest.mark.parametrize(
+    "artifact",
+    [
+        "PR#12",
+        " PR#12 ",
+        "https://github.com/org/repo/pull/12",
+        "https://github.com/org/repo/pull/12/files",
+        "https://github.com/org/repo/pull/12#discussion_r1",
+    ],
+)
+def test_affinage_accepts_a_bare_pr_reference(artifact: str) -> None:
+    checkpoint.check_move_artifact(NextMove.AFFINAGE, artifact)
+
+
+@pytest.mark.parametrize(
+    "artifact",
+    ["notes PR#12", "PR#12 and more", "x"],
+)
+def test_affinage_refuses_a_pr_reference_embedded_in_prose(artifact: str) -> None:
+    """`fullmatch` closes the gap `search` left: a PR mention buried in
+    prose is not the same as the artifact *being* the PR reference."""
+    with pytest.raises(checkpoint.IntentError):
+        checkpoint.check_move_artifact(NextMove.AFFINAGE, artifact)
+
+
+_SECRET_POSITIVES: list[tuple[str, str]] = [
+    ("AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "AWS secret key"),
+    ("ASIA" + "A" * 16, "AWS access key"),
+    ("Authorization: Bearer " + "a" * 30, "bearer token"),
+    ("token=" + "a" * 15, "credential assignment"),
+    ("client_secret=" + "a" * 15, "credential assignment"),
+    ("//registry.npmjs.org/:_authToken=npm_" + "a" * 20, "npm auth token"),
+    ("sk_live_" + "a" * 20, "Stripe key"),
+    ("ghp_" + "a" * 36, "GitHub token"),
+    ("sk-ant-" + "a" * 20, "OpenAI-style key"),
+    ("xoxb-" + "1" * 12, "Slack token"),
+    ("-----BEGIN PRIVATE KEY-----", "private key block"),
+    ("https://user:pass@example.com/", "URL with basic-auth credentials"),
+]
+
+_SECRET_NEGATIVES: list[str] = [
+    "branch sk-refactor-transcript-reader-v2",
+    "Set api_key: environment variable, never inline",
+    "An ordinary sentence about nothing in particular.",
+]
+
+
+@pytest.mark.parametrize(("text", "label"), _SECRET_POSITIVES)
+def test_secret_fields_flags_known_credential_shapes(text: str, label: str) -> None:
+    intent = checkpoint.CheckpointIntent(work_id=WORK_ID, orientation=text)
+    assert checkpoint.secret_fields(intent) == [f"orientation ({label})"]
+
+
+@pytest.mark.parametrize("text", _SECRET_NEGATIVES)
+def test_secret_fields_ignores_ordinary_text(text: str) -> None:
+    intent = checkpoint.CheckpointIntent(work_id=WORK_ID, orientation=text)
+    assert checkpoint.secret_fields(intent) == []
+
+
+@pytest.mark.parametrize("text", [text for text, _label in _SECRET_POSITIVES])
+def test_secret_field_agrees_with_secret_fields_on_the_first_hit(text: str) -> None:
+    intent = checkpoint.CheckpointIntent(work_id=WORK_ID, orientation=text)
+    assert checkpoint.secret_field(intent) == checkpoint.secret_fields(intent)[0]
+
+
+def test_delta_problems_is_empty_for_a_clean_intent() -> None:
+    intent = checkpoint.CheckpointIntent(
+        work_id=WORK_ID, orientation="Fine.", next=NextMove.MOLD
+    )
+    assert checkpoint.delta_problems(intent, None) == []
+
+
+def test_delta_problems_collects_every_delta_stage_problem() -> None:
+    intent = checkpoint.CheckpointIntent(
+        work_id=WORK_ID,
+        next=NextMove.AFFINAGE,
+        artifact="x",
+        tasks=[
+            HandoffTask(
+                slug="task",
+                intent="do the thing",
+                repo="easy-cheese",
+                branch="branch",
+                branch_from="main",
+                command="not a dispatch",
+            )
+        ],
+    )
+    problems = checkpoint.delta_problems(intent, None)
+
+    assert len(problems) == 2
+    assert any("tasks[0].command" in problem for problem in problems)
+    assert any("artifact must name the pull request" in problem for problem in problems)
 
 
 def test_the_checkpoint_command_is_registered_for_the_bundle() -> None:

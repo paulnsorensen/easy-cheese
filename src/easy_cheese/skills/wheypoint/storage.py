@@ -239,22 +239,13 @@ class WorkStore:
             stores.append(cls.open(record_path.parent.name, corpus_root=base))
         return stores
 
-    def revisions(self) -> list[RevisionFile]:
-        """Every complete immutable revision, oldest first.
-
-        Receipts only: projections are located, not read or digested, so a long
-        history costs one small JSON file per revision.
+    def revisions(self) -> tuple[list[RevisionFile], list[str]]:
+        """Every complete immutable revision, oldest first, plus a reason for
+        every receipt or projection that was skipped rather than silently
+        dropped: a caller that only reports the survivors is not the same as
+        a caller that never lost anything.
         """
-        files: list[RevisionFile] = []
-        for path in self.revisions_dir.glob("*.json"):
-            try:
-                revision = records.structure(_parse_json(path.read_bytes()), WheypointRevision)
-            except (OSError, ValueError, records.RecordError):
-                continue
-            projection_path = self.projections_dir / f"{path.stem}.md"
-            if projection_path.is_file():
-                files.append(RevisionFile(revision=revision, path=path, projection_path=projection_path))
-        return sorted(files, key=lambda file: file.revision.revision_number)
+        return self._scan_revisions()
 
     def read_record(self) -> WheypointRecord | None:
         try:
