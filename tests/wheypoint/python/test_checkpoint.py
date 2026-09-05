@@ -327,6 +327,33 @@ def test_checkpoint_refuses_the_fields_that_belong_to_commit(
 
 
 @pytest.mark.usefixtures("store")
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("mode", "parallel"),
+        ("tasks", [{"next": "cook", "artifact": "spec.md"}]),
+        ("order", ["a", "b"]),
+        ("baseline", {"suite": "pytest", "test_id": "t", "signature": "s"}),
+        ("durable_flags", "--hard"),
+    ],
+)
+def test_checkpoint_refuses_a_field_the_record_cannot_hold(
+    field: str, value: object
+) -> None:
+    """Silence is the worst answer here.
+
+    Structuring an intent drops an unknown key, so a caller who authored one of
+    these would be told nothing while the data disappeared.
+    """
+    status, payload = _run("checkpoint", stdin=_first(**{field: value}))
+
+    assert status == 1
+    assert _get(payload, "error", "code") == "invalid-intent"
+    message = cast(str, _get(payload, "error", "message"))
+    assert field in message
+
+
+@pytest.mark.usefixtures("store")
 def test_omitted_protected_state_carries_forward() -> None:
     status, _ = _run(
         "checkpoint",
@@ -488,21 +515,29 @@ def test_mirror_failure_then_retry_resumes_the_committed_revision(
 
     assert status == 1
     assert _get(first, "error", "code") == "note-unwritable"
+    # The projection claims repo-snapshot durability, so a failed mirror must
+    # leave no promoted record behind to carry that claim.
     committed = store.read_record()
     assert committed is not None
-    assert committed.revision_number == 2
-    assert len(committed.questions) == 1
+    assert committed.revision_number == 1
+    assert committed.questions == []
+    assert sorted(path.name for path in store.revisions_dir.glob("*.json")) == [
+        f"1-{committed.revision_id}.json"
+    ]
+    assert not (notes / f"{WORK_ID}.md").exists()
 
     status, second = _run("checkpoint", "--note-dir", str(notes), stdin=intent)
 
     assert status == 0, second
     assert second["revision_number"] == 2
-    assert second["replayed"] is True
+    assert second["replayed"] is False
     assert len(cast(list[dict[str, object]], _get(second, "record", "questions"))) == 1
     assert (notes / f"{WORK_ID}.md").read_text(encoding="utf-8") == second["markdown"]
+    retried = store.read_record()
+    assert retried is not None
     revision_files = sorted(path.name for path in store.revisions_dir.glob("*.json"))
     assert len(revision_files) == 2
-    assert f"2-{committed.revision_id}.json" in revision_files
+    assert f"2-{retried.revision_id}.json" in revision_files
 
 @pytest.mark.usefixtures("genesis")
 def test_an_artifact_without_a_next_move_refuses() -> None:

@@ -796,7 +796,7 @@ def test_a_new_gating_blocker_derives_gated_and_needs_a_dossier(
     assert result.record.status is WheypointStatus.GATED
     assert result.projection.status is WheypointStatus.GATED
     assert result.projection.gating_entry_ids == [gate]
-    assert result.markdown.splitlines()[0] == "status: gated"
+    assert result.markdown.splitlines()[0] == f"status: gated: 1 open gating entry: {gate}"
 
 
 def test_added_artifact_links_append_to_the_ones_already_carried(

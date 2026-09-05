@@ -400,17 +400,23 @@ def test_promotion_refuses_a_triple_that_does_not_agree(
     store: storage.WorkStore, make_promotion: Callable[..., _Promotion], field: str
 ) -> None:
     promotion = make_promotion()
-    broken = {
-        "revision_id": "rev-9999",
-        "revision_number": 9,
-        "work_id": "work-9999",
-        "record_digest": "sha256:" + "9" * 64,
-        "projection_digest": "sha256:" + "9" * 64,
-    }[field]
+    # A receipt that names no parent must stay at revision one, so the
+    # revision_number case also supplies the parent pins the model requires.
+    broken: dict[str, dict[str, object]] = {
+        "revision_id": {"revision_id": "rev-9999"},
+        "revision_number": {
+            "revision_number": 9,
+            "parent_revision_id": "rev-0008",
+            "parent_revision_digest": "sha256:" + "8" * 64,
+        },
+        "work_id": {"work_id": "work-9999"},
+        "record_digest": {"record_digest": "sha256:" + "9" * 64},
+        "projection_digest": {"projection_digest": "sha256:" + "9" * 64},
+    }
     with pytest.raises(storage.StorageError):
         store.promote(
             promotion.record,
-            evolve(promotion.revision, **{field: broken}),
+            evolve(promotion.revision, **broken[field]),
             promotion.markdown,
         )
     assert not store.record_path.exists()
@@ -769,6 +775,50 @@ def test_a_revision_pinned_claim_needs_that_revision_to_exist(
         ArtifactLink(path="cook.md", revision_id="rev-9999", covers_entry_ids=["d-store"]),
     )
     assert _report(unknown, tmp_path, store).failures == (
+        records.CoverageFailure(
+            path="cook.md", reason="coverage pins unknown revision 'rev-9999'"
+        ),
+    )
+
+
+def test_a_dual_pinned_claim_checks_both_pins(
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _Promotion],
+) -> None:
+    """A matching digest does not license an unresolvable revision.
+
+    A claim that supplies both pins asserts both. Returning on the digest alone
+    accepted a revision this store never wrote.
+    """
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    artifact = tmp_path / "cook.md"
+    _ = artifact.write_text("the cook report", encoding="utf-8")
+    digest = storage.file_digest(artifact)
+
+    both_valid = _covered_record(
+        make_record,
+        ArtifactLink(
+            path="cook.md",
+            digest=digest,
+            revision_id="rev-0001",
+            covers_entry_ids=["d-store"],
+        ),
+    )
+    assert _report(both_valid, tmp_path, store).failures == ()
+
+    stale_revision = _covered_record(
+        make_record,
+        ArtifactLink(
+            path="cook.md",
+            digest=digest,
+            revision_id="rev-9999",
+            covers_entry_ids=["d-store"],
+        ),
+    )
+    assert _report(stale_revision, tmp_path, store).failures == (
         records.CoverageFailure(
             path="cook.md", reason="coverage pins unknown revision 'rev-9999'"
         ),

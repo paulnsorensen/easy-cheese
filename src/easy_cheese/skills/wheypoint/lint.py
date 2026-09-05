@@ -23,6 +23,7 @@ from pathlib import Path
 
 from attrs import define, field
 from easy_cheese_schemas import (
+    CompactionRecord,
     Durability,
     WheypointProjection,
     WheypointRecord,
@@ -33,6 +34,7 @@ from easy_cheese_schemas import (
 from . import lineage
 from . import projection as projection_mod
 from . import records, storage
+from .lineage import Lineage
 
 _GIT_TIMEOUT_SECONDS = 5
 
@@ -50,6 +52,7 @@ class LintCode(str, Enum):
     PROJECTION_RECORD_MISMATCH = "projection-record-mismatch"
     PARENT_UNRESOLVED = "parent-unresolved"
     PARENT_DIGEST_MISMATCH = "parent-digest-mismatch"
+    PARENT_NOT_CONTIGUOUS = "parent-not-contiguous"
     PROJECT_MISMATCH = "project-mismatch"
     GIT_OBJECT_MISSING = "git-object-missing"
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
@@ -243,9 +246,11 @@ def lint_work(
         projection_report = _lint_current_projection(store, record, current)
         findings.extend(projection_report.findings)
         projection = projection_report.projection
-        chain = _walk_chain(recovery, current)
+        chain = lineage.walk(
+            (file.revision for file in recovery.complete), current
+        )
         ancestry = chain.revision_ids
-        findings.extend(chain.findings)
+        findings.extend(_lineage_finding(issue) for issue in chain.issues)
         findings.extend(_compaction_findings(chain))
         findings.extend(_conservation_findings(chain, record))
         findings.extend(_git_findings(current, git_object_exists))
@@ -332,35 +337,16 @@ def _lint_current_projection(
     )
 
 
-@define(frozen=True)
-class _Chain:
-    """The ancestry of one revision, and why it stops where it does.
-
-    `revisions` runs current-first and holds only the steps that were actually
-    walked, so a chain that breaks reports the prefix it could prove rather
-    than the whole store: a revision the walk never reached is not an ancestor
-    of the current one, whatever else is on disk.
-    """
-
-    revisions: tuple[WheypointRevision, ...]
-    findings: tuple[LintFinding, ...]
-
-    @property
-    def revision_ids(self) -> frozenset[str]:
-        return frozenset(revision.revision_id for revision in self.revisions)
-
-
-def _walk_chain(
-    recovery: storage.RecoveryReport, current: WheypointRevision
-) -> _Chain:
-    """Adapt the shared provenance walk into lint findings."""
-    checked = lineage.walk(
-        (file.revision for file in recovery.complete),
-        current,
-    )
-    return _Chain(
-        revisions=checked.revisions,
-        findings=tuple(_lineage_finding(issue) for issue in checked.issues),
+def _not_contiguous_detail(issue: lineage.LineageIssue) -> str:
+    """Why a resolvable parent is still not this revision's ancestor."""
+    parent = issue.parent
+    assert parent is not None
+    return (
+        f"revision {issue.revision.revision_id!r} of work "
+        + f"{issue.revision.work_id!r} names parent {issue.parent_revision_id!r} "
+        + f"of work {parent.work_id!r} at revision number "
+        + f"{parent.revision_number}, but its own revision number is "
+        + f"{issue.revision.revision_number}"
     )
 
 
@@ -378,6 +364,10 @@ def _lineage_finding(issue: lineage.LineageIssue) -> LintFinding:
                 + "immutable revision"
             )
         return LintFinding(LintCode.PARENT_UNRESOLVED, detail)
+    if issue.kind is lineage.LineageIssueKind.PARENT_NOT_CONTIGUOUS:
+        return LintFinding(
+            LintCode.PARENT_NOT_CONTIGUOUS, _not_contiguous_detail(issue)
+        )
     pinned = issue.expected_digest
     if pinned is None:
         detail = (
@@ -396,43 +386,89 @@ def _lineage_finding(issue: lineage.LineageIssue) -> LintFinding:
 
 
 
-def _compaction_findings(chain: _Chain) -> list[LintFinding]:
+def _held_entry_ids(revision: WheypointRevision) -> set[str]:
+    """The protected entries the record held after `revision` was written."""
+    return {addition.entry_id for addition in revision.applied_additions} | set(
+        revision.preserved_entry_ids
+    )
+
+
+def _compaction_proof_findings(
+    revision: WheypointRevision,
+    compaction: CompactionRecord,
+    parent: WheypointRevision | None,
+) -> list[LintFinding]:
+    """Re-derive the reconciliation report against the receipt it names."""
+    if compaction.rehydrated_from_revision_id != revision.parent_revision_id:
+        return [
+            LintFinding(
+                LintCode.COMPACTION_PARENT_UNRESOLVED,
+                f"revision {revision.revision_id!r} rehydrated from "
+                + f"{compaction.rehydrated_from_revision_id!r} but was "
+                + f"written onto parent {revision.parent_revision_id!r}",
+            )
+        ]
+    if parent is None:
+        return []
+    findings: list[LintFinding] = []
+    if compaction.rehydrated_record_digest != parent.record_digest:
+        findings.append(
+            LintFinding(
+                LintCode.COMPACTION_PARENT_UNRESOLVED,
+                f"revision {revision.revision_id!r} quotes rehydrated record "
+                + f"digest {compaction.rehydrated_record_digest}, but revision "
+                + f"{parent.revision_id!r} recorded {parent.record_digest}",
+            )
+        )
+    unreconciled = sorted(_held_entry_ids(parent) - set(compaction.reconciled_entry_ids))
+    if unreconciled:
+        findings.append(
+            LintFinding(
+                LintCode.COMPACTION_PARENT_UNRESOLVED,
+                f"revision {revision.revision_id!r} reconciled no entry "
+                + f"{', '.join(repr(entry_id) for entry_id in unreconciled)} "
+                + f"that revision {parent.revision_id!r} still carried",
+            )
+        )
+    return findings
+
+
+def _compaction_findings(chain: Lineage) -> list[LintFinding]:
     """Re-derive every compaction claim against the chain it was written into.
 
-    A compaction record is a reconciliation report, and both of its links are
-    checkable from the receipts alone. The revision it says it rehydrated from
-    must be the parent it then wrote onto -- a session that re-read one revision
-    and committed against another reconciled against state that is not the state
-    it extended. And the predecessor it chains to must be a compaction that is
-    genuinely behind it: an id outside the walked ancestry names a compaction
-    this lineage never passed through, and an id inside it that carries no
-    compaction of its own names an event that never happened.
+    A compaction record is a reconciliation report, and every link in it is
+    checkable from the receipts alone.
 
-    Neither is repairable here -- the lost context is lost -- so both are
-    reported, and both gate continuation: resuming on a checkpoint whose
+    The revision it says it rehydrated from must be the parent it then wrote
+    onto. The digest it quotes must be the digest that parent receipt recorded.
+    The entries it reconciled must cover every protected entry that parent
+    still carried. A session that skips any of the three reconciled against
+    state that is not the state it extended.
+
+    The predecessor it chains to must be a compaction that is genuinely behind
+    it. The chain runs current-first, so a prior compaction must sit at a later
+    position. An id outside the walked ancestry names a compaction this lineage
+    never passed through. An id at the same position or an earlier one names
+    itself or a descendant.
+
+    None of this is repairable here, because the lost context is lost. Each
+    finding gates continuation, because resuming on a checkpoint whose
     compaction claim does not hold is resuming on state nobody reconciled.
     """
-    compacted = {
-        revision.revision_id: revision.compaction for revision in chain.revisions
-    }
+    revisions = chain.revisions
+    position = {revision.revision_id: index for index, revision in enumerate(revisions)}
     findings: list[LintFinding] = []
-    for revision in chain.revisions:
+    for index, revision in enumerate(revisions):
         compaction = revision.compaction
         if compaction is None:
             continue
-        if compaction.rehydrated_from_revision_id != revision.parent_revision_id:
-            findings.append(
-                LintFinding(
-                    LintCode.COMPACTION_PARENT_UNRESOLVED,
-                    f"revision {revision.revision_id!r} rehydrated from "
-                    + f"{compaction.rehydrated_from_revision_id!r} but was "
-                    + f"written onto parent {revision.parent_revision_id!r}",
-                )
-            )
+        parent = revisions[index + 1] if index + 1 < len(revisions) else None
+        findings.extend(_compaction_proof_findings(revision, compaction, parent))
         prior_id = compaction.prior_compaction_revision_id
         if prior_id is None:
             continue
-        if prior_id not in compacted:
+        prior_index = position.get(prior_id)
+        if prior_index is None:
             findings.append(
                 LintFinding(
                     LintCode.COMPACTION_PARENT_UNRESOLVED,
@@ -441,7 +477,16 @@ def _compaction_findings(chain: _Chain) -> list[LintFinding]:
                     + "ancestry of this revision",
                 )
             )
-        elif compacted[prior_id] is None:
+        elif prior_index <= index:
+            findings.append(
+                LintFinding(
+                    LintCode.COMPACTION_PARENT_UNRESOLVED,
+                    f"revision {revision.revision_id!r} chains to prior "
+                    + f"compaction {prior_id!r}, which is not behind it in the "
+                    + "proven ancestry of this revision",
+                )
+            )
+        elif revisions[prior_index].compaction is None:
             findings.append(
                 LintFinding(
                     LintCode.COMPACTION_PARENT_UNRESOLVED,
@@ -453,7 +498,7 @@ def _compaction_findings(chain: _Chain) -> list[LintFinding]:
 
 
 def _conservation_findings(
-    chain: _Chain, record: WheypointRecord
+    chain: Lineage, record: WheypointRecord
 ) -> list[LintFinding]:
     """Reconcile the record against every entry its own lineage accounts for.
 

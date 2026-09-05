@@ -1,8 +1,10 @@
 """The generated Markdown view of a record: render, parse, and pin.
 
-The document opens with a fixed keyed preamble -- the same shape the handoff
-slug uses, so a cold reader already knows how to read the first lines -- and
-closes with the gating entries and the decision dossier.
+The document opens with the shared handoff preamble -- `status:`, `next:`,
+`artifact:`, then the orientation -- so `parse_handoff_slug()` reads a
+projection like any other handoff. The Wheypoint pins follow the orientation
+as a keyed metadata block, and the gating entries and the decision dossier
+close the file.
 
 Two rules make the file safe to hand back to a human:
 
@@ -21,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from typing import cast
 
 from attrs import evolve
@@ -31,14 +34,22 @@ from easy_cheese_schemas import (
     NextMove,
     WheypointProjection,
     WheypointRecord,
+    WheypointStatus,
+)
+from easy_cheese_schemas.handback_status import (
+    MAX_REASON_LENGTH,
+    StatusError,
+    parse_status_field,
+    render_status_field,
 )
 
 from . import canonical, records
 
-_PREAMBLE_KEYS = (
-    "status",
-    "next",
-    "artifact",
+# The shared handoff preamble: three keyed lines, then the orientation.
+_HEAD_KEYS = ("status", "next", "artifact")
+_ORIENTATION_LINE = len(_HEAD_KEYS)
+# The Wheypoint pins, in the keyed block that follows the orientation.
+_META_KEYS = (
     "work_id",
     "revision_id",
     "record_digest",
@@ -46,7 +57,7 @@ _PREAMBLE_KEYS = (
     "durability",
     "schema_version",
 )
-_ORIENTATION_LINE = len(_PREAMBLE_KEYS)
+_META_LINE = _ORIENTATION_LINE + 2
 _GATES_HEADING = "## Gating entries"
 _DOSSIER_HEADING = "## Decision dossier"
 _FENCE = "```json"
@@ -65,19 +76,44 @@ def projection_digest_of_text(text: str) -> str:
     return canonical.digest_text(blanked)
 
 
+def gated_reason(gating_entry_ids: Sequence[str]) -> str:
+    """The one-line reason a `gated` projection carries in its status field.
+
+    The shared grammar requires a reason on every non-`ok` status. The reason
+    is derived from the same list the status itself derives from, so a
+    re-render of the same record reproduces it byte for byte.
+    """
+    count = len(gating_entry_ids)
+    noun = "entry" if count == 1 else "entries"
+    reason = f"{count} open gating {noun}: {', '.join(gating_entry_ids)}"
+    if len(reason) > MAX_REASON_LENGTH:
+        reason = reason[: MAX_REASON_LENGTH - 1].rstrip(", ") + "\u2026"
+    return reason
+
+
+def status_field(projection: WheypointProjection) -> str:
+    """The rendered `status:` value, with a reason when the record is gated."""
+    if projection.status is WheypointStatus.OK:
+        return render_status_field(WheypointStatus.OK.value, None)
+    return render_status_field(
+        WheypointStatus.GATED.value, gated_reason(projection.gating_entry_ids)
+    )
+
+
 def render(projection: WheypointProjection) -> str:
     action = projection.next_action
     lines = [
-        f"status: {projection.status.value}",
+        f"status: {status_field(projection)}",
         f"next: {action.move.value}",
         f"artifact: {action.artifact or ''}",
+        action.orientation,
+        "",
         f"work_id: {projection.work_id}",
         f"revision_id: {projection.revision_id}",
         f"record_digest: {projection.record_digest}",
         f"projection_digest: {projection.projection_digest}",
         f"durability: {projection.durability.value}",
         f"schema_version: {projection.schema_version}",
-        action.orientation,
         "",
         f"# Wheypoint {projection.work_id} @ {projection.revision_id}",
         "",
@@ -119,23 +155,53 @@ def build_projection(
     return pinned, render(pinned)
 
 
-def _preamble(lines: list[str]) -> dict[str, str]:
-    if len(lines) <= _ORIENTATION_LINE:
-        raise ProjectionParseError(
-            f"projection needs {_ORIENTATION_LINE + 1} preamble lines, "
-            + f"got {len(lines)}"
-        )
+def _keyed(lines: list[str], keys: Sequence[str], start: int) -> dict[str, str]:
     values: dict[str, str] = {}
-    for index, key in enumerate(_PREAMBLE_KEYS):
+    for offset, key in enumerate(keys):
+        index = start + offset
+        if index >= len(lines):
+            raise ProjectionParseError(f"projection ends before its {key!r} line")
         prefix = f"{key}: "
         line = lines[index]
         if not line.startswith(prefix):
             raise ProjectionParseError(f"expected {key!r} line, got {line!r}")
-        values[key] = line[len(key) + 1 :].strip()
-    orientation = lines[_ORIENTATION_LINE].strip()
+        values[key] = line[len(prefix) :].strip()
+    return values
+
+
+_MIN_LINES = _META_LINE + len(_META_KEYS)
+_FIRST_META_PREFIX = f"{_META_KEYS[0]}: "
+
+
+def _meta_start(lines: list[str]) -> int:
+    """The index of the first metadata line, after the orientation block.
+
+    The orientation may hold more than one physical line, so the block ends at
+    the blank line that separates it from the pins rather than at a fixed
+    offset.
+    """
+    for index in range(_META_LINE, len(lines)):
+        if lines[index].startswith(_FIRST_META_PREFIX):
+            if lines[index - 1].strip():
+                raise ProjectionParseError(
+                    "the orientation must end with a blank line"
+                )
+            return index
+    raise ProjectionParseError(f"missing {_META_KEYS[0]!r} line")
+
+
+def _preamble(lines: list[str]) -> dict[str, str]:
+    if len(lines) < _MIN_LINES:
+        raise ProjectionParseError(
+            f"projection needs {_MIN_LINES} preamble lines, got {len(lines)}"
+        )
+    values = _keyed(lines, _HEAD_KEYS, 0)
+    start = _meta_start(lines)
+    orientation = "\n".join(lines[_ORIENTATION_LINE : start - 1]).strip()
     if not orientation:
         raise ProjectionParseError("orientation line must be non-empty")
     values["orientation"] = orientation
+    values.update(_keyed(lines, _META_KEYS, start))
     return values
 
 
@@ -186,7 +252,15 @@ def declared_status(text: str) -> str:
     caller hold the two against each other and report the lie rather than
     silently discard it.
     """
-    return _preamble(text.splitlines())["status"]
+    field_value = _preamble(text.splitlines())["status"]
+    # Only the name is read back. A forged `ok` that still carries the gated
+    # reason must be reported as the lie it is, not rejected as unreadable.
+    written_name, _, _ = field_value.partition(":")
+    try:
+        name, _ = parse_status_field(written_name, require_reason=False)
+    except StatusError as exc:
+        raise ProjectionParseError(str(exc)) from exc
+    return name
 
 
 def parse(text: str) -> WheypointProjection:

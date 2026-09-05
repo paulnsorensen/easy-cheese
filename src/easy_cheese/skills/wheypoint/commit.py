@@ -339,11 +339,17 @@ def _finalize(
     *,
     finalize: Callable[[PendingRevision], None] | None,
 ) -> CommitResult:
-    """Make one pending revision durable, then collect durability evidence."""
-    if not pending.replayed:
-        store.promote(pending.record, pending.revision, pending.markdown)
+    """Make one pending revision durable, then collect durability evidence.
+
+    The finalizer runs first, while the record lock is still held. The
+    projection it writes claims the durability the caller asked for, so a
+    finalizer that fails must leave no promoted record behind to carry that
+    claim.
+    """
     if finalize is not None:
         finalize(pending)
+    if not pending.replayed:
+        store.promote(pending.record, pending.revision, pending.markdown)
     return CommitResult(
         revision=pending.revision,
         record=pending.record,
@@ -387,6 +393,16 @@ def _lineage_issue_detail(issue: lineage.LineageIssue) -> str:
             f"revision {issue.revision.revision_id!r} names parent "
             + f"{issue.parent_revision_id!r}, which is not a complete immutable "
             + "revision"
+        )
+    if issue.kind is lineage.LineageIssueKind.PARENT_NOT_CONTIGUOUS:
+        parent = issue.parent
+        assert parent is not None
+        return (
+            f"revision {issue.revision.revision_id!r} of work "
+            + f"{issue.revision.work_id!r} names parent "
+            + f"{issue.parent_revision_id!r} of work {parent.work_id!r} at "
+            + f"revision number {parent.revision_number}, but its own revision "
+            + f"number is {issue.revision.revision_number}"
         )
     if issue.expected_digest is None:
         return (

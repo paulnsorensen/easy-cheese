@@ -194,6 +194,13 @@ def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object
             + "bound from the record, and a compaction record is a proof a "
             + "compacted session has to supply -- author those with commit",
         )
+    unknown = checkpoint_mod.unknown_fields(payload)
+    if unknown:
+        raise _Refused(
+            "invalid-intent",
+            f"checkpoint does not accept {', '.join(unknown)}: the record has "
+            + "no field for that data, so accepting the key would drop it",
+        )
     try:
         intent = records.structure(payload, checkpoint_mod.CheckpointIntent)
     except records.RecordError as exc:
@@ -293,9 +300,11 @@ def _promote(
     _write_pending(store, pending)
 
     def finalize(pending_revision: commit_mod.PendingRevision) -> None:
+        # The mirror is the durability this projection claims, so it lands
+        # before the record is promoted. The request ledger is cleared only
+        # after the promotion succeeds.
         try:
             storage.write_atomic(target, pending_revision.markdown.encode("utf-8"))
-            store.remove_pending(request_identity)
         except OSError as exc:
             raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
 
@@ -307,6 +316,7 @@ def _promote(
             finalize=finalize,
         )
     except _MirrorError as exc:
+        _drop_uncommitted_pending(store, pending)
         raise _Refused("note-unwritable", str(exc)) from exc
     except commit_mod.GenesisConflictError as exc:
         _drop_uncommitted_pending(store, pending)
@@ -320,6 +330,7 @@ def _promote(
     except storage.StorageError as exc:
         _drop_uncommitted_pending(store, pending)
         raise _Refused("storage-error", str(exc)) from exc
+    _clear_pending(store, request_identity)
     return _result_payload(result, str(target))
 
 
@@ -394,6 +405,17 @@ def _drop_uncommitted_pending(
         pass
 
 
+def _clear_pending(store: storage.WorkStore, request_identity: str) -> None:
+    try:
+        store.remove_pending(request_identity)
+    except OSError as exc:
+        raise _Refused(
+            "storage-error",
+            f"request ledger {store.pending_path(request_identity)} cannot be "
+            + f"cleared: {exc}",
+        ) from exc
+
+
 def _resume_mirror(
     store: storage.WorkStore,
     revision_id: str,
@@ -403,12 +425,11 @@ def _resume_mirror(
     def finalize(pending_revision: commit_mod.PendingRevision) -> None:
         try:
             storage.write_atomic(target, pending_revision.markdown.encode("utf-8"))
-            store.remove_pending(pending.request_identity)
         except OSError as exc:
             raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
 
     try:
-        return commit_mod.resume_revision(
+        result = commit_mod.resume_revision(
             revision_id,
             store=store,
             finalize=finalize,
@@ -417,6 +438,8 @@ def _resume_mirror(
         raise _Refused("note-unwritable", str(exc)) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         raise _Refused("storage-error", str(exc)) from exc
+    _clear_pending(store, pending.request_identity)
+    return result
 
 
 def _result_payload(

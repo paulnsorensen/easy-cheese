@@ -191,19 +191,16 @@ def _pin_failure(
     artifact_digest: Callable[[str], str | None],
     ancestor_revision_ids: Container[str],
 ) -> str | None:
-    if link.digest is not None:
-        current = artifact_digest(link.path)
-        if current is None:
-            return "artifact is missing"
-        if current != link.digest:
-            return "artifact digest mismatch"
-        return None
-    if link.revision_id is not None:
-        # Existence first: a revision pin says "this file was what it was at
-        # that revision", which a deleted file cannot be either way.
-        if artifact_digest(link.path) is None:
-            return "artifact is missing"
-        if link.revision_id not in ancestor_revision_ids:
-            return f"coverage pins unknown revision {link.revision_id!r}"
-        return None
-    return "coverage claim has neither a digest nor a revision to pin it"
+    if link.digest is None and link.revision_id is None:
+        return "coverage claim has neither a digest nor a revision to pin it"
+    # Existence first: every pin says what the file was, which a deleted file
+    # cannot be either way. Then each pin the claim supplies is checked, so a
+    # matching digest cannot carry an unresolvable revision past the gate.
+    current = artifact_digest(link.path)
+    if current is None:
+        return "artifact is missing"
+    if link.digest is not None and current != link.digest:
+        return "artifact digest mismatch"
+    if link.revision_id is not None and link.revision_id not in ancestor_revision_ids:
+        return f"coverage pins unknown revision {link.revision_id!r}"
+    return None

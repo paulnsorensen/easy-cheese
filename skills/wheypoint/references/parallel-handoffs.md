@@ -2,6 +2,13 @@
 
 Use this contract when one handoff starts multiple moves.
 
+This contract belongs to the handwritten legacy note.
+
+The `checkpoint` command does not author `mode:`, `order:`, `parallel:`, or
+`tasks:`. It refuses each key and names it in the error.
+
+Write a multi-move handoff by hand under `.cheese/notes/`.
+
 Use an inline `next:` list for read-only moves.
 
 Use `mode: parallel` for independent write moves.

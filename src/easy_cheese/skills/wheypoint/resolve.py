@@ -49,6 +49,8 @@ _IDENTIFIER_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 # A parent may live outside every worktree, but only as a reference someone can
 # actually open: an absolute http(s) URL, never a bare host or a local path.
 _PARENT_URL_RE = re.compile(r"https?://[^\s/]+(?:/\S*)?")
+# The pull request reference both skills document for `next: affinage`.
+_PR_REFERENCE_RE = re.compile(r"PR#\d+")
 
 
 class ResolutionOutcome(str, Enum):
@@ -367,6 +369,48 @@ def _unresolved_parents(
     )
 
 
+def _legacy_artifact_gate(
+    slug_block: legacy_mod.LegacyHandoffSlug, worktree: Path
+) -> str | None:
+    """Validate a declared legacy artifact against the destination that reads it.
+
+    `next: affinage` reads a pull request, which is not a file in this
+    worktree. Both skill documents publish `PR#<n>` or the pull request URL for
+    that move. Every other move reads a repository file, so the file rule holds
+    there.
+    """
+    value = slug_block.artifact
+    assert value is not None
+    if slug_block.next_skill == "affinage":
+        if _PR_REFERENCE_RE.fullmatch(value) or _PARENT_URL_RE.fullmatch(value):
+            return None
+        return (
+            f"declared artifact {value!r} must be 'PR#<n>' or a pull request "
+            + "URL for next: affinage"
+        )
+    artifact = Path(value)
+    if artifact.is_absolute():
+        return (
+            f"declared artifact {value!r} must be a repo-relative regular file "
+            + f"under {worktree}"
+        )
+    candidate = worktree / artifact
+    try:
+        resolved_artifact = candidate.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return (
+            f"declared artifact {value!r} does not resolve to an existing "
+            + f"regular file under {worktree}"
+        )
+    try:
+        _ = resolved_artifact.relative_to(worktree)
+    except ValueError:
+        return f"declared artifact {value!r} resolves outside legacy worktree {worktree}"
+    if not resolved_artifact.is_file():
+        return f"declared artifact {value!r} must be an existing regular file"
+    return None
+
+
 def resolve_legacy(
     slug: str,
     *,
@@ -419,37 +463,9 @@ def resolve_legacy(
         searched=lookup.searched,
     )
     if slug_block.artifact:
-        artifact = Path(slug_block.artifact)
-        worktree = note.worktree.resolve()
-        if artifact.is_absolute():
-            return _gate(
-                found,
-                f"declared artifact {slug_block.artifact!r} must be a "
-                + f"repo-relative regular file under {worktree}",
-            )
-        candidate = worktree / artifact
-        try:
-            resolved_artifact = candidate.resolve(strict=True)
-        except (OSError, RuntimeError, ValueError):
-            return _gate(
-                found,
-                f"declared artifact {slug_block.artifact!r} does not resolve to "
-                + f"an existing regular file under {worktree}",
-            )
-        try:
-            _ = resolved_artifact.relative_to(worktree)
-        except ValueError:
-            return _gate(
-                found,
-                f"declared artifact {slug_block.artifact!r} resolves outside "
-                + f"legacy worktree {worktree}",
-            )
-        if not resolved_artifact.is_file():
-            return _gate(
-                found,
-                f"declared artifact {slug_block.artifact!r} must be an existing "
-                + "regular file",
-            )
+        artifact_gate = _legacy_artifact_gate(slug_block, note.worktree.resolve())
+        if artifact_gate is not None:
+            return _gate(found, artifact_gate)
     if slug_block.parents:
         unresolved = _unresolved_parents(
             slug_block.parents,

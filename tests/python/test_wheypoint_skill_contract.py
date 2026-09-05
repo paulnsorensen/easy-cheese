@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from easy_cheese_schemas import NextMove
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "skills"
@@ -170,15 +171,22 @@ def test_split_and_join_are_marked_outside_the_continuity_contract() -> None:
     assert "outside this continuity contract" in body
     assert "commit no delta" in body
 
-def test_pipeline_omits_cut_and_resume_preserves_flags() -> None:
+def test_the_move_vocabulary_matches_the_schema_and_resume_preserves_flags() -> None:
+    """`NextMove` declares `cut`, so an authoritative record can carry it.
+
+    A record the schema accepts and the prose omits is a handoff no reader is
+    told how to take. The behaviour side of this contract lives in
+    `tests/wheypoint/python/test_shared_handoff_seam.py`, which round-trips
+    every declared move through the shared parser.
+    """
     wheypoint = _read(WHEYPOINT)
     cheese = _read(CHEESE)
     resume = _read(CONTINUE_RESUME)
     corpus = "\n".join((wheypoint, cheese, resume))
 
-    assert "next: mold | cook" in wheypoint
+    for move in NextMove:
+        assert move.value in wheypoint, f"undocumented next move: {move.value}"
     assert "culture -> mold -> cook -> press -> age -> cure -> plate" in corpus
-    assert "next: cut" not in corpus
     assert "GateReceipt" not in corpus
     for flag in ("mode:", "--auto", "--hard", "--open-pr", "--safe"):
         assert flag in corpus

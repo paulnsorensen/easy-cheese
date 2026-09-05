@@ -16,6 +16,7 @@ class LineageIssueKind(str, Enum):
 
     PARENT_UNRESOLVED = "parent-unresolved"
     PARENT_DIGEST_MISMATCH = "parent-digest-mismatch"
+    PARENT_NOT_CONTIGUOUS = "parent-not-contiguous"
 
 
 @define(frozen=True)
@@ -61,7 +62,8 @@ def walk(
     """Walk from ``current`` to genesis and verify every parent provenance pin.
 
     The caller supplies only complete immutable revisions. A missing parent, a
-    cycle, or a changed parent receipt stops the walk at that edge. The proven
+    cycle, a parent from another work, a revision number that skips a step, or
+    a changed parent receipt stops the walk at that edge. The proven
     prefix remains useful to callers such as lint, but it never licenses a
     write past the failed edge.
     """
@@ -89,6 +91,22 @@ def walk(
                     kind=LineageIssueKind.PARENT_UNRESOLVED,
                     revision=revision,
                     parent_revision_id=parent_id,
+                )
+            )
+            break
+        if (
+            parent.work_id != revision.work_id
+            or parent.revision_number != revision.revision_number - 1
+        ):
+            # A resolvable parent is not yet an ancestor. A receipt from
+            # another work, or from a revision number that skips a step,
+            # claims a history this store never wrote.
+            issues.append(
+                LineageIssue(
+                    kind=LineageIssueKind.PARENT_NOT_CONTIGUOUS,
+                    revision=revision,
+                    parent_revision_id=parent_id,
+                    parent=parent,
                 )
             )
             break

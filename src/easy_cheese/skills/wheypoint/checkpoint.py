@@ -50,7 +50,7 @@ import datetime as _dt
 from collections.abc import Callable, Mapping
 from typing import cast
 
-from attrs import define
+from attrs import Attribute, define, fields
 from easy_cheese_schemas import (
     ArtifactLink,
     DecisionFork,
@@ -118,6 +118,30 @@ def commit_only_fields(payload: object) -> tuple[str, ...]:
         return ()
     mapping = cast(Mapping[str, object], payload)
     return tuple(name for name in COMMIT_ONLY_FIELDS if name in mapping)
+
+
+# attrs' `fields()` is untyped, so the attributes are cast once here.
+_INTENT_ATTRIBUTES = cast(
+    "tuple[Attribute[object], ...]", fields(CheckpointIntent)
+)
+_INTENT_FIELD_NAMES: tuple[str, ...] = tuple(
+    attribute.name for attribute in _INTENT_ATTRIBUTES
+)
+
+
+def unknown_fields(payload: object) -> tuple[str, ...]:
+    """Every key the payload carries that `CheckpointIntent` cannot hold.
+
+    The structure step ignores an unknown key, so an author who reaches for a
+    field the record has no place for would otherwise be told nothing and lose
+    it. `commit`-only fields are reported by `commit_only_fields`, which names
+    the command that does author them.
+    """
+    if not isinstance(payload, Mapping):
+        return ()
+    mapping = cast(Mapping[str, object], payload)
+    known = set(_INTENT_FIELD_NAMES) | set(COMMIT_ONLY_FIELDS)
+    return tuple(sorted(name for name in mapping if name not in known))
 
 
 def build_delta(

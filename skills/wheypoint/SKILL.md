@@ -17,6 +17,11 @@ license: MIT
 
 Use `/wheypoint` for culture sessions or work without a phase slug.
 
+`/wheypoint` does not replace a routine phase handoff from `/cook`, `/press`,
+`/age`, or `/cure`.
+
+Use it when the user selects **Checkpoint & stop** at one of those phases.
+
 ## Inputs
 
 - Use the conversation as the primary input.
@@ -72,24 +77,46 @@ Never invoke another archive.
 
 ## Handoff slug
 
-Put the standard slug at the start of the file.
+The `checkpoint` command writes the slug at the start of the generated projection.
 
 This slug lets `/cheese --continue` route without reading the complete document.
 
+The first four lines are the shared handoff preamble.
+
+Every consumer reads them with `parse_handoff_slug()`.
+
 ```markdown
 status: <canonical status field>
-next: mold | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
-mode: single | parallel
+next: mold | cut | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
 artifact: <path-to-richer-report, or PR ref (PR#<n> / URL) when next: affinage, else none>
-session: <harness>:<session-id>      # optional; auto-filled provenance
-git: <branch>@<short-sha>            # optional; auto-filled provenance
-created: <UTC ISO-8601>              # optional; auto-filled provenance
-parents: [<slug>, ...]               # optional; lineage (join => 2+, split-child => 1)
-baseline: none | <block; carry an upstream cook/press/cure baseline; see ../cook/references/quality-gates.md>
 <one-line orientation: where the session is and what is mid-flight>
+
+work_id: <work id>
+revision_id: <revision id>
+record_digest: <sha256 of the record>
+projection_digest: <sha256 of this document>
+durability: canonical-local | repo-snapshot | published
+schema_version: <integer>
 ```
 
-`mode:` is optional for backward compatibility.
+The keyed block after the orientation holds the Wheypoint pins.
+
+The runtime derives every line. Never write or edit this document by hand.
+
+### Handwritten legacy notes
+
+The `resolve` command also reads a handwritten note under `.cheese/notes/`.
+
+That older format accepts `mode:`, `session:`, `git:`, `created:`, `parents:`,
+and `baseline:` between `artifact:` and the orientation.
+
+A legacy result is never authoritative. It gates a resume for a human decision.
+
+The `checkpoint` command refuses each of those keys in an intent.
+
+The record has no field for that data, so accepting the key would drop it.
+
+`mode:` is optional in a legacy note.
 
 An omitted mode means `mode: single`.
 
@@ -121,11 +148,18 @@ Resume preserves `mode:`, `--hard`, `--open-pr`, `--safe`, and explicit `--auto`
 
 Press corrective work remains `continue: press-corrective-cook`, not a global Press-to-Cook dispatch.
 
-Carry a recorded `baseline:` block into the delta without changes.
+A handwritten legacy note can record a one-line `baseline:` value.
 
 The baseline is settled state.
 
 Do not re-ask, re-flag, or re-halt on identical baseline entries.
+
+The canonical record carries no baseline field today.
+
+The `checkpoint` command refuses a `baseline` key rather than drop it.
+
+Keep a Cook baseline mapping in the Cook handoff until the record gains a
+typed baseline field.
 
 See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
 
@@ -154,8 +188,8 @@ No caller can force `ok`.
 - Every open blocker requires `status: gated:`.
 - Never replace a gate with `status: ok` and an actionable `next:`.
 - **`halt: <one-line reason>`**: This legacy value is valid only in handwritten notes.
-- The legacy fallback keeps its existing behavior.
-- It shows the reason and then dispatches the runnable `next:`.
+- The `resolve` command gates every legacy status whose disposition is not `proceed`.
+- A legacy `halt` therefore stops. It shows the reason and dispatches nothing.
 - The runtime never derives `halt`.
 - Derived status has only `ok` and `gated:`.
 - A session can halt after an environment failure without a human decision.
@@ -164,9 +198,11 @@ No caller can force `ok`.
 
 A single `next:` value selects one move.
 
-It accepts `mold`, `cook`, `press`, `age`, `cure`, `affinage`, `briesearch`, `culture`, `hold`, `tasks`, or `done`.
+It accepts `mold`, `cut`, `cook`, `press`, `age`, `cure`, `affinage`, `briesearch`, `culture`, `hold`, `tasks`, or `done`.
 
-- **`mold` / `cook` / `press` / `age` / `cure`**: Select a pipeline phase.
+- **`mold` / `cut` / `cook` / `press` / `age` / `cure`**: Select a pipeline phase.
+- **`cut`**: Select the protected red evidence step before Cook changes production.
+- Put the approved behavior spec path in `artifact:`.
 - The `## Suggested skills` table defines which phase matches each state.
 - **`affinage`**: Select this move for PR review comments or failing CI.
 - Put `PR#<n>` or the PR URL in `artifact:`.
