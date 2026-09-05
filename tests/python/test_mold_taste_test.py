@@ -117,7 +117,7 @@ LEDGER = [
 ]
 
 
-def verdict(taste: _MoldTasteTestModule, draft: str = DRAFT) -> dict[str, object]:
+def verdict(taste: _MoldTasteTestModule, draft: object = DRAFT) -> dict[str, object]:
     return {
         "draft_sha256": taste.draft_sha256(draft),
         "verdict": "pass",
@@ -475,6 +475,40 @@ def test_goal_match_is_case_and_whitespace_insensitive(
     ledger: dict[str, object] = {"goal": spaced_goal, "forks": LEDGER}
     result = taste.taste_test(draft, ledger, verdict(taste, draft))
     assert result.passed, result.acceptance_gaps
+
+
+GOAL_MAPPING_DRAFT: dict[str, object] = {
+    "Goal:": f"{GOAL}, without re-authenticating.",
+    "Approach": "F-1 outer tracer; F-2 browser seam",
+    "Interface sketches": "F-1 outer tracer; F-2 browser seam",
+    "Acceptance": "F-1 outer tracer; F-2 browser seam",
+    "Test Contracts": "F-1 outer tracer; F-2 browser seam",
+}
+
+
+def test_punctuated_goal_key_in_mapping_draft_is_recognized(
+    taste: _MoldTasteTestModule,
+) -> None:
+    result = taste.taste_test(
+        GOAL_MAPPING_DRAFT, GOAL_LEDGER, verdict(taste, GOAL_MAPPING_DRAFT)
+    )
+    assert result.passed
+    assert result.acceptance_gaps == ()
+
+
+UNDERSCORE_MAPPING_DRAFT: dict[str, object] = {
+    **{key: value for key, value in GOAL_MAPPING_DRAFT.items() if key != "Test Contracts"},
+    "test_contracts": "F-1 outer tracer; F-2 browser seam",
+}
+
+
+def test_underscore_reflection_key_in_mapping_draft_is_recognized(
+    taste: _MoldTasteTestModule,
+) -> None:
+    result = taste.taste_test(
+        UNDERSCORE_MAPPING_DRAFT, GOAL_LEDGER, verdict(taste, UNDERSCORE_MAPPING_DRAFT)
+    )
+    assert result.acceptance_gaps == ()
 
 
 def test_goal_alignment_heading_is_not_recognized(

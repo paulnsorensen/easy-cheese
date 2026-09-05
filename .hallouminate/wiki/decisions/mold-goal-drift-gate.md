@@ -25,6 +25,10 @@ The taste test is a mechanical host-side validator, not a fresh-context reviewer
 
 `_normalize_ledger` accepts both `{"goal": ..., "forks": [...]}` and an id-keyed mapping `{"F-1": {...}, "F-2": {...}}`. The first cut parsed the goal in a separate helper and left the id-keyed fallback loop untouched, so a top-level `goal` key on that shape became a settled consequential fork named `goal` and every verdict failed `missing-fork:goal`. The fix (PR #620) reads the goal inside `_normalize_ledger` and skips the reserved key there. Any future top-level ledger key must be reserved in that same loop. Goal headings also live in their own `_GOAL_HEADINGS` set, matched exactly, rather than in `_REFLECTION_ALIASES`, because that table doubles as the `ForkCoverage.reflected_in` validator and anything added to it becomes a legal fork reflection target.
 
+## Gotcha: the draft has two shapes too, and the heading normaliser must keep `_`
+
+`_draft_sections` reads either a Mapping draft (JSON, keys are section names) or markdown (headings). Both branches now share `_heading_title` (lower, strip punctuation, strip ends) so `Goal:` and `## Goal:` agree. The punctuation class must keep `_`: `_REFLECTION_ALIASES` lists `test_contract` / `test_contracts`, reachable only through the Mapping branch, and a class of `[^a-z0-9 -]` silently turns them into `testcontracts` and every Mapping draft fails `missing-section:F-n:test-contract`. `test_underscore_reflection_key_in_mapping_draft_is_recognized` pins it.
+
 ## Rejected
 
 - **A new handshake checklist box / gate-graph node.** The gate-prose-sync test would require a model change and a `mold.dot` regen for what is a sub-check of the existing fork taste gate. Folded into `acceptance_gaps` instead.
