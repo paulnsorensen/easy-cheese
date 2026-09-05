@@ -548,7 +548,8 @@ class WheypointRecord:
     slug: str = field(validator=_identifier)
     title: str = field(validator=_bounded_text)
     created: str = field(validator=_bounded_text)
-    # Produced by shared/scripts/paths.py::project_key; carried, not recomputed.
+    # Produced by src/easy_cheese/shared/paths.py::project_key; carried, not
+    # recomputed.
     project_key: str = field(validator=_bounded_text)
     revision_id: str = field(validator=_identifier)
     revision_number: int = field(validator=validators.ge(1))
@@ -685,6 +686,18 @@ class WheypointRevision:
     parent_revision_id: str | None = field(validator=validators.optional(_identifier))
     revision_id: str = field(validator=_identifier)
     revision_number: int = field(validator=validators.ge(1))
+
+    @revision_number.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_genesis_is_revision_one(
+        self, _attribute: object, value: int
+    ) -> None:  # noqa: V103
+        # A null parent means genesis, and genesis is revision one. Any later
+        # revision that names no parent claims an impossible root.
+        if self.parent_revision_id is None and value != 1:
+            raise ValueError(
+                "revision without parent_revision_id must be revision_number 1"
+            )
+
     request_digest: str = field(validator=_digest)
     record_digest: str = field(validator=_digest)
     applied_additions: list[ProtectedEntry] = field(validator=_bounded_ledger)

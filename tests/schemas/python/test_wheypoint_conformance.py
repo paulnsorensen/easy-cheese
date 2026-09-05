@@ -381,11 +381,24 @@ def test_revision_rejects_a_non_hex_repository_commit() -> None:
 
 def test_revision_accepts_a_genesis_parent_and_bare_repository_provenance() -> None:
     value = structured(
-        revision(parent_revision_id=None, repository={"branch": None, "commit": None}),
+        revision(
+            parent_revision_id=None,
+            revision_number=1,
+            repository={"branch": None, "commit": None},
+        ),
         WheypointRevision,
     )
     assert value.parent_revision_id is None
+    assert value.revision_number == 1
     assert value.repository.branch is None
+
+
+def test_revision_rejects_a_later_revision_without_a_parent() -> None:
+    """A null parent means genesis, so revision two cannot claim that root."""
+    problems = refused(
+        revision(parent_revision_id=None, revision_number=2), WheypointRevision
+    )
+    assert blames(problems, "WheypointRevision.revision_number")
 
 
 def test_revision_parent_digest_is_optional_but_must_be_a_digest() -> None:

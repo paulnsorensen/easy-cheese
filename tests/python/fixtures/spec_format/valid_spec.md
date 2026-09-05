@@ -69,7 +69,7 @@ validate-spec <spec-path> -> exit 0 | exit 1 + ERROR: lines
 
 ## Quality gates
 
-- `python3 src/mold/validate-spec.py <path>` exits 0 on this fixture.
+- `python3 src/easy_cheese/skills/mold/validate_spec.py <path>` exits 0 on this fixture.
 
 ## Curds
 

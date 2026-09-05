@@ -7,8 +7,8 @@ A future stamp is not a rejection: recognized fields still parse, unknown ones
 are ignored, and the caller gets ``FUTURE`` so it can decide.
 
 ``load`` never raises. It accumulates every problem it found as
-``where.key must be ...`` strings, the same format shared/scripts/schema.py
-emits, because the fan-out validators report all problems in one pass rather
+``where.key must be ...`` strings, the same format
+src/easy_cheese/shared/schema.py emits, because the fan-out validators report all problems in one pass rather
 than stopping at the first.
 
 Two things make that possible and neither is cattrs' default. Structuring
@@ -405,6 +405,16 @@ class AdapterSunsetError(ValueError):
     """An adapter whose declared ``remove_after`` has passed is still registered."""
 
 
+class LegacyConversionError(ValueError):
+    """A legacy payload does not carry the shape its adapter declares.
+
+    Conversion callbacks read persisted, untrusted bytes. A missing or
+    wrongly typed key is a rejected input, not a programming error, so the
+    callback raises this instead of leaking ``KeyError`` or ``TypeError``
+    past the caller's error contract.
+    """
+
+
 @define(frozen=True)
 class LegacyAdapter:
     """A deterministic, exact-version transform from a persisted legacy
@@ -431,28 +441,59 @@ _LEGACY_CURD_PLAN_MAJOR = "0"
 _LEGACY_CURD_PLAN_MINOR = "9"
 
 
-def _convert_criterion(index: int, item: Mapping[str, object]) -> dict[str, object]:
+def _mapping(where: str, item: object) -> Mapping[str, object]:
+    if not isinstance(item, Mapping):
+        raise LegacyConversionError(f"{where} must be an object")
+    return cast("Mapping[str, object]", item)
+
+
+def _required(
+    where: str, item: Mapping[str, object], key: str, kind: type
+) -> object:
+    if key not in item:
+        raise LegacyConversionError(f"{where}.{key} must be present")
+    value = item[key]
+    if not isinstance(value, kind):
+        raise LegacyConversionError(f"{where}.{key} must be {kind.__name__}")
+    return value
+
+
+def _str_list(where: str, item: Mapping[str, object], key: str) -> list[str]:
+    """Read an optional legacy string list, defaulting to empty."""
+    value = item.get(key, [])
+    if not isinstance(value, list):
+        raise LegacyConversionError(f"{where}.{key} must be list")
+    entries = cast("list[object]", value)
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, str):
+            raise LegacyConversionError(f"{where}.{key}[{index}] must be str")
+    return [cast(str, entry) for entry in entries]
+
+
+def _convert_criterion(where: str, index: int, item: object) -> dict[str, object]:
+    criterion = _mapping(where, item)
     return {
         "criterion_id": f"legacy-criterion-{index}",
-        "description": item["description"],
-        "check": item["check"],
+        "description": _required(where, criterion, "description", str),
+        "check": _required(where, criterion, "check", str),
     }
 
 
-def _convert_curd(item: Mapping[str, object]) -> dict[str, object]:
-    criteria = cast("list[Mapping[str, object]]", item["criteria"])
+def _convert_curd(where: str, item: object) -> dict[str, object]:
+    curd = _mapping(where, item)
+    criteria = cast("list[object]", _required(where, curd, "criteria", list))
     return {
-        "curd_id": item["key"],
-        "outcome": item["goal"],
+        "curd_id": _required(where, curd, "key", str),
+        "outcome": _required(where, curd, "goal", str),
         "scope": {
-            "paths": list(cast("list[str]", item.get("paths", []))),
+            "paths": _str_list(where, curd, "paths"),
             "excluded_paths": [],
         },
         "inputs": [],
-        "outputs": list(cast("list[str]", item.get("outputs", []))),
+        "outputs": _str_list(where, curd, "outputs"),
         "dependencies": [],
         "criteria": [
-            _convert_criterion(index, criterion)
+            _convert_criterion(f"{where}.criteria[{index - 1}]", index, criterion)
             for index, criterion in enumerate(criteria, start=1)
         ],
         "lineage": {"identity_action": "new", "source_curd_ids": []},
@@ -460,10 +501,16 @@ def _convert_curd(item: Mapping[str, object]) -> dict[str, object]:
 
 
 def _convert_curd_plan_v0_9(payload: Mapping[str, object]) -> dict[str, object]:
-    """Convert the 0.9 curd-plan writer view to the current contract."""
+    """Convert the 0.9 curd-plan writer view to the current contract.
+
+    Raises :class:`LegacyConversionError` for any missing or wrongly typed
+    key, so a malformed persisted artifact reaches the caller as a declared
+    conversion failure rather than an uncaught lookup error.
+    """
+    raw_curds = cast("list[object]", _required("curd-plan", payload, "curds", list))
     curds = [
-        _convert_curd(cast("Mapping[str, object]", curd))
-        for curd in cast("list[object]", payload["curds"])
+        _convert_curd(f"curd-plan.curds[{index}]", curd)
+        for index, curd in enumerate(raw_curds)
     ]
     unsigned = {
         "contract_version": {
@@ -471,9 +518,9 @@ def _convert_curd_plan_v0_9(payload: Mapping[str, object]) -> dict[str, object]:
             "major": "1",
             "minor": "0",
         },
-        "plan_id": payload["plan_id"],
-        "revision": payload["revision"],
-        "objective": payload["goal"],
+        "plan_id": _required("curd-plan", payload, "plan_id", str),
+        "revision": _required("curd-plan", payload, "revision", int),
+        "objective": _required("curd-plan", payload, "goal", str),
         "curds": curds,
         "context": None,
         "parent_plan_ref": None,

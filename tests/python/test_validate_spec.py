@@ -1,5 +1,5 @@
-"""Direct-invocation and pyz-dispatcher coverage for src/mold/validate-spec.py
-(curd-ssfe-2).
+"""Direct-invocation and pyz-dispatcher coverage for
+src/easy_cheese/skills/mold/validate_spec.py (curd-ssfe-2).
 
 Exercises the dispatcher argv contract (`validate-spec <spec-path>`) that
 mold.pyz's `__main__.py` dispatches, at both entry-point seams: the direct

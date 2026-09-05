@@ -7,6 +7,7 @@ pyproject.toml.
 
 from __future__ import annotations
 
+import copy
 from copy import deepcopy
 from datetime import date
 import os
@@ -22,6 +23,7 @@ from attrs import define, field
 from attrs.exceptions import FrozenInstanceError
 
 from easy_cheese_schemas import (
+    CURD_PLAN_SCHEMA_URI,
     MIN_READABLE,
     SCHEMA_VERSION,
     AdapterSunsetError,
@@ -30,8 +32,10 @@ from easy_cheese_schemas import (
     GateProducer,
     GateReceipt,
     LegacyAdapter,
+    LegacyConversionError,
     Loaded,
     Provenance,
+    adapter_for,
     check_adapter_sunsets,
     load,
     register_adapter,
@@ -357,6 +361,79 @@ class TestAdapterSunsets:
         )
 
         check_adapter_sunsets(date(2020, 1, 1))
+
+
+_LEGACY_CURD_PLAN_V0_9: dict[str, object] = {
+    "plan_id": "legacy-plan",
+    "revision": 1,
+    "goal": "Ship the behavior",
+    "curds": [
+        {
+            "key": "runtime",
+            "goal": "Implement validation",
+            "paths": ["src/runtime.py"],
+            "outputs": ["Validated contract"],
+            "criteria": [
+                {
+                    "description": "Reject unknown fields",
+                    "check": "pytest tests/test_runtime.py",
+                }
+            ],
+        }
+    ],
+}
+
+
+def _legacy_plan_without(*keys: str) -> dict[str, object]:
+    payload = copy.deepcopy(_LEGACY_CURD_PLAN_V0_9)
+    for key in keys:
+        _ = payload.pop(key)
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    (
+        (_legacy_plan_without("curds"), "curd-plan.curds must be present"),
+        (_legacy_plan_without("plan_id"), "curd-plan.plan_id must be present"),
+        (_legacy_plan_without("goal"), "curd-plan.goal must be present"),
+        ({**_legacy_plan_without(), "revision": "1"}, "curd-plan.revision must be int"),
+        ({**_legacy_plan_without(), "curds": {}}, "curd-plan.curds must be list"),
+    ),
+)
+def test_builtin_curd_plan_adapter_reports_malformed_legacy_input(
+    payload: dict[str, object], message: str
+) -> None:
+    """A persisted legacy artifact is untrusted input, not a caller mistake."""
+    adapter = adapter_for(CURD_PLAN_SCHEMA_URI, "0", "9")
+    assert adapter is not None
+
+    with pytest.raises(LegacyConversionError, match=re.escape(message)):
+        _ = adapter.convert(payload)
+
+
+def test_builtin_curd_plan_adapter_reports_malformed_legacy_curd_fields() -> None:
+    adapter = adapter_for(CURD_PLAN_SCHEMA_URI, "0", "9")
+    assert adapter is not None
+
+    payload = copy.deepcopy(_LEGACY_CURD_PLAN_V0_9)
+    curds = cast("list[dict[str, object]]", payload["curds"])
+    _ = curds[0].pop("criteria")
+
+    with pytest.raises(
+        LegacyConversionError, match=re.escape("curd-plan.curds[0].criteria must be present")
+    ):
+        _ = adapter.convert(payload)
+
+
+def test_builtin_curd_plan_adapter_converts_the_well_formed_legacy_plan() -> None:
+    adapter = adapter_for(CURD_PLAN_SCHEMA_URI, "0", "9")
+    assert adapter is not None
+
+    converted = adapter.convert(copy.deepcopy(_LEGACY_CURD_PLAN_V0_9))
+
+    assert converted["plan_id"] == "legacy-plan"
+    assert converted["objective"] == "Ship the behavior"
 
 
 _BUILTIN_MIGRATION_IMPORT_ORDER_PROBE = """

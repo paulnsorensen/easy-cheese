@@ -639,7 +639,17 @@ def _normalization_receipt_schema_constraints() -> tuple[dict[str, object], ...]
         _if_equals(
             "ingress_kind",
             IngressKind.LEGACY_ARTIFACT.value,
-            {"required": ["source_schema_uri", "source_version"]},
+            {
+                "required": ["source_schema_uri", "source_version"],
+                # Both fields stay nullable for writer-view ingress, so the
+                # conditional must also reject an explicit null here. Without
+                # it a JSON Schema consumer accepts a receipt that the runtime
+                # model refuses.
+                "properties": {
+                    "source_schema_uri": {"type": "string"},
+                    "source_version": {"type": "object"},
+                },
+            },
         ),
     )
 
@@ -667,11 +677,18 @@ class NormalizationReceipt:
     def _validate_legacy_requires_source(
         self, _attribute: _NamedAttribute, _value: object
     ) -> None:  # noqa: V103
-        if self.ingress_kind is IngressKind.LEGACY_ARTIFACT and (
-            self.source_schema_uri is None or self.source_version is None
-        ):
+        if self.ingress_kind is not IngressKind.LEGACY_ARTIFACT:
+            return
+        if self.source_schema_uri is None or self.source_version is None:
             raise ValueError(
                 "legacy_artifact ingress requires source_schema_uri and source_version"
+            )
+        # One receipt names one source. The flat URI and the nested version
+        # URI are two views of the same identity, so a disagreement is a
+        # forged provenance claim, not a redundant field.
+        if self.source_schema_uri != self.source_version.schema_uri:
+            raise ValueError(
+                "legacy_artifact ingress requires source_schema_uri to equal source_version.schema_uri"
             )
 
 
@@ -2275,8 +2292,9 @@ class AgentWriterView:
 # Declares the mold spec-template shape as decorated models beside the
 # existing @contract markers.  A build-only compiler in the
 # _schema_catalog_compiler family (_document_rules_compiler.py) projects
-# this declaration into the dependency-free src/mold/_document_rules.py,
-# consumed by the hand-rolled validate-spec CLI.
+# this declaration into the dependency-free
+# src/easy_cheese/shared/document_rules.py, consumed by the hand-rolled
+# src/easy_cheese/skills/mold/validate_spec.py CLI.
 
 
 @define(frozen=True)

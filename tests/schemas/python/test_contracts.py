@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import easy_cheese_schemas.contracts as contract_module
+from typing import cast
+
 import attrs
 import pytest
 
@@ -1071,6 +1073,114 @@ def test_normalization_receipt_legacy_ingress_requires_each_source_field_at_gate
         match="legacy_artifact ingress requires source_schema_uri and source_version",
     ):
         _ = validate_contract(raw, NormalizationReceipt)
+
+
+def test_normalization_receipt_legacy_ingress_rejects_two_source_identities() -> None:
+    """One receipt names one source, so the two URI views must agree."""
+    with pytest.raises(
+        ValueError,
+        match="source_schema_uri to equal source_version.schema_uri",
+    ):
+        _ = NormalizationReceipt(
+            ingress_kind=IngressKind.LEGACY_ARTIFACT,
+            normalizer_id="normalizer-1",
+            source_digest=DIGEST,
+            canonical_digest=DIGEST,
+            source_schema_uri=VERSION.schema_uri,
+            source_version=ContractVersion(
+                schema_uri="https://schemas.easy-cheese.dev/other",
+                major=VERSION.major,
+                minor=VERSION.minor,
+            ),
+        )
+
+
+def test_normalization_receipt_gateway_rejects_two_source_identities() -> None:
+    raw: dict[str, object] = {
+        "ingress_kind": IngressKind.LEGACY_ARTIFACT.value,
+        "normalizer_id": "normalizer-1",
+        "source_digest": DIGEST,
+        "canonical_digest": DIGEST,
+        "actions": [],
+        "source_schema_uri": VERSION.schema_uri,
+        "source_version": {
+            "schema_uri": "https://schemas.easy-cheese.dev/other",
+            "major": VERSION.major,
+            "minor": VERSION.minor,
+        },
+    }
+
+    with pytest.raises(
+        ContractValidationError,
+        match="source_schema_uri to equal source_version.schema_uri",
+    ):
+        _ = validate_contract(raw, NormalizationReceipt)
+
+
+def _object(value: object) -> dict[str, object]:
+    assert isinstance(value, dict)
+    return cast("dict[str, object]", value)
+
+
+def test_normalization_receipt_json_schema_rejects_null_legacy_source() -> None:
+    """The published schema must refuse what the runtime model refuses.
+
+    The suite keeps jsonschema out of its dependency surface, so this test
+    reads the emitted conditional instead of running a generic validator.
+    """
+    import json
+
+    from easy_cheese_schemas.schema_runtime import schema_bytes
+
+    loaded = cast(
+        "object",
+        json.loads(schema_bytes("https://schemas.easy-cheese.dev/normalization-receipt")),
+    )
+    schema = _object(loaded)
+    receipt = _object(_object(schema["$defs"])["NormalizationReceipt"])
+    rules = cast("list[object]", receipt["allOf"])
+    legacy = next(
+        _object(rule)
+        for rule in rules
+        if _object(_object(_object(_object(rule)["if"])["properties"])["ingress_kind"])[
+            "const"
+        ]
+        == IngressKind.LEGACY_ARTIFACT.value
+    )
+    then = _object(legacy["then"])
+    properties = _object(receipt["properties"])
+
+    assert then["required"] == ["source_schema_uri", "source_version"]
+    assert then["properties"] == {
+        "source_schema_uri": {"type": "string"},
+        "source_version": {"type": "object"},
+    }
+    # Both fields stay nullable outside the conditional, which is why the
+    # conditional itself has to exclude null.
+    assert {"type": "null"} in cast(
+        "list[object]", _object(properties["source_schema_uri"])["anyOf"]
+    )
+    assert {"type": "null"} in cast(
+        "list[object]", _object(properties["source_version"])["anyOf"]
+    )
+
+    for null_field in ("source_schema_uri", "source_version"):
+        raw: dict[str, object] = {
+            "ingress_kind": IngressKind.LEGACY_ARTIFACT.value,
+            "normalizer_id": "normalizer-1",
+            "source_digest": DIGEST,
+            "canonical_digest": DIGEST,
+            "actions": [],
+            "source_schema_uri": VERSION.schema_uri,
+            "source_version": {
+                "schema_uri": VERSION.schema_uri,
+                "major": VERSION.major,
+                "minor": VERSION.minor,
+            },
+        }
+        raw[null_field] = None
+        with pytest.raises(ContractValidationError):
+            _ = validate_contract(raw, NormalizationReceipt)
 
 
 def test_normalization_action_exposes_only_field_path_and_action() -> None:
