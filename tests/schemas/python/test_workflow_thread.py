@@ -287,7 +287,7 @@ def test_complete_thread_orders_real_callbacks_and_authors_contracts(
     events: list[str] = []
     contexts: list[Mapping[str, object]] = []
 
-    (planner, branches, results), _source = run_complete(tmp_path, events, contexts)
+    (planner, branches, results), _ = run_complete(tmp_path, events, contexts)
 
     assert events == ["planner", "writer", "review"]
     assert planner.disposition is PlannerDisposition.COMPLETE
