@@ -120,7 +120,13 @@ REFLECTIONS = ("approach", "interface", "acceptance", "test-contract")
 NOT_APPLICABLE_REFLECTIONS = tuple(
     location for location in REFLECTIONS if location != "test-contract"
 )
+# The pinned goal lives outside the reflection set: forks never reflect into it,
+# but the ledger's `goal` must survive into it unchanged (goal-drift gate).
+GOAL_SECTION = "problem"
 _REFLECTION_ALIASES = {
+    "problem": GOAL_SECTION,
+    "problem statement": GOAL_SECTION,
+    "goal": GOAL_SECTION,
     "approach": "approach",
     "interface": "interface",
     "interfaces": "interface",
@@ -950,6 +956,30 @@ def _normalize_ledger(
     return tuple(entries), tuple(problems)
 
 
+def _ledger_goal(value: object) -> str | None:
+    """Return the ledger's pinned goal line, or None for a goal-less ledger."""
+    if not isinstance(value, Mapping):
+        return None
+    goal = cast(Mapping[object, object], value).get("goal")
+    if goal is None:
+        return None
+    if not isinstance(goal, str) or not goal.strip():
+        raise TasteTestError("ledger-goal-empty")
+    return goal.strip()
+
+
+def _goal_gaps(sections: Mapping[str, str], goal: str | None) -> list[str]:
+    """The pinned goal must appear in the draft's problem statement verbatim."""
+    if goal is None:
+        return []
+    section = sections.get(GOAL_SECTION, "")
+    if not section.strip():
+        return [f"missing-section:goal:{GOAL_SECTION}"]
+    if goal.casefold() not in " ".join(section.split()).casefold():
+        return ["goal-drift"]
+    return []
+
+
 def _draft_sections(draft: object) -> dict[str, str]:
     if isinstance(draft, Mapping):
         draft_map = cast(Mapping[object, object], draft)
@@ -1039,6 +1069,7 @@ def taste_test(
     )
     ledger, ledger_problems = _normalize_ledger(decision_ledger)
     expected = {entry.id: entry for entry in ledger}
+    sections = _draft_sections(draft)
     additions: dict[str, list[str]] = {
         "contradictions": [],
         "orphaned_decisions": [],
@@ -1046,13 +1077,13 @@ def taste_test(
         "acceptance_gaps": [
             *ledger_problems,
             *_applicability_gaps(draft),
+            *_goal_gaps(sections, _ledger_goal(decision_ledger)),
         ],
     }
 
     if candidate.draft_sha256 != draft_sha256(draft):
         additions["acceptance_gaps"].append("stale-draft-digest")
     seen: set[str] = set()
-    sections = _draft_sections(draft)
     required = required_reflections(draft)
     for fork in candidate.forks:
         if fork.id in seen:
