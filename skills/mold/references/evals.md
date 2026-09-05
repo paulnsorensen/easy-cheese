@@ -11,6 +11,7 @@ These prompts must invoke `/mold` (or its router parent `/cheese` must hand off 
 - "I'm thinking about adding OAuth support"
 - "what should the schema for the events table look like"
 - "should we do the migration now or wait, thinking about downtime"
+- "/mold rename the `parse_flags` helper to `parse_args` in cli.py" — must trigger, and must land in the **Quick** tier: one confirm, a mini-spec, no fork questions (`tiers.md`).
 
 ## Should-not-trigger queries
 
@@ -24,6 +25,8 @@ These prompts must NOT invoke `/mold`:
 If a should-not query triggers `/mold`, the description in `SKILL.md` is over-broad — tighten it.
 
 ## Trace checks
+
+For every completed `/mold` run, verify first that the tier was announced in one line with its reason before the first fork question, and that any tier change was an announced upgrade, never a silent downgrade (`tiers.md`).
 
 For each completed `/mold` Grill-mode run, verify:
 

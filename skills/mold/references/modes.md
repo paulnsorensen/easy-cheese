@@ -66,7 +66,7 @@ Diagnose is **diagnostic-only** — hand off to Shape ("what's the fix?") then C
 
 ## User knobs (free-form interrupts)
 
-`explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`, `validate <hypothesis>`, `prototype <question>`, `curdle`, `pause`, `enough`. Honour these immediately.
+`explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`, `validate <hypothesis>`, `prototype <question>`, `curdle`, `pause`, `enough`, plus the tier knobs `quick`, `light`, and `full` (`tiers.md`). Honour these immediately.
 
 `prototype <question>` launches a Prototype Cycle (`prototype-cycle.md`): a
 throwaway built in a hermetic sub-agent worktree to settle an ungrillable design
