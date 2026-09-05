@@ -69,6 +69,8 @@ hashes the exact draft before it accepts a verdict. The strict
 
 The verdict fails for a stale digest, missing reflection, contradiction, orphan, unsupported assumption, or acceptance gap. A semantic `pass` with blockers also fails.
 
+The ledger JSON may carry the pinned goal as a top-level `goal` string beside `forks`. The draft's `## Problem statement` (or `## Goal`) section must then contain that sentence verbatim. A reworded or dropped goal fails as `goal-drift`. A missing section fails as `missing-section:goal:problem`. A ledger without `goal` skips the check. This is the zoom-out gate: the goal the user pinned in the bounds pass is the goal the spec ships. The devil in the details changes Acceptance or an Interface sketch; cruft changes neither, and a fork that changes neither never reaches the user.
+
 The required reflection set depends on the disposition. A `red-required` draft requires Approach, Interface sketches, Acceptance, and Test Contracts. A `not-applicable` draft requires the first three reflections. The applicability gate prohibits Test Contracts in a `not-applicable` draft.
 
 A third failure stops typed planning and the two-key handshake.

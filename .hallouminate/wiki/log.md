@@ -77,3 +77,6 @@
 - 2026-09-04 · 499c49c7b67d5eb6 · skipped-near-duplicate · — · handback `status:` vs `halt:` rule, disposition-based routing, and the handoff-gate block structure already live in workflow-invariants.md; per-finding ledgers, commit lists, CI status, and the 897-line skill-review-cure.md status table were transient and dropped.
 - 2026-09-04 · 499c49c7b67d5eb6 · retrieval-warning · gotchas/wheypoint-resume-traps.md · exact probe "Wheypoint resume traps" ranks 2 (0.0579) behind architecture/handoff-preamble-grammar.md (0.0584) after one lead revision and one citation revision; all natural probes pass; page kept, no rollback.
 
+
+
+- 2026-09-05 · bef0ae510984cffd · new-page · research/language-reviewability-evidence.md · promoted research report: diff size beats language choice (200–400 LOC), Ray et al. overturned by Berger et al., ~15% typed-JS bug catch, memory-safety class elimination, 19% faster defect finding with full-word identifiers, Python/TS/Go tiering, easy-cheese skill touchpoints.
