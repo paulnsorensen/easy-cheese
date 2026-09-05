@@ -13,18 +13,19 @@ It defines worker exceptions, the puncture clause, and the empty selection case.
   Revert a fix that breaks a passing test or project gate.
   Put it under `### Deferred` with the test name and failure summary.
   Continue with the remaining findings.
-- After all findings, invoke `/age --scope <touched-paths> --auto`.
-  Forward `--open-pr` when it is in scope.
+- After all findings, invoke `/age <slug> --scope <touched-path> [--scope <touched-path>] --auto`.
+  Repeat `--scope` once for each touched path.
+  Forward `--open-pr` and `--hard` when they are in scope.
   Skip the handoff gate.
 - Let `/age --auto` enforce the two-pass cap.
   Cure does not track the pass count.
 
 ## Final publication
 
-When Age returns `next: done`, dispatch `/plate` once.
+When Age returns `next: done`, run § Post-PR write-back in `post-pr-writeback.md`.
+Then dispatch `/plate` once.
 It updates an open PR automatically.
 With `--open-pr`, it applies the explicit layout and review rules before a new PR.
-After publication, run § Post-PR learning write-back in `post-pr-writeback.md`.
 
 A Cure worker from the Cook fan pathway does not invoke `/plate`.
 The orchestrator owns commit and publication.
@@ -53,7 +54,7 @@ Honor the no-chain and no-push override.
 For one curd, apply the selected findings and write `.cheese/cure/<slug>.md`.
 Put the handoff slug first and set `next: age`.
 Then stop.
-Do not invoke `/age --scope <touched-paths> --auto`.
+Do not invoke `/age <slug> --scope <touched-path> --auto`.
 The orchestrator reads the slug and dispatches Age.
 
 For a wave curd, apply the findings and write the Cure slug.

@@ -1,9 +1,14 @@
-# Post-PR learning write-back for Cure
+# Post-PR write-back for Cure
 
 Read this file before any path publishes to a PR.
 These paths include default `/plate`, `--open-pr`, safe **Plate it**, and automatic publication.
 
-After publication, record implementation facts that became known after Curdle.
+Run this write-back before Cure dispatches `/plate`.
+`/plate` requires every durable write before its final gate and commit.
+Give each written path to `/plate` for its artifact inventory.
+Do not write a tracked file after `/plate` completes.
+
+Record implementation facts that became known after Curdle.
 This operation is the second wiki write point.
 Curdle owns the design write point.
 
@@ -32,7 +37,7 @@ Read [`optional-plugins.md`](../../cheese/references/optional-plugins.md) for de
 
 ## Ownership
 
-Run this write-back after every publication path.
+Run this write-back before every publication path.
 The frame that dispatches final `/plate` owns the write-back.
 
 Cure does not write back when another skill owns final `/plate`.
@@ -43,13 +48,5 @@ The final publication owner performs the write-back.
 ## Empty case
 
 When all `durable_flags` are `none` or absent, check for new ADRs and domain changes.
-When no candidate exists, report `no post-PR learnings`.
+When no candidate exists, report `no post-PR write-back candidates`.
 Do not create an entry.
-
-## Deferred move
-
-`[TBD]` The trigger currently exists at the Cure boundary.
-A later change can move it to `/plate`.
-That move keeps publication and fact capture at one boundary.
-Move `durable_flags` consumption with the trigger.
-See the `post-pr-wiki-writeback` wiki page.

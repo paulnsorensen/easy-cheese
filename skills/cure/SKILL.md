@@ -28,7 +28,7 @@ Optional flags:
 
 - `--safe` — Restore the selection gate and the final publication gate.
 - `--open-pr` — Permit `/plate` to publish when no PR exists.
-- `--auto` — Use autonomous mode from `/cook --auto`.
+- `--auto` — Use automatic mode from `/cook --auto`.
   Skip user selection.
   Require `--stake <floor>`.
   `/cook --auto` always passes `medium+`.
@@ -42,15 +42,19 @@ Read `## Auto mode` for the pass cap and revert behavior.
 Read `## --hard mode` for the metacognitive gate.
 
 Read [`harness-portability.md`](../cheese/references/harness-portability.md) for portability rules.
-slash commands are host renderings, not the control model.
+Slash commands are host renderings, not the control model.
 
 ## Flow
 
-1. **Load.** Read the Markdown findings and the upstream typed `PlannerResult` artifact.
-   Extract its `CurdPlan`.
-   Call `validate_curd_plan`.
-   Stop before dispatch if the plan or its digest is absent or invalid.
+1. **Load.** Read `handoff_context.source_report` first when the handoff supplies it.
+   Confirm that the file exists and belongs to the named `source_skill`.
+   Stop with `status: halt: unreadable source report` when this check fails.
+   Read `.cheese/age/<slug>.md` when the handoff supplies only a slug.
+   Take the typed path only when the handoff also supplies a `CurdPlan`.
+   Call `validate_curd_plan` on that plan.
+   Stop before dispatch when the plan or its digest is invalid.
    Do not rebuild a plan from a legacy manifest.
+   Take the report path in every other case.
 2. **Select.** Adopt a locked selection from `/age` or `/affinage`.
    Otherwise, apply the recommended composite.
    Read `references/selection.md` for verbs and gate conditions.
@@ -63,7 +67,8 @@ slash commands are host renderings, not the control model.
    Use the same bundle command when the host only ships the bundle.
 3. **Apply.** Fix one logical group at a time.
    Confirm each anchor with a fresh bounded read.
-   Invoke `easy_cheese_schemas.cure` with the validated plan.
+   The report path stops here and continues at step 4.
+   The typed path also invokes `easy_cheese_schemas.cure` with the validated plan.
    Add one `CureDiagnosisBinding` for each selected curd.
    Create each binding with `bind_diagnosis(plan, curd, diagnosis_result)`.
    Use only a confirmed `DiagnosisResult`.
@@ -81,9 +86,11 @@ slash commands are host renderings, not the control model.
    Identical baseline failures do not block a clean cure or trigger a halt.
    Fix only new or changed failures.
 5. **Taste-test behavioral fixes.** Run the fresh-context taste test before you write the handoff slug.
-   Dispatch the read-only `reviewer` phase agent over the cure diff.
-   Use the Cook review lenses and the pinned Opus model.
-   Use the inline self-check if that agent is unavailable.
+   Resolve the read-only `reviewer` phase agent through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
+   Request the powerful minimum power and high effort.
+   Use the Cook review lenses over the cure diff.
+   Halt when fresh-context isolation is unavailable.
+   Use an inline self-check only under the small-diff cost gate in [`tdd-loop.md`](../cook/references/tdd-loop.md).
    Skip this step for formatting, comments, imports, and logic-free renames.
    Send a `revise` verdict into one bounded correction pass.
    Stop for a human on a Locked-decision `halt`.
@@ -91,13 +98,18 @@ slash commands are host renderings, not the control model.
 6. **Correct the domain model.** Correct only terms that the Cook diff touches.
    Read `references/domain-model-correction.md` first.
    Do not reverse a canonical term that Mold locked.
-7. **Hand off for review.** Recommend `/age --scope <touched-path>`.
+7. **Hand off for review.** Recommend `/age <slug> --scope <touched-path>`.
+   Repeat `--scope` once for each touched path.
+   Send the current slug with every Age dispatch.
+   Forward `--hard` when the run has that flag.
    Do not duplicate the Age review inside Cure.
    A new Age report can start a new `/cure` run.
 8. **Write the report.** Record changes, checks, deferred items, and residual risks.
    Put the handoff slug at the top of `.cheese/cure/<slug>.md`.
-9. **Hand off for publication.** Dispatch `/plate` after a clean cure.
-   Follow `## Handoff`.
+9. **Write back the durable facts.** Run § Post-PR write-back before publication.
+   Give each written path to `/plate` for its artifact inventory.
+10. **Hand off for publication.** Dispatch `/plate` after a clean cure.
+    Follow `## Handoff`.
 
 ## Preferred tools and fallbacks
 
@@ -113,7 +125,7 @@ Then run all relevant existing gates.
 Record why an unavailable gate cannot run.
 Do not declare readiness while selected findings remain unresolved.
 
-A finding is Applied only after its proving test passes.
+Move a finding to Applied only after its proving test passes.
 Read `references/cure-discipline.md` for the Iron Law.
 
 A **clean cure** has at least one applied fix and all gates pass.
@@ -140,26 +152,42 @@ Put this minimum handoff slug at the top:
 ```markdown
 status: <canonical status field>
 next: age | done
-artifact: <path-if-any>
+artifact: <path of the report that this run consumed>
 baseline: none | <recorded baseline block copied from the upstream handoff — see ../cook/references/quality-gates.md>
 <one-line orientation: what cure applied or deferred>
 ```
 
 The [handback contract](../cheese/references/handback-contract.md) defines the `status:` grammar.
 Only `next:` and the additional keyed lines are specific to this phase.
+`artifact:` names the source report that this run consumed.
+Use `handoff_context.source_report` for that value, or the resolved `.cheese/age/<slug>.md` path.
 
-Write the legacy projection with the canonical writer.
-Carry the typed Cure result schema across the boundary:
+Write the report body to a separate file.
+Then let the canonical writer create `.cheese/cure/<slug>.md` once.
+Pass every optional field that this run has.
 
 ```text
 python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cure --next age \
-  --artifact <artifact-path> --orientation "<one-line orientation>" \
+  --artifact <consumed-report-path> --orientation "<one-line orientation>" \
+  --baseline "<copied baseline block>" --durable-flags "<one line per flag>" \
+  --body-file <body-path> \
   --payload-schema https://schemas.easy-cheese.dev/curd-result
 ```
 
-`phase=cure` and `next=age` control storage routing only.
-The live state remains the validated `CurdPlan`, `CurdResult`, and `CureDiagnosisBinding` values.
+Use a second command for the terminal state.
+Omit `--payload-schema`, because a terminal transition rejects a payload schema.
+
+```text
+python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
+  --slug <slug> --status <status> --phase cure --next done \
+  --artifact <consumed-report-path> --orientation "<one-line orientation>" \
+  --baseline "<copied baseline block>" --body-file <body-path>
+```
+
+Omit `--baseline` and `--durable-flags` when this run has no such value.
+`phase=cure` controls storage routing.
+`next` declares the following phase, and the writer validates that transition.
 
 Use `status: ok` when at least one finding applies cleanly.
 Use it when no finding meets the `--auto` severity floor.
@@ -175,9 +203,11 @@ Cure does not track the current pass.
 ## Output
 
 Use [`formatting.md`](../cheese/references/formatting.md).
-Below the slug, add `Applied`, `Deferred`, `Checks`, and `Re-review` sections.
+Below the slug, add the exact headings `### Applied`, `### Deferred`, `### Checks`, and `### Re-review`.
+Bind `<slug>` to the stem of the consumed source report.
+When `source_skill` is `/affinage`, end each result line with `[from-comment:<id>]`.
 Include finding IDs, evidence, residual risk, and the next command.
-Use `/age --scope <touched-path>` or `/plate` as that command.
+Use `/age <slug> --scope <touched-path>` or `/plate` as that command.
 
 ## Handoff
 
@@ -202,14 +232,14 @@ It posts the GitHub replies before it dispatches `/plate`.
   In other cases, stack-sized or ambiguous work asks before commit or branch-layout mutation.
 - Without `--open-pr`, leave the remote unchanged.
   Report `no open PR — pass --open-pr or run /plate`.
-- After publication, run § Post-PR learnings write-back.
+- Run § Post-PR write-back before every `/plate` dispatch.
 - Skip `/plate` when the cure is not clean.
   Report the blocker and stop.
 
 With `--safe`, use the shared [handoff gate](../cheese/references/handoff-gate.md).
 Offer these choices:
 
-- **Review the touched code.** Run `/age --scope <touched-path>`.
+- **Review the touched code.** Run `/age <slug> --scope <touched-path>`.
   Recommend this choice when fixes extend beyond the finding hunk.
 - **Plate it.** Run `/plate [--hard]` to commit and publish.
 - **Checkpoint and stop.** Run `/wheypoint`.
@@ -218,9 +248,9 @@ Offer these choices:
 Preselect **Plate it** only when all selected fixes and gates pass.
 Run the selected command immediately.
 
-### Post-PR learnings write-back
+### Post-PR write-back
 
-Read `references/post-pr-writeback.md` after any path publishes to a PR.
+Read `references/post-pr-writeback.md` before any path publishes to a PR.
 This includes default, `--open-pr`, `--safe`, and automatic publication paths.
 The file defines candidates, writers, fallback behavior, ownership, and the empty case.
 
@@ -229,7 +259,9 @@ The file defines candidates, writers, fallback behavior, ownership, and the empt
 `/cure --hard` passes `--hard` to `/plate`.
 `/plate` completes and verifies every durable write.
 It then gives `/hard-cheese` the final artifact inventory.
-Publication continues only after a pass.
+Stop publication on a `FAILED` gate result.
+Stop publication when a non-TTY environment blocks the gate.
+An `ERROR` result uses the hard-cheese fail-open policy, and publication continues.
 Review, checkpoint, and stop choices skip this gate.
 Read `skills/hard-cheese/SKILL.md` and `../hard-cheese/references/composition.md`.
 
@@ -239,11 +271,11 @@ With `--auto --stake <floor>`, skip the selection list and handoff gate.
 Select each finding that meets the floor.
 Apply and validate each finding.
 Revert and defer a finding when its test fails.
-Then invoke `/age --scope <touched-paths> --auto`.
-Forward `--open-pr` when it is in scope.
+Then invoke `/age <slug> --scope <touched-path> [--scope <touched-path>] --auto`.
+Forward `--open-pr` and `--hard` when they are in scope.
 `/age --auto` owns the two-pass cap.
-On `next: done`, dispatch `/plate` once.
-Then run § Post-PR learnings write-back.
+On `next: done`, run § Post-PR write-back.
+Then dispatch `/plate` once.
 
 Read `references/auto-mode.md` before you use this mode.
 It defines the empty-floor case and the `--auto --hard` puncture clause.

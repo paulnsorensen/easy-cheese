@@ -62,6 +62,7 @@ Render the same table.
 
 ```text
 1,3,5         # specific item ids
+1-3           # an inclusive range of item ids
 all-blocker   # every blocker item
 all-high      # every blocker or high item
 all-medium    # every blocker, high, or medium item
@@ -144,7 +145,8 @@ Put it under `### Deferred` with the test name and failure summary.
 Continue with the remaining findings.
 
 When a finding no longer applies, put it under `### Skipped`.
-After all findings, invoke `/age --scope <touched-paths> --auto` directly (no handoff gate).
+After all findings, invoke `/age <slug> --scope <touched-path> --auto` directly (no handoff gate).
+Repeat `--scope` once for each touched path.
 `/age --auto` enforces the pass cap.
 Cure continues to apply findings when Age calls it.
 

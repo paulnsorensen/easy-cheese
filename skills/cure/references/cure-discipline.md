@@ -2,9 +2,9 @@
 
 ## Iron Law
 
-**No finding is fixed until a passing gate proves the fix.**
+**No finding is Applied until a passing gate proves the fix.**
 
-An edit alone does not cure a finding.
+An edit alone does not make a finding Applied.
 Run the narrowest proving test after each fix.
 Then run each relevant project gate.
 Move a finding to `### Applied` only after these checks pass.
@@ -50,7 +50,7 @@ This limit makes another dispatch safe and specific.
 
 Before a near-limit stop, return one structured handoff with these parts:
 
-- **Completed.** List each cured finding and its verification result.
+- **Completed.** List each Applied finding and its verification result.
   Keep an unvalidated fix in staged state.
 - **Changed-file ownership.** List every file that the agent changed.
 - **Remaining.** List each unfinished finding and its exact next action.
