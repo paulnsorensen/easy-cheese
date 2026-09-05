@@ -1,7 +1,7 @@
 set dotenv-load := true
 # Includes requirements-build.txt so tests/python/test_pyz_bundle.py runs its
 # bundle integration seam instead of skipping it.
-python := "uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt --with pip==26.2.1 --with pytest==9.0.3 --with pyyaml==6.0.2 python3"
+python := "uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
 
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
 # third-party pytest plugins happen to be globally installed. Without this a
@@ -20,7 +20,7 @@ test:
     {{python}} .github/scripts/validate_skills.py
     {{python}} .github/scripts/validate_wiki.py
     {{python}} scripts/render_generated_regions.py --check
-    {{python}} -m pytest tests/python -q
+    {{python}} -m pytest tests/python -q -p xdist -n auto
     {{python}} -m pytest tests/shared/python -q
     {{python}} -m pytest tests/fanout/python -q
     {{python}} -m pytest tests/schemas/python -q
