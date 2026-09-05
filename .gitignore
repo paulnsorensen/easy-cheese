@@ -55,5 +55,8 @@ website/content/docs/**
 # `just release-preview` staging output (hidden so validate_skills.py skips it)
 .release-preview/
 
+# `scripts/build_schema_site.py --out` output (schemas.easy-cheese.dev tree)
+/dist-schemas/
+
 # `just vendor` output — extracted wheel trees rebuilt from requirements-vendor.txt
 /vendor/

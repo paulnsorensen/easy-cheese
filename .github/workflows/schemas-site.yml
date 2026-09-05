@@ -1,0 +1,82 @@
+name: schemas-site
+
+# Publishes the contract-schema catalog at https://schemas.easy-cheese.dev.
+#
+# The site is a Cloudflare Pages project, not GitHub Pages: this repository's
+# single GitHub Pages site already serves the Starlight docs, and GitHub Pages
+# cannot set a content type for the extensionless paths the schema URIs claim
+# (/curd-plan, /review-request, ...). Cloudflare Pages reads the generated
+# `_headers` file and serves them as application/schema+json.
+#
+# MANUAL PREREQUISITES (not automatable from this repo):
+#   1. Create the Cloudflare Pages project (direct upload, no build command).
+#   2. Set repository variable CLOUDFLARE_ACCOUNT_ID and repository secret
+#      CLOUDFLARE_API_TOKEN (token scope: Account > Cloudflare Pages > Edit).
+#   3. Point schemas.easy-cheese.dev at the Pages project as a custom domain.
+# Until the variable is set the deploy step is skipped and this workflow just
+# verifies the generated tree, so it is green from the moment it lands.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/easy_cheese_schemas/**'
+      - 'scripts/build_schema_site.py'
+      - 'tests/schemas/python/test_schema_site.py'
+      - '.github/workflows/schemas-site.yml'
+  pull_request:
+    paths:
+      - 'src/easy_cheese_schemas/**'
+      - 'scripts/build_schema_site.py'
+      - 'tests/schemas/python/test_schema_site.py'
+      - '.github/workflows/schemas-site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: build and publish schema catalog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install runtime dependencies
+        run: |
+          set -euo pipefail
+          pip install --no-cache-dir pytest==9.0.3
+          pip install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+
+      # The suite pins the generated tree to tests/schemas/python/goldens, i.e.
+      # to the same bytes the published package validates against. A red run
+      # here means the deploy would have served a document that drifted.
+      - name: Verify the generated tree against the schema goldens
+        run: python3 -m pytest tests/schemas/python/test_schema_site.py -q
+
+      - name: Build the site
+        run: python3 scripts/build_schema_site.py --out dist-schemas
+
+      - name: Deploy to Cloudflare Pages
+        if: >-
+          github.repository == 'paulnsorensen/easy-cheese'
+          && github.event_name != 'pull_request'
+          && github.ref == 'refs/heads/main'
+          && vars.CLOUDFLARE_ACCOUNT_ID != ''
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist-schemas --project-name=easy-cheese-schemas --branch=main
