@@ -910,13 +910,17 @@ def _run_checks(against: str, bundle_root: Path) -> int:
         stale.append(f"  {path.relative_to(REPO_ROOT)} (obsolete shared bundle)")
     for reference_problem in check_pyz_references():
         stale.append(f"  {reference_problem}")
-    paths = sorted(bundle_root.glob(BUNDLE_GLOB))
+    paths = [
+        path
+        for path in sorted(bundle_root.glob(BUNDLE_GLOB))
+        if path.name != "common.pyz"
+    ]
     relatives = [path.relative_to(bundle_root) for path in paths]
     baseline = _baseline_blobs(against, relatives)
-    checked = 0
+    compared = sum(1 for relative in relatives if baseline.get(relative) is not None)
+    new = len(relatives) - compared
     for path, relative in zip(paths, relatives, strict=True):
         committed = baseline.get(relative)
-        checked += 1
         data = path.read_bytes()
         problems: list[str] = []
         try:
@@ -961,7 +965,10 @@ def _run_checks(against: str, bundle_root: Path) -> int:
         print("\n".join(stale))
         return 1
 
-    print(f".pyz bundles are current ({checked} checked, by canonical member content).")
+    summary = f"{compared} compared against the baseline"
+    if new:
+        summary += f", {new} new"
+    print(f".pyz bundles are current ({summary}, by canonical member content).")
     return 0
 
 
