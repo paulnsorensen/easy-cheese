@@ -23,11 +23,11 @@ Each phase has a bound and an exhaustion action. When a phase reaches its bound,
 
 | Budget | Bound | On exhaustion |
 | --- | --- | --- |
-| Ground per topic | 1 wiki probe and 1 delegated digest | mark the remainder `[?]`; treat a third probe as repeated work |
+| Ground per topic | 1 wiki probe and 1 delegated digest | Mark the remainder `[?]`. Treat a third probe as repeated work. |
 | Shape or Sketch per option set | 1 explorer digest | require a new question before a second dispatch |
 | Fork rounds | 3 consecutive rounds that add no new evidence | show the decision map and stop questions |
 | Parent-context tool calls | approximately 40 calls | run `/wheypoint` before the next heavy step |
-| Sub-agent spawns | 6 spawns per episode | run `/wheypoint`; resume from the digests |
+| Sub-agent spawns | 6 spawns per episode | Run `/wheypoint`. Resume from the digests. |
 | Repeated failures | 2 consecutive failures from the same tool or agent | record the degraded path and use a different route |
 
 Count only calls and spawns from the parent context. Do not count internal sub-agent tool calls. Delegation exists to move those calls out of the parent context.
@@ -40,8 +40,8 @@ No precise live token count is available. Use the visible signals to estimate co
 
 | Estimate | Action |
 | --- | --- |
-| approximately 120,000 tokens | advise that the context is filling; delegate the next heavy step and make questions concise |
-| approximately 140,000 tokens | recommend `/wheypoint`; resume in a fresh context |
+| approximately 120,000 tokens | Advise the user that the context is filling. Delegate the next heavy step. Keep each question concise. |
+| approximately 140,000 tokens | Recommend `/wheypoint`. Resume in a fresh context. |
 
 Estimate from the turn count, sub-agent digests, and large pasted inputs. Do not report false precision. Delegate before you recommend a checkpoint. Delegation directly reduces parent-context use.
 

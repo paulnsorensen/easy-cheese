@@ -13,7 +13,7 @@ These four answers describe the change's shape and bound its blast radius. Upstr
 
 ## Procedure
 
-Run all three. Cheap when the answers are small; the cost of skipping is silent misrouting later.
+Run all three queries. Each query is cheap when the answers are small. A skipped query causes silent misrouting later.
 
 | Question | Backend capability | Call |
 | --- | --- | --- |

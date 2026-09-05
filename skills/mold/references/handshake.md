@@ -37,7 +37,7 @@ If any box is unchecked, name it and propose the smallest move to fill it. The u
 
 The last box — **Durable writes** — is a commitment checked before the handshake. It does not claim that the write already occurred. It confirms that the ADR + domain-model targets are resolved. It also locks in the write → read-back → completion-record protocol for the atomic-write step (`curdle.md` § Atomic write). The read-back verification and visible completion record occur during that step. Note the hallouminate-absent fallback clearly, never silently.
 
-These seventeen checklist items match the gates in Mold's machine-readable gate model. See `gate-graph.md`. A passing `fork_taste_test_passed` verdict opens the typed planner stage. A stale, partial, contradictory, or blocker-bearing verdict keeps typed planning closed. A test compares this checklist with the model nodes. Edit both sources together. Render the flow with `mold.pyz gate-graph`.
+These checklist items match the gates in Mold's machine-readable gate model. See `gate-graph.md`. A passing `fork_taste_test_passed` verdict opens the typed planner stage. A stale, partial, contradictory, or blocker-bearing verdict keeps typed planning closed. A test compares this checklist with the model nodes. Edit both sources together. Render the flow with `mold.pyz gate-graph`.
 
 ## Mandatory gates
 
@@ -148,7 +148,7 @@ Procedure:
 
 4. **An unresolved binding hard-blocks curdle**, exactly as an unapproved `[AGENT-INTRODUCED]` noun does. A search *hit* does not resolve the binding. Determine whether the design's usage differs from the code's existing meaning of the same word. If it differs, state and settle the aliasing before extraction.
 
-This gate is the referent-level sibling of Agent-introduced scope. That gate asks *did the user type this noun*. This gate asks *does the code have it, with the assumed shape*. A fully handshook spec once declared its goal-claims "owned by the run/session". However, the code's `run` was one task dispatch, not a coordinator session. The aliased noun survived to a re-age blocker and a cure-pass-2 design decision that belonged in mold. Curdle is the single chokepoint. Downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block. Record bound and flagged nouns in frontmatter as `entity_referent_bindings: [{noun, verdict, referent, citation, note}, …]`. Use a list of binding records. Preserve the referent and promised `file:line` citation in this record.
+This gate is the referent-level sibling of Agent-introduced scope. That gate asks *did the user type this noun*. This gate asks *does the code have it, with the assumed shape*. One example shows why the gate exists. A fully handshook spec declares its goal-claims "owned by the run/session". The code's `run` names one task dispatch, not a coordinator session. The aliased noun then reaches a re-age blocker and a cure-pass-2 design decision that belongs in Mold. Curdle is the single chokepoint. Downstream skills (`/cook`, etc.) trust the spec frontmatter and do not re-block. Record bound and flagged nouns in frontmatter as `entity_referent_bindings: [{noun, verdict, referent, citation, note}, …]`. Use a list of binding records. Preserve the referent and promised `file:line` citation in this record.
 
 ## Override semantics
 

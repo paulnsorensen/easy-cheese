@@ -149,3 +149,40 @@ def test_mold_pyz_publish_rejects_bad_payload(tmp_path: Path) -> None:
     assert "ERROR:" in result.stderr
     assert "Traceback" not in result.stderr
     assert not (artifact_root / "pointers" / "op-rejected.json").exists()
+
+
+def test_mold_pyz_publish_pointer_names_the_mold_to_cook_route(tmp_path: Path) -> None:
+    """The published pointer binds route identity, not just an operation id."""
+    mold_pyz = build_pyz.cached_bundle("mold")
+    document, invocation = _write_fixtures(tmp_path)
+    artifact_root = tmp_path / "artifacts"
+    result = _run(
+        mold_pyz,
+        "publish",
+        str(document),
+        "--invocation",
+        str(invocation),
+        "--operation-id",
+        "op-route",
+        "--artifact-root",
+        str(artifact_root),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    pointer = cast(dict[str, object], json.loads(result.stdout))
+    assert pointer["source_phase"] == "mold"
+    assert pointer["destination_phase"] == "cook"
+    contract_version = cast(dict[str, object], pointer["contract_version"])
+    assert contract_version["schema_uri"] == (
+        "https://schemas.easy-cheese.dev/handoff-pointer"
+    )
+    payload = cast(dict[str, object], pointer["payload"])
+    assert payload["schema_uri"] == CURD_PLAN_SCHEMA_URI
+    assert cast(str, payload["uri"]).startswith("file:")
+    assert cast(str, pointer["request_digest"]).startswith("sha256:")
+    stored = cast(
+        dict[str, object],
+        json.loads(
+            (artifact_root / "pointers" / "op-route.json").read_text(encoding="utf-8")
+        ),
+    )
+    assert stored == pointer

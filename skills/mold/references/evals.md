@@ -28,8 +28,8 @@ If a should-not query triggers `/mold`, the description in `SKILL.md` is over-br
 For each completed `/mold` Grill-mode run, verify:
 
 1. **Every grilled item produces a steelman + tension statement before any verdict.** Do not proceed directly to an uphold or amend verdict. Surface the steelman first.
-2. **≥1 user-fork round for a grill of `[AGENT-DECIDED]` items.** If a grill covers an agent-decided or design-changing item, invoke the question primitive at least once. Use `AskUserQuestion` on Claude Code/Conductor. On other harnesses, use the equivalent in [`ask-user-question.md`](../../cheese/references/ask-user-question.md). Require an actual user turn. Never render and answer an `A/B/C/D` block yourself. Never issue a verdict monologue without a user turn.
-3. **Amendments surface as questions before ledger entry.** If grilling produces an amendment, ask the user about it before writing it to the per-round decision ledger.
+2. **One user-fork round or more for a grill of `[AGENT-DECIDED]` items.** Invoke the question primitive at least once for each agent-decided or design-changing item. Use `AskUserQuestion` on Claude Code and Conductor. On another harness, use the equivalent in [`ask-user-question.md`](../../cheese/references/ask-user-question.md). Require a real user turn. Never render and answer an `A/B/C/D` block yourself. Never issue a verdict monologue without a user turn.
+3. **Amendments surface as questions before ledger entry.** Ask the user about each amendment that a grill produces. Ask before you write the amendment to the per-round decision ledger.
 4. **Clean-steelman batching stays scoped.** Batch-report an item as upheld only when its steelman finds nothing. Never include an item with a live tension in a batch.
 
 ## Failure modes to watch for

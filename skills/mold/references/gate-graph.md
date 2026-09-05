@@ -1,11 +1,11 @@
 # The gate graph
 
-Mold's gate state machine has one canonical model: `src/easy_cheese/skills/mold/gate_graph.py`'s
-`GATE_MODEL` (bundled into `mold.pyz` as the `gate-graph` subcommand). Both render
-targets derive from that one model, so they cannot drift (ADR-001). The model
-doubles as the gate-prose-sync source: a test asserts the handshake
-coherence-checklist items equal the model's gate nodes, so a gate cannot be
-silently dropped from prose.
+`GATE_MODEL` in `src/easy_cheese/skills/mold/gate_graph.py` holds the one
+canonical model of Mold's gate state machine. `mold.pyz` bundles it as the
+`gate-graph` subcommand. Both render targets derive from that one model, so
+they cannot drift. See ADR-001. The model is also the gate-prose-sync source.
+One test asserts that the handshake coherence-checklist items equal the model's
+gate nodes. No gate can therefore disappear from the prose without a failure.
 
 ## Subcommand
 
@@ -20,8 +20,8 @@ python3 skills/mold/scripts/mold.pyz gate-graph \
 - `--render svg|png`: shells out to Graphviz `dot` when it is on PATH; pass
   `--out <path>` for binary targets. When `dot` is absent it **degrades to
   mermaid** and prints a note to stderr — run-anywhere by construction.
-- `--state`: optional mold `state.json`, validated for shape; the gate model
-  itself is static, so state does not change the graph today.
+- `--state`: an optional Mold `state.json`. The command validates its shape.
+  The gate model stays static, so the state does not change the graph today.
 
 ## When to use it
 
@@ -73,4 +73,4 @@ The required reflection set depends on the disposition. A `red-required` draft r
 
 A third failure stops typed planning and the two-key handshake.
 
-The automatic handoff is `/cook --auto <durable spec pointer>`. It passes the durable pointer and approved metadata without changes. This metadata includes applicability, contract, and taste data.
+The automatic handoff is `/cook --auto <pointer path>`. It passes the published pointer and the approved metadata without changes. This metadata includes applicability, contract, and taste data.

@@ -21,7 +21,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 **Job:** collapse ambiguity with high-leverage questions. Borrow the Job-To-Be-Done frame: Why Now, What This Unlocks, Who Has The Pain, Do Nothing. Use lettered options to compress decisions.
 
-**Exit when:** a problem statement plus one concrete pain point is articulated.
+**Exit when:** the dialogue states one problem statement and one concrete pain point.
 
 ### Ground — anti-hallucination
 
@@ -37,7 +37,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 **Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Present lettered options (`A/B/C/D`) for the user to select. The user chooses consequential forks; do not settle them. Give a one-line rationale for each option, not a verdict. Validate Cycle every critical assumption behind an option. Score options by the information they leave behind. Prefer the option that reduces the next maintainer's required knowledge or makes that knowledge more obvious.
 
-**Exit when:** an option is picked (→ Sketch) or none survive (→ Explore).
+**Exit when:** the user picks one option (→ Sketch). Return to Explore when no option survives.
 
 ### Sketch — interface lockdown
 

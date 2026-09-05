@@ -2,11 +2,12 @@
 
 The ``publish`` command reads a curd plan and its host invocation.
 It sends both values to ``easy_cheese.shared.publication.publish``.
-It writes the resulting ``HandoffPointer`` as canonical JSON.
 
 The ``migrate`` command reads a legacy artifact and its source schema version.
 It sends the artifact to ``easy_cheese.shared.migrate.migrate``.
-It writes the resulting ``HandoffPointer`` as canonical JSON.
+
+Both commands bind the route to ``mold -> cook``. A caller cannot select a
+phase. Both write the resulting ``HandoffPointer`` as canonical JSON.
 """
 from __future__ import annotations
 
@@ -30,6 +31,28 @@ from easy_cheese.shared.publication import PublicationError, publish
 __all__ = ["migrate_main", "publish_main"]
 
 
+def _read_text(path: Path) -> str | None:
+    """Return the file text, or ``None`` after it reports the read failure."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"ERROR: cannot read {path}: {exc}", file=sys.stderr)
+        return None
+
+
+def _as_json_object(raw: str, label: str) -> dict[str, object] | None:
+    """Return the parsed JSON object, or ``None`` after it reports the reason."""
+    try:
+        parsed = cast(object, json.loads(raw))
+    except json.JSONDecodeError as exc:
+        print(f"ERROR: invalid {label} JSON: {exc}", file=sys.stderr)
+        return None
+    if not isinstance(parsed, dict):
+        print(f"ERROR: {label} must be a JSON object", file=sys.stderr)
+        return None
+    return cast("dict[str, object]", parsed)
+
+
 def _parse_publish_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="publish.py")
     _ = parser.add_argument("document", type=Path)
@@ -45,25 +68,15 @@ def publish_main(argv: list[str]) -> int:
     invocation_path = cast(Path, args.invocation)
     operation_id = cast(str, args.operation_id)
     artifact_root = cast(Path, args.artifact_root)
-    try:
-        document_raw = document.read_text(encoding="utf-8")
-    except OSError as exc:
-        print(f"ERROR: cannot read {document}: {exc}", file=sys.stderr)
+    document_raw = _read_text(document)
+    if document_raw is None:
         return 1
-    try:
-        invocation_raw = invocation_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        print(f"ERROR: cannot read {invocation_path}: {exc}", file=sys.stderr)
+    invocation_raw = _read_text(invocation_path)
+    if invocation_raw is None:
         return 1
-    try:
-        invocation = cast(object, json.loads(invocation_raw))
-    except json.JSONDecodeError as exc:
-        print(f"ERROR: invalid invocation JSON: {exc}", file=sys.stderr)
+    invocation_payload = _as_json_object(invocation_raw, "invocation")
+    if invocation_payload is None:
         return 1
-    if not isinstance(invocation, dict):
-        print("ERROR: invocation must be a JSON object", file=sys.stderr)
-        return 1
-    invocation_payload = cast("dict[str, object]", invocation)
     try:
         artifact = publish(
             document_raw,
@@ -91,8 +104,6 @@ def _parse_migrate_args(argv: list[str]) -> argparse.Namespace:
     _ = parser.add_argument("--source-schema-uri", required=True)
     _ = parser.add_argument("--source-major", required=True)
     _ = parser.add_argument("--source-minor", required=True)
-    _ = parser.add_argument("--source-phase", default="mold")
-    _ = parser.add_argument("--destination-phase", default="cook")
     _ = parser.add_argument("--operation-id", required=True)
     _ = parser.add_argument("--artifact-root", required=True, type=Path)
     return parser.parse_args(argv)
@@ -104,32 +115,22 @@ def migrate_main(argv: list[str]) -> int:
     source_schema_uri = cast(str, args.source_schema_uri)
     source_major = cast(str, args.source_major)
     source_minor = cast(str, args.source_minor)
-    source_phase = cast(str, args.source_phase)
-    destination_phase = cast(str, args.destination_phase)
     operation_id = cast(str, args.operation_id)
     artifact_root = cast(Path, args.artifact_root)
-    try:
-        document_raw = document.read_text(encoding="utf-8")
-    except OSError as exc:
-        print(f"ERROR: cannot read {document}: {exc}", file=sys.stderr)
+    document_raw = _read_text(document)
+    if document_raw is None:
         return 1
-    try:
-        legacy_payload = cast(object, json.loads(document_raw))
-    except json.JSONDecodeError as exc:
-        print(f"ERROR: invalid legacy document JSON: {exc}", file=sys.stderr)
+    legacy_mapping = _as_json_object(document_raw, "legacy document")
+    if legacy_mapping is None:
         return 1
-    if not isinstance(legacy_payload, dict):
-        print("ERROR: legacy document must be a JSON object", file=sys.stderr)
-        return 1
-    legacy_mapping = cast("dict[str, object]", legacy_payload)
     try:
         artifact = migrate(
             legacy_mapping,
             source_schema_uri=source_schema_uri,
             source_major=source_major,
             source_minor=source_minor,
-            source_phase=source_phase,
-            destination_phase=destination_phase,
+            source_phase="mold",
+            destination_phase="cook",
             operation_id=operation_id,
             artifact_root=artifact_root,
         )

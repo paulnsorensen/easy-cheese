@@ -12,12 +12,14 @@ Resolve the spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact
 | **Spec + Issues** | Accepted follow-ups whose disposition calls for local recovery or tracker payload | spec at `$SPEC`; issues at `.cheese/issues/<slug>-001.md`, `-002.md`, … |
 | **Issues only** | Pure standalone bug tickets, no design | `.cheese/issues/<slug>-001.md`, … |
 
-A spec is the rich container; absorbs problem framing, requirements, approach, decisions, interface sketches, risks, gates. An issue is a separate, GitHub-flavoured item the user can paste into a tracker.
+A spec is the rich container. It absorbs problem framing, requirements, approach, decisions, interface sketches, risks, and gates. An issue is a separate GitHub-flavoured item. The user can paste it into a tracker.
 
 ## Slug rules
 
 - Lowercase the working problem statement, drop stopwords, kebab-case, cap at 5 words.
-- Honour user-passed slugs verbatim.
+- **Validate every slug before any Curdle write.** Run `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>`. The command applies `validate_slug` and returns a nonzero status for an invalid slug. Stop on a nonzero status.
+- Accept a user-passed slug only after that command returns status zero. A slug can otherwise contain `..` or `/` and write outside `.cheese`.
+- Reuse the validated slug for every repo-local path. Repo-local paths include `.cheese/issues/`, `.cheese/glossary/`, and `.cheese/.out-of-scope/`. Never interpolate a raw slug into a path.
 - Match the spec's parent slug for issues (`<slug>-001.md`, `-002.md`).
 
 ## Collisions
@@ -42,6 +44,7 @@ confidence: <low | medium | high>
 gates_overridden: []   # list of unchecked handshake items if `curdle anyway` was used
 agent_introduced_scope: []   # terms in the spec the user did not type — each approved per `handshake.md` § Agent-introduced scope (audit trail; downstream skills trust this list)
 entity_referent_bindings: []   # list of binding records {noun, verdict, referent, citation, note} for identity/ownership-role nouns bound to code referents or marked NEW ENTITY — each resolved per `handshake.md` § Entity-referent binding (audit trail; downstream skills trust this list)
+agent_resolution: []   # the shared agent-resolution block per `../../cheese/references/agent-resolution.md`
 gate_applicability:
   disposition: red-required | not-applicable
   work_class: behavior | docs-only | refactor-only | test-only | appearance-only
@@ -293,7 +296,7 @@ Finish roadmap publication and all mechanical spec reconciliation before the imp
 
 ## ADRs (durable by-product)
 
-After both handshake keys pass, write the session's non-obvious decisions as durable ADRs. Include them with the durable spec in phase one's local atomic write. Both remain in the durable project corpus. The spec is the approved implementation contract. ADRs preserve its rationale. Resolve the corpus **dynamically**. Probe for the consumer's `repo:<their-repo>:wiki` hallouminate corpus. Write there if present. Otherwise, use a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. See [`adr.md`](adr.md) for the full resolution rule and ADR format.
+Write the session's non-obvious decisions as durable ADRs after both handshake keys pass. Include them with the durable spec in phase one's local atomic write. Both stay in the durable project corpus. The spec is the approved implementation contract. The ADRs preserve its rationale. Resolve the corpus **dynamically**. Probe for the consumer's `repo:<their-repo>:wiki` hallouminate corpus. Write there when it exists. Otherwise write a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. See [`adr.md`](adr.md) for the full resolution rule and the ADR format.
 
 ## Durable glossary (by-product)
 
@@ -354,7 +357,7 @@ Session: <slug>; rejected at: <handshake | scope-audit>
 
 ## Spec-verify pass (optional)
 
-Before the hand-off, run `/spec-verify` as an independent spec-review pass if the harness provides it. If it is absent, skip it without warning and note the absence once. This pass is optional. It must not block curdle where the environment does not bundle the skill. Never create a hard dependency on it.
+Run `/spec-verify` as an independent spec-review pass before the hand-off when the harness provides it. Skip it without a warning when it is absent. Note the absence once. This pass is optional. It must not block Curdle in an environment that does not bundle the skill. Never create a hard dependency on it.
 
 Detect the skill at the instruction level, not in code. Check whether `/spec-verify` appears in the agent's available toolset. Use the pattern in `../../cheese/references/optional-plugins.md` § Probe pattern. Do not use `command -v` or another shell probe. `/spec-verify` is a skill, not a `$PATH` executable.
 
@@ -385,6 +388,21 @@ Before this procedure, run the digest-bound fresh-context fork taste test on the
 
 The legacy `CurdBlock`/`Decomposition` projection is not the normal path. Use it only when an explicit migration consumer requests it; the projection must be lossless or return `UnsupportedProjection`. Never invoke the legacy curd-block decomposer or persist its block as the selected production artifact.
 
+## Publication
+
+Publish the approved plan before the hand-off. Run this command after reconciliation:
+
+```bash
+POINTER_JSON=$(python3 skills/mold/scripts/mold.pyz publish "$CURD_PLAN_JSON" \
+  --invocation "$INVOCATION_JSON" \
+  --operation-id "<slug>-<ordinal>" \
+  --artifact-root "$ARTIFACT_ROOT")
+```
+
+The command validates the payload and the `mold -> cook` route. It stores the pointer at `$ARTIFACT_ROOT/pointers/<operation-id>.json`. Stop on a nonzero status. Never hand off an unpublished plan.
+
+Pass that stored pointer path to Cook. Cook runs its own `accept` command before any executor. That command verifies the route, the receipt, and each referenced artifact. See `skills/cook/SKILL.md` § Inputs.
+
 ## Hand-off
 
 Do not render this hand-off until phase-two publication attempts and the mechanical `Deferred follow-ups` reconciliation are complete.
@@ -392,6 +410,6 @@ After writing, suggest the next step inline. **Never auto-invoke.**
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Red-required Spec | `/cook --auto <durable spec pointer>` (preserve gate and taste metadata) |
-| Spec | `/cook <spec-path>` |
+| Red-required Spec | `/cook --auto <pointer path>` (add `--hard` when the user passed it) |
+| Spec | `/cook <pointer path>` (add `--hard` when the user passed it) |
 | Issues | Paste each into your tracker, or `gh issue create --body-file <path>` |

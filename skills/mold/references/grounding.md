@@ -1,34 +1,43 @@
 # Grounding — hallouminate wiki probe
 
-During a `/mold` dialogue, probe the consumer's wiki corpus at **Ground** phase entry if hallouminate is available. Also probe at decision points in any Dialogue mode before asking the next question (see § When to probe). Add matching rationale or ADR entries to the evidence base. If hallouminate is absent, record `hallouminate: absent` in the ledger once. Then continue with only diff and code evidence.
+Probe the current repository's wiki corpus at **Ground** phase entry. Probe only when hallouminate is available. Also probe at decision points in any Dialogue mode before you ask the next question. See § When to probe. Add each matching rationale entry or ADR entry to the evidence base.
 
-The `grounding-recorded` coherence gate checks that the first structured question does not fire until the ledger carries a probe result. The result contains citations or the explicit absence note. Keep the degrade path cheap but visible.
+Record one named probe outcome in the ledger for every probe. The outcome is `hit`, `miss`, or `unavailable`. Record `hallouminate: absent` once when the tool is missing. Then continue with diff evidence and code evidence only.
+
+The `grounding-recorded` coherence gate blocks the first structured question until the ledger carries a probe outcome. The outcome carries citations, or it names the reason for the absence. Keep the degrade path cheap and visible.
 
 ## Probe shape
 
-Mirrors the wiki probe pattern from the detect-and-degrade contract in [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md):
+The probe mirrors the wiki probe pattern in the detect-and-degrade contract. See [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
 
 ```pseudocode
-ground_wiki(topic):
+ground_wiki(topic, repo_name, session_corpus):
   # 1. Check hallouminate availability.
   if "mcp__hallouminate__list_corpora" not in available_tools:
-    note once: "OPTIONAL MCP ABSENT: hallouminate not loaded. Falling back to diff + code evidence only."
-    return []
+    record once: "hallouminate: absent (tool not loaded)"
+    return unavailable
 
-  # 2. Find the consumer's wiki corpus (dynamic; their repo, not ours).
-  corpora = mcp__hallouminate__list_corpora()
-  wiki = first(c for c in corpora if c.startswith("repo:") and c.endswith(":wiki"))
-  if not wiki:
-    return []   # no wiki configured; skip silently
+  # 2. Select the corpus for THIS repository. Reuse the session selection.
+  if session_corpus is None:
+    corpora = mcp__hallouminate__list_corpora()
+    matches = [c for c in corpora if c == "repo:" + repo_name + ":wiki"]
+    if len(matches) != 1:
+      record once: "hallouminate: unavailable (no wiki for " + repo_name + ")"
+      return unavailable
+    session_corpus = matches[0]
 
   # 3. Ground the topic.
-  results = mcp__hallouminate__ground(query=topic, corpus=wiki, limit=5)
+  results = mcp__hallouminate__ground(query=topic, corpus=session_corpus, limit=5)
+  record: "hallouminate: hit" with citations, or "hallouminate: miss"
   return results
 ```
 
-- The corpus name comes from `list_corpora`, never a literal string — that is the portability invariant (the consumer's repo, not easy-cheese's).
-- If `list_corpora` is unreachable or returns no wiki corpus, fall back to code evidence. Never block the dialogue on the probe.
-- State the absence once per run if the tool is missing. Write it to the ledger once. Do not repeat it for every question.
+- Derive `repo_name` from the current checkout. Use the repository directory name that the host reports.
+- Match the corpus name exactly. Never select the first `repo:*:wiki` entry. A different repository's wiki carries another project's private rationale.
+- Record `unavailable` when zero corpora match. Record `unavailable` when more than one corpus matches. Never guess between two candidates.
+- Never block the dialogue on the probe. An `unavailable` outcome satisfies the gate.
+- Retain `session_corpus` for one Mold episode. Repeat discovery only after an `unavailable` outcome or a registry change.
+- State the absence once for each run. Write it to the ledger once. Do not repeat it for each question.
 
 ## When to probe
 
@@ -47,7 +56,7 @@ Cite hits in that round's decision ledger under `Decided / Asking / [AGENT-DECID
 
 A session can start with prior evidence. Sources include a `/culture` synthesis, a `/briesearch` report, or a `.cheese/notes/<slug>.md` wheypoint. Sources also include an earlier Mold draft or an ADR. Read this evidence once during the Bounds pass. Add each settled item to the ledger. Do not derive settled items again in the parent context.
 
-An item is **covered** only when all three conditions apply:
+An item **covers** a decision only when all three conditions apply:
 
 - **Cited.** The item names evidence that a reader can check. Use a path and symbol, line range, wiki page, or dated URL.
 - **Fresh.** The citation resolves at the current HEAD. Probe the evidence again when a referent moved, changed its name, or no longer exists.
@@ -55,7 +64,7 @@ An item is **covered** only when all three conditions apply:
 
 Put covered items under `Decided`. Include the source artifact and citation, such as `via: .cheese/notes/<slug>.md`. Run the normal pass for each uncovered item. The fast path skips work. It never skips a gate. It cannot skip the two-key handshake or fresh-context taste test. It also cannot skip a consequential fork that the user did not select.
 
-Always record the intake result. Record `no prior evidence` when the session has no prior evidence. This record satisfies `grounding-recorded`.
+Record the intake result for each session. Record `prior evidence: none` when the session starts with no prior evidence. This intake record is not a probe outcome. It does not satisfy `grounding-recorded`. Run the wiki probe and record its outcome separately.
 
 ## Confidence when absent
 

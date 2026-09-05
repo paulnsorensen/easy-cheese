@@ -72,9 +72,10 @@ def gate_id(checklist_label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", head.strip().lower()).strip("-")
 
 
-# The 17 coherence-checklist gates, verbatim from handshake.md's checklist (the
+# The coherence-checklist gates, verbatim from handshake.md's checklist (the
 # text before each colon is the gate's name; gate_id() slugs it). Order matches
-# the prose so a diff between the two is legible.
+# the prose so a diff between the two is legible. A test asserts the two sets
+# are equal, so no count is repeated here.
 COHERENCE_GATES: tuple[str, ...] = (
     "Problem statement: grounded, agreed",
     "Grounding recorded: a wiki probe result — citations or an explicit hallouminate-absent note — preceded the first structured question",
