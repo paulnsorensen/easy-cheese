@@ -117,7 +117,7 @@ def _cleanup_tmp(fd: int, tmp_name: str) -> None:
     try:
         os.unlink(tmp_name)
     except FileNotFoundError:
-        pass
+        pass  # already gone: not an error for a cleanup path
     except OSError:
         print(f"orphaned temp file: {tmp_name}", file=sys.stderr)
 

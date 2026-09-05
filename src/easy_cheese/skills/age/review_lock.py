@@ -33,6 +33,7 @@ the silent path: skipping the lock now fails the write with an instruction.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -136,10 +137,8 @@ def _stream_git(args: list[str], root: Path, consume: Callable[[bytes], None]) -
         stderr = stderr_stream.read()
         returncode = process.wait()
     except BaseException:
-        try:
+        with contextlib.suppress(OSError):
             process.kill()
-        except OSError:
-            pass
         _ = process.wait()
         raise
     finally:

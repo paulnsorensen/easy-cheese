@@ -7,6 +7,7 @@ no checked-in symbol list; exceptions are explicit owner-qualified identities.
 from __future__ import annotations
 
 import ast
+import contextlib
 import importlib
 import io
 import sys
@@ -85,10 +86,8 @@ def _findings(items: Sequence[_UnusedItem]) -> tuple[_Finding, ...]:
     for i in items:
         path = Path(i.filename)
         if path.is_absolute():
-            try:
+            with contextlib.suppress(ValueError):
                 path = path.relative_to(REPO_ROOT)
-            except ValueError:
-                pass
         findings.append(_Finding(path, i.first_lineno, i.name, i.typ, i.get_report()))
     return tuple(findings)
 

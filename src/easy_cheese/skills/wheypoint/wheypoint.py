@@ -31,6 +31,7 @@ subcommand name -- so the command is read from `argv[0]` first, and from
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -399,10 +400,8 @@ def _drop_uncommitted_pending(
 ) -> None:
     if store.find_complete_revision(pending.revision_id) is not None:
         return
-    try:
+    with contextlib.suppress(OSError):
         store.remove_pending(pending.request_identity)
-    except OSError:
-        pass
 
 
 def _clear_pending(store: storage.WorkStore, request_identity: str) -> None:

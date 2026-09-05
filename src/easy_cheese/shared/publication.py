@@ -19,7 +19,7 @@ import os
 import re
 import tempfile
 from collections.abc import Callable, Generator, Mapping
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -332,10 +332,8 @@ def _atomic_write(path: Path, content: bytes) -> None:
         os.replace(temp_name, path)
         _fsync_dir(path.parent)
     except BaseException:
-        try:
+        with suppress(OSError):
             os.unlink(temp_name)
-        except OSError:
-            pass
         raise
 
 
@@ -377,10 +375,8 @@ def _atomic_reveal(path: Path, content: bytes) -> None:
         _exclusive_reveal(temp_name, path, content)
         _fsync_dir(path.parent)
     finally:
-        try:
+        with suppress(OSError):
             os.unlink(temp_name)
-        except OSError:
-            pass
 
 
 def _content_path(directory: Path, digest: str) -> Path:
