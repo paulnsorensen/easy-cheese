@@ -44,6 +44,28 @@ _Code_: NEW ENTITY
 _Avoid_: automatic mirror, co-authoritative record
 _Code_: NEW ENTITY
 
+
+
+**CheckpointIntent** - the only agent-facing writer view for a wheypoint checkpoint; the host derives the WheypointDelta from it, including compaction proofs passed as a sidecar.
+_Avoid_: delta, commit payload
+_Code_: `src/easy_cheese/skills/wheypoint/checkpoint.py:86` (moving to `src/easy_cheese_schemas/contracts.py` per ADR wheypoint-ergonomics-002)
+
+**Directive** - a protected entry of kind `directive` holding a user-stated constraint or preference with a verbatim `quote`; it never gates and is carried forward like a decision.
+_Avoid_: note, constraint, preference, working-context line
+_Code_: NEW ENTITY (`EntryKind.DIRECTIVE`, `WheypointRecord.directives`)
+
+**HandoffTask** - one typed item of a `next: tasks` handoff: slug, intent, repo, branch, branch_from, command, optional worktree.
+_Avoid_: parallel task, move, hand-written tasks block
+_Code_: NEW ENTITY
+
+**ParallelPlan** - the typed `parallel:` block of a multi-move handoff: isolation, worktree_strategy, optional worktree_root.
+_Avoid_: parallel block, legacy note header
+_Code_: NEW ENTITY
+
+**runtime-behind** - the resolve/lint finding meaning a record's schema stamp is newer than the reading runtime; distinct from store-inconsistent, which means the bytes disagree with their digest under the same canonical form.
+_Avoid_: store-inconsistent (for version skew)
+_Code_: NEW ENTITY (`LintCode.RUNTIME_BEHIND`)
+
 ## Semantic work contracts
 
 **CurdPlan** - the canonical semantic description of executable work, checks, dependencies, and bounded shared context.

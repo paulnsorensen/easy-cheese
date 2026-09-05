@@ -189,3 +189,48 @@ def test_canonical_payload_of_a_record_is_sorted_utf8_json(
     payload = records.canonical_payload(make_record())
     assert payload.startswith(b'{"artifact_links":[],"blockers":[],"created":')
     assert payload.endswith(b'"working_context":["src/wheypoint/storage.py"]}')
+
+
+def test_v3_fields_at_their_default_leave_v2_canonical_bytes_untouched(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    """ADR wheypoint-ergonomics-004: additive v3 fields are omitted at default."""
+    record = make_record()
+    payload = records.unstructure(record)
+    assert "notes" not in payload and "directives" not in payload
+    next_action = cast(dict[str, object], payload["next_action"])
+    assert "tasks" not in next_action and "parallel" not in next_action
+    for entry in cast(list[dict[str, object]], payload["decisions"]):
+        assert "quote" not in entry
+    # A v2-shaped payload structures back and re-serializes byte-identically.
+    reloaded = records.structure(payload, WheypointRecord)
+    assert records.canonical_payload(reloaded) == records.canonical_payload(record)
+    assert records.record_digest(reloaded) == records.record_digest(record)
+    # Setting a v3 field changes the bytes; clearing it restores them.
+    with_notes = evolve(record, notes="body")
+    assert "notes" in records.unstructure(with_notes)
+    assert records.canonical_payload(evolve(with_notes, notes=None)) == records.canonical_payload(record)
+
+def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
+    import json
+    from pathlib import Path
+
+    from easy_cheese_schemas import SCHEMA_VERSION, WheypointRevision
+
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures"
+    raw = (fixtures / "golden-record-v3.json").read_bytes()
+    pins = cast(dict[str, object], json.loads((fixtures / "golden-record-v3.pins.json").read_text(encoding="utf-8")))
+    record = records.structure(cast(object, json.loads(raw)), WheypointRecord)
+    revision = records.structure(
+        cast(object, json.loads((fixtures / "golden-revision-v3.json").read_bytes())), WheypointRevision
+    )
+    bump = (
+        f"canonical bytes changed for schema_version {SCHEMA_VERSION}: bump SCHEMA_VERSION "
+        + f"to {SCHEMA_VERSION + 1}, regenerate the golden, and add the new fields to _V3_OPTIONAL"
+    )
+    assert pins["schema_version"] == SCHEMA_VERSION, bump
+    assert records.canonical_payload(record) == raw, bump
+    assert records.record_digest(record) == pins["record_digest"], bump
+    assert records.revision_digest(revision) == pins["revision_digest"], bump
+    mutated = raw.replace(b"Golden v3 record.", b"Golden v3 record!")
+    assert records.record_digest(records.structure(cast(object, json.loads(mutated)), WheypointRecord)) != pins["record_digest"]

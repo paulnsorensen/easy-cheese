@@ -23,6 +23,7 @@ from pathlib import Path
 
 from attrs import define, field
 from easy_cheese_schemas import (
+    SCHEMA_VERSION,
     CompactionRecord,
     Durability,
     WheypointProjection,
@@ -45,6 +46,7 @@ class LintCode(str, Enum):
 
     RECORD_MISSING = "record-missing"
     STORE_INCONSISTENT = "store-inconsistent"
+    RUNTIME_BEHIND = "runtime-behind"
     REVISION_INCOMPLETE = "revision-incomplete"
     PROJECTION_UNREADABLE = "projection-unreadable"
     PROJECTION_DIGEST_MISMATCH = "projection-digest-mismatch"
@@ -202,11 +204,26 @@ def lint_work(
 ) -> LintReport:
     """Validate the whole current checkpoint of one work store."""
     recovery = store.recover()
+    record = recovery.record
+    if record is not None and record.schema_version > SCHEMA_VERSION:
+        # A newer runtime wrote this store. Its bytes may not round-trip through
+        # this reader's canonical form, so a digest disagreement here says
+        # nothing about the store (ADR wheypoint-ergonomics-004).
+        return LintReport(
+            findings=(
+                LintFinding(
+                    LintCode.RUNTIME_BEHIND,
+                    f"record is stamped schema version {record.schema_version} but "
+                    + f"this runtime reads up to {SCHEMA_VERSION}: upgrade the "
+                    + "wheypoint bundle before trusting any integrity verdict",
+                ),
+            ),
+            record=record,
+        )
     findings = [
         LintFinding(LintCode.STORE_INCONSISTENT, problem)
         for problem in recovery.problems
     ]
-    record = recovery.record
     if record is None:
         if not findings:
             findings.append(

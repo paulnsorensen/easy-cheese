@@ -1,0 +1,8 @@
+{
+ "record_digest": "sha256:2988d9fc732cd28a5548b522be0818cc6c9dbae782ac3c5c75039d29e0e11bca",
+ "revision_digest": "sha256:d213574d97310176dfd26c98770a05ec0aad8b27fccedc1d7e5f07f706ba8f6c",
+ "revisions": {
+  "rev-49a042e28606": "sha256:58a15704a6e4db4d46219d60b78e91a1e8f7886aae4361fd2eaa3af4e2c4af37",
+  "rev-d52373c54e48": "sha256:d213574d97310176dfd26c98770a05ec0aad8b27fccedc1d7e5f07f706ba8f6c"
+ }
+}

@@ -43,11 +43,13 @@ first: an identical genesis resubmission is a replay, not a conflict.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import cast
 
 from attrs import define, evolve
 from easy_cheese_schemas import (
     SCHEMA_VERSION,
+    ArtifactLink,
     CompactionRecord,
     Durability,
     EntryKind,
@@ -67,6 +69,7 @@ from easy_cheese.shared import paths
 
 from . import canonical
 from . import lineage
+from . import lint as lint_mod
 from . import projection as projection_mod
 from . import records, storage
 
@@ -84,16 +87,19 @@ _KIND_PREFIX = {
     EntryKind.DECISION: "d",
     EntryKind.QUESTION: "q",
     EntryKind.BLOCKER: "b",
+    EntryKind.DIRECTIVE: "v",
 }
-_ADDITION_FIELDS = {
+ADDITION_FIELDS = {
     EntryKind.DECISION: "add_decisions",
     EntryKind.QUESTION: "add_questions",
     EntryKind.BLOCKER: "add_blockers",
+    EntryKind.DIRECTIVE: "add_directives",
 }
 _RECORD_FIELDS = {
     EntryKind.DECISION: "decisions",
     EntryKind.QUESTION: "questions",
     EntryKind.BLOCKER: "blockers",
+    EntryKind.DIRECTIVE: "directives",
 }
 
 
@@ -510,11 +516,7 @@ def _revision_id(delta: WheypointDelta, fingerprint: str) -> str:
 
 
 def _proposed_entries(delta: WheypointDelta, kind: EntryKind) -> list[ProposedEntry]:
-    if kind is EntryKind.DECISION:
-        return list(delta.add_decisions or [])
-    if kind is EntryKind.QUESTION:
-        return list(delta.add_questions or [])
-    return list(delta.add_blockers or [])
+    return list(cast("list[ProposedEntry] | None", getattr(delta, ADDITION_FIELDS[kind])) or [])
 
 
 def _additions(delta: WheypointDelta, kind: EntryKind) -> list[ProtectedEntry]:
@@ -526,6 +528,8 @@ def _additions(delta: WheypointDelta, kind: EntryKind) -> list[ProtectedEntry]:
             summary=entry.summary,
             state=EntryState.ACTIVE,
             blocks_continuation=entry.blocks_continuation,
+            rationale=entry.rationale,
+            quote=entry.quote,
         )
         for index, entry in enumerate(proposed)
     ]
@@ -539,11 +543,52 @@ def revision_id_for(delta: WheypointDelta) -> str:
 def _existing_entries(
     current: WheypointRecord, kind: EntryKind
 ) -> list[ProtectedEntry]:
-    if kind is EntryKind.DECISION:
-        return current.decisions
-    if kind is EntryKind.QUESTION:
-        return current.questions
-    return current.blockers
+    return cast(list[ProtectedEntry], getattr(current, _RECORD_FIELDS[kind]))
+
+
+def _artifact_digest() -> Callable[[str], str | None]:
+    """Digest repo-relative artifact files from the repository root (S3).
+
+    The root is the Git toplevel when there is one, so the digest does not
+    depend on which subdirectory the checkpoint was run from; outside a
+    repository the working directory is the root.
+    """
+    return lint_mod.artifact_digest_in(paths.git_toplevel() or Path.cwd())
+
+
+def _merge_artifact_links(
+    current_links: list[ArtifactLink],
+    add: list[ArtifactLink] | None,
+    remove: list[str] | None,
+    *,
+    revision_id: str,
+    digest_of: Callable[[str], str | None],
+) -> list[ArtifactLink]:
+    """Artifact links as a set keyed by path (S3, S4).
+
+    An added link replaces the one already carried for its path and is pinned
+    to the revision being written, with the file's digest computed here when
+    the path resolves to a file. Removal names paths; an unknown path is
+    refused rather than ignored, and an empty list never reaches this point.
+    """
+    if add is None and remove is None:
+        return current_links
+    order = [link.path for link in current_links]
+    by_path = {link.path: link for link in current_links}
+    for link in add or ():
+        # The digest is host-computed from the file (S3): a path that does not
+        # resolve to a file under the repository root carries no digest, and a
+        # caller-supplied value is never honoured.
+        if link.path not in by_path:
+            order.append(link.path)
+        by_path[link.path] = evolve(link, digest=digest_of(link.path), revision_id=revision_id)
+    for path in remove or ():
+        if path not in by_path:
+            raise CommitError(
+                f"remove_artifact_links names a path this record does not carry: {path!r}"
+            )
+        del by_path[path]
+    return [by_path[path] for path in order if path in by_path]
 
 
 def _transitioned(
@@ -586,7 +631,7 @@ def _apply(
             entry.entry_id for entry in existing if entry.entry_id not in by_entry
         )
 
-    additions = {kind: _additions(delta, kind) for kind in _ADDITION_FIELDS}
+    additions = {kind: _additions(delta, kind) for kind in ADDITION_FIELDS}
     revision_id = _revision_id(delta, fingerprint)
     number = current.revision_number + 1
     draft = _draft_record(
@@ -616,7 +661,7 @@ def _apply(
         # re-asserting it.
         parent_revision_digest=current.revision_digest,
         fingerprint=fingerprint,
-        additions=[entry for kind in _ADDITION_FIELDS for entry in additions[kind]],
+        additions=[entry for kind in ADDITION_FIELDS for entry in additions[kind]],
         transitions=transitions,
         preserved=preserved,
         repository=repository,
@@ -670,7 +715,12 @@ def _genesis(
             + "runtime derives the record's created time rather than reading a clock"
         )
 
-    additions = {kind: _additions(delta, kind) for kind in _ADDITION_FIELDS}
+    additions = {kind: _additions(delta, kind) for kind in ADDITION_FIELDS}
+    if not any(additions.values()) and delta.notes is None:
+        raise CommitError(
+            "a first checkpoint must capture at least one decision, question, "
+            + "blocker, or directive, or a notes body: orientation alone is not a record"
+        )
     revision_id = _revision_id(delta, fingerprint)
     try:
         draft = WheypointRecord(
@@ -687,11 +737,19 @@ def _genesis(
             revision_digest=_UNPINNED_DIGEST,
             orientation=delta.orientation or "",
             working_context=list(delta.working_context or []),
+            notes=delta.notes,
             next_action=next_action,
             decisions=additions[EntryKind.DECISION],
             questions=additions[EntryKind.QUESTION],
             blockers=additions[EntryKind.BLOCKER],
-            artifact_links=list(delta.add_artifact_links or []),
+            directives=additions[EntryKind.DIRECTIVE],
+            artifact_links=_merge_artifact_links(
+                [],
+                delta.add_artifact_links,
+                delta.remove_artifact_links,
+                revision_id=revision_id,
+                digest_of=_artifact_digest(),
+            ),
             decision_dossier=list(delta.decision_dossier or []),
         )
     except ValueError as exc:
@@ -705,7 +763,7 @@ def _genesis(
         parent_revision_id=None,
         parent_revision_digest=None,
         fingerprint=fingerprint,
-        additions=[entry for kind in _ADDITION_FIELDS for entry in additions[kind]],
+        additions=[entry for kind in ADDITION_FIELDS for entry in additions[kind]],
         transitions=[],
         preserved=[],
         repository=repository,
@@ -786,6 +844,7 @@ def _draft_record(
             working_context=_replaced(
                 delta.working_context, current.working_context
             ),
+            notes=_replaced(delta.notes, current.notes),
             next_action=_replaced(delta.next_action, current.next_action),
             decision_dossier=_replaced(
                 delta.decision_dossier, current.decision_dossier
@@ -793,10 +852,14 @@ def _draft_record(
             decisions=kept[EntryKind.DECISION] + additions[EntryKind.DECISION],
             questions=kept[EntryKind.QUESTION] + additions[EntryKind.QUESTION],
             blockers=kept[EntryKind.BLOCKER] + additions[EntryKind.BLOCKER],
-            artifact_links=[
-                *current.artifact_links,
-                *(delta.add_artifact_links or []),
-            ],
+            directives=kept[EntryKind.DIRECTIVE] + additions[EntryKind.DIRECTIVE],
+            artifact_links=_merge_artifact_links(
+                list(current.artifact_links),
+                delta.add_artifact_links,
+                delta.remove_artifact_links,
+                revision_id=revision_id,
+                digest_of=_artifact_digest(),
+            ),
         )
     except ValueError as exc:
         raise CommitError(f"the delta does not produce a legal record: {exc}") from exc

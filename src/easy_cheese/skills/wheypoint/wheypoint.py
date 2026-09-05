@@ -1,4 +1,4 @@
-"""The five commands the bundle exposes: checkpoint, commit, resolve, show, lint.
+"""The nine commands the bundle exposes: checkpoint, validate, schema, resolve, show, lint, list, log, turns.
 
 This module is a mouth, not a brain. Every decision it reports was made by
 `commit`, `resolve`, or `lint`; nothing here parses a projection, compares a
@@ -22,7 +22,7 @@ corpus, so it exits 0 with `ok: true` and the outcome in the payload; only a
 reference that could not be interpreted at all is a refusal. Lint findings are
 answers by the same rule.
 
-All five commands live in this one module because the bundle dispatcher gives
+All nine commands live in this one module because the bundle dispatcher gives
 each subcommand its own entry point and rewrites `sys.argv[0]` to the
 subcommand name -- so the command is read from `argv[0]` first, and from
 `argv[1]` when the module is run directly.
@@ -32,14 +32,23 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime as _dt
 import json
 import sys
 from pathlib import Path
 from typing import NoReturn, TextIO, cast, override
 
-from attrs import define
+from attrs import define, evolve
 
-from easy_cheese_schemas import Durability, WheypointDelta
+from easy_cheese_schemas import (
+    CheckpointIntent,
+    CompactionRecord,
+    Durability,
+    WheypointDelta,
+    load,
+    registered_contracts,
+)
+from easy_cheese_schemas import schema_runtime
 
 from easy_cheese.shared import paths
 
@@ -51,8 +60,19 @@ from . import lint as lint_mod
 from . import records
 from . import resolve as resolve_mod
 from . import storage
+from . import transcript
 
-COMMANDS = ("checkpoint", "commit", "resolve", "show", "lint")
+COMMANDS = (
+    "checkpoint",
+    "validate",
+    "schema",
+    "resolve",
+    "show",
+    "lint",
+    "list",
+    "log",
+    "turns",
+)
 
 EXIT_OK = 0
 EXIT_REFUSED = 1
@@ -62,9 +82,10 @@ EXIT_USAGE = 2
 class _Refused(Exception):
     """A command that has an error shape to report rather than a payload."""
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str, extra: dict[str, object] | None = None) -> None:
         super().__init__(message)
         self.code: str = code
+        self.extra: dict[str, object] = {} if extra is None else extra
 
 
 @define(frozen=True)
@@ -89,7 +110,17 @@ class _Parser(argparse.ArgumentParser):
 
 def _parser(command: str) -> _Parser:
     parser = _Parser(prog=f"wheypoint.pyz {command}")
-    if command in ("checkpoint", "commit"):
+    if command == "checkpoint":
+        _ = parser.add_argument(
+            "--compacted",
+            dest="compacted",
+            default=None,
+            metavar="PROOF_JSON",
+            help=(
+                "path to a caller-authored CompactionRecord proving the session "
+                + "rehydrated from the current revision before writing"
+            ),
+        )
         _ = parser.add_argument(
             "--note-dir",
             dest="note_dir",
@@ -105,6 +136,20 @@ def _parser(command: str) -> _Parser:
             action="store_true",
             help="write no mirror; the checkpoint stays canonical-local",
         )
+    elif command == "schema":
+        _ = parser.add_argument("slug", help="a registered contract slug, e.g. checkpoint-intent")
+    elif command in ("list", "log"):
+        _ = parser.add_argument(
+            "--corpus-root",
+            dest="corpus_root",
+            default=None,
+            help="the per-project corpus root (default: the project's own corpus)",
+        )
+        if command == "log":
+            _ = parser.add_argument("--work-id", required=True, dest="work_id")
+    elif command == "turns":
+        _ = parser.add_argument("--transcript", default=None, help="path to a session .jsonl transcript")
+        _ = parser.add_argument("--session", default=None, help="session id under the derived projects directory")
     elif command == "resolve":
         _ = parser.add_argument(
             "--ref",
@@ -165,20 +210,6 @@ def _open(work_id: str) -> storage.WorkStore:
         raise _Refused("storage-error", str(exc)) from exc
 
 
-def _run_commit(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
-    payload = _payload(stdin)
-    try:
-        delta = records.structure(payload, WheypointDelta)
-    except records.RecordError as exc:
-        raise _Refused("invalid-delta", str(exc)) from exc
-    return _promote(
-        delta,
-        _open(delta.work_id),
-        args,
-        request_identity=records.request_fingerprint(delta),
-    )
-
-
 def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
     """A semantic intent, bound to the current record and committed.
 
@@ -195,18 +226,21 @@ def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object
             + "bound from the record, and a compaction record is a proof a "
             + "compacted session has to supply -- author those with commit",
         )
-    unknown = checkpoint_mod.unknown_fields(payload)
-    if unknown:
-        raise _Refused(
-            "invalid-intent",
-            f"checkpoint does not accept {', '.join(unknown)}: the record has "
-            + "no field for that data, so accepting the key would drop it",
-        )
     try:
-        intent = records.structure(payload, checkpoint_mod.CheckpointIntent)
+        intent = records.structure(payload, CheckpointIntent, forbid_unknown=True)
     except records.RecordError as exc:
         raise _Refused("invalid-intent", str(exc)) from exc
-    request_identity = canonical.digest_value(records.unstructure(intent))
+    secret = checkpoint_mod.secret_field(intent)
+    if secret is not None:
+        raise _Refused(
+            "secret-pattern",
+            f"{secret} looks like a credential: a checkpoint is durable, "
+            + "digest-protected text, so it cannot carry one",
+        )
+    proof = _compaction_proof(args)
+    # The proof is part of the request: an identical intent with and without a
+    # proof must not share a pending-mirror ledger entry.
+    request_identity = request_identity_for(intent, proof)
     store = _open(intent.work_id)
     try:
         current = store.read_record()
@@ -220,12 +254,54 @@ def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object
         delta = checkpoint_mod.build_delta(intent, current)
     except checkpoint_mod.IntentError as exc:
         raise _Refused("invalid-intent", str(exc)) from exc
+    if proof is not None:
+        delta = evolve(delta, compacted=True, compaction=proof)
     return _promote(
         delta,
         store,
         args,
         request_identity=request_identity,
     )
+
+
+def request_identity_for(intent: CheckpointIntent, proof: CompactionRecord | None) -> str:
+    """The pending-mirror ledger key: the intent, plus the proof when one rides with it."""
+    if proof is None:
+        return canonical.digest_value(records.unstructure(intent))
+    return canonical.digest_value(
+        {"intent": records.unstructure(intent), "compaction": records.unstructure(proof)}
+    )
+
+
+def _compaction_proof(args: argparse.Namespace) -> CompactionRecord | None:
+    """The `--compacted` proof, validated before it can touch a delta."""
+    path_arg = cast("str | None", getattr(args, "compacted", None))
+    if path_arg is None:
+        return None
+    path = Path(path_arg)
+    try:
+        raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
+    except OSError as exc:
+        raise _Refused("compaction-proof-unreadable", f"{path_arg}: {exc}") from exc
+    except ValueError as exc:
+        raise _Refused("compaction-proof-unreadable", f"{path_arg} is not one JSON value: {exc}") from exc
+    try:
+        return records.structure(raw, CompactionRecord, forbid_unknown=True)
+    except records.RecordError as exc:
+        raise _Refused("invalid-compaction-proof", str(exc)) from exc
+
+
+def _refusal_for(exc: Exception) -> _Refused:
+    """The one mapping from a kernel/storage error to a reply code, both paths."""
+    if isinstance(exc, commit_mod.GenesisConflictError):
+        return _Refused("genesis-conflict", str(exc))
+    if isinstance(exc, commit_mod.StaleParentError):
+        return _Refused("stale-parent", str(exc))
+    if isinstance(exc, commit_mod.CommitError):
+        return _Refused("commit-refused", str(exc))
+    if isinstance(exc, storage.StorageError):
+        return _Refused("storage-error", str(exc))
+    return _Refused("internal-error", f"{type(exc).__name__}: {exc}")
 
 
 def _promote(
@@ -243,14 +319,8 @@ def _promote(
                 store=store,
                 durability=Durability.CANONICAL_LOCAL,
             )
-        except commit_mod.GenesisConflictError as exc:
-            raise _Refused("genesis-conflict", str(exc)) from exc
-        except commit_mod.StaleParentError as exc:
-            raise _Refused("stale-parent", str(exc)) from exc
-        except commit_mod.CommitError as exc:
-            raise _Refused("commit-refused", str(exc)) from exc
-        except storage.StorageError as exc:
-            raise _Refused("storage-error", str(exc)) from exc
+        except (commit_mod.CommitError, storage.StorageError) as exc:
+            raise _refusal_for(exc) from exc
         return _result_payload(result, None)
 
     try:
@@ -436,7 +506,7 @@ def _resume_mirror(
     except _MirrorError as exc:
         raise _Refused("note-unwritable", str(exc)) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
-        raise _Refused("storage-error", str(exc)) from exc
+        raise _refusal_for(exc) from exc
     _clear_pending(store, pending.request_identity)
     return result
 
@@ -524,12 +594,181 @@ def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     }
 
 
+def _run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
+    """Schema-only dry run: every problem, no store opened (AC-11)."""
+    _ = args
+    payload = _payload(stdin)
+    problems = [
+        f"{name} belongs to the compaction proof or the parent binding: pass it "
+        + "through --compacted or let the runtime bind it"
+        for name in checkpoint_mod.commit_only_fields(payload)
+    ]
+    scrubbed = {
+        key: value
+        for key, value in cast(dict[str, object], payload).items()
+        if key not in checkpoint_mod.COMMIT_ONLY_FIELDS
+    } if isinstance(payload, dict) else payload
+    loaded = load(cast(dict[str, object], scrubbed), CheckpointIntent, strict=True, forbid_unknown=True)
+    problems.extend(loaded.problems)
+    if loaded.value is not None:
+        problems.extend(f"{hit} looks like a credential" for hit in checkpoint_mod.secret_fields(loaded.value))
+        # The same delta the checkpoint would build, against no record: every
+        # NextAction and delta invariant fires here, with the store untouched.
+        try:
+            _ = checkpoint_mod.build_delta(loaded.value, None)
+        except checkpoint_mod.IntentError as exc:
+            problems.append(str(exc))
+    if problems:
+        raise _Refused("invalid-intent", "; ".join(problems), {"problems": problems})
+    return {"valid": True, "work_id": loaded.value.work_id if loaded.value else None}
+
+
+def _run_schema(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+    """The JSON Schema for one registered contract, so no one unzips the bundle (AC-12)."""
+    slug = cast(str, args.slug)
+    table = dict(registered_contracts())
+    if slug not in table:
+        raise _Refused(
+            "unknown-contract",
+            f"no contract is registered as {slug!r}; known: {', '.join(sorted(table))}",
+            {"known": sorted(table)},
+        )
+    document = cast(dict[str, object], json.loads(schema_runtime.schema_bytes(table[slug])))
+    return {"slug": slug, "schema": document}
+
+
+def _corpus_root(args: argparse.Namespace) -> Path:
+    root_arg = cast("str | None", getattr(args, "corpus_root", None))
+    return Path(root_arg) if root_arg is not None else paths.project_corpus_root()
+
+
+def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+    """One line per work item under the corpus root (AC-13)."""
+    root = _corpus_root(args)
+    items: list[dict[str, object]] = []
+    lines: list[str] = []
+    for store in storage.WorkStore.enumerate(root):
+        work_id = store.work_id
+        try:
+            record = store.read_record()
+        except (storage.StorageError, records.RecordError, ValueError) as exc:
+            items.append({"work_id": work_id, "unreadable": str(exc)})
+            lines.append(f"{work_id}\t-\tunreadable\t-\t{exc}")
+            continue
+        if record is None:
+            items.append({"work_id": work_id, "no_record": True})
+            lines.append(f"{work_id}\t-\tno-record\t-\t")
+            continue
+        head = record.orientation.strip().splitlines()[0] if record.orientation.strip() else ""
+        items.append(
+            {
+                "work_id": record.work_id,
+                "revision_number": record.revision_number,
+                "status": record.status.value,
+                "next": record.next_action.move.value,
+                "orientation": head,
+            }
+        )
+        lines.append(
+            f"{record.work_id}\t{record.revision_number}\t{record.status.value}\t"
+            + f"{record.next_action.move.value}\t{head}"
+        )
+    return {"corpus_root": str(root), "items": items, "lines": lines}
+
+
+def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+    """One line per complete revision, oldest first (AC-14)."""
+    work_id = cast(str, args.work_id)
+    try:
+        store = storage.WorkStore.open(work_id, corpus_root=_corpus_root(args))
+    except storage.StorageError as exc:
+        raise _Refused("storage-error", str(exc)) from exc
+    files = store.revisions()
+    if not files and store.read_record() is None:
+        raise _Refused("record-missing", f"work {work_id!r} has no record at {store.record_path}")
+    entries: list[dict[str, object]] = []
+    lines: list[str] = []
+    for file in files:
+        revision = file.revision
+        captured = (
+            revision.session_provenance.captured_at
+            if revision.session_provenance is not None
+            and revision.session_provenance.captured_at is not None
+            else "-"
+        )
+        compacted = revision.compaction is not None
+        entries.append(
+            {
+                "revision_number": revision.revision_number,
+                "revision_id": revision.revision_id,
+                "captured_at": captured,
+                "additions": len(revision.applied_additions),
+                "transitions": len(revision.applied_transitions),
+                "compacted": compacted,
+            }
+        )
+        lines.append(
+            f"{revision.revision_number}\t{revision.revision_id}\t{captured}\t"
+            + f"+{len(revision.applied_additions)}\t~{len(revision.applied_transitions)}\t"
+            + ("compacted" if compacted else "-")
+        )
+    return {"work_id": work_id, "revisions": entries, "lines": lines}
+
+
+def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+    """The user's own turns from a session transcript (AC-27, AC-28)."""
+    transcript_arg = cast("str | None", args.transcript)
+    session = cast("str | None", args.session)
+    if transcript_arg is not None:
+        path = Path(transcript_arg)
+    else:
+        directory = transcript.projects_dir(Path.cwd())
+        if session is None:
+            stamped: list[tuple[float, str]] = []
+            for candidate in directory.glob("*.jsonl"):
+                try:
+                    stamped.append((candidate.stat().st_mtime, candidate.stem))
+                except OSError:
+                    continue
+            listing = [
+                {
+                    "session": stem,
+                    "modified": _dt.datetime.fromtimestamp(mtime, tz=_dt.timezone.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    ),
+                }
+                for mtime, stem in sorted(stamped, reverse=True)
+            ]
+            raise _Refused(
+                "session-required",
+                f"{len(listing)} transcript(s) under {directory}: pass --session <id> "
+                + "(never guessed by recency) or --transcript <path>",
+                {"projects_dir": str(directory), "candidates": listing},
+            )
+        if transcript.SESSION_ID_RE.fullmatch(session) is None:
+            raise _Refused("invalid-session", f"session id {session!r} must be one safe file-name segment")
+        path = directory / f"{session}.jsonl"
+    if not path.is_file():
+        raise _Refused("transcript-missing", f"no transcript at {path}", {"path": str(path)})
+    turns, skipped = transcript.user_turns(path)
+    return {
+        "transcript": str(path),
+        "count": len(turns),
+        "skipped_lines": skipped,
+        "lines": [f"{turn['timestamp']}\t{turn['text']}" for turn in turns],
+    }
+
+
 _RUNNERS = {
     "checkpoint": _run_checkpoint,
-    "commit": _run_commit,
+    "validate": _run_validate,
+    "schema": _run_schema,
     "resolve": _run_resolve,
     "show": _run_show,
     "lint": _run_lint,
+    "list": _run_list,
+    "log": _run_log,
+    "turns": _run_turns,
 }
 
 
@@ -554,13 +793,20 @@ def _emit(stdout: TextIO, payload: dict[str, object]) -> None:
     _ = stdout.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
-def _refuse(stdout: TextIO, command: str, code: str, message: str, status: int) -> int:
+def _refuse(
+    stdout: TextIO,
+    command: str,
+    code: str,
+    message: str,
+    status: int,
+    extra: dict[str, object] | None = None,
+) -> int:
     _emit(
         stdout,
         {
             "ok": False,
             "command": command,
-            "error": {"code": code, "message": message},
+            "error": {"code": code, "message": message, **(extra or {})},
         },
     )
     return status
@@ -592,7 +838,7 @@ def main(
     try:
         payload = _RUNNERS[command](args, stdin2)
     except _Refused as exc:
-        return _refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED)
+        return _refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED, exc.extra)
     except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
         return _refuse(
             stdout2,
@@ -613,8 +859,24 @@ def checkpoint_main(argv: list[str]) -> int:  # noqa: V103
     return _bundle_main("checkpoint", argv)
 
 
-def commit_main(argv: list[str]) -> int:  # noqa: V103
-    return _bundle_main("commit", argv)
+def validate_main(argv: list[str]) -> int:  # noqa: V103
+    return _bundle_main("validate", argv)
+
+
+def schema_main(argv: list[str]) -> int:  # noqa: V103
+    return _bundle_main("schema", argv)
+
+
+def list_main(argv: list[str]) -> int:  # noqa: V103
+    return _bundle_main("list", argv)
+
+
+def log_main(argv: list[str]) -> int:  # noqa: V103
+    return _bundle_main("log", argv)
+
+
+def turns_main(argv: list[str]) -> int:  # noqa: V103
+    return _bundle_main("turns", argv)
 
 
 def resolve_main(argv: list[str]) -> int:  # noqa: V103

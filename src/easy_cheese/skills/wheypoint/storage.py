@@ -225,6 +225,37 @@ class WorkStore:
             finally:
                 os.close(fd)
 
+    @classmethod
+    def enumerate(cls, corpus_root: Path | str | None = None) -> list[WorkStore]:
+        """Every work store under the corpus root that holds a record, by work id."""
+        base = Path(corpus_root) if corpus_root is not None else paths.project_corpus_root()
+        work_dir = base / WORK_DIRNAME
+        stores: list[WorkStore] = []
+        for record_path in sorted(work_dir.glob(f"*/{RECORD_FILENAME}")):
+            # The same guard `open` enforces: a directory whose name is not a safe
+            # work id is not a store, whatever it contains.
+            if _WORK_ID_RE.fullmatch(record_path.parent.name) is None:
+                continue
+            stores.append(cls.open(record_path.parent.name, corpus_root=base))
+        return stores
+
+    def revisions(self) -> list[RevisionFile]:
+        """Every complete immutable revision, oldest first.
+
+        Receipts only: projections are located, not read or digested, so a long
+        history costs one small JSON file per revision.
+        """
+        files: list[RevisionFile] = []
+        for path in self.revisions_dir.glob("*.json"):
+            try:
+                revision = records.structure(_parse_json(path.read_bytes()), WheypointRevision)
+            except (OSError, ValueError, records.RecordError):
+                continue
+            projection_path = self.projections_dir / f"{path.stem}.md"
+            if projection_path.is_file():
+                files.append(RevisionFile(revision=revision, path=path, projection_path=projection_path))
+        return sorted(files, key=lambda file: file.revision.revision_number)
+
     def read_record(self) -> WheypointRecord | None:
         try:
             raw = self.record_path.read_bytes()

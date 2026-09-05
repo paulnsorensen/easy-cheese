@@ -13,10 +13,13 @@ import pytest
 from attrs import evolve
 from easy_cheese_schemas import (
     Durability,
+    HandoffTask,
     NextAction,
     NextMove,
+    ParallelPlan,
     WheypointRecord,
     WheypointStatus,
+    WorktreeStrategy,
 )
 from easy_cheese_schemas.handback_status import MAX_REASON_LENGTH, status_disposition
 
@@ -64,12 +67,30 @@ def test_every_declared_move_survives_the_shared_parser(
 ) -> None:
     """`cut` is in the schema vocabulary, so it must reach a consumer too."""
     record = make_record()
-    action = evolve(record.next_action, move=move)
+    changes: dict[str, object] = {"move": move}
+    if move is NextMove.TASKS:
+        changes["tasks"] = [
+            HandoffTask(
+                slug="demo-task",
+                intent="Do the thing.",
+                repo="easy-cheese",
+                branch="demo",
+                branch_from="main",
+                command="/cook",
+            )
+        ]
+        changes["parallel"] = ParallelPlan(
+            isolation="worktree", worktree_strategy=WorktreeStrategy.CREATE
+        )
+    action = evolve(record.next_action, **changes)
     _, markdown = projection.build_projection(
         evolve(record, next_action=action), durability=Durability.CANONICAL_LOCAL
     )
 
-    assert parse_handoff_slug(markdown).next_skill == move.value
+    slug = parse_handoff_slug(markdown)
+    assert slug.next_skill == move.value
+    if move is NextMove.TASKS:
+        assert slug.mode == "parallel"
 
 
 def test_a_projection_without_an_artifact_parses_as_a_shared_handoff(

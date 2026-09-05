@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import re
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -491,9 +492,9 @@ class TestWheypointProvenance:
         # `tests/wheypoint/python/test_legacy.py` proves the parser itself
         # accepts them between `artifact:` and the orientation.
         body = _skill_corpus("wheypoint")
-        section = body.split("### Handwritten legacy notes", 1)
+        section = re.split(r"^#{2,3} Handwritten legacy notes$", body, maxsplit=1, flags=re.M)
         assert len(section) == 2, (
-            "wheypoint must keep a `### Handwritten legacy notes` section"
+            "wheypoint must keep a `Handwritten legacy notes` section (SKILL.md or a reference)"
         )
         legacy = section[1]
         for key in self.PROVENANCE_KEYS:

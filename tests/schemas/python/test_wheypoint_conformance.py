@@ -10,13 +10,17 @@ declaring `ok` over an active gate.
 
 from __future__ import annotations
 
-from typing import TypeVar
+import importlib
+import json
+from typing import TypeVar, cast
 
 import attrs
 import pytest
 from easy_cheese_schemas import (
     __all__ as schema_exports,
     SCHEMA_VERSION,
+    CheckpointIntent,
+    EntryKind,
     ProposedEntry,
     Provenance,
     WheypointDelta,
@@ -28,13 +32,42 @@ from easy_cheese_schemas import (
     NextMove,
     load,
 )
-from easy_cheese_schemas.wheypoint import (
+from easy_cheese_schemas import contracts, schema_runtime
+from easy_cheese_schemas.contracts import (
     _DIGEST_RE,  # pyright: ignore[reportPrivateUsage]
-    _ID_RE,  # pyright: ignore[reportPrivateUsage]
+    _LOWER_ID_RE,  # pyright: ignore[reportPrivateUsage]
     _MAX_ID,  # pyright: ignore[reportPrivateUsage]
     _MAX_ITEMS,  # pyright: ignore[reportPrivateUsage]
     _MAX_LEDGER,  # pyright: ignore[reportPrivateUsage]
     _MAX_TEXT,  # pyright: ignore[reportPrivateUsage]
+)
+
+# Every name the move into contracts.py must keep importable and re-homed.
+_MOVED_CONTRACT_NAMES = (
+    "ArtifactLink",
+    "CheckpointIntent",
+    "CompactionRecord",
+    "DecisionFork",
+    "DossierOption",
+    "Durability",
+    "EntryKind",
+    "EntryState",
+    "EntryTransition",
+    "HandoffTask",
+    "NextAction",
+    "NextMove",
+    "ParallelPlan",
+    "ProposedEntry",
+    "ProtectedEntry",
+    "RepositoryProvenance",
+    "SessionProvenance",
+    "TransitionAction",
+    "WheypointDelta",
+    "WheypointProjection",
+    "WheypointRecord",
+    "WheypointRevision",
+    "WheypointStatus",
+    "WorktreeStrategy",
 )
 
 DIGEST = "sha256:" + "0" * 64
@@ -155,6 +188,10 @@ def projection(**overrides: object) -> dict[str, object]:
     )
 
 
+def checkpoint_intent(**overrides: object) -> dict[str, object]:
+    return merged({"work_id": "wheypoint-continuity-kernel"}, overrides)
+
+
 T = TypeVar("T")
 
 
@@ -195,7 +232,7 @@ def test_the_four_types_are_public_exports() -> None:
         WheypointProjection,
     ):
         assert exported.__name__ in schema_exports
-        assert exported.__module__ == "easy_cheese_schemas.wheypoint"
+        assert exported.__module__ == "easy_cheese_schemas.contracts"
         assert attrs.has(exported)
         assert getattr(exported, "__attrs_attrs__", None) is not None
         assert attrs.resolve_types(exported) is exported
@@ -237,9 +274,9 @@ def test_every_persisted_artifact_carries_its_own_vintage() -> None:
 
 def test_identifier_pattern_accepts_and_rejects_exactly() -> None:
     for good in ("rev-0003", "w1", "a" * _MAX_ID, "work.id_2"):
-        assert _ID_RE.fullmatch(good), good
+        assert _LOWER_ID_RE.fullmatch(good), good
     for bad in ("", "-lead", "Upper", "has space", "a" * (_MAX_ID + 1), "sl/ash"):
-        assert _ID_RE.fullmatch(bad) is None, bad
+        assert _LOWER_ID_RE.fullmatch(bad) is None, bad
 
 
 def test_digest_pattern_requires_lowercase_sha256() -> None:
@@ -785,25 +822,24 @@ def test_a_decision_dossier_fork_needs_options_with_evidence() -> None:
         assert blames(problems, f"WheypointRecord.decision_dossier[1].{path}"), problems
 
 
-def test_an_ungated_record_cannot_carry_a_decision_dossier() -> None:
-    """An ungated open fork produces `status: ok`.
-
-    The resumed session then skips a decision that requires a human answer.
-    """
-    problems = refused(record(decision_dossier=dossier()), WheypointRecord)
-    assert blames(problems, "WheypointRecord.decision_dossier"), problems
-    resolved = entry("q1", state="resolved", rationale="settled", blocks_continuation=False)
-    assert structured(
-        record(questions=[resolved], decision_dossier=[]), WheypointRecord
-    ).status is WheypointStatus.OK
+def test_an_ungated_record_may_carry_a_decision_dossier_for_an_active_question() -> None:
+    """ADR wheypoint-ergonomics-001: a fork may reference any active question,
+    not only one that already gates. The record still derives `status: ok`."""
+    active = entry("q1", blocks_continuation=False)
+    value = structured(
+        record(questions=[active], decision_dossier=dossier()), WheypointRecord
+    )
+    assert value.status is WheypointStatus.OK
+    assert len(value.decision_dossier) == 1
 
 
-def test_an_ungated_projection_cannot_carry_a_decision_dossier() -> None:
-    problems = refused(
+def test_an_ungated_projection_may_carry_a_decision_dossier() -> None:
+    value = structured(
         projection(gating_entry_ids=[], decision_dossier=dossier()),
         WheypointProjection,
     )
-    assert blames(problems, "WheypointProjection.decision_dossier"), problems
+    assert value.status is WheypointStatus.OK
+    assert len(value.decision_dossier) == 1
 
 
 @pytest.mark.parametrize("level", ["canonical-local", "repo-snapshot", "published"])
@@ -835,3 +871,106 @@ def test_cut_round_trips_through_record_and_projection_with_receipt_pointer() ->
     )
     assert projected.next_action.move is NextMove.CUT
     assert projected.next_action.artifact == receipt
+
+
+# --- slice 1c: move into contracts.py + v3 additions ------------------------
+
+
+def test_every_moved_wheypoint_name_lives_in_contracts_and_wheypoint_module_is_gone() -> None:
+    for name in _MOVED_CONTRACT_NAMES:
+        assert name in schema_exports, name
+        exported = cast(type, getattr(contracts, name))
+        assert exported.__module__ == "easy_cheese_schemas.contracts", name
+    with pytest.raises(ImportError):
+        _ = importlib.import_module("easy_cheese_schemas.wheypoint")
+
+
+def test_checkpoint_intent_is_a_registered_contract_with_a_registered_schema_uri() -> None:
+    slugs = dict(contracts.registered_contracts())
+    assert slugs["checkpoint-intent"] is CheckpointIntent
+    document = cast(dict[str, object], json.loads(schema_runtime.schema_bytes(CheckpointIntent)))
+    assert document["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+    assert cast(str, document["$id"]).endswith("/checkpoint-intent")
+    assert document["$id"] in schema_runtime.REGISTERED_CONTRACT_SCHEMA_URIS
+
+
+def test_checkpoint_intent_schema_carries_the_runtime_constraints() -> None:
+    document = cast(dict[str, object], json.loads(schema_runtime.schema_bytes(CheckpointIntent)))
+    defs = cast(dict[str, dict[str, object]], document["$defs"])
+    properties = cast(dict[str, dict[str, object]], defs["CheckpointIntent"]["properties"])
+    assert properties["work_id"]["pattern"] == contracts._LOWER_ID_RE.pattern  # pyright: ignore[reportPrivateUsage]
+    assert properties["entries"]["maxItems"] == contracts._MAX_ITEMS  # pyright: ignore[reportPrivateUsage]
+
+
+def test_a_directive_entry_carries_a_quote_and_cannot_gate() -> None:
+    value = structured(
+        checkpoint_intent(
+            entries=[
+                {
+                    "kind": "directive",
+                    "summary": "keep records append-only",
+                    "quote": "never rewrite a landed revision",
+                    "blocks_continuation": False,
+                }
+            ]
+        ),
+        CheckpointIntent,
+    )
+    assert value.entries is not None
+    assert value.entries[0].kind is EntryKind.DIRECTIVE
+    assert value.entries[0].quote == "never rewrite a landed revision"
+
+    problems = refused(
+        checkpoint_intent(
+            entries=[
+                {
+                    "kind": "directive",
+                    "summary": "keep records append-only",
+                    "blocks_continuation": True,
+                }
+            ]
+        ),
+        CheckpointIntent,
+    )
+    assert blames(problems, "CheckpointIntent.entries[1].blocks_continuation"), problems
+
+
+def test_next_action_tasks_move_requires_non_empty_tasks_and_structures_a_handoff_task() -> None:
+    task = {
+        "slug": "slice-1c",
+        "intent": "finish curd 1",
+        "repo": "easy-cheese",
+        "branch": "feat/wheypoint-1c",
+        "branch_from": "main",
+        "command": "just cook",
+        "worktree": None,
+    }
+    problems = refused(
+        record(next_action=next_action(move="tasks", tasks=[])), WheypointRecord
+    )
+    assert blames(problems, "WheypointRecord.next_action.tasks"), problems
+
+    value = structured(
+        record(next_action=next_action(move="tasks", tasks=[task])), WheypointRecord
+    )
+    assert value.next_action.move is NextMove.TASKS
+    assert value.next_action.tasks is not None
+    [only] = value.next_action.tasks
+    assert (only.slug, only.intent, only.command) == (task["slug"], task["intent"], task["command"])
+
+
+def test_checkpoint_intent_refuses_an_empty_artifact_links_or_remove_artifact_links_list() -> None:
+    problems = refused(checkpoint_intent(artifact_links=[]), CheckpointIntent)
+    assert blames(problems, "CheckpointIntent.artifact_links"), problems
+
+    problems = refused(checkpoint_intent(remove_artifact_links=[]), CheckpointIntent)
+    assert blames(problems, "CheckpointIntent.remove_artifact_links"), problems
+
+
+def test_a_prior_record_payload_loads_with_v3_fields_at_their_defaults() -> None:
+    payload = record(schema_version=2)
+    loaded = load(payload, WheypointRecord, strict=True)
+    assert loaded.provenance is Provenance.PRIOR
+    assert loaded.value is not None, loaded.problems
+    assert loaded.value.notes is None
+    assert loaded.value.directives == []

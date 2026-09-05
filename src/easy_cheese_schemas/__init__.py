@@ -86,8 +86,10 @@ from easy_cheese_schemas.manifest import (
     WorkStatus,
 )
 from easy_cheese_schemas.pr_plan import PrGroup, PrPlan, PrShape
-from easy_cheese_schemas.wheypoint import (
+from easy_cheese_schemas.contracts import registered_contracts
+from easy_cheese_schemas.contracts import (  # wheypoint continuity types
     ArtifactLink,
+    CheckpointIntent,
     CompactionRecord,
     DecisionFork,
     DossierOption,
@@ -95,8 +97,10 @@ from easy_cheese_schemas.wheypoint import (
     EntryKind,
     EntryState,
     EntryTransition,
+    HandoffTask,
     NextAction,
     NextMove,
+    ParallelPlan,
     ProposedEntry,
     ProtectedEntry,
     RepositoryProvenance,
@@ -107,6 +111,7 @@ from easy_cheese_schemas.wheypoint import (
     WheypointRecord,
     WheypointRevision,
     WheypointStatus,
+    WorktreeStrategy,
 )
 
 from easy_cheese_schemas.artifacts import (
@@ -268,6 +273,7 @@ from easy_cheese_schemas.workflow import (
 __version__ = "1.1.0"
 
 __all__ = [
+    "registered_contracts",
     "BaselineCheck",
     "EvidenceOrigin",
     "GateDisposition",
@@ -291,6 +297,7 @@ __all__ = [
     "AttemptResult",
     "Baseline",
     "BaselineGate",
+    "CheckpointIntent",
     "CompactionRecord",
     "CurdBlock",
     "CurdRecord",
@@ -306,11 +313,13 @@ __all__ = [
     "EntryState",
     "EntryTransition",
     "GateFailure",
+    "HandoffTask",
     "Isolation",
     "Loaded",
     "ManifestLoadError",
     "NextAction",
     "NextMove",
+    "ParallelPlan",
     "PermissionEnforcement",
     "Permissions",
     "Phase",
@@ -337,6 +346,7 @@ __all__ = [
     "SessionProvenance",
     "Topology",
     "TransitionAction",
+    "WorktreeStrategy",
     "WheypointDelta",
     "WheypointProjection",
     "WheypointRecord",

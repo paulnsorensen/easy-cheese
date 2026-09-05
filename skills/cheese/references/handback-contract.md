@@ -118,11 +118,11 @@ Register their transitions before you route them through the writer.
   registered name) is rejected before lookup, so the accepted set never
   widens beyond the vocabulary above.
 - **Every preamble field is single-line** — `status`, `next`, `artifact`,
-  `orientation`, `taste_test`, `durable_flags`, `baseline` — a newline in any
+  `mode`, `orientation`, `taste_test`, `durable_flags`, `baseline` — a newline in any
   of them is a render-time contract violation, not a value that reaches the
   artifact.
 - **`reason` is the field name**; `halt_reason` is a deprecated read-only
-  alias kept for readers written against the pre-rename shape (`handoff_cli
+  alias kept for readers written against the pre-rename shape (`handoff
   parse` still publishes both JSON keys).
 
 ## CLI and router behavior

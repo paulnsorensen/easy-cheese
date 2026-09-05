@@ -11,7 +11,8 @@ from typing import cast
 
 import attrs
 import pytest
-from attrs import Attribute, evolve
+from attrs import evolve
+from attrs import Attribute
 from easy_cheese_schemas import (
     ArtifactLink,
     CompactionRecord,
@@ -149,9 +150,11 @@ def test_narrowed_delta_preserves_omitted_protected_state(
 def test_resolving_the_last_gate_must_clear_the_dossier_it_carried(
     store: storage.WorkStore, make_promotion: Callable[..., Promotion]
 ) -> None:
-    """Carry-forward keeps the dossier a silent delta did not speak about, and
-    an unanswered fork under `status: ok` is exactly the misfire the schema
-    now refuses -- so closing the last gate has to say so in the same delta."""
+    """ADR wheypoint-ergonomics-001: a dossier is required while something
+    gates, but nothing forces it to disappear once the last gate clears --
+    `_dossier_rule` only checks that direction. Resolving the last gate is
+    accepted outright, the fork it carried survives untouched, and clearing
+    the dossier explicitly in the same delta is equally legal."""
     seed = _seed(store, make_promotion, gating=True)
     resolve = EntryTransition(
         entry_id="q-durability",
@@ -159,18 +162,19 @@ def test_resolving_the_last_gate_must_clear_the_dossier_it_carried(
         rationale="canonical-local it is",
     )
 
-    with pytest.raises(commit.CommitError, match="does not produce a legal record"):
-        _ = commit.commit(
-            _delta(seed.record.revision_id, transitions=[resolve]), store=store
-        )
-
-    result = commit.commit(
-        _delta(seed.record.revision_id, transitions=[resolve], decision_dossier=[]),
-        store=store,
+    carried = commit.commit(
+        _delta(seed.record.revision_id, transitions=[resolve]), store=store
     )
 
-    assert result.record.decision_dossier == []
-    assert result.record.status is WheypointStatus.OK
+    assert carried.record.decision_dossier == seed.record.decision_dossier
+    assert carried.record.status is WheypointStatus.OK
+
+    cleared = commit.commit(
+        _delta(carried.record.revision_id, decision_dossier=[]), store=store
+    )
+
+    assert cleared.record.decision_dossier == []
+    assert cleared.record.status is WheypointStatus.OK
 
 
 def test_assigned_entry_ids_are_derived_from_the_request_not_the_clock(
@@ -313,13 +317,25 @@ def test_transition_of_an_already_settled_entry_is_refused(
 
 
 def test_a_delta_offers_no_way_to_remove_protected_state() -> None:
-    # Acceptance: generic deletion is unavailable, so every state change has to
-    # carry an entry id, an action, and a rationale.
+    # Acceptance: generic deletion is unavailable for protected entries --
+    # every state change has to carry an entry id, an action, and a
+    # rationale. Artifact links are not protected state (module docstring),
+    # so `remove_artifact_links` is the one legitimate "remove" field.
     field_names = {
         field.name
         for field in cast(tuple["Attribute[object]", ...], attrs.fields(WheypointDelta))
     }
-    assert not [name for name in field_names if "remove" in name or "delete" in name]
+    entry_field_names = {
+        name
+        for name in field_names
+        if any(
+            protected in name
+            for protected in ("decisions", "questions", "blockers", "directives")
+        )
+    }
+    assert not [
+        name for name in entry_field_names if "remove" in name or "delete" in name
+    ]
     assert "delete" not in {action.value for action in TransitionAction}
     with pytest.raises(TypeError):
         _ = EntryTransition(entry_id="d-keep", action=TransitionAction.RESOLVE)  # pyright: ignore[reportCallIssue]
@@ -799,11 +815,13 @@ def test_a_new_gating_blocker_derives_gated_and_needs_a_dossier(
     assert result.markdown.splitlines()[0] == f"status: gated: 1 open gating entry: {gate}"
 
 
-def test_added_artifact_links_append_to_the_ones_already_carried(
+def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
     store: storage.WorkStore,
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., Promotion],
 ) -> None:
+    """S4: links are a set keyed by path; an added link replaces its path's
+    carried link and is pinned to the revision being written (S3)."""
     carried = ArtifactLink(path=".cheese/cook/wave-2.md")
     added = ArtifactLink(path=".cheese/cook/wave-3.md", digest=PLACEHOLDER_DIGEST)
     seed = _seed(store, make_promotion, record=make_record(artifact_links=[carried]))
@@ -811,8 +829,30 @@ def test_added_artifact_links_append_to_the_ones_already_carried(
     result = commit.commit(
         _delta(seed.record.revision_id, add_artifact_links=[added]), store=store
     )
+    # The digest is host-computed (S3): a path that is not a file under the
+    # repository root carries none, whatever the caller supplied.
+    assert result.record.artifact_links == [
+        carried,
+        evolve(added, digest=None, revision_id=result.record.revision_id),
+    ]
 
-    assert result.record.artifact_links == [carried, added]
+    replaced = ArtifactLink(path=".cheese/cook/wave-2.md", covers_entry_ids=[])
+    second = commit.commit(
+        _delta(
+            result.record.revision_id,
+            add_artifact_links=[replaced],
+            remove_artifact_links=[".cheese/cook/wave-3.md"],
+        ),
+        store=store,
+    )
+    assert [link.path for link in second.record.artifact_links] == [".cheese/cook/wave-2.md"]
+    assert second.record.artifact_links[0].revision_id == second.record.revision_id
+
+    with pytest.raises(commit.CommitError, match="does not carry: '.cheese/cook/nope.md'"):
+        _ = commit.commit(
+            _delta(second.record.revision_id, remove_artifact_links=[".cheese/cook/nope.md"]),
+            store=store,
+        )
 
 
 def test_a_held_record_lock_blocks_the_transaction_until_it_is_released(
@@ -877,6 +917,8 @@ def _genesis_delta(**overrides: object) -> WheypointDelta:
             artifact=".cheese/cook/wheypoint-pyz-cli.md",
         ),
         "session_provenance": SessionProvenance(captured_at=GENESIS_CAPTURED_AT),
+        # AC-26: a first checkpoint must capture something beyond orientation.
+        "notes": "First record.",
     }
     fields.update(overrides)
     return _delta(commit.GENESIS_PARENT, **fields)

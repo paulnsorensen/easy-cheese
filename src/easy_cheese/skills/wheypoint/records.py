@@ -53,14 +53,56 @@ def _serialize(_instance: object, _attribute: object, value: object) -> object:
     return cast(object, value.value) if isinstance(value, Enum) else value
 
 
+# Fields added after schema_version 2 carry `metadata={"since": 3}` on the
+# producer side (ADR wheypoint-ergonomics-004). They are omitted from canonical
+# bytes while they hold their declared default, so a record or receipt written
+# by the v2 runtime re-serializes byte-identically and keeps its digests. The
+# rule is read from the field itself: a new field needs no entry here, and a
+# field without the marker is never omitted.
+_SINCE_KEY = "since"
+_COMPAT_VERSION = 2
+
+
+def _added_after_compat(attribute: object) -> bool:
+    metadata = cast(dict[str, object], getattr(attribute, "metadata", {}) or {})
+    since = metadata.get(_SINCE_KEY)
+    return isinstance(since, int) and since > _COMPAT_VERSION
+
+
+def _is_declared_default(attribute: object, value: object) -> bool:
+    default = cast(object, getattr(attribute, "default", attrs.NOTHING))
+    # attrs represents a factory default as a `Factory` instance; a list factory
+    # means "empty ledger", so only the empty list is the declared default.
+    if type(default).__name__ == "Factory":
+        return value == []
+    return value is default or (default is None and value is None)
+
+
+def _omit_v3_defaults(attribute: object, value: object) -> bool:
+    if _added_after_compat(attribute) and _is_declared_default(attribute, value):
+        return False
+    return True
+
+
 def unstructure(obj: AttrsInstance) -> dict[str, object]:
-    """A schema instance as plain JSON data, enums flattened to their values."""
-    return attrs.asdict(obj, recurse=True, value_serializer=_serialize)
+    """A schema instance as plain JSON data, enums flattened to their values.
+
+    Fields marked `since: 3` are dropped while at their declared default.
+    """
+    return attrs.asdict(
+        obj, recurse=True, value_serializer=_serialize, filter=_omit_v3_defaults
+    )
 
 
-def structure(payload: object, cls: type[T]) -> T:
-    """Structure `payload` into `cls` or raise with everything that was wrong."""
-    loaded = load(cast(dict[str, object], payload), cls, strict=True)
+def structure(payload: object, cls: type[T], *, forbid_unknown: bool = False) -> T:
+    """Structure `payload` into `cls` or raise with everything that was wrong.
+
+    `forbid_unknown` names every key `cls` cannot hold by its path; it is the
+    rule on every write path (S6), never on a read.
+    """
+    loaded = load(
+        cast(dict[str, object], payload), cls, strict=True, forbid_unknown=forbid_unknown
+    )
     if loaded.value is None:
         detail = "; ".join(loaded.problems) or "payload is not readable"
         raise RecordError(f"{cls.__name__}: {detail}")
@@ -92,8 +134,8 @@ def request_fingerprint(delta: WheypointDelta) -> str:
 
 
 def entries(record: WheypointRecord) -> tuple[ProtectedEntry, ...]:
-    """Every protected entry, decisions then questions then blockers."""
-    return (*record.decisions, *record.questions, *record.blockers)
+    """Every protected entry: decisions, questions, blockers, then directives."""
+    return (*record.decisions, *record.questions, *record.blockers, *record.directives)
 
 
 def find_entry(record: WheypointRecord, entry_id: str) -> ProtectedEntry | None:

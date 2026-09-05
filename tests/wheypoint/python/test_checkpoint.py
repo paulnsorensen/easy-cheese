@@ -60,6 +60,8 @@ def _first(**overrides: object) -> str:
         "working_context": ["src/easy_cheese/skills/wheypoint/checkpoint.py"],
         "next": "cook",
         "artifact": ".cheese/cook/wheypoint-checkpoint.md",
+        # AC-26: a first checkpoint must capture something beyond orientation.
+        "notes": "First record.",
     }
     payload.update(overrides)
     return _intent(**payload)
@@ -359,7 +361,7 @@ def test_omitted_protected_state_carries_forward() -> None:
         "checkpoint",
         stdin=_first(
             session={"captured_at": CAPTURED_AT},
-            add_decisions=[
+            entries=[
                 {"kind": "decision", "summary": "The kernel keeps every check."}
             ],
         ),
@@ -392,7 +394,7 @@ def test_retirement_still_needs_a_caller_authored_transition() -> None:
         "checkpoint",
         stdin=_first(
             session={"captured_at": CAPTURED_AT},
-            add_questions=[
+            entries=[
                 {
                     "kind": "question",
                     "summary": "Does binding weaken the stale-writer check?",
@@ -456,7 +458,7 @@ def test_a_gating_addition_derives_gated_status_and_a_projection(
         str(notes),
         stdin=_first(
             session={"captured_at": CAPTURED_AT},
-            add_blockers=[
+            entries=[
                 {
                     "kind": "blocker",
                     "summary": "The bundle manifest has not been regenerated.",
@@ -502,7 +504,7 @@ def test_mirror_failure_then_retry_resumes_the_committed_revision(
 
     monkeypatch.setattr(storage, "write_atomic", fail_mirror_once)
     intent = _intent(
-        add_questions=[
+        entries=[
             {
                 "kind": "question",
                 "summary": "Can the mirror be retried?",
@@ -570,7 +572,7 @@ def test_checkpoint_reports_a_work_id_that_is_not_a_path_segment() -> None:
     status, payload = _run("checkpoint", stdin=json.dumps({"work_id": "../escape"}))
 
     assert status == 1
-    assert _get(payload, "error", "code") == "storage-error"
+    assert _get(payload, "error", "code") == "invalid-intent"
 
 
 @pytest.mark.usefixtures("genesis")
@@ -630,4 +632,5 @@ def test_the_checkpoint_command_is_registered_for_the_bundle() -> None:
     from easy_cheese.skills.wheypoint import commands
 
     assert "checkpoint" in wheypoint.COMMANDS
-    assert [command.name for command in commands.COMMANDS] == list(wheypoint.COMMANDS)
+    # The bundle also registers the shared `handoff` command, which is not a runner here.
+    assert [command.name for command in commands.COMMANDS] == [*wheypoint.COMMANDS, "handoff"]

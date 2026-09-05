@@ -13,22 +13,11 @@ import json
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import cast
 
 import pytest
-from easy_cheese_schemas import (
-    ArtifactLink,
-    CompactionRecord,
-    DecisionFork,
-    EntryKind,
-    EntryTransition,
-    NextAction,
-    NextMove,
-    ProposedEntry,
-    SessionProvenance,
-    WheypointDelta,
-)
 
+from easy_cheese_schemas import CheckpointIntent
 from easy_cheese.skills.wheypoint import commit, records, storage, wheypoint
 
 from conftest import WORK_ID, Promotion
@@ -49,42 +38,10 @@ def _run(
     return status, json.loads(lines[0])
 
 
-class _DeltaFields(TypedDict):
-    work_id: str
-    expected_revision_id: str
-    orientation: str | None
-    working_context: list[str] | None
-    next_action: NextAction | None
-    decision_dossier: list[DecisionFork] | None
-    add_decisions: list[ProposedEntry] | None
-    add_questions: list[ProposedEntry] | None
-    add_blockers: list[ProposedEntry] | None
-    add_artifact_links: list[ArtifactLink] | None
-    transitions: list[EntryTransition] | None
-    compacted: bool
-    compaction: CompactionRecord | None
-    session_provenance: SessionProvenance | None
 
 
-def _genesis_delta(**overrides: object) -> WheypointDelta:
-    fields: dict[str, object] = {
-        "work_id": WORK_ID,
-        "expected_revision_id": commit.GENESIS_PARENT,
-        "orientation": "Wave 4 owns the CLI.\nThe second line is not the title.",
-        "working_context": ["src/wheypoint/wheypoint.py"],
-        "next_action": NextAction(
-            move=NextMove.COOK,
-            orientation="Ship the four commands.",
-            artifact=".cheese/cook/wheypoint-pyz-cli.md",
-        ),
-        "session_provenance": SessionProvenance(captured_at=CAPTURED_AT),
-    }
-    fields.update(overrides)
-    return WheypointDelta(**cast(_DeltaFields, cast(object, fields)))
 
 
-def _delta_json(delta: WheypointDelta) -> str:
-    return json.dumps(records.unstructure(delta))
 
 
 def _get(container: object, *path: str) -> object:
@@ -114,20 +71,17 @@ def store(corpus_root: Path) -> storage.WorkStore:
     return storage.WorkStore.open(WORK_ID, corpus_root=corpus_root)
 
 
-def test_commit_creates_the_first_record_from_a_genesis_delta_on_stdin(
+def test_checkpoint_creates_the_first_record_from_an_intent_on_stdin(
     store: storage.WorkStore,
 ) -> None:
-    delta = _genesis_delta(
-        add_decisions=[
-            ProposedEntry(kind=EntryKind.DECISION, summary="Four subcommands.")
-        ]
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(entries=[{"kind": "decision", "summary": "Four subcommands."}]),
     )
-
-    status, payload = _run("commit", stdin=_delta_json(delta))
 
     assert status == 0
     assert payload["ok"] is True
-    assert payload["command"] == "commit"
+    assert payload["command"] == "checkpoint"
     assert payload["replayed"] is False
     assert payload["work_id"] == WORK_ID
     assert payload["revision_number"] == 1
@@ -139,7 +93,7 @@ def test_commit_creates_the_first_record_from_a_genesis_delta_on_stdin(
     revision_id = payload["revision_id"]
     assert payload["projection_path"] == f"projections/1-{revision_id}.md"
     assert _get(payload, "record", "revision_id") == revision_id
-    assert _get(payload, "record", "title") == "Wave 4 owns the CLI."
+    assert _get(payload, "record", "title") == "Genesis orientation."
     assert _get(payload, "record", "created") == CAPTURED_AT
     decisions = cast(list[dict[str, object]], _get(payload, "record", "decisions"))
     assert [d["summary"] for d in decisions] == ["Four subcommands."]
@@ -152,19 +106,18 @@ def test_commit_creates_the_first_record_from_a_genesis_delta_on_stdin(
     assert payload["record"] == records.unstructure(written)
 
 
-def test_commit_replays_an_identical_request_instead_of_writing_twice(
+def test_checkpoint_replays_an_identical_request_instead_of_writing_twice(
     store: storage.WorkStore,
 ) -> None:
-    created = _run("commit", stdin=_delta_json(_genesis_delta()))[1]
-    body = _delta_json(
-        _genesis_delta(
-            expected_revision_id=created["revision_id"],
-            orientation="Submitted twice.",
-        )
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    body = _intent_json(
+        base_revision_id=created["revision_id"],
+        orientation="Submitted twice.",
+        session={"captured_at": CAPTURED_AT},
     )
 
-    first_status, first = _run("commit", stdin=body)
-    second_status, second = _run("commit", stdin=body)
+    first_status, first = _run("checkpoint", stdin=body)
+    second_status, second = _run("checkpoint", stdin=body)
 
     assert (first_status, second_status) == (0, 0)
     assert first["replayed"] is False
@@ -173,98 +126,86 @@ def test_commit_replays_an_identical_request_instead_of_writing_twice(
     assert len(list(store.revisions_dir.glob("*.json"))) == 2
 
 
-def test_commit_refuses_a_genesis_delta_over_a_live_record(
+def test_checkpoint_refuses_a_genesis_intent_over_a_live_record(
     store: storage.WorkStore,
 ) -> None:
-    _ = _run("commit", stdin=_delta_json(_genesis_delta()))
+    _ = _run("checkpoint", stdin=_first_intent())
     before = store.record_path.read_bytes()
 
     status, payload = _run(
-        "commit", stdin=_delta_json(_genesis_delta(orientation="A second creation."))
+        "checkpoint",
+        stdin=_first_intent(orientation="A second creation.", base_revision_id=commit.GENESIS_PARENT),
     )
 
     assert status == 1
     assert payload["ok"] is False
-    assert payload["command"] == "commit"
+    assert payload["command"] == "checkpoint"
     assert _get(payload, "error", "code") == "genesis-conflict"
     assert "never replaces a live one" in cast(str, _get(payload, "error", "message"))
     assert store.record_path.read_bytes() == before
 
 
 @pytest.mark.usefixtures("store")
-def test_commit_reports_a_stale_parent_as_its_own_code() -> None:
-    created = _run("commit", stdin=_delta_json(_genesis_delta()))[1]
+def test_checkpoint_reports_a_stale_parent_as_its_own_code() -> None:
+    created = _run("checkpoint", stdin=_first_intent())[1]
     _ = _run(
-        "commit",
-        stdin=_delta_json(
-            _genesis_delta(
-                expected_revision_id=created["revision_id"],
-                orientation="First writer wins.",
-            )
-        ),
+        "checkpoint",
+        stdin=_intent_json(base_revision_id=created["revision_id"], orientation="First writer wins."),
     )
 
     status, payload = _run(
-        "commit",
-        stdin=_delta_json(
-            _genesis_delta(
-                expected_revision_id=created["revision_id"],
-                orientation="Second writer loses.",
-            )
-        ),
+        "checkpoint",
+        stdin=_intent_json(base_revision_id=created["revision_id"], orientation="Second writer loses."),
     )
 
     assert status == 1
     assert _get(payload, "error", "code") == "stale-parent"
 
 
-def test_commit_refuses_a_delta_that_the_kernel_will_not_apply(
+def test_checkpoint_refuses_an_intent_without_a_next_move(
     store: storage.WorkStore,
 ) -> None:
-    status, payload = _run(
-        "commit",
-        stdin=_delta_json(_genesis_delta(next_action=None)),
-    )
+    intent = cast(dict[str, object], json.loads(_first_intent()))
+    del intent["next"], intent["artifact"]
+    status, payload = _run("checkpoint", stdin=json.dumps(intent))
 
     assert status == 1
-    assert _get(payload, "error", "code") == "commit-refused"
-    assert "next_action" in cast(str, _get(payload, "error", "message"))
+    assert _get(payload, "error", "code") == "invalid-intent"
+    assert "next" in cast(str, _get(payload, "error", "message"))
     assert store.read_record() is None
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_commit_refuses_stdin_that_is_not_json() -> None:
-    status, payload = _run("commit", stdin="not json at all")
+def test_checkpoint_refuses_stdin_that_is_not_json() -> None:
+    status, payload = _run("checkpoint", stdin="not json at all")
 
     assert status == 1
     assert _get(payload, "error", "code") == "invalid-json"
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_commit_refuses_json_that_is_not_a_delta() -> None:
-    status, payload = _run("commit", stdin=json.dumps({"work_id": WORK_ID}))
+def test_checkpoint_refuses_json_that_is_not_an_intent() -> None:
+    status, payload = _run("checkpoint", stdin=json.dumps({"work_id": WORK_ID, "bogus": 1}))
 
     assert status == 1
-    assert _get(payload, "error", "code") == "invalid-delta"
+    assert _get(payload, "error", "code") == "invalid-intent"
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_commit_refuses_a_work_id_that_is_not_a_safe_path_segment() -> None:
-    status, payload = _run(
-        "commit", stdin=json.dumps({"work_id": "../escape", "expected_revision_id": "genesis"})
-    )
+def test_checkpoint_refuses_a_work_id_that_is_not_a_safe_path_segment() -> None:
+    status, payload = _run("checkpoint", stdin=json.dumps({"work_id": "../escape"}))
 
     assert status == 1
-    assert _get(payload, "error", "code") in {"invalid-delta", "storage-error"}
+    assert _get(payload, "error", "code") in {"invalid-intent", "storage-error"}
 
 
-def test_commit_mirrors_the_projection_into_an_explicit_note_dir(
+def test_checkpoint_mirrors_the_projection_into_an_explicit_note_dir(
     store: storage.WorkStore, tmp_path: Path
 ) -> None:
     notes = tmp_path / "handoffs"
 
     status, payload = _run(
-        "commit", "--note-dir", str(notes), stdin=_delta_json(_genesis_delta())
+        "checkpoint", "--note-dir", str(notes), stdin=_first_intent()
     )
 
     assert status == 0
@@ -282,14 +223,14 @@ def test_commit_mirrors_the_projection_into_an_explicit_note_dir(
 
 
 @pytest.mark.usefixtures("store")
-def test_commit_replay_rewrites_the_identical_mirror(tmp_path: Path) -> None:
+def test_checkpoint_replay_rewrites_the_identical_mirror(tmp_path: Path) -> None:
     notes = tmp_path / "handoffs"
-    body = _delta_json(_genesis_delta())
+    body = _first_intent(base_revision_id=commit.GENESIS_PARENT)
 
-    first_status, first = _run("commit", "--note-dir", str(notes), stdin=body)
+    first_status, first = _run("checkpoint", "--note-dir", str(notes), stdin=body)
     mirror = notes / f"{WORK_ID}.md"
     written = mirror.read_bytes()
-    second_status, second = _run("commit", "--note-dir", str(notes), stdin=body)
+    second_status, second = _run("checkpoint", "--note-dir", str(notes), stdin=body)
 
     assert (first_status, second_status) == (0, 0)
     assert first["replayed"] is False
@@ -299,15 +240,15 @@ def test_commit_replay_rewrites_the_identical_mirror(tmp_path: Path) -> None:
 
 
 @pytest.mark.usefixtures("store")
-def test_commit_no_note_overrides_an_explicit_note_dir(tmp_path: Path) -> None:
+def test_checkpoint_no_note_overrides_an_explicit_note_dir(tmp_path: Path) -> None:
     notes = tmp_path / "handoffs"
 
     status, payload = _run(
-        "commit",
+        "checkpoint",
         "--note-dir",
         str(notes),
         "--no-note",
-        stdin=_delta_json(_genesis_delta()),
+        stdin=_first_intent(),
     )
 
     assert status == 0
@@ -318,8 +259,8 @@ def test_commit_no_note_overrides_an_explicit_note_dir(tmp_path: Path) -> None:
 
 
 @pytest.mark.usefixtures("store")
-def test_commit_outside_a_repository_writes_no_mirror(tmp_path: Path) -> None:
-    status, payload = _run("commit", stdin=_delta_json(_genesis_delta()))
+def test_checkpoint_outside_a_repository_writes_no_mirror(tmp_path: Path) -> None:
+    status, payload = _run("checkpoint", stdin=_first_intent())
 
     assert status == 0
     assert payload["note_path"] is None
@@ -328,7 +269,7 @@ def test_commit_outside_a_repository_writes_no_mirror(tmp_path: Path) -> None:
 
 
 @pytest.mark.usefixtures("store")
-def test_commit_defaults_the_mirror_to_the_enclosing_repository(
+def test_checkpoint_defaults_the_mirror_to_the_enclosing_repository(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     checkout = tmp_path / "checkout"
@@ -336,7 +277,7 @@ def test_commit_defaults_the_mirror_to_the_enclosing_repository(
     _ = subprocess.run(["git", "init", "--quiet"], cwd=checkout, check=True)
     monkeypatch.chdir(checkout)
 
-    status, payload = _run("commit", stdin=_delta_json(_genesis_delta()))
+    status, payload = _run("checkpoint", stdin=_first_intent())
 
     assert status == 0
     assert payload["durability"] == "repo-snapshot"
@@ -347,15 +288,15 @@ def test_commit_defaults_the_mirror_to_the_enclosing_repository(
 
 
 @pytest.mark.usefixtures("store")
-def test_commit_refuses_when_the_note_dir_cannot_be_created(tmp_path: Path) -> None:
+def test_checkpoint_refuses_when_the_note_dir_cannot_be_created(tmp_path: Path) -> None:
     blocker = tmp_path / "blocker"
     _ = blocker.write_text("not a directory\n", encoding="utf-8")
 
     status, payload = _run(
-        "commit",
+        "checkpoint",
         "--note-dir",
         str(blocker / "notes"),
-        stdin=_delta_json(_genesis_delta()),
+        stdin=_first_intent(),
     )
 
     assert status == 1
@@ -369,7 +310,7 @@ def test_commit_refuses_when_the_note_dir_cannot_be_created(tmp_path: Path) -> N
 
 @pytest.mark.usefixtures("store")
 def test_show_returns_the_current_record() -> None:
-    created = _run("commit", stdin=_delta_json(_genesis_delta()))[1]
+    created = _run("checkpoint", stdin=_first_intent())[1]
 
     status, payload = _run("show", "--work-id", WORK_ID)
 
@@ -402,7 +343,7 @@ def test_show_refuses_an_unsafe_work_id() -> None:
 
 @pytest.mark.usefixtures("store")
 def test_resolve_reports_a_committed_work_id_as_dispatchable() -> None:
-    created = _run("commit", stdin=_delta_json(_genesis_delta()))[1]
+    created = _run("checkpoint", stdin=_first_intent())[1]
 
     status, payload = _run("resolve", "--ref", WORK_ID)
 
@@ -516,7 +457,7 @@ def test_an_unknown_command_is_a_usage_error_in_the_same_json_shape() -> None:
     assert payload["ok"] is False
     assert payload["command"] == "unknown"
     assert _get(payload, "error", "code") == "usage"
-    assert "commit" in cast(str, _get(payload, "error", "message"))
+    assert "validate" in cast(str, _get(payload, "error", "message"))
 
 
 def test_a_missing_required_argument_is_a_usage_error_not_a_traceback() -> None:
@@ -532,7 +473,7 @@ def test_a_missing_required_argument_is_a_usage_error_not_a_traceback() -> None:
 def test_every_reply_is_one_line_of_sorted_json() -> None:
     out = io.StringIO()
     status = wheypoint.main(
-        ["commit"], stdin=io.StringIO(_delta_json(_genesis_delta())), stdout=out
+        ["checkpoint"], stdin=io.StringIO(_first_intent()), stdout=out
     )
     text = out.getvalue()
 
@@ -543,6 +484,543 @@ def test_every_reply_is_one_line_of_sorted_json() -> None:
     assert json.dumps(payload, sort_keys=True) + "\n" == text
 
 
-def test_the_command_surface_is_exactly_five_commands() -> None:
-    assert wheypoint.COMMANDS == ("checkpoint", "commit", "resolve", "show", "lint")
-    assert "create" not in wheypoint.COMMANDS
+def test_the_command_surface_is_exactly_nine_commands() -> None:
+    assert wheypoint.COMMANDS == (
+        "checkpoint", "validate", "schema", "resolve", "show", "lint", "list", "log", "turns",
+    )
+    assert "commit" not in wheypoint.COMMANDS and "create" not in wheypoint.COMMANDS
+
+
+# --------------------------------------------------------------------------
+# v3 write path (spec wheypoint-ergonomics, curd 2): tracer tests per AC.
+# --------------------------------------------------------------------------
+
+
+def _intent_json(**fields: object) -> str:
+    return json.dumps({"work_id": WORK_ID, **fields})
+
+
+def _first_intent(**fields: object) -> str:
+    base: dict[str, object] = {
+        "orientation": "Genesis orientation.\nNot the title.",
+        "working_context": ["src/easy_cheese/skills/wheypoint/checkpoint.py"],
+        "next": "cook",
+        "artifact": ".cheese/cook/wheypoint-ergonomics.md",
+        "notes": "First record.",
+        "session": {"captured_at": CAPTURED_AT},
+    }
+    base.update(fields)
+    return _intent_json(**base)
+
+
+def _error(payload: dict[str, object]) -> tuple[str, str]:
+    error = cast(dict[str, str], payload["error"])
+    return error["code"], error["message"]
+
+
+@pytest.mark.usefixtures("store")
+def test_ac1_an_unknown_key_is_refused_by_path_on_every_write_path() -> None:
+    status, payload = _run("checkpoint", stdin=_first_intent(bogus=1))
+    code, message = _error(payload)
+    assert (status, code) == (1, "invalid-intent")
+    assert "bogus" in message and "unknown field" in message
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(entries=[{"kind": "decision", "summary": "s", "nested_bogus": 1}]),
+    )
+    code, message = _error(payload)
+    assert (status, code) == (1, "invalid-intent")
+    assert "entries[" in message and "nested_bogus" in message
+
+    # AC-10: the raw-delta surface is gone, so checkpoint is the only write path.
+    status, payload = _run("commit", stdin="{}")
+    assert (status, _error(payload)[0]) == (2, "usage")
+
+
+@pytest.mark.usefixtures("store")
+def test_ac3_entries_are_promoted_per_kind_with_their_rationale() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[
+                {"kind": "decision", "summary": "Keep canonical JSON.", "rationale": "digests need it"},
+                {"kind": "question", "summary": "Bump or migrate?"},
+                {"kind": "blocker", "summary": "Bundle is stale.", "blocks_continuation": False},
+            ]
+        ),
+    )
+    assert status == 0, payload
+    decisions = cast(list[dict[str, object]], _get(payload, "record", "decisions"))
+    assert decisions[0]["rationale"] == "digests need it"
+    assert len(cast(list[object], _get(payload, "record", "questions"))) == 1
+    assert len(cast(list[object], _get(payload, "record", "blockers"))) == 1
+
+
+@pytest.mark.usefixtures("store")
+def test_ac25_a_directive_keeps_its_quote_and_is_carried_forward() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[{"kind": "directive", "summary": "Prose stays STE100.", "quote": "is it all in STE100?"}]
+        ),
+    )
+    assert status == 0, payload
+    directives = cast(list[dict[str, object]], _get(payload, "record", "directives"))
+    assert directives[0]["quote"] == "is it all in STE100?"
+    assert cast(str, directives[0]["entry_id"]).startswith("v-")
+
+    status, payload = _run("checkpoint", stdin=_intent_json(orientation="Says nothing new."))
+    assert status == 0, payload
+    assert cast(list[dict[str, object]], _get(payload, "record", "directives")) == directives
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(entries=[{"kind": "directive", "summary": "x", "blocks_continuation": True}]),
+    )
+    assert status == 1 and "directive" in _error(payload)[1]
+
+
+@pytest.mark.usefixtures("store")
+def test_ac8_notes_are_stored_and_carried_forward_when_omitted() -> None:
+    status, payload = _run("checkpoint", stdin=_first_intent(notes="Body of the record."))
+    assert status == 0 and _get(payload, "record", "notes") == "Body of the record."
+    status, payload = _run("checkpoint", stdin=_intent_json(orientation="Only orientation."))
+    assert status == 0 and _get(payload, "record", "notes") == "Body of the record."
+    status, payload = _run("checkpoint", stdin=_intent_json(notes="Replaced."))
+    assert status == 0 and _get(payload, "record", "notes") == "Replaced."
+
+
+@pytest.mark.usefixtures("store")
+def test_ac9_tasks_persist_typed_and_an_empty_tasks_move_is_refused() -> None:
+    task = {
+        "slug": "curd-a",
+        "intent": "cook",
+        "repo": "easy-cheese",
+        "branch": "cook/curd-a",
+        "branch_from": "main",
+        "command": "/cook .cheese/specs/curd-a.md",
+    }
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            next="tasks",
+            artifact=None,
+            tasks=[task],
+            parallel={"isolation": "worktree", "worktree_strategy": "create", "worktree_root": "../wt"},
+        ),
+    )
+    assert status == 0, payload
+    assert _get(payload, "record", "next_action", "tasks") == [{**task, "worktree": None}]
+    assert _get(payload, "record", "next_action", "parallel", "worktree_strategy") == "create"
+
+    status, payload = _run("checkpoint", stdin=_intent_json(next="tasks"))
+    assert status == 1 and "tasks must be non-empty when move is 'tasks'" in _error(payload)[1]
+    status, payload = _run("checkpoint", stdin=_intent_json(next="cook", artifact="x.md", tasks=[task]))
+    assert status == 1 and "tasks may only be set when move is 'tasks'" in _error(payload)[1]
+
+
+def test_ac4_ac5_ac6_ac23_artifact_links_are_a_set_pinned_by_the_host(
+    store: storage.WorkStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    doc = tmp_path / "doc.md"
+    _ = doc.write_text("hello\n", encoding="utf-8")
+
+    status, payload = _run("checkpoint", stdin=_first_intent(artifact_links=[{"path": "doc.md"}]))
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert links[0]["digest"] == storage.file_digest(doc)
+    assert links[0]["revision_id"] == _get(payload, "record", "revision_id")
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_intent_json(artifact_links=[{"path": "doc.md", "covers_entry_ids": cast(list[str], [])}]),
+    )
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert [link["path"] for link in links] == ["doc.md"]
+    assert links[0]["revision_id"] == _get(payload, "record", "revision_id")
+
+    before = store.read_record()
+    status, payload = _run("checkpoint", stdin=_intent_json(artifact_links=[]))
+    code, message = _error(payload)
+    assert (status, code) == (1, "invalid-intent") and "artifact_links" in message
+    assert store.read_record() == before
+
+    status, payload = _run("checkpoint", stdin=_intent_json(remove_artifact_links=["nope.md"]))
+    assert status == 1 and "does not carry" in _error(payload)[1]
+
+    status, payload = _run("checkpoint", stdin=_intent_json(remove_artifact_links=["doc.md"]))
+    assert status == 0 and _get(payload, "record", "artifact_links") == []
+
+
+@pytest.mark.usefixtures("store")
+def test_ac19_next_and_artifact_must_cohere() -> None:
+    status, payload = _run("checkpoint", stdin=_first_intent(next="affinage", artifact="a report"))
+    assert status == 1 and "PR#" in _error(payload)[1]
+    status, payload = _run("checkpoint", stdin=_first_intent(next="affinage", artifact="PR#615"))
+    assert status == 0, payload
+    status, payload = _run("checkpoint", stdin=_intent_json(next="cook"))
+    assert status == 1 and "artifact is required" in _error(payload)[1]
+
+
+@pytest.mark.usefixtures("store")
+def test_ac20_a_secret_pattern_refuses_the_checkpoint_naming_the_field() -> None:
+    token = "ghp_" + "a" * 36
+    status, payload = _run("checkpoint", stdin=_first_intent(orientation=f"token {token} pasted"))
+    code, message = _error(payload)
+    assert (status, code) == (1, "secret-pattern")
+    assert message.startswith("orientation (GitHub token)")
+
+
+def test_ac26_a_genesis_without_entries_or_notes_creates_no_store(
+    store: storage.WorkStore,
+) -> None:
+    intent = cast(dict[str, object], json.loads(_first_intent()))
+    del intent["notes"]
+    status, payload = _run("checkpoint", stdin=json.dumps(intent))
+    code, message = _error(payload)
+    assert (status, code) == (1, "commit-refused")
+    assert "first checkpoint must capture" in message
+    assert store.read_record() is None
+    assert not store.record_path.exists()
+
+
+def test_ac10_checkpoint_compacted_commits_a_compacted_delta(
+    store: storage.WorkStore, tmp_path: Path
+) -> None:
+    status, payload = _run("checkpoint", stdin=_first_intent())
+    assert status == 0, payload
+    current = store.read_record()
+    assert current is not None
+    proof = tmp_path / "proof.json"
+    _ = proof.write_text(
+        json.dumps(
+            {
+                "rehydrated_from_revision_id": current.revision_id,
+                "rehydrated_record_digest": records.record_digest(current),
+                "reconciled_entry_ids": [entry.entry_id for entry in records.entries(current)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    status, payload = _run(
+        "checkpoint",
+        "--compacted",
+        str(proof),
+        stdin=_intent_json(orientation="Rehydrated.", session={"harness": "claude", "session_id": "s-1"}),
+    )
+    assert status == 0, payload
+    revision = store.find_complete_revision(cast(str, payload["revision_id"]))
+    assert revision is not None and revision.compaction is not None
+    assert revision.compaction.rehydrated_from_revision_id == current.revision_id
+
+    _ = proof.write_text(json.dumps({"rehydrated_from_revision_id": current.revision_id}), encoding="utf-8")
+    status, payload = _run("checkpoint", "--compacted", str(proof), stdin=_intent_json(orientation="x"))
+    assert status == 1 and _error(payload)[0] == "invalid-compaction-proof"
+
+
+def test_ac10_commit_is_no_longer_a_listed_command() -> None:
+    from easy_cheese.skills.wheypoint import commands
+
+    assert "commit" not in wheypoint.COMMANDS
+    assert [command.name for command in commands.COMMANDS] == [
+        "checkpoint", "validate", "schema", "resolve", "show", "lint", "list", "log", "turns", "handoff",
+    ]
+
+
+def test_ac11_validate_reports_every_problem_and_never_opens_the_store(
+    store: storage.WorkStore,
+) -> None:
+    status, payload = _run("validate", stdin=_first_intent(bogus=1, compacted=True))
+    assert status == 1
+    problems = cast(list[str], _get(payload, "error", "problems"))
+    assert any("bogus" in p for p in problems) and any("compacted" in p for p in problems)
+    status, payload = _run("validate", stdin=_first_intent(next="affinage", artifact="x"))
+    assert status == 1
+    assert any("PR#" in p for p in cast(list[str], _get(payload, "error", "problems")))
+    assert not store.record_path.exists()
+
+    status, payload = _run("validate", stdin=_first_intent())
+    assert (status, payload["valid"]) == (0, True)
+    assert not store.record_path.exists()
+
+
+def test_ac12_schema_prints_the_registered_json_schema() -> None:
+    status, payload = _run("schema", "checkpoint-intent")
+    assert status == 0
+    schema = cast(dict[str, object], payload["schema"])
+    assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+    assert cast(str, schema["$id"]).endswith("/checkpoint-intent")
+    assert "work_id" in json.dumps(schema)
+
+    status, payload = _run("schema", "nope")
+    assert (status, _error(payload)[0]) == (1, "unknown-contract")
+    assert "checkpoint-intent" in cast(list[str], _get(payload, "error", "known"))
+
+
+def test_ac13_list_prints_one_line_per_work_item(corpus_root: Path) -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _ = _run("checkpoint", stdin=_first_intent(work_id="other-work", orientation="Other.\nMore."))
+
+    status, payload = _run("list")
+    assert status == 0
+    lines = cast(list[str], payload["lines"])
+    assert len(lines) == 2
+    assert lines[0].split("\t") == ["other-work", "1", "ok", "cook", "Other."]
+    assert lines[1].split("\t")[0] == WORK_ID
+    assert payload["corpus_root"] == str(corpus_root)
+
+
+@pytest.mark.usefixtures("store")
+def test_ac14_log_walks_revisions_oldest_first() -> None:
+    _ = _run("checkpoint", stdin=_first_intent(entries=[{"kind": "decision", "summary": "One."}]))
+    _ = _run("checkpoint", stdin=_intent_json(orientation="Second."))
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+    assert status == 0
+    lines = cast(list[str], payload["lines"])
+    assert len(lines) == 2
+    first, second = (line.split("\t") for line in lines)
+    assert first[0] == "1" and second[0] == "2"
+    assert first[2] == CAPTURED_AT and first[3] == "+1" and first[4] == "~0" and first[5] == "-"
+    assert second[3] == "+0"
+
+    status, payload = _run("log", "--work-id", "never-written")
+    assert (status, _error(payload)[0]) == (1, "record-missing")
+
+
+def _transcript(path: Path) -> None:
+    entries = [
+        {"type": "user", "timestamp": "2026-09-05T06:17:04Z", "message": {"content": "What are our gh issues?"}},
+        {"type": "assistant", "timestamp": "2026-09-05T06:17:10Z", "message": {"content": [{"type": "text", "text": "ignored"}]}},
+        {"type": "user", "timestamp": "2026-09-05T06:18:00Z", "message": {"content": [{"type": "tool_result", "content": "x"}]}},
+        {"type": "user", "timestamp": "2026-09-05T06:18:30Z", "message": {"content": "<system-reminder>not the user</system-reminder>"}},
+        {"type": "user", "timestamp": "2026-09-05T06:19:00Z", "message": {"content": [{"type": "text", "text": "Base directory for this skill: /x"}]}},
+        {"type": "user", "timestamp": "2026-09-05T06:20:00Z", "message": {"content": [{"type": "text", "text": "Double down on ergonomics."}]}},
+    ]
+    _ = path.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+
+
+def test_ac27_turns_prints_the_users_turns_from_a_transcript(tmp_path: Path) -> None:
+    transcript = tmp_path / "s.jsonl"
+    _transcript(transcript)
+    status, payload = _run("turns", "--transcript", str(transcript))
+    assert status == 0
+    assert cast(list[str], payload["lines"]) == [
+        "2026-09-05T06:17:04Z\tWhat are our gh issues?",
+        "2026-09-05T06:20:00Z\tDouble down on ergonomics.",
+    ]
+    status, payload = _run("turns", "--transcript", str(tmp_path / "missing.jsonl"))
+    assert (status, _error(payload)[0]) == (1, "transcript-missing")
+    assert str(tmp_path / "missing.jsonl") in _error(payload)[1]
+
+
+def test_ac28_turns_derives_the_projects_dir_and_never_guesses_a_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    cwd = tmp_path / "Dev" / "easy.cheese_x"
+    cwd.mkdir(parents=True)
+    projects = home / ".claude" / "projects" / str(cwd).replace("/", "-").replace(".", "-").replace("_", "-")
+    projects.mkdir(parents=True)
+    _transcript(projects / "aaa.jsonl")
+    _transcript(projects / "bbb.jsonl")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(cwd)
+
+    status, payload = _run("turns")
+    assert (status, _error(payload)[0]) == (1, "session-required")
+    candidates = cast(list[dict[str, str]], _get(payload, "error", "candidates"))
+    assert sorted(c["session"] for c in candidates) == ["aaa", "bbb"]
+    assert all(c["modified"].endswith("Z") for c in candidates)
+
+    status, payload = _run("turns", "--session", "bbb")
+    assert status == 0 and payload["transcript"] == str(projects / "bbb.jsonl")
+    assert (payload["count"], payload["skipped_lines"]) == (2, 0)
+
+# --- cure of the curd 2/3 review ------------------------------------------
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_secret_scan_covers_every_string_field() -> None:
+    token = "ghp_" + "b" * 36
+    task = {"slug": "s", "intent": "cook", "repo": "r", "branch": "b", "branch_from": "main", "command": f"/cook --token {token}"}
+    status, payload = _run("checkpoint", stdin=_first_intent(next="tasks", artifact=None, tasks=[task]))
+    code, message = _error(payload)
+    assert (status, code) == (1, "secret-pattern") and message.startswith("tasks[0].command")
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            decision_dossier=[{"fork": "f", "options": [{"option": "o", "evidence": [f"AKIA{'C' * 16}"], "breaks": "x"}], "prior_leaning": None}],
+            entries=[{"kind": "question", "summary": "q", "blocks_continuation": True}],
+        ),
+    )
+    assert status == 1 and _error(payload)[1].startswith("decision_dossier[0].options[0].evidence[0]")
+
+
+def test_cure_a_compaction_proof_is_part_of_the_request_identity(
+    store: storage.WorkStore,
+) -> None:
+    """The pending-mirror ledger key differs with and without a proof (dead-store regression)."""
+    from easy_cheese_schemas import CompactionRecord
+
+    _ = _run("checkpoint", stdin=_first_intent())
+    current = store.read_record()
+    assert current is not None
+    intent = records.structure(cast(object, json.loads(_intent_json(orientation="Same words."))), CheckpointIntent)
+    proof = CompactionRecord(
+        rehydrated_from_revision_id=current.revision_id,
+        rehydrated_record_digest=records.record_digest(current),
+        reconciled_entry_ids=[e.entry_id for e in records.entries(current)],
+    )
+    without = wheypoint.request_identity_for(intent, None)
+    with_proof = wheypoint.request_identity_for(intent, proof)
+    assert without != with_proof
+    assert without == wheypoint.request_identity_for(intent, None)
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_pr_urls_with_a_trailing_route_satisfy_the_affinage_gate() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(next="affinage", artifact="https://github.com/o/r/pull/12/files"),
+    )
+    assert status == 0, payload
+
+
+def test_cure_turns_strips_host_wrappers_but_keeps_the_users_words(tmp_path: Path) -> None:
+    transcript = tmp_path / "s.jsonl"
+    entries = [
+        {"type": "user", "timestamp": "t1", "message": {"content": "<system-reminder>ignored</system-reminder>Pull the ten turns in too."}},
+        {"type": "user", "timestamp": "t2", "message": {"content": "Curdle.\n<task-notification><task-id>x</task-id></task-notification>"}},
+        {"type": "user", "timestamp": "t3", "message": {"content": "<local-command-stdout></local-command-stdout>"}},
+    ]
+    _ = transcript.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+    status, payload = _run("turns", "--transcript", str(transcript))
+    assert status == 0
+    assert cast(list[str], payload["lines"]) == ["t1\tPull the ten turns in too.", "t2\tCurdle."]
+
+
+def test_cure_turns_refuses_a_session_id_that_escapes_the_projects_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    status, payload = _run("turns", "--session", "../../etc/passwd")
+    assert (status, _error(payload)[0]) == (1, "invalid-session")
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_artifact_digests_resolve_from_the_repository_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = tmp_path / "checkout"
+    (checkout / "sub").mkdir(parents=True)
+    _ = subprocess.run(["git", "init", "--quiet"], cwd=checkout, check=True)
+    doc = checkout / "doc.md"
+    _ = doc.write_text("root-relative\n", encoding="utf-8")
+    monkeypatch.chdir(checkout / "sub")
+    status, payload = _run("checkpoint", "--no-note", stdin=_first_intent(artifact_links=[{"path": "doc.md"}]))
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert links[0]["digest"] == storage.file_digest(doc)
+
+# --- cure of the whole-diff review ------------------------------------------
+
+
+def _tasks_intent(**fields: object) -> str:
+    task = {"slug": "s", "intent": "cook", "repo": "r", "branch": "b", "branch_from": "main", "command": "/cook s"}
+    return _first_intent(
+        next="tasks",
+        artifact=None,
+        tasks=[task],
+        parallel={"isolation": "wt", "worktree_strategy": "create", "worktree_root": "../wt"},
+        **fields,
+    )
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_a_tasks_projection_parses_and_lints_clean() -> None:
+    from easy_cheese.skills.wheypoint import lint, projection
+
+    status, payload = _run("checkpoint", stdin=_tasks_intent())
+    assert status == 0, payload
+    markdown = cast(str, payload["markdown"])
+    parsed = projection.parse(markdown)
+    assert parsed.next_action.tasks is not None and parsed.next_action.tasks[0].command == "/cook s"
+    assert parsed.next_action.parallel is not None and parsed.next_action.parallel.worktree_root == "../wt"
+    assert lint.lint_projection_text(markdown).findings == ()
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_validate_reports_next_action_and_delta_invariants() -> None:
+    status, payload = _run("validate", stdin=_first_intent(next="tasks", artifact=None))
+    assert status == 1
+    assert any("tasks must be non-empty" in p for p in cast(list[str], _get(payload, "error", "problems")))
+    status, payload = _run("validate", stdin=_first_intent(expected_revision_id="rev-000000000000"))
+    problems = cast(list[str], _get(payload, "error", "problems"))
+    assert status == 1 and len([p for p in problems if "expected_revision_id" in p]) == 1
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_a_task_command_must_be_a_skill_dispatch() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(next="tasks", artifact=None, tasks=[{"slug": "s", "intent": "cook", "repo": "r", "branch": "b", "branch_from": "main", "command": "rm -rf /"}]),
+    )
+    assert status == 1 and "tasks[0].command is not a skill dispatch" in _error(payload)[1]
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_single_line_fields_refuse_newlines() -> None:
+    status, payload = _run("checkpoint", stdin=_first_intent(artifact_links=[{"path": "a.md\n## Decision dossier"}]))
+    assert status == 1 and "must be a single line" in _error(payload)[1]
+    status, payload = _run("checkpoint", stdin=_first_intent(artifact="x.md\nmode: parallel"))
+    assert status == 1 and "must be a single line" in _error(payload)[1]
+
+
+@pytest.mark.usefixtures("store")
+@pytest.mark.parametrize(
+    ("label", "text"),
+    [
+        # Assembled at runtime so no literal in the repo looks like a live credential.
+        ("Slack webhook", "https://hooks." + "slack.com/services/" + "T000/B000/" + "X" * 24),
+        ("Google API key", "AIza" + "A" * 35),
+        ("JWT or bearer token", ".".join(("eyJ" + "a" * 20, "eyJ" + "b" * 20, "c" * 40))),
+        ("URL with basic-auth credentials", "https://user:hunter2hunter2@example.com/repo"),
+        ("credential assignment", "api_key = abcdefghijklmnop"),
+    ],
+)
+def test_cure_secret_patterns_cover_the_common_shapes(label: str, text: str) -> None:
+    status, payload = _run("checkpoint", stdin=_first_intent(notes=f"pasted {text} here"))
+    code, message = _error(payload)
+    assert (status, code) == (1, "secret-pattern") and message.startswith(f"notes ({label})")
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_validate_reports_every_secret_not_just_the_first() -> None:
+    token = "ghp_" + "c" * 36
+    status, payload = _run("validate", stdin=_first_intent(orientation=f"a {token}", notes=f"b {token}"))
+    problems = cast(list[str], _get(payload, "error", "problems"))
+    assert status == 1 and sum("looks like a credential" in p for p in problems) == 2
+
+
+def test_cure_turns_counts_unreadable_lines(tmp_path: Path) -> None:
+    transcript = tmp_path / "s.jsonl"
+    _transcript(transcript)
+    with transcript.open("a", encoding="utf-8") as handle:
+        _ = handle.write('{"type": "user", "timestamp": "t9", "message": {"content": "truncated')
+    status, payload = _run("turns", "--transcript", str(transcript))
+    assert status == 0 and (payload["count"], payload["skipped_lines"]) == (2, 1)
+
+
+def test_cure_enumerate_ignores_directories_that_are_not_work_ids(corpus_root: Path) -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    rogue = corpus_root / storage.WORK_DIRNAME / "Not_A_Work-ID"
+    rogue.mkdir(parents=True)
+    _ = (rogue / storage.RECORD_FILENAME).write_text("{}", encoding="utf-8")
+    status, payload = _run("list")
+    assert status == 0
+    assert [line.split("\t")[0] for line in cast(list[str], payload["lines"])] == [WORK_ID]
