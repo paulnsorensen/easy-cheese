@@ -20,7 +20,7 @@ Each failed check summary includes approximately 10 final log lines.
   Exit 2 identifies a missing `gh` binary.
   Write `status: halt: pr-status-unavailable` and stop.
 
-## Step 3 — Fresh-window review
+## Step 3 — Fresh review
 
 Score the PR diff with the `review-surface` command.
 Run `python3 skills/affinage/scripts/affinage.pyz review-surface --repo . <base>...HEAD`.
@@ -53,9 +53,9 @@ Then treat each `/age` finding as an additional claim.
 - Grade every failed check, including build, compile, lint, type, and test failures.
 - Send failed checks to `/cure` like test failures.
 - Tag each CI finding with `[from-check:<job>]`.
-- Keep the existing dimension and severity for each fresh `/age` finding.
-- Tag each fresh finding with `[from-age:<dimension>]`.
-- Remove duplicate fresh findings when a reviewer reports the same defect.
+- Keep the existing dimension and severity for each fresh review finding.
+- Tag each fresh review finding with `[from-age:<dimension>]`.
+- Remove a duplicate fresh review finding when a reviewer reports the same defect.
 - Keep the reviewer claim because it requires a reply.
 - Record `CHANGES_REQUESTED` as `reviewer-asserted:` metadata.
 - Do not use reviewer urgency to calculate severity.
@@ -65,14 +65,15 @@ Use these report sections:
 - Put grounded claims with contained fixes in `## Blocker`, `## High`, `## Medium`, or `## Low`.
   Add a `[<dimension>:<severity>]` tag to each claim.
   Map style and quality claims to `deslop`.
-  Keep `[from-comment:<id>]` so `/cure` can reply.
+  Add a `source: from-comment:<id>` line so `/cure` can reply.
   Prefer a cheap fix to push-back.
 - Put plausible claims that need outside evidence in `## Needs-investigation`.
 - Put wrong or unsupported claims in `## Reviewer-rejected`.
 - Also put valid but large claims in `## Reviewer-rejected`.
   Large claims have `fix-cost-now: moderate` or `sprawling`.
   Structural later work is also large.
-  Reject wrong claims and defer large claims.
+  Reject a wrong claim.
+  Defer a large claim.
 
 ## Step 9 — Reply rules
 

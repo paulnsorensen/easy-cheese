@@ -24,7 +24,7 @@ Its entry path controls whether it also finds new `/age` findings:
 - **Chained** — `/cook` or `/cure` supplies `handoff_context`.
   Skip the fresh review because `/age` already ran in this chain.
 
-See `## Fresh-window review` for the entry rule.
+See `## Fresh review` for the entry rule.
 See `## Merge-conflict resolution` for the conflict path.
 
 ## Inputs
@@ -33,41 +33,49 @@ See `## Merge-conflict resolution` for the conflict path.
 /affinage [<pr-ref>] [--auto --stake <floor>] [--plate] [--safe] [--open-pr] [--hard] [--full] [--include-outdated]
 ```
 
-`<pr-ref>` accepts a PR number or a full GitHub PR URL.
+`<pr-ref>` accepts a PR number, a `PR#<n>` reference, or a full GitHub PR URL.
+Extract the integer before you call `pr-status`.
+The command accepts only the integer.
 If no reference exists, run `gh pr view --json number` on the current branch.
 
 Flags:
 
 - `--auto --stake <floor>` — Run without selection prompts.
   `<floor>` accepts `blocker`, `high`, `medium+`, or `all`.
+  Bare `--auto` uses the `medium+` default floor.
   Use the same floor rules as `/cure`.
-  Send `/cure --auto --stake <floor>` and post replies without prompts.
+  Send `/cure --auto --stake <floor>`.
+  Post replies without prompts.
   See `references/auto-mode.md`.
 - `--safe` — Add gates before cure selection and conflict resolution.
   This flag does not remove the default reply gate.
 - `--open-pr` — Let terminal `/plate` open a new PR when no PR exists.
   Without this flag, `/plate` only updates an open PR.
 - `--plate` — Run `--auto --stake medium+ --open-pr`.
-  Grade claims, cure the selected findings, post replies, and run `/plate`.
+  Grade the claims.
+  Cure the selected findings.
+  Post the replies.
+  Then run `/plate`.
   An explicit `--stake <floor>` replaces `medium+`.
 - `--hard` — Pass the metacognitive gate flag to terminal `/plate`.
 - `--full` — Show all low findings when at least 10 low findings exist.
 - `--include-outdated` — Include outdated review threads.
-- `--no-age` — Skip the fresh `/age` pass in standalone mode.
+- `--no-age` — Skip the fresh review in standalone mode.
   This flag has no effect in chained mode.
 
 Read [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for portability rules.
 It covers helper resolution, agent dispatch, GitHub operations, and handoff transitions.
 Use the bundle or repository helper first.
-Use `${CLAUDE_SKILL_DIR}` only as an optional host fallback.
+Do not use the `${CLAUDE_SKILL_DIR}` environment variable in an invocation path.
 The handoff blocks below define the portable contract.
-The phrase "slash commands are host renderings, not the control model" defines the host rule.
+The rule "slash commands are host renderings, not the control model" applies here.
 
 ## Flow
 
 Read `references/flow-details.md` for exact commands, exit codes, and grading reasons.
 
 1. **Resolve PR.** Use `<pr-ref>` or `gh pr view --json number`.
+   Normalize a `PR#<n>` reference or a PR URL to its integer.
    Resolve `<owner>/<repo>` from the Git remote.
 2. **Fetch PR status.** Run `affinage.pyz pr-status <pr>`.
    Exit 3 stops with `status: halt: pr-status-logs-expired`.
@@ -81,7 +89,8 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
 4. **Fetch comments.** Fetch inline threads from `pulls/<pr>/comments`.
    Skip comments with `position: null` unless the user passes `--include-outdated`.
    Fetch review bodies from `pulls/<pr>/reviews`.
-   Keep nonempty bodies and remove duplicates by `pull_request_review_id`.
+   Keep each nonempty body.
+   Remove duplicates by `pull_request_review_id`.
 5. **Skip answered threads.** Skip a thread when the resolved GitHub handle wrote its latest comment.
    Render the footer as `agent on behalf of <handle>`.
 6. **Grade claims.** Classify each claim by the `/age` dimension and severity rules.
@@ -94,21 +103,23 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
    Add the `/age` report body and two affinage sections.
    See `## Output`.
 8. **Act or ask.** Follow `## Handoff`.
-9. **Handle non-cure replies.** Draft replies for rejected and investigation claims.
-   Require the reply gate unless `--auto` is active.
-   Post approved replies with `affinage.pyz post-reply`.
+9. **Draft non-cure replies.** Draft replies for rejected and investigation claims.
    Do not reply to CI or fresh-review findings.
-10. **Handle cure replies.** Run this step only after `/cure`.
+10. **Draft cure replies.** Run this step only after `/cure`.
     Read `### Applied` and `### Deferred` from `.cheese/cure/pr-<n>.md`.
-    Reply `Fixed — <applied summary>.` for applied comment findings.
-    Reply `Attempted fix reverted — <reason>.` for deferred comment findings.
-11. **Publish.** Run this step only after all approved replies post.
-    Require `/cure` to apply at least one fix.
+    Draft `Fixed — <applied summary>.` for applied comment findings.
+    Draft `Attempted fix reverted — <reason>.` for deferred comment findings.
+11. **Post replies.** Show one reply gate for every drafted reply.
+    Skip the gate only when `--auto` is active.
+    Post approved replies with `affinage.pyz post-reply`.
+12. **Publish.** Run this step only after all approved replies post.
+    Publish when `/cure` applies at least one fix.
+    Also publish when `/melt` resolved a merge conflict.
     Send terminal `/plate [--open-pr] [--hard] [--safe]`.
     Then run the post-PR learning write-back from `../cure/SKILL.md`.
-    Skip publication and write-back when `/cure` applies no fix.
+    Skip publication and write-back when the working tree has no change.
 
-## Fresh-window review
+## Fresh review
 
 Standalone mode calls the router with `entry="affinage"`.
 Pass the PR reference and the router values to `/age`.
@@ -130,6 +141,8 @@ Do not resolve conflicts by hand.
 Default and `--auto` modes run checkout and `/melt` before `/cure`.
 `--safe` requires the handoff gate first.
 If `/melt` fails, write `status: halt: merge-conflicts-need-human` and stop.
+`/melt` leaves the resolution uncommitted.
+Terminal `/plate` commits and pushes that resolution.
 See `references/merge-conflict.md`.
 
 ## Sub-agent context gate
@@ -165,7 +178,8 @@ Use these affinage tools:
 Write the report to `.cheese/affinage/pr-<n>.md`.
 Start with the four-line handoff slug.
 Then add the `/age` report body and the `## PR status` section.
-Use the severity, `## Needs-investigation`, and `## Reviewer-rejected` sections from `/age`.
+Use the severity sections from `/age`.
+Add the `## Needs-investigation` and `## Reviewer-rejected` sections from `/affinage`.
 See `references/report-template.md`.
 
 ```markdown
@@ -179,7 +193,7 @@ Use the canonical `status:` grammar from the [handback contract](../cheese/refer
 Only `next:` and the extra keyed lines are phase-specific.
 Omit empty sections.
 Use `status: ok` after grading completes.
-Use `halt: <reason>` when `gh` or `pr-status` fails.
+Use `status: halt: <reason>` when `gh` or `pr-status` fails.
 Set `next:` by the rules in `## Handoff`.
 
 ## Handoff
@@ -191,18 +205,22 @@ By default, affinage acts without a prompt.
 Ask only when the selected fix is large, findings conflict, or `--safe` is active.
 
 - **Severity findings exist.** Calculate the recommended `all-medium, cheap` selection.
-  Without an ask reason, announce the selection and send `/cure` the locked `handoff_context`.
-  Then show the reply gate before you post.
+  Without an ask reason, announce the selection.
+  Then send `/cure` the locked `handoff_context`.
+  Then show one reply gate for every drafted reply.
+  That gate covers the applied, deferred, push-back, and investigation replies.
   With an ask reason, show the cure selection gate instead.
   Use the shared gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md).
   Preselect the composite and identify large rows.
   `--auto` skips both gates.
 - **Only rejected or investigation claims exist.** Do not call `/cure`.
-  Show the reply gate and wait for a selection.
+  Show the reply gate.
+  Then wait for a selection.
   `--auto` skips this gate.
 
 Post approved replies after the selection.
-Run terminal `/plate [--open-pr] [--hard] [--safe]` only when `/cure` applies a fix.
+Run terminal `/plate [--open-pr] [--hard] [--safe]` only when the working tree has a change.
+A resolved merge conflict is such a change.
 Set `status: ok / next: done` when no action remains.
 
 Set `next: cure` when at least one finding meets the `medium+` floor.
@@ -214,13 +232,13 @@ Also set `next: done` when the selected findings are empty.
 Skip the selection gate.
 Resolve merge conflicts through `/melt` first.
 Stop with `status: halt: merge-conflicts-need-human` when conflicts remain.
-Run the fresh `/age` pass in standalone mode.
+Run the fresh review in standalone mode.
 Select each finding that meets `<floor>`.
 `--plate` uses `--stake medium+ --open-pr`.
 Send `/cure --auto --stake <floor>`.
 Post replies for the original graded claims after the cure chain stops.
 Then run terminal `/plate --open-pr [--hard]` after every reply posts.
-Skip `/plate` when `/cure` applies no fix.
+Skip `/plate` when the working tree has no change.
 If no finding meets the floor, skip `/cure`.
 Post only rejection and investigation replies.
 Exit with `status: ok / next: done`.

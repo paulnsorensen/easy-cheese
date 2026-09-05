@@ -8,7 +8,7 @@ This file defines each step.
 - Skip the selection gate.
 - Send merge conflicts to `/melt` before `/cure`.
 - Stop with `status: halt: merge-conflicts-need-human` when `/melt` cannot resolve them.
-- Run fresh `/age` in standalone mode unless the user passes `--no-age`.
+- Run the fresh review in standalone mode unless the user passes `--no-age`.
 - Add `[from-age:…]` findings to the automatic selection.
 - Select every finding that meets the floor.
 - Include cheap, contained low findings when the floor is `medium+`.
@@ -22,7 +22,8 @@ This file defines each step.
 - Use `Needs <evidence> to confirm — will follow up with the result.`
 - Do not run the investigation in auto mode.
 - Post all replies before terminal `/plate` publishes fixes.
-- Send terminal `/plate --open-pr [--hard]` only when `/cure` applies a fix.
+- Send terminal `/plate --open-pr [--hard]` only when the working tree has a change.
+- Treat a merge conflict that `/melt` resolved as such a change.
 
 Keep the complete cure chain in the parent affinage context.
 The parent must retain finding slugs, comment identifiers, tags, and reply text.

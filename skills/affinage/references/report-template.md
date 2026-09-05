@@ -4,6 +4,13 @@ Use this example for `.cheese/affinage/pr-<n>.md`.
 Keep the four-line handoff slug from `SKILL.md` before these sections.
 Downstream skills parse that slug.
 
+Each severity bullet uses the shared finding grammar.
+The bullet holds one `[<dimension>:<severity>]` tag, then the location in backticks, then the summary.
+`/cure` parses that grammar with `findings-cli`.
+Put the provenance tag on an indented `source:` line under the bullet.
+The `## Needs-investigation` and `## Reviewer-rejected` sections do not use this grammar.
+`/cure` does not parse those two sections.
+
 ```markdown
 # Affinage Report — PR #<n>
 
@@ -17,18 +24,22 @@ Downstream skills parse that slug.
 - Fresh review: ran /age (N findings) | skipped (chained) | skipped (--no-age)
 
 ## Blocker
-- **[from-comment:<id>] [security:blocker]** alice on `src/auth.ts:42` — The code parses a token without validation.
+- **[security:blocker]** `src/auth.ts:42` — The code parses a token without validation.
+  - source: from-comment:<id> · author: alice
   - location: contract · fix-cost-now: contained · fix-cost-later: structural · confidence: certain
   - reviewer-asserted: changes-requested
   - recommendation: Validate `authorization`. Return 401 when the header is absent.
-- **[from-check:test-suite] [correctness:blocker]** CI job `test-suite` — Three tests fail in `tests/auth.test.ts`.
+- **[correctness:blocker]** `tests/auth.test.ts` — Three tests fail in CI job `test-suite`.
+  - source: from-check:test-suite
   - location: contract · fix-cost-now: contained · fix-cost-later: structural · confidence: certain
   - recommendation: Add the absent null check. Then run the tests again.
-- **[from-check:build] [correctness:blocker]** CI job `build` — `tsc` reports `src/auth.ts:42: 'token' is possibly undefined`.
+- **[correctness:blocker]** `src/auth.ts:42` — `tsc` reports `'token' is possibly undefined` in CI job `build`.
+  - source: from-check:build
   - location: contract · fix-cost-now: contained · fix-cost-later: structural · confidence: certain
   - recommendation: Narrow `token` before use. The build cannot pass until this compiles.
-- **[from-age:efficiency] [efficiency:high]** fresh review — `src/api/users.ts:88` fetches the user in each loop iteration.
-  - location: hot path · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
+- **[efficiency:high]** `src/api/users.ts:88` — The fresh review found a user fetch in each loop iteration on the hot path.
+  - source: from-age:efficiency
+  - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
   - recommendation: Move the fetch before the loop.
 
 ## High
@@ -38,14 +49,15 @@ Downstream skills parse that slug.
 ... (use the same format)
 
 ## Low
-- **[from-comment:<id>] [deslop:low]** copilot on `src/utils/format.ts:18` — Rename `data` to `lineItems`.
+- **[deslop:low]** `src/utils/format.ts:18` — The name `data` does not state what the value holds.
+  - source: from-comment:<id> · author: copilot
   - location: class · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
   - recommendation: Rename `data` to `lineItems`. Send this cheap fix to `/cure`.
 ... (use the same format; collapse it by the --full rules)
 
 ## Needs-investigation
 - **[from-comment:<id>]** bob on `src/api/users.ts:108` — "This might break the analytics pipeline."
-  - reason: The claim is plausible, but the pipeline is in another repository.
+  - reason: The claim is plausible. The pipeline is in another repository.
   - suggested action: Read `analytics-svc/consumers/users.ts`.
 
 ## Reviewer-rejected
@@ -74,3 +86,6 @@ Use the confidence scale from `../../age/references/voice.md`.
 Use `certain` when direct evidence confirms the defect.
 Use `speculating` when indirect evidence supports the defect.
 Put a `don't know` claim in `## Needs-investigation`, not a severity section.
+
+Use only `class`, `module`, `cross-module`, or `contract` for `location:`.
+See [`../../age/references/dimensions.md`](../../age/references/dimensions.md).
