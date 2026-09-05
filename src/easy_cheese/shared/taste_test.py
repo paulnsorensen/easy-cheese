@@ -121,12 +121,11 @@ NOT_APPLICABLE_REFLECTIONS = tuple(
     location for location in REFLECTIONS if location != "test-contract"
 )
 # The pinned goal lives outside the reflection set: forks never reflect into it,
-# but the ledger's `goal` must survive into it unchanged (goal-drift gate).
+# but the ledger's `goal` must survive into it unchanged, compared case- and
+# whitespace-insensitively (goal-drift gate).
 GOAL_SECTION = "problem"
+_GOAL_HEADINGS = frozenset({"problem statement", "problem", "goal"})
 _REFLECTION_ALIASES = {
-    "problem": GOAL_SECTION,
-    "problem statement": GOAL_SECTION,
-    "goal": GOAL_SECTION,
     "approach": "approach",
     "interface": "interface",
     "interfaces": "interface",
@@ -898,10 +897,16 @@ def parse_gate_applicability(
 
 def _normalize_ledger(
     value: object,
-) -> tuple[tuple[ForkDecision, ...], tuple[str, ...]]:
+) -> tuple[tuple[ForkDecision, ...], tuple[str, ...], str | None]:
     raw: object
+    goal: str | None = None
     if isinstance(value, Mapping):
         mapping_value = cast(Mapping[object, object], value)
+        goal_value = mapping_value.get("goal")
+        if goal_value is not None:
+            if not isinstance(goal_value, str) or not goal_value.strip():
+                raise TasteTestError("ledger-goal-empty")
+            goal = goal_value.strip()
         raw = mapping_value.get(
             "forks",
             mapping_value.get(
@@ -911,7 +916,7 @@ def _normalize_ledger(
         if raw is None:
             raw_list: list[object] = []
             for key, item in mapping_value.items():
-                if not isinstance(key, str):
+                if not isinstance(key, str) or key == "goal":
                     continue
                 if isinstance(item, Mapping):
                     raw_list.append({"id": key, **cast(Mapping[str, object], item)})
@@ -953,29 +958,19 @@ def _normalize_ledger(
     ids = [entry.id for entry in entries]
     if len(set(ids)) != len(ids):
         problems.append("ledger-duplicate-fork-id")
-    return tuple(entries), tuple(problems)
-
-
-def _ledger_goal(value: object) -> str | None:
-    """Return the ledger's pinned goal line, or None for a goal-less ledger."""
-    if not isinstance(value, Mapping):
-        return None
-    goal = cast(Mapping[object, object], value).get("goal")
-    if goal is None:
-        return None
-    if not isinstance(goal, str) or not goal.strip():
-        raise TasteTestError("ledger-goal-empty")
-    return goal.strip()
+    return tuple(entries), tuple(problems), goal
 
 
 def _goal_gaps(sections: Mapping[str, str], goal: str | None) -> list[str]:
-    """The pinned goal must appear in the draft's problem statement verbatim."""
+    """The pinned goal must survive unchanged into the draft's problem statement,
+    compared case- and whitespace-insensitively."""
     if goal is None:
         return []
     section = sections.get(GOAL_SECTION, "")
     if not section.strip():
         return [f"missing-section:goal:{GOAL_SECTION}"]
-    if goal.casefold() not in " ".join(section.split()).casefold():
+    normalized_goal = " ".join(goal.split()).casefold()
+    if normalized_goal not in " ".join(section.split()).casefold():
         return ["goal-drift"]
     return []
 
@@ -985,7 +980,12 @@ def _draft_sections(draft: object) -> dict[str, str]:
         draft_map = cast(Mapping[object, object], draft)
         result: dict[str, str] = {}
         for key, value in draft_map.items():
-            normalized = _REFLECTION_ALIASES.get(str(key).strip().lower())
+            title = str(key).strip().lower()
+            if title in _GOAL_HEADINGS:
+                if GOAL_SECTION not in result:
+                    result[GOAL_SECTION] = _canonical(value)
+                continue
+            normalized = _REFLECTION_ALIASES.get(title)
             if normalized:
                 result[normalized] = _canonical(value)
         return result
@@ -994,6 +994,13 @@ def _draft_sections(draft: object) -> dict[str, str]:
     result = {}
     for index, heading in enumerate(headings):
         title = re.sub(r"[^a-z0-9 -]", "", heading.group(1).lower()).strip()
+        end = (
+            headings[index + 1].start() if index + 1 < len(headings) else len(text)
+        )
+        if title in _GOAL_HEADINGS:
+            if GOAL_SECTION not in result:
+                result[GOAL_SECTION] = text[heading.end() : end]
+            continue
         key = next(
             (
                 alias
@@ -1004,9 +1011,6 @@ def _draft_sections(draft: object) -> dict[str, str]:
         )
         if key:
             normalized = _REFLECTION_ALIASES[key]
-            end = (
-                headings[index + 1].start() if index + 1 < len(headings) else len(text)
-            )
             result[normalized] = text[heading.end() : end]
     return result
 
@@ -1067,7 +1071,7 @@ def taste_test(
         if isinstance(reviewer_verdict, ForkTasteVerdict)
         else ForkTasteVerdict.from_mapping(reviewer_verdict)
     )
-    ledger, ledger_problems = _normalize_ledger(decision_ledger)
+    ledger, ledger_problems, goal = _normalize_ledger(decision_ledger)
     expected = {entry.id: entry for entry in ledger}
     sections = _draft_sections(draft)
     additions: dict[str, list[str]] = {
@@ -1077,7 +1081,7 @@ def taste_test(
         "acceptance_gaps": [
             *ledger_problems,
             *_applicability_gaps(draft),
-            *_goal_gaps(sections, _ledger_goal(decision_ledger)),
+            *_goal_gaps(sections, goal),
         ],
     }
 
