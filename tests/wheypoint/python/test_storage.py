@@ -82,7 +82,7 @@ def test_pending_path_rejects_dot_prefixed_stems(
     store: storage.WorkStore, request_identity: str
 ) -> None:
     with pytest.raises(storage.StorageError, match="safe path segment"):
-        store.pending_path(request_identity)
+        _ = store.pending_path(request_identity)
 
 
 @pytest.mark.parametrize("work_id", ["../evil", "work/0001", "Work-0001", "", "."])

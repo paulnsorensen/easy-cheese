@@ -87,7 +87,7 @@ def test_main_reports_error_on_bad_slug(capsys: pytest.CaptureFixture[str]) -> N
     assert "error:" in capsys.readouterr().err
 
 
-def test_main_research_prints_corpus_root(
+def test_main_research_prints_flat_artifact_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

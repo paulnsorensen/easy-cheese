@@ -83,26 +83,15 @@ def derive_command(fn: CommandHandler, summary: str) -> Command:
     return Command(name, f"{fn.__module__}:{fn.__qualname__}", summary)
 
 
-def compiled_commands(module: ModuleType) -> tuple[Command, ...]:
-    """Every `@bundle_command`-decorated top-level function defined in `module`."""
-    declared = (
-        cast("CommandHandler", value)
+def _declared_names(module: ModuleType) -> set[str]:
+    """Every `@bundle_command` name declared by a function defined in `module`."""
+    return {
+        cast("str", getattr(value, "__bundle_command_name__"))
         for value in cast("dict[str, object]", vars(module)).values()
         if callable(value)
         and getattr(value, "__module__", None) == module.__name__
         and getattr(value, "__bundle_command_name__", None) is not None
-    )
-    return tuple(
-        sorted(
-            (
-                derive_command(
-                    fn, cast("str", getattr(fn, "__bundle_command_name__"))
-                )
-                for fn in declared
-            ),
-            key=lambda command: command.name,
-        )
-    )
+    }
 
 
 def validate_command_surface(module: ModuleType, commands: Sequence[Command]) -> None:
@@ -111,7 +100,7 @@ def validate_command_surface(module: ModuleType, commands: Sequence[Command]) ->
     Also rejects `commands` entries whose name was never declared via the
     decorator in `module`, closing the gate in both directions.
     """
-    declared = {command.name for command in compiled_commands(module)}
+    declared = _declared_names(module)
     referenced = {command.name for command in commands}
     unreferenced = declared - referenced
     if unreferenced:
@@ -158,7 +147,6 @@ __all__ = [
     "Command",
     "bundle_command",
     "command_map",
-    "compiled_commands",
     "derive_command",
     "dispatch",
     "validate_command_surface",

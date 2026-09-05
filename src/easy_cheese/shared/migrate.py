@@ -21,6 +21,7 @@ from pathlib import Path
 
 from easy_cheese_schemas import (
     CanonicalArtifact,
+    ContractValidationError,
     ContractVersion,
     IngressKind,
     NormalizationReceipt,
@@ -69,7 +70,10 @@ def migrate(
     adapter blocks migration even if it is not the one this call would use.
     The published :class:`~easy_cheese_schemas.NormalizationReceipt` carries
     ``ingress_kind=IngressKind.LEGACY_ARTIFACT`` with the source schema and
-    version, never a heuristic guess at what changed.
+    version, never a heuristic guess at what changed. A malformed legacy
+    payload that the adapter cannot read raises
+    :class:`UnsupportedLegacySourceError`, so no raw converter failure
+    escapes this boundary.
     """
     check_adapter_sunsets(
         reference_date if reference_date is not None else date.today()
@@ -94,7 +98,15 @@ def migrate(
     )
 
     def _prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
-        converted = adapter.convert(legacy_payload)
+        try:
+            converted = adapter.convert(legacy_payload)
+        except ContractValidationError:
+            raise
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError) as exc:
+            source = f"{source_schema_uri}@{source_major}.{source_minor}"
+            raise UnsupportedLegacySourceError(
+                f"legacy payload for {source} does not convert: {exc}"
+            ) from exc
         validated = validate_contract(
             converted,
             adapter.target_schema_uri,

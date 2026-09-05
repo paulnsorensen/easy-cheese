@@ -22,6 +22,7 @@ from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 try:
     import fcntl
@@ -30,6 +31,7 @@ except ImportError:  # pragma: no cover
 
 from easy_cheese_schemas import (
     COMPILED_TRANSITION_REGISTRY,
+    MAX_CONTRACT_BYTES,
     NORMALIZATION_RECEIPT_SCHEMA_URI,
     AcceptedArtifact,
     ArtifactRef,
@@ -95,8 +97,10 @@ class CorruptLeftoverError(PublicationError):
     """A prepared payload or receipt file does not match its content digest.
 
     Raised on retry after an interrupted publication when a leftover file was
-    tampered with between the crash and the retry; the corrupt file is
-    removed before this is raised, so a further retry starts clean.
+    tampered with between the crash and the retry. Repair quarantines the
+    file first. It removes a file that stays corrupt, and it retains a valid
+    replacement that a racing writer put in place. The message names the
+    outcome, and a further retry starts from a clean or valid file.
     """
 
 
@@ -297,9 +301,20 @@ def request_digest(
 
 
 def _fsync_dir(directory: Path) -> None:
-    descriptor = os.open(str(directory), os.O_RDONLY)
+    """Flush ``directory`` metadata where the platform supports it.
+
+    Windows and some network filesystems refuse a directory handle or a
+    directory ``fsync``. Durability is best effort there; the caller has
+    already flushed the file itself, so the publication still proceeds.
+    """
+    try:
+        descriptor = os.open(str(directory), os.O_RDONLY)
+    except OSError:
+        return
     try:
         os.fsync(descriptor)
+    except OSError:
+        return
     finally:
         os.close(descriptor)
 
@@ -324,6 +339,28 @@ def _atomic_write(path: Path, content: bytes) -> None:
         raise
 
 
+def _exclusive_reveal(temp_name: str, path: Path, content: bytes) -> None:
+    """Link ``temp_name`` to ``path``, falling back to an exclusive create.
+
+    A hard link is the primitive that fails loudly on a racing reveal. A
+    filesystem without hard links (for example FAT or an SMB share) raises
+    ``OSError``; the fallback writes the same content under ``O_EXCL``,
+    which keeps the same ``FileExistsError`` contract for that race.
+    """
+    try:
+        os.link(temp_name, path)
+        return
+    except FileExistsError:
+        raise
+    except OSError:
+        pass
+    descriptor = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as handle:
+        _ = handle.write(content)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
 def _atomic_reveal(path: Path, content: bytes) -> None:
     """Create ``path`` exclusively, raising ``FileExistsError`` if it is
     already there -- a racing reveal for the same ``operation_id`` can never
@@ -337,7 +374,7 @@ def _atomic_reveal(path: Path, content: bytes) -> None:
             _ = handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.link(temp_name, path)
+        _exclusive_reveal(temp_name, path, content)
         _fsync_dir(path.parent)
     finally:
         try:
@@ -416,8 +453,23 @@ def _retain_content(directory: Path, digest: str, content: bytes) -> Path:
     return path
 
 
+def _read_bounded(path: Path) -> bytes:
+    """Read at most one contract-sized file, rejecting a larger one unread.
+
+    A pointer path is caller-supplied, so the gateway never allocates more
+    than ``MAX_CONTRACT_BYTES`` for it before schema validation runs.
+    """
+    with path.open("rb") as handle:
+        raw = handle.read(MAX_CONTRACT_BYTES + 1)
+    if len(raw) > MAX_CONTRACT_BYTES:
+        raise ContractValidationError(
+            f"pointer at {path} exceeds MAX_CONTRACT_BYTES ({MAX_CONTRACT_BYTES} bytes)"
+        )
+    return raw
+
+
 def _read_pointer(path: Path) -> HandoffPointer:
-    raw = path.read_bytes()
+    raw = _read_bounded(path)
     artifact = validate_contract(
         raw, HandoffPointer, supported_version_for(HandoffPointer)
     )
@@ -432,6 +484,16 @@ def _resolve_pointer_artifact(
     *,
     digest_error: Callable[[str], Exception] | None = None,
 ) -> bytes:
+    try:
+        scheme = urlsplit(ref.uri).scheme
+    except ValueError as exc:
+        raise ContractValidationError(
+            f"artifact {ref.artifact_id!r} has an invalid uri"
+        ) from exc
+    if scheme != "file":
+        raise ContractValidationError(
+            f"artifact {ref.artifact_id!r} is not a file:// uri"
+        )
     try:
         resolved = resolve_artifact(
             ref,
@@ -484,6 +546,15 @@ def _resolve_pointer(
         receipt_artifact = validate_contract(receipt_bytes, NormalizationReceipt, None)
         receipt = receipt_artifact.value
         assert isinstance(receipt, NormalizationReceipt)
+        source_version = receipt.source_version
+        if (
+            source_version is not None
+            and receipt.source_schema_uri != source_version.schema_uri
+        ):
+            raise ContractValidationError(
+                "normalization_receipt declares two legacy source identities: "
+                + f"{receipt.source_schema_uri!r} and {source_version.schema_uri!r}"
+            )
         if receipt.canonical_digest != _digest_bytes(canonical.canonical_bytes):
             raise ContractValidationError(
                 "normalization_receipt.canonical_digest does not match the canonical payload"

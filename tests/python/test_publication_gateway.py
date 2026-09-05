@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import errno
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
 import pytest
 from easy_cheese_schemas import (
+    MAX_CONTRACT_BYTES,
     ContractValidationError,
     PublishedArtifact,
     TransitionError,
@@ -108,10 +111,13 @@ def test_syntax_normalize_trim_whitespace_recovers() -> None:
 
 
 def test_syntax_normalize_normalize_quotes_recovers() -> None:
-    raw = "{“a”: 1}"
+    """A straight quote in the text proves which curly quotes are structure:
+    the curly pair around the key sits outside string content, so quote
+    repair converts it and the value text stays untouched."""
+    raw = '{“a”: "one"}'
     text, actions = publication.syntax_normalize(raw)
     assert [a.action.value for a in actions] == ["normalize_quotes"]
-    assert json.loads(text) == {"a": 1}
+    assert json.loads(text) == {"a": "one"}
 
 
 def test_syntax_normalize_remove_trailing_comma_recovers() -> None:
@@ -140,7 +146,7 @@ def test_select_repair_unrecoverable_raises() -> None:
 def test_select_repair_rejects_all_curly_quotes_as_ambiguous() -> None:
     raw = '{“a”: “don’t”}'
     with pytest.raises(publication.UnrecoverableSyntaxError):
-        publication._select_repair(raw)  # pyright: ignore[reportPrivateUsage]
+        _ = publication._select_repair(raw)  # pyright: ignore[reportPrivateUsage]
 
 
 def test_normalize_quotes_preserves_curly_quote_inside_string_content() -> None:
@@ -366,14 +372,14 @@ def test_publish_replay_revalidates_artifact_metadata(tmp_path: Path) -> None:
 
 
 def test_publish_rejects_replay_with_tampered_operation_id(tmp_path: Path) -> None:
-    _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-identity")
+    _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-identity")
     pointer_path = tmp_path / "pointers" / "op-identity.json"
     pointer = cast("dict[str, object]", json.loads(pointer_path.read_text()))
     pointer["operation_id"] = "other"
-    pointer_path.write_text(json.dumps(pointer))
+    _ = pointer_path.write_text(json.dumps(pointer))
 
     with pytest.raises(publication.IdempotencyConflictError, match="different request"):
-        _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-identity")
+        _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-identity")
 
 
 def test_publish_replay_revalidates_receipt(tmp_path: Path) -> None:
@@ -402,3 +408,86 @@ def test_publish_revalidates_payload_before_pointer_reveal(tmp_path: Path) -> No
             _before_reveal=_tamper,
         )
     assert not (tmp_path / "pointers" / "op-revalidate.json").exists()
+
+
+def test_accept_rejects_non_file_artifact_uri(tmp_path: Path) -> None:
+    published = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-remote")
+    pointer_path = tmp_path / "pointers" / "op-remote.json"
+    pointer = cast("dict[str, object]", json.loads(pointer_path.read_text()))
+    payload = cast("dict[str, object]", pointer["payload"])
+    payload["uri"] = "https://example.com/payload.json"
+    _ = pointer_path.write_text(json.dumps(pointer))
+    assert published.pointer.payload.uri.startswith("file://")
+
+    with pytest.raises(ContractValidationError, match="is not a file:// uri"):
+        _ = publication.accept(
+            pointer_path,
+            destination_phase="cook",
+            payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+            artifact_root=tmp_path,
+        )
+
+
+def test_accept_rejects_oversized_pointer_before_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-oversized")
+    pointer_path = tmp_path / "pointers" / "op-oversized.json"
+    padding = " " * (MAX_CONTRACT_BYTES + 1)
+    _ = pointer_path.write_text(pointer_path.read_text() + padding)
+
+    def _forbidden(_self: Path) -> bytes:
+        raise AssertionError("pointer was read without a size bound")
+
+    monkeypatch.setattr(Path, "read_bytes", _forbidden)
+
+    with pytest.raises(ContractValidationError, match="MAX_CONTRACT_BYTES"):
+        _ = publication.accept(
+            pointer_path,
+            destination_phase="cook",
+            payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+            artifact_root=tmp_path,
+        )
+
+
+def test_publish_reveals_pointer_without_hard_links(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A filesystem without hard links must still reveal one pointer and must
+    still reject a racing conflicting request."""
+
+    def _no_links(_source: object, _target: object) -> None:
+        raise OSError(errno.EPERM, "hard links are unsupported")
+
+    monkeypatch.setattr(os, "link", _no_links)
+    artifact = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-nolink")
+    pointer_path = tmp_path / "pointers" / "op-nolink.json"
+
+    assert pointer_path.is_file()
+    assert artifact.pointer.operation_id == "op-nolink"
+    assert list((tmp_path / "pointers").glob(".*")) == []
+
+    doc_payload = cast("dict[str, object]", DOC["payload"])
+    other_doc = {**DOC, "payload": {**doc_payload, "objective": "Another objective"}}
+    with pytest.raises(publication.IdempotencyConflictError):
+        _ = _publish(
+            tmp_path, raw_text=json.dumps(other_doc), operation_id="op-nolink"
+        )
+
+
+def test_publish_survives_unsupported_directory_fsync(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A platform that refuses a directory handle must not block publication."""
+    real_open = os.open
+
+    def _reject_directory(path: object, flags: int, *args: int) -> int:
+        if Path(cast("str", path)).is_dir():
+            raise OSError(errno.EACCES, "directory handles are unsupported")
+        return real_open(cast("str", path), flags, *args)
+
+    monkeypatch.setattr(os, "open", _reject_directory)
+    artifact = _publish(tmp_path, raw_text=json.dumps(DOC), operation_id="op-nofsync")
+
+    assert (tmp_path / "pointers" / "op-nofsync.json").is_file()
+    assert artifact.pointer.operation_id == "op-nofsync"
