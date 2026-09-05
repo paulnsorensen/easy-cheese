@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import errno
 import hashlib
 import hmac
@@ -209,15 +210,11 @@ def read_repository_artifact(
         ) from exc
     finally:
         for fd in reversed(opened_fds):
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
         if root_fd is not None:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(root_fd)
-            except OSError:
-                pass
 
     detected_type, _encoding = mimetypes.guess_type(display_path.name)
     if detected_type is None:
@@ -263,10 +260,8 @@ def _read_local(path: Path, expected_size: int) -> tuple[bytes, str]:
         raise ArtifactResolutionError(f"artifact is not readable: {path}") from exc
     finally:
         if fd is not None:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(fd)
-            except OSError:
-                pass
 
     detected_type, _encoding = mimetypes.guess_type(path.name)
     if detected_type is None:
@@ -392,10 +387,8 @@ def _read_https(artifact: ArtifactRef, parsed: SplitResult) -> tuple[bytes, str]
                     ) from exc
                 redirects += 1
             finally:
-                try:
+                with contextlib.suppress(OSError):
                     exc.close()
-                except OSError:
-                    pass
             continue
         except ArtifactResolutionError:
             raise
@@ -717,15 +710,11 @@ def _retain_verified_bytes(content: bytes, artifact_directory: str | Path) -> st
         ) from exc
     finally:
         if temp_fd is not None:
-            try:
+            with contextlib.suppress(OSError):
                 os.close(temp_fd)
-            except OSError:
-                pass
         if temp_path is not None:
-            try:
+            with contextlib.suppress(OSError):
                 temp_path.unlink()
-            except OSError:
-                pass
 
 
 def _base_media_type(media_type: str) -> str:
