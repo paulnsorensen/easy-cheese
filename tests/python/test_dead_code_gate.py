@@ -468,6 +468,7 @@ def test_definition_noqa_requires_exact_header_comment(tmp_path: Path) -> None:
         ("value = '# noqa: V103'\ndef generated():\n    pass\n", False),
         ("# noqa: V103\ndef generated():\n    pass\n", False),
         ("def generated():\n    # noqa: V103\n    pass\n", False),
+        ("def generated(\n    x,  # noqa: V103\n):\n    pass\n", False),
     ]
     for text, expected in cases:
         source = tmp_path / "generated.py"

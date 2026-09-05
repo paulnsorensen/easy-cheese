@@ -265,12 +265,10 @@ def _has_definition_noqa(
             continue
         depth = 0
         for index, token in enumerate(tokens[start:], start):
-            if token.type == tokenize.COMMENT and token.string == "# noqa: V103":
-                return True
             if token.type == tokenize.OP:
-                if token.string in "([{":
+                if token.string in {"(", "[", "{"}:
                     depth += 1
-                elif token.string in ")]}":
+                elif token.string in {")", "]", "}"}:
                     depth = max(0, depth - 1)
                 elif token.string == ":" and depth == 0:
                     next_token = tokens[index + 1] if index + 1 < len(tokens) else None
