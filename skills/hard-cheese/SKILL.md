@@ -20,16 +20,16 @@ Arguments:
 - `<slug>` identifies the artifact at `.cheese/hard-cheese/<slug>.md`. This argument is optional. Without it, use the short SHA of `HEAD`. An explicit slug overrides the SHA.
 - `--socratic-cap N` sets the maximum number of retries. The gate then marks the artifact `FAILED` and returns a non-zero status. The default is `3`. Vibecheck has no limit, but easy-cheese prevents infinite loops.
 - `--passing-score N` sets the minimum SOLO score for PASS. Use a value from `1` through `5`. The default is `3`. The gate treats a previous PASS below this value as stale.
-- `--no-judge` enables log-only mode. Record the user's explanation with `status: LOGGED`. Do not start the judge sub-agent. This mode matches the optional JSONL telemetry mode in vibecheck.
+- `--no-judge` enables log-only mode. Record the user's explanation with `status: LOGGED`. Do not start the judge sub-agent. This mode is the easy-cheese equivalent of the optional JSONL telemetry mode in vibecheck. It retains more content. See `## Divergence from the paper`.
 
 ## Invocation modes
 
-| Mode | How it fires | Where the gate sits |
+| Mode | How the gate runs | Where the gate sits |
 | --- | --- | --- |
-| **standalone** | User runs `/hard-cheese <slug>` directly before opening a pull request. | Outside the pipeline. No upstream skill required. |
-| **propagated** | `/plate --hard` invokes `/hard-cheese <slug>` after its final writing gate and before publication. | At the verified-artifacts → share-for-review boundary. |
+| **standalone** | The user runs `/hard-cheese <slug>` before a pull request. | Outside the pipeline. No upstream skill is required. |
+| **propagated** | `/plate --hard` runs `/hard-cheese <slug>` after the final writes and before publication. | At the verified-artifacts to share-for-review boundary. |
 
-`--hard` passes through `/cheese → /mold → /cook → /press → /age → /cure → /plate`. Only `/plate` calls `/hard-cheese`.
+`--hard` passes through `/cheese → /mold → /cook → /press → /age → /cure → /plate`. Only `/plate` runs `/hard-cheese`.
 
 See [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for portability requirements. It covers helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions.
 Use the bundle or repository helper first. Use `${CLAUDE_SKILL_DIR}` only as an optional host fallback.
@@ -44,7 +44,7 @@ The handoff blocks define the portable contract because slash commands are host 
    - If the diff against `origin/main` is empty, return `0` with `"nothing to gate on"`. Do not write an artifact.
 
 2. **Freshness check.**
-   Check freshness before launching the gate:
+   Run the freshness check before you run the gate:
 
    ```
    python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check \
@@ -59,7 +59,14 @@ The handoff blocks define the portable contract because slash commands are host 
 
    > Before this is shared for review, explain its causal logic in your own words. How does *<feature or fix>* work? Why does it produce the desired behavior? What state, control flow, or invariants does it rely on?
 
-   Show a diff summary with the prompt. For `/plate`, also show the final artifact inventory and each `{target, backend, verified}` row.
+   Show a diff summary with the prompt. For `/plate`, also show the complete final evidence:
+
+   - the final artifact inventory,
+   - each `{target, backend, verified}` completion row,
+   - the tracked artifact diff,
+   - the quality gate result.
+
+   Stop with a non-zero status when `/plate` omits one of these four values. Stop with a non-zero status when a completion row has `verified: false`.
 
 4. **Record the user's explanation** as free text. Do not provide coaching or example answers. The explanation is the artifact under test.
 
@@ -102,7 +109,7 @@ passing_score: <n>
 divergence: fail-open on judge error (vibecheck fails closed)
 diff_base: <sha>
 diff_head: <short-sha>
-status: PASS | FAIL | FAILED | LOGGED
+status: PASS | FAIL | FAILED | LOGGED | ERROR
 attempts: <n>
 ---
 ```
@@ -121,10 +128,11 @@ Each invocation appends attempts and does not overwrite rows. If `HEAD` changes,
 ## Sub-agent contract — fresh judge
 
 - **Use fresh context for every invocation.** The code-writing context can bias the judge.
-- Resolve a no-tool or read-only `reviewer` at `default` power and `high` effort. Use the shared agent resolver.
+- Resolve a no-tool or read-only `reviewer` at `powerful` power and `high` effort. Use the shared agent resolver.
+- The shared resolver pins each reviewer to `powerful`. Do not lower this value for the judge.
 - Use a general worker only with no-write enforcement. Set `degraded: true`.
 - Use `references/judge-prompt.md` as the system prompt.
-- Give the judge the diff summary, optional spec excerpt, and explanation. Require JSON and prohibit repository writes.
+- Give the judge the diff summary, the optional spec excerpt, and the explanation. Require a JSON reply. Prohibit repository writes.
 - **Parse the JSON output.** On a parse error, log an `ERROR` attempt and fail open.
 
 The gate requires a host sub-agent feature. Without this feature, recommend `/hard-cheese --no-judge` to record the explanation without a grade.
@@ -141,20 +149,28 @@ This `SKILL.md`, `references/judge-prompt.md`, and each artifact include the att
 
 ## Divergence from the paper
 
-Hard-cheese has one difference from vibecheck:
+Hard-cheese has two differences from vibecheck:
 
-**Vibecheck fails closed on a judge error.** The modal blocks code application until the judge recovers or the user retries.
+**1. Judge errors.** Vibecheck fails closed. The modal blocks code application until the judge recovers or the user retries.
 
-**Hard-cheese fails open on a judge error.** The gate records an `ERROR`, prints a warning, and returns `0`.
+Hard-cheese fails open. The gate records an `ERROR`, prints a warning, and returns `0`.
 
-This policy prevents API failures from blocking pull request work. Add each new difference to this section.
+This policy prevents API failures from blocking pull request work.
+
+**2. Telemetry content.** Vibecheck records the length of an explanation. It never records the text of an explanation.
+
+Hard-cheese records the complete text of every explanation in the local artifact. The `.gitignore` file excludes `.cheese/`, so this text remains on the author's machine.
+
+Tell the user about this retention before `--no-judge` records the first explanation.
+
+Add each new difference to this section.
 
 ## Composition with `--auto`
 
 `--hard` and `--auto` can operate together. Terminal `/plate --hard` pauses automation once before publication, after `/plate` verifies the final artifacts.
 The user responds to the prompt. PASS permits publication. FAILED stops publication. ERROR uses the documented fail-open behavior.
 
-Commit-only `/plate --hard` does not run the gate because it shares nothing. See `references/composition.md` for new pull requests and non-TTY behavior.
+Commit-only `/plate --hard` does not run the gate. That path shares nothing. See `references/composition.md` for new pull requests and non-TTY behavior.
 
 ## Output
 
@@ -194,7 +210,7 @@ Then print one applicable message:
 - Always run the freshness check. A changed `HEAD` requires a new attempt sequence.
 - Record every ERROR attempt. Show a warning for each judge failure.
 - Do not call `/gh` or a specific pull request tool. The gate operates before code enters review.
-- Apply the shared voice rules from `../age/references/voice.md`. Report the result and classify residual risk as `certain | speculating | don't know`.
+- Apply the shared voice rules from `../age/references/voice.md`. Report the result. Classify the residual risk as `certain | speculating | don't know`.
 - Do not describe FAILED as `"almost passing"`.
 
 ## References
@@ -209,6 +225,6 @@ Resolve the fresh judge through [`../cheese/references/agent-resolution.md`](../
 
 | Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
 | --- | --- | --- | --- | --- | --- |
-| Grade the explanation | reviewer | no-tool or read-only, fresh-context | default | high | compatible reviewer, then general |
+| Grade the explanation | reviewer | no-tool or read-only, fresh-context | powerful | high | compatible reviewer, then general |
 
 The canonical hard-cheese audit includes the shared `agent_resolution` block.
