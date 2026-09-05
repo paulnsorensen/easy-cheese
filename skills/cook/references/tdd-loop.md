@@ -27,13 +27,12 @@ For closed N/A work, make the requested docs/refactor/test/appearance change thr
 
 ### Reviewable by construction
 
-Write the change so the taste-test and `/age` pass on the first round. Each rule below maps to a lens or dimension that otherwise sends the work back. The evidence is in `.hallouminate/wiki/research/language-reviewability-evidence.md`.
+Write the change so the taste-test and `/age` pass on the first round. Most rules below map to a taste-test lens or `/age` dimension that otherwise sends the work back; the size ceiling is enforced by `/plate`.
 
-- **Full-word identifiers.** No abbreviations or single letters outside a loop index or a conventional short name (`i`, `db`, `ctx`). Reviewers find defects about 19% faster with full words.
+- **Full-word identifiers.** No abbreviation or single letter whose scope outlives one short block. A conventional short name used conventionally (`i` as a loop index, `db`, `ctx`) is exempt. Reviewers find defects about 19% faster with full words (Hofmeister et al., 2019). `/age` grades this under [`deslop`](../../age/references/dimensions.md).
 - **Local reasoning.** A reviewer must understand each changed function from its own body plus the signatures it calls. Do not add monkey-patching, side-effecting decorators, `__getattr__` or `__getattribute__` tricks, operator overloading, metaclass logic, or exception-based control flow that crosses a module boundary.
-- **Let the type checker review.** Annotate every new parameter and return. Use a closed union or enum instead of a string tag. Make every `match` or `switch` over a closed union exhaustive with `assert_never` / `assertNever`; never rely on a silent default arm.
-- **Canonical formatting.** Run the project formatter before handoff so the diff carries no formatting noise.
-- **Stay under the comprehension ceiling.** Keep the semantics-altering surface under roughly 400 changed code lines. When the contract needs more, name the layer boundaries in the package report so `/plate` can recommend a stack.
+- **Let the type checker review.** Annotate every new parameter and return. Use a closed union or enum instead of a string tag. Make every `match` or `switch` over a closed union exhaustive with `assert_never` (mypy/pyright) or `assertNever` (typescript-eslint `switch-exhaustiveness-check`); never rely on a silent default arm. Idioms: [`deslop-python.md` § 15](../../age/references/deslop-python.md), [`deslop-typescript.md` § 16](../../age/references/deslop-typescript.md).
+- **Stay under the comprehension ceiling.** Keep the semantics-altering surface under roughly 400 changed code lines. When the contract needs more, name the layer boundaries under the package report's `### Risks` so `/plate` can recommend a stack.
 
 These rules do not license speculative types, helpers, or abstractions. Scope and Simplify still apply.
 
@@ -98,7 +97,7 @@ The inline or dispatched taste-test returns `pass | revise | escalate` for each 
 | Lens | Question | Pass criterion |
 | --- | --- | --- |
 | Spec | Did the implementation drift from the spec? | Every behavior described in the spec is present; nothing extra. |
-| Readability | Is the change as concise and clear as possible? | A reviewer can understand each changed function from its body and the signatures it calls, without external context. Identifiers are full words. No monkey-patching, side-effecting decorators, `__getattr__` tricks, operator overloading, or cross-module exception control flow. |
+| Readability | Is the change as concise and clear as possible? | A reviewer can understand each changed function from its body and the signatures it calls, without external context, and the diff meets § Reviewable by construction (full-word identifiers, local reasoning). |
 | Scope | Did Cook add more than asked? | The diff matches the spec's bullets; no speculative helpers. |
 | Simplify | Does the diff reuse what exists, stay clean, and avoid wasted work? | See sub-checks below; all three must pass. |
 | Production path | Does every spec acceptance criterion have a *production* path that exercises it? | The behavior is reachable from real callers, not only from tests that manufacture the state. |

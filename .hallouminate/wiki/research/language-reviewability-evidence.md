@@ -60,11 +60,11 @@ Vendor signals (not peer-reviewed): LinearB 2026 reported ~32.7% acceptance for 
 
 ## Where this touches easy-cheese
 
-- `/plate` topology (`skills/plate/references/topology.md`): review shape still decides single-vs-stacked, but a semantics-altering surface over roughly 400 changed code lines now gates a stack recommendation and the layout question. The PR body contract (`ordinary-pr.md`) requires a `## Non-obvious changes` section.
-- `/age` fan-out (`skills/age/references/fan-out.md`): the router score is already line-derived, so the ladder sizes by diff size. What it cannot do is shrink each worker's read, so a score over 400 records `coverage: degraded` under `## Confidence` and recommends a stacked split.
-- `/age` `deslop` (`dimensions.md`): an abbreviated or single-letter identifier with more than one short block of scope grades `medium`, citing the 19% defect-finding-speed result. `deslop-python.md` and `deslop-typescript.md` gained non-exhaustive `match`/`switch` patterns with `assert_never` / `assertNever`.
-- `/cook` (`skills/cook/references/tdd-loop.md` § Reviewable by construction): the coder builds for the reviewer on the first pass. Full-word identifiers, local reasoning, annotated parameters and returns, exhaustive matches, canonical formatting, and the 400-line ceiling. The taste-test Readability lens names the same anti-patterns.
-- `/mold` Sketch (`skills/mold/references/modes.md`): language default is the incumbent typed language; Go for uniform tooling, Rust only where memory safety or performance is the requirement, Elm/Gleam niche.
+- Diff-size ceiling and author annotation land in `/plate`: `skills/plate/references/topology.md` step 2 (size gates the layout question), `ordinary-pr.md` § Body contract and `.github/PULL_REQUEST_TEMPLATE.md` (non-obvious changes section).
+- The comprehension ceiling for reviewers lands in `/age`: `skills/age/SKILL.md` § Output (coverage flag) and `references/fan-out.md` (the router sizes by weighted review surface, which is line-derived but not a raw line count).
+- Identifier and exhaustiveness evidence lands in `/age` deslop: `references/dimensions.md` § deslop, `deslop-python.md` § 15, `deslop-typescript.md` § 16.
+- Build-for-the-reviewer rules land in `/cook`: `skills/cook/references/tdd-loop.md` § Reviewable by construction and the taste-test Readability lens.
+- The language tiering lands in `/mold` Sketch: `skills/mold/references/modes.md` § Language default.
 
 ## Caveats
 

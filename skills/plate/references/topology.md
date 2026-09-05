@@ -15,7 +15,11 @@ For a **new PR**, resolve topology before any commit or branch-layout mutation:
      Put incidental fixes in a separate change. Never put them in a feature or fix.
      A move or rename is semantics-altering if it changes an externally observable name, path, API, or configuration key.
      Use the same classification for a changed serialized shape, command, or documented contract.
-   - Choose **single** when the change is one cohesive review unit. Then proceed without asking.
+   - Size never decides the shape on its own. It decides whether the question gets asked.
+     When the semantics-altering surface exceeds roughly 400 changed code lines, always ask the single-versus-stacked question in step 3, even when the change reads as cohesive.
+     Reviewer defect detection falls off sharply past that size (SmartBear/Cisco review data).
+     At topology preflight, before a diff exists, estimate the surface from the spec or curd plan. Re-evaluate on the real diff at publication.
+   - Choose **single** when the change is one cohesive review unit under that ceiling. Then proceed without asking.
      Its implementation, tests, docs, and durable artifacts must serve one behavior or contract.
      A split must not leave incomplete behavior. It must not force reviewers to reconstruct the whole.
    - Recommend **stacked** when the change has independently reviewable ordered layers.
@@ -23,14 +27,10 @@ For a **new PR**, resolve topology before any commit or branch-layout mutation:
      A lower layer must stand alone. Later layers must build on it without unrelated concerns.
      A change is also stack-sized when one review would combine distinct concerns with clear ordered boundaries.
      Put a semantics-preserving layer below a semantic change that depends on the reorganization.
-     Line and file counts never decide the shape on their own. They do gate the question.
-     When the semantics-altering surface exceeds roughly 400 changed code lines, recommend **stacked** and ask, even when the change reads as cohesive.
-     Reviewer defect detection falls off sharply past that size; see `.hallouminate/wiki/research/language-reviewability-evidence.md`.
-     Name the candidate layers. When no layer boundary exists, say so and recommend single with the size risk stated.
-3. Ask one single-versus-stacked question when you recommend a stack.
-   Ask the same question when the review shape is genuinely ambiguous.
+     Over the ceiling with no layer boundary, recommend single, state the size risk, and still ask.
+3. Ask one single-versus-stacked question when you recommend a stack, when the surface exceeds the ceiling, or when the review shape is genuinely ambiguous.
    For a stack recommendation, name the proposed layers. Recommend **Stacked PRs**.
-   For ambiguity, state the competing evidence. Recommend the best-supported option.
+   For ambiguity or an over-ceiling single, state the competing evidence. Recommend the best-supported option.
    Do not choose silently.
 
 This policy stays unchanged under `--auto`. Transport any required question

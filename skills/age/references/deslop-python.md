@@ -261,10 +261,9 @@ logger.debug("processing %s", item)
 
 ## 15. Non-exhaustive `match` over a closed union
 
-AI writes a `match` or `if/elif` chain over an enum or `Literal` union and leaves a silent `case _:` or no final branch.
+AI writes a `match` or `if/elif` chain over an enum or `Literal` union and leaves a silent `case _:`, a bare `else`, or no final branch.
 A new member then falls through without a type error.
 `assert_never` turns the missing case into a mypy or pyright error, so the checker carries that review.
-No Ruff rule covers this. Review it by hand.
 
 ```python
 # SLOP
@@ -277,6 +276,8 @@ match status:
         pass
 
 # CLEAN
+from typing import assert_never  # typing_extensions before 3.11
+
 match status:
     case Status.ACTIVE:
         return activate()
@@ -284,7 +285,17 @@ match status:
         return deactivate()
     case _:
         assert_never(status)
+
+# CLEAN — if/elif form
+if status is Status.ACTIVE:
+    return activate()
+elif status is Status.INACTIVE:
+    return deactivate()
+else:
+    assert_never(status)
 ```
+
+No Ruff rule covers this. Review it by hand.
 
 ## Sources
 

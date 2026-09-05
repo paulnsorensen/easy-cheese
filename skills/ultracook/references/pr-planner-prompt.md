@@ -32,8 +32,9 @@ Review-shape criteria, in priority order:
 3. Use `orthogonal_flat` only when curds have no ordering dependency. Use
    `diamond_stack` when a shared base and final wiring surround independent
    curds. Otherwise use `stacked_linear`.
-4. Do not use line-count or file-count thresholds. If the plan cannot name
-   honest review boundaries, report the conflict instead of manufacturing them.
+4. Counts never decide the shape. `/plate` topology (`skills/plate/references/topology.md`
+   step 2) owns the size gate and has already resolved `{plate_layout}`. If the plan
+   cannot name honest review boundaries, report the conflict instead of manufacturing them.
 
 ## Output: pr-plan.yaml
 
