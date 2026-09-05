@@ -4,6 +4,6 @@
 
 | Command | Purpose |
 | --- | --- |
-| `debug-tag-sweep` | Scan a tree for surviving instrumentation tags |
-| `pasteurize-route` | Size a /pasteurize investigation into fan-out lanes (JSON in, JSON out) |
-| `repro-rerun` | Re-run a repro command N times and emit a structured verdict |
+| `debug-tag-sweep` | Scan changed files for surviving instrumentation tags |
+| `pasteurize-route` | Size a /pasteurize investigation into agents (JSON in, JSON out) |
+| `repro-rerun` | Re-run a reproduction command a specified number of times and emit a verdict |

@@ -1,8 +1,13 @@
 ---
 name: pasteurize
 description: >
-  Diagnose and fix hard bugs. Build a reliable reproduction, name the cause,
-  add a regression test, and apply the minimum fix.
+  Diagnose and fix a hard bug. Build a reliable reproduction, name the cause,
+  add a regression test, and apply the minimum fix. Use when the user reports
+  a bug, a failure, a flaky test, a performance regression, an error, or a
+  wrong result whose cause is unknown. Use when the user pastes a symptom, a
+  stack trace, or failing test output. Use for "why is X broken", "it stopped
+  working", "it got slower", or "this looks wrong". Do not use for a
+  review-only diff, for feature design, or for a fix whose cause is known.
 license: MIT
 ---
 
@@ -10,8 +15,29 @@ license: MIT
 
 Use this process for hard bugs.
 
+## Discipline
+
+**Iron Law:** Build a reliable feedback loop before you form one hypothesis.
+
+Stop at each red flag:
+
+- You name a cause before the loop reproduces the failure.
+- You accept an unrelated failure as the reproduction.
+- You add a test at a mocked seam because the real seam is difficult.
+- You make a fourth fix attempt on the same hypothesis list.
+- You report a clean worktree without the session-tag sweep.
+
+| Rationalization | Answer |
+| --- | --- |
+| "The cause is obvious." | Build the loop. An obvious cause takes one run to confirm. |
+| "The loop is too slow to write." | A slow loop still beats a wrong fix. |
+| "Any failure proves the bug." | Match the expected exit code or output. |
+| "The mocked seam is close enough." | Record the missing seam and route to Mold. |
+| "One more attempt will work." | Write a new hypothesis list first. |
+
 Follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) when you explore code.
-Check `.cheese/specs/` for notes about the failed seam.
+Resolve the specification store with `artifact-path specs`.
+Read the notes about the failed seam from the resolved directory.
 
 Read [`harness-portability.md`](../cheese/references/harness-portability.md) for portable tool use.
 Use bundled or repository helpers before `${CLAUDE_SKILL_DIR}`.
@@ -19,10 +45,45 @@ Treat `${CLAUDE_SKILL_DIR}` as an optional host fallback.
 Use the handoff blocks as the portable contract.
 Remember that slash commands are host renderings, not the control model.
 
+## Inputs
+
+`<input>` is the reported symptom.
+Accept a bug report, a stack trace, failing test output, or an artifact path.
+Accept an investigation request from Affinage, Cheese, or Cook.
+
+An investigation request uses these fields:
+
+| Field | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `source` | string | yes | The requesting skill, such as `affinage`. |
+| `source_ref` | string | no | The pull request comment or finding identifier. |
+| `symptom` | string | yes | The reported failure in one sentence. |
+| `expect_exit` | integer | no | The exit code that shows the failure. |
+| `expect_output` | string | no | A regular expression for the failure output. |
+| `mode` | string | no | `investigate` or `fix`. The default is `fix`. |
+
+Accept these flags:
+
+- `--auto` runs the phases without the two questions.
+- `--open-pr` reaches Plate through Cook.
+- `--hard` reaches the final Hard-cheese gate through Cook.
+
+Forward `--open-pr` and `--hard` to every `/cook` and `/mold` command.
+Do not drop a flag that the caller supplied.
+
+Cheese can supply `handoff_context.wiki_hits`.
+Each hit has a `page`, a `line`, and a `why` field.
+Read each hit before Phase 1.
+Name any hit that changes the hypothesis ranking.
+
+A request with `mode: investigate` stops after Phase 2.
+Return `reproduced`, `not-reproduced`, or `inconclusive` to the source skill.
+Do not start Phase 4 for an investigation request.
+
 ## Phase 1: Build the feedback loop
 
-Build a fast and reliable pass-or-fail signal before you diagnose the bug.
-This signal controls every later phase.
+Build a fast and reliable pass-or-fail feedback loop before you diagnose the bug.
+This feedback loop controls every later phase.
 
 Read [`references/feedback-loops.md`](references/feedback-loops.md) for the ordered loop options.
 Select the first option that reaches the failed seam.
@@ -36,7 +97,10 @@ Improve the loop before you continue.
 ### Non-deterministic bugs
 
 Increase the reproduction rate above 50 percent.
-Repeat the trigger, add stress, narrow timing windows, or add controlled delays.
+Repeat the trigger.
+Add stress.
+Narrow the timing window.
+Add a controlled delay.
 
 ### No usable loop
 
@@ -44,7 +108,8 @@ Stop when you cannot build a usable loop.
 List each method that you tried.
 Request access to the reproduction environment.
 Alternatively, request a captured artifact or permission for temporary production instrumentation.
-Write a `status: halt` handoff slug.
+Write a `status: needs-context: <the access you need>` handoff slug.
+The orchestrator retries this run after it supplies the access.
 Do not form hypotheses without a loop.
 
 Confirm these conditions before Phase 2:
@@ -62,13 +127,20 @@ Aim for a loop that completes in less than five seconds.
 Run the loop five times.
 
 ```bash
-python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun --cmd "<repro-command>" --runs 5
+python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun \
+  --cmd "<repro-command>" --runs 5 \
+  --expect-output "<expected failure text>" --threshold 0.5 --timeout 30
 ```
 
+Always name the expected failure mode.
+Use `--expect-output` for a failure with known output.
+Use `--expect-exit` for a failure with a known exit code.
 Confirm that the result contains `reproduced: true`.
-Confirm that `failures` matches the expected failure mode.
+Confirm that `matches` equals `runs` for a deterministic bug.
+Read the `results` list and confirm each matched run.
 Increase `--runs` when five runs do not reproduce a flaky bug.
-Do not continue until the loop reproduces the bug.
+Do not continue until the loop reproduces the expected failure.
+Do not accept an unrelated failure as a reproduction.
 
 ## Symptom gate
 
@@ -78,7 +150,8 @@ Classify the symptom before you form hypotheses.
 - Upgrade the model tier for races, cross-module failures, performance regressions, or Heisenbugs.
 
 Use the harness command for the model upgrade.
-For Claude, use `/model opus` and `/effort`.
+For Claude, use `/model opus`.
+Then use `/effort`.
 Use the named equivalent for Codex or OMP.
 Use a generic model upgrade on other hosts.
 
@@ -107,8 +180,10 @@ Use tools in this order:
 2. Add targeted logs at boundaries that distinguish hypotheses.
 3. Do not log all data and search it later.
 
-Prefix each temporary log with a unique tag such as `[DEBUG-a4f2]`.
-Use the selected search backend to find every tagged log during cleanup.
+Select one session tag for this investigation, such as `a4f2`.
+Prefix each temporary log with the exact token `[DEBUG-a4f2]`.
+Record the session tag in the handoff slug.
+Use the session tag to find every temporary log during cleanup.
 
 For performance regressions, measure a baseline before you change code.
 Use a timing harness, profiler, or query plan.
@@ -125,8 +200,8 @@ A shallow or mocked seam gives false confidence.
 
 Treat a missing seam as an architectural finding.
 Record it in the handoff slug.
-Write the applicable halt string.
-Route the work to `/mold`.
+Write the applicable early-stop status.
+Set `next: mold`.
 Do not add a test at an incorrect seam.
 
 When a correct seam exists, complete these steps:
@@ -139,12 +214,13 @@ When a correct seam exists, complete these steps:
 
 Revert an unsuccessful fix before the next attempt.
 Stop after three unsuccessful fix attempts.
-Return to Phase 3 and write a new ranked hypothesis list.
+Return to Phase 3.
+Write a new ranked hypothesis list.
 Do not make a fourth attempt without a new hypothesis.
 
 Restart at Phase 4 when you find a new hypothesis.
-Otherwise, write the fix-attempts-exhausted halt string.
-Then route the work to `/mold`.
+Otherwise, write the fix-attempts-exhausted status.
+Then set `next: mold`.
 
 Leave broader changes for `/cook`.
 Record those changes in the handoff slug.
@@ -161,15 +237,20 @@ Complete this checklist before you write the handoff slug:
 - [ ] Record any retained debug file in the slug.
 - [ ] Record the confirmed hypothesis in the slug.
 
-Run the instrumentation sweep:
+Run the instrumentation sweep with your session tag:
 
 ```bash
-python3 skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep --root .
+python3 skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep \
+  --session-tag a4f2 --changed-only --root .
 ```
 
+`--session-tag` matches the exact token `[DEBUG-a4f2]`.
+`--changed-only` scans the files that this worktree changed.
+The sweep excludes tool output such as `.cheese/`, caches, and run logs.
 Exit status 0 means that the sweep found no tags.
 Exit status 1 means that the sweep found listed tags.
 Remove each listed tag before you continue.
+Do not use the broad `--tags` scan to certify a clean worktree.
 
 Identify what could prevent this bug.
 Record necessary architectural work in the slug.
@@ -201,8 +282,9 @@ A lower evidence score produces more agents because it represents a larger searc
 
 A score of 250 defines a tight range.
 
-The constants are reasoned and not measured.
-Reviewer thresholds use 30 repository commits, but these constants have no run history.
+A reviewer reasoned these constants. Runs have not measured them.
+Reviewer thresholds use 30 repository commits.
+These constants have no run history.
 Keep the named constants adjustable.
 Review them when real runs exist.
 
@@ -251,17 +333,34 @@ Use this minimum form:
 status: <canonical status field>
 next: cook | mold | done
 artifact: <path-to-richer-report-if-any>
+<one-line orientation: what pasteurize confirmed>
+
 cause: <one-sentence named cause>
 loop: <command or repro path>
+session_tag: <the Phase 4 session tag, or "none">
 seam: <regression-test path:line, or "none — architectural follow-up">
 fix: <production diff footprint, e.g. "src/foo.ts:42">
 follow_up: <architectural follow-up note, or "none">
-<one-line orientation: what pasteurize confirmed>
 ```
 
-Use `status: ok` after the test, reproduction, and cleanup checks succeed.
-Use `halt: <reason>` after an early-stop condition.
+Keep the orientation on line four.
+The parser reads `status`, `next`, and `artifact` before the orientation.
+It reads no other keyed line in the preamble.
+Put every diagnostic field in the body after one blank line.
+Use `artifact` for the richer report, not for the diagnosis.
 Follow the [handback contract](../cheese/references/handback-contract.md).
+
+Use these statuses:
+
+| Status | Disposition | Use |
+| --- | --- | --- |
+| `ok` | proceed | The test, reproduction, and cleanup checks succeed. |
+| `ok-with-concerns: <reason>` | proceed | The diagnosis is complete, but the work needs Mold. |
+| `needs-context: <reason>` | retry | The run needs reproduction access or a captured artifact. |
+| `halt: <reason>` | stop | The run cannot continue, and no route follows. |
+
+The orchestrator ignores `next:` after `halt`.
+Do not name a route in a `halt` slug.
 
 Set `next: cook` for the standard chain.
 Set `next: mold` when the diagnosis requires an architectural specification.
@@ -299,10 +398,11 @@ Stop for any of these conditions:
 - The minimum fix breaks an unrelated test outside the pasteurize scope.
 - Three unsuccessful fixes exhaust all hypotheses.
 
-For a missing seam, write `status: halt: no correct regression-test seam`.
-For exhausted fixes, write `status: halt: fix attempts exhausted — architectural re-examination needed`.
-Route both conditions to `/mold`.
-Always write the halt slug and show the report.
+For a missing seam, write `status: ok-with-concerns: no correct regression-test seam`.
+For exhausted fixes, write `status: ok-with-concerns: fix attempts exhausted — architectural re-examination needed`.
+Set `next: mold` for both conditions.
+For missing reproduction access, write `status: needs-context: <the access you need>`.
+Always write the slug and show the report.
 Do not replace evidence with a best guess.
 
 ## Rules

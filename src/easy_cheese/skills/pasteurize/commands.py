@@ -29,13 +29,16 @@ def _repro_rerun(argv: list[str]) -> int:
 
 
 COMMANDS = (
-    derive_command(_debug_tag_sweep, "Scan a tree for surviving instrumentation tags"),
     derive_command(
-        _pasteurize_route,
-        "Size a /pasteurize investigation into fan-out lanes (JSON in, JSON out)",
+        _debug_tag_sweep, "Scan changed files for surviving instrumentation tags"
     ),
     derive_command(
-        _repro_rerun, "Re-run a repro command N times and emit a structured verdict"
+        _pasteurize_route,
+        "Size a /pasteurize investigation into agents (JSON in, JSON out)",
+    ),
+    derive_command(
+        _repro_rerun,
+        "Re-run a reproduction command a specified number of times and emit a verdict",
     ),
 )
 
