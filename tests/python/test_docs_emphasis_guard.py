@@ -33,6 +33,7 @@ def test_shared_source_routing_contract_is_linked_and_complete():
         "skills/melt/SKILL.md",
         "skills/mold/SKILL.md",
         "skills/pasteurize/SKILL.md",
+        "skills/plate/SKILL.md",
         "skills/press/SKILL.md",
         "skills/ultracook/SKILL.md",
     )
@@ -82,6 +83,8 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         REPO_ROOT / "skills/affinage/SKILL.md",
         REPO_ROOT / "skills/hard-cheese/SKILL.md",
         REPO_ROOT / "skills/pasteurize/SKILL.md",
+        REPO_ROOT / "skills/plate/SKILL.md",
+        REPO_ROOT / "skills/wheypoint/SKILL.md",
     ]
 
     # The sentence appears both mid-sentence and sentence-initial, so only its
@@ -314,6 +317,7 @@ def test_question_routing_is_native_first_and_lossless():
         "mold",
         "pasteurize",
         "press",
+        "wheypoint",
     ),
 )
 def test_core_workflow_question_sites_reference_shared_handoff_gate(skill: str):

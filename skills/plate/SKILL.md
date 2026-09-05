@@ -72,10 +72,13 @@ See [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-
   The command detects Graphite, Git Town, and `gh stack`. It does not change repository state.
 - Use Git and GitHub for repository, remote, and PR state. Use the selected provider CLI for stack state.
 - Use the repository code-intelligence backend to edit tracked artifacts. Use the same backend to read them.
+  Select the backend with [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md).
   Follow this sequence from [`references/durable-writes.md`](references/durable-writes.md): fresh tagged read, one stale-safe write, diff read-back.
   Use named paths. Do not use shell redirects.
 - Send durable wiki knowledge through `/wiki-ingest`. Do not edit the Hallouminate tree directly.
 - Keep temporary completion and PR-body files under `.cheese/`. Do not stage them.
+- Slash commands are host renderings, not the control model. Name the capability before you show a host example.
+  See [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md).
 
 ## Generic transaction
 
@@ -131,6 +134,7 @@ Use multiple commits in one PR only for a short series of simple steps. Keep the
 
 Every halt names the mode, the failed step, and who owns the failure.
 Name the step with exactly one of: `classify`, `topology`, `durable write`, `quality gate`, `stage/commit`, `publish`, or `terminal validation`.
+Apply the shared voice rules from [`../age/references/voice.md`](../age/references/voice.md) in halt and completion reports.
 
 - **Plate-owned** — This skill selected an incorrect call shape or route.
   Examples include a malformed write, stale write, skipped read, or unnamed staging path.

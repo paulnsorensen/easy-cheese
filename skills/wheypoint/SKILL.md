@@ -48,6 +48,10 @@ Direct invocations run, return output, and **STOP** before checkpoint writing.
 
 Never invoke another archive.
 
+Slash commands are host renderings, not the control model.
+
+Run the bundled archive by its repository path on every host. See [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md).
+
 1. **Derive a slug.** Use a value such as `auth-retry-backoff`.
 2. Reuse an existing slug when this session already owns it under `.cheese/`.
 3. **List existing artifacts.** Include each artifact, spec, PR, issue, commit, and diff that this session touched.
@@ -185,6 +189,7 @@ No caller can force `ok`.
 - The new agent shows the decision and the open entries.
 - The new agent asks whether to research, decide, or build.
 - It dispatches nothing until the user selects a direction.
+- The new agent asks through the shared [handoff gate](../cheese/references/handoff-gate.md).
 - Every open blocker requires `status: gated:`.
 - Never replace a gate with `status: ok` and an actionable `next:`.
 - **`halt: <one-line reason>`**: This legacy value is valid only in handwritten notes.
@@ -245,6 +250,8 @@ Use this order:
 - Remove sensitive values from environment details.
 
 Follow [`../cheese/references/formatting.md`](../cheese/references/formatting.md).
+
+Apply the shared voice rules from [`../age/references/voice.md`](../age/references/voice.md).
 
 Use complete sentences in prose.
 
