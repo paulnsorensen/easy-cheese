@@ -19,6 +19,12 @@ Three prose rules plus one mechanical check, all in `skills/mold/`:
 
 The taste test is a mechanical host-side validator, not a fresh-context reviewer. A substring check is deterministic, cheap, and gives a precise failure mode. "Does this fork serve the goal" is a judgment and stays in prose (the altitude tag), where the user can argue with it. The verbatim rule also makes goal amendments visible: changing the sentence requires an explicit user fork, so a silently reworded goal fails the gate rather than passing on a paraphrase.
 
+
+
+## Gotcha: the ledger has two shapes, so parse the goal once
+
+`_normalize_ledger` accepts both `{"goal": ..., "forks": [...]}` and an id-keyed mapping `{"F-1": {...}, "F-2": {...}}`. The first cut parsed the goal in a separate helper and left the id-keyed fallback loop untouched, so a top-level `goal` key on that shape became a settled consequential fork named `goal` and every verdict failed `missing-fork:goal`. The fix (PR #620) reads the goal inside `_normalize_ledger` and skips the reserved key there. Any future top-level ledger key must be reserved in that same loop. Goal headings also live in their own `_GOAL_HEADINGS` set, matched exactly, rather than in `_REFLECTION_ALIASES`, because that table doubles as the `ForkCoverage.reflected_in` validator and anything added to it becomes a legal fork reflection target.
+
 ## Rejected
 
 - **A new handshake checklist box / gate-graph node.** The gate-prose-sync test would require a model change and a `mold.dot` regen for what is a sub-check of the existing fork taste gate. Folded into `acceptance_gaps` instead.
