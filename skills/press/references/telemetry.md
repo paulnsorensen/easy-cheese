@@ -69,6 +69,7 @@ Cite the telemetry file from the Press report.
 - `recurring` is true after the same phase and operation fail twice during one attempt. This result marks an operation failure, not a temporary tool failure.
 - Each changed path has the class `tests`, `metadata`, or `production_source`. An unknown path has the `production_source` class. This rule exposes unfamiliar paths.
 - `boundary_consistent` is false when an outcome other than `production_changed` reports production source paths. This audit flag does not control the route. `press-route` still selects the action.
+- The `metadata` class does not make a path boundary-safe. Press writes only tests, fixtures, and test-only harness support. Review each `metadata` path by hand. Classify the attempt as `production_changed` when a `metadata` path is not test support.
 
 ## Read the records
 

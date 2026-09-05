@@ -4,5 +4,5 @@
 
 | Command | Purpose |
 | --- | --- |
-| `press-route` | Decide whether Press continues or stops (JSON in, JSON out) |
+| `press-route` | Return the Press action: continue, dispatch /age, or stop (JSON in, JSON out) |
 | `press-telemetry` | Build the Press attempt telemetry record (JSON in, JSON out) |

@@ -15,7 +15,7 @@ Treat a missing production implementation as an in-contract RED. Request a bound
 | In-contract defect | The approved seam fails on an adversarial input or transition | Preserve the same failing test and digest. Route as `in_contract_red`. |
 | Invalid evidence | The recorded run does not verify the attack outcome | Stop without a repair action. |
 | Production mutation | A production path changes during a Press interval | Stop. |
-| Out-of-contract behavior | The approved Test Contracts omit a desired behavior | Record a review follow-up. Do not implement it. |
+| Out-of-contract behavior | The approved Test Contracts omit a desired behavior | Record it under `## Review follow-ups`. Report `ok-with-concerns` on a GREEN pass. Do not implement it. |
 
 ## Evidence sequence
 
@@ -52,7 +52,7 @@ The packaged boundary uses the classified outcome and completed corrective count
 }
 ```
 
-`repair_cycles` counts completed corrective Cook continuations for this slug. Use 0 for P1, 1 for P2, and 2 for P3.
+`repair_cycles` counts completed corrective Cook continuations for this slug. Use 0 for attempt 1, 1 for attempt 2, and 2 for attempt 3.
 
 Each attempt uses separate candidate and route paths. Never reuse or overwrite an earlier attempt artifact.
 
@@ -70,7 +70,9 @@ The packaged boundary applies these rules:
 - The third RED at `repair_cycles` 2 returns `Stop("third-red")`.
 - Invalid evidence and production changes stop.
 
-A valid GREEN result is ready for review. A complete third-RED evidence chain is also ready for review.
+A valid GREEN result is ready for review. Press dispatches Age after that result.
+
+A complete third-RED evidence chain is ready for terminal reporting. Press does not dispatch Age after that result.
 
 Invalid evidence blocks the route. A production mutation also blocks the route.
 
@@ -84,7 +86,7 @@ New or changed failures block the route.
 | --- | --- |
 | An approved adversarial test exposes a defect in Cook behavior | Preserve the RED evidence. Request a bounded corrective Cook continuation. |
 | The evidence chain, digest, or production snapshot is invalid | Stop. Report the exact integrity failure. |
-| The attack targets behavior outside approved contracts | Record it for `/age`. Do not edit production code or continue. |
+| The attack targets behavior outside approved contracts | Record it under `## Review follow-ups` for `/age`. Do not edit production code. Do not continue. |
 
 ## Hard rule — preserve evidence
 

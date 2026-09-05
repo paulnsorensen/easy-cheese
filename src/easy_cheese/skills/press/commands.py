@@ -10,7 +10,7 @@ COMMANDS = (
     Command(
         "press-route",
         "easy_cheese.shared.fanout.press_route_cli:main",
-        "Decide whether Press continues or stops (JSON in, JSON out)",
+        "Return the Press action: continue, dispatch /age, or stop (JSON in, JSON out)",
     ),
     Command(
         "press-telemetry",

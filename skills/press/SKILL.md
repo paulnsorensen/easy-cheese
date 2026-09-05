@@ -17,6 +17,24 @@ press(spec_ref)
 
 Press never owns first coverage. Press never edits production code. Cook owns the implementation. Press attacks the approved contract and preserves failure evidence for a bounded Cook repair.
 
+## Inputs
+
+Press accepts this invocation:
+
+```text
+/press <slug> [--auto] [--hard] [--open-pr]
+```
+
+`<slug>` names the pipeline slug. Press requires it. Press reads `.cheese/cook/<slug>.md` for the Cook handoff.
+
+`--auto` selects the autonomous chain. See `## Auto mode`.
+
+`--hard` requests the optional final gate. Press forwards this flag to Age.
+
+`--open-pr` is publication permission. Only the user supplies it. Press forwards this flag to Age. Press never adds it.
+
+Press preserves the Cook `durable_flags:` value without change. Press ignores the Cook `taste_test:` value.
+
 ## Packaged commands
 
 Run this command for boundary routing:
@@ -85,9 +103,9 @@ Press has no global `dispatch: /cook` action. Press owns the corrective Cook `Co
 
 ## Baseline-aware gates
 
-Press preserves baseline-aware readiness for project gates. A Cook `baseline:` block contains the settled state.
+Press preserves baseline-aware readiness for project gates. The Cook `baseline:` line names one artifact. That artifact holds the settled state.
 
-Do not re-flag a failure when its test and signature match the baseline. New or changed failures block the route.
+Read the artifact through the `baseline:` path. Do not re-flag a failure when its test and signature match the artifact. New or changed failures block the route.
 
 See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md). Also see [`references/gap-analysis.md`](references/gap-analysis.md).
 
@@ -97,7 +115,7 @@ See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)
 2. **Attack** — Add or run only adversarial tests. Do not add first-coverage tests. Do not change production paths.
 3. **Classify** — Select `green`, `in_contract_red`, `invalid_evidence`, or `production_changed` from the adversarial run.
 4. **Continue or stop** — Run `press.pyz press-route` with `outcome` and `repair_cycles`. Only `Continue`, `Dispatch`, and `Stop` action shapes are public.
-5. **Report** — Write `.cheese/press/<slug>.md`. Include the evidence, action, and telemetry record path.
+5. **Report** — Write `.cheese/press/<slug>.md` at a terminal result. Include the attempts, evidence, and review follow-ups.
 6. **Hand off** — Send only a GREEN `Dispatch("/age")` to the global Age route.
 
 Use [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) for source changes.
@@ -105,42 +123,64 @@ Use [`code-intelligence-routing.md`](../cheese/references/code-intelligence-rout
 Use [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for portability.
 The reference states that slash commands are host renderings, not the control model.
 
-Map `ready for /age` to `status: ok` and `next: age`. Map `follow-up recommended` to `status: ok-with-concerns: <concern>`. Continue after that status.
+Press reports one readiness value. Map `ready for /age` to `status: ok` and `next: age`.
 
-Map `blocked` to `status: gated: <decision>`. Stop after that status.
+Map `follow-up recommended` to `status: ok-with-concerns: <concern>` and `next: age`. Use this status for a GREEN pass that also records a review follow-up. Age owns each recorded concern.
 
-If `/ultracook` sets its no-chain directive, write the Press handoff and stop. Do not start another phase.
+Map `blocked` to `status: gated: <decision>` and `next: done`. Stop after that status.
+
+## Auto mode
+
+`--auto` runs the same adversarial loop. It also selects the next phase without a user prompt.
+
+Dispatch `/age <slug> --auto` after `ready for /age` or `follow-up recommended`. Add `--hard` when the user supplied it. Add `--open-pr` when the user supplied it.
+
+Stop after `blocked`. Do not dispatch Age.
+
+Honor the no-chain directive when the caller supplies it. Write the Press handoff and stop. Do not start another phase. Cook's fan pathway owns this directive. The retired `/ultracook` orchestrator previously owned it. Test for the directive itself. Do not test for the source name. See [`../cook/references/auto-mode.md`](../cook/references/auto-mode.md).
 
 ## Output
 
-Write `.cheese/press/<slug>.md` with at least this content:
+Write `.cheese/press/<slug>.md` only at a terminal Press result. A corrective `Continue` stays inside the Press phase. It writes no durable handoff.
+
+Write the file with `write-handoff-artifact`. Use the canonical preamble:
 
 ```markdown
 status: <canonical status field>
-next: age | press | done
-artifact: <evidence-path>
-baseline: none | <Cook baseline block>
-action: continue | dispatch | stop
-telemetry: <telemetry-record-path>
+next: age | done
+artifact: .cheese/cook/<slug>.md
+durable_flags: <preserved Cook value>
+baseline: none | <baseline artifact path>
 <one-line orientation>
 ```
 
-The [handback contract](../cheese/references/handback-contract.md) defines the `status:` grammar. Only `next:` and the additional keyed lines are specific to Press.
+The [handback contract](../cheese/references/handback-contract.md) defines the `status:` grammar. The preamble accepts no other keys. Put every Press value in the report body.
 
-Map the router action without a new runnable phase:
+`artifact:` names the consumed Cook report. Do not put attack evidence on this line.
 
-| router action | status | next | action |
-| --- | --- | --- | --- |
-| `Dispatch("/age")` after GREEN | `ok` | `age` | `dispatch` |
-| `Continue("press-corrective-cook")` on repair cycle 0 or 1 | `ok` | `press` | `continue` |
-| `Stop("third-red")` | `ok` | `done` | `stop` |
-| invalid evidence or production change | `halt: <reason>` | `done` | `stop` |
+`baseline:` names the one artifact that Cook recorded. See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md).
+
+Write these body sections under the preamble:
+
+- `## Attempts` — one row for each attempt. Give the attempt number, outcome, router action, candidate path, route path, and telemetry record path.
+- `## Evidence` — the stable attack identity and the test digest.
+- `## Review follow-ups` — each out-of-contract concern. Write `none` when the run records no concern. Age reads this section.
+
+Map the router action to the terminal preamble:
+
+| router action | status | next |
+| --- | --- | --- |
+| `Dispatch("/age")` after GREEN | `ok` | `age` |
+| `Dispatch("/age")` after GREEN with a recorded concern | `ok-with-concerns: <concern>` | `age` |
+| `Continue("press-corrective-cook")` on repair cycle 0 or 1 | no handoff | no handoff |
+| `Stop("third-red")` | `ok` | `done` |
+| invalid evidence or production change | `halt: <reason>` | `done` |
 
 `next: done` is terminal. It never starts another phase.
 
-A valid third-RED stop can offer a later Cook handoff that the user selects. It does not set Cook, Press, or Age as the next phase.
+A valid third-RED stop is ready for terminal reporting. It does not dispatch Age. It can offer a later Cook handoff that the user selects.
 
-Invalid evidence and production changes halt. Reserve `next: age` for GREEN `Dispatch("/age")`. A corrective `Continue` belongs to Press. It is not a global phase handoff.
+Reserve `next: age` for a GREEN `Dispatch("/age")`. The corrective `Continue` belongs to Press. It is not a global phase handoff. Do not write `next: press`.
 
 ## Handoff
 
@@ -150,7 +190,7 @@ After a GREEN Press report, use the shared [handoff gate](../cheese/references/h
 
 The Press owner controls a corrective Cook continuation. Do not offer that continuation as a second global route.
 
-Pass `--hard` to `/age` and later phases.
+Forward `--hard`, `--auto`, and `--open-pr` to `/age` when the caller supplied them. Never add `--open-pr`.
 
 ## Rules
 
@@ -158,12 +198,12 @@ Pass `--hard` to `/age` and later phases.
 - Do not dispatch a global Cook repair from Press.
 - Do not use more than two corrective continuations.
 - Do not change the attack between retries.
-- Do not treat out-of-contract behavior as an implementation request. Record it as a review follow-up.
+- Do not treat out-of-contract behavior as an implementation request. Record it under `## Review follow-ups`. Report the run as `ok-with-concerns` on a GREEN pass.
 - Preserve baseline-aware readiness unless these route rules replace it.
 
 ## Discipline
 
-Press uses evidence first. Fear is the curd-killer. An unverified failure is not a RED.
+Press uses evidence first. An unverified failure is not a RED.
 
 Name the outcome before each route decision. Name the attack digest and completed `repair_cycles` count. Stop if one value is missing. Do not guess.
 
