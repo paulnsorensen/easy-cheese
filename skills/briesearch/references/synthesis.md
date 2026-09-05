@@ -1,6 +1,6 @@
 # Synthesis and confidence
 
-After fetchers report, build a claim-level evidence table, verify citations, and apply the confidence cap.
+Build the claim-level evidence table after the fetchers report. Verify each citation. Then apply the confidence cap.
 
 ## Claim-level evidence table
 
@@ -21,7 +21,7 @@ Rules:
 - **Conflicting evidence is its own row pair**, not silently averaged. Surface disagreement explicitly.
 - **Cap a single-source claim at `speculating`.** An authoritative source for that claim type can remove this cap. Examples include vendor documentation for an API and repository knowledge for recorded rationale. Current code is authoritative for current local behavior. Documentation is authoritative only when its version matches the question. A provider name does not make an ambiguous excerpt authoritative.
 
-The tokens `certain`, `speculating`, and `don't know` are exact label values — write them verbatim, never as synonyms.
+The tokens `certain`, `speculating`, and `don't know` are exact label values. Write each one verbatim. Do not write a synonym or a case variant.
 
 ## Treat alternatives as open questions
 
@@ -64,7 +64,7 @@ Skip link verification only for inline `file:line` references and URLs that the 
 
 ## Absence and negative claims
 
-An absence claim is easy to infer from silence and difficult to disprove. Unsupported absence claims can remain through many review turns. Apply a higher standard to absence claims than to positive claims.
+An absence claim is easy to infer from silence. It is also difficult to disprove. An unsupported absence claim can survive many review turns. Apply a higher standard to an absence claim than to a positive claim.
 
 - **Do not mark an unsupported absence as `certain`.** Cite a source that states the absence. Otherwise, list each candidate mechanism and cite evidence that excludes it.
 - **Downgrade an incomplete search.** Report `not found in <sources checked>` at `speculating`. Name the searched sources. Do not report `does not exist`.
@@ -111,6 +111,6 @@ Short form (always returned to the caller):
 
 Long form (when the question warranted a deep look):
 
-- Resolve each path with `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. Use a slug with four to six kebab-case words. The command prints `corpus_root`, `dir`, `report`, `raw_dir`, and `manifest`. Write the complete report to `report`. Write raw bodies under `raw_dir`. Do not construct these paths manually.
-- Include the complete claim table and verification log. Cite raw bodies with paths relative to `raw_dir`, such as `raw/01-example.md#Lstart-end`. Never put URL user information or query values in a persisted citation.
+- Resolve each path with `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. Use a slug with four to six kebab-case words. The command prints `corpus_root`, `dir`, `report`, `raw_dir`, `manifest`, and `artifact`. Write the complete report to `report`. Write raw bodies under `raw_dir`. Report `artifact` to a caller that records a corpus-relative path. Do not construct these paths manually.
+- Include the complete claim table and the verification log. Cite each raw body with a path relative to `raw_dir`, such as `raw/01-example.md#Lstart-end`. Never put URL user information, query values, or a fragment in a persisted citation.
 - Return one summary paragraph, the report path, and the confidence line in chat. Do not paste the complete report in chat.

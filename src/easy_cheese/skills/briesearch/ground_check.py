@@ -13,17 +13,25 @@ Reads a markdown report, finds every evidence table (a table whose header has a
 
   - CITATION (error): the evidence/source cell carries a URL, an inline
     ``path:line``, a confined local path, or a uniquely defined footnote
-    containing one of those citation shapes. Local line anchors must be in bounds.
+    containing one of those citation shapes. Every local citation resolves under
+    its allowed root, and every line anchor (``path:12-40`` or ``path#L12-40``)
+    names lines the file has.
     A claim with none is un-grounded.
   - CONFIDENCE (error): the confidence cell is exactly one of the three label
-    values (``certain`` / ``speculating`` / ``don't know``), not a synonym.
+    values (``certain`` / ``speculating`` / ``don't know``), not a synonym and
+    not a case variant.
+  - FRESHNESS (error): a row date that disagrees with the manifest fetch date of
+    the body it cites.
+  - MANIFEST (error): a manifest slug that names another report, or a successful
+    capture that stored no confined raw body.
   - ABSENCE (advisory): a negative/absence-shaped claim marked ``certain`` that
     carries no ruling-out phrase. Whether an absence was *observed* (a cited
     source states it) or *inferred* (synthesised from silence) is not decidable
     from text, so this is surfaced, not failed — it feeds the synthesis-fidelity
     self-check, which downgrades inferred absences to "not found in <sources>".
   - REMOTE (error): a cited ``http(s)`` URL that the run's capture manifest does
-    not record as retrieved through a provider retrieval tool (#493). Routing
+    not record as retrieved through a provider retrieval tool (#493), or a
+    citation that carries user information, a query value, or a fragment. Routing
     tells the agent to open every cited page with the selected provider's own
     extraction tool; without this the claim "verify then cite" was unauditable,
     and a URL that only ever appeared in a search result list could be cited as
@@ -41,10 +49,13 @@ import argparse
 import re
 import sys
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlsplit
 
 from easy_cheese.skills.briesearch.ledger import (
+    EXTRACT,
     Call,
     Ledger,
     LedgerError,
@@ -70,11 +81,19 @@ _DIRECT_CITATION = re.compile(
 )
 _CITATION = re.compile(r"\[\^[^\]]+\]|" + _DIRECT_CITATION.pattern, re.IGNORECASE)
 _REMOTE_START = re.compile(r"https?://", re.IGNORECASE)
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _URL_OPENERS = frozenset("([{")
 _URL_CLOSERS = {")": "(", "]": "[", "}": "{"}
 _FOOTNOTE_DEFINITION = re.compile(r"^\[\^([^\]]+)\]:\s*(.*)$")
 _LOCAL_PATH = re.compile(r"(?:^|[\s(])((?:\.cheese|raw)/[^\s|]+)", re.IGNORECASE)
-_LINE_ANCHOR = re.compile(r":(\d+)(?:-(\d+))?$")
+# A local line anchor is written either ``path:12-40`` or ``path#L12-40``.
+# `context-isolation.md` § The recipe requires the ``#L`` form for raw captures.
+_LINE_ANCHOR = re.compile(r"(?::|#L)(\d+)(?:-L?(\d+))?$", re.IGNORECASE)
+# A repository-relative ``path:line`` citation. The line part is required: a bare
+# file name is prose, not a location a reader can check.
+_INLINE_PATH = re.compile(
+    r"(?<![\w/#-])((?:\.\.?/)*(?:[\w][\w.-]*/)*[\w][\w.-]*\.[A-Za-z]\w*:\d+(?:-\d+)?)"
+)
 
 # Negation aimed at existence / support / provision — the shape of an absence
 # claim. Whole-word matched so "Cargo" never trips "no".
@@ -113,24 +132,72 @@ class Violation:
 
 
 def _split_row(line: str) -> list[str]:
-    """Split a markdown table row into trimmed cells, dropping the edge pipes."""
+    """Split a markdown table row into trimmed cells, dropping the edge pipes.
+
+    A backslash escapes a pipe in Markdown. A naive split moves every later cell
+    one column left, so a claim that contains ``\\|`` reads the wrong confidence
+    value. The escape is removed from the cell text after the split.
+    """
     inner = line.strip()
-    if inner.startswith("|"):
+    if inner.startswith("|") and not inner.startswith("\\|"):
         inner = inner[1:]
-    if inner.endswith("|"):
+    if inner.endswith("|") and not inner.endswith("\\|"):
         inner = inner[:-1]
-    return [cell.strip() for cell in inner.split("|")]
+    cells: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for char in inner:
+        if escaped:
+            current.append(char if char == "|" else f"\\{char}")
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == "|":
+            cells.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    if escaped:
+        current.append("\\")
+    cells.append("".join(current).strip())
+    return cells
 
 
 def _is_separator(cells: list[str]) -> bool:
     return all(re.fullmatch(r":?-{1,}:?", c) is not None for c in cells if c)
 
 
-def _find_columns(header: list[str]) -> tuple[int, int, int] | None:
-    """Return (claim, evidence, confidence) column indices, or None if this is
-    not an evidence table. Evidence column matches "Evidence" or "Source"."""
+@dataclass(frozen=True)
+class _Columns:
+    """Column indices of one evidence table. `freshness` is -1 when absent."""
+
+    claim: int
+    evidence: int
+    confidence: int
+    freshness: int
+
+    @property
+    def width(self) -> int:
+        return max(self.claim, self.evidence, self.confidence, self.freshness) + 1
+
+
+@dataclass
+class _Context:
+    """Everything one row check reads that the report, not the row, supplies."""
+
+    footnotes: dict[str, str]
+    report_dir: Path
+    invocation_dir: Path
+    retrieved: Mapping[str, Call] | None
+    remote_seen: set[str]
+    line_counts: dict[Path, int]
+
+
+def _find_columns(header: list[str]) -> _Columns | None:
+    """Return the evidence-table column indices, or None if this is not an
+    evidence table. The evidence column matches "Evidence" or "Source"."""
     lower = [h.lower() for h in header]
-    claim = evidence = confidence = -1
+    claim = evidence = confidence = freshness = -1
     for i, h in enumerate(lower):
         if claim < 0 and "claim" in h:
             claim = i
@@ -138,11 +205,13 @@ def _find_columns(header: list[str]) -> tuple[int, int, int] | None:
             evidence = i
         if confidence < 0 and "confidence" in h:
             confidence = i
+        if freshness < 0 and "freshness" in h:
+            freshness = i
     if claim < 0 or confidence < 0:
         return None
     if evidence < 0:
         evidence = claim  # degenerate table: cite inside the claim cell
-    return claim, evidence, confidence
+    return _Columns(claim, evidence, confidence, freshness)
 
 
 def _footnote_definitions(lines: list[str]) -> tuple[dict[str, str], set[str]]:
@@ -166,14 +235,27 @@ def _footnote_definitions(lines: list[str]) -> tuple[dict[str, str], set[str]]:
     return definitions, duplicates
 
 
+def _line_count(target: Path, cache: dict[Path, int]) -> int:
+    """Count lines in `target` once for each report check."""
+    cached = cache.get(target)
+    if cached is None:
+        with target.open("rb") as stream:
+            cached = sum(1 for _ in stream)
+        cache[target] = cached
+    return cached
+
+
 def _check_line_anchor(
-    target: Path, anchor: re.Match[str], reference: str, row_no: int
+    target: Path,
+    anchor: re.Match[str],
+    reference: str,
+    row_no: int,
+    cache: dict[Path, int],
 ) -> list[Violation]:
     start = int(anchor.group(1))
     end = int(anchor.group(2) or start)
     try:
-        with target.open("rb") as stream:
-            line_count = sum(1 for _ in stream)
+        line_count = _line_count(target, cache)
     except OSError as exc:
         return [
             Violation(
@@ -196,24 +278,48 @@ def _check_line_anchor(
     ]
 
 
+def _local_references(text: str) -> list[str]:
+    """Every local citation in `text`: corpus, raw capture, and inline path:line."""
+    trailing = "`>.,;:!?)]}'\"*_~"
+    references = [
+        match.group(1).rstrip(trailing) for match in _LOCAL_PATH.finditer(text)
+    ]
+    # An inline path inside a URL is part of that URL, not a local file.
+    without_urls = text
+    for url in _remote_urls(text):
+        without_urls = without_urls.replace(url, " " * len(url))
+    for match in _INLINE_PATH.finditer(without_urls):
+        reference = match.group(1)
+        if not reference.casefold().startswith((".cheese/", "raw/")):
+            references.append(reference)
+    return references
+
+
+def _resolve_local(
+    local_path: str, report_dir: Path, invocation_dir: Path
+) -> tuple[Path, Path]:
+    """Return the allowed root and the resolved target for one local citation."""
+    if local_path.casefold().startswith("raw/"):
+        return (report_dir / "raw").resolve(), (report_dir / local_path).resolve()
+    if local_path.casefold().startswith(".cheese/"):
+        root = (invocation_dir / ".cheese").resolve()
+        return root, (invocation_dir / local_path).resolve()
+    # A repository-relative location is confined to the invocation directory.
+    return invocation_dir.resolve(), (invocation_dir / local_path).resolve()
+
+
 def _check_local_paths(
-    text: str, report_dir: Path, invocation_dir: Path, row_no: int
+    text: str,
+    report_dir: Path,
+    invocation_dir: Path,
+    row_no: int,
+    cache: dict[Path, int],
 ) -> list[Violation]:
     violations: list[Violation] = []
-    for match in _LOCAL_PATH.finditer(text):
-        reference = match.group(1).rstrip("`>.,;:!?)]}'\"*_~")
+    for reference in _local_references(text):
         anchor = _LINE_ANCHOR.search(reference)
         local_path = reference[: anchor.start()] if anchor else reference
-        root = (
-            report_dir / "raw"
-            if local_path.casefold().startswith("raw/")
-            else invocation_dir / ".cheese"
-        ).resolve()
-        target = (
-            report_dir / local_path
-            if local_path.casefold().startswith("raw/")
-            else invocation_dir / local_path
-        ).resolve()
+        root, target = _resolve_local(local_path, report_dir, invocation_dir)
         if not target.is_relative_to(root):
             violations.append(
                 Violation(
@@ -233,7 +339,9 @@ def _check_local_paths(
                 )
             )
         elif anchor:
-            violations.extend(_check_line_anchor(target, anchor, local_path, row_no))
+            violations.extend(
+                _check_line_anchor(target, anchor, local_path, row_no, cache)
+            )
     return violations
 
 
@@ -260,12 +368,43 @@ def _remote_urls(text: str) -> list[str]:
     return urls
 
 
+def _url_secret(url: str) -> str | None:
+    """Name the credential-bearing URL part, or None when the URL is safe."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return None
+    if parts.username is not None or parts.password is not None:
+        return "user information"
+    if parts.query:
+        return "query value"
+    if parts.fragment:
+        return "fragment"
+    return None
+
+
 def _check_remote(
     citations: list[str], retrieved: Mapping[str, Call] | None, row_no: int
 ) -> list[Violation]:
-    """Check cited URLs against the one report-level retrieval map."""
+    """Check cited URLs against the one report-level retrieval map.
+
+    A persisted citation carries the scheme, host, and path only. A query value
+    or a fragment can hold a signed token, so `safety.md` forbids it in a stored
+    report. The digest match runs after that rejection, never instead of it.
+    """
     violations: list[Violation] = []
     for url in dict.fromkeys(citations):
+        secret = _url_secret(url)
+        if secret is not None:
+            violations.append(
+                Violation(
+                    "error",
+                    row_no,
+                    "REMOTE",
+                    f"cited URL carries a forbidden {secret}: {render_url(url)!r}",
+                )
+            )
+            continue
         try:
             identity = url_digest(url)
         except ValueError:
@@ -293,31 +432,60 @@ def _check_remote(
     return violations
 
 
+def _check_freshness(
+    cells: list[str],
+    cols: _Columns,
+    citations: list[str],
+    retrieved: Mapping[str, Call] | None,
+    row_no: int,
+) -> list[Violation]:
+    """Bind the row's Freshness date to the manifest fetch date it cites.
+
+    `context-isolation.md` § The recipe requires this binding. Without it a row
+    can report a 2026 check over a body that a 2020 call retrieved.
+    """
+    if cols.freshness < 0 or retrieved is None:
+        return []
+    stated = _ISO_DATE.search(cells[cols.freshness])
+    if stated is None:
+        return []
+    for url in dict.fromkeys(citations):
+        if _url_secret(url) is not None:
+            continue
+        call = retrieved.get(url_digest(url))
+        if call is None or not call.fetched or call.fetched == stated.group(0):
+            continue
+        return [
+            Violation(
+                "error",
+                row_no,
+                "FRESHNESS",
+                f"row reports {stated.group(0)!r} but the capture manifest "
+                + f"retrieved {render_url(url)!r} on {call.fetched!r}",
+            )
+        ]
+    return []
+
+
 def _check_row(
     cells: list[str],
-    cols: tuple[int, int, int],
+    cols: _Columns,
     row_no: int,
-    footnotes: dict[str, str],
-    report_dir: Path,
-    invocation_dir: Path,
-    retrieved: Mapping[str, Call] | None,
-    remote_seen: set[str],
+    context: _Context,
 ) -> list[Violation]:
-    claim_i, ev_i, conf_i = cols
-    width = max(cols) + 1
-    if len(cells) < width:
+    if len(cells) < cols.width:
         return [
             Violation(
                 "error",
                 row_no,
                 "MALFORMED",
-                f"row has {len(cells)} cells, expected ≥ {width}",
+                f"row has {len(cells)} cells, expected ≥ {cols.width}",
             )
         ]
 
-    claim = cells[claim_i]
-    evidence = cells[ev_i]
-    confidence = cells[conf_i].strip().strip("`").strip()
+    claim = cells[cols.claim]
+    evidence = cells[cols.evidence]
+    confidence = cells[cols.confidence].strip().strip("`").strip()
     out: list[Violation] = []
     citations = _remote_urls(evidence)
 
@@ -332,7 +500,7 @@ def _check_row(
         )
 
     for label in cast("list[str]", _FOOTNOTE_REF.findall(evidence)):
-        definition = footnotes.get(label)
+        definition = context.footnotes.get(label)
         if definition is None:
             out.append(
                 Violation(
@@ -354,17 +522,34 @@ def _check_row(
         else:
             citations.extend(_remote_urls(definition))
             out.extend(
-                _check_local_paths(definition, report_dir, invocation_dir, row_no)
+                _check_local_paths(
+                    definition,
+                    context.report_dir,
+                    context.invocation_dir,
+                    row_no,
+                    context.line_counts,
+                )
             )
-    out.extend(_check_local_paths(evidence, report_dir, invocation_dir, row_no))
+    out.extend(
+        _check_local_paths(
+            evidence,
+            context.report_dir,
+            context.invocation_dir,
+            row_no,
+            context.line_counts,
+        )
+    )
     for url in citations:
         try:
-            remote_seen.add(url_digest(url))
+            context.remote_seen.add(url_digest(url))
         except ValueError:
-            remote_seen.add(render_url(url))
-    out.extend(_check_remote(citations, retrieved, row_no))
+            context.remote_seen.add(render_url(url))
+    out.extend(_check_remote(citations, context.retrieved, row_no))
+    out.extend(_check_freshness(cells, cols, citations, context.retrieved, row_no))
 
-    if confidence.lower() not in CONFIDENCE_LABELS:
+    # `synthesis.md` § Claim-level evidence table calls these exact label values.
+    # A case variant is a synonym, so it is not one of the three labels.
+    if confidence not in CONFIDENCE_LABELS:
         out.append(
             Violation(
                 "error",
@@ -375,7 +560,7 @@ def _check_row(
         )
 
     if (
-        confidence.lower() == "certain"
+        confidence == "certain"
         and _ABSENCE.search(claim)
         and not _RULED_OUT.search(claim)
     ):
@@ -391,11 +576,59 @@ def _check_row(
     return out
 
 
+def _check_manifest(
+    ledger: Ledger, report_dir: Path, report_stem: str | None
+) -> list[Violation]:
+    """Bind the capture manifest to the report that sits beside it.
+
+    `context-isolation.md` § Capture manifest puts the slug and one stored body
+    in the ledger. Without this check a report can carry the evidence of another
+    run, or claim a successful capture that stored nothing.
+    """
+    out: list[Violation] = []
+    if ledger.slug and report_stem and ledger.slug != report_stem:
+        out.append(
+            Violation(
+                "error",
+                0,
+                "MANIFEST",
+                f"manifest slug {ledger.slug!r} does not name this report "
+                + f"({report_stem!r})",
+            )
+        )
+    raw_root = (report_dir / "raw").resolve()
+    for index, call in enumerate(ledger.calls, start=1):
+        if call.kind != EXTRACT or not call.ok:
+            continue
+        if not call.file:
+            out.append(
+                Violation(
+                    "error",
+                    0,
+                    "MANIFEST",
+                    f"call {index} retrieved {render_url(call.url)!r} but stored "
+                    + "no raw body; a deep capture must name its file",
+                )
+            )
+        elif not (report_dir / call.file).resolve().is_relative_to(raw_root):
+            out.append(
+                Violation(
+                    "error",
+                    0,
+                    "MANIFEST",
+                    f"call {index} stored a body outside the raw capture "
+                    + f"directory: {call.file!r}",
+                )
+            )
+    return out
+
+
 def check_report(
     text: str,
     report_dir: Path | None = None,
     invocation_dir: Path | None = None,
     ledger: Ledger | None = None,
+    report_stem: str | None = None,
 ) -> tuple[list[Violation], int]:
     """Return (violations, tables_checked). A report with claims but no evidence
     table is itself a grounding failure (caller maps that to a non-zero exit)."""
@@ -413,8 +646,13 @@ def check_report(
         )
         for label in sorted(duplicate_footnotes)
     ]
+    if ledger is not None:
+        violations.extend(_check_manifest(ledger, report_dir, report_stem))
     tables_checked = 0
     remote_seen: set[str] = set()
+    context = _Context(
+        footnotes, report_dir, invocation_dir, retrieved, remote_seen, {}
+    )
     i = 0
     n = len(lines)
     while i < n:
@@ -435,16 +673,7 @@ def check_report(
                     if not _is_separator(cells):
                         row_no += 1
                         violations.extend(
-                            _check_row(
-                                cells,
-                                cols,
-                                row_no,
-                                footnotes,
-                                report_dir,
-                                invocation_dir,
-                                retrieved,
-                                remote_seen,
-                            )
+                            _check_row(cells, cols, row_no, context)
                         )
                     j += 1
                 i = j
@@ -491,7 +720,9 @@ def main(argv: list[str]) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 1
 
-    violations, tables = check_report(text, report_dir, Path.cwd(), ledger)
+    violations, tables = check_report(
+        text, report_dir, Path.cwd(), ledger, path.stem
+    )
 
     if tables == 0:
         print(f"error: no evidence table found in {report}", file=sys.stderr)

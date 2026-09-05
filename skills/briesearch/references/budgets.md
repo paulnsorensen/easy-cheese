@@ -18,7 +18,7 @@ Use these values as starting points, not as rules. A compact freshness check nee
 | Single-subject "how does X work" | 4 | 5 |
 | Comparative / best-practice report | 8 | 10 |
 
-The budget is soft. You can exceed it only when you record the overspend.
+Declare a limit for each call kind that the run uses. `budget-check` reports `BUDGET_UNDECLARED` for a used kind with no limit. The budget is soft. You can exceed it only when you record the overspend.
 
 ## Extensions
 
@@ -41,8 +41,9 @@ An extension names the gap that the extra calls must close. If the calls do not 
 ## Do not repeat calls
 
 - **Same search twice.** The provider, query, and filters identify a search. Do not issue the same search again. Change the words only when you target a different sub-question.
-- **Same URL twice.** Extract a canonical URL once. Then read the stored body. See `context-isolation.md` § Re-extraction in later turns. When freshness becomes relevant, fetch the URL again and record `"refresh": true`.
+- **Same URL twice.** Extract a canonical URL once. Then read the stored body. See `context-isolation.md` § Re-extraction in later turns. When freshness becomes relevant, fetch the URL again. Record `"refresh": true` for that fetch.
 - **Failed calls.** Record the actual status and omit `file`. Do not use data from a failed retrieval as evidence.
+- **Cached records.** Set `"cached": true` for an entry that an earlier run supplies. A cached record does not spend the call budget. `budget-check` reports it under `cached`.
 
 ## Check it
 
@@ -50,4 +51,4 @@ An extension names the gap that the extra calls must close. If the calls do not 
 python3 skills/briesearch/scripts/briesearch.pyz budget-check <research-dir>
 ```
 
-The command prints the run metrics to stdout. The metrics include invocation class, counts, duplicates, cache hits, and failures. The command fails on `DUPLICATE_SEARCH`, `DUPLICATE_EXTRACT`, `FAILED_EVIDENCE`, `EXTENSION_GAP`, or `BUDGET`. `EXTENSION_GAP` identifies a value outside the five allowed values. `BUDGET` identifies overspend without a recognized extension. Run this command with `ground-check` before you finish a deep report.
+The command prints the run metrics to stdout. The metrics include invocation class, counts, spent counts, duplicates, cache hits, and failures. The command fails on `DUPLICATE_SEARCH`, `DUPLICATE_EXTRACT`, `FAILED_EVIDENCE`, `EXTENSION_GAP`, `BUDGET_UNDECLARED`, or `BUDGET`. `EXTENSION_GAP` identifies a value outside the five allowed values. `BUDGET_UNDECLARED` identifies a used call kind with no declared limit. `BUDGET` identifies overspend without a recognized extension. Run this command with `ground-check` before you finish a deep report.

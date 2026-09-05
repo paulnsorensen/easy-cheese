@@ -16,7 +16,7 @@ Do not use this skill for one clear file lookup. Do not use it when the user alr
 
 ## Inputs
 
-Accept the complete user prompt as the research question. Ask one question only when missing criteria change the source plan. Use the shared transport in [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md). Otherwise, state the assumptions and continue.
+Accept the complete user prompt as the research question. Ask one question only when missing criteria change the source plan. Use the shared transport in [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md). Otherwise state the assumptions. Then continue the research.
 
 ## Flow
 
@@ -59,7 +59,7 @@ Do not lower confidence only because you substitute a provider. Lower confidence
 
 ## Output
 
-Use the style and citation format in [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Follow the output contract in `references/synthesis.md`. Return one synthesis paragraph, a claim evidence table, open questions, confidence, and the recommended next step. Give a one-line reason for the confidence value. For deep research, write the long report to `research/<slug>/<slug>.md` in the durable corpus. Resolve each path with `research-layout <slug>`. See `references/synthesis.md`. Return the path.
+Use the style and citation format in [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Follow the output contract in `references/synthesis.md`. Return one synthesis paragraph, a claim evidence table, open questions, confidence, and the recommended next step. Give a one-line reason for the confidence value. For deep research, write the long report to `research/<slug>/<slug>.md` in the durable corpus. Resolve each path with `research-layout <slug>`. See `references/synthesis.md`. Return the corpus-relative `artifact` path.
 
 ## Rules
 

@@ -2,8 +2,9 @@
 """Parse the per-invocation research ledger written beside a report.
 
 `references/context-isolation.md` tells /briesearch to write a
-`manifest.json` recording a safe URL display value, its digest, selected
-provider, and fetch date for every stored body. This module parses that file
+`manifest.json` recording the report slug, a safe URL display value, its
+digest, the selected provider, the title, and the fetch date for every stored
+body. This module parses that file
 back as a trust boundary, so a report cannot cite a URL that no provider
 retrieval tool opened (#493), and one invocation cannot extract the same URL
 repeatedly without being noticed (#549).
@@ -69,6 +70,7 @@ EVIDENCE_GAPS: Final = frozenset(
 _DEFAULT_PORTS: Final = {"http": 80, "https": 443}
 _URL_DIGEST: Final = re.compile(r"^[0-9a-fA-F]{64}$")
 _URL_USERINFO_ERROR: Final = "URL user information is not allowed"
+_ISO_DATE: Final = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def _netloc(parts: "SplitResult", scheme: str) -> str:
@@ -115,9 +117,10 @@ class Call:
     # the identity used for correlation because it includes the full URL.
     url: str = ""
     url_digest: str = ""
-    # Kept as a compatibility name for callers that used the old URL identity.
-    # It now contains the non-reversible digest, never the full URL.
-    canonical: str = ""
+    title: str = ""
+    # ISO ``YYYY-MM-DD`` date the body was retrieved. A report row binds its
+    # Freshness value to this date, so the ledger must retain it.
+    fetched: str = ""
     file: str = ""
     refresh: bool = False
     cached: bool = False
@@ -139,6 +142,7 @@ class Extension:
 class Ledger:
     """A parsed `manifest.json`: what this invocation actually called."""
 
+    slug: str = ""
     invocation: str = TOP_LEVEL
     calls: tuple[Call, ...] = ()
     budget: dict[str, int] = field(default_factory=dict)
@@ -154,7 +158,7 @@ class Ledger:
         for call in self.calls:
             if call.kind != EXTRACT or not call.ok or not call.tool:
                 continue
-            identities = {call.url_digest or call.canonical}
+            identities = {call.url_digest}
             if call.url:
                 identities.add(url_digest(call.url))
             for identity in identities:
@@ -191,6 +195,7 @@ def canonical_url(raw: str) -> str:
 def url_digest(raw: str) -> str:
     """Return a non-reversible SHA-256 identity for the full canonical URL."""
     return hashlib.sha256(canonical_url(raw).encode("utf-8")).hexdigest()
+
 
 def _as_object(value: object, what: str) -> dict[str, object]:
     if not isinstance(value, dict):
@@ -230,15 +235,13 @@ def _filters(entry: dict[str, object], what: str) -> str:
         raise LedgerError(f"{what} field 'filters' is not JSON-encodable: {exc}") from exc
 
 
-def _url_fields(
-    entry: dict[str, object], what: str, raw_url: str
-) -> tuple[str, str, str]:
-    """Return a safe display URL, its digest, and the compatibility identity."""
+def _url_fields(entry: dict[str, object], what: str, raw_url: str) -> tuple[str, str]:
+    """Return a safe display URL and the full-URL digest."""
     if not raw_url:
         supplied = _text(entry, "url_digest", what, required=False)
         if supplied:
             raise LedgerError(f"{what} field 'url_digest' requires a URL")
-        return "", "", ""
+        return "", ""
     try:
         parts = urlsplit(raw_url)
         computed = url_digest(raw_url)
@@ -262,7 +265,7 @@ def _url_fields(
         digest = digest.casefold()
     else:
         digest = computed
-    return render_url(raw_url), digest, digest
+    return render_url(raw_url), digest
 
 
 def _parse_call(value: object, index: int) -> Call:
@@ -275,7 +278,7 @@ def _parse_call(value: object, index: int) -> Call:
             + ", ".join(sorted(CALL_KINDS))
         )
     raw_url = _text(entry, "url", what, required=kind == EXTRACT)
-    display_url, digest, canonical = _url_fields(entry, what, raw_url)
+    display_url, digest = _url_fields(entry, what, raw_url)
     return Call(
         kind=kind,
         provider=_text(entry, "provider", what, required=True),
@@ -287,11 +290,20 @@ def _parse_call(value: object, index: int) -> Call:
         filters=_filters(entry, what),
         url=display_url,
         url_digest=digest,
-        canonical=canonical,
+        title=_text(entry, "title", what, required=False),
+        fetched=_fetched(entry, what),
         file=_text(entry, "file", what, required=False),
         refresh=_flag(entry, "refresh", what),
         cached=_flag(entry, "cached", what),
     )
+
+
+def _fetched(entry: dict[str, object], what: str) -> str:
+    """Return the retrieval date. An unparsable date is a corrupt manifest."""
+    value = _text(entry, "fetched", what, required=False)
+    if value and _ISO_DATE.fullmatch(value) is None:
+        raise LedgerError(f"{what} field 'fetched' must be an ISO YYYY-MM-DD date")
+    return value
 
 
 def _parse_extension(value: object, index: int) -> Extension:
@@ -336,6 +348,7 @@ def parse_ledger(data: object) -> Ledger:
             + " or ".join(sorted(INVOCATIONS))
         )
     return Ledger(
+        slug=_text(document, "slug", "manifest", required=False),
         invocation=invocation,
         calls=tuple(
             _parse_call(call, i) for i, call in enumerate(_sequence(document, "calls"))

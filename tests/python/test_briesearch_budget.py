@@ -48,8 +48,21 @@ def _extract(url: str, **overrides: object) -> dict[str, object]:
     return call
 
 
+_GENEROUS_BUDGET: dict[str, object] = {"search": 99, "extract": 99, "spawn": 99}
+
+
 def _findings(document: object) -> list[tuple[str, str]]:
-    report = budget.check_ledger(parse_ledger(document))
+    """Findings for `document`, with a generous budget when it declares none.
+
+    Every kind the run uses needs a declared limit, so a document written to
+    exercise one other check would otherwise also report BUDGET_UNDECLARED.
+    """
+    checked: object = document
+    if isinstance(document, dict) and "budget" not in document:
+        declared: dict[str, object] = dict(cast("dict[str, object]", document))
+        declared["budget"] = _GENEROUS_BUDGET
+        checked = declared
+    report = budget.check_ledger(parse_ledger(checked))
     return [(f.kind, f.message) for f in report.findings]
 
 
@@ -266,6 +279,7 @@ def test_metrics_report_the_whole_run() -> None:
     assert _metrics(document) == {
         "invocation": "sidechain",
         "calls": {"extract": 3, "search": 3, "spawn": 1},
+        "spent": {"extract": 3, "search": 2, "spawn": 1},
         "duplicates": {"search": 1, "extract": 1},
         "cached": 1,
         "failed": 1,
@@ -278,6 +292,7 @@ def test_an_empty_ledger_reports_zeroed_metrics() -> None:
     assert _metrics({}) == {
         "invocation": "top-level",
         "calls": {"extract": 0, "search": 0, "spawn": 0},
+        "spent": {"extract": 0, "search": 0, "spawn": 0},
         "duplicates": {"search": 0, "extract": 0},
         "cached": 0,
         "failed": 0,
@@ -310,21 +325,27 @@ def _write_manifest(directory: Path, document: object) -> Path:
 def test_main_accepts_the_research_directory(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _ = _write_manifest(tmp_path, {"calls": [_search("q")]})
+    _ = _write_manifest(
+        tmp_path, {"budget": {"search": 2}, "calls": [_search("q")]}
+    )
     assert budget.main([str(tmp_path)]) == 0
     metrics = cast("dict[str, object]", json.loads(capsys.readouterr().out))
     assert metrics["calls"] == {"extract": 0, "search": 1, "spawn": 0}
 
 
 def test_main_accepts_the_manifest_file(tmp_path: Path) -> None:
-    _ = _write_manifest(tmp_path, {"calls": [_search("q")]})
+    _ = _write_manifest(
+        tmp_path, {"budget": {"search": 2}, "calls": [_search("q")]}
+    )
     assert budget.main([str(tmp_path / "manifest.json")]) == 0
 
 
 def test_main_fails_on_a_violation_but_still_prints_metrics(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _ = _write_manifest(tmp_path, {"calls": [_search("q"), _search("q")]})
+    _ = _write_manifest(
+        tmp_path, {"budget": {"search": 4}, "calls": [_search("q"), _search("q")]}
+    )
     assert budget.main([str(tmp_path)]) == 1
     captured = capsys.readouterr()
     assert json.loads(captured.out)["duplicates"]["search"] == 1
@@ -341,3 +362,42 @@ def test_main_reports_a_missing_manifest_as_a_usage_error(
 ) -> None:
     assert budget.main([str(tmp_path)]) == 2
     assert "no manifest.json found" in capsys.readouterr().err
+
+
+def test_a_used_kind_with_no_declared_budget_is_reported() -> None:
+    """`budgets.md` § Declare the budget puts the budget in the manifest before
+    the first provider call. A missing budget must not be a free budget."""
+    report = budget.check_ledger(parse_ledger({"calls": [_search("a")]}))
+    assert [f.kind for f in report.findings] == ["BUDGET_UNDECLARED"]
+    assert "no declared search budget" in report.findings[0].message
+
+
+def test_every_used_kind_needs_its_own_limit() -> None:
+    document = {
+        "budget": {"search": 4},
+        "calls": [_search("a"), _extract("https://example.com/a")],
+    }
+    report = budget.check_ledger(parse_ledger(document))
+    assert [f.kind for f in report.findings] == ["BUDGET_UNDECLARED"]
+    assert "extract budget" in report.findings[0].message
+
+
+def test_an_unused_kind_needs_no_limit() -> None:
+    document = {"budget": {"search": 4}, "calls": [_search("a")]}
+    assert [f.kind for f in budget.check_ledger(parse_ledger(document)).findings] == []
+
+
+def test_a_cached_record_does_not_spend_the_call_budget() -> None:
+    """`context-isolation.md` calls a cached record an earlier run entry, so it
+    replays evidence instead of buying it."""
+    document = {"budget": {"search": 0}, "calls": [_search("a", cached=True)]}
+    report = budget.check_ledger(parse_ledger(document))
+    assert [f.kind for f in report.findings] == []
+    assert report.metrics["cached"] == 1
+    assert report.metrics["calls"] == {"extract": 0, "search": 1, "spawn": 0}
+    assert report.metrics["spent"] == {"extract": 0, "search": 0, "spawn": 0}
+
+
+def test_a_cached_record_alone_needs_no_declared_budget() -> None:
+    report = budget.check_ledger(parse_ledger({"calls": [_search("a", cached=True)]}))
+    assert [f.kind for f in report.findings] == []

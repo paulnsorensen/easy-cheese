@@ -23,7 +23,7 @@ UNAVAILABLE: Context7 is not loaded. Using official vendor llms.txt for
 Library/API documentation. Coverage remains authoritative; no confidence change.
 ```
 
-If the replacement is weaker, name the lost coverage and apply the matching cap from `synthesis.md`. Do not lower confidence merely because the preferred provider is absent. Do not retry the same unavailable provider or silently change the question.
+If the replacement is weaker, name the lost coverage. Then apply the matching cap from `synthesis.md`. Do not lower confidence because the preferred provider is absent. Do not retry the same unavailable provider. Do not change the question silently.
 
 ## When to stop
 

@@ -229,6 +229,7 @@ def test_missing_manifest_degrades_to_one_advisory(tmp_path: Path) -> None:
 
 
 def test_local_only_report_gets_no_manifest_advisory(tmp_path: Path) -> None:
+    _ = (tmp_path / "source.py").write_text("x\n" * 20, encoding="utf-8")
     body = (
         "## Research: q\n\n| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
         "| A holds | source.py:12 | certain |\n"
@@ -327,3 +328,189 @@ def test_main_reports_manifest_missing_from_report_directory(
     )
     assert ground_check.main([str(report)]) == 0
     assert "MANIFEST" in capsys.readouterr().err
+
+
+def _table(evidence: str, confidence: str = "certain", freshness: str = "") -> str:
+    """One evidence table, with the optional Freshness column when asked."""
+    if freshness:
+        return (
+            "## Research: q\n\n"
+            "| Claim | Evidence | Freshness | Confidence |\n"
+            "| --- | --- | --- | --- |\n"
+            f"| A holds | {evidence} | {freshness} | {confidence} |\n"
+        )
+    return (
+        "## Research: q\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        f"| A holds | {evidence} | {confidence} |\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("cited", "part"),
+    [
+        ("https://example.com/a?token=secret", "query value"),
+        ("https://user:pw@example.com/a", "user information"),
+        ("https://example.com/a#tail", "fragment"),
+    ],
+)
+def test_a_signed_citation_is_rejected_before_the_digest_match(
+    tmp_path: Path, cited: str, part: str
+) -> None:
+    """`safety.md` § Protect URL credentials forbids a persisted query value. The
+    manifest digest covers the full URL, so a digest match alone would accept a
+    signed URL into the report."""
+    ledger = parse_ledger({"calls": [_extract("https://example.com/a")]})
+    violations, _ = ground_check.check_report(_table(cited), tmp_path, tmp_path, ledger)
+    assert _kinds(violations) == [("error", "REMOTE")]
+    assert part in violations[0].message
+    assert "secret" not in violations[0].message
+
+
+def test_a_raw_capture_anchor_uses_the_hash_l_form(tmp_path: Path) -> None:
+    """`context-isolation.md` § The recipe cites `raw/NN-host.md#Lstart-end`."""
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _ = (raw / "01-example.md").write_text("a\nb\nc\n", encoding="utf-8")
+    violations, _ = ground_check.check_report(
+        _table("raw/01-example.md#L1-2"), tmp_path, tmp_path, None
+    )
+    assert violations == []
+
+
+def test_an_out_of_range_raw_anchor_is_an_error(tmp_path: Path) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    _ = (raw / "01-example.md").write_text("a\nb\n", encoding="utf-8")
+    violations, _ = ground_check.check_report(
+        _table("raw/01-example.md#L1-9"), tmp_path, tmp_path, None
+    )
+    assert _kinds(violations) == [("error", "LOCAL_PATH")]
+
+
+def test_an_inline_path_that_does_not_exist_is_an_error(tmp_path: Path) -> None:
+    violations, _ = ground_check.check_report(
+        _table("missing.py:999999"), tmp_path, tmp_path, None
+    )
+    assert _kinds(violations) == [("error", "LOCAL_PATH")]
+    assert "missing.py" in violations[0].message
+
+
+def test_an_inline_path_outside_the_invocation_root_is_an_error(
+    tmp_path: Path,
+) -> None:
+    inner = tmp_path / "inner"
+    inner.mkdir()
+    violations, _ = ground_check.check_report(
+        _table("../outside.py:1"), inner, inner, None
+    )
+    assert _kinds(violations) == [("error", "LOCAL_PATH")]
+    assert "outside allowed root" in violations[0].message
+
+
+def test_a_url_path_is_not_read_as_a_local_file(tmp_path: Path) -> None:
+    ledger = parse_ledger({"calls": [_extract("https://example.com/pkg/mod.py")]})
+    violations, _ = ground_check.check_report(
+        _table("https://example.com/pkg/mod.py"), tmp_path, tmp_path, ledger
+    )
+    assert violations == []
+
+
+def test_an_escaped_pipe_does_not_shift_the_confidence_column(tmp_path: Path) -> None:
+    """A claim that contains an escaped pipe must keep its own confidence cell."""
+    body = (
+        "## Research: q\n\n"
+        "| Claim | Evidence | Confidence |\n| --- | --- | --- |\n"
+        "| A \\| B holds | https://example.com/a | certain |\n"
+    )
+    ledger = parse_ledger({"calls": [_extract("https://example.com/a")]})
+    violations, _ = ground_check.check_report(body, tmp_path, tmp_path, ledger)
+    assert violations == []
+
+
+def test_a_case_variant_confidence_label_is_rejected(tmp_path: Path) -> None:
+    """`synthesis.md` calls these exact label values."""
+    ledger = parse_ledger({"calls": [_extract("https://example.com/a")]})
+    violations, _ = ground_check.check_report(
+        _table("https://example.com/a", confidence="CERTAIN"),
+        tmp_path,
+        tmp_path,
+        ledger,
+    )
+    assert _kinds(violations) == [("error", "CONFIDENCE")]
+
+
+def test_a_manifest_slug_must_name_its_own_report(tmp_path: Path) -> None:
+    ledger = parse_ledger(
+        {"slug": "another-run-entirely-here", "calls": [_extract("https://e.com/a")]}
+    )
+    violations, _ = ground_check.check_report(
+        _table("https://e.com/a"), tmp_path, tmp_path, ledger, "this-report-slug"
+    )
+    assert _kinds(violations) == [("error", "MANIFEST")]
+    assert "another-run-entirely-here" in violations[0].message
+
+
+def test_a_successful_capture_must_store_a_confined_raw_body(tmp_path: Path) -> None:
+    ledger = parse_ledger({"calls": [_extract("https://example.com/a", file="")]})
+    violations, _ = ground_check.check_report(
+        _table("https://example.com/a"), tmp_path, tmp_path, ledger
+    )
+    assert _kinds(violations) == [("error", "MANIFEST")]
+    assert "stored no raw body" in violations[0].message
+
+
+def test_a_capture_stored_outside_the_raw_directory_is_an_error(
+    tmp_path: Path,
+) -> None:
+    ledger = parse_ledger(
+        {"calls": [_extract("https://example.com/a", file="../escape.md")]}
+    )
+    violations, _ = ground_check.check_report(
+        _table("https://example.com/a"), tmp_path, tmp_path, ledger
+    )
+    assert _kinds(violations) == [("error", "MANIFEST")]
+    assert "outside the raw capture" in violations[0].message
+
+
+def test_a_row_date_must_match_the_manifest_fetch_date(tmp_path: Path) -> None:
+    ledger = parse_ledger(
+        {"calls": [_extract("https://example.com/a", fetched="2020-01-01")]}
+    )
+    violations, _ = ground_check.check_report(
+        _table("https://example.com/a", freshness="2026-08-30"),
+        tmp_path,
+        tmp_path,
+        ledger,
+    )
+    assert _kinds(violations) == [("error", "FRESHNESS")]
+    assert "2020-01-01" in violations[0].message
+
+
+def test_a_row_date_equal_to_the_fetch_date_passes(tmp_path: Path) -> None:
+    ledger = parse_ledger(
+        {"calls": [_extract("https://example.com/a", fetched="2026-08-30")]}
+    )
+    violations, _ = ground_check.check_report(
+        _table("https://example.com/a", freshness="2026-08-30"),
+        tmp_path,
+        tmp_path,
+        ledger,
+    )
+    assert violations == []
+
+
+def test_parse_ledger_rejects_an_unparsable_fetch_date() -> None:
+    with pytest.raises(LedgerError, match="ISO YYYY-MM-DD"):
+        _ = parse_ledger({"calls": [_extract("https://e.com/a", fetched="Aug 2026")]})
+
+
+def test_parse_ledger_retains_the_slug_title_and_fetch_date() -> None:
+    ledger = parse_ledger(
+        {
+            "slug": "hybrid-retrieval-fusion-study",
+            "calls": [_extract("https://e.com/a", title="A", fetched="2026-08-30")],
+        }
+    )
+    assert ledger.slug == "hybrid-retrieval-fusion-study"
+    assert (ledger.calls[0].title, ledger.calls[0].fetched) == ("A", "2026-08-30")

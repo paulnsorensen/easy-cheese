@@ -4,7 +4,7 @@ Choose planning depth before routing.
 
 ## Compact freshness plan
 
-A single freshness-sensitive fact still needs a compact plan; do not skip planning merely because it has one answer.
+A single freshness-sensitive fact still needs a compact plan. Do not skip the plan because the fact has one answer.
 
 ```text
 PLAN
@@ -21,9 +21,9 @@ Examples include the latest stable release, current maintainer, active support s
 Use the full plan for a multi-part question, a comparison, a best-practice question, or a report.
 
 1. **Restate the supported decision.** Name what the user will do with the evidence.
-2. **Extract constraints.** Dates, versions, repository scope, languages, geographies, and deal-breakers become routing inputs.
+2. **Extract constraints.** Use dates, versions, repository scope, languages, geographies, and deal-breakers as routing inputs.
 3. **Clarify only if it changes the capability plan.** Ask at most one question.
-4. **Decompose into 2-5 focused subqueries.** Each should be answerable from a coherent source set.
+4. **Decompose the question into 2-5 focused subqueries.** One coherent source set must answer each subquery.
 5. **Name stop criteria.** Define the evidence that makes the research complete.
 
 ```text
@@ -39,11 +39,11 @@ PLAN
 
 Apply these rules with the selected provider:
 
-- Keep discovery queries focused; do not send the whole report prompt as one search.
-- Decompose once and fan independent subqueries out in one assistant turn where supported. Re-search only thin subqueries.
+- Keep each discovery query focused. Do not send the complete report prompt as one search.
+- Decompose the question once. Send the independent subqueries in one turn when the harness supports parallel work. Search again only for a thin subquery.
 - Include decision-relevant constraints such as version, date, company, language, or repository.
 - Apply freshness windows and authority/domain filters at the provider when available.
-- Request snippets for discovery, then extract/open only the strongest URLs. Avoid pulling raw bodies for every result.
+- Request snippets for discovery. Then open only the strongest URLs. Do not retrieve a raw body for every result.
 - Use exact-phrase matching for literal errors, quotes, or API names when supported.
 
 Examples: Tavily search filters, Exa category/domain/date controls, and native web recency/domain filters are different interfaces for the same planning decisions.
@@ -66,4 +66,4 @@ Run independent subqueries in parallel, then extract the strongest evidence per 
 
 ## When you can omit a visible plan
 
-Skip a visible plan only for a stable lookup with one clear source, scope, and authority. Also skip it for a direct local file question. Such a question must not trigger `/briesearch`. Reuse a decomposition that the user supplies. State freshness and stop criteria for current facts.
+Skip a visible plan only for a stable lookup with one clear source, scope, and authority. Also skip it for a direct local file question. Such a question must not trigger `/briesearch`. Reuse a decomposition that the user supplies. State the freshness window and the stop criteria for a current fact.

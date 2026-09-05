@@ -107,7 +107,8 @@ def test_research_layout_composes_nested_artifact_paths(
     # Each directory contains the report, cited raw captures, and capture manifest.
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
-    slug = "hybrid-retrieval-fusion"
+    # `/briesearch` sizes a research slug at four to six kebab-case words.
+    slug = "hybrid-retrieval-fusion-study"
     directory = tmp_path / "proj" / "research" / slug
     assert research_layout(slug) == {
         "slug": slug,
@@ -116,6 +117,7 @@ def test_research_layout_composes_nested_artifact_paths(
         "report": str(directory / f"{slug}.md"),
         "raw_dir": str(directory / "raw"),
         "manifest": str(directory / "manifest.json"),
+        "artifact": f"research/{slug}/{slug}.md",
     }
 
 
@@ -124,8 +126,9 @@ def test_research_layout_root_override_ignores_corpus_env(
 ) -> None:
     monkeypatch.setenv("EASY_CHEESE_HOME", "/never/used")
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
-    layout = research_layout("a-slug", root=tmp_path)
-    assert layout["report"] == str(tmp_path / "research" / "a-slug" / "a-slug.md")
+    slug = "a-short-research-slug"
+    layout = research_layout(slug, root=tmp_path)
+    assert layout["report"] == str(tmp_path / "research" / slug / f"{slug}.md")
 
 
 def test_research_layout_rejects_invalid_slug() -> None:
@@ -140,10 +143,9 @@ def test_research_layout_report_is_where_the_resolver_looks(
     # Otherwise, `/cheese --continue` cannot find a report written from the layout.
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
-    report = Path(research_layout("nested-report-slug")["report"])
+    slug = "nested-research-report-slug"
+    report = Path(research_layout(slug)["report"])
     report.parent.mkdir(parents=True)
     _ = report.write_text("body\n")
-    resolved = paths.resolve_slug(
-        "nested-report-slug", phase_hint="research", repo_root=tmp_path
-    )
+    resolved = paths.resolve_slug(slug, phase_hint="research", repo_root=tmp_path)
     assert [m["abs_path"] for m in resolved["matches"]] == [str(report)]

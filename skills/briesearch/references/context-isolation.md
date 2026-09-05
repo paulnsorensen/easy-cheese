@@ -1,6 +1,6 @@
 # Context isolation
 
-High-volume discovery/extraction output can consume the main context window. Keep raw bodies on disk; surface only the evidence needed for synthesis.
+A large discovery or extraction result can consume the main context window. Keep raw bodies on disk. Surface only the evidence that the synthesis needs.
 
 ## When to apply
 
@@ -16,8 +16,8 @@ Provider examples include Tavily crawl or research, Exa contents, and batches of
 
 ## The recipe
 
-1. **Generate a slug.** Use 4-6 kebab-case words derived from the question, matching `synthesis.md`.
-2. **Resolve the layout.** Run `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. The command prints the `dir`, `report`, `raw_dir`, and `manifest` JSON paths. Use these paths without changes. Do not derive them again.
+1. **Generate a slug.** Use 4-6 kebab-case words derived from the question. `synthesis.md` states the same limit.
+2. **Resolve the layout.** Run `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. The command prints the `dir`, `report`, `raw_dir`, and `manifest` absolute paths. It also prints the corpus-relative `artifact` path. Use these paths without changes. Do not derive them again. The command rejects a slug outside the four-to-six-word range.
 3. **Run the heavy provider operation in a separate sub-agent.** Do not run it in the main context. Give the routing block and the layout's `corpus_root` to the sub-agent.
 4. **Persist raw bodies as files.** One file per result/URL:
 

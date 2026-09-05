@@ -21,6 +21,13 @@ reports:
     `EVIDENCE_GAPS`. A free-text reason is not a reason.
   - BUDGET: more calls of a kind than the declared soft budget allows, with no
     recognised extension recorded.
+  - BUDGET_UNDECLARED: a call kind the run used without a declared limit.
+    `references/budgets.md` § Declare the budget puts the budget in the manifest
+    before the first provider call, so an undeclared kind has no soft budget to
+    exceed and the BUDGET check above can never fire for it.
+
+A cached record replays an earlier run's entry, so it is reported under
+``cached`` and never charged against the soft budget.
 
 Always prints a metrics object on stdout — invocation class, per-kind call
 counts, duplicates, cache hits, failures, budget, extensions — so a run's cost
@@ -95,6 +102,7 @@ def check_ledger(ledger: Ledger) -> Report:
     """Run every budget check over a parsed ledger and collect the run metrics."""
     findings: list[Finding] = []
     counts = dict.fromkeys(sorted(CALL_KINDS), 0)
+    spent = dict.fromkeys(sorted(CALL_KINDS), 0)
     duplicates = {SEARCH: 0, EXTRACT: 0}
     cached = 0
     failed = 0
@@ -105,6 +113,8 @@ def check_ledger(ledger: Ledger) -> Report:
         counts[call.kind] += 1
         if call.cached:
             cached += 1
+        else:
+            spent[call.kind] += 1
         if not call.ok:
             failed += 1
             if call.file:
@@ -163,12 +173,24 @@ def check_ledger(ledger: Ledger) -> Report:
     # Only a recognised gap buys budget: an unrecognised one is the free-text
     # escape hatch the EXTENSION_GAP check exists to close.
     excused = any(extension.gap in EVIDENCE_GAPS for extension in ledger.extensions)
-    for kind, limit in sorted(ledger.budget.items()):
-        if counts[kind] > limit and not excused:
+    for kind in sorted(CALL_KINDS):
+        limit = ledger.budget.get(kind)
+        if limit is None:
+            if spent[kind]:
+                findings.append(
+                    Finding(
+                        "BUDGET_UNDECLARED",
+                        f"{spent[kind]} {kind} call(s) ran with no declared "
+                        + f"{kind} budget; declare the budget in manifest.json "
+                        + "before the first provider call",
+                    )
+                )
+            continue
+        if spent[kind] > limit and not excused:
             findings.append(
                 Finding(
                     "BUDGET",
-                    f"{counts[kind]} {kind} call(s) against a declared budget of "
+                    f"{spent[kind]} {kind} call(s) against a declared budget of "
                     + f"{limit}, with no extension recorded; name the evidence gap "
                     + "that justified spending past it",
                 )
@@ -177,6 +199,7 @@ def check_ledger(ledger: Ledger) -> Report:
     metrics: dict[str, object] = {
         "invocation": ledger.invocation,
         "calls": counts,
+        "spent": spent,
         "duplicates": duplicates,
         "cached": cached,
         "failed": failed,
