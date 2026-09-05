@@ -182,6 +182,7 @@ Set `next: cure` when that set is not empty.
 Set `next: done` when that set is empty.
 Keep every finding in the report, whatever `next` says.
 Set `durable_flags:` to `none` by default, as in cook's gate.
+When the review-surface score exceeds 400, set `durable_flags: coverage-degraded: review-surface score <score> exceeds the 400-point ceiling` and lead `## Next step` with a stacked-split recommendation for `/plate`.
 Record the resolved worker types under `## Agent resolution` in the body.
 
 Print `Age report: .cheese/age/<slug>.md`.

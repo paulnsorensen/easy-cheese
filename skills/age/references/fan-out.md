@@ -43,6 +43,10 @@ The base ladder uses these score bands before any override promotion:
 - A score `>250` returns `n=5`.
 - A score `>900` selects high effort.
 
+**Comprehension ceiling.** The score is a weighted review surface, not a line count: `sum(weight × lines) + 8 × sum(weight)` (`src/easy_cheese/shared/fanout/review_surface.py`). 400 code lines across ten files score 480; 400 prose lines score about 100.
+The router raises `n` above the ceiling, but it does not shrink what each worker reads.
+`SKILL.md § Output` owns the `coverage-degraded` flag that a score above 400 sets, in every width including forced single-parent runs.
+
 The base ladder partitions lenses at `n>1`, before any override promotion:
 
 - `n=2` — `[correctness, spec, assertions, security, telemetry]` / `[encapsulation, complexity, deslop, nih, efficiency]`.

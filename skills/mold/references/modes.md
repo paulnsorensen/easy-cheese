@@ -47,6 +47,8 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 **Concrete-seam rule:** a small seam has a complete function body of roughly 20 lines. For a small seam, write the full implementation instead of pseudocode. Use abbreviated signatures only when bodies are too large or depend on unresolved design unknowns.
 
+**Language default:** when a sketch introduces a component with a free language choice, default to the repository's incumbent memory-safe typed language (Python under a strict type checker, or TypeScript in `strict` mode). When the incumbent is C or C++, treat Rust as the default for new components. Choose Go only for standalone tooling where diff uniformity dominates. Treat Elm and Gleam as niche. Reviewer familiarity and model generation accuracy dominate review speed; cross-language review throughput itself is unmeasured. Record any departure as an `[AGENT-DECIDED]` item for Grill.
+
 **Exit when:** every public seam has a pseudocode signature or full implementation under the concrete-seam rule. Every acceptance criterion uses EARS form or has `[prose-fallback]`. Every cross-module call uses public interfaces, not internals. Record the shape-check verdict, or explicitly skip it under the gate above.
 
 ### Grill — adversarial clarification

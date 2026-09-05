@@ -17,6 +17,10 @@ from the description alone.
 
 <!-- Commands the reviewer can run, or what to click in the UI. -->
 
+## Non-obvious changes
+
+<!-- One line per hunk whose intent is not visible from the diff alone. Write
+     "None" when every hunk is self-evident. -->
 ## Risk / rollout notes
 
 <!-- Anything reviewers should pay extra attention to. Migrations, breaking

@@ -7,7 +7,7 @@ staging, the commit, and the commit verification.
 
 1. Confirm that `/plate` resolved the new PR as single. Accept an explicit choice, cohesive-shape inference, or a user answer.
 2. Resolve the trunk and current branch. Reject publication from the trunk.
-3. Draft a title and body. Include the purpose, verification, durable artifacts, and residual risks.
+3. Draft a title and body per `## Body contract` below.
 4. Write the body to a temporary or transient file. Pass that file through `--body-file`.
    Do not embed a markdown heredoc in `--body`.
 5. Push the named branch without force.
@@ -52,7 +52,8 @@ If a PR exists, switch to the existing-PR path. Do not rely on a failed create c
 
 ## Body contract
 
-Record the purpose, user-visible behavior, gate results, durable artifact rows, risks, follow-ups, and stack relationships.
+Record the purpose, user-visible behavior, non-obvious changes, gate results, durable artifact rows, risks, follow-ups, and stack relationships.
+When the repository tracks `.github/PULL_REQUEST_TEMPLATE.md`, use its section headings.
 Keep the body file transient unless the repository tracks PR templates or release artifacts.
 Leave a transient body file unstaged after verification.
 
@@ -65,6 +66,8 @@ Write for the reviewer's verification pass:
 - A semantics-altering change names the changed behavior or contract. It also names its observable verification.
   This information directs scrutiny to the changed logic.
 - A change that is not self-contained links its context. Link the spike branch, plan, or stack siblings that show the abstraction in use.
+- A `## Non-obvious changes` section names every hunk whose intent is not visible from the diff alone, with one line of reason each.
+  Write `None` when every hunk is self-evident. Author-annotated reviews carry markedly lower defect density (Cisco review data).
 
 ## Push verification
 

@@ -12,6 +12,7 @@ Ordinary single pull request work never reads this file.
    Classify the production implementation decision. Tests, docs, and durable artifacts inherit its layer.
    They inherit the layer when they directly verify or describe the decision.
    Each layer's implementation preserves semantics or alters them, never both.
+   Each layer's pull request body follows `ordinary-pr.md` § Body contract, including `## Non-obvious changes`.
    Put semantics-preserving layers below the semantic changes that depend on their reorganization.
 3. Create or adopt provider lineage in the approved bottom-to-top order.
 4. For **each layer**, bottom to top:

@@ -282,8 +282,36 @@ const fullName = `${first} ${last}`;
 
 No lint rule catches this pattern. `react-hooks/exhaustive-deps` does not catch it. Review it manually. See the react.dev article "You Might Not Need an Effect".
 
+## 16. Non-exhaustive `switch` over a discriminated union
+
+AI writes a `switch` on a discriminant and omits the `default` arm, or fills it with a silent `break`.
+A new union member then compiles and falls through.
+An `assertNever` default makes the missing case a compile error, so the type checker carries that review.
+
+```typescript
+// SLOP
+switch (event.kind) {
+  case "open": return onOpen(event);
+  case "close": return onClose(event);
+  default: break;
+}
+
+// CLEAN — report only the discriminant; the payload may carry secrets or PII
+function assertNever(value: never): never {
+  throw new Error(`Unhandled case: ${String((value as { kind: string }).kind)}`);
+}
+
+switch (event.kind) {
+  case "open": return onOpen(event);
+  case "close": return onClose(event);
+  default: return assertNever(event);
+}
+```
+
+typescript-eslint `switch-exhaustiveness-check` flags the missing cases. It is opt-in and type-aware; no preset enables it.
+
 ## Sources
 
-- The typescript-eslint `strict-type-checked` configuration and rule documentation provide the source of truth for every rule named above.
+- The typescript-eslint `strict-type-checked` configuration and rule documentation provide the source of truth for every rule named above, except `switch-exhaustiveness-check`, which its own rule page documents as opt-in.
 - Chapter 5 of Effective TypeScript, 2nd ed. (Vanderkam, 2024), covers narrowing `any`'s scope.
 - The arXiv 2602.17955 study provides an empirical AI-versus-human PR comparison of `!`/`as` overuse.

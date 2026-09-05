@@ -60,11 +60,11 @@ Vendor signals (not peer-reviewed): LinearB 2026 reported ~32.7% acceptance for 
 
 ## Where this touches easy-cheese
 
-- `/plate` topology (`skills/plate/references/topology.md`) forbids line-count thresholds and decides single-vs-stacked purely on review shape. The diff-size evidence argues for a size signal as a _stack recommendation trigger_, not a hard split rule.
-- `/age` sizes fan-out by a router score (`skills/age/references/fan-out.md`), not by diff size. The 200–400-line comprehension ceiling is a candidate input for packet sizing.
-- `/age` `deslop` grades a vague name `low`. The 19% defect-finding-speed result supports raising abbreviated or single-letter identifiers in reviewed hunks.
-- `/cook` taste-test Readability lens (`skills/cook/references/tdd-loop.md`) has no local-reasoning criterion; metaprogramming and action-at-a-distance are unnamed.
-- `/mold` has no language-selection guidance for new components; the tiering table is a ready default.
+- Diff-size ceiling and author annotation land in `/plate`: `skills/plate/references/topology.md` step 2 (size gates the layout question), `ordinary-pr.md` § Body contract and `.github/PULL_REQUEST_TEMPLATE.md` (non-obvious changes section).
+- The comprehension ceiling for reviewers lands in `/age`: `skills/age/SKILL.md` § Output (coverage flag) and `references/fan-out.md` (the router sizes by weighted review surface, which is line-derived but not a raw line count).
+- Identifier and exhaustiveness evidence lands in `/age` deslop: `references/dimensions.md` § deslop, `deslop-python.md` § 15, `deslop-typescript.md` § 16.
+- Build-for-the-reviewer rules land in `/cook`: `skills/cook/references/tdd-loop.md` § Reviewable by construction and the taste-test Readability lens.
+- The language tiering lands in `/mold` Sketch: `skills/mold/references/modes.md` § Language default.
 
 ## Caveats
 

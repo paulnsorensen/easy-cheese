@@ -23,7 +23,8 @@ def test_plate_owns_commit_stack_and_review_shape_policy() -> None:
     assert "cohesive review unit" in topology
     assert "proceed without asking" in topology
     assert "independently reviewable ordered" in topology
-    assert "Do not use line-count or file-count thresholds" in topology
+    assert "never decides the shape on its own" in topology
+    assert "exceeds roughly 400 changed code lines" in topology
     assert "**semantics-altering**" in topology
     assert "**semantics-preserving**" in topology
     assert attribution_url in credits
@@ -441,7 +442,8 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     assert '"required": ["plate_layout", "shape", "groups"]' in plan_schema
     assert "cannot override an explicit" in plan_schema
     assert "copy it exactly into the plan" in planner.lower()
-    assert "line-count or file-count thresholds" in planner
+    assert "owns the size gate" in planner
+    assert "skills/plate/references/topology.md" in planner
     assert "~400" not in planner
 
 
