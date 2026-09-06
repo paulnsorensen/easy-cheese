@@ -76,14 +76,15 @@ If the user dropped a debug or implementation signal *and* asked for discussion 
 
 ### mold (`/mold`)
 
-Fuzzy idea or multi-module feature where a spec is the right next artifact.
+High-leverage work where the user must steer the design, or an explicit ask for a spec.
 
 | Signal | Example |
 | --- | --- |
-| Feature description without acceptance criteria | "add dark mode", "support webhooks" |
-| Touches more than one module or introduces a new public seam | "a new authn flow across web + worker" |
+| Any leverage trigger fires (see [`routing-policy.md`](routing-policy.md) § Leverage triggers) | "a new authn flow across web + worker" (`auth`, `cross-slice-dep`) |
 | Asks for a spec, plan, or design doc | "shape this into a spec", "design X" |
 | Issue reference whose body is itself a fuzzy idea | `#87` with "we should support…" body |
+
+A feature description without acceptance criteria is not a mold signal on its own. When no trigger fires, it is a `cook` intent that tier 1 turns into a mini-spec.
 
 Optional pre-step: route `/briesearch` first when the user calls out external evidence as missing.
 
@@ -174,7 +175,7 @@ When two intents are plausible, apply in order:
 
 1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Commit", "publish", or "stack PRs" → `plate`. "Respond to comments" or "fix the build" on a pull request → `affinage`.
 2. **Strongest signal wins.** A spec path beats free text. A stack trace beats a feature description. A PR URL beats a path glob.
-3. **Smallest committed scope wins.** Prefer `cook` over `mold` when the fast-path checks pass. Only prefer `culture` over `mold` when the user has explicitly opted out of writes.
+3. **Lowest leverage wins.** Prefer `cook` over `mold` unless a leverage trigger fires. Missing acceptance criteria is a mini-spec, not a mold. Only prefer `culture` over `mold` when the user has explicitly opted out of writes.
 4. **If still tied, clarify.** Ask one question; do not guess.
 
 ## Confidence cues

@@ -39,16 +39,22 @@ Workers use frozen contracts at worker tier.
 
 Scoper: deleted everywhere.
 
-## Hard risk-overrides
+## Leverage triggers
 
-Any listed condition requires strong review and lowers mold's specification threshold:
+Leverage is the routing axis for design ceremony. Ambiguity and scope size pick the artifact; leverage picks whether the user steers. Any fired trigger routes the ask to `/mold`'s full ceremony, requires strong review, and lowers mold's specification threshold. Zero fired triggers keep the ask on the cook fast-path or the tier-1 mini-spec. Record fired ids in the spec's `leverage:` frontmatter list.
 
-- auth/secrets/crypto/tenant isolation
-- payments/ledgers/irreversible effects
-- concurrency/idempotency/ordering/retries
-- schema/migration/protocol/public-API change
-- production-destructive ops
-- weak integration coverage around a global invariant
+| id | Fires when |
+| --- | --- |
+| `auth` | auth, secrets, crypto, or tenant isolation changes |
+| `irreversible` | payments, ledgers, or any effect that cannot be rolled back |
+| `concurrency` | idempotency, ordering, retries, or shared-state races |
+| `contract` | schema, migration, protocol, public API, or a new export from a slice's public seam |
+| `destructive` | production-destructive operations |
+| `new-slice` | a new top-level domain slice or spine step |
+| `cross-slice-dep` | a new import between slices, or a slice reaching into another's internals |
+| `invariant-gap` | weak integration coverage around a global invariant |
+
+The list is closed. A routine internal choice that fires no trigger is the agent's to make and log as `[AGENT-DECIDED]`.
 
 ## Cross-cutting contracts
 

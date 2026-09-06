@@ -10,7 +10,9 @@ For a `cook` intent, `/cheese` runs Cook's fast-path check and uses three escala
 
 **Tier 1: clear.** Run the specification discovery check.
 When one specification matches, dispatch `/cook --auto` against it.
-Otherwise, invoke `/mold`'s agent mode to write a mini-specification.
+Otherwise, check the leverage triggers in `routing-policy.md`.
+A fired trigger dispatches `/mold`'s user mode with the trigger ids in the handoff packet; tier 1 never mints a mini-specification for it.
+When zero triggers fire, invoke `/mold`'s agent mode to write a mini-specification.
 `/mold` owns that write target and resolves it through `artifact-path specs <slug>`.
 Never name a literal specification path for `/mold`.
 Then dispatch `/cook --auto <spec-path>` in the same turn.

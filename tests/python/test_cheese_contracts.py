@@ -414,3 +414,61 @@ class TestFastPathProbeAccounting:
             "Never print `probes=0` for a route that read a file or grounded the wiki."
             in body
         )
+
+
+class TestLeverageIsTheCeremonyAxis:
+    """Ceremony scales to leverage, not to ambiguity or noun count.
+
+    The routing docs used to key the cook-versus-mold split on scope size and
+    missing acceptance criteria alone, so low-stakes asks paid for a full mold
+    while high-stakes refactors slipped through as cooks.
+    """
+
+    TRIGGER_IDS: tuple[str, ...] = (
+        "auth",
+        "irreversible",
+        "concurrency",
+        "contract",
+        "destructive",
+        "new-slice",
+        "cross-slice-dep",
+        "invariant-gap",
+    )
+
+    def test_routing_policy_defines_a_closed_trigger_table(self) -> None:
+        body = _text(REFERENCES / "routing-policy.md")
+        assert "## Leverage triggers" in body
+        assert "Hard risk-overrides" not in body
+        for trigger in self.TRIGGER_IDS:
+            assert f"| `{trigger}` |" in body, trigger
+        assert "The list is closed." in body
+        assert "Record fired ids in the spec's `leverage:` frontmatter list." in body
+
+    def test_classification_routes_mold_on_a_fired_trigger(self) -> None:
+        body = _text(REFERENCES / "classification.md")
+        assert "Any leverage trigger fires" in body
+        assert "§ Leverage triggers" in body
+        assert "| Feature description without acceptance criteria |" not in body
+        assert "is not a mold signal on its own" in body
+
+    def test_disambiguation_prefers_the_lowest_leverage(self) -> None:
+        body = _text(REFERENCES / "classification.md")
+        assert "3. **Lowest leverage wins.**" in body
+        assert "Missing acceptance criteria is a mini-spec, not a mold." in body
+        assert "Smallest committed scope wins" not in body
+
+    def test_tier_one_refuses_a_mini_spec_for_a_fired_trigger(self) -> None:
+        body = _text(REFERENCES / "escalation.md")
+        assert "check the leverage triggers in `routing-policy.md`" in body
+        assert "tier 1 never mints a mini-specification for it" in body
+        assert "When zero triggers fire, invoke `/mold`'s agent mode" in body
+
+    def test_mini_spec_mode_carries_and_refuses_on_leverage(self) -> None:
+        body = _text(REPO_ROOT / "skills" / "mold" / "references" / "mini-spec-mode.md")
+        assert "leverage: []" in body
+        assert "When any trigger fires, refuse the mint" in body
+
+    def test_cook_fast_path_requires_zero_fired_triggers(self) -> None:
+        body = _text(REPO_ROOT / "skills" / "cook" / "SKILL.md")
+        assert "No leverage trigger may fire" in body
+        assert "§ Leverage triggers" in body
