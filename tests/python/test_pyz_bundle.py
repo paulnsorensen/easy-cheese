@@ -416,7 +416,7 @@ def test_press_bundle_loads_router_and_rejects_receipt_keys(bundles: Path) -> No
     assert result.returncode == 1
     assert (
         result.stderr.strip()
-        == "ERROR: request must contain exactly outcome and repair_cycles"
+        == "ERROR: request keys mismatch: missing ['repair_cycles'], unknown ['current_receipt']"
     )
 
 

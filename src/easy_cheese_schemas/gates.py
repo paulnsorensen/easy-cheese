@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from pathlib import PurePosixPath
 from typing import ClassVar, Literal, Protocol, cast
 
 import attrs
 from attrs import define, field
+
+from easy_cheese_schemas.validate import require_int, require_relative_path
 
 __all__ = [
     "BaselineCheck",
@@ -119,19 +120,7 @@ def _argv(_instance: object, attribute: _NamedAttribute, value: object) -> None:
 def _project_relative_path(
     _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
-    _non_empty_string(_instance, attribute, value)
-    assert isinstance(value, str)
-    first = value.split("/", 1)[0]
-    path = PurePosixPath(value)
-    if (
-        path.is_absolute()
-        or value.startswith("\\")
-        or "\\" in value
-        or ":" in first
-        or ".." in path.parts
-        or "\x00" in value
-    ):
-        raise ValueError(f"{attribute.name} must be a project-relative path")
+    _ = require_relative_path(value, attribute.name)
 
 
 _DIGEST_RE = re.compile(r"(?:sha256:)?[0-9A-Fa-f]{64}")
@@ -166,8 +155,7 @@ def _enum(enum_type: type[Enum]):
 def _schema_version(
     _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{attribute.name} must be an integer")
+    _ = require_int(value, attribute.name)
 
 
 def _zero_exit_code(
@@ -180,8 +168,7 @@ def _zero_exit_code(
 def _observed_exit_code(
     _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{attribute.name} must be an integer")
+    _ = require_int(value, attribute.name)
 
 
 def _contract_source(
