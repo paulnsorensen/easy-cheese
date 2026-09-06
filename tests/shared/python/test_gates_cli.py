@@ -1,12 +1,8 @@
-"""Tests for shared/scripts/gates_cli.py — CLI wrapper around gates.py.
-
-Loaded via importlib (not the conftest fixture) so the test file is
-self-contained per curd file-assignment constraint.
-"""
+"""Tests for shared/gates.py's classify CLI."""
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
 import subprocess
 import sys
@@ -25,27 +21,12 @@ class _GatesCliModule(Protocol):
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
-GATES_CLI_PATH = SHARED_SCRIPTS / "gates_cli.py"
-CLI_PATH = SHARED_SCRIPTS / "cli.py"
-GATES_PATH = SHARED_SCRIPTS / "gates.py"
-
-
-def _load(name: str, path: Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+GATES_CLI_PATH = SHARED_SCRIPTS / "gates.py"
 
 
 @pytest.fixture(scope="module")
 def gates_cli() -> ModuleType:
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    _ = _load("cli", CLI_PATH)
-    _ = _load("gates", GATES_PATH)
-    return _load("gates_cli", GATES_CLI_PATH)
+    return importlib.import_module("easy_cheese.shared.gates")
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:

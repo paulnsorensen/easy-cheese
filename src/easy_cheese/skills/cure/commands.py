@@ -28,23 +28,23 @@ def _read_handoff_slug(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("findings-cli")
-def _findings_cli(argv: list[str]) -> int:
-    from easy_cheese.shared.findings_cli import main
+@bundle_command("findings")
+def _findings(argv: list[str]) -> int:
+    from easy_cheese.shared.findings import main
 
     return main(argv)
 
 
-@bundle_command("gates-cli")
-def _gates_cli(argv: list[str]) -> int:
-    from easy_cheese.shared.gates_cli import main
+@bundle_command("gates")
+def _gates(argv: list[str]) -> int:
+    from easy_cheese.shared.gates import main
 
     return main(argv)
 
 
-@bundle_command("paths-cli")
-def _paths_cli(argv: list[str]) -> int:
-    from easy_cheese.shared.paths_cli import main
+@bundle_command("paths")
+def _paths(argv: list[str]) -> int:
+    from easy_cheese.shared.paths import main
 
     return main(argv)
 
@@ -75,14 +75,14 @@ COMMANDS = (
         _read_handoff_slug, "Read the handoff preamble back from a phase artifact"
     ),
     derive_command(
-        _findings_cli,
+        _findings,
         "Render an /age report's selection table and resolve selection verbs",
     ),
     derive_command(
-        _gates_cli, "Map a quality-gate scoreboard's booleans to a readiness verdict"
+        _gates, "Map a quality-gate scoreboard's booleans to a readiness verdict"
     ),
     derive_command(
-        _paths_cli, "Slugify, validate, resolve, and list .cheese artifact paths"
+        _paths, "Slugify, validate, resolve, and list .cheese artifact paths"
     ),
     derive_command(_handoff, "Render, parse, and dispatch-split handoff preambles"),
     derive_command(
