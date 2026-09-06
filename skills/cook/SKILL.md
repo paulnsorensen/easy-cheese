@@ -68,6 +68,7 @@ Route the task to `/mold` if an ambiguity check fails.
 ## Flow
 
 1. **Contract** — Confirm behavior, non-goals, scope, gates, and applicability.
+   Print the shape-check block from `../mold/references/shape-check.md` inside the Contract. No block, no code.
    If `.cheese/glossary/<slug>.md` exists, use its canonical terms.
 2. **Implement** — Use inner RED → GREEN for behavior changes.
    Use the requested non-behavior path for closed N/A work.
@@ -276,6 +277,7 @@ The reference also contains the final report template.
 - Prefer existing dependencies and patterns.
 - Build for the reviewer on the first pass: `references/tdd-loop.md` § Reviewable by construction.
 - Keep import direction and crust integrity per [`../cheese/references/sliced-bread.md`](../cheese/references/sliced-bread.md).
+- Stop before a new crust export, a cross-slice import of an internal, or a schema or contract change the spec does not name. Ask the user.
 - Do not invent architecture that the spec already rejected.
 - Stop when implementation reveals a design decision that the spec does not answer.
 - Ask the user that decision before you continue.
