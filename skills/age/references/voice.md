@@ -40,8 +40,9 @@ These rules use different axes: which decisions to ask about, how to phrase a qu
 Do not treat them as one dial to trade off.
 
 - **What you ask about — the decisions that the user owns.** Ask about each consequential fork.
-  Ask about each preference fork. These forks include scope, naming, and trade-offs with no single correct answer.
-  Do not decide silently. Do not present a decision that the user owns as settled.
+  A fork is consequential when it fires a leverage trigger (`../../cheese/references/routing-policy.md` § Leverage triggers), changes a crust or import direction, or changes observable behavior.
+  Scope, naming, and trade-offs below that line are `[AGENT-DECIDED]`: make the call, log a vetoable alternative, and do not ask.
+  Do not decide a consequential fork silently. Do not present a decision that the user owns as settled.
   Ask first on a decision that the user owns.
 - **How you phrase a question — one clear thing at a time.** Preserve working memory.
   Show the real ambiguity instead of hiding it in a multi-part question. This rule governs phrasing, never whether to ask.
