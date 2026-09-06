@@ -27,6 +27,7 @@ PACKAGE_ROOT = SRC_ROOT / "easy_cheese"
 SKILLS_ROOT = PACKAGE_ROOT / "skills"
 RUNTIME_LOCK = REPO_ROOT / "requirements" / "runtime.txt"
 SCHEMA_ROOT = SRC_ROOT / "easy_cheese_schemas"
+BUILD_SCRIPTS_ROOT = REPO_ROOT / "scripts"
 SCHEMA_CONTRACT_SOURCE = SCHEMA_ROOT / "contracts.py"
 SCHEMA_CATALOG_SOURCE = SCHEMA_ROOT / "_schema_catalog.py"
 PHASE_REGISTRY_SOURCE = SCHEMA_ROOT / "_compiled_phase_registry.py"
@@ -46,9 +47,10 @@ SKILLS = tuple(
 
 def _compiler_module(name: str) -> ModuleType:
     """Load a build-only compiler source module (excluded from wheels)."""
-    package_entry = str(SCHEMA_ROOT)
-    if package_entry not in sys.path:
-        sys.path.insert(0, package_entry)
+    for package_entry in (BUILD_SCRIPTS_ROOT, SRC_ROOT):
+        entry = str(package_entry)
+        if entry not in sys.path:
+            sys.path.insert(0, entry)
     return importlib.import_module(name)
 
 

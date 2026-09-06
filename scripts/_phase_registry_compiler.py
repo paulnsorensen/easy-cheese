@@ -9,21 +9,20 @@ resolver instead; this module contains no runtime transition lookup.
 from __future__ import annotations
 
 import json
+import runpy
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
-try:
-    from ._schema_catalog import (
-        PHASE_CONTRACT_SCHEMA_URI,
-        REGISTERED_CONTRACT_SCHEMA_URIS as REGISTERED_SCHEMA_URIS,
-    )
-except ImportError:
-    from _schema_catalog import (
-        PHASE_CONTRACT_SCHEMA_URI,
-        REGISTERED_CONTRACT_SCHEMA_URIS as REGISTERED_SCHEMA_URIS,
-    )
+
+_SCHEMA_CATALOG = runpy.run_path(
+    str(Path(__file__).resolve().parents[1] / "src" / "easy_cheese_schemas" / "_schema_catalog.py")
+)
+PHASE_CONTRACT_SCHEMA_URI = cast(str, _SCHEMA_CATALOG["PHASE_CONTRACT_SCHEMA_URI"])
+REGISTERED_SCHEMA_URIS = cast(
+    frozenset[str], _SCHEMA_CATALOG["REGISTERED_CONTRACT_SCHEMA_URIS"]
+)
 
 SUPPORTED_PHASE_CONTRACT_MAJOR = "1"
 SUPPORTED_PHASE_CONTRACT_MINOR = "0"

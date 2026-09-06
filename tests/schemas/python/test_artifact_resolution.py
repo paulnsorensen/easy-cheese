@@ -14,8 +14,8 @@ from urllib.request import HTTPSHandler, Request, build_opener
 import pytest
 from attrs import Attribute, asdict, evolve, fields
 
-import easy_cheese_schemas.artifacts as artifacts_module
-from easy_cheese_schemas.artifacts import (
+import easy_cheese.shared.artifacts as artifacts_module
+from easy_cheese.shared.artifacts import (
     ArtifactResolutionError,
     resolve_artifact,
     resolve_verified_bytes,
@@ -300,7 +300,7 @@ def test_closes_http_error_before_raising(
         _ = timeout
         raise error
 
-    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", raise_error)
+    monkeypatch.setattr("easy_cheese.shared.artifacts.urlopen", raise_error)
 
     with pytest.raises(ArtifactResolutionError, match="could not be fetched"):
         _ = resolve_artifact(artifact_ref(uri, content), artifact_directory=tmp_path)
@@ -325,7 +325,7 @@ def test_closes_http_error_before_following_redirect(
             raise error
         return HttpsResponse(content, redirected_uri, "text/plain")
 
-    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
+    monkeypatch.setattr("easy_cheese.shared.artifacts.urlopen", open_https)
 
     resolved = resolve_artifact(
         artifact_ref(uri, content),
@@ -348,7 +348,7 @@ def test_resolves_https_artifact_to_durable_snapshot(
         calls.append((request.full_url, timeout))
         return HttpsResponse(content, uri, "text/plain")
 
-    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
+    monkeypatch.setattr("easy_cheese.shared.artifacts.urlopen", open_https)
 
     resolved = resolve_artifact(
         artifact_ref(uri, content),
@@ -372,7 +372,7 @@ def test_rejects_https_response_without_media_type(
         _ = timeout
         return HttpsResponse(content, uri, None)
 
-    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
+    monkeypatch.setattr("easy_cheese.shared.artifacts.urlopen", open_https)
     artifact_directory = tmp_path / "resolved"
 
     with pytest.raises(ArtifactResolutionError, match="declare a Content-Type"):
@@ -402,7 +402,7 @@ def test_rejects_https_redirect_outside_policy(
         _ = timeout
         return HttpsResponse(content, redirect_uri, "text/plain")
 
-    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
+    monkeypatch.setattr("easy_cheese.shared.artifacts.urlopen", open_https)
     artifact_directory = tmp_path / "resolved"
 
     with pytest.raises(ArtifactResolutionError, match="redirected outside URI policy"):
@@ -449,7 +449,7 @@ def test_rejects_forbidden_redirect_before_opening_or_reading(
             raise AssertionError("forbidden redirect must not be contacted")
         return RedirectResponse(uri, forbidden_uri)
 
-    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
+    monkeypatch.setattr("easy_cheese.shared.artifacts.urlopen", open_https)
 
     with pytest.raises(ArtifactResolutionError, match="redirected outside URI policy"):
         _ = resolve_artifact(
@@ -637,7 +637,7 @@ def test_https_integrity_failure_is_not_materialized(
         _ = timeout
         return HttpsResponse(content, uri, "text/plain")
 
-    monkeypatch.setattr("easy_cheese_schemas.artifacts.urlopen", open_https)
+    monkeypatch.setattr("easy_cheese.shared.artifacts.urlopen", open_https)
     reference = evolve(
         artifact_ref(uri, content),
         digest=f"sha256:{'0' * 64}",
