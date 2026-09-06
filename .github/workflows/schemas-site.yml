@@ -69,6 +69,27 @@ jobs:
       - name: Build the site
         run: python3 scripts/build_schema_site.py --out dist-schemas
 
+      # Current wrangler no longer auto-creates a Pages project on first
+      # `pages deploy`, so create it once, idempotently. `project create`
+      # exits non-zero when the project already exists; guard on the list.
+      - name: Ensure the Pages project exists
+        if: >-
+          github.repository == 'paulnsorensen/easy-cheese'
+          && github.event_name != 'pull_request'
+          && github.ref == 'refs/heads/main'
+          && vars.CLOUDFLARE_ACCOUNT_ID != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if npx --yes wrangler@4 pages project list | grep -qw easy-cheese-schemas; then
+            echo "Pages project easy-cheese-schemas already exists."
+          else
+            npx --yes wrangler@4 pages project create easy-cheese-schemas \
+              --production-branch=main
+          fi
+
       - name: Deploy to Cloudflare Pages
         if: >-
           github.repository == 'paulnsorensen/easy-cheese'
