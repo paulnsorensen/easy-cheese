@@ -8,8 +8,10 @@ production-source boundary held. It must never change Press routing.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -35,6 +37,38 @@ GREEN_REQUEST: dict[str, object] = {
 
 def _request(**overrides: object) -> dict[str, object]:
     return {**GREEN_REQUEST, **overrides}
+
+
+# The CLI request carries only the agent's observations; `outcome` and
+# `repair_cycles` come from the attempt's route artifact (#611).
+CLI_REQUEST: dict[str, object] = {
+    key: value
+    for key, value in GREEN_REQUEST.items()
+    if key not in {"outcome", "repair_cycles"}
+}
+
+
+def _cli_request(**overrides: object) -> dict[str, object]:
+    return {**CLI_REQUEST, **overrides}
+
+
+def _write_route(
+    root: Path, slug: str, attempt: int, outcome: str, repair_cycles: int
+) -> Path:
+    press_dir = root / ".cheese" / "press"
+    press_dir.mkdir(parents=True, exist_ok=True)
+    path = press_dir / f"{slug}.attempt-{attempt}.route.json"
+    _ = path.write_text(
+        json.dumps({"outcome": outcome, "repair_cycles": repair_cycles}),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_request(tmp_path: Path, payload: dict[str, object]) -> Path:
+    request = tmp_path / "telemetry-request.json"
+    _ = request.write_text(json.dumps(payload), encoding="utf-8")
+    return request
 
 
 def test_clean_attempt_records_every_derived_field() -> None:
@@ -234,15 +268,15 @@ def test_non_list_tool_errors_is_rejected() -> None:
         _ = press_telemetry.telemetry_record(**_request(tool_errors={"phase": "attack"}))
 
 
-def test_cli_emits_the_record_for_a_request_file(
+def test_cli_reads_outcome_and_repair_cycles_from_the_route_artifact(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    request = tmp_path / "telemetry.json"
-    payload = _request(
+    monkeypatch.chdir(tmp_path)
+    _ = _write_route(tmp_path, "outer-tdd-gates", 2, "in_contract_red", 1)
+    observed = _cli_request(
         attempt=2,
-        outcome="in_contract_red",
-        repair_cycles=1,
         tool_errors=[
             {"phase": "attack", "operation": "pytest"},
             {"phase": "attack", "operation": "pytest"},
@@ -250,11 +284,45 @@ def test_cli_emits_the_record_for_a_request_file(
         delegations=[{"role": "reviewer", "purpose": "replay the attack digest"}],
         changed_files=["tests/fanout/python/test_press_route.py"],
     )
-    _ = request.write_text(json.dumps(payload), encoding="utf-8")
 
-    assert press_telemetry_cli.main([str(request)]) == 0
-    assert json.loads(capsys.readouterr().out) == press_telemetry.telemetry_record(
-        **payload
+    assert press_telemetry_cli.main([str(_write_request(tmp_path, observed))]) == 0
+    record = cast(dict[str, object], json.loads(capsys.readouterr().out))
+    assert record == press_telemetry.telemetry_record(
+        **observed, outcome="in_contract_red", repair_cycles=1
+    )
+    assert (record["outcome"], record["repair_cycles"]) == ("in_contract_red", 1)
+
+
+def test_cli_resolves_the_route_artifact_from_the_git_toplevel(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _ = subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    nested = tmp_path / "src" / "pkg"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+    _ = _write_route(tmp_path, "outer-tdd-gates", 1, "green", 0)
+
+    assert press_telemetry_cli.main([str(_write_request(tmp_path, _cli_request()))]) == 0
+    record = cast(dict[str, object], json.loads(capsys.readouterr().out))
+    assert record["outcome"] == "green"
+
+
+def test_cli_rejects_a_request_that_restates_the_route_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The retyped `outcome: green` from #611 is now an unknown key, not evidence."""
+    monkeypatch.chdir(tmp_path)
+    _ = _write_route(tmp_path, "outer-tdd-gates", 1, "in_contract_red", 0)
+    retyped = _cli_request(outcome="green", repair_cycles=0)
+
+    assert press_telemetry_cli.main([str(_write_request(tmp_path, retyped))]) == 1
+    assert (
+        "request keys mismatch: unknown ['outcome', 'repair_cycles']"
+        in capsys.readouterr().err
     )
 
 
@@ -262,26 +330,95 @@ def test_cli_requires_every_request_key(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    request = tmp_path / "telemetry.json"
-    incomplete = dict(GREEN_REQUEST)
+    incomplete = dict(CLI_REQUEST)
     del incomplete["delegations"]
-    _ = request.write_text(json.dumps(incomplete), encoding="utf-8")
 
-    assert press_telemetry_cli.main([str(request)]) == 1
-    assert "delegations" in capsys.readouterr().err
+    assert press_telemetry_cli.main([str(_write_request(tmp_path, incomplete))]) == 1
+    assert "request keys mismatch: missing ['delegations']" in capsys.readouterr().err
 
 
-def test_cli_rejects_extra_request_keys(
+def test_cli_refuses_to_record_an_attempt_that_was_never_routed(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    request = tmp_path / "telemetry.json"
-    _ = request.write_text(
-        json.dumps(_request(duration_seconds=246)), encoding="utf-8"
-    )
+    monkeypatch.chdir(tmp_path)
 
+    assert press_telemetry_cli.main([str(_write_request(tmp_path, _cli_request()))]) == 1
+    err = capsys.readouterr().err
+    assert "route artifact not found" in err
+    assert str(tmp_path / ".cheese" / "press" / "outer-tdd-gates.attempt-1.route.json") in err
+    assert "run press-route" in err
+
+
+def test_cli_rejects_a_route_artifact_that_contradicts_the_attempt_number(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    _ = _write_route(tmp_path, "outer-tdd-gates", 2, "green", 0)
+
+    request = _write_request(tmp_path, _cli_request(attempt=2))
     assert press_telemetry_cli.main([str(request)]) == 1
-    assert "request keys mismatch: unknown ['duration_seconds']" in capsys.readouterr().err
+    assert "attempt 2 contradicts repair_cycles 0" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("route_text", "message"),
+    [
+        ("[]", "expected a mapping"),
+        ('{"outcome": "green"}', "keys mismatch: missing ['repair_cycles']"),
+        (
+            '{"outcome": "green", "repair_cycles": 0, "action": "dispatch"}',
+            "keys mismatch: unknown ['action']",
+        ),
+        ('{"outcome": "purple", "repair_cycles": 0}', "invalid outcome 'purple'"),
+    ],
+)
+def test_cli_rejects_a_route_artifact_that_press_route_would_reject(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    route_text: str,
+    message: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    route = _write_route(tmp_path, "outer-tdd-gates", 1, "green", 0)
+    _ = route.write_text(route_text, encoding="utf-8")
+
+    assert press_telemetry_cli.main([str(_write_request(tmp_path, _cli_request()))]) == 1
+    assert message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("slug", ["../../etc/passwd", "Outer TDD", ""])
+def test_cli_validates_the_slug_before_building_the_route_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    slug: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    request = _write_request(tmp_path, _cli_request(slug=slug))
+    assert press_telemetry_cli.main([str(request)]) == 1
+    err = capsys.readouterr().err
+    assert "slug" in err
+    assert "route artifact" not in err
+
+
+def test_cli_bounds_the_attempt_before_building_the_route_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    request = _write_request(tmp_path, _cli_request(attempt=4))
+    assert press_telemetry_cli.main([str(request)]) == 1
+    err = capsys.readouterr().err
+    assert "attempt must be between 1 and 3" in err
+    assert "route artifact" not in err
 
 
 @pytest.mark.parametrize("path", [".", "./", "./."])

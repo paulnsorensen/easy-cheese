@@ -117,10 +117,16 @@ def _require_phase(value: object) -> Phase:
         ) from exc
 
 
-def _require_attempt(value: object, repair_cycles: int) -> int:
+def require_attempt_number(value: object) -> int:
+    """The 1-based Press attempt number, bounded by ``MAX_ATTEMPTS``."""
     attempt = require_int(value, "attempt")
     if not 1 <= attempt <= MAX_ATTEMPTS:
         raise ValueError(f"attempt must be between 1 and {MAX_ATTEMPTS}")
+    return attempt
+
+
+def _require_attempt(value: object, repair_cycles: int) -> int:
+    attempt = require_attempt_number(value)
     if attempt != repair_cycles + 1:
         raise ValueError(
             f"attempt {attempt} contradicts repair_cycles {repair_cycles}; "
@@ -248,5 +254,6 @@ __all__ = [
     "FileClass",
     "Phase",
     "classify_path",
+    "require_attempt_number",
     "telemetry_record",
 ]
