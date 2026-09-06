@@ -79,4 +79,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          # Force npm: the action otherwise infers pnpm from the repo's
+          # root pnpm-lock.yaml (the Starlight docs), but this Python-only
+          # job never sets up Node/pnpm, so wrangler install fails.
+          packageManager: npm
           command: pages deploy dist-schemas --project-name=easy-cheese-schemas --branch=main
