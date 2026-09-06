@@ -19,7 +19,7 @@ Coherence self-check before curdle:
 - [ ] At least 2 options weighed (Do Nothing included)
 - [ ] Chosen option grounded in codebase evidence
 - [ ] Exploration delegated: evidence-heavy reads carry an explorer digest, or the parent-context fallback is recorded
-- [ ] Interface sketches: every public seam has a pseudocode signature
+- [ ] Interface sketches: Placement block complete (slice, spine step, public interface, private, crust delta, arrows)
 - [ ] Cross-module calls go through public interfaces, not internals
 - [ ] Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)
 - [ ] Non-goals audit: every bullet traces to a user-stated out-of-scope item or is marked [AGENT-INTRODUCED]

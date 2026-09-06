@@ -41,15 +41,22 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Sketch — interface lockdown
 
-**Job:** lock modules, responsibilities, I/O contracts, and seams in pseudocode signatures. Run the shape check (`shape-check.md`) before drafting when the change touches multiple modules. Also run it before drafting when the change introduces a new public interface. Check signatures, semantic callers, and dependency blast radius for touched symbols. This check helps new seams follow existing conventions and bounds the impact. Print the shape-check summary block before any pseudocode. Single-module, internals-only sketches can skip the gate. Instead, note "shape check skipped: single-module change".
+**Job:** place the change in the architecture at 10,000 ft. The output is the **Placement block** that fills `## Interface sketches` (`curdle.md` § Spec template):
 
-**Acceptance notation (EARS):** for every public seam, emit acceptance criteria in EARS form: `WHEN <trigger> THE SYSTEM SHALL <response>`. If the trigger cannot be stated precisely (e.g. pure internal utilities), fall back to prose with a `[prose-fallback]` marker.
+- `slice:` which domain slice owns the change, or `NEW SLICE` (a `new-slice` leverage trigger)
+- `spine step:` where it sits on the request path (entry → workflow → domain → infra), or `none`
+- `public interface:` one signature per new or changed crust export, nothing else
+- `private:` what stays behind the crust, as a one-line list of responsibilities, not signatures
+- `crust delta:` new exports, cross-slice imports, or contract changes, or `none`
+- `arrows:` any dependency direction the change adds, checked against [`../../cheese/references/sliced-bread.md`](../../cheese/references/sliced-bread.md)
 
-**Concrete-seam rule:** a small seam has a complete function body of roughly 20 lines. For a small seam, write the full implementation instead of pseudocode. Use abbreviated signatures only when bodies are too large or depend on unresolved design unknowns.
+Run the shape check (`shape-check.md`) before drafting when the change touches multiple modules or introduces a new public interface; print its summary block first. Single-module, internals-only sketches note "shape check skipped: single-module change". Do not write bodies, helper signatures, or internal pseudocode in Sketch; those belong to `/cook`. A non-empty `crust delta` is a consequential fork.
+
+**Acceptance notation (EARS):** for every public interface line, emit acceptance criteria in EARS form: `WHEN <trigger> THE SYSTEM SHALL <response>`. If the trigger cannot be stated precisely (e.g. pure internal utilities), fall back to prose with a `[prose-fallback]` marker.
 
 **Language default:** when a sketch introduces a component with a free language choice, default to the repository's incumbent memory-safe typed language (Python under a strict type checker, or TypeScript in `strict` mode). When the incumbent is C or C++, treat Rust as the default for new components. Choose Go only for standalone tooling where diff uniformity dominates. Treat Elm and Gleam as niche. Reviewer familiarity and model generation accuracy dominate review speed; cross-language review throughput itself is unmeasured. Record any departure as an `[AGENT-DECIDED]` item for Grill.
 
-**Exit when:** every public seam has a pseudocode signature or full implementation under the concrete-seam rule. Every acceptance criterion uses EARS form or has `[prose-fallback]`. Every cross-module call uses public interfaces, not internals. Record the shape-check verdict, or explicitly skip it under the gate above.
+**Exit when:** the Placement block is complete, every acceptance criterion uses EARS form or has `[prose-fallback]`, every cross-module call uses public interfaces, not internals, and the shape-check verdict is recorded or explicitly skipped under the gate above.
 
 ### Grill — adversarial clarification
 

@@ -116,8 +116,16 @@ Add one row for each criterion.
 | AC-2 | <public interface> | <existing outer seam> | <witness and expected red assertion> | contract-matrix | <ratified version> | <row 1><br><row 2> |
 
 ## Interface sketches
-```pseudocode
-<signatures, schemas, seams>
+
+The Placement block from Sketch (`modes.md` § Sketch). Architecture at 10,000 ft, not bodies.
+
+```text
+slice:            <owning slice | NEW SLICE>
+spine step:       <entry | workflow | domain | infra | none>
+public interface: <one signature per new or changed crust export>
+private:          <responsibilities that stay behind the crust>
+crust delta:      <new exports | cross-slice imports | contract changes | none>
+arrows:           <dependency directions added, or none>
 ```
 
 ## Risks

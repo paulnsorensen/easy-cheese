@@ -176,7 +176,7 @@ Recommendation shape: "Validate at the boundary" / "Use the project's existing `
 
 ### encapsulation
 
-Look for cross-module access to internals, public APIs that leak implementation types, and parameters that carry excess context. Look for new exports without a use case. Also look for a domain invariant lifted from its producer and enforced above it by every caller. Check whether the producer could absorb error, default, or configuration decisions instead of exporting them.
+Look for cross-module access to internals, public APIs that leak implementation types, and parameters that carry excess context. Look for new exports without a use case. Check import direction and crust integrity against [`../../cheese/references/sliced-bread.md`](../../cheese/references/sliced-bread.md), and flag a crust delta the spec's Placement block did not name. Also look for a domain invariant lifted from its producer and enforced above it by every caller. Check whether the producer could absorb error, default, or configuration decisions instead of exporting them.
 
 | Base | Trigger |
 | --- | --- |
