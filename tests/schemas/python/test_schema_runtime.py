@@ -9,24 +9,20 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-ROOT = Path(__file__).resolve().parents[3]
-SCRIPTS_ROOT = ROOT / "scripts"
-if str(SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_ROOT))
 
-from _schema_catalog_compiler import (  # noqa: E402
+from _schema_catalog_compiler import (
     _ContractModule,  # pyright: ignore[reportPrivateUsage]
     collect as collect_schema_markers,
     render as render_schema_catalog,
 )
-from easy_cheese_schemas.contracts import (  # noqa: E402
+from easy_cheese_schemas.contracts import (
     MAX_CONTRACT_BYTES,
     MAX_CONTRACT_DEPTH,
     ContractVersion,
     CurdPlan,
     contract,
 )
-from easy_cheese_schemas.schema_runtime import (  # noqa: E402
+from easy_cheese_schemas.schema_runtime import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     ContractValidationError,
     canonical_digest,
@@ -38,6 +34,7 @@ from easy_cheese_schemas.schema_runtime import (  # noqa: E402
 )
 
 SCHEMA_ROOT = "https://schemas.easy-cheese.dev"
+ROOT = Path(__file__).resolve().parents[3]
 
 PLAN_SCHEMA = f"{SCHEMA_ROOT}/curd-plan"
 

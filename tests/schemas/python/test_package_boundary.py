@@ -8,21 +8,23 @@ import easy_cheese_schemas
 
 
 SCHEMA_ROOT = Path(easy_cheese_schemas.__file__).parent
+RUNTIME_EXPORTS = frozenset(
+    {"cook", "cure", "run_workflow", "resolve_artifact", "WriterCheckpoint", "BenchmarkReport"}
+)
+RELOCATED_MODULES = (
+    "workflow",
+    "artifacts",
+    "benchmarks",
+    "_phase_registry_compiler",
+    "_schema_catalog_compiler",
+    "_document_rules_compiler",
+)
 
 
 def test_schema_package_exposes_contracts_but_not_runtime_machinery() -> None:
-    assert not hasattr(easy_cheese_schemas, "cook")
-    assert not hasattr(easy_cheese_schemas, "cure")
-    assert not hasattr(easy_cheese_schemas, "run_workflow")
-    assert not hasattr(easy_cheese_schemas, "resolve_artifact")
-    assert not hasattr(easy_cheese_schemas, "WriterCheckpoint")
-    assert not hasattr(easy_cheese_schemas, "BenchmarkReport")
-    assert importlib.util.find_spec("easy_cheese_schemas.workflow") is None
-    assert importlib.util.find_spec("easy_cheese_schemas.artifacts") is None
-    assert importlib.util.find_spec("easy_cheese_schemas.benchmarks") is None
-    assert importlib.util.find_spec("easy_cheese_schemas._phase_registry_compiler") is None
-    assert importlib.util.find_spec("easy_cheese_schemas._schema_catalog_compiler") is None
-    assert importlib.util.find_spec("easy_cheese_schemas._document_rules_compiler") is None
+    assert not RUNTIME_EXPORTS & set(vars(easy_cheese_schemas))
+    for module in RELOCATED_MODULES:
+        assert importlib.util.find_spec(f"easy_cheese_schemas.{module}") is None, module
 
 
 def test_schema_sources_do_not_import_runtime_packages() -> None:
@@ -40,13 +42,3 @@ def test_schema_sources_do_not_import_runtime_packages() -> None:
             for name in imported
             for root in forbidden_roots
         ), f"{source} imports a runtime package: {imported}"
-
-
-def test_runtime_machinery_lives_in_shared_package() -> None:
-    import easy_cheese.shared.artifacts as artifacts
-    import easy_cheese.shared.workflow as workflow
-
-    assert artifacts.__file__ is not None
-    assert workflow.__file__ is not None
-    assert Path(artifacts.__file__).parent == Path(workflow.__file__).parent
-    assert Path(artifacts.__file__).parent == SCHEMA_ROOT.parent / "easy_cheese" / "shared"

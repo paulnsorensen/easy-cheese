@@ -1,21 +1,14 @@
 from __future__ import annotations
 
 import pytest
-import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
-SCRIPTS_ROOT = ROOT / "scripts"
-if str(SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_ROOT))
-
-from contract_benchmarks import (  # noqa: E402
+from contract_benchmarks import (
     BenchmarkRecord,
     BenchmarkReport,
     ContractBenchmarkInput,
     benchmark_contracts,
 )
-from easy_cheese_schemas.contracts import (  # noqa: E402
+from easy_cheese_schemas.contracts import (
     AgentWriterView,
     ArtifactRef,
     BoundedContextWriterView,
@@ -33,7 +26,7 @@ from easy_cheese_schemas.contracts import (  # noqa: E402
     UncertaintyScope,
     WriterViewKind,
 )
-from easy_cheese_schemas.schema_runtime import normalize_agent_output  # noqa: E402
+from easy_cheese_schemas.schema_runtime import normalize_agent_output
 
 SCHEMA_ROOT = "https://schemas.easy-cheese.dev"
 PLANNER_RESULT_SCHEMA = f"{SCHEMA_ROOT}/planner-result"

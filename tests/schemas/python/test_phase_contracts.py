@@ -11,16 +11,11 @@ from typing import TYPE_CHECKING, Protocol, cast
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPTS_ROOT = REPO_ROOT / "scripts"
-if str(SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_ROOT))
-
-from _phase_registry_compiler import (  # noqa: E402
+from _phase_registry_compiler import (
     compile_phase_declarations,
     parse_phase_yaml,
 )
-from easy_cheese_schemas.phase_contracts import (  # noqa: E402
+from easy_cheese_schemas.phase_contracts import (
     COMPILED_TRANSITION_REGISTRY,
     CURD_PLAN_SCHEMA_URI,
     CURD_RESULT_SCHEMA_URI,
@@ -33,6 +28,8 @@ from easy_cheese_schemas.phase_contracts import (  # noqa: E402
 if TYPE_CHECKING:
     from easy_cheese_schemas.phase_contracts import CompiledTransition, TransitionRegistry
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SCRIPTS_ROOT = REPO_ROOT / "scripts"
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 WRITER_PATH = SHARED_SCRIPTS / "write_handoff_artifact.py"
 DECLARATIONS = (

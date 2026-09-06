@@ -47,10 +47,9 @@ SKILLS = tuple(
 
 def _compiler_module(name: str) -> ModuleType:
     """Load a build-only compiler source module (excluded from wheels)."""
-    for package_entry in (BUILD_SCRIPTS_ROOT, SRC_ROOT):
-        entry = str(package_entry)
-        if entry not in sys.path:
-            sys.path.insert(0, entry)
+    entry = str(BUILD_SCRIPTS_ROOT)
+    if entry not in sys.path:
+        sys.path.insert(0, entry)
     return importlib.import_module(name)
 
 

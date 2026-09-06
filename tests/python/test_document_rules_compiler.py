@@ -17,9 +17,6 @@ CURDLE_MD = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
 
 if str(SCHEMAS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCHEMAS_ROOT))
-SCRIPTS_ROOT = REPO_ROOT / "scripts"
-if str(SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_ROOT))
 
 import contracts  # noqa: E402
 import _document_rules_compiler as compiler  # noqa: E402
