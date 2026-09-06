@@ -937,6 +937,7 @@ def test_a_directive_entry_carries_a_quote_and_cannot_gate() -> None:
                 {
                     "kind": "directive",
                     "summary": "keep records append-only",
+                    "quote": "never rewrite a landed revision",
                     "blocks_continuation": True,
                 }
             ]

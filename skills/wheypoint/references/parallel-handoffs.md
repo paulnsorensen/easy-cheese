@@ -6,7 +6,9 @@ Use this contract when one checkpoint starts multiple moves.
 
 Set `next: tasks` and give at least one task.
 
-The projection then renders `mode: parallel` after `artifact:` and a `## Tasks` section.
+The projection renders `mode: parallel` between `next:` and `artifact:`, plus a `## Tasks` section.
+This position keeps mode metadata separate from free-text orientation.
+A legacy orientation that starts with `mode:` remains text.
 
 A single move does not need this contract.
 
@@ -48,8 +50,8 @@ Rendered projection preamble and tasks block:
 ```markdown
 status: ok
 next: tasks
-artifact:
 mode: parallel
+artifact:
 KIP-76 and KIP-77 are ready to run as independent PR efforts.
 
 ## Tasks

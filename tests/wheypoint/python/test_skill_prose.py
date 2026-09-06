@@ -80,11 +80,12 @@ def test_ac29_parallel_handoffs_documents_the_intent_fields() -> None:
     assert "refuses" not in text
     assert "`tasks` and `parallel` are `CheckpointIntent` fields" in text
     cheese = SKILL_DIR.parent / "cheese" / "references" / "continue-resume.md"
-    assert "`mode:` is a keyed line after `artifact:`" in cheese.read_text(encoding="utf-8")
+    assert "`mode:` is a keyed line between `next:` and `artifact:`" in cheese.read_text(encoding="utf-8")
     checked = 0
     for block in _preamble_blocks(text) + _preamble_blocks(cheese.read_text(encoding="utf-8")):
         keys = [line.split(":", 1)[0] for line in block if ":" in line]
         if "mode" in keys:
-            assert keys.index("mode") == keys.index("artifact") + 1, block
+            assert keys.index("mode") == keys.index("next") + 1, block
+            assert keys.index("artifact") == keys.index("mode") + 1, block
             checked += 1
     assert checked >= 1, "no preamble example carries a mode: line"

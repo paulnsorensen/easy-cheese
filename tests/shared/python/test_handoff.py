@@ -332,7 +332,7 @@ class TestSharedEmitter:
 
         artifact = tmp_path / ".cheese" / "age" / "slug.md"
         artifact.parent.mkdir(parents=True)
-        _ = artifact.write_text("status: ok\nnext: tasks\nartifact: \nmode: parallel\norient\n", encoding="utf-8")
+        _ = artifact.write_text("status: ok\nnext: tasks\nmode: parallel\nartifact: \norient\n", encoding="utf-8")
         def _fixed(_phase: str, _slug: str) -> Path:
             return artifact
 

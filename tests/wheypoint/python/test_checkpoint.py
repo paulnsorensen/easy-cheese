@@ -325,7 +325,8 @@ def test_checkpoint_refuses_the_fields_that_belong_to_commit(
     assert _get(payload, "error", "code") == "commit-only-field"
     message = cast(str, _get(payload, "error", "message"))
     assert field in message
-    assert "commit" in message
+    assert "checkpoint --compacted" in message
+    assert "base_revision_id" in message
 
 
 @pytest.mark.usefixtures("store")

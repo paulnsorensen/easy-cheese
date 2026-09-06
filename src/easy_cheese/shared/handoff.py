@@ -4,8 +4,8 @@ Schema (canonical rules: skills/cheese/references/handback-contract.md):
 
     status: <one of easy_cheese_schemas.phase_contracts.HANDBACK_STATUSES>
     next: <skill-name> | done
-    artifact: <path-to-prior-report-if-any>
     mode: parallel                            (optional keyed line)
+    artifact: <path-to-prior-report-if-any>
     taste_test: <verdict>                     (optional keyed line)
     durable_flags: none | <flag lines>        (optional keyed line)
     baseline: none | <block>                  (optional keyed line)
@@ -93,8 +93,8 @@ class HandoffSlug:
 _STATUS_RE = re.compile(r"^status:\s*(?P<rest>.+?)\s*$")
 _NEXT_RE = re.compile(r"^next:\s*(?P<value>\S.*?)\s*$")
 _ARTIFACT_RE = re.compile(r"^artifact:\s*(?P<value>.*?)\s*$")
-# Optional keyed lines allowed between `artifact:` and the orientation.
-_OPTIONAL_KEY_RE = re.compile(r"^(?P<key>mode|taste_test|durable_flags|baseline):\s*(?P<value>.*?)\s*$")
+_MODE_RE = re.compile(r"^mode:\s*(?P<value>.*?)\s*$")
+_OPTIONAL_KEY_RE = re.compile(r"^(?P<key>taste_test|durable_flags|baseline):\s*(?P<value>.*?)\s*$")
 
 
 class HandoffParseError(ValueError):
@@ -115,11 +115,9 @@ def _parse_status(line: str) -> tuple[str, str | None]:
 def parse_handoff_slug(text: str) -> HandoffSlug:
     """Parse the preamble from the top of an artifact body.
 
-    The preamble is strictly the first *physical* lines: status, next,
-    artifact (value may be empty), zero or more optional keyed lines
-    (`mode:`, `taste_test:`, `durable_flags:`, `baseline:`), orientation. Treating blank lines as
-    skippable would let a missing orientation silently consume the first
-    body line (e.g. a `# Press Report` heading) as the orientation.
+    The preamble starts with status, next, optional mode, then artifact.
+    Optional taste_test, durable_flags, and baseline fields precede orientation.
+    A blank line cannot replace orientation or let the parser consume the body heading.
     """
     raw_lines = text.splitlines()
     if len(raw_lines) < 4:
@@ -133,13 +131,21 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
         raise HandoffParseError(f"expected 'next:' line, got {raw_lines[1]!r}")
     next_skill = next_match.group("value").lstrip("/")
 
-    artifact_match = _ARTIFACT_RE.match(raw_lines[2])
+    index = 2
+    mode_match = _MODE_RE.match(raw_lines[index])
+    mode = None
+    if mode_match:
+        mode = mode_match.group("value")
+        if not mode:
+            raise HandoffParseError("'mode:' line requires a value")
+        index += 1
+    artifact_match = _ARTIFACT_RE.match(raw_lines[index])
     if not artifact_match:
-        raise HandoffParseError(f"expected 'artifact:' line, got {raw_lines[2]!r}")
+        raise HandoffParseError(f"expected 'artifact:' line, got {raw_lines[index]!r}")
     artifact_value = artifact_match.group("value") or None
 
     optional: dict[str, str] = {}
-    index = 3
+    index += 1
     while index < len(raw_lines):
         keyed_match = _OPTIONAL_KEY_RE.match(raw_lines[index])
         if not keyed_match:
@@ -165,7 +171,7 @@ def parse_handoff_slug(text: str) -> HandoffSlug:
         next_skill=next_skill,
         artifact=artifact_value,
         orientation=orientation,
-        mode=optional.get("mode"),
+        mode=mode,
         taste_test=optional.get("taste_test"),
         durable_flags=optional.get("durable_flags"),
         baseline=optional.get("baseline"),
@@ -185,9 +191,10 @@ def render_handoff_slug(slug: HandoffSlug) -> str:
         if value is not None:
             require_single_line(field_name, value)
     status_line = "status: " + render_status_field(slug.status, slug.reason)
-    lines = [status_line, f"next: {slug.next_skill}", f"artifact: {slug.artifact or ''}"]
+    lines = [status_line, f"next: {slug.next_skill}"]
     if slug.mode is not None:
         lines.append(f"mode: {slug.mode}")
+    lines.append(f"artifact: {slug.artifact or ''}")
     if slug.taste_test is not None:
         lines.append(f"taste_test: {slug.taste_test}")
     if slug.durable_flags is not None:

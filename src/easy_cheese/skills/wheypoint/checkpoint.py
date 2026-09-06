@@ -118,10 +118,8 @@ _SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         re.compile(r"(?i)\baws_secret_access_key\s*[=:]\s*['\"]?[A-Za-z0-9/+=]{40}\b"),
     ),
     ("private key block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
-    # Excludes `-`/`_` from the body so a hyphenated word like
-    # `sk-refactor-transcript-reader-v2` does not read as a key, while still
-    # matching the Anthropic `sk-ant-` shape.
-    ("OpenAI-style key", re.compile(r"\bsk-ant-[A-Za-z0-9]{10,}\b|\bsk-[A-Za-z0-9]{20,}\b")),
+    # Known prefixes admit provider separators; generic prose does not.
+    ("OpenAI-style key", re.compile(r"\bsk-ant-(?:api\d{2}-)?[A-Za-z0-9_-]{10,}\b|\bsk-(?:proj|svcacct)-[A-Za-z0-9_-]{10,}\b|\bsk-[A-Za-z0-9]{20,}\b")),
     ("Stripe key", re.compile(r"\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b")),
     ("Slack token", re.compile(r"\bxox[abps]-[A-Za-z0-9-]{10,}\b")),
     ("Slack webhook", re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/]+")),
@@ -165,15 +163,16 @@ def _string_fields(value: object, path: str) -> list[tuple[str, str]]:
     return []
 
 
-def secret_fields(intent: CheckpointIntent) -> list[str]:
+def secret_fields(intent: object) -> list[str]:
     """Every text field of the intent that carries a secret pattern, named by path.
 
     Every string field is scanned -- task commands, dossier evidence, transition
     rationales, and artifact paths included -- because a checkpoint is durable,
     digest-protected text that can never be scrubbed afterwards (AC-20).
     """
+    payload = attrs.asdict(intent, recurse=True) if isinstance(intent, CheckpointIntent) else intent
     hits: list[str] = []
-    for field_name, text in _string_fields(attrs.asdict(intent, recurse=True), ""):
+    for field_name, text in _string_fields(payload, ""):
         for label, pattern in _SECRET_PATTERNS:
             if pattern.search(text):
                 hits.append(f"{field_name} ({label})")
@@ -213,17 +212,12 @@ def commit_only_fields(payload: object) -> tuple[str, ...]:
     return tuple(name for name in COMMIT_ONLY_FIELDS if name in mapping)
 
 
-def _next_action_problems(
-    intent: CheckpointIntent, current: WheypointRecord | None
-) -> list[str]:
+def _next_action_problems(intent: CheckpointIntent) -> list[str]:
     """Every problem with the intent's next-action/artifact coherence."""
     problems: list[str] = []
     if intent.next is None:
-        if current is None:
-            problems.append(
-                "a first checkpoint has no next action to carry forward, so it "
-                + "must say what comes next"
-            )
+        if intent.tasks is not None or intent.parallel is not None:
+            problems.append("tasks and parallel require an explicit next action")
         if intent.artifact is not None:
             problems.append(
                 "artifact belongs to the move it is worked on by, so it cannot "
@@ -238,7 +232,7 @@ def _next_action_problems(
 
 
 def delta_problems(
-    intent: CheckpointIntent, current: WheypointRecord | None
+    intent: CheckpointIntent, current: WheypointRecord | None, *, schema_only: bool = False
 ) -> list[str]:
     """Every problem building a delta against this record, none of them fatal (AC-11).
 
@@ -248,8 +242,19 @@ def delta_problems(
     those passing first.
     """
     problems = list(task_command_problems(intent))
-    problems.extend(_next_action_problems(intent, current))
+    problems.extend(_next_action_problems(intent))
     if problems:
+        return problems
+    if schema_only:
+        if intent.next is not None:
+            try:
+                # Omitted orientation depends on the record, which this dry run never opens.
+                _ = NextAction(
+                    move=intent.next, orientation=intent.orientation or "Carried orientation.",
+                    artifact=intent.artifact, tasks=intent.tasks, parallel=intent.parallel,
+                )
+            except ValueError as exc:
+                problems.append(str(exc))
         return problems
     try:
         _ = build_delta(intent, current)
@@ -321,10 +326,15 @@ def _next_action(
     record has. `artifact` describes what the next move works on, so it is not
     a thing to set while leaving the move alone.
     """
-    problems = _next_action_problems(intent, current)
+    problems = _next_action_problems(intent)
     if problems:
         raise IntentError(problems[0])
     if intent.next is None:
+        if current is None:
+            raise IntentError(
+                "a first checkpoint has no next action to carry forward, so it "
+                + "must say what comes next"
+            )
         return None
     # The orientation the caller gave is what the whole checkpoint is about, so
     # it orients the next move too; without one, the record's standing

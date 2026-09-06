@@ -399,7 +399,7 @@ def test_cure_an_unknown_mode_is_refused(make_record: Callable[..., WheypointRec
     record = make_record()
     _, markdown = projection.build_projection(record, durability=Durability.CANONICAL_LOCAL)
     lines = markdown.splitlines()
-    lines.insert(3, "mode: serial")
+    lines.insert(2, "mode: serial")
     with pytest.raises(projection.ProjectionParseError, match="unknown mode 'serial'"):
         _ = projection.parse("\n".join(lines) + "\n")
 

@@ -3019,6 +3019,10 @@ class ProposedEntry:
     rationale: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
     quote: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
 
+    def __attrs_post_init__(self) -> None:
+        if self.kind is EntryKind.DIRECTIVE and self.quote is None:
+            raise ValueError("quote must preserve the verbatim instruction for a directive")
+
 
 def _target_rule(
     instance: EntryTransition, attribute: _NamedAttribute, value: object

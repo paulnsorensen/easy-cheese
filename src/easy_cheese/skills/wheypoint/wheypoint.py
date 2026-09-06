@@ -226,9 +226,9 @@ def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object
     if reserved:
         raise _Refused(
             "commit-only-field",
-            f"checkpoint does not author {', '.join(reserved)}: the parent is "
-            + "bound from the record, and a compaction record is a proof a "
-            + "compacted session has to supply -- author those with commit",
+            f"checkpoint does not author {', '.join(reserved)}: the runtime binds "
+            + "the parent automatically. Use base_revision_id to pin a read revision. "
+            + "Use checkpoint --compacted <proof-path> for a compaction proof.",
         )
     try:
         intent = records.structure(payload, CheckpointIntent, forbid_unknown=True)
@@ -524,7 +524,10 @@ def _result_payload(
 def _run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     work_id = cast(str, args.work_id)
     store = _open(work_id)
-    record = store.read_record()
+    try:
+        record = store.read_record()
+    except (storage.StorageError, OSError, ValueError) as exc:
+        raise _Refused("record-unreadable", str(exc)) from exc
     if record is None:
         raise _Refused(
             "record-missing",
@@ -604,11 +607,17 @@ def _run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
     }
     loaded = load(scrubbed, CheckpointIntent, strict=True, forbid_unknown=True)
     problems.extend(loaded.problems)
-    if loaded.value is not None:
-        problems.extend(f"{hit} looks like a credential" for hit in checkpoint_mod.secret_fields(loaded.value))
-        # The same delta the checkpoint would build, against no record: every
-        # NextAction and delta invariant fires here, with the store untouched.
-        problems.extend(checkpoint_mod.delta_problems(loaded.value, None))
+    problems.extend(f"{hit} looks like a credential" for hit in checkpoint_mod.secret_fields(intent_payload))
+    action_intent = loaded.value
+    if action_intent is None:
+        # Invalid entries or unknown keys do not suppress independent action checks.
+        action_fields = {"work_id", "next", "orientation", "artifact", "tasks", "parallel"}
+        action_intent = load(
+            {key: value for key, value in scrubbed.items() if key in action_fields},
+            CheckpointIntent, strict=True, forbid_unknown=True,
+        ).value
+    if action_intent is not None:
+        problems.extend(checkpoint_mod.delta_problems(action_intent, None, schema_only=True))
     if problems:
         raise _Refused("invalid-intent", "; ".join(problems), {"problems": problems})
     return {"valid": True, "work_id": loaded.value.work_id if loaded.value else None}
@@ -685,12 +694,17 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     store = _open(work_id, corpus_root=_corpus_root(args))
     scan = store.revisions()
     files, skipped = scan.files, scan.skipped
-    if not files and store.read_record() is None:
-        raise _Refused("record-missing", f"work {work_id!r} has no record at {store.record_path}")
-    if not files and skipped:
+    if not files:
+        try:
+            record = store.read_record()
+        except (storage.StorageError, OSError, ValueError) as exc:
+            raise _Refused("record-unreadable", str(exc)) from exc
+        if record is None:
+            raise _Refused("record-missing", f"work {work_id!r} has no record at {store.record_path}")
         raise _Refused(
             "store-inconsistent",
-            f"work {work_id!r} has a record but every revision was dropped: {'; '.join(skipped)}",
+            f"work {work_id!r} has a record but no complete revisions"
+            + (f": {'; '.join(skipped)}" if skipped else ""),
         )
     entries: list[dict[str, object]] = []
     for file in files:

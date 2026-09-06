@@ -21,6 +21,9 @@ artifact: <path-to-prior-report-if-any>     # key always present, value may be e
 <one-line orientation: what changed or what was reviewed>
 ```
 
+An optional `mode:` line sits between `next:` and `artifact:`.
+The parser never treats `mode:` after `artifact:` as metadata.
+This preserves legacy orientations that start with that text.
 Optional keyed lines sit between `artifact:` and the orientation line.
 They are `taste_test:`, `durable_flags:`, and `baseline:`.
 A fan-in barrier adds `scope`, `evidence`, `assumptions`, and `risks`.

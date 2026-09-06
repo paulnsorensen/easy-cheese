@@ -17,6 +17,10 @@ from typing import cast
 _PROJECTS_DIR = Path(".claude") / "projects"
 _NOT_PATH_CHAR = re.compile(r"[^A-Za-z0-9]")
 SESSION_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+# Retain unknown multiline text; a matching shape does not prove host provenance.
+_SKILL_PREAMBLE_RE = re.compile(
+    r"Base directory for this skill: /[^\r\n]+(?:\r?\n\r?\n# [^\r\n]+(?:\r?\n[\s\S]*)?)?"
+)
 # Host wrappers that ride inside a user turn but are not the user's words.
 _WRAPPER_TAGS = (
     "system-reminder",
@@ -88,7 +92,7 @@ def user_turns(path: Path) -> tuple[list[dict[str, str]], int]:
             # Host wrappers, tool results, and skill preambles are not the user's
             # words: strip the wrappers and keep whatever the user typed around them.
             stripped = _WRAPPER_RE.sub("", text).strip()
-            if not stripped or "Base directory for this skill" in stripped:
+            if not stripped or _SKILL_PREAMBLE_RE.fullmatch(stripped):
                 continue
             turns.append({"timestamp": str(entry_map.get("timestamp", "")), "text": stripped})
     return turns, skipped

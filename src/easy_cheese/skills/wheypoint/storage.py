@@ -25,6 +25,7 @@ projection; this module never publishes.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -112,7 +113,8 @@ class RecoveryReport:
 def file_digest(path: Path) -> str | None:
     """The digest of a file's bytes, or None when it is not there."""
     try:
-        return canonical.digest_bytes(Path(path).read_bytes())
+        with Path(path).open("rb") as handle:
+            return f"{canonical.DIGEST_PREFIX}{hashlib.file_digest(handle, 'sha256').hexdigest()}"
     except (FileNotFoundError, IsADirectoryError, NotADirectoryError):
         return None
 

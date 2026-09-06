@@ -123,14 +123,23 @@ def status_field(projection: WheypointProjection) -> str:
     )
 
 
+_ESCAPES = {
+    "\\": "\\\\", "\n": "\\n", "\r": "\\r", "\v": "\\v", "\f": "\\f",
+    "\x1c": "\\u001c", "\x1d": "\\u001d", "\x1e": "\\u001e",
+    "\u0085": "\\u0085", "\u2028": "\\u2028", "\u2029": "\\u2029",
+}
+_UNESCAPES = {escaped[1:]: char for char, escaped in _ESCAPES.items()} | {"t": "\t"}
+
+
 def escape(text: str, *, tab: bool = False) -> str:
-    """One line per field: backslashes and newlines are escaped, tabs on request."""
-    escaped = text.replace("\\", "\\\\").replace("\n", "\\n")
-    return escaped.replace("\t", "\\t") if tab else escaped
+    """Escape every line separator so each field stays on one physical line."""
+    for char, escaped in _ESCAPES.items():
+        text = text.replace(char, escaped)
+    return text.replace("\t", "\\t") if tab else text
 
 
 def unescape(text: str) -> str:
-    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m[1], m[1]), text)
+    return re.sub(r"\\(u[0-9a-f]{4}|.)", lambda match: _UNESCAPES.get(match[1], match[1]), text)
 
 
 # One table each drives both the render order in `_tasks` and the
@@ -260,11 +269,10 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
     lines = [
         f"status: {status_field(projection)}",
         f"next: {action.move.value}",
-        f"artifact: {action.artifact or ''}",
     ]
     if action.tasks:
         lines.append(f"{_MODE_PREFIX}{_MODE_PARALLEL}")
-    lines.append(action.orientation)
+    lines += [f"artifact: {action.artifact or ''}", action.orientation]
     lines += [
         "",
         f"work_id: {projection.work_id}",
@@ -366,14 +374,16 @@ def _preamble(lines: list[str], body_start: int) -> dict[str, str]:
         raise ProjectionParseError(
             f"projection needs {_MIN_LINES} preamble lines, got {len(lines)}"
         )
-    values = _keyed(lines, _HEAD_KEYS, 0)
-    orientation_line = _ORIENTATION_LINE
-    if lines[orientation_line].startswith(_MODE_PREFIX):
-        mode = lines[orientation_line][len(_MODE_PREFIX) :].strip()
+    values = _keyed(lines, _HEAD_KEYS[:2], 0)
+    artifact_line = 2
+    if lines[artifact_line].startswith(_MODE_PREFIX):
+        mode = lines[artifact_line][len(_MODE_PREFIX) :].strip()
         if mode != _MODE_PARALLEL:
             raise ProjectionParseError(f"unknown mode {mode!r}: a projection renders only {_MODE_PARALLEL!r}")
         values["mode"] = mode
-        orientation_line += 1
+        artifact_line += 1
+    values.update(_keyed(lines, ("artifact",), artifact_line))
+    orientation_line = artifact_line + 1
     start = _meta_start(lines, body_start)
     orientation = "\n".join(lines[orientation_line : start - 1]).strip()
     if not orientation:
@@ -512,7 +522,8 @@ def _parse_tasks(
             tasks.append({"slug": unescape(line[len("  - slug: ") :])})
             target = tasks[-1]
         elif target is not None and line.startswith("  " if target is plan_fields else "    "):
-            key, _, value = line.strip().partition(": ")
+            indent = 2 if target is plan_fields else 4
+            key, _, value = line[indent:].partition(": ")
             target[key] = unescape(value)
         else:
             raise ProjectionParseError(f"unreadable tasks line {line!r}")
