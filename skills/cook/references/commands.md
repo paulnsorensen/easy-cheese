@@ -9,14 +9,14 @@
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
 | `baseline` | Classify a current test-failure list against a stored baseline |
 | `curd-block` | Validate a curd block against the spec-locked decomposition schema |
-| `findings-cli` | Render an /age report's selection table and resolve selection verbs |
-| `gates-cli` | Map a quality-gate scoreboard's booleans to a readiness verdict |
+| `findings` | Render an /age report's selection table and resolve selection verbs |
+| `gates` | Map a quality-gate scoreboard's booleans to a readiness verdict |
 | `handoff` | Render, parse, and dispatch-split handoff preambles |
 | `manifest-update` | Apply an atomic, schema-validated update to a fan-out run manifest |
 | `milknado` | Probe the milknado engine seam used by parallel mode |
 | `mode` | Select the fan-out mode from the canonical size thresholds |
 | `normalize` | Normalize a typed contract payload on the host |
-| `paths-cli` | Slugify, validate, resolve, and list .cheese artifact paths |
+| `paths` | Slugify, validate, resolve, and list .cheese artifact paths |
 | `phase-decision` | Decide what the fan-out pathway does after a phase sub-agent returns |
 | `pr-plan-to-branches` | Convert a fan-out PR plan into branch, cherry-pick, and PR commands |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |

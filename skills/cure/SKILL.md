@@ -61,7 +61,7 @@ Slash commands are host renderings, not the control model.
    Expand a user verb with this command:
 
    ```text
-   python3 skills/cure/scripts/cure.pyz findings-cli parse-selection --report <path> --selection "<verb>"
+   python3 skills/cure/scripts/cure.pyz findings parse-selection --report <path> --selection "<verb>"
    ```
 
    Use the same bundle command when the host only ships the bundle.
@@ -137,7 +137,7 @@ The agent judges the gate values.
 The CLI maps those values to a readiness verdict:
 
 ```text
-python3 skills/cure/scripts/cure.pyz gates-cli classify \
+python3 skills/cure/scripts/cure.pyz gates classify \
   --press-status <label> \
   [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
 ```

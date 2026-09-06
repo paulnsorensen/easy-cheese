@@ -4,10 +4,10 @@
 
 | Command | Purpose |
 | --- | --- |
-| `findings-cli` | Render an /age report's selection table and resolve selection verbs |
-| `gates-cli` | Map a quality-gate scoreboard's booleans to a readiness verdict |
+| `findings` | Render an /age report's selection table and resolve selection verbs |
+| `gates` | Map a quality-gate scoreboard's booleans to a readiness verdict |
 | `handoff` | Render, parse, and dispatch-split handoff preambles |
-| `paths-cli` | Slugify, validate, resolve, and list .cheese artifact paths |
+| `paths` | Slugify, validate, resolve, and list .cheese artifact paths |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text |

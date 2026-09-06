@@ -271,7 +271,7 @@ def test_subcommand_resolves_inside_bundle(bundles: Path, skill: str, sub: str) 
     [
         ("age", "write-handoff-artifact", "write_handoff_artifact"),
         ("cook", "read-handoff-slug", "read_handoff_slug"),
-        ("cure", "findings-cli", "findings_cli"),
+        ("cure", "read-handoff-slug", "read_handoff_slug"),
         ("mold", "render-html", "render_html"),
     ],
 )
@@ -284,6 +284,12 @@ def test_kebab_commands_and_legacy_aliases_dispatch_from_committed_bundles(
         assert "ModuleNotFoundError" not in combined, combined
         assert "Traceback" not in combined, combined
         assert not combined.strip().startswith("usage: <pyz>"), combined
+
+
+@pytest.mark.parametrize("skill", sorted(SKILL_SUBCOMMANDS))
+def test_no_bundle_command_carries_the_cli_suffix(skill: str) -> None:
+    """Every bundle command is a CLI, so the suffix is noise (#615, #621)."""
+    assert [sub for sub in SKILL_SUBCOMMANDS[skill] if sub.endswith(("-cli", "_cli"))] == []
 
 
 @pytest.mark.parametrize("skill", list(SKILL_SUBCOMMANDS))

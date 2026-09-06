@@ -1,4 +1,4 @@
-"""Tests for shared/scripts/findings_cli.py — render-table + parse-selection CLI."""
+"""Tests for shared/findings.py's render-table + parse-selection CLI."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class _FindingsModule(Protocol):
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
-FINDINGS_CLI = SHARED_SCRIPTS / "findings_cli.py"
+FINDINGS_CLI = SHARED_SCRIPTS / "findings.py"
 
 SAMPLE_REPORT = """\
 status: ok
