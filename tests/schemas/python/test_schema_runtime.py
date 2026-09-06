@@ -10,7 +10,7 @@ from typing import cast
 
 import pytest
 
-from easy_cheese_schemas._schema_catalog_compiler import (
+from _schema_catalog_compiler import (
     _ContractModule,  # pyright: ignore[reportPrivateUsage]
     collect as collect_schema_markers,
     render as render_schema_catalog,

@@ -9,8 +9,8 @@ import attrs
 from attrs import Attribute
 import pytest
 
-import easy_cheese_schemas.workflow as workflow_module
-from easy_cheese_schemas.artifacts import (
+import easy_cheese.shared.workflow as workflow_module
+from easy_cheese.shared.artifacts import (
     ResolvedAgentArtifact,
     resolve_artifact,
 )
@@ -58,7 +58,7 @@ from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
     supported_version_for,
 )
-from easy_cheese_schemas.workflow import (
+from easy_cheese.shared.workflow import (
     WriterBudgetExceeded,
     WriterCheckpoint,
     bind_diagnosis,

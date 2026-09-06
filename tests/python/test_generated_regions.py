@@ -119,7 +119,7 @@ def test_intertwine_lists_a_real_registered_phase_transition_row() -> None:
 # registry through its own pipeline, review the diff, then recompute:
 #   python3 -c "import hashlib; print(hashlib.sha256(open(PATH, 'rb').read()).hexdigest())"
 _PHASE_REGISTRY_COMPILER_DIGEST = (
-    "181d0f6aea78a6ff7ce82ba3b54d3c582040eee364e8789ef431a366ea3bc16e"
+    "84cb45b0e3efea3dc53eaa53265ab0da9584e4016ecabfd1faf7d60e5f3a5136"
 )
 _COMPILED_PHASE_REGISTRY_DIGEST = (
     "5fb1a336e8eb7ee23e5ab44916808341cf6adf972e92a14ac5521c66f41eec30"
@@ -128,7 +128,7 @@ _COMPILED_PHASE_REGISTRY_DIGEST = (
 
 def test_phase_registry_sources_are_untouched() -> None:
     for relative_path, expected_digest in (
-        ("src/easy_cheese_schemas/_phase_registry_compiler.py", _PHASE_REGISTRY_COMPILER_DIGEST),
+        ("scripts/_phase_registry_compiler.py", _PHASE_REGISTRY_COMPILER_DIGEST),
         ("src/easy_cheese_schemas/_compiled_phase_registry.py", _COMPILED_PHASE_REGISTRY_DIGEST),
     ):
         content = (REPO_ROOT / relative_path).read_bytes()

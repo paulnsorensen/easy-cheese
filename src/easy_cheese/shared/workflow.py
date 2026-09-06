@@ -19,7 +19,7 @@ from .artifacts import (
     resolve_verified_bytes,
     resolve_artifact,
 )
-from .contracts import (
+from easy_cheese_schemas.contracts import (
     AgentWriterView,
     ArtifactRef,
     ContractVersion,
@@ -59,8 +59,8 @@ from .contracts import (
     _string_list,  # pyright: ignore[reportPrivateUsage]
     _tuple_sequence,  # pyright: ignore[reportPrivateUsage]
 )
-from .planner import materialize_planner_result
-from .schema_runtime import (
+from easy_cheese_schemas.planner import materialize_planner_result
+from easy_cheese_schemas.schema_runtime import (
     CanonicalArtifact,
     ContractValidationError,
     curd_plan_digest,

@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from easy_cheese_schemas.artifacts import ArtifactResolutionError, resolve_artifact
+from easy_cheese.shared.artifacts import ArtifactResolutionError, resolve_artifact
 from easy_cheese_schemas.contracts import (
     ArtifactRef,
     ContractVersion,

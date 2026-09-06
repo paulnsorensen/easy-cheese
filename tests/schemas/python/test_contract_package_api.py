@@ -70,10 +70,8 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
         "AgentWriterView",
         "ArtifactRef",
         "AcceptedArtifact",
-        "BenchmarkReport",
         "CurdPlan",
         "CurdResult",
-        "CureDiagnosisBinding",
         "DiagnosisResult",
         "HandoffPointer",
         "IngressKind",
@@ -88,13 +86,8 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
         "SemanticCurd",
         "SourceCurdRef",
         "SourcePlanRef",
-        "WriterBudgetExceeded",
-        "WriterCheckpoint",
-        "benchmark_contracts",
         "canonical_bytes",
         "canonical_digest",
-        "cook",
-        "cure",
         "list_conformance_fixtures",
         "load_conformance_fixture",
         "materialize_planner_result",
@@ -102,11 +95,8 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
         "normalize_agent_value",
         "validate_curd_plan",
         "normalize_agent_output",
-        "plan",
         "project_curd_block",
         "read_conformance_fixture",
-        "resolve_artifact",
-        "run_workflow",
         "schema_bytes",
         "supported_version_for",
         "validate_contract",
@@ -215,6 +205,27 @@ import easy_cheese_schemas as schemas
 assert schemas.__version__ == "1.1.0"
 assert metadata.version("easy-cheese-schemas") == "1.1.0"
 assert Path(schemas.__file__).resolve().is_relative_to(Path(__import__("sys").prefix))
+for name in ("AGENTS.md", "CLAUDE.md"):
+    assert not Path(schemas.__file__).with_name(name).exists(), name
+for name in (
+    "workflow.py",
+    "artifacts.py",
+    "benchmarks.py",
+    "_phase_registry_compiler.py",
+    "_schema_catalog_compiler.py",
+    "_document_rules_compiler.py",
+):
+    assert not Path(schemas.__file__).with_name(name).exists(), name
+try:
+    schemas.validate_contract(
+        {}, schemas.CURD_PLAN_SCHEMA_URI, schemas.ContractVersion(
+            schema_uri=schemas.CURD_PLAN_SCHEMA_URI, major="1", minor="0"
+        )
+    )
+except ValueError as exc:
+    assert str(exc) == "$.contract_version is required"
+else:
+    raise AssertionError("invalid contract unexpectedly passed validation")
 actual = {
     name: hashlib.sha256(schemas.read_conformance_fixture(name)).hexdigest()
     for name in schemas.list_conformance_fixtures()

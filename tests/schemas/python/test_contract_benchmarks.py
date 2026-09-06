@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from easy_cheese_schemas.benchmarks import (
+from contract_benchmarks import (
     BenchmarkRecord,
     BenchmarkReport,
     ContractBenchmarkInput,

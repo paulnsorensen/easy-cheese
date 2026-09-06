@@ -36,9 +36,8 @@ Issues = "https://github.com/paulnsorensen/easy-cheese/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["src/easy_cheese_schemas"]
 exclude = [
-  "src/easy_cheese_schemas/_phase_registry_compiler.py",
-  "src/easy_cheese_schemas/_schema_catalog_compiler.py",
-  "src/easy_cheese_schemas/_document_rules_compiler.py",
+  "src/easy_cheese_schemas/AGENTS.md",
+  "src/easy_cheese_schemas/CLAUDE.md",
 ]
 
 # Hatchling's default sdist walks the filesystem honouring .gitignore, which
@@ -73,6 +72,12 @@ pythonVersion = "3.11"
 # directories onto sys.path at runtime; mirror that for static resolution.
 # tests/wheypoint/python lists itself first so `from conftest import ...`
 # resolves to the sibling conftest.py, matching pytest's rootdir insertion.
+# scripts/_phase_registry_compiler.py imports the generated catalog as a
+# top-level module so the schema package never initialises at build time.
+[[tool.basedpyright.executionEnvironments]]
+root = "scripts"
+extraPaths = ["src", "src/easy_cheese_schemas"]
+
 [[tool.basedpyright.executionEnvironments]]
 root = "tests/schemas/python"
 extraPaths = ["tests/schemas/python", ".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]

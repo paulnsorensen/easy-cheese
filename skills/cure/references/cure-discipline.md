@@ -65,7 +65,7 @@ The first `unresolved_work` entry starts with `writer stopped at its budget:`.
 Use `budget checkpoint invalid:` when checkpoint validation fails.
 These prefixes distinguish a limit stop from an executor failure.
 
-`easy_cheese_schemas.workflow.WriterBudgetExceeded` defines this seam.
+`easy_cheese.shared.workflow.WriterBudgetExceeded` defines this seam.
 It carries a `WriterCheckpoint` with the four handoff parts.
 The `reason` text carries the blocker and the limit cause.
 The host finalizes the checkpoint as a partial curd result.

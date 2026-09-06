@@ -9,21 +9,22 @@ resolver instead; this module contains no runtime transition lookup.
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
-try:
-    from ._schema_catalog import (
-        PHASE_CONTRACT_SCHEMA_URI,
-        REGISTERED_CONTRACT_SCHEMA_URIS as REGISTERED_SCHEMA_URIS,
-    )
-except ImportError:
-    from _schema_catalog import (
-        PHASE_CONTRACT_SCHEMA_URI,
-        REGISTERED_CONTRACT_SCHEMA_URIS as REGISTERED_SCHEMA_URIS,
-    )
+
+# Import the generated catalog as a top-level module so the schema package
+# itself (and its third-party dependencies) is never initialised at build time.
+_SCHEMA_ROOT = str(Path(__file__).resolve().parents[1] / "src" / "easy_cheese_schemas")
+if _SCHEMA_ROOT not in sys.path:
+    sys.path.insert(0, _SCHEMA_ROOT)
+from _schema_catalog import (  # noqa: E402
+    PHASE_CONTRACT_SCHEMA_URI,
+    REGISTERED_CONTRACT_SCHEMA_URIS as REGISTERED_SCHEMA_URIS,
+)
 
 SUPPORTED_PHASE_CONTRACT_MAJOR = "1"
 SUPPORTED_PHASE_CONTRACT_MINOR = "0"

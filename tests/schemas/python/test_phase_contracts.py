@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 import pytest
 import yaml
 
-from easy_cheese_schemas._phase_registry_compiler import (
+from _phase_registry_compiler import (
     compile_phase_declarations,
     parse_phase_yaml,
 )
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from easy_cheese_schemas.phase_contracts import CompiledTransition, TransitionRegistry
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+SCRIPTS_ROOT = REPO_ROOT / "scripts"
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 WRITER_PATH = SHARED_SCRIPTS / "write_handoff_artifact.py"
 DECLARATIONS = (
@@ -127,6 +129,30 @@ def test_phase_declarations_compile_to_embedded_registry_deterministically() -> 
     forward = compile_phase_declarations(declarations)
     reverse = compile_phase_declarations(reversed(declarations))
     assert forward.to_json() == reverse.to_json() == COMPILED_TRANSITION_REGISTRY.to_json()
+
+
+def test_phase_compiler_bootstraps_without_schema_package_initialization() -> None:
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = os.pathsep.join((str(SCRIPTS_ROOT), str(REPO_ROOT / "src")))
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            (
+                "from pathlib import Path; import sys; "
+                "import _phase_registry_compiler as compiler; "
+                "assert compiler.compile_phase_files([Path(sys.argv[1])]).sources == ('age',); "
+                "print(compiler.PHASE_CONTRACT_SCHEMA_URI)"
+            ),
+            str(DECLARATIONS[0]),
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == PHASE_CONTRACT_SCHEMA_URI
 
 
 def test_phase_declarations_use_canonical_registered_schema_ids() -> None:

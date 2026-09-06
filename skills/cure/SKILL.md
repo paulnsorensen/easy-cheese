@@ -68,7 +68,7 @@ Slash commands are host renderings, not the control model.
 3. **Apply.** Fix one logical group at a time.
    Confirm each anchor with a fresh bounded read.
    The report path stops here and continues at step 4.
-   The typed path also invokes `easy_cheese_schemas.cure` with the validated plan.
+   The typed path also invokes `easy_cheese.shared.workflow.cure` with the validated plan.
    Add one `CureDiagnosisBinding` for each selected curd.
    Create each binding with `bind_diagnosis(plan, curd, diagnosis_result)`.
    Use only a confirmed `DiagnosisResult`.

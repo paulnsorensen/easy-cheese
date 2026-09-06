@@ -59,11 +59,11 @@ ARTIFACT_PATH_SKILLS = ("mold", "briesearch", "cook")
 TYPED_RUNTIME_BUNDLES = ("cook", "cure", "wheypoint")
 REQUIRED_WORKFLOW_MODULES = (
     "easy_cheese_schemas/__init__.py",
-    "easy_cheese_schemas/artifacts.py",
+    "easy_cheese/shared/artifacts.py",
     "easy_cheese_schemas/contracts.py",
     "easy_cheese_schemas/planner.py",
     "easy_cheese_schemas/schema_runtime.py",
-    "easy_cheese_schemas/workflow.py",
+    "easy_cheese/shared/workflow.py",
     "easy_cheese_schemas/_schema_catalog.py",
 )
 
@@ -1183,9 +1183,10 @@ def test_cook_and_cure_installed_paths_expose_canonical_workflow_api(
         "import easy_cheese_schemas as schemas;"
         "from easy_cheese_schemas import "
         "CurdPlan, CurdResult, DiagnosisResult, PlannerResult, "
-        "bind_diagnosis, cook, cure, materialize_planner_result, "
-        "normalize_agent_output, resolve_artifact, run_workflow, "
+        "materialize_planner_result, normalize_agent_output, "
         "schema_bytes, validate_curd_plan;"
+        "from easy_cheese.shared.artifacts import resolve_artifact;"
+        "from easy_cheese.shared.workflow import bind_diagnosis, cook, cure, run_workflow;"
         "assert all(callable(item) for item in ("
         "bind_diagnosis, cook, cure, materialize_planner_result, "
         "normalize_agent_output, resolve_artifact, run_workflow, "

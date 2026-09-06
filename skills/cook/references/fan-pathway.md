@@ -65,7 +65,7 @@ Do not create a preflight helper.
 
 1. Build a `PlannerRequest` from the authored spec.
    Select the request kind from the failure class, as `## Planner request kinds` defines.
-   Dispatch the planner through `easy_cheese_schemas.plan`.
+   Dispatch the planner through `easy_cheese.shared.workflow.plan`.
    The planner returns a `PlannerResultWriterView`.
    `plan` materializes this view into one `PlannerResult`.
    If `PlannerResult.plan` is absent, stop before any worker dispatch.
@@ -81,7 +81,7 @@ Do not create a preflight helper.
    A blocked prerequisite produces a deterministic blocked `CurdResult` for its dependents.
    Never use declaration order instead of the plan's dependency graph.
 
-4. Call `easy_cheese_schemas.cook` with the validated plan.
+4. Call `easy_cheese.shared.workflow.cook` with the validated plan.
    The host resolves every `ArtifactRef` with `resolve_artifact`.
    The host finalizes exactly one `CurdResult` for each selected curd through `normalize_agent_output`.
    Treat writer output only as an observation.
@@ -94,9 +94,9 @@ Do not create a preflight helper.
    The canonical normalizer produces a `DiagnosisResult`.
    Only a confirmed result can continue to Cure.
    Bind the result to the exact source plan and curd.
-   Use `easy_cheese_schemas.bind_diagnosis(plan, curd, diagnosis_result)`.
+   Use `easy_cheese.shared.workflow.bind_diagnosis(plan, curd, diagnosis_result)`.
 
-6. Call `easy_cheese_schemas.cure` with the same validated `CurdPlan`.
+6. Call `easy_cheese.shared.workflow.cure` with the same validated `CurdPlan`.
    Supply the complete tuple or mapping of `CureDiagnosisBinding` values.
    Before dispatch, Cure validates each binding's plan reference, curd reference, digest, and confirmed disposition.
    Cure then repeats artifact resolution and host-owned `CurdResult` normalization.
