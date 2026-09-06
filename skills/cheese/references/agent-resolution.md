@@ -14,8 +14,8 @@ Apply these gates in order for every requested agent:
 2. **Minimum power.** Power is `cheap | default | powerful`; effort is `low | medium | high`. Reject a candidate known to be below the requested power. A candidate whose power is unknown is eligible only as the final fallback and sets `degraded: true`.
 3. **Specificity.** Among eligible candidates choose an exact easy-cheese specialist, then a compatible specialist, then a general worker.
 
-A general worker can fill a read-only role when the host cannot restrict tools.
-Make the no-write constraint explicit.
+When the host cannot restrict tools, an eligible specialist or general worker can fill a read-only role only when the caller states an explicit no-write constraint.
+This includes an artifact-capable Explorer under the same explicit no-write constraint.
 Record `permission_enforcement: prompt-only` and set `degraded: true`.
 Prompt-only enforcement cannot satisfy write work or stronger isolation.
 
