@@ -64,6 +64,11 @@
 - [wheypoint-continuity-kernel-002](./wheypoint-continuity-kernel-002.md) — Dedicated Wheypoint runtime boundary
 - [wheypoint-continuity-kernel-003](./wheypoint-continuity-kernel-003.md) — Immutable Wheypoint updates and resolution
 - [wheypoint-continuity-kernel-004](./wheypoint-continuity-kernel-004.md) — Canonical JSON persistence for Wheypoint records
+- [wheypoint-ergonomics-001](./wheypoint-ergonomics-001.md) — Decision dossiers decoupled from gating
+- [wheypoint-ergonomics-002](./wheypoint-ergonomics-002.md) — Wheypoint schema types live in the contract catalog module
+- [wheypoint-ergonomics-003](./wheypoint-ergonomics-003.md) — One agent-facing wheypoint verb, with compaction proofs as a sidecar
+- [wheypoint-ergonomics-004](./wheypoint-ergonomics-004.md) — Additive schema evolution keeps old digests valid
+- [wheypoint-ergonomics-005](./wheypoint-ergonomics-005.md) — Checkpoints must carry the user's words
 - [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md) — ADR: wheypoint provenance as additive header fields with join/split verbs
 - [workflow-contract-milknado-seam-001](./workflow-contract-milknado-seam-001.md) — ADR: CurdPlan is the semantic work authority
 - [workflow-contract-milknado-seam-002](./workflow-contract-milknado-seam-002.md) — ADR: Agents write slim views and hosts normalize canonical contracts

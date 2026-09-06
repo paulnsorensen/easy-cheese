@@ -33,14 +33,20 @@ import attrs
 import cattrs
 from attrs import Attribute, define, field
 from cattrs.cols import list_structure_factory
-from cattrs.errors import AttributeValidationNote, IterableValidationNote
+from cattrs.errors import (
+    AttributeValidationNote,
+    ForbiddenExtraKeysError,
+    IterableValidationNote,
+)
 from cattrs.gen import make_dict_structure_fn
 from easy_cheese_schemas._schema_catalog import CURD_PLAN_SCHEMA_URI
 
 
 # 2 adds WheypointRevision.parent_revision_digest, which pins each receipt to
-# the exact ancestor it was written against.
-SCHEMA_VERSION = 2
+# the exact ancestor it was written against. 3 adds strict unknown-key
+# rejection on the write path (`load(..., forbid_unknown=True)`) and an Enum
+# hook that names the offending value, not just the allowed set.
+SCHEMA_VERSION = 3
 MIN_READABLE = 1  # N-1 tolerance; widens as the schema evolves
 STAMP_KEY = "schema_version"
 
@@ -92,7 +98,9 @@ def _exact(
                 allowed = ", ".join(
                     str(cast(object, member.value)) for member in _type
                 )
-                raise ValueError(f"must be one of: {allowed}") from None
+                raise ValueError(
+                    f"unknown value {value!r} (allowed: {allowed})"
+                ) from None
         if isinstance(value, bool) is not boolean or not isinstance(value, expected):
             raise TypeError(f"must be {label}, not {type(value).__name__}")
         return value
@@ -133,6 +141,23 @@ def _is_list_annotation(type_: object) -> bool:
     return get_origin(type_) is list
 
 
+def _guarded_class_strict(
+    type_: object, converter: cattrs.BaseConverter
+) -> _StructureHook:
+    """Like :func:`_guarded_class`, but the write-path counterpart: an unknown
+    key is a refused write (S6), not a forward-compatible ignore."""
+    structure = make_dict_structure_fn(
+        cast("type[object]", type_), converter, _cattrs_forbid_extra_keys=True
+    )
+
+    def hook(value: object, _type: object = type_) -> object:
+        if not isinstance(value, Mapping):
+            raise TypeError(f"must be an object, not {type(value).__name__}")
+        return structure(cast(Mapping[str, object], value), _type)
+
+    return hook
+
+
 # Default converter semantics: unknown keys are ignored, which is exactly what
 # a FUTURE-stamped payload needs. Schema types may explicitly reject a
 # semantically misplaced key before it reaches this additive-field boundary.
@@ -143,6 +168,16 @@ _converter.register_structure_hook(int, _exact(int, "an integer"))
 _converter.register_structure_hook(float, _exact((int, float), "a number"))
 _ = _converter.register_structure_hook_factory(attrs.has, _guarded_class)
 _ = _converter.register_structure_hook_factory(_is_list_annotation, _guarded_list)
+
+# A second converter for the write path (S6): identical primitive handling,
+# but an unknown key on any nested class is a refused write, not an ignored
+# additive field. `load(..., forbid_unknown=True)` selects it.
+# A copy keeps every primitive rule the read path uses; only the attrs-class
+# factory is swapped, so read and write can never disagree on what a primitive is.
+_strict_converter = _converter.copy()
+_ = _strict_converter.register_structure_hook_factory(
+    attrs.has, _guarded_class_strict
+)
 
 
 class Provenance(Enum):
@@ -179,7 +214,9 @@ def classify_stamp(stamp: int | None) -> Provenance:
     return Provenance.STALE
 
 
-def load(raw: object, cls: type[T], *, strict: bool) -> Loaded[T]:
+def load(
+    raw: object, cls: type[T], *, strict: bool, forbid_unknown: bool = False
+) -> Loaded[T]:
     """Structure `raw` into `cls`, reporting problems instead of raising.
 
     strict=True  -> every field rule must hold; problems are accumulated and
@@ -196,7 +233,17 @@ def load(raw: object, cls: type[T], *, strict: bool) -> Loaded[T]:
     Strictness is the caller's call: markdown documents are read lenient (a
     human wrote them, so a missing optional field is a gap to report, not a
     rejection) while machine-written manifests are read strict.
+
+    forbid_unknown=True is the write-path opt-in (S6): an unknown key on any
+    nested path is reported as `<path>: unknown field` and `value` is None,
+    rather than the read path's forward-compatible ignore. It only changes
+    `strict=True` structuring; readers keep today's lenient-on-unknown-keys
+    behaviour by leaving it at its default.
     """
+    if forbid_unknown and not strict:
+        raise ValueError(
+            "forbid_unknown requires strict=True: the lenient read path tolerates unknown keys by design"
+        )
     where = getattr(cls, "__name__", type(cls).__name__)
     if not attrs.has(cls):
         return Loaded(None, Provenance.UNSTAMPED, (f"{where} is not a schema type",))
@@ -227,7 +274,10 @@ def load(raw: object, cls: type[T], *, strict: bool) -> Loaded[T]:
     )
 
     if strict:
-        value, failures = _structure(dict(mapping), cls, where)
+        payload = dict(mapping)
+        if forbid_unknown and STAMP_KEY not in attrs.fields_dict(cls):
+            _ = payload.pop(STAMP_KEY, None)
+        value, failures = _structure(payload, cls, where, forbid_unknown=forbid_unknown)
         problems.extend(message for _, message in failures)
         if forbidden:
             value = None
@@ -240,16 +290,21 @@ def load(raw: object, cls: type[T], *, strict: bool) -> Loaded[T]:
 
 
 def _structure(
-    payload: dict[str, object], cls: type[T], where: str
+    payload: dict[str, object],
+    cls: type[T],
+    where: str,
+    *,
+    forbid_unknown: bool = False,
 ) -> tuple[T | None, list[tuple[str | None, str]]]:
     """Structure `payload`, then apply the field rules over the result.
 
     Each problem is paired with the top-level attribute it blames, so lenient
     mode knows what to drop.
     """
+    converter = _strict_converter if forbid_unknown else _converter
     try:
         with attrs.validators.disabled():
-            value = _converter.structure(payload, cls)
+            value = converter.structure(payload, cls)
     except Exception as exc:
         return None, _flatten(exc, where)
     failures = _field_problems(value, where)
@@ -347,6 +402,13 @@ def _collect(
     if isinstance(exc, BaseExceptionGroup):
         for sub in exc.exceptions:
             _collect(sub, path, where, out)
+        return
+    if isinstance(exc, ForbiddenExtraKeysError):
+        rendered = where + "".join(text for _, text in path)
+        out.extend(
+            (None, f"{rendered}.{field_name}: unknown field")
+            for field_name in sorted(exc.extra_fields)
+        )
         return
     blamed = path[0][0] if path else None
     rendered = where + "".join(text for _, text in path)

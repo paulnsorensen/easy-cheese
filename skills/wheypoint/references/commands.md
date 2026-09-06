@@ -4,8 +4,13 @@
 
 | Command | Purpose |
 | --- | --- |
-| `checkpoint` | Build a delta from a semantic intent and commit it |
-| `commit` | Commit a handoff delta and write the generated projection |
+| `checkpoint` | Checkpoint a semantic intent onto the current record |
+| `handoff` | Render, parse, and dispatch-split handoff preambles |
 | `lint` | Lint a generated projection against the record |
+| `list` | List every work item under the corpus root |
+| `log` | Walk the revisions of one work id, oldest first |
 | `resolve` | Resolve a slug, work id, or path to the current record |
+| `schema` | Print the JSON Schema for a registered contract slug |
 | `show` | Print the current record for a work id |
+| `turns` | Print the user's own turns from a session transcript |
+| `validate` | Validate an intent against its schema without opening the store |

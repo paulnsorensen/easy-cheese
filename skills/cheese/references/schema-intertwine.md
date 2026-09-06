@@ -20,6 +20,7 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | Slug | Contract model | Input to phase | Output of phase |
 | --- | --- | --- | --- |
 | agent-writer-view | AgentWriterView | — | — |
+| checkpoint-intent | CheckpointIntent | — | — |
 | curd-plan | CurdPlan | cook, cure | age, cook, mold |
 | curd-result | CurdResult | age, press | cook, cure, press |
 | diagnosis-request | DiagnosisRequest | — | — |
@@ -31,3 +32,5 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | planner-result | PlannerResult | — | — |
 | review-request | ReviewRequest | — | — |
 | review-result | ReviewResult | — | — |
+| wheypoint-record | WheypointRecord | — | — |
+| wheypoint-revision | WheypointRevision | — | — |

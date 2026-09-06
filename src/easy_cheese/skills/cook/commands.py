@@ -172,9 +172,9 @@ def _paths_cli(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("handoff-cli")
-def _handoff_cli(argv: list[str]) -> int:
-    from easy_cheese.shared.handoff_cli import main
+@bundle_command("handoff")
+def _handoff(argv: list[str]) -> int:
+    from easy_cheese.shared.handoff import main
 
     return main(argv)
 
@@ -252,7 +252,7 @@ COMMANDS = (
     derive_command(
         _paths_cli, "Slugify, validate, resolve, and list .cheese artifact paths"
     ),
-    derive_command(_handoff_cli, "Render, parse, and dispatch-split handoff preambles"),
+    derive_command(_handoff, "Render, parse, and dispatch-split handoff preambles"),
     derive_command(
         _render_html,
         "Render a markdown report into one self-contained offline HTML file",

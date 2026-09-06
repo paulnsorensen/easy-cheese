@@ -21,6 +21,9 @@ artifact: <path-to-prior-report-if-any>     # key always present, value may be e
 <one-line orientation: what changed or what was reviewed>
 ```
 
+An optional `mode:` line sits between `next:` and `artifact:`.
+The parser never treats `mode:` after `artifact:` as metadata.
+This preserves legacy orientations that start with that text.
 Optional keyed lines sit between `artifact:` and the orientation line.
 They are `taste_test:`, `durable_flags:`, and `baseline:`.
 A fan-in barrier adds `scope`, `evidence`, `assumptions`, and `risks`.
@@ -118,11 +121,11 @@ Register their transitions before you route them through the writer.
   registered name) is rejected before lookup, so the accepted set never
   widens beyond the vocabulary above.
 - **Every preamble field is single-line** — `status`, `next`, `artifact`,
-  `orientation`, `taste_test`, `durable_flags`, `baseline` — a newline in any
+  `mode`, `orientation`, `taste_test`, `durable_flags`, `baseline` — a newline in any
   of them is a render-time contract violation, not a value that reaches the
   artifact.
 - **`reason` is the field name**; `halt_reason` is a deprecated read-only
-  alias kept for readers written against the pre-rename shape (`handoff_cli
+  alias kept for readers written against the pre-rename shape (`handoff
   parse` still publishes both JSON keys).
 
 ## CLI and router behavior

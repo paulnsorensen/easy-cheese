@@ -337,9 +337,10 @@ class TestRunManifestFields:
         result = load(payload, RunManifest, strict=True)
         assert result.value is None
         assert result.problems == (
-            "RunManifest.phase must be one of: gate_approved, seed_complete, "
-            + "curds_complete, merge_complete, wiring_complete, final_merge_complete, "
-            + "post_review_complete, pr_publish_complete",
+            "RunManifest.phase must be valid: unknown value 'cheese_complete' "
+            + "(allowed: gate_approved, seed_complete, curds_complete, "
+            + "merge_complete, wiring_complete, final_merge_complete, "
+            + "post_review_complete, pr_publish_complete)",
         )
 
     def test_review_context_rejects_a_short_tree_oid(self) -> None:
@@ -553,7 +554,8 @@ class TestCurdBlockInvariants:
         result = load(payload, CurdBlock, strict=True)
         assert result.value is None
         assert result.problems == (
-            "CurdBlock.decomposer.source must be one of: mold, cook",
+            "CurdBlock.decomposer.source must be valid: unknown value "
+            + "'vibes' (allowed: mold, cook)",
         )
 
 

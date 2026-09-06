@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import cast
 from typing import Protocol
 
 import pytest
@@ -424,6 +425,47 @@ def test_a_legacy_note_whose_artifact_resolves_is_returned(tmp_path: Path) -> No
 
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
 
+
+def test_a_legacy_affinage_artifact_embedded_in_prose_gates(tmp_path: Path) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    path = start / ".cheese" / "notes" / "review.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(
+        "status: ok\nnext: affinage\nartifact: see notes PR#12\n"
+        + "Pick the loop back up.\n",
+        encoding="utf-8",
+    )
+
+    found = resolve_mod.resolve_legacy(
+        "review", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert found.detail is not None
+    assert "must be 'PR#<n>' or a pull request URL" in found.detail
+
+
+@pytest.mark.parametrize(
+    "artifact", ["PR#12", "https://github.com/org/repo/pull/12/files"]
+)
+def test_a_legacy_affinage_artifact_with_a_trailing_route_resolves(
+    tmp_path: Path, artifact: str
+) -> None:
+    start = tmp_path / "start"
+    start.mkdir()
+    path = start / ".cheese" / "notes" / "review.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(
+        f"status: ok\nnext: affinage\nartifact: {artifact}\nPick the loop back up.\n",
+        encoding="utf-8",
+    )
+
+    found = resolve_mod.resolve_legacy(
+        "review", start=start, run=fake_runner(porcelain(start))
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
 
 def write_note_with_parents(root: Path, slug: str, parents: str) -> Path:
     path = root / ".cheese" / "notes" / f"{slug}.md"
@@ -907,3 +949,35 @@ def test_repo_relative_regular_legacy_artifact_is_accepted(tmp_path: Path) -> No
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
     assert found.detail is None
     assert not found.dispatchable
+
+def test_ac24_the_v2_golden_store_resolves_authoritative_with_its_pinned_digests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import io
+    import json
+
+    from easy_cheese.skills.wheypoint import records, storage, wheypoint
+
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures"
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(fixtures))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "golden-v2")
+    out = io.StringIO()
+    status = wheypoint.main(["resolve", "--ref", "golden-v2"], stdin=io.StringIO(""), stdout=out)
+    payload = cast(dict[str, object], json.loads(out.getvalue()))
+    assert (status, payload["outcome"], payload["dispatchable"], payload["findings"]) == (
+        0,
+        "authoritative",
+        True,
+        [],
+    )
+
+    store = storage.WorkStore.open("golden-v2", corpus_root=fixtures / "golden-v2")
+    pins = cast(dict[str, object], json.loads((store.record_path.parent / "pins.json").read_text(encoding="utf-8")))
+    record = store.read_record()
+    assert record is not None and record.schema_version == 2
+    assert records.record_digest(record) == pins["record_digest"]
+    assert record.revision_digest == pins["revision_digest"]
+    for file in store.recover().complete:
+        assert records.revision_digest(file.revision) == cast(dict[str, str], pins["revisions"])[file.revision.revision_id]
+    # Re-serializing the loaded record reproduces the stored bytes exactly.
+    assert records.canonical_payload(record) == store.record_path.read_bytes()

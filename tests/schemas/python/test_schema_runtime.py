@@ -125,7 +125,7 @@ def test_marker_authority_rejects_duplicate_slugs() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
     contract_type = cast(type, contracts.CurdPlan)
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts._registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
     )
     original_slug = cast(object, getattr(contract_type, "__contract_slug__"))
     try:
@@ -151,7 +151,7 @@ def test_marker_authority_rejects_invalid_registered_markers(slug: object) -> No
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
     contract_type = cast(type, contracts.CurdPlan)
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts._registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
     )
     original_slug = cast(object, getattr(contract_type, "__contract_slug__"))
     try:
@@ -168,7 +168,7 @@ def test_runtime_and_compiler_project_one_marker_authority() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
     runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts._registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
     )
     entries = registered()
     marked_contracts = cast(
@@ -247,6 +247,7 @@ finally:
 def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
     assert set(REGISTERED_CONTRACT_SCHEMA_URIS) == {
         f"{SCHEMA_ROOT}/agent-writer-view",
+        f"{SCHEMA_ROOT}/checkpoint-intent",
         f"{SCHEMA_ROOT}/curd-plan",
         f"{SCHEMA_ROOT}/curd-result",
         f"{SCHEMA_ROOT}/diagnosis-request",
@@ -258,6 +259,8 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         f"{SCHEMA_ROOT}/planner-result",
         f"{SCHEMA_ROOT}/review-request",
         f"{SCHEMA_ROOT}/review-result",
+        f"{SCHEMA_ROOT}/wheypoint-record",
+        f"{SCHEMA_ROOT}/wheypoint-revision",
     }
     first = {uri: schema_bytes(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS}
     second = {uri: schema_bytes(uri) for uri in reversed(sorted(REGISTERED_CONTRACT_SCHEMA_URIS))}
