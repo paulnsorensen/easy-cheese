@@ -33,6 +33,8 @@ import attrs
 import cattrs
 from attrs import Attribute, define, field
 from cattrs.cols import list_structure_factory
+
+from easy_cheese_schemas.validate import is_int
 from cattrs.errors import (
     AttributeValidationNote,
     ForbiddenExtraKeysError,
@@ -257,7 +259,7 @@ def load(
 
     problems: list[str] = []
     stamp = mapping.get(STAMP_KEY)
-    if stamp is not None and (isinstance(stamp, bool) or not isinstance(stamp, int)):
+    if stamp is not None and not is_int(stamp):
         problems.append(f"{where}.{STAMP_KEY} must be an integer")
         stamp = None
     provenance = classify_stamp(stamp)

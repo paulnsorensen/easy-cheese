@@ -8,7 +8,7 @@ from easy_cheese.shared.manifest_io import json_command
 
 from .press_telemetry import telemetry_record
 
-_EXPECTED_KEYS = {
+_REQUEST_KEYS = (
     "slug",
     "attempt",
     "outcome",
@@ -16,27 +16,13 @@ _EXPECTED_KEYS = {
     "tool_errors",
     "delegations",
     "changed_files",
-}
+)
 
-
-def _record(**payload: object) -> dict[str, object]:
-    if set(payload) != _EXPECTED_KEYS:
-        raise ValueError(
-            "request must contain exactly "
-            + ", ".join(sorted(_EXPECTED_KEYS))
-        )
-    return telemetry_record(
-        slug=payload["slug"],
-        attempt=payload["attempt"],
-        outcome=payload["outcome"],
-        repair_cycles=payload["repair_cycles"],
-        tool_errors=payload["tool_errors"],
-        delegations=payload["delegations"],
-        changed_files=payload["changed_files"],
-    )
-
-
-main = json_command(_record, "usage: press_telemetry_cli.py [<request.json>]")
+main = json_command(
+    telemetry_record,
+    "usage: press_telemetry_cli.py [<request.json>]",
+    keys=_REQUEST_KEYS,
+)
 
 
 if __name__ == "__main__":

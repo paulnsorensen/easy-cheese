@@ -105,7 +105,9 @@ def test_delegation_without_a_purpose_is_rejected() -> None:
 
 
 def test_delegation_missing_the_purpose_key_is_rejected() -> None:
-    with pytest.raises(ValueError, match="exactly purpose, role"):
+    with pytest.raises(
+        ValueError, match=r"each delegations entry keys mismatch: missing \['purpose'\]"
+    ):
         _ = press_telemetry.telemetry_record(
             **_request(delegations=[{"role": "reviewer"}])
         )
@@ -279,7 +281,7 @@ def test_cli_rejects_extra_request_keys(
     )
 
     assert press_telemetry_cli.main([str(request)]) == 1
-    assert "request must contain exactly" in capsys.readouterr().err
+    assert "request keys mismatch: unknown ['duration_seconds']" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("path", [".", "./", "./."])

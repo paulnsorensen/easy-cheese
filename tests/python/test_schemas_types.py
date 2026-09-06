@@ -806,7 +806,7 @@ class TestGateReceiptShapes:
             ),
             (
                 "case_cwd",
-                "GateReceipt.cases[1].cwd must be a project-relative path",
+                "GateReceipt.cases[1].cwd must be a repository-relative path",
             ),
             (
                 "protected_digest",

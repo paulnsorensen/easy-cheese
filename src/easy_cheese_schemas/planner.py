@@ -28,6 +28,7 @@ from easy_cheese_schemas.schema_runtime import (
     supported_version_for,
     validate_curd_plan,
 )
+from easy_cheese_schemas.validate import require_exact_keys
 
 
 PLANNER_REQUEST_SCHEMA = f"{SCHEMA_ROOT}/planner-request"
@@ -125,7 +126,7 @@ def _materialize_plan(
     assert writer.plan is not None
     keys = tuple(curd.key for curd in writer.plan.curds)
     _require_unique(keys, "writer curd keys")
-    _require_exact_keys(curd_ids, keys, "curd_ids")
+    require_exact_keys(curd_ids, keys, "curd_ids", error=PlannerMaterializationError)
     resolved_ids = tuple(
         _typed_id(curd_ids[key], f"curd_ids[{key!r}]") for key in keys
     )
@@ -263,7 +264,7 @@ def _plan_lineages(
         return {key: IdentityLineage(IdentityAction.NEW) for key in keys}
 
     if request.kind is PlannerRequestKind.DECOMPOSE:
-        _require_exact_keys(lineages, keys, "lineages")
+        require_exact_keys(lineages, keys, "lineages", error=PlannerMaterializationError)
         resolved = {}
         for key in keys:
             lineage = lineages[key]
@@ -278,7 +279,7 @@ def _plan_lineages(
             resolved[key] = lineage
         return resolved
 
-    _require_exact_keys(lineages, keys, "lineages")
+    require_exact_keys(lineages, keys, "lineages", error=PlannerMaterializationError)
     assert source_plan is not None
     source_ids = {curd.curd_id for curd in source_plan.curds}
     resolved: dict[str, IdentityLineage] = {}
@@ -527,22 +528,6 @@ def _require_unique(values: tuple[str, ...], label: str) -> None:
                 f"{label} must not contain duplicate {value!r}"
             )
         seen.add(value)
-
-
-def _require_exact_keys(
-    values: Mapping[str, object], expected: tuple[str, ...], label: str
-) -> None:
-    missing = sorted(set(expected) - values.keys())
-    extra = sorted(values.keys() - set(expected))
-    if missing or extra:
-        details: list[str] = []
-        if missing:
-            details.append(f"missing {missing!r}")
-        if extra:
-            details.append(f"unknown {extra!r}")
-        raise PlannerMaterializationError(
-            f"{label} keys mismatch: {', '.join(details)}"
-        )
 
 
 def _resolve_refs(
