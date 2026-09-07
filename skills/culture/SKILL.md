@@ -98,5 +98,5 @@ After a non-stop selection, run the selected downstream skill immediately with t
 - Writes only knowledge — the `## Record ledger` entries and the end-of-session wheypoint — never code, specs, commits, or PRs; see `## Invariant`.
 - Ask the user the decisions that shape the work — one consequential fork at a time when they're exploring — rather than settling them yourself. Decide the rest and log it.
 - Agree when agreement is warranted; do not manufacture counterpoints to seem balanced.
-- When external evidence raises an alternative ("X uses Y or Z"), name it as a trade-off in the dialogue and a candidate option — never silently recommend "add both" or "expose a knob". Design choices need explicit user adjudication, not agent inference from a citation.
+- When external evidence raises an alternative ("X uses Y or Z"), name it as a trade-off in the dialogue and a candidate option — never silently recommend "add both" or "expose a knob". Consequential design choices need explicit user adjudication, not agent inference from a citation; below the leverage line, pick one and log the alternative.
 - Apply the shared voice kernel (lives at `../age/references/voice.md`): lead with the answer, flag confidence as `certain | speculating | don't know`, steelman, track contradictions across turns.

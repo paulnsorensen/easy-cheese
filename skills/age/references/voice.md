@@ -40,7 +40,7 @@ These rules use different axes: which decisions to ask about, how to phrase a qu
 Do not treat them as one dial to trade off.
 
 - **What you ask about — the decisions that the user owns.** Ask about each consequential fork.
-  A fork is consequential when it fires a leverage trigger (`../../cheese/references/routing-policy.md` § Leverage triggers), changes a crust or import direction, or changes observable behavior.
+  A fork is consequential when it fires a leverage trigger (`../../cheese/references/routing-policy.md` § Leverage triggers), changes a crust or import direction, or changes user-visible behavior or output. Internal behavior the user cannot observe through a public interface does not qualify.
   Scope, naming, and trade-offs below that line are `[AGENT-DECIDED]`: make the call, log a vetoable alternative, and do not ask.
   Do not decide a consequential fork silently. Do not present a decision that the user owns as settled.
   Ask first on a decision that the user owns.

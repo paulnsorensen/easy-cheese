@@ -11,7 +11,7 @@ Ceremony scales to the job. The Bounds pass picks one of three tiers from `refer
 
 ## Flow
 
-1. **Bounds pass** — map every input's goals and **non-goals** before routing; ask the user rather than assume. Open the `Goal / Decided / Asking / [AGENT-DECIDED]` ledger with the goal pinned as one sentence; only an explicit user fork changes it. Run the shape check, then announce the tier with its reason (`references/tiers.md`). Quick exits here: one fast confirm, then `## Agent-invoked mini-spec mode`. Upgrade the tier whenever the evidence changes; never downgrade silently.
+1. **Bounds pass** — open the `Goal / Decided / Asking / [AGENT-DECIDED]` ledger with the goal pinned as one sentence; only an explicit user fork changes it. Map every input's goals and **non-goals** as one `[AGENT-DECIDED]` line; ask the user only when the goal is genuinely unknown or a leverage trigger fires. Run the shape check, then announce the tier with its reason (`references/tiers.md`). Quick exits here: one fast confirm, then `## Agent-invoked mini-spec mode`. Upgrade the tier whenever the evidence changes; never downgrade silently.
 2. **Route** — choose the secondary mode from `references/modes.md`, announce it, and correct false premises first.
 3. **Dialogue** — consequential forks are the user's to pick. A fork is consequential per the leverage line in `../age/references/voice.md`. Every other fork is `[AGENT-DECIDED]`. Supply options, trade-offs, and evidence before you ask. Ground each critical claim through code, the [Validate Cycle](references/validate-cycle.md), or a [Prototype Cycle](references/prototype-cycle.md). Resolve every contradiction. Render the decision map after three consecutive fork questions, or on request.
 4. **Sketch** — For work across modules or with a new public interface, run `references/shape-check.md`. Bind identity and role nouns to code referents. Lock seams as pseudocode signatures.
@@ -66,7 +66,7 @@ Beyond source-code routing there are mold-specific tools:
 
 ### Gate graph
 
-`python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Text targets need no binary. Image targets use Mermaid when Graphviz is unavailable. Tests keep gate nodes aligned with the handshake checklist. See `references/gate-graph.md`.
+`python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Image targets use Mermaid when Graphviz is unavailable. Tests keep gate nodes aligned with the handshake checklist. See `references/gate-graph.md`.
 
 ### Gate applicability and Test Contracts
 
@@ -133,7 +133,7 @@ The digest's `mode` is orientation, not a skill. Render the fixed blast-radius m
 - Do not implement code.
 - Do not write production files before the approval gate.
 - Do not silently settle uncertain claims.
-- Apply the shared voice kernel at `../age/references/voice.md`. Correct false premises. Mark each critical claim's confidence as `certain | speculating | don't know`. Steelman before you dismiss. Put design-shaping decisions to the user. Let depth inform each question, but never let it replace the question.
+- Apply the shared voice kernel at `../age/references/voice.md`. Correct false premises. Mark each critical claim's confidence as `certain | speculating | don't know`. Steelman before you dismiss. Put consequential forks to the user; depth informs the question, never replaces it.
 
 The schema entanglement behind curdle's spec-template and cook's writer views is phase registry × schema catalog × models per transition. The generated [`../cheese/references/schema-intertwine.md`](../cheese/references/schema-intertwine.md) documents it.
 

@@ -35,7 +35,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 
 ### Shape — option generation
 
-**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Present lettered options (`A/B/C/D`) for the user to select. The user chooses consequential forks; do not settle them. Give a one-line rationale for each option, not a verdict. Validate Cycle every critical assumption behind an option. Score options by the information they leave behind. Prefer the option that reduces the next maintainer's required knowledge or makes that knowledge more obvious.
+**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Present lettered options (`A/B/C/D`) for the user to select. The user chooses consequential forks (the leverage line in `../../age/references/voice.md`); do not settle them. Settle every fork below the line and log it. Give a one-line rationale for each option, not a verdict. Validate Cycle every critical assumption behind an option. Score options by the information they leave behind. Prefer the option that reduces the next maintainer's required knowledge or makes that knowledge more obvious.
 
 **Exit when:** the user picks one option (→ Sketch). Return to Explore when no option survives.
 

@@ -4,7 +4,7 @@ Before this rule, every scope, naming, and trade-off fork was a user turn.
 Session analytics measured a median of 6.5 AskUserQuestion calls and 443
 minutes of wall clock per mold run, with a fifth of runs reaching a spec.
 The fix draws one line: a fork reaches the user only when it fires a leverage
-trigger, changes a crust or import direction, or changes observable behavior.
+trigger, changes a crust or import direction, or changes user-visible behavior.
 Everything else is `[AGENT-DECIDED]` with a vetoable alternative.
 """
 
@@ -23,8 +23,9 @@ CULTURE = SKILLS / "culture" / "SKILL.md"
 
 LEVERAGE_LINE = re.compile(
     r"consequential when it fires a leverage trigger"
-    + r"[^\n]*?changes a crust or import direction"
-    + r"[^\n]*?changes observable behavior",
+    + r".*?changes a crust or import direction"
+    + r".*?changes user-visible behavior or output",
+    re.S,
 )
 
 
@@ -33,9 +34,11 @@ def _text(path: Path) -> str:
 
 
 def _section(body: str, heading: str) -> str:
+    """Slice from ``heading`` to the next heading of the same or a higher level."""
+    level = len(heading) - len(heading.lstrip("#"))
     start = body.index(heading)
-    end = body.find("\n## ", start + len(heading))
-    return body[start : end if end != -1 else len(body)]
+    nxt = re.compile(r"\n#{1,%d} " % level).search(body, start + len(heading))
+    return body[start : nxt.start() if nxt else len(body)]
 
 
 class TestConsequentialMeansLeverage:
@@ -47,12 +50,37 @@ class TestConsequentialMeansLeverage:
     def test_voice_kernel_carries_the_same_line(self) -> None:
         body = _text(VOICE)
         assert LEVERAGE_LINE.search(body), "voice.md must define consequential"
+        assert "Internal behavior the user cannot observe" in body
+        assert "changes observable behavior" not in body
         assert "make the call, log a vetoable alternative, and do not ask" in body
         assert "These forks include scope, naming, and trade-offs" not in body
 
     def test_culture_points_at_the_line_instead_of_restating_it(self) -> None:
         body = _text(CULTURE)
         assert "per the leverage line in `../age/references/voice.md`" in body
+        assert "Consequential design choices need explicit user adjudication" in body
+        assert "below the leverage line, pick one and log the alternative" in body
+
+    def test_adr_and_shape_point_at_the_line_instead_of_restating_it(self) -> None:
+        adr = _text(ADR)
+        assert "(per the leverage line in `../../age/references/voice.md`)" in adr
+        assert "changed observable" not in adr
+        shape = _section(_text(MODES), "### Shape")
+        assert "the leverage line in `../../age/references/voice.md`" in shape
+        assert "Settle every fork below the line and log it." in shape
+
+    def test_bounds_pass_step_asks_only_above_the_line(self) -> None:
+        flow = _section(_text(MOLD), "## Flow")
+        assert "ask the user rather than assume" not in flow
+        assert "as one `[AGENT-DECIDED]` line" in flow
+        assert "ask the user only when the goal is genuinely unknown or a leverage trigger fires" in flow
+
+    def test_grill_eval_requires_a_turn_only_for_consequential_items(self) -> None:
+        evals = _text(SKILLS / "mold" / "references" / "evals.md")
+        assert "for a grill of `[AGENT-DECIDED]` items" not in evals
+        assert "One user-fork round or more for each consequential grilled item" in evals
+        assert "a user turn spent on one is a regression" in evals
+        assert "**Under-batching**" in evals
 
 
 class TestBelowTheLineIsAgentDecided:
@@ -70,6 +98,10 @@ class TestBelowTheLineIsAgentDecided:
         assert "no longer skip asking" not in body
         assert "the pass is one ledger line" in body
         assert "becomes a question only when the goal is genuinely unknown" in body
+
+    def test_section_helper_stops_at_the_next_sibling_heading(self) -> None:
+        grill = _section(_text(MODES), "### Grill")
+        assert "### Diagnose" not in grill
 
     def test_grill_skips_items_below_the_line(self) -> None:
         grill = _section(_text(MODES), "### Grill")

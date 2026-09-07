@@ -22,8 +22,7 @@ spec body already states plainly.
 
 Mold's per-round decision ledger (`Decided / Asking / [AGENT-DECIDED]`, see
 `../SKILL.md` § Rules) persists **here at curdle**: each consequential decision
-(a fork that fired a leverage trigger, changed a crust, or changed observable
-behavior) earns an ADR — it is exactly the kind of decision a future reader would
+(per the leverage line in `../../age/references/voice.md`) earns an ADR — it is exactly the kind of decision a future reader would
 otherwise reverse-engineer. `[AGENT-DECIDED]` calls ride the spec's one-line
 decision-log (`curdle.md` § Spec template) with their vetoable alternative,
 never a full ADR; the ledger keeps no separate file (ADR-004).
