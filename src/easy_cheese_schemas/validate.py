@@ -84,7 +84,7 @@ def require_exact_keys(
 def is_relative_path(value: object) -> TypeGuard[str]:
     """True for a non-blank POSIX path that cannot escape the repository.
 
-    Rejects absolute paths, backslashes, a drive letter in the first segment,
+    Rejects absolute paths, backslashes, a colon in the first segment,
     ``..`` segments, and NUL. ``"."`` and a trailing ``/`` pass: both stay
     inside the repository, and whether they name something useful is the
     caller's rule.

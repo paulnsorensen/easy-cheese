@@ -24,6 +24,8 @@ def read_mapping_file(path: Path) -> dict[str, object]:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise ManifestLoadError(f"manifest not found: {path}") from exc
+    except OSError as exc:
+        raise ManifestLoadError(f"cannot read manifest {path}: {exc}") from exc
     return parse_mapping(text, str(path))
 
 

@@ -108,6 +108,20 @@ class TestReadMappingArgOrStdin:
                 [str(bogus)], "usage: prog [<plan>]"
             )
 
+    def test_non_notfound_oserror_wraps_as_load_error(
+        self,
+        manifest_io: _ManifestIoModule,
+        tmp_path: Path,
+    ) -> None:
+        # A directory path makes read_text raise IsADirectoryError — an OSError
+        # that is not FileNotFoundError. It must still surface as a
+        # ManifestLoadError so the CLI keeps its single-ERROR-line/exit-code
+        # contract instead of leaking an unhandled traceback.
+        with pytest.raises(manifest_io.ManifestLoadError, match="cannot read manifest"):
+            _ = manifest_io.read_mapping_arg_or_stdin(
+                [str(tmp_path)], "usage: prog [<plan>]"
+            )
+
     def test_too_many_args_yields_usage(self, manifest_io: _ManifestIoModule) -> None:
         # The CLI scripts inspect the error message — anything starting with
         # "usage:" maps to exit code 2 (argument error), anything else to 1
