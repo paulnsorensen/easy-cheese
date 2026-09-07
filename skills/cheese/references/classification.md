@@ -101,7 +101,7 @@ Do not restate the check here. The signals below only recognize the shape.
 | Single-file fix with named function or test | "make `tail` count bytes correctly when no trailing newline" |
 | A request that passes Cook's standalone fast-path check | the check in `skills/cook/SKILL.md` |
 
-Downgrade to `mold` when any part of Cook's check is borderline.
+Downgrade to `mold` only when a leverage trigger fires. A borderline check with zero fired triggers is a tier-1 mini-spec, not a mold.
 
 Before a tier-1 `cook` dispatch, run the specification discovery check in `skills/cheese/references/escalation.md`.
 Reuse a matching specification instead of writing a duplicate.
@@ -193,7 +193,8 @@ When two intents are plausible, apply in order:
 | `$ARGUMENTS` | Intent | Reason |
 | --- | --- | --- |
 | `.cheese/specs/dark-mode.md` | cook | spec path resolves; fast-path obvious |
-| `add dark mode to the web client` | mold | feature scope, no spec, multi-module likely |
+| `add dark mode to the web client` | cook | feature scope, zero triggers fire; tier 1 mints a mini-spec, then `/cook --auto` |
+| `add SSO login to the web client` | mold | `auth` fires; user steers the design |
 | `PR#142` | age | PR reference, no fix verb |
 | `respond to the review comments on PR#142` | affinage | review-feedback verb on a pull request |
 | `fix the failing build on PR#142` | affinage | failing checks on an open pull request |
@@ -201,7 +202,7 @@ When two intents are plausible, apply in order:
 | stack trace pasted | debug | trace present, cause not stated |
 | `what's the best rate limiter library for fastify` | research | external library question |
 | `help me think about splitting orders into a sub-slice — don't write anything yet` | rubber-duck | explicit no-writes opt-out |
-| `help me think about splitting orders into a sub-slice` | mold | fuzzy multi-module idea; agent thinks via `/culture` internally, then routes to `/mold` |
+| `help me think about splitting orders into a sub-slice` | mold | `new-slice` fires; agent thinks via `/culture` internally, then routes to `/mold` |
 | `commit this but do not push` | plate | commit-only transaction |
 | `open a PR` | plate | publication request; plate resolves topology from explicit choice and review shape |
 | `/cheese` | clarify | empty input; ask what they want |

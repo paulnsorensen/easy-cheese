@@ -41,20 +41,20 @@ Scoper: deleted everywhere.
 
 ## Leverage triggers
 
-Leverage is the routing axis for design ceremony. Ambiguity and scope size pick the artifact; leverage picks whether the user steers. Any fired trigger routes the ask to `/mold`'s full ceremony, requires strong review, and lowers mold's specification threshold. Zero fired triggers keep the ask on the cook fast-path or the tier-1 mini-spec. Record fired ids in the spec's `leverage:` frontmatter list.
+Leverage is the routing axis for design ceremony. Ambiguity and scope size pick the artifact; leverage picks whether the user steers. Any fired trigger routes the ask to `/mold`'s full ceremony, requires strong review, and lowers mold's specification threshold. Zero fired triggers keep the ask on the cook fast-path or the tier-1 mini-spec. Evaluate the table at classification time from the ask and the code it names, before any diff exists. Record fired ids in the spec's `leverage:` frontmatter list.
 
-| id | Fires when |
-| --- | --- |
-| `auth` | auth, secrets, crypto, or tenant isolation changes |
-| `irreversible` | payments, ledgers, or any effect that cannot be rolled back |
-| `concurrency` | idempotency, ordering, retries, or shared-state races |
-| `contract` | schema, migration, protocol, public API, or a new export from a slice's public seam |
-| `destructive` | production-destructive operations |
-| `new-slice` | a new top-level domain slice or spine step |
-| `cross-slice-dep` | a new import between slices, or a slice reaching into another's internals |
-| `invariant-gap` | weak integration coverage around a global invariant |
+| id | Fires when | `/age` promotes |
+| --- | --- | --- |
+| `auth` | auth, secrets, crypto, or tenant isolation changes | security |
+| `irreversible` | payments, ledgers, or any effect that cannot be rolled back | correctness |
+| `concurrency` | idempotency, ordering, retries, or shared-state races | correctness |
+| `contract` | schema, migration, protocol, public API, or a new export from a slice's public seam | encapsulation |
+| `destructive` | production-destructive operations | correctness |
+| `new-slice` | a new top-level domain slice or spine step | encapsulation |
+| `cross-slice-dep` | a new import between slices, or a slice reaching into another's internals | encapsulation |
+| `invariant-gap` | the change touches a named global invariant (uniqueness, balance, ordering, tenancy) that no integration test exercises | assertions |
 
-The list is closed. A routine internal choice that fires no trigger is the agent's to make and log as `[AGENT-DECIDED]`.
+The list is closed. A routine internal choice that fires no trigger is the agent's to make and log as `[AGENT-DECIDED]`. The `/age` column is the crosswalk to `age_route.OVERRIDE_FLAGS`: the first five ids are the flag families the diff grep already emits; the last three reach the router only through the spec's `leverage:` list, per `../../age/references/fan-out.md`.
 
 ## Cross-cutting contracts
 

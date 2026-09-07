@@ -14,6 +14,7 @@ Grep added lines outside `skills/**` and `.hallouminate/**` for the bundled age 
 Scope this search so a diff that only documents the override vocabulary does not trip its own tokens.
 A missed token means no promoted lens, not a missing security lens.
 Treat each hit as a hint, not a guarantee.
+When the review has a spec, also read its `leverage:` frontmatter list and add the flag each fired id promotes, per the `/age` column in `../../cheese/references/routing-policy.md` § Leverage triggers (`new-slice` and `cross-slice-dep` add `public-api-change`; `invariant-gap` adds `weak-integration-coverage`).
 Then call:
 
 ```python

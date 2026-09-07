@@ -131,7 +131,10 @@ handoff_context:
   resolved_ids: [1, 3, 5]
   wiki_hits:
     - {page: .hallouminate/wiki/adr/foo-001.md, line: 12, why: "prior decision on X"}
+  leverage: [auth, cross-slice-dep]
 ```
+
+`leverage:` carries the fired trigger ids from `routing-policy.md` § Leverage triggers. `/cheese -> /mold` sets it on every dispatch, empty when nothing fired; `/mold` copies it into the spec's `leverage:` frontmatter.
 
 Examples of when to attach a `handoff_context:` block:
 

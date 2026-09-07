@@ -443,6 +443,40 @@ class TestLeverageIsTheCeremonyAxis:
             assert f"| `{trigger}` |" in body, trigger
         assert "The list is closed." in body
         assert "Record fired ids in the spec's `leverage:` frontmatter list." in body
+        section = body[body.index("## Leverage triggers") :]
+        section = section[: section.index("\n## ", 1)]
+        rows = [line for line in section.splitlines() if line.startswith("| `")]
+        assert len(rows) == len(self.TRIGGER_IDS), rows
+        assert "Evaluate the table at classification time" in section
+
+    def test_classification_examples_send_a_zero_trigger_feature_to_cook(self) -> None:
+        body = _text(REFERENCES / "classification.md")
+        assert "| `add dark mode to the web client` | cook |" in body
+        assert "| `add SSO login to the web client` | mold | `auth` fires" in body
+        assert "Downgrade to `mold` only when a leverage trigger fires." in body
+        assert "when any part of Cook's check is borderline" not in body
+
+    def test_weak_spec_match_still_runs_the_trigger_check(self) -> None:
+        body = _text(REFERENCES / "escalation.md")
+        assert "only zero fired triggers mint a new mini-specification" in body
+        assert "write a new mini-specification to avoid the wrong match" not in body
+
+    def test_fired_ids_have_a_carrier_at_every_seam(self) -> None:
+        handoff = _text(REFERENCES / "handoff-gate.md")
+        assert "leverage: [auth, cross-slice-dep]" in handoff
+        curdle = _text(REPO_ROOT / "skills" / "mold" / "references" / "curdle.md")
+        template = curdle[curdle.index("## Spec template") : curdle.index("# <Title>")]
+        assert "leverage: []" in template
+        fan_out = _text(REPO_ROOT / "skills" / "age" / "references" / "fan-out.md")
+        assert "read its `leverage:` frontmatter list" in fan_out
+
+    def test_mold_description_does_not_advertise_fuzzy_feature_asks(self) -> None:
+        body = _text(REPO_ROOT / "skills" / "mold" / "SKILL.md")
+        description = body[: body.index("\n---", 4)]
+        assert "leverage trigger fires" in description
+        assert "zero fired triggers is a `/cook` mini-spec" in description
+        assert "fuzzy idea" not in description
+        assert "I want to add a feature that" not in description
 
     def test_classification_routes_mold_on_a_fired_trigger(self) -> None:
         body = _text(REFERENCES / "classification.md")

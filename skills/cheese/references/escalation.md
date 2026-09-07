@@ -59,7 +59,7 @@ Act on the result, do not guess:
    Then dispatch `/cook --auto <resolved-spec-path>` against it.
    Do not write a duplicate.
 2. **Multiple plausible matches or one weak match** — under `--safe`, let the user select a candidate.
-   Without `--safe`, write a new mini-specification to avoid the wrong match.
+   Without `--safe`, ignore the weak match and fall through to the tier-1 leverage check above. A fired trigger still dispatches `/mold`'s user mode; only zero fired triggers mint a new mini-specification.
 
 Skip silently when no specification exists yet.
 Also skip silently when the user already named a specification path.
