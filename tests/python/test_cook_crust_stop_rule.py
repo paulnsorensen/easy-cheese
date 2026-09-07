@@ -8,11 +8,13 @@ shape check was a hedged step, so no mold or cook run ever called
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COOK = REPO_ROOT / "skills" / "cook" / "SKILL.md"
 MODES = REPO_ROOT / "skills" / "mold" / "references" / "modes.md"
+SHAPE_CHECK = REPO_ROOT / "skills" / "mold" / "references" / "shape-check.md"
 
 
 def _text(path: Path) -> str:
@@ -20,9 +22,11 @@ def _text(path: Path) -> str:
 
 
 def _section(body: str, heading: str) -> str:
+    """Slice from ``heading`` to the next heading of the same or a higher level."""
+    level = len(heading) - len(heading.lstrip("#"))
     start = body.index(heading)
-    end = body.find("\n## ", start + len(heading))
-    return body[start : end if end != -1 else len(body)]
+    nxt = re.compile(r"\n#{1,%d} " % level).search(body, start + len(heading))
+    return body[start : nxt.start() if nxt else len(body)]
 
 
 class TestShapeCheckIsAPrecondition:
@@ -34,7 +38,18 @@ class TestShapeCheckIsAPrecondition:
 
     def test_sketch_requires_the_block_before_drafting(self) -> None:
         sketch = _section(_text(MODES), "### Sketch")
+        assert "### Grill" not in sketch
         assert "print its summary block first. No block, no sketch." in sketch
+
+    def test_cook_and_mold_share_the_single_module_skip_line(self) -> None:
+        flow = _section(_text(COOK), "## Flow")
+        contract = flow[: flow.index("2. **Implement**")]
+        assert "or the line `shape check skipped: single-module change`" in contract
+        sketch = _section(_text(MODES), "### Sketch")
+        assert '"shape check skipped: single-module change"' in sketch
+        skip = _section(_text(SHAPE_CHECK), "## When to skip")
+        assert "`shape check skipped: <reason>`" in skip
+        assert 'satisfies the "no block, no code" precondition' in skip
 
 
 class TestCookStopsAtTheCrust:

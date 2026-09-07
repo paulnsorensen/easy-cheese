@@ -64,6 +64,8 @@ If both tilth and LSP are unavailable, say so once and proceed with `[?]`. Do no
 - The change affects one private function in one file and has no exports. Sibling signature lookup still applies. You can skip dependencies and callers.
 - The user explicitly said `skip the shape check`.
 
+A skipped check prints one line in place of the block, `shape check skipped: <reason>`, and that line satisfies the "no block, no code" precondition in cook's Contract and mold's Sketch. Closed non-behavior work (docs-only, appearance-only) always takes this path.
+
 ## Why
 
 Trade-offs and seams discussed without a shape check rely on the agent's guess at impact. The check converts that guess into numbers — caller count, callee count, importer count — the user can argue with.
