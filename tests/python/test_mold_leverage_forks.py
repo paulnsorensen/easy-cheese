@@ -69,6 +69,13 @@ class TestConsequentialMeansLeverage:
         assert "the leverage line in `../../age/references/voice.md`" in shape
         assert "Settle every fork below the line and log it." in shape
 
+    def test_altitude_tag_and_leverage_line_compose(self) -> None:
+        rules = _section(_text(MOLD), "## Rules")
+        assert "or that sits below the leverage line, is `[AGENT-DECIDED]`" in rules
+        grill = _section(_text(MODES), "### Grill")
+        assert "Tag each grilled item with what it moves" in grill
+        assert "or that sits below the leverage line, is not a user fork" in grill
+
     def test_bounds_pass_step_asks_only_above_the_line(self) -> None:
         flow = _section(_text(MOLD), "## Flow")
         assert "ask the user rather than assume" not in flow
