@@ -9,6 +9,7 @@ Sliced Bread digest gives mold, cook, and age one shared vocabulary.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -29,12 +30,40 @@ def _text(path: Path) -> str:
 
 
 def _section(body: str, heading: str) -> str:
+    """Slice from ``heading`` to the next heading of the same or a higher level."""
+    level = len(heading) - len(heading.lstrip("#"))
     start = body.index(heading)
-    end = body.find("\n## ", start + len(heading))
-    return body[start : end if end != -1 else len(body)]
+    nxt = re.compile(r"\n#{1,%d} " % level).search(body, start + len(heading))
+    return body[start : nxt.start() if nxt else len(body)]
 
 
 class TestSketchIsPlacement:
+    def test_section_helper_stops_at_the_next_sibling_heading(self) -> None:
+        assert "### Grill" not in _section(_text(MODES), "### Sketch")
+        assert "### spec" not in _section(_text(DIMENSIONS), "### encapsulation")
+
+    def test_shape_check_derives_slice_from_the_symbol_path(self) -> None:
+        body = _text(SHAPE_CHECK)
+        assert "the touched symbol's own path names the owning slice" in body
+        assert "the importer list names the slice" not in body
+        assert "Three consumers print this block" in body
+
+    def test_curd_count_reads_footprints_from_the_typed_plan(self) -> None:
+        body = _text(SKILLS / "mold" / "references" / "curd-count.md")
+        assert "naming each curd's `scope`" in body
+        assert "`## Interface sketches` itself carries no file paths" in body
+        assert "file footprints\ncaptured in `## Interface sketches`" not in body
+
+    def test_voice_depth_rule_stops_at_the_public_signature(self) -> None:
+        body = _text(SKILLS / "age" / "references" / "voice.md")
+        assert "Write full pseudocode signatures" not in body
+        assert "bodies and helpers wait for `/cook`" in body
+
+    def test_wiki_invariant_names_the_placement_block(self) -> None:
+        body = _text(REPO_ROOT / ".hallouminate" / "wiki" / "workflow-invariants.md")
+        assert "sketches as a complete Placement block" in body
+        assert "pseudocode signatures" not in body
+
     def test_sketch_names_every_placement_field(self) -> None:
         sketch = _section(_text(MODES), "### Sketch")
         for field in PLACEMENT_FIELDS:

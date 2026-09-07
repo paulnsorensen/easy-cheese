@@ -42,7 +42,9 @@ Shape check on <symbol(s)>:
 
 The `callees` line is optional — print it only when the symbol query's `── calls ──` footer is non-empty. A leaf function with no callees should drop the line, not print `0`.
 
-`slice` and `crust delta` come from the same `tilth_deps` answer read against [`../../cheese/references/sliced-bread.md`](../../cheese/references/sliced-bread.md): the importer list names the slice, and any import that crosses a slice boundary or adds an export is a crust delta.
+`slice` and `crust delta` come from the same `tilth_deps` answer read against [`../../cheese/references/sliced-bread.md`](../../cheese/references/sliced-bread.md): the touched symbol's own path names the owning slice; the importer list shows which other slices consume it. Any importer outside the owning slice that reads past its crust, any new cross-slice import, or any new export is a crust delta.
+
+Three consumers print this block: mold's Sketch turn, culture's blast-radius step, and cook's Contract step. The block shape is the same in all three; only the gate that follows differs.
 
 A `high` verdict means multi-module callers, more than five importers, or a non-empty crust delta. It makes the Grill gate mandatory in mold; see `handshake.md`. Before continuing trade-off talk, culture must label the option `[high blast radius]`.
 

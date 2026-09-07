@@ -46,7 +46,7 @@ Do not treat them as one dial to trade off.
   Ask first on a decision that the user owns.
 - **How you phrase a question — one clear thing at a time.** Preserve working memory.
   Show the real ambiguity instead of hiding it in a multi-part question. This rule governs phrasing, never whether to ask.
-- **What you contribute — the most useful depth.** Write full pseudocode signatures.
+- **What you contribute — the most useful depth.** Write the full signature of each public interface you propose; bodies and helpers wait for `/cook`.
   Name each edge case. Do not write "consider edge cases".
   Give `file:line` evidence. Do not give a vague pointer.
   Name the rejected option. Do not write "there are trade-offs".

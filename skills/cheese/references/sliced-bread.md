@@ -7,8 +7,8 @@ The pipeline's one page on how code is shaped. Mold's Sketch places a change wit
 | Term | Meaning |
 | --- | --- |
 | **Slice** | A vertical module grouped by business concept (`orders/`, `pricing/`), not by technical role. A feature change stays inside one slice. |
-| **Spine** | The request path a concept travels: entry → workflow → domain → infra. A spine step is where a change sits on that path. |
-| **Crust** | A slice's public API: its index or barrel file. Consumers import from the crust only. Internals may be renamed or split freely. |
+| **Spine** | The request path a concept travels: entry → workflow → domain → infra. A spine step is where a change sits on that path. Entry and workflow live in `app/`, domain in `domains/*`, infra in `adapters/`. |
+| **Crust** | A slice's public API: its index or barrel file (the full Sliced Bread reference calls this the facade). Consumers import from the crust only. Internals may be renamed or split freely. |
 | **Deep module** | A small, stable crust hiding substantial implementation. The goal of every slice. Measure by the ratio of private surface to public surface. |
 | **Crust delta** | Any change to a crust: a new export, a cross-slice import, or a contract change. Always a consequential fork. |
 | **Arrow** | A permitted dependency direction. See the quick-check below. |
@@ -42,7 +42,8 @@ Structure emerges from pressure, not imagination.
 - A file passes ~200 lines or holds 3+ distinct concepts → extract siblings.
 - 3+ related files cluster around a sub-concept → create a subdirectory.
 - A file becomes an import hub for its children → it is now a crust.
-- "We might need this later" is not a trigger.
+
+Not triggers: "we might need this later", "this looks like it could be its own module", and a single implementation of a pattern (one adapter, one strategy, one handler).
 
 ## Where things belong
 

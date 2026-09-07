@@ -65,7 +65,7 @@ happen to be in.
    or ambiguous approval (`handshake.md:5-10`).
 2. **Agent key** — the agent prints a 10-item coherence self-check
    (problem grounded, ≥2 options weighed including Do Nothing, interface
-   sketches with pseudocode signatures, Validate Cycles judged, Grill run
+   sketches as a complete Placement block, Validate Cycles judged, Grill run
    for high-blast-radius work, open questions marked, quality gates
    specified) and every box must be checked, or the user issues an
    explicit `curdle anyway` override (`handshake.md:11-27`).
