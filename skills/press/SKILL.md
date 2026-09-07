@@ -79,7 +79,7 @@ python3 skills/press/scripts/press.pyz press-telemetry \
   .cheese/press/<slug>.attempt-N.telemetry-request.json
 ```
 
-The request names the slug, the attempt, the tool errors, the delegations, and the changed files. The command reads the outcome and the repair count from the attempt's route request. Run it from the project root.
+The request carries only what the attempt observed. Run `press-route` for the attempt first: the command reads `outcome` and `repair_cycles` from that route request.
 
 Save the output at `.cheese/press/<slug>.attempt-N.telemetry.json`. The record contains these values:
 

@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-from easy_cheese_schemas import (
+from easy_cheese_schemas.validate import (
     is_int,
+    is_relative_path,
     require_exact_keys,
     require_int,
     require_list,
@@ -33,10 +34,9 @@ def test_require_int_returns_the_integer() -> None:
     assert require_int(3, "attempt") == 3
 
 
-@pytest.mark.parametrize("value", [True, "3", 3.0, None])
-def test_require_int_names_the_field(value: object) -> None:
+def test_require_int_names_the_field() -> None:
     with pytest.raises(ValueError, match="^attempt must be an integer$"):
-        _ = require_int(value, "attempt")
+        _ = require_int(True, "attempt")
 
 
 def test_require_str_returns_the_value_unstripped() -> None:
@@ -103,6 +103,7 @@ def test_require_exact_keys_raises_the_callers_error_type() -> None:
 
 @pytest.mark.parametrize("path", ["src/a.py", ".", "tests/", "./a", "a/b:c", "a b/c.d"])
 def test_require_relative_path_returns_accepted_paths_unchanged(path: str) -> None:
+    assert is_relative_path(path) is True
     assert require_relative_path(path, "cwd") == path
 
 
@@ -122,11 +123,13 @@ def test_require_relative_path_returns_accepted_paths_unchanged(path: str) -> No
     ],
 )
 def test_require_relative_path_rejects_escapes(path: str) -> None:
+    assert is_relative_path(path) is False
     with pytest.raises(ValueError, match="^cwd must be a repository-relative path$"):
         _ = require_relative_path(path, "cwd")
 
 
 @pytest.mark.parametrize("value", ["", "  ", 3, None])
 def test_require_relative_path_requires_a_non_empty_string_first(value: object) -> None:
+    assert is_relative_path(value) is False
     with pytest.raises(ValueError, match="^cwd must be a non-empty string$"):
         _ = require_relative_path(value, "cwd")

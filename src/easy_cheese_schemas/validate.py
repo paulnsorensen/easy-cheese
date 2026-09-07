@@ -16,6 +16,7 @@ from typing import TypeGuard, cast
 
 __all__ = [
     "is_int",
+    "is_relative_path",
     "require_exact_keys",
     "require_int",
     "require_list",
@@ -80,23 +81,30 @@ def require_exact_keys(
         raise error(f"{label} keys mismatch: {', '.join(details)}")
 
 
-def require_relative_path(value: object, field: str) -> str:
-    """A non-empty POSIX path that cannot escape the repository.
+def is_relative_path(value: object) -> TypeGuard[str]:
+    """True for a non-blank POSIX path that cannot escape the repository.
 
     Rejects absolute paths, backslashes, a drive letter in the first segment,
     ``..`` segments, and NUL. ``"."`` and a trailing ``/`` pass: both stay
     inside the repository, and whether they name something useful is the
     caller's rule.
     """
-    text = require_str(value, field)
-    first = text.split("/", 1)[0]
-    path = PurePosixPath(text)
-    if (
+    if not isinstance(value, str) or not value.strip():
+        return False
+    first = value.split("/", 1)[0]
+    path = PurePosixPath(value)
+    return not (
         path.is_absolute()
-        or "\\" in text
+        or "\\" in value
         or ":" in first
         or ".." in path.parts
-        or "\x00" in text
-    ):
+        or "\x00" in value
+    )
+
+
+def require_relative_path(value: object, field: str) -> str:
+    """``is_relative_path`` as a check; a blank value is named as such."""
+    text = require_str(value, field)
+    if not is_relative_path(text):
         raise ValueError(f"{field} must be a repository-relative path")
     return text

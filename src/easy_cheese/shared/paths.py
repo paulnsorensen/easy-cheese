@@ -347,14 +347,14 @@ def git_toplevel() -> Path | None:
     return None
 
 
-def _resolve_repo_root(repo_root: Path | str | None) -> Path:
+def resolve_repo_root(repo_root: Path | str | None) -> Path:
     """Absolute repo root: the given value, else git toplevel, else cwd."""
     if repo_root is not None:
         return Path(repo_root).resolve()
     return (git_toplevel() or Path.cwd()).resolve()
 
 
-def _phase_dirpath(phase: str, repo_root: Path) -> Path:
+def phase_dirpath(phase: str, repo_root: Path) -> Path:
     """Absolute artifact directory for a phase/aux token."""
     base = project_corpus_root() if phase in XDG_PHASES else repo_root / ".cheese"
     return base / phase_dir(phase)
@@ -368,7 +368,7 @@ def _phase_entries(phase: str, repo_root: Path) -> list[tuple[str, Path]]:
     ``ultracook/<slug>/manifest.yaml`` (dir + manifest), and the flat
     ``<dir>/<slug>.md`` everywhere else.
     """
-    dirpath = _phase_dirpath(phase, repo_root)
+    dirpath = phase_dirpath(phase, repo_root)
     if not dirpath.is_dir():
         return []
     entries: list[tuple[str, Path]] = []
@@ -431,14 +431,14 @@ def resolve_slug(
     known = sorted(PHASES | AUX_PHASES)
     if phase_hint is not None and phase_hint not in known:
         raise ValueError(f"unknown phase {phase_hint!r}; expected one of {known}")
-    repo = _resolve_repo_root(repo_root)
+    repo = resolve_repo_root(repo_root)
     phases = [phase_hint] if phase_hint is not None else known
 
     exact: list[SlugMatch] = []
     fuzzy_pool: list[tuple[str, Path, str]] = []
     searched_roots: list[str] = []
     for phase in phases:
-        searched_roots.append(str(_phase_dirpath(phase, repo)))
+        searched_roots.append(str(phase_dirpath(phase, repo)))
         for stem, path in _phase_entries(phase, repo):
             if stem == slug:
                 exact.append(
@@ -478,13 +478,13 @@ def resolve_slug(
 def list_artifacts(phase: str, *, repo_root: Path | str | None = None) -> list[dict[str, str]]:
     """Return ``[{"slug": stem, "path": abs_path}, ...]`` for a phase's artifacts.
 
-    Reuses ``_phase_entries``/``_phase_dirpath`` (also driving ``resolve_slug``) so
+    Reuses ``_phase_entries``/``phase_dirpath`` (also driving ``resolve_slug``) so
     durable phases (specs, research) list from the XDG corpus and transient phases
     list from ``.cheese/`` -- one routing source, not a second copy of it.
     """
     if phase not in PHASES:
         raise ValueError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
-    repo = _resolve_repo_root(repo_root)
+    repo = resolve_repo_root(repo_root)
     entries = sorted(_phase_entries(phase, repo), key=lambda e: (e[0], str(e[1])))
     return [{"slug": stem, "path": str(path)} for stem, path in entries]
 
@@ -579,7 +579,7 @@ def domain_model_target(
     failed wiki-model probe cannot confirm presence, so existing file stores
     still win while a listed corpus remains the creation target.
     """
-    repo = _resolve_repo_root(repo_root)
+    repo = resolve_repo_root(repo_root)
     docs_root = repo / "docs"
     xdg_root = project_corpus_root(project)
 

@@ -14,7 +14,11 @@ import sys
 from pathlib import Path
 
 from easy_cheese.shared import paths
-from easy_cheese.shared.manifest_io import ManifestLoadError, json_command, parse_mapping
+from easy_cheese.shared.manifest_io import (
+    ManifestLoadError,
+    json_command,
+    read_mapping_file,
+)
 from easy_cheese_schemas.validate import require_exact_keys
 
 from .press_telemetry import require_attempt_number, telemetry_record
@@ -23,14 +27,10 @@ _REQUEST_KEYS = ("slug", "attempt", "tool_errors", "delegations", "changed_files
 _ROUTE_KEYS = ("outcome", "repair_cycles")
 
 
-def route_artifact_path(slug: str, attempt: int, *, repo_root: Path | None = None) -> Path:
-    """The route request `press-route` read for attempt N of `slug`.
-
-    Resolved under the git worktree root, else the working directory, the
-    same rule `paths.list_artifacts` uses for `.cheese/`.
-    """
-    root = repo_root if repo_root is not None else (paths.git_toplevel() or Path.cwd())
-    return root / ".cheese" / paths.phase_dir("press") / f"{slug}.attempt-{attempt}.route.json"
+def _route_artifact_path(slug: str, attempt: int) -> Path:
+    """The route request `press-route` read for attempt N of `slug`."""
+    press_dir = paths.phase_dirpath("press", paths.resolve_repo_root(None))
+    return press_dir / f"{slug}.attempt-{attempt}.route.json"
 
 
 def _read_route(slug: object, attempt: object) -> dict[str, object]:
@@ -40,13 +40,13 @@ def _read_route(slug: object, attempt: object) -> dict[str, object]:
     if slug_error is not None:
         raise ValueError(slug_error)
     assert isinstance(slug, str)
-    path = route_artifact_path(slug, require_attempt_number(attempt))
-    try:
-        route = parse_mapping(path.read_text(encoding="utf-8"), str(path))
-    except FileNotFoundError as exc:
+    path = _route_artifact_path(slug, require_attempt_number(attempt))
+    if not path.is_file():
         raise ValueError(
             f"route artifact not found: {path}; run press-route for this attempt first"
-        ) from exc
+        )
+    try:
+        route = read_mapping_file(path)
     except ManifestLoadError as exc:
         raise ValueError(str(exc)) from exc
     require_exact_keys(route, _ROUTE_KEYS, f"route artifact {path}")

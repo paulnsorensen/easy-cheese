@@ -53,16 +53,21 @@ def _cli_request(**overrides: object) -> dict[str, object]:
 
 
 def _write_route(
-    root: Path, slug: str, attempt: int, outcome: str, repair_cycles: int
+    root: Path, slug: str, attempt: int, outcome: str, repair_cycles: int, *, text: str | None = None
 ) -> Path:
     press_dir = root / ".cheese" / "press"
     press_dir.mkdir(parents=True, exist_ok=True)
     path = press_dir / f"{slug}.attempt-{attempt}.route.json"
-    _ = path.write_text(
-        json.dumps({"outcome": outcome, "repair_cycles": repair_cycles}),
-        encoding="utf-8",
-    )
+    body = json.dumps({"outcome": outcome, "repair_cycles": repair_cycles}) if text is None else text
+    _ = path.write_text(body, encoding="utf-8")
     return path
+
+
+@pytest.fixture
+def at_repo_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Run the CLI from a scratch repo root so `.cheese/press/` resolves under it."""
+    monkeypatch.chdir(tmp_path)
+    return tmp_path
 
 
 def _write_request(tmp_path: Path, payload: dict[str, object]) -> Path:
@@ -269,12 +274,10 @@ def test_non_list_tool_errors_is_rejected() -> None:
 
 
 def test_cli_reads_outcome_and_repair_cycles_from_the_route_artifact(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    at_repo_root: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-    _ = _write_route(tmp_path, "outer-tdd-gates", 2, "in_contract_red", 1)
+    _ = _write_route(at_repo_root, "outer-tdd-gates", 2, "in_contract_red", 1)
     observed = _cli_request(
         attempt=2,
         tool_errors=[
@@ -285,7 +288,7 @@ def test_cli_reads_outcome_and_repair_cycles_from_the_route_artifact(
         changed_files=["tests/fanout/python/test_press_route.py"],
     )
 
-    assert press_telemetry_cli.main([str(_write_request(tmp_path, observed))]) == 0
+    assert press_telemetry_cli.main([str(_write_request(at_repo_root, observed))]) == 0
     record = cast(dict[str, object], json.loads(capsys.readouterr().out))
     assert record == press_telemetry.telemetry_record(
         **observed, outcome="in_contract_red", repair_cycles=1
@@ -310,16 +313,14 @@ def test_cli_resolves_the_route_artifact_from_the_git_toplevel(
 
 
 def test_cli_rejects_a_request_that_restates_the_route_fields(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    at_repo_root: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The retyped `outcome: green` from #611 is now an unknown key, not evidence."""
-    monkeypatch.chdir(tmp_path)
-    _ = _write_route(tmp_path, "outer-tdd-gates", 1, "in_contract_red", 0)
+    _ = _write_route(at_repo_root, "outer-tdd-gates", 1, "in_contract_red", 0)
     retyped = _cli_request(outcome="green", repair_cycles=0)
 
-    assert press_telemetry_cli.main([str(_write_request(tmp_path, retyped))]) == 1
+    assert press_telemetry_cli.main([str(_write_request(at_repo_root, retyped))]) == 1
     assert (
         "request keys mismatch: unknown ['outcome', 'repair_cycles']"
         in capsys.readouterr().err
@@ -338,28 +339,24 @@ def test_cli_requires_every_request_key(
 
 
 def test_cli_refuses_to_record_an_attempt_that_was_never_routed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    at_repo_root: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.chdir(tmp_path)
 
-    assert press_telemetry_cli.main([str(_write_request(tmp_path, _cli_request()))]) == 1
+    assert press_telemetry_cli.main([str(_write_request(at_repo_root, _cli_request()))]) == 1
     err = capsys.readouterr().err
     assert "route artifact not found" in err
-    assert str(tmp_path / ".cheese" / "press" / "outer-tdd-gates.attempt-1.route.json") in err
+    assert str(at_repo_root / ".cheese" / "press" / "outer-tdd-gates.attempt-1.route.json") in err
     assert "run press-route" in err
 
 
 def test_cli_rejects_a_route_artifact_that_contradicts_the_attempt_number(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    at_repo_root: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-    _ = _write_route(tmp_path, "outer-tdd-gates", 2, "green", 0)
+    _ = _write_route(at_repo_root, "outer-tdd-gates", 2, "green", 0)
 
-    request = _write_request(tmp_path, _cli_request(attempt=2))
+    request = _write_request(at_repo_root, _cli_request(attempt=2))
     assert press_telemetry_cli.main([str(request)]) == 1
     assert "attempt 2 contradicts repair_cycles 0" in capsys.readouterr().err
 
@@ -377,30 +374,25 @@ def test_cli_rejects_a_route_artifact_that_contradicts_the_attempt_number(
     ],
 )
 def test_cli_rejects_a_route_artifact_that_press_route_would_reject(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    at_repo_root: Path,
     capsys: pytest.CaptureFixture[str],
     route_text: str,
     message: str,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
-    route = _write_route(tmp_path, "outer-tdd-gates", 1, "green", 0)
-    _ = route.write_text(route_text, encoding="utf-8")
+    _ = _write_route(at_repo_root, "outer-tdd-gates", 1, "green", 0, text=route_text)
 
-    assert press_telemetry_cli.main([str(_write_request(tmp_path, _cli_request()))]) == 1
+    assert press_telemetry_cli.main([str(_write_request(at_repo_root, _cli_request()))]) == 1
     assert message in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("slug", ["../../etc/passwd", "Outer TDD", ""])
 def test_cli_validates_the_slug_before_building_the_route_path(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    at_repo_root: Path,
     capsys: pytest.CaptureFixture[str],
     slug: str,
 ) -> None:
-    monkeypatch.chdir(tmp_path)
 
-    request = _write_request(tmp_path, _cli_request(slug=slug))
+    request = _write_request(at_repo_root, _cli_request(slug=slug))
     assert press_telemetry_cli.main([str(request)]) == 1
     err = capsys.readouterr().err
     assert "slug" in err
@@ -408,13 +400,11 @@ def test_cli_validates_the_slug_before_building_the_route_path(
 
 
 def test_cli_bounds_the_attempt_before_building_the_route_path(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    at_repo_root: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.chdir(tmp_path)
 
-    request = _write_request(tmp_path, _cli_request(attempt=4))
+    request = _write_request(at_repo_root, _cli_request(attempt=4))
     assert press_telemetry_cli.main([str(request)]) == 1
     err = capsys.readouterr().err
     assert "attempt must be between 1 and 3" in err

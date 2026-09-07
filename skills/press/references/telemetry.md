@@ -30,7 +30,7 @@ Include every field. Use an empty list to record no items.
 }
 ```
 
-- Use the route request value for `slug`.
+- Use the slug from the route request filename.
 - Set `attempt` to `repair_cycles + 1`. Do not use a value greater than 3.
 - The command reads `outcome` and `repair_cycles` from `.cheese/press/<slug>.attempt-N.route.json`. Run `press-route` for the attempt first.
 - Do not repeat `outcome` or `repair_cycles` in the request. The command rejects them as unknown keys.
