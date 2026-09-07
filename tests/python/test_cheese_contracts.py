@@ -502,6 +502,13 @@ class TestLeverageIsTheCeremonyAxis:
         assert "leverage: []" in body
         assert "When any trigger fires, refuse the mint" in body
 
+    def test_quick_tier_requires_zero_fired_triggers(self) -> None:
+        body = _text(REPO_ROOT / "skills" / "mold" / "references" / "tiers.md")
+        quick = next(line for line in body.splitlines() if line.startswith("| **Quick** |"))
+        assert "zero fired leverage triggers" in quick
+        assert "A fired leverage trigger rules Quick out" in body
+        assert "a fired trigger never lands in Quick" in body
+
     def test_cook_fast_path_requires_zero_fired_triggers(self) -> None:
         body = _text(REPO_ROOT / "skills" / "cook" / "SKILL.md")
         assert "No leverage trigger may fire" in body
