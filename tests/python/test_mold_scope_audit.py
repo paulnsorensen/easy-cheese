@@ -40,17 +40,43 @@ class TestOneTableOneConfirm:
         assert "A row that fires a leverage trigger needs its own verb" in body
         assert "A `Bound` row needs no approval" in body
 
+    def test_leverage_rows_render_as_blocking_in_the_template(self) -> None:
+        section = _section(_text(HANDSHAKE), "## Scope audit table")
+        assert "| needs your verb | contract |" in section
+        assert "| needs your verb (ALIAS <referent>) | — |" in section
+        assert "Rows marked `needs your verb` block until you name a verb for each." in section
+        assert "Confirm the table, or name the rows to change." not in section
+        assert "would itself fire one of the eight ids if kept" in section
+
+    def test_confirmed_drop_default_still_writes_a_rejection_record(self) -> None:
+        body = _text(HANDSHAKE)
+        assert "whether the user typed the verb or confirmed a `drop` default" in body
+
+    def test_agent_decided_non_goals_enter_the_table(self) -> None:
+        body = _text(HANDSHAKE)
+        assert "authored as `[AGENT-DECIDED]` are agent-introduced by definition" in body
+
     def test_per_row_approval_rounds_are_gone(self) -> None:
         body = _text(HANDSHAKE)
         assert "The user must explicitly approve each row" not in body
         assert "The user must explicitly keep, drop, or reword it." not in body
         assert 'Vague "looks good" is not approval' not in body
         assert "inline, per dialogue round" not in body
+        assert "inline per round" not in body
+        assert "per-term approval" not in body
+        assert "approves each grouping" not in body
+        assert "approves each reuse" not in body
+        assert "receive per-term approval" not in body
+        curdle = _text(REPO_ROOT / "skills" / "mold" / "references" / "curdle.md")
+        assert "each approved per `handshake.md` § Agent-introduced scope" not in curdle
 
     def test_follow_up_default_is_non_goal_only(self) -> None:
         section = _section(_text(HANDSHAKE), "## Follow-up disposition")
         assert "The default destination is **non-goal only**" in section
         assert "by confirming the table's defaults or editing the rows" in section
+        assert "Each unit is one `follow-up` row whose cell lists its members" in section
+        assert "A semantic match becomes the row's default destination, `link #<id>`" in section
+        assert "approves the destination by confirming the row's default or editing it" in section
 
     def test_curdle_anyway_accepts_the_defaults(self) -> None:
         body = _text(HANDSHAKE)
