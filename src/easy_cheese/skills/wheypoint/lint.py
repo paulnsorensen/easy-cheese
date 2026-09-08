@@ -31,7 +31,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
     WheypointStatus,
 )
-from easy_cheese_schemas.validate import require_relative_path
+from easy_cheese_schemas.validate import is_relative_path
 
 from . import lineage
 from . import projection as projection_mod
@@ -137,10 +137,9 @@ def artifact_digest_in(root: Path | str) -> Callable[[str], str | None]:
     resolved_root = Path(root).resolve()
 
     def digest(path: str) -> str | None:
-        try:
-            candidate = Path(require_relative_path(path, "artifact"))
-        except ValueError:
+        if not is_relative_path(path):
             return None
+        candidate = Path(path)
         try:
             resolved = (resolved_root / candidate).resolve()
             if not resolved.is_relative_to(resolved_root) or not resolved.is_file():

@@ -19,8 +19,6 @@ Include every field. Use an empty list to record no items.
 {
   "slug": "outer-tdd-gates",
   "attempt": 1,
-  "outcome": "in_contract_red",
-  "repair_cycles": 0,
   "tool_errors": [
     {"phase": "attack", "operation": "pytest"},
     {"phase": "attack", "operation": "pytest"}
@@ -32,8 +30,11 @@ Include every field. Use an empty list to record no items.
 }
 ```
 
-- Use the route request values for `slug` and `outcome`.
+- Use the slug from the route request filename.
 - Set `attempt` to `repair_cycles + 1`. Do not use a value greater than 3.
+- The command reads `outcome` and `repair_cycles` from `.cheese/press/<slug>.attempt-N.route.json`. Run `press-route` for the attempt first.
+- Do not repeat `outcome` or `repair_cycles` in the request. The command rejects them as unknown keys.
+- The command stops when the route request is missing, malformed, or names a `repair_cycles` value that contradicts `attempt`.
 - Set `phase` to `read`, `attack`, `classify`, `route`, `report`, or `handoff`. These values match the Flow steps.
 - Set `operation` to the failed tool or command. Use the same name for repeated operations.
 - Set `role` to the delegated agent.

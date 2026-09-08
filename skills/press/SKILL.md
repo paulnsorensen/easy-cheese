@@ -79,6 +79,8 @@ python3 skills/press/scripts/press.pyz press-telemetry \
   .cheese/press/<slug>.attempt-N.telemetry-request.json
 ```
 
+The request carries only what the attempt observed. Run `press-route` for the attempt first: the command reads `outcome` and `repair_cycles` from that route request.
+
 Save the output at `.cheese/press/<slug>.attempt-N.telemetry.json`. The record contains these values:
 
 - Attempt outcome

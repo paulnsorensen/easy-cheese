@@ -33,8 +33,6 @@ import attrs
 import cattrs
 from attrs import Attribute, define, field
 from cattrs.cols import list_structure_factory
-
-from easy_cheese_schemas.validate import is_int
 from cattrs.errors import (
     AttributeValidationNote,
     ForbiddenExtraKeysError,
@@ -42,6 +40,7 @@ from cattrs.errors import (
 )
 from cattrs.gen import make_dict_structure_fn
 from easy_cheese_schemas._schema_catalog import CURD_PLAN_SCHEMA_URI
+from easy_cheese_schemas.validate import is_int
 
 
 # 2 adds WheypointRevision.parent_revision_digest, which pins each receipt to
