@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 import pytest
 
 from easy_cheese.shared import bundle_commands as bc
+from scripts import build_pyz as _build_pyz
 
 
 _CommandHandler = Callable[[list[str]], int]
@@ -235,22 +236,7 @@ def test_validate_command_surface_rejects_undeclared_reference() -> None:
         )
 
 
-_SKILLS_ON_THE_DECORATOR_SURFACE = (
-    "age",
-    "affinage",
-    "briesearch",
-    "cure",
-    "melt",
-    "mold",
-    "pasteurize",
-    "plate",
-    "hard-cheese",
-    "wheypoint",
-    "cook",
-)
-
-
-@pytest.mark.parametrize("skill", _SKILLS_ON_THE_DECORATOR_SURFACE)
+@pytest.mark.parametrize("skill", _build_pyz.SKILLS)
 def test_validate_command_surface_passes_for_every_skill(skill: str) -> None:
     package = skill.replace("-", "_")
     module = importlib.import_module(f"easy_cheese.skills.{package}.commands")

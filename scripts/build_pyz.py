@@ -45,12 +45,25 @@ SKILLS = tuple(
 )
 
 
-def _compiler_module(name: str) -> ModuleType:
-    """Load a build-only compiler source module (excluded from wheels)."""
-    entry = str(BUILD_SCRIPTS_ROOT)
+def _import_from(root: Path, name: str) -> ModuleType:
+    """Import `name` with `root` on sys.path."""
+    entry = str(root)
     if entry not in sys.path:
         sys.path.insert(0, entry)
     return importlib.import_module(name)
+
+
+_ = _import_from(SRC_ROOT, "easy_cheese")
+from easy_cheese.shared.bundle_commands import (  # noqa: E402
+    Command,
+    command_map,
+    validate_command_surface,
+)
+
+
+def _compiler_module(name: str) -> ModuleType:
+    """Load a build-only compiler source module (excluded from wheels)."""
+    return _import_from(BUILD_SCRIPTS_ROOT, name)
 
 
 def _phase_compiler() -> Callable[[Iterable[Path]], str]:
@@ -379,6 +392,21 @@ def _download_runtime_wheels(wheelhouse: Path) -> tuple[Path, ...]:
     return wheels
 
 
+def validate_command_surfaces(skills: Iterable[str]) -> None:
+    """Reject a skill whose `COMMANDS` manifest and `@bundle_command` surface disagree.
+
+    Runs the dispatcher's own two-way check plus `command_map`'s duplicate and
+    alias-collision rejection against each manifest under `src/` before any
+    wheel is built, so a broken surface fails the build rather than the bundle.
+    """
+    for skill in skills:
+        package = skill.replace("-", "_")
+        module = _import_from(SRC_ROOT, f"easy_cheese.skills.{package}.commands")
+        commands = cast("Sequence[Command]", getattr(module, "COMMANDS"))
+        validate_command_surface(module, commands)
+        _ = command_map(commands)
+
+
 def build_wheelhouse(
     wheelhouse: Path,
     skills: Iterable[str] | None = None,
@@ -388,6 +416,7 @@ def build_wheelhouse(
     unknown = sorted(set(selected) - set(SKILLS))
     if unknown:
         raise ValueError(f"unknown skill(s): {', '.join(unknown)}")
+    validate_command_surfaces(selected)
     _validate_generated_runtime()
     wheelhouse.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="easy-cheese-projects-") as temporary:
@@ -510,23 +539,40 @@ def _build_from_wheelhouse(
     return target
 
 
+def _verify_built_archive(skill: str, archive: Path) -> None:
+    """AC-7's 'built' clause: the build itself rejects what the closure gate would."""
+    verify = cast(
+        Callable[[Path], list[str]],
+        getattr(_import_from(BUILD_SCRIPTS_ROOT, "check_bundles"), "verify_archive"),
+    )
+    problems = verify(archive)
+    if problems:
+        raise RuntimeError(
+            f"{skill} archive failed the closure gate:\n"
+            + "\n".join(f"  ! {problem}" for problem in problems)
+        )
+
+
 def build_bundles(
     destinations: dict[str, Path],
 ) -> dict[str, Path]:
+    """Build, verify, then move each archive into place; a rejected archive never lands."""
     unknown = sorted(set(destinations) - set(SKILLS))
     if unknown:
         raise ValueError(f"unknown skill(s): {', '.join(unknown)}")
     with tempfile.TemporaryDirectory(prefix="easy-cheese-build-") as temporary:
         wheelhouse = Path(temporary) / "wheelhouse"
         build_wheelhouse(wheelhouse, destinations)
-        return {
-            skill: _build_from_wheelhouse(
-                skill,
-                target,
-                wheelhouse,
+        built: dict[str, Path] = {}
+        for skill, target in destinations.items():
+            staged = _build_from_wheelhouse(
+                skill, Path(temporary) / f"{skill}.pyz", wheelhouse
             )
-            for skill, target in destinations.items()
-        }
+            _verify_built_archive(skill, staged)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _ = shutil.move(staged, target)
+            built[skill] = target
+        return built
 
 
 def build_bundle(skill: str, target: Path) -> Path:

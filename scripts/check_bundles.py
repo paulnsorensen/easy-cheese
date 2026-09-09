@@ -909,6 +909,32 @@ def _parse_against(argv: Sequence[str]) -> str:
     return cast(str, parser.parse_args(argv).against)
 
 
+def _archive_problems(pyz: Path, analysis: _ArchiveAnalysis) -> list[str]:
+    """Every AC-7 rejection for one analysed archive.
+
+    Static inspection (native members, first-party import closure) plus the
+    isolated-subprocess proofs (command dispatch, self-contained execution).
+    """
+    problems = [f"native member: {name}" for name in analysis.native_members]
+    problems += _check_import_closure(analysis)
+    problems += _check_command_dispatch(pyz, analysis.command_names)
+    problems += check_isolated_execution(pyz)
+    return problems
+
+
+def verify_archive(pyz: Path) -> list[str]:
+    """AC-7's 'built' clause for one freshly built archive.
+
+    `build_pyz.py` calls this after every build so the build itself rejects
+    what this gate would. A non-Shiv archive raises ValueError.
+    """
+    with zipfile.ZipFile(pyz) as archive:
+        analysis = _ArchiveAnalysis.from_archive(
+            archive, validate_shiv=True, parse_first_party=True
+        )
+        return _archive_problems(pyz, analysis)
+
+
 def _run_checks(against: str, bundle_root: Path) -> int:
     stale: list[str] = []
     for path in sorted(REPO_ROOT.glob("skills/*/scripts/common.pyz")):
@@ -936,15 +962,7 @@ def _run_checks(against: str, bundle_root: Path) -> int:
                 if analysis.manifest is None:
                     raise ValueError("Shiv archive manifest was not computed")
                 rebuilt_manifest = analysis.manifest
-                problems += [
-                    f"    ! native member: {name}" for name in analysis.native_members
-                ]
-                problems += [f"    ! {p}" for p in _check_import_closure(analysis)]
-                problems += [
-                    f"    ! {p}"
-                    for p in _check_command_dispatch(path, analysis.command_names)
-                ]
-            problems += [f"    ! {p}" for p in check_isolated_execution(path)]
+                problems += [f"    ! {p}" for p in _archive_problems(path, analysis)]
             if committed is None:
                 print(f"new Shiv bundle, nothing to compare: {relative}")
                 if problems:

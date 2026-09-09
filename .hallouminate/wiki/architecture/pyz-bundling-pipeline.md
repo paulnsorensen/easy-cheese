@@ -6,7 +6,7 @@ The repository builds every Python-backed skill as a hash-locked Shiv applicatio
 
 `scripts/build_pyz.py` discovers applications from `src/easy_cheese/skills/*/commands.py`. Each discovered package becomes one `easy-cheese-<skill>` wheel with a same-named console script.[^2]
 
-Each `commands.py` declares the application's public subcommands as an immutable tuple of `Command(name, "module:callable")` values. Dispatch validates unique command names, imports only the selected target, passes it a command-local `list[str]`, and requires an integer status return. Command targets write result text to stdout or diagnostics to stderr; dispatch does not mutate `sys.argv`, execute modules through `runpy`, or use decorator registration.[^12]
+Each `commands.py` declares the application's public subcommands as an immutable `COMMANDS` tuple: every handler is a `@bundle_command("name")`-decorated function that imports its target lazily, and `derive_command(handler, summary)` compiles it into a `Command(name, "module:callable", summary)`. Dispatch validates unique command names, imports only the selected target, passes it a command-local `list[str]`, and requires an integer status return. Command targets write result text to stdout or diagnostics to stderr; dispatch does not mutate `sys.argv` or execute modules through `runpy`.[^12]
 
 A build creates three distribution layers:
 
@@ -51,6 +51,13 @@ The output is written to `skills/<skill>/scripts/<skill>.pyz` and marked executa
 
 Before building wheels, the builder recompiles the phase registry, schema catalog, and document rules in memory. Any mismatch with the checked-in runtime modules stops the build. Compiler modules are excluded from the published schema wheel.[^7]
 
+Two further gates make the build itself the rejection point for AC-7's "built" clause, so a broken archive never reaches `check_bundles.py` or a commit:
+
+- **Command surface, before any wheel.** `build_pyz.validate_command_surfaces` imports each selected `commands.py` from `src/` and runs the dispatcher's own `validate_command_surface` (every `@bundle_command` declaration referenced by `COMMANDS`, every manifest entry declared) plus `command_map` (no duplicate or alias-colliding names). All thirteen packaged skills, press included, sit on the decorator surface.
+- **Closure, after Shiv.** Each archive is assembled into the build's temporary directory, handed to `check_bundles.verify_archive` (native members, first-party import closure, per-command dispatch in an isolated subprocess, self-contained execution), and only then moved into `skills/<skill>/scripts/`. A rejected archive is reported as `ERROR: bundle build failed for <skill>: <skill> archive failed the closure gate:` followed by one `!` line per problem, and the checked-in bundle is left untouched.
+
+`check_bundles.py` keeps running the same `_archive_problems` list on rebuilt bundles for currency checks; the build hook is what closes the gap for `just bundle`, `stage_release.py`, and any other `build_bundles` caller. The "or executed" half of AC-7 (a runtime provenance signal at user-execution time) is still open in issue #596.
+
 ## CI and release
 
 `.github/workflows/build-pyz.yml` runs the bundle build, freshness comparison, and isolation tests under both Python 3.12 and 3.14. This keeps 3.12 as the runtime baseline while proving that newer build interpreters produce the same canonical bundle content from the committed external lock. Regular validation installs no Shiv.[^8]
@@ -89,4 +96,4 @@ just bundle
 [^11]: justfile; .github/workflows/build-pyz.yml
 [^12]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py; tests/python/test_bundle_commands.py
 
-_Source: implemented repository architecture · Updated: 2026-08-28 · Supersedes: committed internal-wheel hashes, inaccurate bundle-comparison wording, and implicit command registration_
+_Source: implemented repository architecture · Updated: 2026-09-09 · Supersedes: committed internal-wheel hashes, inaccurate bundle-comparison wording, implicit command registration, and the literal `Command(...)` manifest form_
