@@ -17,7 +17,7 @@ In default and `--auto` modes, run checkout and `/melt` before `/cure`.
 Treat a resolved merge as a publishable change.
 If `/melt` cannot resolve the conflicts, write `status: halt: merge-conflicts-need-human` and stop.
 Run terminal `/plate` after every approved reply posts.
-Then run `affinage.pyz pr-status` again to confirm that the conflicts are gone.
+Then run `python3 skills/affinage/scripts/affinage.pyz pr-status` again to confirm that the conflicts are gone.
 
 In `--safe` mode, require approval before checkout and `/melt`.
 Include `Resolve merge conflicts` in the cure selection options.
