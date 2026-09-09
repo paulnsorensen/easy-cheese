@@ -9,7 +9,7 @@ The record gives evidence for a route that `press-route` already selected.
 Run the command once for each attempt. Run it from the project root after `press-route`:
 
 ```sh
-python3 "skills/press/scripts/press.pyz" press-telemetry \
+python3 skills/press/scripts/press.pyz press-telemetry \
   .cheese/press/outer-tdd-gates.attempt-1.telemetry-request.json
 ```
 

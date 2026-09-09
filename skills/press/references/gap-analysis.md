@@ -59,7 +59,7 @@ Each attempt uses separate candidate and route paths. Never reuse or overwrite a
 Run this command from the project root. Use the route request for the current attempt:
 
 ```sh
-python3 "skills/press/scripts/press.pyz" press-route \
+python3 skills/press/scripts/press.pyz press-route \
   .cheese/press/outer-tdd-gates.attempt-1.route.json
 ```
 
