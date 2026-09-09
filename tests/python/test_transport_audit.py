@@ -184,7 +184,7 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
     ),
     (
         "skills/mold/references/handshake.md",
-        "ask the user to choose the action: **create/link now** or "
+        "An edited destination also names the action: **create/link now** or "
         + "**leave prepared**",
         "mechanical fast-path: create/link-now vs leave-prepared is the "
         + "operational disposition of an already-approved follow-up unit, "

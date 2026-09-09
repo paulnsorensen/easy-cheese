@@ -104,7 +104,7 @@ Each settled consequential fork must appear in Approach, Interface sketches, and
 
 Curdle requires the **two-key handshake**. It requires an explicit user verb, such as `curdle` or `ship it`. It also requires the agent's coherence self-check. Present the validated typed `CurdPlan`'s `N curds / M waves` with the final approval request in Flow step 5; on Light's single-curd path there is no plan, so present the spec alone and mark the plan boxes `n/a`. See `references/handshake.md` for the checklist, mandatory gates, and override semantics.
 
-Before the handshake runs, also perform the **agent-introduced-scope** check. Flag each noun in Approach / Decisions / Interface sketches that the user did not type. Require explicit approval for each term before extraction. See `references/handshake.md` § Agent-introduced scope for the full procedure and single-chokepoint guarantee.
+Before the handshake runs, present the **scope audit table** once: agent-introduced nouns, non-goals, entity bindings, and follow-ups, each with a default. One confirm approves the defaults; only leverage rows and unresolved bindings need their own verb. Procedure: `references/handshake.md` § Scope audit table.
 
 If any gate is unmet, propose the smallest next question, evidence check, or planner correction. Do the same if the typed plan remains invalid after one retry. Write artifacts only after both keys pass.
 
