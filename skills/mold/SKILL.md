@@ -11,9 +11,9 @@ Ceremony scales to the job. The Bounds pass picks one of three tiers from `refer
 
 ## Flow
 
-1. **Bounds pass** — map every input's goals and **non-goals** before routing; ask the user rather than assume. Open the `Goal / Decided / Asking / [AGENT-DECIDED]` ledger with the goal pinned as one sentence; only an explicit user fork changes it. Run the shape check, then announce the tier with its reason (`references/tiers.md`). Quick exits here: one fast confirm, then `## Agent-invoked mini-spec mode`. Upgrade the tier whenever the evidence changes; never downgrade silently.
+1. **Bounds pass** — open the `Goal / Decided / Asking / [AGENT-DECIDED]` ledger with the goal pinned as one sentence; only an explicit user fork changes it. Map every input's goals and **non-goals** as one `[AGENT-DECIDED]` line; ask the user only when the goal is genuinely unknown or a leverage trigger fires. Run the shape check, then announce the tier with its reason (`references/tiers.md`). Quick exits here: one fast confirm, then `## Agent-invoked mini-spec mode`. Upgrade the tier whenever the evidence changes; never downgrade silently.
 2. **Route** — choose the secondary mode from `references/modes.md`, announce it, and correct false premises first.
-3. **Dialogue** — consequential forks are the user's to pick. Supply options, trade-offs, and evidence before you ask. Ground each critical claim through code, the [Validate Cycle](references/validate-cycle.md), or a [Prototype Cycle](references/prototype-cycle.md). Resolve every contradiction. Render the decision map after three consecutive fork questions, or on request.
+3. **Dialogue** — consequential forks are the user's to pick. A fork is consequential per the leverage line in `../age/references/voice.md`. Every other fork is `[AGENT-DECIDED]`. Supply options, trade-offs, and evidence before you ask. Ground each critical claim through code, the [Validate Cycle](references/validate-cycle.md), or a [Prototype Cycle](references/prototype-cycle.md). Resolve every contradiction. Render the decision map after three consecutive fork questions, or on request.
 4. **Sketch** — For work across modules or with a new public interface, run `references/shape-check.md`. Bind identity and role nouns to code referents. Lock seams as pseudocode signatures.
 5. **Plan for approval** — run the fresh-context fork-coherence taste test with `mold.pyz taste-test` and persist its digest-bound pass; a failure reopens only named forks, and the third failed verdict stops. Light with one expected curd stops here: no planner, and the handoff is `/cook --auto <spec-path>`. Otherwise dispatch a typed `PlannerRequest`, validate its `PlannerResultWriterView` (one retry, then stop before the handshake), normalize on the host, and persist only the typed `PlannerResult` and `CurdPlan`. A legacy projection needs an explicit migration request and must be lossless or `UnsupportedProjection`. Present the plan's semantic curds and waves at the handshake. See `references/curdle.md` § "Pre-approval typed planner dispatch".
 6. **Two-key handshake** — Before extraction, the user and agent must agree to the draft spec and displayed typed plan. The user provides an explicit verb. The agent performs a coherence self-check. Neither key changes nor disappears. See `references/handshake.md`.
@@ -66,7 +66,7 @@ Beyond source-code routing there are mold-specific tools:
 
 ### Gate graph
 
-`python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Text targets need no binary. Image targets use Mermaid when Graphviz is unavailable. Tests keep gate nodes aligned with the handshake checklist. See `references/gate-graph.md`.
+`python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Image targets use Mermaid when Graphviz is unavailable. Tests keep gate nodes aligned with the handshake checklist. See `references/gate-graph.md`.
 
 ### Gate applicability and Test Contracts
 
@@ -126,14 +126,14 @@ The digest's `mode` is orientation, not a skill. Render the fixed blast-radius m
 ## Rules
 
 - Dialogue first; artifacts are the by-product.
-- **Tiered lettered options.** Consequential forks use `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md`. Never decide them silently. Minor mechanics use `[AGENT-DECIDED]` with a vetoable alternative. A fork is valid only after its depth was contributed in-dialogue first. Precede every structured question with visible prose that weighs the fork and the evidence. Keep one open picker.
-- **Altitude tag.** Every `Asking` fork names the acceptance criterion, public seam, or non-goal it moves. A fork that moves none is `[AGENT-DECIDED]` or a follow-up candidate, never a user question.
+- **Tiered lettered options.** Consequential forks use `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md`. Never decide them silently. Everything below the leverage line is `[AGENT-DECIDED]` by default: make the call, log a one-line vetoable alternative in the ledger, and do not ask. A fork is valid only after its depth was contributed in-dialogue first. Precede every structured question with visible prose that weighs the fork and the evidence. Keep one open picker.
+- **Altitude tag.** Every `Asking` fork names the acceptance criterion, public seam, or non-goal it moves. A fork that moves none, or that sits below the leverage line, is `[AGENT-DECIDED]` or a follow-up candidate, never a user question.
 - **Decision ledger.** Each round prints `Goal / Decided / Asking / [AGENT-DECIDED]`, the goal verbatim. Curdle persists consequential decisions to [ADRs](references/adr.md) and minor ones to the spec. The taste verdict names every settled consequential entry exactly once.
 - **Decision map and fork-round cap.** Stop after three consecutive fork rounds that add no new evidence, or three consecutive forks that fail the altitude tag, or when the user requests a decision map. Show completed forks, remaining forks, and a ready or blocked verdict. A fourth round requires new grounding, a delegated digest, or a `/wheypoint` checkpoint. The map shows ledger state. It does not create an artifact.
 - Do not implement code.
 - Do not write production files before the approval gate.
 - Do not silently settle uncertain claims.
-- Apply the shared voice kernel at `../age/references/voice.md`. Correct false premises. Mark each critical claim's confidence as `certain | speculating | don't know`. Steelman before you dismiss. Put design-shaping decisions to the user. Let depth inform each question, but never let it replace the question.
+- Apply the shared voice kernel at `../age/references/voice.md`. Correct false premises. Mark each critical claim's confidence as `certain | speculating | don't know`. Steelman before you dismiss. Put consequential forks to the user; depth informs the question, never replaces it.
 
 The schema entanglement behind curdle's spec-template and cook's writer views is phase registry × schema catalog × models per transition. The generated [`../cheese/references/schema-intertwine.md`](../cheese/references/schema-intertwine.md) documents it.
 
