@@ -12,9 +12,11 @@ The user overrides with the `quick`, `light`, or `full` knob at any time. Mold u
 
 | Tier | Enter when every condition holds | Runs | Skips | Artifact → handoff |
 | --- | --- | --- | --- | --- |
-| **Quick** | Cook's standalone fast-path check passes on the bounded ask ([`../../cook/SKILL.md`](../../cook/SKILL.md) § Standalone fast-path); shape-check verdict `low`, or skipped as greenfield or a single private function; no consequential fork open after bounds | Bounds, one wiki probe, one fast confirm (`go`, `yes`, `ship it`) | Explore, Shape, Sketch, Grill, Validate and Prototype cycles, fork taste test, typed planner, handshake checklist, ADRs, follow-up publication | mini-spec through [`mini-spec-mode.md`](mini-spec-mode.md), still gated by `validate-spec --strict` → `/cook --auto <spec-path>` |
+| **Quick** | Cook's standalone fast-path check passes on the bounded ask ([`../../cook/SKILL.md`](../../cook/SKILL.md) § Standalone fast-path), which includes zero fired leverage triggers ([`../../cheese/references/routing-policy.md`](../../cheese/references/routing-policy.md) § Leverage triggers); shape-check verdict `low`, or skipped as greenfield or a single private function; no consequential fork open after bounds | Bounds, one wiki probe, one fast confirm (`go`, `yes`, `ship it`) | Explore, Shape, Sketch, Grill, Validate and Prototype cycles, fork taste test, typed planner, handshake checklist, ADRs, follow-up publication | mini-spec through [`mini-spec-mode.md`](mini-spec-mode.md), still gated by `validate-spec --strict` → `/cook --auto <spec-path>` |
 | **Light** | Goal is clear after bounds; verdict `low` or `medium`; at most two consequential forks; no new public seam across modules; one expected curd | Bounds, Ground, Shape for the open forks, Sketch only when a public seam changes, fork taste test, two-key handshake, Curdle phase one | Explore; Grill unless the user asks or a fork turns high-blast; typed planner and `publish` (one curd needs no `CurdPlan`); issue-draft publication | full spec (`source: mold-handshake`) → `/cook --auto <spec-path>` |
 | **Full** | Anything else: verdict `high` or `[?]`, three or more forks, a new cross-module public seam, two or more expected curds, a Diagnose input, or the `full` knob | The whole Flow | Nothing | spec + `PlannerResult` + `CurdPlan` → `mold.pyz publish` pointer → `## Handoff` menu |
+
+A fired leverage trigger rules Quick out: the fork it names is consequential, so the ask enters Light or Full by the rows above. Leverage picks whether the user steers; the verdict, fork count, and curd count pick how much of the Flow runs.
 
 The fast confirm is Quick's user key and `validate-spec --strict` is its agent key. The checklist in [`handshake.md`](handshake.md) applies to Light and Full only. Light marks each handshake box that does not apply as `n/a: <reason>` out loud rather than leaving it unchecked. `curdle anyway` is never needed to leave a gate that was never entered.
 
@@ -36,6 +38,7 @@ Downgrade only on the user's knob. Say what the lower tier skips before continui
 - The agent-introduced-scope check: every distinguishing noun traces to the user's words.
 - `validate-spec --strict` on whatever artifact ships.
 - The user's say on every consequential fork.
+- The leverage-trigger check: a fired trigger never lands in Quick.
 
 ## Relationship to `/cheese`
 

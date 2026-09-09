@@ -60,6 +60,7 @@ Read `references/auto-mode.md`, `references/fan-pathway.md`, and `../cheese/refe
 `/cook` bypasses `/mold` only when the inputs, outputs, scope, and verification are clear.
 The task must name a bug or call site in one or two files.
 The task must also have a failing test or an expected-output check.
+No leverage trigger may fire; see `../cheese/references/routing-policy.md` § Leverage triggers.
 Derive a slug.
 Then restate the **Contract**.
 Route the task to `/mold` if an ambiguity check fails.

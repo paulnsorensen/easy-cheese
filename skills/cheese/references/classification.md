@@ -76,14 +76,15 @@ If the user dropped a debug or implementation signal *and* asked for discussion 
 
 ### mold (`/mold`)
 
-Fuzzy idea or multi-module feature where a spec is the right next artifact.
+High-leverage work where the user must steer the design, or an explicit ask for a spec.
 
 | Signal | Example |
 | --- | --- |
-| Feature description without acceptance criteria | "add dark mode", "support webhooks" |
-| Touches more than one module or introduces a new public seam | "a new authn flow across web + worker" |
+| Any leverage trigger fires (see [`routing-policy.md`](routing-policy.md) § Leverage triggers) | "a new authn flow across web + worker" (`auth`, `cross-slice-dep`) |
 | Asks for a spec, plan, or design doc | "shape this into a spec", "design X" |
 | Issue reference whose body is itself a fuzzy idea | `#87` with "we should support…" body |
+
+A feature description without acceptance criteria is not a mold signal on its own. When no trigger fires, it is a `cook` intent that tier 1 turns into a mini-spec.
 
 Optional pre-step: route `/briesearch` first when the user calls out external evidence as missing.
 
@@ -100,7 +101,7 @@ Do not restate the check here. The signals below only recognize the shape.
 | Single-file fix with named function or test | "make `tail` count bytes correctly when no trailing newline" |
 | A request that passes Cook's standalone fast-path check | the check in `skills/cook/SKILL.md` |
 
-Downgrade to `mold` when any part of Cook's check is borderline.
+Downgrade to `mold` only when a leverage trigger fires. A borderline check with zero fired triggers is a tier-1 mini-spec, not a mold.
 
 Before a tier-1 `cook` dispatch, run the specification discovery check in `skills/cheese/references/escalation.md`.
 Reuse a matching specification instead of writing a duplicate.
@@ -174,7 +175,7 @@ When two intents are plausible, apply in order:
 
 1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Commit", "publish", or "stack PRs" → `plate`. "Respond to comments" or "fix the build" on a pull request → `affinage`.
 2. **Strongest signal wins.** A spec path beats free text. A stack trace beats a feature description. A PR URL beats a path glob.
-3. **Smallest committed scope wins.** Prefer `cook` over `mold` when the fast-path checks pass. Only prefer `culture` over `mold` when the user has explicitly opted out of writes.
+3. **Lowest leverage wins.** Prefer `cook` over `mold` unless a leverage trigger fires. Missing acceptance criteria is a mini-spec, not a mold. Only prefer `culture` over `mold` when the user has explicitly opted out of writes.
 4. **If still tied, clarify.** Ask one question; do not guess.
 
 ## Confidence cues
@@ -192,7 +193,8 @@ When two intents are plausible, apply in order:
 | `$ARGUMENTS` | Intent | Reason |
 | --- | --- | --- |
 | `.cheese/specs/dark-mode.md` | cook | spec path resolves; fast-path obvious |
-| `add dark mode to the web client` | mold | feature scope, no spec, multi-module likely |
+| `add dark mode to the web client` | cook | feature scope, zero triggers fire; tier 1 mints a mini-spec, then `/cook --auto` |
+| `add SSO login to the web client` | mold | `auth` fires; user steers the design |
 | `PR#142` | age | PR reference, no fix verb |
 | `respond to the review comments on PR#142` | affinage | review-feedback verb on a pull request |
 | `fix the failing build on PR#142` | affinage | failing checks on an open pull request |
@@ -200,7 +202,7 @@ When two intents are plausible, apply in order:
 | stack trace pasted | debug | trace present, cause not stated |
 | `what's the best rate limiter library for fastify` | research | external library question |
 | `help me think about splitting orders into a sub-slice — don't write anything yet` | rubber-duck | explicit no-writes opt-out |
-| `help me think about splitting orders into a sub-slice` | mold | fuzzy multi-module idea; agent thinks via `/culture` internally, then routes to `/mold` |
+| `help me think about splitting orders into a sub-slice` | mold | `new-slice` fires; agent thinks via `/culture` internally, then routes to `/mold` |
 | `commit this but do not push` | plate | commit-only transaction |
 | `open a PR` | plate | publication request; plate resolves topology from explicit choice and review shape |
 | `/cheese` | clarify | empty input; ask what they want |

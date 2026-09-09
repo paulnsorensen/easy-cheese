@@ -414,3 +414,102 @@ class TestFastPathProbeAccounting:
             "Never print `probes=0` for a route that read a file or grounded the wiki."
             in body
         )
+
+
+class TestLeverageIsTheCeremonyAxis:
+    """Ceremony scales to leverage, not to ambiguity or noun count.
+
+    The routing docs used to key the cook-versus-mold split on scope size and
+    missing acceptance criteria alone, so low-stakes asks paid for a full mold
+    while high-stakes refactors slipped through as cooks.
+    """
+
+    TRIGGER_IDS: tuple[str, ...] = (
+        "auth",
+        "irreversible",
+        "concurrency",
+        "contract",
+        "destructive",
+        "new-slice",
+        "cross-slice-dep",
+        "invariant-gap",
+    )
+
+    def test_routing_policy_defines_a_closed_trigger_table(self) -> None:
+        body = _text(REFERENCES / "routing-policy.md")
+        assert "## Leverage triggers" in body
+        assert "Hard risk-overrides" not in body
+        for trigger in self.TRIGGER_IDS:
+            assert f"| `{trigger}` |" in body, trigger
+        assert "The list is closed." in body
+        assert "Record fired ids in the spec's `leverage:` frontmatter list." in body
+        section = body[body.index("## Leverage triggers") :]
+        section = section[: section.index("\n## ", 1)]
+        rows = [line for line in section.splitlines() if line.startswith("| `")]
+        assert len(rows) == len(self.TRIGGER_IDS), rows
+        assert "Evaluate the table at classification time" in section
+
+    def test_classification_examples_send_a_zero_trigger_feature_to_cook(self) -> None:
+        body = _text(REFERENCES / "classification.md")
+        assert "| `add dark mode to the web client` | cook |" in body
+        assert "| `add SSO login to the web client` | mold | `auth` fires" in body
+        assert "Downgrade to `mold` only when a leverage trigger fires." in body
+        assert "when any part of Cook's check is borderline" not in body
+
+    def test_weak_spec_match_still_runs_the_trigger_check(self) -> None:
+        body = _text(REFERENCES / "escalation.md")
+        assert "only zero fired triggers mint a new mini-specification" in body
+        assert "write a new mini-specification to avoid the wrong match" not in body
+
+    def test_fired_ids_have_a_carrier_at_every_seam(self) -> None:
+        handoff = _text(REFERENCES / "handoff-gate.md")
+        assert "leverage: [auth, cross-slice-dep]" in handoff
+        curdle = _text(REPO_ROOT / "skills" / "mold" / "references" / "curdle.md")
+        template = curdle[curdle.index("## Spec template") : curdle.index("# <Title>")]
+        assert "leverage: []" in template
+        fan_out = _text(REPO_ROOT / "skills" / "age" / "references" / "fan-out.md")
+        assert "read its `leverage:` frontmatter list" in fan_out
+
+    def test_mold_description_does_not_advertise_fuzzy_feature_asks(self) -> None:
+        body = _text(REPO_ROOT / "skills" / "mold" / "SKILL.md")
+        description = body[: body.index("\n---", 4)]
+        assert "leverage trigger fires" in description
+        assert "zero fired triggers is a `/cook` mini-spec" in description
+        assert "fuzzy idea" not in description
+        assert "I want to add a feature that" not in description
+
+    def test_classification_routes_mold_on_a_fired_trigger(self) -> None:
+        body = _text(REFERENCES / "classification.md")
+        assert "Any leverage trigger fires" in body
+        assert "§ Leverage triggers" in body
+        assert "| Feature description without acceptance criteria |" not in body
+        assert "is not a mold signal on its own" in body
+
+    def test_disambiguation_prefers_the_lowest_leverage(self) -> None:
+        body = _text(REFERENCES / "classification.md")
+        assert "3. **Lowest leverage wins.**" in body
+        assert "Missing acceptance criteria is a mini-spec, not a mold." in body
+        assert "Smallest committed scope wins" not in body
+
+    def test_tier_one_refuses_a_mini_spec_for_a_fired_trigger(self) -> None:
+        body = _text(REFERENCES / "escalation.md")
+        assert "check the leverage triggers in `routing-policy.md`" in body
+        assert "tier 1 never mints a mini-specification for it" in body
+        assert "When zero triggers fire, invoke `/mold`'s agent mode" in body
+
+    def test_mini_spec_mode_carries_and_refuses_on_leverage(self) -> None:
+        body = _text(REPO_ROOT / "skills" / "mold" / "references" / "mini-spec-mode.md")
+        assert "leverage: []" in body
+        assert "When any trigger fires, refuse the mint" in body
+
+    def test_quick_tier_requires_zero_fired_triggers(self) -> None:
+        body = _text(REPO_ROOT / "skills" / "mold" / "references" / "tiers.md")
+        quick = next(line for line in body.splitlines() if line.startswith("| **Quick** |"))
+        assert "zero fired leverage triggers" in quick
+        assert "A fired leverage trigger rules Quick out" in body
+        assert "a fired trigger never lands in Quick" in body
+
+    def test_cook_fast_path_requires_zero_fired_triggers(self) -> None:
+        body = _text(REPO_ROOT / "skills" / "cook" / "SKILL.md")
+        assert "No leverage trigger may fire" in body
+        assert "§ Leverage triggers" in body

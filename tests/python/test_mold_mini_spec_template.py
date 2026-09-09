@@ -24,6 +24,7 @@ created: 2026-09-05
 confidence: medium
 intent: Clarify the Mold documentation.
 blast_radius: low
+leverage: []
 inputs: Existing Mold documentation.
 outputs: Updated Mold documentation.
 agent_resolution: []
@@ -58,7 +59,8 @@ def _template() -> str:
 
 
 @pytest.mark.parametrize(
-    "field", ["status: draft", "created:", "confidence:", "agent_resolution:"]
+    "field",
+    ["status: draft", "created:", "confidence:", "agent_resolution:", "leverage: []"],
 )
 def test_template_declares_each_required_frontmatter_field(field: str) -> None:
     """The validator must read a real value, not a default it invented."""
