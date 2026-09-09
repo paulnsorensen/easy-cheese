@@ -17,6 +17,11 @@ Shiv assembles deterministic wheel members, but ZIP metadata and interpreter
 paths can vary between toolchains. Host-specific fields are canonicalized; a
 source edit that never made it into the committed bundle still fails this gate.
 
+The per-archive AC-7 rejections (native members, import closure, isolated
+command dispatch and execution) run inside `build_pyz.py` through
+`verify_archive` before an archive lands; this checker owns currency and the
+cross-skill `.pyz` reference scan.
+
 Every .pyz must carry Shiv's runtime markers; other zipapp formats are rejected.
 """
 
@@ -29,6 +34,7 @@ import functools
 import hashlib
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -434,7 +440,14 @@ def _import_failure_problems(combined: str) -> list[str]:
     return problems
 
 
-def check_isolated_execution(pyz: Path) -> list[str]:
+def _isolated_env(shiv_root: Path | None) -> dict[str, str] | None:
+    """Point Shiv's extraction cache at a scratch root instead of `~/.shiv`."""
+    if shiv_root is None:
+        return None
+    return {**os.environ, "SHIV_ROOT": str(shiv_root)}
+
+
+def check_isolated_execution(pyz: Path, shiv_root: Path | None = None) -> list[str]:
     """Run the built archive from a scratch cwd with no PYTHONPATH or repo path.
 
     Proves the archive is self-contained: no reliance on the repository
@@ -448,6 +461,7 @@ def check_isolated_execution(pyz: Path) -> list[str]:
             cwd=scratch,
             capture_output=True,
             text=True,
+            env=_isolated_env(shiv_root),
         )
     combined = result.stdout + result.stderr
     problems = [f"isolated execution {p}" for p in _import_failure_problems(combined)]
@@ -512,7 +526,9 @@ def _declared_command_names_from_trees(
     return sorted(names)
 
 
-def _check_command_dispatch(pyz: Path, command_names: Sequence[str]) -> list[str]:
+def _check_command_dispatch(
+    pyz: Path, command_names: Sequence[str], shiv_root: Path | None = None
+) -> list[str]:
     """Every declared command must actually import its handler module.
 
     A bare argv only reaches the dispatcher's own usage branch (exit 2), so
@@ -528,6 +544,7 @@ def _check_command_dispatch(pyz: Path, command_names: Sequence[str]) -> list[str
                 cwd=scratch,
                 capture_output=True,
                 text=True,
+                env=_isolated_env(shiv_root),
             )
         combined = result.stdout + result.stderr
         problems.extend(
@@ -909,30 +926,30 @@ def _parse_against(argv: Sequence[str]) -> str:
     return cast(str, parser.parse_args(argv).against)
 
 
-def _archive_problems(pyz: Path, analysis: _ArchiveAnalysis) -> list[str]:
-    """Every AC-7 rejection for one analysed archive.
-
-    Static inspection (native members, first-party import closure) plus the
-    isolated-subprocess proofs (command dispatch, self-contained execution).
-    """
-    problems = [f"native member: {name}" for name in analysis.native_members]
-    problems += _check_import_closure(analysis)
-    problems += _check_command_dispatch(pyz, analysis.command_names)
-    problems += check_isolated_execution(pyz)
-    return problems
-
-
 def verify_archive(pyz: Path) -> list[str]:
-    """AC-7's 'built' clause for one freshly built archive.
+    """Every per-archive AC-7 rejection for one freshly built archive.
 
-    `build_pyz.py` calls this after every build so the build itself rejects
-    what this gate would. A non-Shiv archive raises ValueError.
+    Static inspection (Shiv layout, native members, first-party import
+    closure) followed by the isolated-subprocess proofs (per-command dispatch,
+    self-contained execution) under a scratch `SHIV_ROOT`. A malformed archive
+    is reported as a problem rather than raised. Cross-skill archive references
+    are a whole-tree property; see `check_pyz_references`.
     """
-    with zipfile.ZipFile(pyz) as archive:
-        analysis = _ArchiveAnalysis.from_archive(
-            archive, validate_shiv=True, parse_first_party=True
-        )
-        return _archive_problems(pyz, analysis)
+    try:
+        with zipfile.ZipFile(pyz) as archive:
+            analysis = _ArchiveAnalysis.from_archive(
+                archive, validate_shiv=True, parse_first_party=True
+            )
+            problems = [f"native member: {name}" for name in analysis.native_members]
+            problems += _check_import_closure(analysis)
+            command_names = analysis.command_names
+    except (ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+        return [f"bundle metadata invalid: {exc}"]
+    with tempfile.TemporaryDirectory(prefix="easy-cheese-shiv-root-") as scratch:
+        shiv_root = Path(scratch)
+        problems += _check_command_dispatch(pyz, command_names, shiv_root=shiv_root)
+        problems += check_isolated_execution(pyz, shiv_root=shiv_root)
+    return problems
 
 
 def _run_checks(against: str, bundle_root: Path) -> int:
@@ -956,17 +973,12 @@ def _run_checks(against: str, bundle_root: Path) -> int:
         problems: list[str] = []
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                analysis = _ArchiveAnalysis.from_archive(
-                    archive, validate_shiv=True, parse_first_party=True
-                )
+                analysis = _ArchiveAnalysis.from_archive(archive, validate_shiv=True)
                 if analysis.manifest is None:
                     raise ValueError("Shiv archive manifest was not computed")
                 rebuilt_manifest = analysis.manifest
-                problems += [f"    ! {p}" for p in _archive_problems(path, analysis)]
             if committed is None:
                 print(f"new Shiv bundle, nothing to compare: {relative}")
-                if problems:
-                    stale.append(f"  {relative}\n" + "\n".join(problems))
                 continue
             with zipfile.ZipFile(io.BytesIO(committed)) as archive:
                 committed_analysis = _ArchiveAnalysis.from_archive(

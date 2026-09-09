@@ -318,7 +318,7 @@ def test_build_cli_preserves_resolver_diagnostics(
 
     assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path), "cook"]) == 1
     diagnostics = capsys.readouterr().err
-    assert "cook" in diagnostics
+    assert "pip" in diagnostics
     assert "subprocess stdout" in diagnostics
     assert "subprocess stderr" in diagnostics
 

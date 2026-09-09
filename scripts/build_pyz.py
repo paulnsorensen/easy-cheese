@@ -19,7 +19,10 @@ from collections.abc import Callable, Iterable, Sequence
 from email.parser import Parser
 from pathlib import Path
 from types import ModuleType
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from easy_cheese.shared.bundle_commands import Command
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
@@ -51,14 +54,6 @@ def _import_from(root: Path, name: str) -> ModuleType:
     if entry not in sys.path:
         sys.path.insert(0, entry)
     return importlib.import_module(name)
-
-
-_ = _import_from(SRC_ROOT, "easy_cheese")
-from easy_cheese.shared.bundle_commands import (  # noqa: E402
-    Command,
-    command_map,
-    validate_command_surface,
-)
 
 
 def _compiler_module(name: str) -> ModuleType:
@@ -398,13 +393,26 @@ def validate_command_surfaces(skills: Iterable[str]) -> None:
     Runs the dispatcher's own two-way check plus `command_map`'s duplicate and
     alias-collision rejection against each manifest under `src/` before any
     wheel is built, so a broken surface fails the build rather than the bundle.
+    Every failure names the skill.
     """
+    package = _import_from(SRC_ROOT, "easy_cheese")
+    origin = Path(package.__file__ or "").resolve()
+    if not origin.is_relative_to(SRC_ROOT):
+        raise RuntimeError(
+            f"easy_cheese resolved from {origin}, not {SRC_ROOT}; "
+            + "the surface gate must inspect the sources that get packaged"
+        )
+    from easy_cheese.shared.bundle_commands import command_map, validate_command_surface
+
     for skill in skills:
-        package = skill.replace("-", "_")
-        module = _import_from(SRC_ROOT, f"easy_cheese.skills.{package}.commands")
-        commands = cast("Sequence[Command]", getattr(module, "COMMANDS"))
-        validate_command_surface(module, commands)
-        _ = command_map(commands)
+        module_name = f"easy_cheese.skills.{skill.replace('-', '_')}.commands"
+        try:
+            module = importlib.import_module(module_name)
+            commands = cast("Sequence[Command]", getattr(module, "COMMANDS"))
+            validate_command_surface(module, commands)
+            _ = command_map(commands)
+        except (ImportError, SyntaxError, AttributeError, TypeError, ValueError) as exc:
+            raise ValueError(f"{skill}: {exc}") from exc
 
 
 def build_wheelhouse(
@@ -539,17 +547,33 @@ def _build_from_wheelhouse(
     return target
 
 
+def _check_bundles() -> ModuleType:
+    return _import_from(BUILD_SCRIPTS_ROOT, "check_bundles")
+
+
 def _verify_built_archive(skill: str, archive: Path) -> None:
-    """AC-7's 'built' clause: the build itself rejects what the closure gate would."""
+    """AC-7's per-archive rejections, applied before the archive lands."""
     verify = cast(
-        Callable[[Path], list[str]],
-        getattr(_import_from(BUILD_SCRIPTS_ROOT, "check_bundles"), "verify_archive"),
+        Callable[[Path], list[str]], getattr(_check_bundles(), "verify_archive")
     )
     problems = verify(archive)
     if problems:
         raise RuntimeError(
             f"{skill} archive failed the closure gate:\n"
             + "\n".join(f"  ! {problem}" for problem in problems)
+        )
+
+
+def _check_archive_references() -> None:
+    """AC-7's cross-skill clause: no skill doc or source may name another skill's archive."""
+    check = cast(
+        Callable[[], list[str]], getattr(_check_bundles(), "check_pyz_references")
+    )
+    violations = check()
+    if violations:
+        raise RuntimeError(
+            "cross-skill archive references:\n"
+            + "\n".join(f"  ! {violation}" for violation in violations)
         )
 
 
@@ -560,6 +584,7 @@ def build_bundles(
     unknown = sorted(set(destinations) - set(SKILLS))
     if unknown:
         raise ValueError(f"unknown skill(s): {', '.join(unknown)}")
+    _check_archive_references()
     with tempfile.TemporaryDirectory(prefix="easy-cheese-build-") as temporary:
         wheelhouse = Path(temporary) / "wheelhouse"
         build_wheelhouse(wheelhouse, destinations)
@@ -622,7 +647,7 @@ def main(argv: list[str]) -> int:
         built = build_bundles(destinations)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(
-            f"ERROR: bundle build failed for {', '.join(selected)}: {exc}",
+            f"ERROR: bundle build failed: {exc}",
             file=sys.stderr,
         )
         if isinstance(exc, subprocess.CalledProcessError):
