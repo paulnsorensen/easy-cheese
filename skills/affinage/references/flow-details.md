@@ -43,7 +43,7 @@ Call `age_route.route(score=<float>, ...)` with these values:
 This route includes comment count and CI class.
 It can increase fan-out for a small PR with many comments or red CI.
 
-If only the bundle exists, pipe JSON to `affinage.pyz age-route`.
+If only the bundle exists, pipe JSON to `python3 skills/affinage/scripts/affinage.pyz age-route`.
 The command reads JSON from standard input and writes route JSON to standard output.
 Pass the returned `n`, `lenses`, and `effort` to `/age`.
 Then treat each `/age` finding as an additional claim.

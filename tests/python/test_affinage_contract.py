@@ -41,7 +41,7 @@ def test_melt_leaves_the_resolution_for_plate() -> None:
 def test_remote_status_recheck_follows_publication() -> None:
     conflict = _read(REFERENCES / "merge-conflict.md")
     publish = conflict.index("Run terminal `/plate` after every approved reply posts.")
-    recheck = conflict.index("Then run `affinage.pyz pr-status` again")
+    recheck = conflict.index("Then run `python3 skills/affinage/scripts/affinage.pyz pr-status` again")
     assert publish < recheck, "the remote status recheck must follow terminal /plate"
 
 
