@@ -103,9 +103,11 @@ The independent Cook mode signal follows the curd count and blast radius:
 
 The script counts; it cannot verify that the candidate curds are file-disjoint
 (criterion 4) from spec text alone. Before a parallel wave-plan runs, mold
-confirms independence with the user — typically by naming the file footprints
-captured in `## Interface sketches` and asking whether any two candidate
-curds touch the same file. If they do, the decomposer folds the shared-file
+confirms independence with the user — typically by naming each curd's `scope`
+from the typed `CurdPlan` (the planner derives file footprints from the
+Placement block's `slice:` and `public interface:` lines plus the shape-check
+importer list; `## Interface sketches` itself carries no file paths) and
+asking whether any two candidate curds touch the same file. If they do, the decomposer folds the shared-file
 curds back into the linear chain; the dispatched skill is `/cook` either way.
 
 ## When tilth / Python is unavailable
