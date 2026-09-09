@@ -50,7 +50,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 - `crust delta:` new exports, cross-slice imports, or contract changes, or `none`
 - `arrows:` any dependency direction the change adds, checked against [`../../cheese/references/sliced-bread.md`](../../cheese/references/sliced-bread.md)
 
-Run the shape check (`shape-check.md`) before drafting when the change touches multiple modules or introduces a new public interface; print its summary block first. Single-module, internals-only sketches note "shape check skipped: single-module change". Do not write bodies, helper signatures, or internal pseudocode in Sketch; those belong to `/cook`. A non-empty `crust delta` is a consequential fork.
+Run the shape check (`shape-check.md`) before drafting when the change touches multiple modules or introduces a new public interface; print its summary block first. No block, no sketch. Single-module, internals-only sketches note "shape check skipped: single-module change"; that skip line satisfies the "no block, no sketch" precondition, as `shape-check.md` § When to skip defines for every sanctioned skip. Do not write bodies, helper signatures, or internal pseudocode in Sketch; those belong to `/cook`. A non-empty `crust delta` is a consequential fork.
 
 **Acceptance notation (EARS):** for every public interface line, emit acceptance criteria in EARS form: `WHEN <trigger> THE SYSTEM SHALL <response>`. If the trigger cannot be stated precisely (e.g. pure internal utilities), fall back to prose with a `[prose-fallback]` marker.
 
