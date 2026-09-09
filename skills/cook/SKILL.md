@@ -68,7 +68,7 @@ Route the task to `/mold` if an ambiguity check fails.
 ## Flow
 
 1. **Contract** — Confirm behavior, non-goals, scope, gates, and applicability.
-   Print the shape-check block from `../mold/references/shape-check.md` inside the Contract, or the line `shape check skipped: single-module change` for a one-module change with no new export. No block, no code.
+   Print the shape-check block from `../mold/references/shape-check.md` inside the Contract, or the line `shape check skipped: single-module change` per `shape-check.md` § When to skip. No block, no code.
    If `.cheese/glossary/<slug>.md` exists, use its canonical terms.
 2. **Implement** — Use inner RED → GREEN for behavior changes.
    Use the requested non-behavior path for closed N/A work.
