@@ -749,13 +749,18 @@ def check_pyz_references() -> list[str]:
         skill = _owning_skill(path)
         if skill in _RETIRED_REDIRECT_SKILLS:
             continue
+        relative = path.relative_to(REPO_ROOT)
         try:
             text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
+        except UnicodeDecodeError:
+            continue  # binary content carries no archive references
+        except OSError as exc:
+            # A present-but-unreadable file was never inspected; say so
+            # rather than letting the gate go green on it.
+            violations.append(f"{relative}: unreadable ({exc.strerror or exc})")
             continue
         for match in _PYZ_REFERENCE.finditer(text):
             archive_name = match.group(0).removesuffix(".pyz")
-            relative = path.relative_to(REPO_ROOT)
             if archive_name == "common":
                 violations.append(
                     f"{relative}: references obsolete shared bundle common.pyz"
