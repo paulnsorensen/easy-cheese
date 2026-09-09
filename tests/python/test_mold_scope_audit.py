@@ -30,7 +30,10 @@ class TestOneTableOneConfirm:
     def test_table_is_presented_once_before_the_handshake(self) -> None:
         section = _section(_text(HANDSHAKE), "## Scope audit table")
         assert "one table, presented once, before the handshake" in section
-        assert "One confirm of the table approves every default." in section
+        assert (
+            "One confirm of the table approves every default except the rows marked `needs your verb`."
+            in section
+        )
         for kind in ("| scope |", "| non-goal |", "| entity |", "| follow-up |"):
             assert kind in section, kind
 
@@ -75,7 +78,8 @@ class TestOneTableOneConfirm:
         assert "The default destination is **non-goal only**" in section
         assert "by confirming the table's defaults or editing the rows" in section
         assert "Each unit is one `follow-up` row whose cell lists its members" in section
-        assert "A semantic match becomes the row's default destination, `link #<id>`" in section
+        assert "A semantic match is surfaced on the row as a recommended `link #<id>`" in section
+        assert "the default destination stays non-goal only" in section
         assert "approves the destination by confirming the row's default or editing it" in section
 
     def test_curdle_anyway_accepts_the_defaults(self) -> None:

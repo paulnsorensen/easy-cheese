@@ -63,7 +63,7 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
 
 ## Scope audit table
 
-The agent-introduced scope, non-goals, entity-referent, and follow-up audits below populate **one table, presented once, before the handshake**. Each row carries a default disposition. One confirm of the table approves every default. A row needs its own explicit verb only when it fires a leverage trigger (`../../cheese/references/routing-policy.md` § Leverage triggers) or is an unresolved ALIAS / NEW ENTITY binding. A row fires a trigger when the term, bullet, or noun it names would itself fire one of the eight ids if kept: an auth knob fires `auth`, a new export fires `contract`, a new domain fires `new-slice`. Such a row renders `needs your verb` in its Default cell, and the confirm never covers it. The grep and semantic search that populate the rows still run; the per-row approval round does not.
+The agent-introduced scope, non-goals, entity-referent, and follow-up audits below populate **one table, presented once, before the handshake**. Each row carries a default disposition. One confirm of the table approves every default except the rows marked `needs your verb`. A row needs its own explicit verb only when it fires a leverage trigger (`../../cheese/references/routing-policy.md` § Leverage triggers) or is an unresolved ALIAS / NEW ENTITY binding. A row fires a trigger when the term, bullet, or noun it names would itself fire one of the eight ids if kept: an auth knob fires `auth`, a new export fires `contract`, a new domain fires `new-slice`. Such a row renders `needs your verb` in its Default cell, and the confirm never covers it. The grep and semantic search that populate the rows still run; the per-row approval round does not.
 
 ```
 Scope audit:
@@ -75,7 +75,7 @@ Scope audit:
 | 4 | follow-up | <unit: member, member> | dialogue | non-goal only | — |
 | 5 | scope | <noun> | citation | needs your verb | contract |
 | 6 | entity | <noun> | search | needs your verb (ALIAS <referent>) | — |
-Confirm the table to accept every default. Rows marked `needs your verb` block until you name a verb for each.
+Confirm the table to accept the defaults. Rows marked `needs your verb` block until you name a verb for each.
 ```
 
 Curdle runs the table as the terminal backstop. It remains the single chokepoint that downstream skills trust (RC3).
@@ -105,7 +105,7 @@ Curdle is the single chokepoint for this gate. Downstream skills (`/cook`, etc.)
 Procedure:
 
 1. For each `Non-goals` bullet, grep prior user turns for a statement that puts the item out of scope. Search only the user's typed messages. Examples include "don't bother with X", "leave Y alone", and an explicit deferral.
-2. **Any bullet with no such user statement is agent-introduced.** Mark it `[AGENT-INTRODUCED]` inline and add a `non-goal` row to the scope audit table with default `keep`. Non-goals the bounds pass authored as `[AGENT-DECIDED]` are agent-introduced by definition and enter the table the same way. The user keeps, drops, or rewords it by confirming or editing the row.
+2. **Any bullet with no such user statement is agent-introduced.** Mark it `[AGENT-INTRODUCED]` inline and add a `non-goal` row to the scope audit table with default `keep`. Non-goals that the bounds pass authored as `[AGENT-DECIDED]` are agent-introduced by definition and enter the table the same way. The user keeps, drops, or rewords it by confirming or editing the row.
 3. Record approved-but-flagged non-goals in the same `agent_introduced_scope` frontmatter list, so the paper trail survives downstream.
 4. Add every audited non-goal to the follow-up candidate set, including approved `[AGENT-INTRODUCED]` bullets. Candidate status preserves the scope boundary without accepting future work.
 
@@ -116,7 +116,7 @@ This audit is the `Non-goals audit` coherence gate. It is the `non_goals_audit` 
 Before the two-key handshake, dispose of every follow-up candidate in one batch: the `follow-up` rows of the scope audit table. This process extends the existing `Non-goals audit` gate. It does not add or rename a gate. The default destination is **non-goal only**; every other destination is a user edit on the row.
 
 1. Group related candidates into independently deliverable units. Each unit is one `follow-up` row whose cell lists its members; confirming the table accepts the grouping, and the user splits or merges by editing the row.
-2. Search GitHub Issues and Hallouminate roadmap goals when discovery is available. A semantic match becomes the row's default destination, `link #<id>`, in place of non-goal only; the user approves the reuse by confirming the row.
+2. Search GitHub Issues and Hallouminate roadmap goals when discovery is available. A semantic match is surfaced on the row as a recommended `link #<id>`, not adopted as the default: the default destination stays non-goal only, and the user adopts the link by editing the row.
 3. Recommend one destination per unit:
    - **non-goal only** — keep the scope boundary, create no follow-up artifact, and offer no action choice;
    - **GitHub Issue** — use for discrete, independently actionable work;
