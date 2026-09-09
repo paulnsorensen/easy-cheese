@@ -51,7 +51,7 @@ Full procedure, the mini-spec schema, and the `## Provenance` rules: `references
 
 Call source-code search, read, and edit backends according to [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md). Shape checks use semantic caller search plus dependency context; procedure: `references/shape-check.md`.
 
-Beyond source-code routing there are mold-specific tools:
+Mold-specific tools beyond source-code routing:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
@@ -88,7 +88,7 @@ gate_applicability:
 `ui_surface` is required on the Mold production path: `browser` means every
 Test Contract names an existing browser/E2E interface and outer seam,
 `non-browser` is explicit and never inferred from prose, and `not-applicable`
-covers closed non-behavior classes, including appearance-only.
+is required for closed non-behavior classes including appearance-only.
 `red-required` requires `behavior` plus a complete `## Test Contracts` table
 with one executable red row; `not-applicable` requires a closed class, a
 reason, and no contracts. Mold never infers applicability. Row-level rules:
