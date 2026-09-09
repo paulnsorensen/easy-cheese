@@ -288,6 +288,32 @@ def test_check_pyz_references_flags_a_website_doc_naming_a_foreign_skill_pyz(
     ]
 
 
+def test_check_pyz_references_reports_an_unreadable_referenced_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A scanned file that exists but cannot be read must fail the gate, not vanish."""
+    skill_dir = tmp_path / "skills" / "demo"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").symlink_to(skill_dir / "missing-target.md")
+    monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
+
+    violations = check_bundles.check_pyz_references()
+
+    assert violations == ["skills/demo/SKILL.md: unreadable (No such file or directory)"]
+
+
+def test_check_pyz_references_skips_binary_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Undecodable bytes carry no archive references and are not a violation."""
+    skill_dir = tmp_path / "skills" / "demo"
+    skill_dir.mkdir(parents=True)
+    _ = (skill_dir / "SKILL.md").write_bytes(b"\xff\xfe cook.pyz")
+    monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
+
+    assert check_bundles.check_pyz_references() == []
+
+
 def _analysis(members: dict[str, bytes]) -> check_bundles._ArchiveAnalysis:  # pyright: ignore[reportPrivateUsage]
     data = BytesIO()
     with zipfile.ZipFile(data, "w") as archive:
