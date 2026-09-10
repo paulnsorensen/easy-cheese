@@ -46,7 +46,8 @@ ERROR_TYPES = {
 
 def _load_fixture(filename: str) -> dict[str, object]:
     return cast(
-        "dict[str, object]", json.loads(FIXTURE_FILES[filename].read_text(encoding="utf-8"))
+        "dict[str, object]",
+        json.loads(FIXTURE_FILES[filename].read_text(encoding="utf-8")),
     )
 
 
@@ -412,7 +413,7 @@ def _stable_observation(kind: str, value: object) -> dict[str, object]:
             "deliverable_artifact_ids": [
                 artifact.artifact_id for artifact in value.deliverables
             ],
-            "runtime_refs": list(value.runtime_refs),
+            "provenance_refs": list(value.provenance_refs),
         },
         "coverage": {
             "expected_criterion_ids": list(value.expected_criterion_ids),
@@ -448,7 +449,58 @@ def test_normalization_case_is_byte_exact_and_stable(case: dict[str, object]) ->
     writer_view = cast("dict[str, object]", writer_view)
     kind = writer_view["kind"]
     assert isinstance(kind, str)
-    assert (
-        _stable_observation(kind, normalized.value)
-        == expected_stable
+    assert _stable_observation(kind, normalized.value) == expected_stable
+
+
+def _curd_result_normalization_case() -> dict[str, object]:
+    case = next(
+        item
+        for item in NORMALIZATION_CASES
+        if item["name"] == "curd-result-host-identity-provenance-and-criterion-coverage"
     )
+    return cast("dict[str, object]", json.loads(json.dumps(case)))
+
+
+def test_curd_result_normalization_associates_criteria_by_id() -> None:
+    case = _curd_result_normalization_case()
+    writer = cast("dict[str, object]", case["writer_view"])
+    payload = cast("dict[str, object]", writer["payload"])
+    rows = cast("list[object]", payload["criterion_results"])
+    rows.reverse()
+
+    normalized = normalize_agent_output(writer, case["host_invocation"])
+
+    assert isinstance(normalized.value, CurdResult)
+    assert [
+        (row.criterion_id, row.disposition.value)
+        for row in normalized.value.criterion_results
+    ] == [
+        ("criterion-runtime", "passed"),
+        ("criterion-service", "blocked"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("unknown", "cover expected_criterion_ids exactly"),
+        ("duplicate", "one row per criterion_id"),
+        ("missing", "cover expected_criterion_ids exactly"),
+    ],
+)
+def test_curd_result_normalization_rejects_invalid_criterion_ids(
+    mutation: str, message: str
+) -> None:
+    case = _curd_result_normalization_case()
+    writer = cast("dict[str, object]", case["writer_view"])
+    payload = cast("dict[str, object]", writer["payload"])
+    rows = cast("list[dict[str, object]]", payload["criterion_results"])
+    if mutation == "unknown":
+        rows[0]["criterion_id"] = "criterion-unknown"
+    elif mutation == "duplicate":
+        rows[1]["criterion_id"] = rows[0]["criterion_id"]
+    else:
+        _ = rows.pop()
+
+    with pytest.raises(ContractValidationError, match=message):
+        _ = normalize_agent_output(writer, case["host_invocation"])

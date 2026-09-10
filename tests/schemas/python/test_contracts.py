@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import easy_cheese_schemas.contracts as contract_module
 from typing import cast
 
 import attrs
 import pytest
 
-from easy_cheese_schemas.schema_runtime import ContractValidationError, validate_contract
-
+import easy_cheese_schemas.contracts as contract_module
 from easy_cheese_schemas.contracts import (
+    MAX_ARTIFACT_BYTES,
     AgentWriterView,
     ArtifactRef,
     BoundedContext,
@@ -18,21 +17,20 @@ from easy_cheese_schemas.contracts import (
     Criterion,
     CriterionDisposition,
     CriterionResult,
-    CriterionWriterView,
     CriterionResultWriterView,
+    CriterionWriterView,
     CurdDisposition,
-    MAX_ARTIFACT_BYTES,
     CurdPlan,
     CurdPlanWriterView,
     CurdResult,
     CurdResultWriterView,
     DiagnosisCause,
     DiagnosisDisposition,
-    DiagnosisHypothesisWriterView,
-    DiagnosisResultWriterView,
     DiagnosisHypothesis,
+    DiagnosisHypothesisWriterView,
     DiagnosisRequest,
     DiagnosisResult,
+    DiagnosisResultWriterView,
     EvidenceKind,
     EvidenceRef,
     HandoffPointer,
@@ -57,10 +55,10 @@ from easy_cheese_schemas.contracts import (
     ReviewCoverage,
     ReviewDisposition,
     ReviewFinding,
+    ReviewFindingWriterView,
     ReviewKind,
     ReviewRequest,
     ReviewResult,
-    ReviewFindingWriterView,
     ReviewResultWriterView,
     ReviewSeverity,
     SemanticCurd,
@@ -74,6 +72,10 @@ from easy_cheese_schemas.contracts import (
     canonical_digest,
     curd_plan_digest,
     derive_curd_disposition,
+)
+from easy_cheese_schemas.schema_runtime import (
+    ContractValidationError,
+    validate_contract,
 )
 
 DIGEST = f"sha256:{'a' * 64}"
@@ -215,9 +217,7 @@ def curd_result(
 def test_contract_rejects_invalid_slugs_at_decorator_construction(
     slug: object,
 ) -> None:
-    with pytest.raises(
-        ValueError, match=r"^contract slug must be a non-empty string$"
-    ):
+    with pytest.raises(ValueError, match=r"^contract slug must be a non-empty string$"):
         _ = contract_module.contract(slug)  # pyright: ignore[reportArgumentType]
 
 
@@ -233,8 +233,6 @@ def test_canonical_contracts_are_deeply_frozen() -> None:
         value.curds.append(curd("escaped"))  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
     with pytest.raises(attrs.exceptions.FrozenInstanceError):
         value.revision = 2  # pyright: ignore[reportAttributeAccessIssue]
-
-
 
 
 def test_artifact_size_is_bounded() -> None:
@@ -262,6 +260,7 @@ def test_curd_disposition_precedence_has_one_canonical_producer() -> None:
     assert derive_curd_disposition((failed, blocked, skipped)) is CurdDisposition.FAILED
     assert derive_curd_disposition((blocked, skipped)) is CurdDisposition.BLOCKED
     assert derive_curd_disposition((skipped,)) is CurdDisposition.SKIPPED
+
 
 @pytest.mark.parametrize(
     ("scope", "message"),
@@ -559,7 +558,6 @@ def test_review_request_and_result_accept_typed_evidence() -> None:
     assert result.coverage == (
         ReviewCoverage("correctness", CoverageDisposition.COVERED),
     )
-
 
 
 def test_review_request_accepts_typed_review_kind_and_rejects_invalid_values() -> None:
@@ -887,6 +885,7 @@ def test_writer_views_expose_only_agent_authored_fields() -> None:
         "reason",
     }
     assert set(attrs.fields_dict(CriterionResultWriterView)) == {
+        "criterion_id",
         "disposition",
         "evidence_keys",
         "reason",
@@ -1000,6 +999,7 @@ def test_diagnosis_hypothesis_writer_view_requires_evidence_for_a_verdict() -> N
 
 def test_criterion_writer_view_enforces_disposition() -> None:
     kwargs: dict[str, object] = {
+        "criterion_id": "criterion-1",
         "disposition": CriterionDisposition.PASSED,
         "evidence_keys": [],
     }
@@ -1134,7 +1134,9 @@ def test_normalization_receipt_json_schema_rejects_null_legacy_source() -> None:
 
     loaded = cast(
         "object",
-        json.loads(schema_bytes("https://schemas.easy-cheese.dev/normalization-receipt")),
+        json.loads(
+            schema_bytes("https://schemas.easy-cheese.dev/normalization-receipt")
+        ),
     )
     schema = _object(loaded)
     receipt = _object(_object(schema["$defs"])["NormalizationReceipt"])

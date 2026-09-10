@@ -37,6 +37,7 @@ type BoundedScope {
 }
 
 type CriterionResultWriterView {
+  criterion_id str
   disposition CriterionDisposition
   evidence_keys? tuple[str, ...] = ()
   reason? str | None = None
