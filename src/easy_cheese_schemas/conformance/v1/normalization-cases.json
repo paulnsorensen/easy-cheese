@@ -268,12 +268,14 @@
         "payload": {
           "criterion_results": [
             {
+              "criterion_id": "criterion-runtime",
               "disposition": "passed",
               "evidence_keys": [
                 "test-log"
               ]
             },
             {
+              "criterion_id": "criterion-service",
               "disposition": "blocked",
               "reason": "The dependent service was unavailable"
             }
@@ -335,7 +337,7 @@
             "media_type": "application/json"
           }
         },
-        "runtime_refs": [
+        "provenance_refs": [
           "milknado:node-42"
         ]
       },
@@ -404,7 +406,7 @@
         "unresolved_work": [
           "Run the service-backed criterion"
         ],
-        "runtime_refs": [
+        "provenance_refs": [
           "milknado:node-42"
         ]
       },
@@ -421,7 +423,7 @@
           "deliverable_artifact_ids": [
             "artifact-result"
           ],
-          "runtime_refs": [
+          "provenance_refs": [
             "milknado:node-42"
           ]
         },

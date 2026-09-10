@@ -3,9 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
-from collections.abc import Iterable
 from typing import ClassVar, Protocol, TypeVar, cast
 
 import attrs
@@ -29,6 +28,7 @@ _MEDIA_TYPE_RE = re.compile(
     r"[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[^\r\n]+)?"
 )
 _URI_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:.+")
+
 
 class _NamedAttribute(Protocol):
     name: str
@@ -324,15 +324,11 @@ def _positive_integer(
 
 
 @schema_constraints(minimum=0, maximum=MAX_ARTIFACT_BYTES)
-def _artifact_size(
-    instance: object, attribute: _NamedAttribute, value: object
-) -> None:
+def _artifact_size(instance: object, attribute: _NamedAttribute, value: object) -> None:
     _non_negative_integer(instance, attribute, value)
     assert isinstance(value, int)
     if value > MAX_ARTIFACT_BYTES:
-        raise ValueError(
-            f"{attribute.name} must be at most {MAX_ARTIFACT_BYTES} bytes"
-        )
+        raise ValueError(f"{attribute.name} must be at most {MAX_ARTIFACT_BYTES} bytes")
 
 
 @schema_constraints(minimum=0)
@@ -343,7 +339,6 @@ def _non_negative_integer(
         raise ValueError(f"{attribute.name} must be a non-negative integer")
 
 
- 
 @schema_constraints(pattern=_VERSION_RE.pattern, minLength=1)
 def _version_component(
     _instance: object, attribute: _NamedAttribute, value: object
@@ -700,6 +695,7 @@ class HandoffPointer:
         validator=validators.optional(validators.instance_of(ArtifactRef)),
     )
 
+
 @schema_constraints(
     _if_equals(
         "identity_action",
@@ -709,11 +705,7 @@ class HandoffPointer:
     _if_equals(
         "identity_action",
         "retain",
-        {
-            "properties": {
-                "source_curd_ids": {"minItems": 1, "maxItems": 1}
-            }
-        },
+        {"properties": {"source_curd_ids": {"minItems": 1, "maxItems": 1}}},
     ),
     _if_equals(
         "identity_action",
@@ -1111,8 +1103,7 @@ def _validate_planner_disposition(
         if not unresolved_work:
             raise ValueError(f"partial {label} must describe omitted work")
         if any(
-            item.scope is not UncertaintyScope.OMITTED_WORK
-            for item in unresolved_work
+            item.scope is not UncertaintyScope.OMITTED_WORK for item in unresolved_work
         ):
             raise ValueError(
                 f"partial {label} uncertainty must concern omitted work only"
@@ -1133,9 +1124,7 @@ def _validate_planner_disposition(
         }
         and unresolved_work
     ):
-        raise ValueError(
-            f"{disposition.value} {label} must not carry unresolved work"
-        )
+        raise ValueError(f"{disposition.value} {label} must not carry unresolved work")
     if not reason:
         raise ValueError(f"{disposition.value} {label} must include a reason")
 
@@ -1158,9 +1147,7 @@ _PLANNER_RESULT_SCHEMA_CONSTRAINTS = (
             "properties": {
                 "unresolved_work": {
                     "minItems": 1,
-                    "items": {
-                        "properties": {"scope": {"const": "omitted_work"}}
-                    },
+                    "items": {"properties": {"scope": {"const": "omitted_work"}}},
                 }
             },
             **_without("reason"),
@@ -1227,7 +1214,9 @@ class PlannerResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         _validate_planner_disposition(
             self.disposition,
             self.plan,
@@ -1272,7 +1261,9 @@ class ReviewCoverage:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if self.disposition is CoverageDisposition.NOT_COVERED and not self.reason:
             raise ValueError("not_covered review coverage must include a reason")
         if self.disposition is CoverageDisposition.COVERED and self.reason is not None:
@@ -1317,9 +1308,7 @@ _REVIEW_RESULT_TERMINAL_SCHEMA_CONSTRAINTS = tuple(
                 "findings": {"maxItems": 0},
                 "coverage": {
                     "minItems": 1,
-                    "items": {
-                        "properties": {"disposition": {"const": "covered"}}
-                    },
+                    "items": {"properties": {"disposition": {"const": "covered"}}},
                 },
             },
         },
@@ -1356,7 +1345,9 @@ class ReviewResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         duplicate_target = _unique_by("target", self.coverage)
         if duplicate_target is not None:
             raise ValueError(f"coverage target {duplicate_target!r} must be unique")
@@ -1489,7 +1480,9 @@ class DiagnosisHypothesis:
     )
 
     @evidence.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if (
             self.disposition is not HypothesisDisposition.UNRESOLVED
             and not self.evidence
@@ -1595,7 +1588,9 @@ class DiagnosisResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         duplicate = _unique_by("hypothesis_id", self.hypotheses)
         if duplicate is not None:
             raise ValueError(f"hypothesis_id {duplicate!r} must be unique")
@@ -1650,9 +1645,7 @@ def _criterion_result_schema_constraints(
             for disposition in ("passed", "failed")
         ),
         *(
-            _if_equals(
-                "disposition", disposition, {"required": ["reason"]}
-            )
+            _if_equals("disposition", disposition, {"required": ["reason"]})
             for disposition in ("blocked", "skipped")
         ),
     )
@@ -1673,7 +1666,9 @@ class CriterionResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if (
             self.disposition
             in {
@@ -1748,11 +1743,11 @@ class CurdResult:
     unresolved_work: tuple[str, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
-    runtime_refs: tuple[str, ...] = field(
+    provenance_refs: tuple[str, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
 
-    @runtime_refs.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    @provenance_refs.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_result(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         result_ids = [row.criterion_id for row in self.criterion_results]
         if len(result_ids) != len(set(result_ids)):
@@ -1929,7 +1924,9 @@ class PlannerResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         _validate_planner_disposition(
             self.disposition,
             self.plan,
@@ -1976,7 +1973,9 @@ class ReviewResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if self.disposition is ReviewDisposition.CLEAN and self.findings:
             raise ValueError("clean review writer view must not include findings")
         if self.disposition is ReviewDisposition.FINDINGS and not self.findings:
@@ -2036,9 +2035,7 @@ class ReproductionWriterView:
             raise ValueError("blocked writer reproduction must explain the blocker")
 
 
-@schema_constraints(
-    *_diagnosis_hypothesis_schema_constraints("evidence_keys")
-)
+@schema_constraints(*_diagnosis_hypothesis_schema_constraints("evidence_keys"))
 @define(frozen=True)
 class DiagnosisHypothesisWriterView:
     statement: str = field(validator=_bounded_string)
@@ -2050,7 +2047,9 @@ class DiagnosisHypothesisWriterView:
     )
 
     @evidence_keys.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if (
             self.disposition is not HypothesisDisposition.UNRESOLVED
             and not self.evidence_keys
@@ -2072,9 +2071,7 @@ class DiagnosisCauseWriterView:
     )
 
 
-@schema_constraints(
-    *_diagnosis_result_schema_constraints("unresolved_evidence_keys")
-)
+@schema_constraints(*_diagnosis_result_schema_constraints("unresolved_evidence_keys"))
 @define(frozen=True)
 class DiagnosisResultWriterView:
     disposition: DiagnosisDisposition = field(
@@ -2100,7 +2097,9 @@ class DiagnosisResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if self.disposition is DiagnosisDisposition.CONFIRMED:
             if self.reproduction.status is not ReproductionDisposition.REPRODUCED:
                 raise ValueError(
@@ -2144,6 +2143,7 @@ class DiagnosisResultWriterView:
 @schema_constraints(*_criterion_result_schema_constraints("evidence_keys"))
 @define(frozen=True)
 class CriterionResultWriterView:
+    criterion_id: str = field(validator=_identifier)
     disposition: CriterionDisposition = field(
         validator=validators.instance_of(CriterionDisposition)
     )
@@ -2153,7 +2153,9 @@ class CriterionResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if (
             self.disposition
             in {
@@ -2376,9 +2378,7 @@ class GateApplicability:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @ui_surface.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_combination(
-        self, _attribute: _NamedAttribute, value: object
-    ) -> None:  # noqa: V103
+    def _validate_combination(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
         if self.disposition is GateApplicabilityDisposition.RED_REQUIRED:
             if self.work_class is not WorkClass.BEHAVIOR:
                 raise ValueError("red-required-work-class-must-be-behavior")
@@ -2392,15 +2392,16 @@ class GateApplicability:
                     "not-applicable-work-class-must-be-closed-non-behavior"
                 )
             if value is not UiSurface.NOT_APPLICABLE:
-                raise ValueError(
-                    "not-applicable-ui-surface-must-be-not-applicable"
-                )
+                raise ValueError("not-applicable-ui-surface-must-be-not-applicable")
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_not_applicable_reason(
         self, _attribute: _NamedAttribute, value: object
     ) -> None:  # noqa: V103
-        if self.disposition is GateApplicabilityDisposition.NOT_APPLICABLE and not value:
+        if (
+            self.disposition is GateApplicabilityDisposition.NOT_APPLICABLE
+            and not value
+        ):
             raise ValueError(
                 "gate_applicability.reason is required when disposition is not-applicable"
             )
@@ -2450,10 +2451,10 @@ class TestContractRow:
             raise ValueError(
                 f"Test Contracts row {self.acceptance_id} is contract-matrix mode and requires both Interface version and Matrix rows"
             )
-        elif len(set(cast(tuple[str, ...], value))) != len(cast(tuple[str, ...], value)):
-            raise ValueError(
-                f"contract-matrix-rows-not-unique:{self.acceptance_id}"
-            )
+        elif len(set(cast(tuple[str, ...], value))) != len(
+            cast(tuple[str, ...], value)
+        ):
+            raise ValueError(f"contract-matrix-rows-not-unique:{self.acceptance_id}")
 
 
 @define(frozen=True)
@@ -2461,7 +2462,9 @@ class GroundingRow:
     """One recorded precondition probe standing behind the spec."""
 
     probe: GroundingProbe = field(validator=validators.instance_of(GroundingProbe))
-    outcome: GroundingOutcome = field(validator=validators.instance_of(GroundingOutcome))
+    outcome: GroundingOutcome = field(
+        validator=validators.instance_of(GroundingOutcome)
+    )
     evidence: str = field(validator=_bounded_string)
 
 
@@ -2574,7 +2577,9 @@ class MoldSpecDocument:
 
     slug: ClassVar[str] = "mold-spec"
     sections: ClassVar[tuple[Section, ...]] = MOLD_SPEC_SECTIONS
-    cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = MOLD_SPEC_CROSS_FIELD_RULES
+    cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = (
+        MOLD_SPEC_CROSS_FIELD_RULES
+    )
     enums: ClassVar[dict[str, tuple[str, ...]]] = MOLD_SPEC_ENUMS
 
     @acceptance_ids.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
@@ -2612,7 +2617,9 @@ class MoldSpecDocument:
             )
 
     @grounding_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_grounding_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
+    def _validate_grounding_coverage(
+        self, _attribute: _NamedAttribute, value: object
+    ) -> None:  # noqa: V103
         assert isinstance(value, tuple)
         rows = cast(tuple[GroundingRow, ...], value)
         counts: dict[GroundingProbe, int] = {}
@@ -2625,6 +2632,7 @@ class MoldSpecDocument:
         ]
         if violations:
             raise ValueError("; ".join(violations))
+
 
 # ---------------------------------------------------------------------------
 # Wheypoint continuity types (moved from easy_cheese_schemas.wheypoint; ADR
@@ -2670,8 +2678,6 @@ _MAX_ID = 64
 LOWER_IDENTIFIER_RE = re.compile(rf"[a-z0-9][a-z0-9._-]{{0,{_MAX_ID - 1}}}")
 _LOWER_ID_RE = LOWER_IDENTIFIER_RE
 _COMMIT_RE = re.compile(r"[0-9a-f]{7,64}")
-
-
 
 
 class WheypointStatus(str, Enum):
@@ -2786,7 +2792,9 @@ def _bounded_text_list(
 
 
 @schema_constraints(pattern=_LOWER_ID_RE.pattern, minLength=1, maxLength=_MAX_ID)
-def _lower_identifier(_instance: object, attribute: _NamedAttribute, value: object) -> None:
+def _lower_identifier(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
     if not isinstance(value, str) or _LOWER_ID_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be a lowercase identifier of at most "
@@ -2937,7 +2945,9 @@ def _tasks_move_rule(
             + f"{NextMove.TASKS.value!r}, not {instance.move.value!r}"
         )
     if instance.parallel is not None and not value:
-        raise ValueError(f"parallel may only be set alongside a non-empty {attribute.name}")
+        raise ValueError(
+            f"parallel may only be set alongside a non-empty {attribute.name}"
+        )
 
 
 @define(frozen=True)
@@ -2950,7 +2960,9 @@ class NextAction:
     artifact: str | None = field(
         default=None, validator=validators.optional(_single_line_text)
     )
-    tasks: list[HandoffTask] | None = field(default=None, validator=_tasks_move_rule, metadata={"since": 3})
+    tasks: list[HandoffTask] | None = field(
+        default=None, validator=_tasks_move_rule, metadata={"since": 3}
+    )
     parallel: ParallelPlan | None = field(default=None, metadata={"since": 3})
 
 
@@ -3004,7 +3016,11 @@ class ProtectedEntry:
     blocks_continuation: bool = field(validator=_gating_kind_rule)
     rationale: str | None = field(default=None, validator=_rationale_rule)
     superseded_by: str | None = field(default=None, validator=_successor_rule)
-    quote: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
+    quote: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
 
 
 @define(frozen=True)
@@ -3016,12 +3032,22 @@ class ProposedEntry:
     kind: EntryKind
     summary: str = field(validator=_bounded_text)
     blocks_continuation: bool = field(default=False, validator=_gating_kind_rule)
-    rationale: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
-    quote: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
+    rationale: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
+    quote: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
 
     def __attrs_post_init__(self) -> None:
         if self.kind is EntryKind.DIRECTIVE and self.quote is None:
-            raise ValueError("quote must preserve the verbatim instruction for a directive")
+            raise ValueError(
+                "quote must preserve the verbatim instruction for a directive"
+            )
 
 
 def _target_rule(
@@ -3236,12 +3262,17 @@ class WheypointRecord:
     )
     artifact_links: list[ArtifactLink] = field(validator=_bounded_list)
     decision_dossier: list[DecisionFork] = field(validator=_record_dossier)
-    notes: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
+    notes: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
     directives: list[ProtectedEntry] = field(
         factory=list,
         validator=_protected_entries(
             EntryKind.DIRECTIVE, "decisions", "questions", "blockers"
-        ), metadata={"since": 3},
+        ),
+        metadata={"since": 3},
     )
 
     @property
@@ -3318,7 +3349,9 @@ class WheypointDelta:
         default=None, validator=_optional_bounded_text_list
     )
     notes: str | None = field(
-        default=None, validator=validators.optional(_bounded_text), metadata={"since": 3},
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
     )
     next_action: NextAction | None = None
     decision_dossier: list[DecisionFork] | None = field(
@@ -3334,13 +3367,17 @@ class WheypointDelta:
         default=None, validator=_optional_bounded_list
     )
     add_directives: list[ProposedEntry] | None = field(
-        default=None, validator=_optional_bounded_list, metadata={"since": 3},
+        default=None,
+        validator=_optional_bounded_list,
+        metadata={"since": 3},
     )
     add_artifact_links: list[ArtifactLink] | None = field(
         default=None, validator=_optional_bounded_list
     )
     remove_artifact_links: list[str] | None = field(
-        default=None, validator=_optional_bounded_list, metadata={"since": 3},
+        default=None,
+        validator=_optional_bounded_list,
+        metadata={"since": 3},
     )
     transitions: list[EntryTransition] | None = field(
         default=None, validator=_one_transition_per_entry
@@ -3370,14 +3407,14 @@ class WheypointRevision:
     schema_version: int = field(validator=validators.ge(1))
     work_id: str = field(validator=_lower_identifier)
     # Null exactly once, for the genesis revision.
-    parent_revision_id: str | None = field(validator=validators.optional(_lower_identifier))
+    parent_revision_id: str | None = field(
+        validator=validators.optional(_lower_identifier)
+    )
     revision_id: str = field(validator=_lower_identifier)
     revision_number: int = field(validator=validators.ge(1))
 
     @revision_number.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_genesis_is_revision_one(
-        self, _attribute: object, value: int
-    ) -> None:  # noqa: V103
+    def _validate_genesis_is_revision_one(self, _attribute: object, value: int) -> None:  # noqa: V103
         # A null parent means genesis, and genesis is revision one. Any later
         # revision that names no parent claims an impossible root.
         if self.parent_revision_id is None and value != 1:
@@ -3461,12 +3498,18 @@ class CheckpointIntent:
     working_context: list[str] | None = field(
         default=None, validator=_optional_bounded_text_list
     )
-    notes: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
+    notes: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
     next: NextMove | None = None
     artifact: str | None = field(
         default=None, validator=validators.optional(_bounded_text)
     )
-    tasks: list[HandoffTask] | None = field(default=None, validator=_optional_bounded_list, metadata={"since": 3})
+    tasks: list[HandoffTask] | None = field(
+        default=None, validator=_optional_bounded_list, metadata={"since": 3}
+    )
     parallel: ParallelPlan | None = field(default=None, metadata={"since": 3})
     entries: list[ProposedEntry] | None = field(
         default=None, validator=_optional_bounded_list
@@ -3475,7 +3518,9 @@ class CheckpointIntent:
         default=None, validator=_optional_non_empty_bounded_list
     )
     remove_artifact_links: list[str] | None = field(
-        default=None, validator=_optional_non_empty_bounded_list, metadata={"since": 3},
+        default=None,
+        validator=_optional_non_empty_bounded_list,
+        metadata={"since": 3},
     )
     decision_dossier: list[DecisionFork] | None = field(
         default=None, validator=_optional_bounded_list
