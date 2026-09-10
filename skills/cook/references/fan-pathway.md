@@ -302,6 +302,7 @@ Wiring rows exist in the manifest, not the curd block.
 
 - **Aggregate-gate conflict.**
   After you harvest all wave results, run the project gates over the merged tree.
+  When the gate output exceeds one screen, dispatch a `gate-runner` (`cheap` / `low`, no-write) and read its failures-plus-counts digest instead of the log.
   Distinguish a real cross-curd conflict from harmless generated drift.
   A real cross-curd conflict occurs when curds pass individually but collide in aggregate.
   The post-merge Cure can absorb harmless generated drift.
@@ -390,6 +391,8 @@ Also use the shared protocol in [`../../cheese/references/agent-resolution.md`](
 | Plan the spec | planner, general |
 | Cook, press, cure, seed, or wiring | coder |
 | Every age pass | reviewer |
+| Taste-test per curd | reviewer (taste-test) — `default` power, `medium` effort |
+| Gate digest for a curd worktree | gate-runner, general — `cheap` power, `low` effort, no-write |
 | Harvest and plate | parent |
 
 The resolver first filters required capabilities, tools, permissions, and isolation.

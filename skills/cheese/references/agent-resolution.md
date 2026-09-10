@@ -82,6 +82,8 @@ Each role's spawn-primitive `minimum_power` and `effort` defaults, harness-agnos
 | coder | default | medium | gains the ESCALATE contract; delegation IS the downgrade |
 | verifier | cheap | low | "verify exactly one claim"; schema-constrained; the cheap severity-filter leg |
 | reviewer | powerful | low \| medium \| high (dial) | pinned to a powerful model; count and effort follow the age router |
+| reviewer (taste-test) | default | medium | seven-lens handoff checklist, one artifact, ≤2 correction rounds; measured fix-rate parity with severity-report at powerful (16% vs 12%, 2026-09 analytics) |
+| gate-runner | cheap | low | runs the recorded gate command in the curd worktree and returns failures plus counts (≤2 KB); never edits; compatible type: whey-drainer |
 | planner / integrator | powerful | high (at mold) | the integrator is parent-owned and never delegated; the planner is a delegated fresh-context worker |
 
 The `planner / integrator` row names two separate jobs at one power and effort setting.
@@ -110,6 +112,9 @@ An unsubstituted `{model}` makes the spawn use the parent model.
 | age (first and final) | reviewer | powerful | dial: low \| medium \| high, set by the age router |
 | cure | coder | default | medium |
 | wiring task | coder | default | low — single-file glue, capped at ~20 tool calls |
+| cook / cure taste-test | reviewer (taste-test) | default | medium |
+| mold fork-coherence taste test | reviewer (taste-test) | default | medium |
+| quality gates for a digest | gate-runner | cheap | low |
 
 Resolve each phase against this table.
 Apply the resolution order.

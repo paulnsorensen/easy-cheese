@@ -80,7 +80,7 @@ The router ignores an unknown flag, so a spelling error removes a risk promotion
 
 - **Top-level `/cook`**:
   - Resolve the fresh-context taste-test through `../../cheese/references/agent-resolution.md`.
-  - Request a read-only `reviewer` at `powerful` / `high`.
+  - Request a read-only `reviewer (taste-test)` at `default` / `medium`.
   - Pass `{spec/contract, diff, inner-test list, any locked/user-approved decisions}`.
   - The reviewer returns the per-lens verdict below.
   - The reviewer does not return a full `/age` report.
