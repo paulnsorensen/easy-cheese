@@ -12,6 +12,8 @@ The two-key handshake does not fire in this mode. The agent-introduced-scope che
 
 ## Mini-spec schema
 
+Mini-spec mode always writes `shape: single`, so `landing.layers` stays `[]`. Do not add an inline `#` comment inside the `landing` block. The front-matter reader keeps the comment as part of the value.
+
 ```markdown
 ---
 slug: <kebab-slug>
@@ -30,8 +32,8 @@ gate_applicability:
   ui_surface: browser | non-browser | not-applicable
   reason: <required only for not-applicable>
 landing:
-  shape: single | orthogonal_flat | stacked_linear | diamond_stack   # default single; mini-spec mode writes single
-  layers: []   # ordered groups of canonical curd ids from the approved CurdPlan, as a one-line flow list; a mini-spec has no plan, so keep []
+  shape: single | orthogonal_flat | stacked_linear | diamond_stack
+  layers: []
   per_layer_green: required | tip-only
   review_fixes: fold | top-up
 verification: <one-line: the obvious check>

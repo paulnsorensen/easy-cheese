@@ -936,33 +936,33 @@ def landing_layer_errors(plan: CurdPlan, landing: Landing) -> tuple[str, ...]:
     """
     if not landing.layers:
         return ()
-    errors: list[str] = []
     curd_ids = {curd.curd_id for curd in plan.curds}
     layer_index: dict[str, int] = {}
+    unknown_errors: list[str] = []
     for index, layer in enumerate(landing.layers):
         for curd_id in layer:
             layer_index[curd_id] = index
             if curd_id not in curd_ids:
-                errors.append(
+                unknown_errors.append(
                     f"landing-layer-unknown-curd landing.layers names unknown curd {curd_id!r}"
                 )
+    missing_errors: list[str] = []
+    order_errors: list[str] = []
     for curd in plan.curds:
-        if curd.curd_id not in layer_index:
-            errors.append(
+        layer_of_curd = layer_index.get(curd.curd_id)
+        if layer_of_curd is None:
+            missing_errors.append(
                 f"landing-layer-missing-curd curd {curd.curd_id!r} is missing from landing.layers"
             )
-    for curd in plan.curds:
-        if curd.curd_id not in layer_index:
             continue
-        layer_of_curd = layer_index[curd.curd_id]
         for dependency in curd.dependencies:
             layer_of_dependency = layer_index.get(dependency)
             if layer_of_dependency is not None and layer_of_dependency > layer_of_curd:
-                errors.append(
+                order_errors.append(
                     f"landing-layer-order curd {curd.curd_id!r} in layer {layer_of_curd + 1} "
                     + f"depends on {dependency!r} in layer {layer_of_dependency + 1}"
                 )
-    return tuple(errors)
+    return tuple(unknown_errors) + tuple(missing_errors) + tuple(order_errors)
 
 
 @contract("curd-plan")
@@ -2387,7 +2387,15 @@ class UiSurface(str, Enum):
 
 
 class LandingShape(str, Enum):
-    """PR landing topology; values mirror ``pr_plan.PrShape`` by design."""
+    """PR landing topology; values mirror ``pr_plan.PrShape`` by design.
+
+    Do not alias ``PrShape`` here. ``validate_spec._load_local_module`` and
+    ``scripts/build_pyz.py`` exec this file standalone; any
+    ``easy_cheese_schemas.*`` import runs the package ``__init__``, which
+    imports ``compat`` and fails without ``cattrs``
+    (``test_standalone_validator_falls_back_when_cattrs_is_missing``).
+    ``tests/python/test_schemas_types.py`` pins the two value lists.
+    """
 
     SINGLE = "single"
     ORTHOGONAL_FLAT = "orthogonal_flat"
@@ -2481,33 +2489,14 @@ class GateApplicability:
 def _landing_layers(
     value: Iterable[Iterable[str]] | tuple[tuple[str, ...], ...],
 ) -> tuple[tuple[str, ...], ...]:
-    return tuple(tuple(group) for group in value)
-
-
-def _landing_layers_bounds(
-    _instance: object, attribute: _NamedAttribute, value: object
-) -> None:
-    assert isinstance(value, tuple)
-    groups = cast(tuple[tuple[str, ...], ...], value)
-    if len(groups) > MAX_COLLECTION_ITEMS:
-        raise ValueError(
-            f"{attribute.name} must be at most {MAX_COLLECTION_ITEMS} groups"
-        )
-    for index, group in enumerate(groups, start=1):
-        if len(group) > MAX_COLLECTION_ITEMS:
-            raise ValueError(
-                f"{attribute.name}[{index}] must be at most {MAX_COLLECTION_ITEMS} items"
-            )
-
-
-setattr(
-    _landing_layers_bounds, "__schema_constraints__", {"maxItems": MAX_COLLECTION_ITEMS}
-)
-setattr(
-    _landing_layers_bounds,
-    "__schema_item_constraints__",
-    {"maxItems": MAX_COLLECTION_ITEMS},
-)
+    if isinstance(value, (str, bytes)):
+        raise ValueError("landing.layers must be a list of lists of strings")
+    groups: list[tuple[str, ...]] = []
+    for group in value:
+        if isinstance(group, (str, bytes)):
+            raise ValueError("landing.layers must be a list of lists of strings")
+        groups.append(tuple(group))
+    return tuple(groups)
 
 
 @define(frozen=True)
@@ -2516,7 +2505,7 @@ class Landing:
 
     shape: LandingShape = field(validator=validators.instance_of(LandingShape))
     layers: tuple[tuple[str, ...], ...] = field(
-        factory=tuple, converter=_landing_layers, validator=_landing_layers_bounds
+        factory=tuple, converter=_landing_layers
     )
     per_layer_green: PerLayerGreen = field(
         default=PerLayerGreen.REQUIRED,
@@ -2534,6 +2523,13 @@ class Landing:
         groups = cast(tuple[tuple[str, ...], ...], value)
         if groups and self.shape is LandingShape.SINGLE:
             raise ValueError("landing-layers-require-non-single-shape")
+        if not groups and self.shape is not LandingShape.SINGLE:
+            raise ValueError("landing-layers-required-for-stacked-shape")
+        total_ids = sum(len(group) for group in groups)
+        if total_ids > MAX_COLLECTION_ITEMS:
+            raise ValueError(
+                f"{attribute.name} must be at most {MAX_COLLECTION_ITEMS} ids total"
+            )
         seen: set[str] = set()
         for group_index, group in enumerate(groups):
             for index, curd_id in enumerate(group):
@@ -2549,7 +2545,23 @@ class Landing:
                 seen.add(curd_id)
 
 
-LANDING_FIELD_NAMES: frozenset[str] = frozenset(attrs.fields_dict(Landing))
+_LANDING_FIELD_NAMES: frozenset[str] = frozenset(attrs.fields_dict(Landing))
+
+
+def _landing_enum(
+    raw_mapping: Mapping[str, object],
+    key: str,
+    enum_cls: type[Enum],
+    default: object = None,
+) -> Enum:
+    raw_value = raw_mapping.get(key, default)
+    try:
+        return enum_cls(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"landing-closed-class landing.{key} {raw_value!r} is not a "
+            + f"recognized {key}"
+        ) from exc
 
 
 def parse_landing_mapping(raw: object) -> Landing:
@@ -2563,51 +2575,58 @@ def parse_landing_mapping(raw: object) -> Landing:
     if not isinstance(raw, Mapping):
         raise ValueError("landing-closed-class landing must be a mapping")
     raw_mapping = cast(Mapping[str, object], raw)
-    unknown = raw_mapping.keys() - LANDING_FIELD_NAMES
+    unknown = raw_mapping.keys() - _LANDING_FIELD_NAMES
     if unknown:
         raise ValueError(
             "landing-closed-class landing."
-            + ", landing.".join(repr(name) for name in sorted(unknown))
+            + ", landing.".join(sorted(repr(name) for name in unknown))
             + " is not allowed"
         )
     if "shape" not in raw_mapping:
         raise ValueError("landing-closed-class landing.shape is required")
 
-    enum_checks: tuple[tuple[str, type[Enum], object], ...] = (
-        ("shape", LandingShape, None),
-        ("per_layer_green", PerLayerGreen, "required"),
-        ("review_fixes", ReviewFixes, "fold"),
-    )
-    values: dict[str, Enum] = {}
-    for key, enum_cls, default in enum_checks:
-        raw_value = raw_mapping.get(key, default)
-        try:
-            values[key] = enum_cls(raw_value)
-        except ValueError as exc:
-            raise ValueError(
-                f"landing-closed-class landing.{key} {raw_value!r} is not a "
-                + f"recognized {key}"
-            ) from exc
+    shape = _landing_enum(raw_mapping, "shape", LandingShape)
+    per_layer_green = _landing_enum(raw_mapping, "per_layer_green", PerLayerGreen, "required")
+    review_fixes = _landing_enum(raw_mapping, "review_fixes", ReviewFixes, "fold")
 
-    layers_raw = raw_mapping.get("layers", [])
-    if not isinstance(layers_raw, list) or not all(
-        isinstance(group, list)
-        and all(isinstance(item, str) for item in cast("list[object]", group))
-        for group in cast("list[object]", layers_raw)
-    ):
+    layers_raw: object = raw_mapping.get("layers", [])
+    if not isinstance(layers_raw, list):
         raise ValueError(
             "landing-closed-class landing.layers must be a list of lists of strings"
         )
+    layers_list = cast("list[object]", layers_raw)
+    if len(layers_list) > MAX_COLLECTION_ITEMS:
+        raise ValueError(
+            f"landing-closed-class landing.layers must be at most {MAX_COLLECTION_ITEMS} groups"
+        )
+    total_ids = 0
+    for group in layers_list:
+        if not isinstance(group, list) or not all(
+            isinstance(item, str) for item in cast("list[object]", group)
+        ):
+            raise ValueError(
+                "landing-closed-class landing.layers must be a list of lists of strings"
+            )
+        total_ids += len(cast("list[object]", group))
+        if total_ids > MAX_COLLECTION_ITEMS:
+            raise ValueError(
+                f"landing-closed-class landing.layers must be at most {MAX_COLLECTION_ITEMS} ids total"
+            )
 
     try:
         return Landing(
-            shape=cast(LandingShape, values["shape"]),
+            shape=cast(LandingShape, shape),
             layers=cast("list[list[str]]", layers_raw),
-            per_layer_green=cast(PerLayerGreen, values["per_layer_green"]),
-            review_fixes=cast(ReviewFixes, values["review_fixes"]),
+            per_layer_green=cast(PerLayerGreen, per_layer_green),
+            review_fixes=cast(ReviewFixes, review_fixes),
         )
     except ValueError as exc:
         raise ValueError(f"landing-closed-class {exc}") from exc
+
+
+def landing_mapping(landing: Landing) -> dict[str, object]:
+    """Project a :class:`Landing` onto its wire mapping via ``_unstructure``."""
+    return cast("dict[str, object]", _unstructure(landing))
 
 
 @define(frozen=True)
@@ -2892,8 +2911,8 @@ __all__ = [
     "LandingShape",
     "PerLayerGreen",
     "ReviewFixes",
-    "LANDING_FIELD_NAMES",
     "landing_layer_errors",
+    "landing_mapping",
     "parse_landing_mapping",
     "GroundingProbe",
     "GroundingRow",

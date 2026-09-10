@@ -35,11 +35,11 @@ from easy_cheese.shared.taste_test import (
     RedRequired,
     auto_handoff,
     is_new_mold_spec,
-    landing_metadata,
     parse_gate_applicability,
     parse_landing,
     read_spec_text,
 )
+from easy_cheese_schemas.contracts import Landing, LandingShape, landing_mapping
 
 HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 BULLET_RE = re.compile(r"^\s*[-*+]\s+\S", re.MULTILINE)
@@ -114,14 +114,14 @@ def _read_spec(spec_path: Path) -> str:
 
 
 def _gate_handoff(
-    spec_path: Path, body: str
-) -> tuple[dict[str, object] | None, dict[str, object] | None]:
-    """Return ``(handoff, landing)``; ``landing`` is the spec's block or the single default."""
+    spec_path: Path, body: str, landing: dict[str, object]
+) -> dict[str, object] | None:
+    """Return the red-required handoff for ``body``, or ``None`` when the spec doesn't gate."""
     if (
         not re.search(r"(?m)^gate_applicability:\s*(?:\{|$)", body)
         and not is_new_mold_spec(body)
     ):
-        return None, None
+        return None
     try:
         applicability = parse_gate_applicability(
             body,
@@ -129,13 +129,9 @@ def _gate_handoff(
         )
     except ApplicabilityError as exc:
         raise SpecReadError(f"invalid gate applicability: {exc}") from exc
-    try:
-        landing = landing_metadata(parse_landing(body))
-    except ApplicabilityError as exc:
-        raise SpecReadError(f"invalid landing: {exc}") from exc
     if isinstance(applicability, RedRequired):
-        return auto_handoff(spec_path, applicability, metadata={"landing": landing}), landing
-    return None, landing
+        return auto_handoff(spec_path, applicability, metadata={"landing": landing})
+    return None
 
 
 def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
@@ -146,7 +142,12 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
     decisions = _count_bullets(_extract_section(body, DECISIONS_HEADINGS))
 
     recommended, mode, rationale = _recommend(candidate_curds, blast_radius)
-    handoff, landing = _gate_handoff(spec_path, body)
+    try:
+        declared_landing = parse_landing(body) or Landing(shape=LandingShape.SINGLE)
+    except ApplicabilityError as exc:
+        raise SpecReadError(f"invalid landing: {exc}") from exc
+    landing = landing_mapping(declared_landing)
+    handoff = _gate_handoff(spec_path, body, landing)
     if handoff is not None:
         command = cast(list[str], handoff["command"])
         recommended = command[0]

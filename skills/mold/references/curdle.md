@@ -34,6 +34,8 @@ A spec is the rich container. It absorbs problem framing, requirements, approach
 
 Cross-cutting house style and citation form: [`formatting.md`](../../cheese/references/formatting.md). This section owns the spec shape; formatting.md owns the voice rules and the footnote primitive.
 
+`landing.layers` records ordered groups of canonical curd ids from the approved CurdPlan, as a one-line flow list. Leave it `[]` only when `shape` is `single`; a non-single shape requires at least one layer.
+
 ```markdown
 ---
 slug: <slug>
@@ -51,8 +53,8 @@ gate_applicability:
   ui_surface: browser | non-browser | not-applicable
   reason: <required only for not-applicable>
 landing:
-  shape: single | orthogonal_flat | stacked_linear | diamond_stack   # default single; mini-spec mode writes single
-  layers: []   # ordered groups of canonical curd ids from the approved CurdPlan, as a one-line flow list, e.g. [["<plan>/curd/1"], ["<plan>/curd/2"]]; must be [] when shape is single
+  shape: single | orthogonal_flat | stacked_linear | diamond_stack
+  layers: []
   per_layer_green: required | tip-only
   review_fixes: fold | top-up
 
@@ -215,8 +217,8 @@ type GroundingRow {
 type Landing {
   shape LandingShape
   layers? tuple[tuple[str, ...], ...] = ()
-  per_layer_green? PerLayerGreen = <PerLayerGreen.REQUIRED: 'required'>
-  review_fixes? ReviewFixes = <ReviewFixes.FOLD: 'fold'>
+  per_layer_green? PerLayerGreen = required
+  review_fixes? ReviewFixes = fold
 }
 
 type MoldSpecDocument {

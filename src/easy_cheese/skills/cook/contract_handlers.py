@@ -22,7 +22,6 @@ from easy_cheese_schemas import (
     SCHEMA_ROOT,
     ContractValidationError,
     CurdPlan,
-    Landing,
     TransitionError,
     canonical_bytes,
     landing_layer_errors,
@@ -30,6 +29,8 @@ from easy_cheese_schemas import (
     supported_version_for,
     validate_contract,
 )
+
+from easy_cheese_schemas.contracts import LandingShape
 
 from easy_cheese.shared.publication import PublicationError, accept
 from easy_cheese.shared.taste_test import ApplicabilityError, parse_landing, read_spec_text
@@ -118,11 +119,29 @@ def validate_main(argv: list[str]) -> int:
     return 0
 
 
-def _landing_layer_violations(
-    spec_path: Path, curd_plan: CurdPlan
-) -> tuple[Landing, tuple[str, ...]]:
-    landing = parse_landing(read_spec_text(spec_path))
-    return landing, landing_layer_errors(curd_plan, landing)
+def _check_landing_layers(spec_path: Path, plan: CurdPlan) -> int:
+    quoted = repr(str(spec_path))
+    try:
+        landing = parse_landing(read_spec_text(spec_path))
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"ERROR: cannot read spec {quoted}: {exc}", file=sys.stderr)
+        return 1
+    except ApplicabilityError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    if landing is None:
+        print(f"NOTE: landing layers not checked ({quoted} has no landing block)", file=sys.stderr)
+        return 0
+    if landing.shape is LandingShape.SINGLE:
+        print(f"NOTE: landing layers not checked ({quoted} declares shape single)", file=sys.stderr)
+        return 0
+    violations = landing_layer_errors(plan, landing)
+    if violations:
+        for error in violations:
+            print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    print(f"NOTE: landing layers checked against {quoted}", file=sys.stderr)
+    return 0
 
 
 def accept_main(argv: list[str]) -> int:
@@ -144,29 +163,9 @@ def accept_main(argv: list[str]) -> int:
     if spec_path is None:
         print("NOTE: landing layers not checked (no --spec)", file=sys.stderr)
     else:
-        try:
-            landing, violations = _landing_layer_violations(
-                spec_path, cast(CurdPlan, accepted.canonical.value)
-            )
-        except (OSError, UnicodeDecodeError) as exc:
-            print(f"ERROR: cannot read spec {str(spec_path)!r}: {exc}", file=sys.stderr)
-            return 1
-        except ApplicabilityError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
-            return 1
-        if violations:
-            for error in violations:
-                print(f"ERROR: {error}", file=sys.stderr)
-            return 1
-        if landing.layers:
-            print(
-                f"NOTE: landing layers checked against {str(spec_path)!r}", file=sys.stderr
-            )
-        else:
-            print(
-                f"NOTE: landing layers not checked ({str(spec_path)!r} declares no layers)",
-                file=sys.stderr,
-            )
+        exit_code = _check_landing_layers(spec_path, cast(CurdPlan, accepted.canonical.value))
+        if exit_code:
+            return exit_code
     wrapper = {
         "value": accepted.canonical.value,
         "digest": _digest_of(accepted.canonical.canonical_bytes),

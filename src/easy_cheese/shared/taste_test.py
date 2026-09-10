@@ -10,7 +10,10 @@ import argparse
 import copy
 import hashlib
 import json
+import errno
+import os
 import re
+import stat
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -24,7 +27,6 @@ from easy_cheese_schemas.contracts import (
     GroundingProbe,
     GroundingRow,
     Landing,
-    LandingShape,
     MoldSpecDocument,
     MoldSpecFrontmatter,
     SpecConfidence,
@@ -504,8 +506,7 @@ def draft_sha256(draft: object) -> str:
 
 def _spec_text(spec: object) -> tuple[str, Mapping[str, object]]:
     if isinstance(spec, Path):
-        text = spec.read_text(encoding="utf-8")
-        return text, {}
+        return read_spec_text(spec), {}
     if isinstance(spec, Mapping):
         spec_map = cast(Mapping[str, object], spec)
         return _canonical(spec_map), spec_map
@@ -520,6 +521,10 @@ def _spec_text(spec: object) -> tuple[str, Mapping[str, object]]:
     if isinstance(parsed, Mapping):
         return spec, cast(Mapping[str, object], parsed)
     return spec, {}
+
+
+def _merged_frontmatter(text: str, raw_spec: Mapping[str, object]) -> dict[str, object]:
+    return {**_frontmatter(text), **raw_spec}
 
 
 def _frontmatter(text: str) -> dict[str, object]:
@@ -715,7 +720,7 @@ def _typed_mold_document(
     spec: object, *, require_ui_surface: bool = False
 ) -> tuple[MoldSpecDocument, str, Mapping[str, object]]:
     text, raw_spec = _spec_text(spec)
-    merged: dict[str, object] = {**_frontmatter(text), **raw_spec}
+    merged = _merged_frontmatter(text, raw_spec)
     declaration = merged.get("gate_applicability")
     if not isinstance(declaration, Mapping):
         raise ApplicabilityError("gate-applicability-declaration-required")
@@ -878,30 +883,27 @@ def read_spec_text(spec_path: Path) -> str:
     Raises ``OSError`` for a missing, non-regular, or oversized path and
     ``UnicodeDecodeError`` for bytes that are not UTF-8.
     """
-    if not spec_path.is_file():
-        raise OSError("not a regular file")
-    with spec_path.open("rb") as handle:
+    fd = os.open(spec_path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        mode = os.fstat(fd).st_mode
+        if stat.S_ISDIR(mode):
+            raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(spec_path))
+        if not stat.S_ISREG(mode):
+            raise OSError(f"not a regular file: {str(spec_path)!r}")
+    except BaseException:
+        os.close(fd)
+        raise
+    with os.fdopen(fd, "rb") as handle:
         raw = handle.read(MAX_SPEC_BYTES + 1)
     if len(raw) > MAX_SPEC_BYTES:
         raise OSError(f"larger than {MAX_SPEC_BYTES} bytes")
     return raw.decode("utf-8")
 
 
-def parse_landing(spec: object) -> Landing:
-    """Read only the front matter's ``landing`` block; an absent block means ``single``."""
+def parse_landing(spec: object) -> Landing | None:
+    """Read only the front matter's ``landing`` block; ``None`` when absent."""
     text, raw_spec = _spec_text(spec)
-    merged: dict[str, object] = {**_frontmatter(text), **raw_spec}
-    landing = _typed_landing(merged)
-    return landing if landing is not None else Landing(shape=LandingShape.SINGLE)
-
-
-def landing_metadata(landing: Landing) -> dict[str, object]:
-    return {
-        "shape": landing.shape.value,
-        "layers": [list(group) for group in landing.layers],
-        "per_layer_green": landing.per_layer_green.value,
-        "review_fixes": landing.review_fixes.value,
-    }
+    return _typed_landing(_merged_frontmatter(text, raw_spec))
 
 
 def parse_gate_applicability(

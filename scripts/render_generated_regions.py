@@ -143,6 +143,13 @@ def _collect_reachable(
     return classes, enums
 
 
+def _render_default_value(value: object) -> str:
+    """Render one default value; an enum member renders as its bare ``.value``."""
+    if isinstance(value, Enum):
+        return str(cast(str, value.value))
+    return repr(value)
+
+
 def _field_default(field: "attrs.Attribute[object]") -> str | None:
     """The rendered default of one field, or None when the field is required.
 
@@ -154,10 +161,10 @@ def _field_default(field: "attrs.Attribute[object]") -> str | None:
         return None
     factory = cast("Callable[[], object] | None", getattr(default, "factory", None))
     if factory is None:
-        return repr(default)
+        return _render_default_value(default)
     if cast(bool, getattr(default, "takes_self", False)):
         return ""
-    return repr(factory())
+    return _render_default_value(factory())
 
 
 def render_type_blocks(roots: list[type], module: ModuleType) -> str:

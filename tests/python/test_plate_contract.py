@@ -518,7 +518,8 @@ def test_landing_block_answers_the_layout_question() -> None:
     assert "`landing` block" in topology
     assert "names the layer and the files in conflict" in flat_topology
     assert "Never ask the plain layout question while a `landing` block exists" in flat_topology
-    assert "`single` maps to `single`, and every other shape maps to `stacked`" in fan_pathway
+    assert "`easy_cheese_schemas.manifest.plate_layout_for`" in fan_pathway
+    assert "`easy_cheese_schemas.manifest.plate_layout_for`" in topology
     assert "Ask only when the spec has no `landing` block" in fan_pathway
     assert "--spec <spec-path>" in cook_skill
     assert "refused before any coder dispatch" in cook_skill

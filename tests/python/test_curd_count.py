@@ -286,15 +286,17 @@ class TestRecommend:
         assert mode == "linear"
 
 
+def _write_spec(tmp_path: Path, name: str, body: str) -> Path:
+    path = tmp_path / name
+    _ = path.write_text(body, encoding="utf-8")
+    return path
+
 
 class TestAnalyze:
-    def _write(self, tmp_path: Path, name: str, body: str) -> Path:
-        return _write_spec(tmp_path, name, body)
-
     def test_decomposable_spec_recommends_parallel_mode(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "big.md", SPEC_LARGE)
+        spec = _write_spec(tmp_path, "big.md", SPEC_LARGE)
         digest = curd_count.analyze(spec, "high")
         assert digest["candidate_curds"] == 7
         assert digest["decomposable"] is True
@@ -304,7 +306,7 @@ class TestAnalyze:
     def test_small_spec_high_blast_recommends_linear_mode(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "small.md", SPEC_SMALL)
+        spec = _write_spec(tmp_path, "small.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, "high")
         assert digest["candidate_curds"] == 1
         assert digest["decomposable"] is False
@@ -313,31 +315,30 @@ class TestAnalyze:
     def test_small_spec_low_blast_recommends_cook(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "small.md", SPEC_SMALL)
+        spec = _write_spec(tmp_path, "small.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, "low")
         assert digest["recommended_skill"] == "/cook"
 
     def test_small_spec_no_blast_radius_recommends_cook(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "small.md", SPEC_SMALL)
+        spec = _write_spec(tmp_path, "small.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, None)
         assert digest["recommended_skill"] == "/cook"
 
     def test_red_required_spec_routes_to_cook_with_handoff(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "behavior.md", SPEC_RED_REQUIRED)
+        spec = _write_spec(tmp_path, "behavior.md", SPEC_RED_REQUIRED)
         digest = curd_count.analyze(spec, "medium")
         assert digest["recommended_skill"] == "/cook"
         assert _dig(digest, "handoff", "command") == ["/cook", "--auto", str(spec)]
-
 
     def test_new_mold_spec_without_ui_surface_is_blocked(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
         body = SPEC_RED_REQUIRED.replace("  ui_surface: non-browser\n", "")
-        spec = self._write(tmp_path, "missing-ui.md", body)
+        spec = _write_spec(tmp_path, "missing-ui.md", body)
         with pytest.raises(curd_count.SpecReadError, match="ui-surface-required"):
             _ = curd_count.analyze(spec, "medium")
 
@@ -348,7 +349,7 @@ class TestAnalyze:
             "  ui_surface: non-browser", "  ui_surface: browser"
         )
         body = body.replace("existing service boundary", "internal helper")
-        spec = self._write(tmp_path, "browser-missing-seam.md", body)
+        spec = _write_spec(tmp_path, "browser-missing-seam.md", body)
         with pytest.raises(curd_count.SpecReadError, match="browser-e2e-seam"):
             _ = curd_count.analyze(spec, "medium")
 
@@ -360,7 +361,7 @@ class TestAnalyze:
         )
         body = body.replace("public call", "existing browser interface")
         body = body.replace("existing service boundary", "existing browser E2E outer seam")
-        spec = self._write(tmp_path, "browser.md", body)
+        spec = _write_spec(tmp_path, "browser.md", body)
         digest = curd_count.analyze(spec, "medium")
         assert _dig(digest, "handoff", "metadata", "gate_applicability", "ui_surface") == "browser"
 
@@ -376,7 +377,7 @@ class TestAnalyze:
             + "  per_layer_green: required\n"
             + "  review_fixes: fold\n",
         )
-        spec = self._write(tmp_path, "stacked.md", body)
+        spec = _write_spec(tmp_path, "stacked.md", body)
         digest = curd_count.analyze(spec, "medium")
         assert _dig(digest, "handoff", "metadata", "landing", "shape") == "stacked_linear"
         assert _dig(digest, "handoff", "metadata", "landing", "layers") == [["c1"], ["c2"]]
@@ -386,7 +387,7 @@ class TestAnalyze:
     def test_absent_landing_block_defaults_to_single_in_handoff(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "no-landing.md", SPEC_RED_REQUIRED)
+        spec = _write_spec(tmp_path, "no-landing.md", SPEC_RED_REQUIRED)
         digest = curd_count.analyze(spec, "medium")
         assert _dig(digest, "handoff", "metadata", "landing") == {
             "shape": "single",
@@ -395,7 +396,6 @@ class TestAnalyze:
             "review_fixes": "fold",
         }
 
-
     def test_unknown_landing_key_is_a_spec_read_error(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
@@ -403,15 +403,16 @@ class TestAnalyze:
             "  ui_surface: non-browser\n",
             "  ui_surface: non-browser\nlanding:\n  shape: single\n  per_layer_greeen: tip-only\n",
         )
-        spec = self._write(tmp_path, "typo.md", body)
+        spec = _write_spec(tmp_path, "typo.md", body)
         with pytest.raises(curd_count.SpecReadError, match="landing-closed-class"):
             _ = curd_count.analyze(spec, "medium")
+
     def test_unmarked_legacy_spec_without_ui_surface_keeps_red_required_handoff(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
         body = SPEC_RED_REQUIRED.replace("source: mold-handshake\n", "")
         body = body.replace("  ui_surface: non-browser\n", "")
-        spec = self._write(tmp_path, "legacy.md", body)
+        spec = _write_spec(tmp_path, "legacy.md", body)
         digest = curd_count.analyze(spec, "medium")
         assert digest["recommended_skill"] == "/cook"
         assert digest["handoff"] is not None
@@ -419,7 +420,7 @@ class TestAnalyze:
     def test_not_applicable_spec_with_acceptance_ids_routes_to_cook(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "docs.md", SPEC_NOT_APPLICABLE)
+        spec = _write_spec(tmp_path, "docs.md", SPEC_NOT_APPLICABLE)
         digest = curd_count.analyze(spec, "low")
         assert digest["recommended_skill"] == "/cook"
         assert digest["handoff"] is None
@@ -429,7 +430,7 @@ class TestAnalyze:
     ) -> None:
         # SPEC_LARGE has 7 goals + 3 gates. candidate_curds tracks distinct
         # behavioural goals (7), not the acceptance-criteria count (issue #111).
-        spec = self._write(tmp_path, "big.md", SPEC_LARGE)
+        spec = _write_spec(tmp_path, "big.md", SPEC_LARGE)
         digest = curd_count.analyze(spec, "high")
         assert _dig(digest, "signals", "goals") == 7
         assert _dig(digest, "signals", "quality_gates") == 3
@@ -442,7 +443,7 @@ class TestAnalyze:
         # criteria must NOT be graded decomposable. Acceptance criteria are
         # facets of one diff, not independent file-disjoint curds; counting them
         # as curds flipped `decomposable` true and mis-recommended /cheese-factory.
-        spec = self._write(tmp_path, "refactor.md", SPEC_GATES_HEAVY)
+        spec = _write_spec(tmp_path, "refactor.md", SPEC_GATES_HEAVY)
         digest = curd_count.analyze(spec, "medium")
         assert _dig(digest, "signals", "quality_gates") == 8  # still reported
         assert digest["candidate_curds"] == 1  # driven by goals, not gates
@@ -453,7 +454,7 @@ class TestAnalyze:
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
         # Even at high blast radius, gate count alone must not trigger fan-out.
-        spec = self._write(tmp_path, "refactor.md", SPEC_GATES_HEAVY)
+        spec = _write_spec(tmp_path, "refactor.md", SPEC_GATES_HEAVY)
         digest = curd_count.analyze(spec, "high")
         assert digest["recommended_skill"] == "/cook"
 
@@ -469,7 +470,7 @@ class TestAnalyze:
             "- gate one\n- gate two\n- gate three\n"
             "- gate four\n- gate five\n- gate six\n"
         )
-        spec = self._write(tmp_path, "no-goals.md", body)
+        spec = _write_spec(tmp_path, "no-goals.md", body)
         digest = curd_count.analyze(spec, None)
         assert _dig(digest, "signals", "goals") == 0
         assert _dig(digest, "signals", "quality_gates") == 6
@@ -480,14 +481,14 @@ class TestAnalyze:
     def test_decisions_counted_but_not_used(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "big.md", SPEC_LARGE)
+        spec = _write_spec(tmp_path, "big.md", SPEC_LARGE)
         digest = curd_count.analyze(spec, "high")
         assert _dig(digest, "signals", "decisions") == 2
 
     def test_empty_spec_yields_zero_candidates(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "empty.md", SPEC_EMPTY)
+        spec = _write_spec(tmp_path, "empty.md", SPEC_EMPTY)
         digest = curd_count.analyze(spec, "high")
         assert digest["candidate_curds"] == 0
         assert digest["decomposable"] is False
@@ -496,14 +497,14 @@ class TestAnalyze:
     def test_slug_extracted_from_filename(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "my-feature-slug.md", SPEC_SMALL)
+        spec = _write_spec(tmp_path, "my-feature-slug.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, "low")
         assert digest["slug"] == "my-feature-slug"
 
     def test_digest_has_all_expected_keys(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "small.md", SPEC_SMALL)
+        spec = _write_spec(tmp_path, "small.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, "low")
         expected = {
             "spec_path",
@@ -520,18 +521,24 @@ class TestAnalyze:
             "notes",
         }
         assert expected <= set(digest.keys())
+        assert digest["landing"] == {
+            "shape": "single",
+            "layers": [],
+            "per_layer_green": "required",
+            "review_fixes": "fold",
+        }
 
     def test_threshold_field_matches_constant(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "small.md", SPEC_SMALL)
+        spec = _write_spec(tmp_path, "small.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, "low")
         assert digest["threshold"] == curd_count.PARALLEL_THRESHOLD
 
     def test_notes_warn_about_independence(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
-        spec = self._write(tmp_path, "small.md", SPEC_SMALL)
+        spec = _write_spec(tmp_path, "small.md", SPEC_SMALL)
         digest = curd_count.analyze(spec, "low")
         joined = " ".join(cast(list[str], digest["notes"]))
         assert "criterion 4" in joined
@@ -624,14 +631,7 @@ class TestSpecReadError:
         assert issubclass(curd_count.SpecReadError, Exception)
 
 
-def _write_spec(tmp_path: Path, name: str, body: str) -> Path:
-    path = tmp_path / name
-    _ = path.write_text(body)
-    return path
-
-
 class TestLandingEdgeCases:
-
     def test_empty_landing_mapping_is_a_spec_read_error(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
@@ -687,3 +687,44 @@ class TestLandingEdgeCases:
         assert layers == [["a"], ["b"]]
         serialized = json.dumps(digest)
         assert json.loads(serialized) == digest
+
+    def test_legacy_spec_declared_landing_shape_carries_into_digest(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        body = (
+            "---\n"
+            "landing:\n"
+            '  shape: stacked_linear\n'
+            '  layers: [["c1"], ["c2"]]\n'
+            "---\n\n"
+            "# Small spec\n\n"
+            "## Goals\n"
+            "- Fix the bug\n"
+        )
+        spec = _write_spec(tmp_path, "legacy-landing.md", body)
+        digest = curd_count.analyze(spec, "low")
+        assert digest["handoff"] is None
+        assert digest["landing"] == {
+            "shape": "stacked_linear",
+            "layers": [["c1"], ["c2"]],
+            "per_layer_green": "required",
+            "review_fixes": "fold",
+        }
+
+    def test_legacy_spec_with_malformed_landing_is_a_spec_read_error(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        body = (
+            "---\n"
+            "landing:\n"
+            "  shape: sideways\n"
+            "---\n\n"
+            "# Small spec\n\n"
+            "## Goals\n"
+            "- Fix the bug\n"
+        )
+        spec = _write_spec(tmp_path, "legacy-bad-landing.md", body)
+        with pytest.raises(
+            curd_count.SpecReadError, match=r"^invalid landing: landing-closed-class"
+        ):
+            _ = curd_count.analyze(spec, "low")

@@ -1019,11 +1019,13 @@ class TestLockedDependencyProvenance:
 
 
 class TestLandingShapeMirrorsPrShape:
-    """LandingShape duplicates PrShape's values by design (contracts.py stays
-    dependency-free); this pins the two enums to the same closed class."""
+    """LandingShape duplicates PrShape on purpose: contracts.py is exec'd
+    standalone and cannot import the package. Pin the two value lists."""
 
-    def test_landing_shape_values_match_pr_shape_values(self) -> None:
+    def test_landing_shape_values_match_pr_shape(self) -> None:
         from easy_cheese_schemas.contracts import LandingShape
         from easy_cheese_schemas.pr_plan import PrShape
 
-        assert [e.value for e in LandingShape] == [e.value for e in PrShape]
+        assert LandingShape is not PrShape
+        assert [m.value for m in LandingShape] == [m.value for m in PrShape]
+        assert [m.name for m in LandingShape] == [m.name for m in PrShape]

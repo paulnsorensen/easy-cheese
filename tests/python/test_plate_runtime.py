@@ -87,7 +87,8 @@ def test_validate_publication_rejects_landing_topology_mismatch() -> None:
         _ = publication.validate_publication(state)
 
     assert error.value.errors == (
-        "landing-topology-mismatch: landing.shape stacked_linear requires topology stacked",
+        "landing-topology-mismatch: landing.shape stacked_linear requires topology stacked, "
+        + "got 'single'",
     )
 
 
@@ -521,6 +522,43 @@ def test_validate_publication_commit_only_landing_with_na_topology_is_valid() ->
     assert result["landing"] == landing
 
 
+def test_validate_publication_new_pr_landing_with_na_topology_and_single_shape_is_valid() -> None:
+    landing: dict[str, object] = {"shape": "single", "layers": []}
+    overrides: dict[str, object] = {
+        "mode": "new-pr",
+        "topology": "n/a",
+        "provider": "n/a",
+        "landing": landing,
+    }
+    state = valid_publication() | overrides
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+    assert result["landing"] == landing
+
+
+def test_validate_publication_new_pr_landing_with_na_topology_and_stacked_shape_is_unresolved() -> (
+    None
+):
+    landing: dict[str, object] = {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
+    overrides: dict[str, object] = {
+        "mode": "new-pr",
+        "topology": "n/a",
+        "provider": "n/a",
+        "landing": landing,
+    }
+    state = valid_publication() | overrides
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert error.value.errors == (
+        "landing-topology-unresolved: landing.shape stacked_linear requires topology stacked, "
+        + "got 'n/a'",
+    )
+
+
 def test_validate_publication_topology_preflight_landing_mismatch_is_rejected() -> None:
     overrides: dict[str, object] = {
         "mode": "topology-preflight",
@@ -537,7 +575,7 @@ def test_validate_publication_topology_preflight_landing_mismatch_is_rejected() 
         _ = publication.validate_publication(state)
 
     assert (
-        "landing-topology-mismatch: landing.shape single requires topology single"
+        "landing-topology-mismatch: landing.shape single requires topology single, got 'stacked'"
         in error.value.errors
     )
 
@@ -589,6 +627,31 @@ def test_validate_publication_cli_reports_a_landing_topology_mismatch(
 
     stderr = capsys.readouterr().err
     assert (
-        "ERROR: landing-topology-mismatch: landing.shape stacked_linear requires topology stacked"
-        in stderr
-    )
+        "ERROR: landing-topology-mismatch: landing.shape stacked_linear requires topology stacked, "
+        + "got 'single'"
+    ) in stderr
+
+
+def test_validate_publication_cli_reports_oversize_state_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "state.json"
+    max_state_bytes = publication._MAX_STATE_BYTES  # pyright: ignore[reportPrivateUsage]
+    _ = path.write_bytes(b" " * (max_state_bytes + 1))
+
+    assert publication.main([str(path)]) == 1
+
+    stderr = capsys.readouterr().err
+    assert f"ERROR: state file exceeds {max_state_bytes} bytes" in stderr
+
+
+def test_validate_publication_cli_reports_non_utf8_state_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "state.json"
+    _ = path.write_bytes(b"\xff\xfe\x00\x01")
+
+    assert publication.main([str(path)]) == 1
+
+    stderr = capsys.readouterr().err
+    assert "ERROR: state file is not valid UTF-8" in stderr

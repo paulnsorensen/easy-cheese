@@ -42,6 +42,13 @@ Name it and stop.
 
 ---
 
+## Stacked-layer fix write-back
+
+When a fix targets a stacked PR, read the spec's `landing.review_fixes` before
+committing it. `fold` (the default) folds the fix into the layer commit it
+corrects, rewriting that layer in place. `top-up` instead adds the fix as a new
+commit on top of the stack, leaving every existing layer commit untouched.
+
 ## Bounded responsibility on dispatch
 
 A repair agent owns only the findings in its brief.

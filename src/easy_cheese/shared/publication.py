@@ -58,6 +58,7 @@ from easy_cheese_schemas.artifacts import (
 
 __all__ = [
     "AmbiguousSyntaxRepairError",
+    "BoundedReadOverflow",
     "CorruptLeftoverError",
     "IdempotencyConflictError",
     "PayloadDigestMismatchError",
@@ -67,6 +68,7 @@ __all__ = [
     "accept",
     "publish",
     "publish_canonical",
+    "read_bounded",
     "request_digest",
     "syntax_normalize",
 ]
@@ -110,6 +112,18 @@ class PointerNotFoundError(PublicationError):
 
 class PayloadDigestMismatchError(PublicationError):
     """A previously revealed pointer's payload no longer matches its digest."""
+
+
+class BoundedReadOverflow(OSError):
+    """A bounded read hit a file larger than its caller-supplied cap."""
+
+    path: Path
+    max_bytes: int
+
+    def __init__(self, path: Path, max_bytes: int) -> None:
+        self.path = path
+        self.max_bytes = max_bytes
+        super().__init__(f"{path} exceeds {max_bytes} bytes")
 
 
 @dataclass(frozen=True)
@@ -449,19 +463,31 @@ def _retain_content(directory: Path, digest: str, content: bytes) -> Path:
     return path
 
 
+def read_bounded(path: Path, max_bytes: int) -> bytes:
+    """Read at most ``max_bytes`` of ``path``, rejecting a larger file unread.
+
+    A caller-supplied path never causes the gateway to allocate more than
+    ``max_bytes`` for it before validation runs.
+    """
+    with path.open("rb") as handle:
+        raw = handle.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise BoundedReadOverflow(path, max_bytes)
+    return raw
+
+
 def _read_bounded(path: Path) -> bytes:
     """Read at most one contract-sized file, rejecting a larger one unread.
 
     A pointer path is caller-supplied, so the gateway never allocates more
     than ``MAX_CONTRACT_BYTES`` for it before schema validation runs.
     """
-    with path.open("rb") as handle:
-        raw = handle.read(MAX_CONTRACT_BYTES + 1)
-    if len(raw) > MAX_CONTRACT_BYTES:
+    try:
+        return read_bounded(path, MAX_CONTRACT_BYTES)
+    except BoundedReadOverflow as exc:
         raise ContractValidationError(
             f"pointer at {path} exceeds MAX_CONTRACT_BYTES ({MAX_CONTRACT_BYTES} bytes)"
-        )
-    return raw
+        ) from exc
 
 
 def _read_pointer(path: Path) -> HandoffPointer:

@@ -6,7 +6,7 @@ Execution continues in `ordinary-pr.md` for a single PR or in `stacks.md` for a 
 For a **new PR**, resolve topology before any commit or branch-layout mutation:
 
 1. Honor an explicit user choice from the current request, verified workflow state, or the spec's `landing` block. It is authoritative.
-   A `landing.shape` of `single` resolves `single`. Any other shape resolves `stacked`, with `landing.layers` as the proposed layer boundaries.
+   Derive the topology from `landing.shape` via `easy_cheese_schemas.manifest.plate_layout_for`, with `landing.layers` as the proposed layer boundaries.
    Persist the choice. Skip the topology question.
 2. Otherwise inspect the finished work's review shape:
    - First classify each production change.
