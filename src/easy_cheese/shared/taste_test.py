@@ -23,6 +23,8 @@ from easy_cheese_schemas.contracts import (
     GroundingOutcome,
     GroundingProbe,
     GroundingRow,
+    Landing,
+    LandingShape,
     MoldSpecDocument,
     MoldSpecFrontmatter,
     SpecConfidence,
@@ -30,6 +32,7 @@ from easy_cheese_schemas.contracts import (
     TestContractRow,
     UiSurface,
     WorkClass,
+    parse_landing_mapping,
 )
 
 
@@ -78,6 +81,7 @@ class _FrontmatterFactory(Protocol):
         gates_overridden: tuple[str, ...],
         agent_introduced_scope: tuple[str, ...],
         entity_referent_bindings: tuple[Mapping[str, object], ...],
+        landing: Landing | None,
     ) -> MoldSpecFrontmatter: ...
 
 
@@ -697,6 +701,16 @@ def _grounding_rows(text: str, spec: Mapping[str, object]) -> tuple[GroundingRow
     )
 
 
+def _typed_landing(merged: Mapping[str, object]) -> Landing | None:
+    landing_raw = merged.get("landing")
+    if landing_raw is None:
+        return None
+    try:
+        return parse_landing_mapping(landing_raw)
+    except ValueError as exc:
+        raise ApplicabilityError(str(exc)) from exc
+
+
 def _typed_mold_document(
     spec: object, *, require_ui_surface: bool = False
 ) -> tuple[MoldSpecDocument, str, Mapping[str, object]]:
@@ -767,6 +781,7 @@ def _typed_mold_document(
         acceptance_ids = _acceptance_ids(text, merged)
         if rows and not acceptance_ids:
             raise ApplicabilityError("acceptance-ids-required")
+        landing = _typed_landing(merged)
         document = _document(
             frontmatter=_frontmatter_model(
                 slug=cast(str, merged.get("slug", "legacy-spec")),
@@ -785,6 +800,7 @@ def _typed_mold_document(
                     tuple[Mapping[str, object], ...],
                     merged.get("entity_referent_bindings", ()),
                 ),
+                landing=landing,
             ),
             acceptance_ids=acceptance_ids,
             test_contract_rows=tuple(rows),
@@ -851,6 +867,41 @@ def required_reflections(spec: object) -> tuple[str, ...]:
     ):
         return NOT_APPLICABLE_REFLECTIONS
     return REFLECTIONS
+
+
+MAX_SPEC_BYTES = 1_000_000
+
+
+def read_spec_text(spec_path: Path) -> str:
+    """Read a caller-named spec: a regular file only, capped at ``MAX_SPEC_BYTES``, UTF-8.
+
+    Raises ``OSError`` for a missing, non-regular, or oversized path and
+    ``UnicodeDecodeError`` for bytes that are not UTF-8.
+    """
+    if not spec_path.is_file():
+        raise OSError("not a regular file")
+    with spec_path.open("rb") as handle:
+        raw = handle.read(MAX_SPEC_BYTES + 1)
+    if len(raw) > MAX_SPEC_BYTES:
+        raise OSError(f"larger than {MAX_SPEC_BYTES} bytes")
+    return raw.decode("utf-8")
+
+
+def parse_landing(spec: object) -> Landing:
+    """Read only the front matter's ``landing`` block; an absent block means ``single``."""
+    text, raw_spec = _spec_text(spec)
+    merged: dict[str, object] = {**_frontmatter(text), **raw_spec}
+    landing = _typed_landing(merged)
+    return landing if landing is not None else Landing(shape=LandingShape.SINGLE)
+
+
+def landing_metadata(landing: Landing) -> dict[str, object]:
+    return {
+        "shape": landing.shape.value,
+        "layers": [list(group) for group in landing.layers],
+        "per_layer_green": landing.per_layer_green.value,
+        "review_fixes": landing.review_fixes.value,
+    }
 
 
 def parse_gate_applicability(

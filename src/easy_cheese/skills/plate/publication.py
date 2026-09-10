@@ -11,13 +11,30 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
 
+from easy_cheese_schemas.contracts import LandingShape, parse_landing_mapping
+
 _MODES = {"commit-only", "topology-preflight", "new-pr", "existing-pr", "stack-maintenance"}
 _TOPOLOGIES = {"single", "stacked", "n/a"}
 _PROVIDERS = {"ordinary", "graphite", "git-town", "gh-stack", "n/a"}
 _STACK_PROVIDERS = {"graphite", "git-town", "gh-stack"}
 _REQUIRED = {"mode", "topology", "provider", "artifacts", "gate", "commits", "prs", "risk"}
-_ALLOWED = _REQUIRED | {"pr_plan"}
+_ALLOWED = _REQUIRED | {"pr_plan", "landing"}
 _SHA = re.compile(r"[0-9a-fA-F]{7,40}")
+
+
+def _validate_landing(raw: object, topology: object, errors: list[str]) -> None:
+    """Decode the spec's landing block with the schema's rules, then check topology."""
+    try:
+        landing = parse_landing_mapping(raw)
+    except ValueError as exc:
+        errors.append(str(exc))
+        return
+    expected = "single" if landing.shape is LandingShape.SINGLE else "stacked"
+    if topology in {"single", "stacked"} and topology != expected:
+        errors.append(
+            "landing-topology-mismatch: landing.shape "
+            + f"{landing.shape.value} requires topology {expected}"
+        )
 
 
 class PublicationValidationError(ValueError):
@@ -131,6 +148,9 @@ def validate_publication(data: object) -> dict[str, object]:
             _exact_fields(plan, {"plate_layout"}, "pr_plan", errors)
             if plan.get("plate_layout") != topology:
                 errors.append("pr_plan.plate_layout must match topology")
+
+    if "landing" in state:
+        _validate_landing(state["landing"], topology, errors)
 
     if mode == "topology-preflight":
         if topology not in {"single", "stacked"}:

@@ -5,7 +5,8 @@ Execution continues in `ordinary-pr.md` for a single PR or in `stacks.md` for a 
 
 For a **new PR**, resolve topology before any commit or branch-layout mutation:
 
-1. Honor an explicit user choice from the current request or verified workflow state. It is authoritative.
+1. Honor an explicit user choice from the current request, verified workflow state, or the spec's `landing` block. It is authoritative.
+   A `landing.shape` of `single` resolves `single`. Any other shape resolves `stacked`, with `landing.layers` as the proposed layer boundaries.
    Persist the choice. Skip the topology question.
 2. Otherwise inspect the finished work's review shape:
    - First classify each production change.
@@ -29,6 +30,10 @@ For a **new PR**, resolve topology before any commit or branch-layout mutation:
    For a stack recommendation, name the proposed layers. Recommend **Stacked PRs**.
    For ambiguity, state the competing evidence. Recommend the best-supported option.
    Do not choose silently.
+4. When a `landing` block exists and the finished diff cannot meet its shape, ask one question that names the layer and the files in conflict.
+   A layer that depends on files a later layer owns, or commits that cannot split on the layer boundaries, is a conflict.
+   Offer three options: collapse to a single PR, re-layer on the proposed boundaries, or stop.
+   Never ask the plain layout question while a `landing` block exists.
 
 This policy stays unchanged under `--auto`. Transport any required question
 through

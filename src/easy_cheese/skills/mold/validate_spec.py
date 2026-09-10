@@ -46,6 +46,7 @@ if TYPE_CHECKING:
         GroundingOutcome,
         GroundingProbe,
         GroundingRow,
+        Landing,
         MoldSpecDocument,
         MoldSpecFrontmatter,
         SpecConfidence,
@@ -91,6 +92,7 @@ class _SchemaModule(Protocol):
     TestContractRow: type[TestContractRow]
     UiSurface: type[UiSurface]
     WorkClass: type[WorkClass]
+    parse_landing_mapping: Callable[[object], Landing]
 
 
 is_hardened_provenance: Callable[[Mapping[str, object]], bool]
@@ -444,6 +446,23 @@ def _typed_errors(message: str, path: Path) -> tuple[str, ...]:
     return (f"ERROR: typed-document-invalid {message} in {path}",)
 
 
+def _typed_landing(
+    schema: _SchemaModule,
+    frontmatter: Mapping[str, object],
+    path: Path,
+    errors: list[str],
+) -> tuple[Landing | None, bool]:
+    """Return (landing, ok). ``ok`` is False when an error was appended."""
+    landing_raw = frontmatter.get("landing")
+    if landing_raw is None:
+        return None, True
+    try:
+        return schema.parse_landing_mapping(landing_raw), True
+    except ValueError as error:
+        errors.append(f"ERROR: {error} in {path}")
+        return None, False
+
+
 def _typed_frontmatter(
     frontmatter: Mapping[str, object],
     path: Path,
@@ -479,6 +498,10 @@ def _typed_frontmatter(
             )
             return None
 
+    landing, landing_ok = _typed_landing(schema, frontmatter, path, errors)
+    if not landing_ok:
+        return None
+
     try:
         gate_model = schema.GateApplicability(
             disposition=schema.GateApplicabilityDisposition(
@@ -507,6 +530,7 @@ def _typed_frontmatter(
                 tuple[Mapping[str, object], ...],
                 frontmatter.get("entity_referent_bindings", ()),
             ),
+            landing=landing,
         )
     except (TypeError, ValueError) as error:
         errors.extend(_typed_errors(str(error), path))

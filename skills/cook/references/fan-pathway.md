@@ -178,6 +178,10 @@ Run `/plate` in topology-preflight mode when the selected mode is `parallel`, th
 
 Complete this decision before Phase 1 seed or any worker commit.
 
+Derive `plate_layout` from the spec's `landing.shape` first: `single` maps to `single`, and every other shape maps to `stacked`.
+
+Record that derivation and skip the question. Ask only when the spec has no `landing` block.
+
 Apply `/plate`'s review-shape policy.
 
 Preserve an explicit choice.

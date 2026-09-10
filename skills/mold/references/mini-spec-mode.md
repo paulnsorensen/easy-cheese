@@ -29,6 +29,11 @@ gate_applicability:
   work_class: behavior | docs-only | refactor-only | test-only | appearance-only
   ui_surface: browser | non-browser | not-applicable
   reason: <required only for not-applicable>
+landing:
+  shape: single | orthogonal_flat | stacked_linear | diamond_stack   # default single; mini-spec mode writes single
+  layers: []   # ordered groups of canonical curd ids from the approved CurdPlan, as a one-line flow list; a mini-spec has no plan, so keep []
+  per_layer_green: required | tip-only
+  review_fixes: fold | top-up
 verification: <one-line: the obvious check>
 ---
 
@@ -63,6 +68,8 @@ Include this section only for `red-required`; omit it for `not-applicable`.
 - culture: <one-line synthesis of what /culture concluded>
 - briesearch: <one-line synthesis>; artifact: research/<slug>/<slug>.md
 ```
+
+Mini-spec mode writes `shape: single` unless the user named a shape.
 
 `source: agent-mini-spec` marks the strict Mold production path. New behavior
 specs must set `ui_surface` to exactly `browser` or `non-browser`; closed

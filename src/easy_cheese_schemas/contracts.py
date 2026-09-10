@@ -923,6 +923,48 @@ def _validate_plan_curds(
         visit(curd_id)
 
 
+def landing_layer_errors(plan: CurdPlan, landing: Landing) -> tuple[str, ...]:
+    """Return landing-layer errors for a plan against the spec's declared layers.
+
+    Reads only declared ``dependencies``, never final-state behavior. Empty
+    ``landing.layers`` means the spec named no layers and yields no errors.
+    Each error starts with one of three tokens: ``landing-layer-unknown-curd``
+    (a layer names a curd the plan lacks), ``landing-layer-missing-curd`` (a
+    plan curd appears in no layer), or ``landing-layer-order`` (a curd depends
+    on a curd in a later layer). ``Landing`` already forbids a curd id in two
+    layers, so the first layer that names an id is the only one.
+    """
+    if not landing.layers:
+        return ()
+    errors: list[str] = []
+    curd_ids = {curd.curd_id for curd in plan.curds}
+    layer_index: dict[str, int] = {}
+    for index, layer in enumerate(landing.layers):
+        for curd_id in layer:
+            layer_index[curd_id] = index
+            if curd_id not in curd_ids:
+                errors.append(
+                    f"landing-layer-unknown-curd landing.layers names unknown curd {curd_id!r}"
+                )
+    for curd in plan.curds:
+        if curd.curd_id not in layer_index:
+            errors.append(
+                f"landing-layer-missing-curd curd {curd.curd_id!r} is missing from landing.layers"
+            )
+    for curd in plan.curds:
+        if curd.curd_id not in layer_index:
+            continue
+        layer_of_curd = layer_index[curd.curd_id]
+        for dependency in curd.dependencies:
+            layer_of_dependency = layer_index.get(dependency)
+            if layer_of_dependency is not None and layer_of_dependency > layer_of_curd:
+                errors.append(
+                    f"landing-layer-order curd {curd.curd_id!r} in layer {layer_of_curd + 1} "
+                    + f"depends on {dependency!r} in layer {layer_of_dependency + 1}"
+                )
+    return tuple(errors)
+
+
 @contract("curd-plan")
 @define(frozen=True)
 class CurdPlan:
@@ -2344,6 +2386,25 @@ class UiSurface(str, Enum):
     NOT_APPLICABLE = "not-applicable"
 
 
+class LandingShape(str, Enum):
+    """PR landing topology; values mirror ``pr_plan.PrShape`` by design."""
+
+    SINGLE = "single"
+    ORTHOGONAL_FLAT = "orthogonal_flat"
+    STACKED_LINEAR = "stacked_linear"
+    DIAMOND_STACK = "diamond_stack"
+
+
+class PerLayerGreen(str, Enum):
+    REQUIRED = "required"
+    TIP_ONLY = "tip-only"
+
+
+class ReviewFixes(str, Enum):
+    FOLD = "fold"
+    TOP_UP = "top-up"
+
+
 class SpecConfidence(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
@@ -2417,6 +2478,138 @@ class GateApplicability:
             )
 
 
+def _landing_layers(
+    value: Iterable[Iterable[str]] | tuple[tuple[str, ...], ...],
+) -> tuple[tuple[str, ...], ...]:
+    return tuple(tuple(group) for group in value)
+
+
+def _landing_layers_bounds(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    assert isinstance(value, tuple)
+    groups = cast(tuple[tuple[str, ...], ...], value)
+    if len(groups) > MAX_COLLECTION_ITEMS:
+        raise ValueError(
+            f"{attribute.name} must be at most {MAX_COLLECTION_ITEMS} groups"
+        )
+    for index, group in enumerate(groups, start=1):
+        if len(group) > MAX_COLLECTION_ITEMS:
+            raise ValueError(
+                f"{attribute.name}[{index}] must be at most {MAX_COLLECTION_ITEMS} items"
+            )
+
+
+setattr(
+    _landing_layers_bounds, "__schema_constraints__", {"maxItems": MAX_COLLECTION_ITEMS}
+)
+setattr(
+    _landing_layers_bounds,
+    "__schema_item_constraints__",
+    {"maxItems": MAX_COLLECTION_ITEMS},
+)
+
+
+@define(frozen=True)
+class Landing:
+    """The spec's PR landing shape; absent on a spec reads as ``single``."""
+
+    shape: LandingShape = field(validator=validators.instance_of(LandingShape))
+    layers: tuple[tuple[str, ...], ...] = field(
+        factory=tuple, converter=_landing_layers, validator=_landing_layers_bounds
+    )
+    per_layer_green: PerLayerGreen = field(
+        default=PerLayerGreen.REQUIRED,
+        validator=validators.instance_of(PerLayerGreen),
+    )
+    review_fixes: ReviewFixes = field(
+        default=ReviewFixes.FOLD, validator=validators.instance_of(ReviewFixes)
+    )
+
+    @layers.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_layers(
+        self, attribute: _NamedAttribute, value: object
+    ) -> None:  # noqa: V103
+        assert isinstance(value, tuple)
+        groups = cast(tuple[tuple[str, ...], ...], value)
+        if groups and self.shape is LandingShape.SINGLE:
+            raise ValueError("landing-layers-require-non-single-shape")
+        seen: set[str] = set()
+        for group_index, group in enumerate(groups):
+            for index, curd_id in enumerate(group):
+                _identifier(
+                    self,
+                    _ListItemAttribute(f"{attribute.name}[{group_index}][{index}]"),
+                    curd_id,
+                )
+                if curd_id in seen:
+                    raise ValueError(
+                        f"landing-layer-curd-ids-must-be-unique: {curd_id!r} appears twice"
+                    )
+                seen.add(curd_id)
+
+
+LANDING_FIELD_NAMES: frozenset[str] = frozenset(attrs.fields_dict(Landing))
+
+
+def parse_landing_mapping(raw: object) -> Landing:
+    """Decode a spec's ``landing`` mapping into a :class:`Landing`.
+
+    Raises ``ValueError`` prefixed with ``landing-closed-class`` on any
+    closed-class violation: an unknown key, a missing or unrecognized
+    ``shape``/``per_layer_green``/``review_fixes``, or a malformed ``layers``
+    shape.
+    """
+    if not isinstance(raw, Mapping):
+        raise ValueError("landing-closed-class landing must be a mapping")
+    raw_mapping = cast(Mapping[str, object], raw)
+    unknown = raw_mapping.keys() - LANDING_FIELD_NAMES
+    if unknown:
+        raise ValueError(
+            "landing-closed-class landing."
+            + ", landing.".join(repr(name) for name in sorted(unknown))
+            + " is not allowed"
+        )
+    if "shape" not in raw_mapping:
+        raise ValueError("landing-closed-class landing.shape is required")
+
+    enum_checks: tuple[tuple[str, type[Enum], object], ...] = (
+        ("shape", LandingShape, None),
+        ("per_layer_green", PerLayerGreen, "required"),
+        ("review_fixes", ReviewFixes, "fold"),
+    )
+    values: dict[str, Enum] = {}
+    for key, enum_cls, default in enum_checks:
+        raw_value = raw_mapping.get(key, default)
+        try:
+            values[key] = enum_cls(raw_value)
+        except ValueError as exc:
+            raise ValueError(
+                f"landing-closed-class landing.{key} {raw_value!r} is not a "
+                + f"recognized {key}"
+            ) from exc
+
+    layers_raw = raw_mapping.get("layers", [])
+    if not isinstance(layers_raw, list) or not all(
+        isinstance(group, list)
+        and all(isinstance(item, str) for item in cast("list[object]", group))
+        for group in cast("list[object]", layers_raw)
+    ):
+        raise ValueError(
+            "landing-closed-class landing.layers must be a list of lists of strings"
+        )
+
+    try:
+        return Landing(
+            shape=cast(LandingShape, values["shape"]),
+            layers=cast("list[list[str]]", layers_raw),
+            per_layer_green=cast(PerLayerGreen, values["per_layer_green"]),
+            review_fixes=cast(ReviewFixes, values["review_fixes"]),
+        )
+    except ValueError as exc:
+        raise ValueError(f"landing-closed-class {exc}") from exc
+
+
 @define(frozen=True)
 class MoldSpecFrontmatter:
     slug: str = field(validator=_identifier)
@@ -2435,6 +2628,9 @@ class MoldSpecFrontmatter:
     )
     entity_referent_bindings: tuple[Mapping[str, object], ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_list_of(Mapping)
+    )
+    landing: Landing | None = field(
+        default=None, validator=validators.optional(validators.instance_of(Landing))
     )
 
 
@@ -2533,6 +2729,9 @@ MOLD_SPEC_ENUMS: dict[str, tuple[str, ...]] = {
     ),
     "work_class": tuple(work_class.value for work_class in WorkClass),
     "ui_surface": tuple(ui_surface.value for ui_surface in UiSurface),
+    "landing_shape": tuple(shape.value for shape in LandingShape),
+    "per_layer_green": tuple(value.value for value in PerLayerGreen),
+    "review_fixes": tuple(value.value for value in ReviewFixes),
 }
 
 MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
@@ -2561,6 +2760,12 @@ MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
         description=(
             "red-required requires Test Contracts; not-applicable forbids them "
             "and requires a reason."
+        ),
+    ),
+    CrossFieldRule(
+        rule_id="landing-closed-class",
+        description=(
+            "landing fields take only their declared values; layers is empty when shape is single."
         ),
     ),
 )
@@ -2683,6 +2888,13 @@ __all__ = [
     "GateApplicability",
     "GateApplicabilityDisposition",
     "GroundingOutcome",
+    "Landing",
+    "LandingShape",
+    "PerLayerGreen",
+    "ReviewFixes",
+    "LANDING_FIELD_NAMES",
+    "landing_layer_errors",
+    "parse_landing_mapping",
     "GroundingProbe",
     "GroundingRow",
     "HypothesisDisposition",

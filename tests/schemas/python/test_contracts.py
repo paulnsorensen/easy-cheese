@@ -40,6 +40,13 @@ from easy_cheese_schemas.contracts import (
     IdentityAction,
     IdentityLineage,
     IngressKind,
+    Landing,
+    LandingShape,
+    landing_layer_errors,
+    MAX_COLLECTION_ITEMS,
+    parse_landing_mapping,
+    PerLayerGreen,
+    ReviewFixes,
     NormalizationAction,
     NormalizationReceipt,
     PhaseContract,
@@ -353,6 +360,50 @@ def test_curd_plan_signed_digest_covers_every_field_but_the_digest() -> None:
 def test_curd_plan_digest_refuses_a_value_that_is_not_a_plan() -> None:
     with pytest.raises(TypeError, match="curd_plan_digest expects CurdPlan, not str"):
         _ = curd_plan_digest(DIGEST)
+
+
+def _layers(*groups: list[str]) -> Landing:
+    return Landing(shape=LandingShape.STACKED_LINEAR, layers=[list(group) for group in groups])
+
+
+def _curd(curd_id: str, *dependencies: str) -> SemanticCurd:
+    return curd(
+        curd_id,
+        dependencies=list(dependencies),
+        criteria=[criterion(f"{curd_id}-criterion")],
+    )
+
+
+def test_landing_layer_errors_empty_layers_means_unset() -> None:
+    assert landing_layer_errors(plan(curd("c1")), Landing(shape=LandingShape.SINGLE)) == ()
+
+
+def test_landing_layer_errors_flags_forward_dependency() -> None:
+    errors = landing_layer_errors(
+        plan(_curd("c1", "c2"), _curd("c2")),
+        _layers(["c1"], ["c2"]),
+    )
+    assert errors == (
+        "landing-layer-order curd 'c1' in layer 1 depends on 'c2' in layer 2",
+    )
+
+
+def test_landing_layer_errors_flags_missing_and_unknown_layer_curds() -> None:
+    errors = landing_layer_errors(plan(_curd("c1"), _curd("c2")), _layers(["c1"], ["c3"]))
+    assert errors == (
+        "landing-layer-unknown-curd landing.layers names unknown curd 'c3'",
+        "landing-layer-missing-curd curd 'c2' is missing from landing.layers",
+    )
+
+
+def test_landing_layer_errors_accepts_backward_and_same_layer_dependencies() -> None:
+    assert (
+        landing_layer_errors(
+            plan(_curd("c1"), _curd("c2", "c1"), _curd("c3", "c2")),
+            _layers(["c1"], ["c2", "c3"]),
+        )
+        == ()
+    )
 
 
 def test_identity_lineage_enforces_new_retain_and_derive_rules() -> None:
@@ -1185,3 +1236,68 @@ def test_normalization_receipt_json_schema_rejects_null_legacy_source() -> None:
 
 def test_normalization_action_exposes_only_field_path_and_action() -> None:
     assert set(attrs.fields_dict(NormalizationAction)) == {"field_path", "action"}
+
+
+def test_landing_layer_errors_empty_group_reports_curd_missing() -> None:
+    errors = landing_layer_errors(plan(curd("c1")), _layers([]))
+    assert errors == ("landing-layer-missing-curd curd 'c1' is missing from landing.layers",)
+
+
+def test_landing_layer_errors_every_message_carries_its_own_token() -> None:
+    errors = landing_layer_errors(
+        plan(_curd("c1", "c2"), _curd("c2")),
+        _layers(["c1"], ["c2", "c3"]),
+    )
+    assert [error.split(" ", 1)[0] for error in errors] == [
+        "landing-layer-unknown-curd",
+        "landing-layer-order",
+    ]
+
+
+def test_landing_layer_errors_reports_an_unmatched_layer_and_an_uncovered_curd() -> None:
+    errors = landing_layer_errors(plan(curd("c1")), _layers(["x"]))
+    assert errors == (
+        "landing-layer-unknown-curd landing.layers names unknown curd 'x'",
+        "landing-layer-missing-curd curd 'c1' is missing from landing.layers",
+    )
+
+
+def test_parse_landing_mapping_reports_every_unknown_key_once() -> None:
+    with pytest.raises(ValueError) as info:
+        _ = parse_landing_mapping({"shape": "single", "extra": 1, "bogus": 2})
+    assert str(info.value) == "landing-closed-class landing.'bogus', landing.'extra' is not allowed"
+
+
+def test_parse_landing_mapping_requires_shape_and_escapes_echoed_values() -> None:
+    with pytest.raises(ValueError, match="^landing-closed-class landing.shape is required$"):
+        _ = parse_landing_mapping({})
+    with pytest.raises(ValueError) as info:
+        _ = parse_landing_mapping({"shape": "\x1b[31msideways"})
+    assert r"landing.shape '\x1b[31msideways' is not a recognized shape" in str(info.value)
+    assert "\x1b" not in str(info.value)
+    with pytest.raises(ValueError) as info:
+        _ = parse_landing_mapping({"shape": "single", "evil\nERROR: fabricated": 1})
+    assert "\n" not in str(info.value)
+    assert r"landing.'evil\nERROR: fabricated' is not allowed" in str(info.value)
+
+
+def test_parse_landing_mapping_applies_defaults_and_bounds() -> None:
+    landing = parse_landing_mapping({"shape": "stacked_linear", "layers": [["c1"], ["c2"]]})
+    assert landing.per_layer_green is PerLayerGreen.REQUIRED
+    assert landing.review_fixes is ReviewFixes.FOLD
+    assert landing.layers == (("c1",), ("c2",))
+    too_many = [[f"c{index}"] for index in range(MAX_COLLECTION_ITEMS + 1)]
+    with pytest.raises(ValueError, match="^landing-closed-class "):
+        _ = parse_landing_mapping({"shape": "stacked_linear", "layers": too_many})
+    with pytest.raises(ValueError, match="^landing-closed-class landing must be a mapping$"):
+        _ = parse_landing_mapping(None)
+
+
+def test_landing_layer_messages_name_the_offending_id_and_position() -> None:
+    with pytest.raises(ValueError) as bad_id:
+        _ = parse_landing_mapping({"shape": "stacked_linear", "layers": [["ok"], ["not an id"]]})
+    assert "layers[1][0]" in str(bad_id.value)
+    assert str(bad_id.value).startswith("landing-closed-class ")
+    with pytest.raises(ValueError) as duplicate:
+        _ = parse_landing_mapping({"shape": "stacked_linear", "layers": [["ok"], ["ok"]]})
+    assert "landing-layer-curd-ids-must-be-unique: 'ok' appears twice" in str(duplicate.value)

@@ -1016,3 +1016,14 @@ class TestLockedDependencyProvenance:
         import attrs
 
         assert _runtime_pins()["attrs"] == attrs.__version__
+
+
+class TestLandingShapeMirrorsPrShape:
+    """LandingShape duplicates PrShape's values by design (contracts.py stays
+    dependency-free); this pins the two enums to the same closed class."""
+
+    def test_landing_shape_values_match_pr_shape_values(self) -> None:
+        from easy_cheese_schemas.contracts import LandingShape
+        from easy_cheese_schemas.pr_plan import PrShape
+
+        assert [e.value for e in LandingShape] == [e.value for e in PrShape]

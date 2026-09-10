@@ -289,9 +289,7 @@ class TestRecommend:
 
 class TestAnalyze:
     def _write(self, tmp_path: Path, name: str, body: str) -> Path:
-        path = tmp_path / name
-        _ = path.write_text(body)
-        return path
+        return _write_spec(tmp_path, name, body)
 
     def test_decomposable_spec_recommends_parallel_mode(
         self, curd_count: _CurdCountModule, tmp_path: Path
@@ -366,6 +364,48 @@ class TestAnalyze:
         digest = curd_count.analyze(spec, "medium")
         assert _dig(digest, "handoff", "metadata", "gate_applicability", "ui_surface") == "browser"
 
+    def test_declared_landing_shape_carries_into_handoff(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        body = SPEC_RED_REQUIRED.replace(
+            "  ui_surface: non-browser\n",
+            "  ui_surface: non-browser\n"
+            + "landing:\n"
+            + "  shape: stacked_linear\n"
+            + '  layers: [["c1"], ["c2"]]\n'
+            + "  per_layer_green: required\n"
+            + "  review_fixes: fold\n",
+        )
+        spec = self._write(tmp_path, "stacked.md", body)
+        digest = curd_count.analyze(spec, "medium")
+        assert _dig(digest, "handoff", "metadata", "landing", "shape") == "stacked_linear"
+        assert _dig(digest, "handoff", "metadata", "landing", "layers") == [["c1"], ["c2"]]
+        assert _dig(digest, "handoff", "metadata", "landing", "per_layer_green") == "required"
+        assert _dig(digest, "handoff", "metadata", "landing", "review_fixes") == "fold"
+
+    def test_absent_landing_block_defaults_to_single_in_handoff(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        spec = self._write(tmp_path, "no-landing.md", SPEC_RED_REQUIRED)
+        digest = curd_count.analyze(spec, "medium")
+        assert _dig(digest, "handoff", "metadata", "landing") == {
+            "shape": "single",
+            "layers": [],
+            "per_layer_green": "required",
+            "review_fixes": "fold",
+        }
+
+
+    def test_unknown_landing_key_is_a_spec_read_error(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        body = SPEC_RED_REQUIRED.replace(
+            "  ui_surface: non-browser\n",
+            "  ui_surface: non-browser\nlanding:\n  shape: single\n  per_layer_greeen: tip-only\n",
+        )
+        spec = self._write(tmp_path, "typo.md", body)
+        with pytest.raises(curd_count.SpecReadError, match="landing-closed-class"):
+            _ = curd_count.analyze(spec, "medium")
     def test_unmarked_legacy_spec_without_ui_surface_keeps_red_required_handoff(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
@@ -471,6 +511,7 @@ class TestAnalyze:
             "blast_radius",
             "candidate_curds",
             "signals",
+            "landing",
             "threshold",
             "decomposable",
             "recommended_skill",
@@ -581,3 +622,68 @@ class TestSpecReadError:
     def test_specreaderror_is_exception_subclass(self, curd_count: _CurdCountModule) -> None:
         # Importable as a public type so callers can catch it specifically.
         assert issubclass(curd_count.SpecReadError, Exception)
+
+
+def _write_spec(tmp_path: Path, name: str, body: str) -> Path:
+    path = tmp_path / name
+    _ = path.write_text(body)
+    return path
+
+
+class TestLandingEdgeCases:
+
+    def test_empty_landing_mapping_is_a_spec_read_error(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        body = SPEC_RED_REQUIRED.replace(
+            "  ui_surface: non-browser\n",
+            "  ui_surface: non-browser\nlanding: {}\n",
+        )
+        spec = _write_spec(tmp_path, "empty-landing.md", body)
+        with pytest.raises(
+            curd_count.SpecReadError,
+            match="landing-closed-class landing.shape is required",
+        ):
+            _ = curd_count.analyze(spec, "medium")
+
+    def test_not_applicable_spec_with_malformed_landing_is_a_spec_read_error(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        body = SPEC_NOT_APPLICABLE.replace(
+            "  reason: documentation-only change\n",
+            "  reason: documentation-only change\nlanding:\n  shape: sideways\n",
+        )
+        spec = _write_spec(tmp_path, "na-bad-landing.md", body)
+        with pytest.raises(curd_count.SpecReadError, match="landing-closed-class"):
+            _ = curd_count.analyze(spec, "low")
+
+    def test_not_applicable_spec_with_landing_block_produces_no_handoff(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        body = SPEC_NOT_APPLICABLE.replace(
+            "  reason: documentation-only change\n",
+            "  reason: documentation-only change\n"
+            + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n',
+        )
+        spec = _write_spec(tmp_path, "na-landing.md", body)
+        digest = curd_count.analyze(spec, "low")
+        assert digest["handoff"] is None
+        assert _dig(digest, "landing", "shape") == "stacked_linear"
+        assert _dig(digest, "landing", "layers") == [["c1"], ["c2"]]
+
+    def test_layers_list_of_list_shape_survives_json_round_trip(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        body = SPEC_RED_REQUIRED.replace(
+            "  ui_surface: non-browser\n",
+            "  ui_surface: non-browser\n"
+            + "landing:\n"
+            + "  shape: stacked_linear\n"
+            + '  layers: [["a"], ["b"]]\n',
+        )
+        spec = _write_spec(tmp_path, "ab-layers.md", body)
+        digest = curd_count.analyze(spec, "medium")
+        layers = _dig(digest, "handoff", "metadata", "landing", "layers")
+        assert layers == [["a"], ["b"]]
+        serialized = json.dumps(digest)
+        assert json.loads(serialized) == digest

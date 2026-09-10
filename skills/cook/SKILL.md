@@ -36,6 +36,9 @@ Read explicit spec paths verbatim.
 Resolve a bare slug with `SPEC=$(python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>)`.
 Use `python3 skills/cook/scripts/cook.pyz accept <pointer>` for a Mold handoff pointer.
 This command verifies the route and referenced artifacts before execution.
+Always pass `--spec <spec-path>` with a Mold pointer; Mold's hand-off supplies it.
+A plan whose `dependencies` cross the spec's `landing.layers` is refused before any coder dispatch.
+Without the flag the layer gate does not run, and `accept` says so on stderr.
 
 Flags:
 
@@ -43,6 +46,7 @@ Flags:
 - `--hard` propagates through `/plate`.
 - `--open-pr` lets terminal `/plate` publish. Auto mode never adds this flag.
 - `--resume <slug>` resumes a typed fan handoff and its referenced artifacts.
+- `--spec <spec-path>` names the approved spec when the primary argument is a Mold pointer. Cook forwards it to `accept --spec`. Mold's hand-off supplies it.
 
 Optional context payload:
 

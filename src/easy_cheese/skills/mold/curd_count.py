@@ -35,7 +35,10 @@ from easy_cheese.shared.taste_test import (
     RedRequired,
     auto_handoff,
     is_new_mold_spec,
+    landing_metadata,
     parse_gate_applicability,
+    parse_landing,
+    read_spec_text,
 )
 
 HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
@@ -101,7 +104,7 @@ class SpecReadError(Exception):
 
 def _read_spec(spec_path: Path) -> str:
     try:
-        return spec_path.read_text(encoding="utf-8")
+        return read_spec_text(spec_path)
     except UnicodeDecodeError as exc:
         raise SpecReadError(
             f"spec is not valid UTF-8 ({exc.reason} at byte {exc.start})"
@@ -110,12 +113,15 @@ def _read_spec(spec_path: Path) -> str:
         raise SpecReadError(f"could not read spec: {exc.strerror or exc}") from exc
 
 
-def _gate_handoff(spec_path: Path, body: str) -> dict[str, object] | None:
+def _gate_handoff(
+    spec_path: Path, body: str
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    """Return ``(handoff, landing)``; ``landing`` is the spec's block or the single default."""
     if (
         not re.search(r"(?m)^gate_applicability:\s*(?:\{|$)", body)
         and not is_new_mold_spec(body)
     ):
-        return None
+        return None, None
     try:
         applicability = parse_gate_applicability(
             body,
@@ -123,9 +129,13 @@ def _gate_handoff(spec_path: Path, body: str) -> dict[str, object] | None:
         )
     except ApplicabilityError as exc:
         raise SpecReadError(f"invalid gate applicability: {exc}") from exc
+    try:
+        landing = landing_metadata(parse_landing(body))
+    except ApplicabilityError as exc:
+        raise SpecReadError(f"invalid landing: {exc}") from exc
     if isinstance(applicability, RedRequired):
-        return auto_handoff(spec_path, applicability)
-    return None
+        return auto_handoff(spec_path, applicability, metadata={"landing": landing}), landing
+    return None, landing
 
 
 def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
@@ -136,7 +146,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
     decisions = _count_bullets(_extract_section(body, DECISIONS_HEADINGS))
 
     recommended, mode, rationale = _recommend(candidate_curds, blast_radius)
-    handoff = _gate_handoff(spec_path, body)
+    handoff, landing = _gate_handoff(spec_path, body)
     if handoff is not None:
         command = cast(list[str], handoff["command"])
         recommended = command[0]
@@ -156,6 +166,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
         "decomposable": candidate_curds >= PARALLEL_THRESHOLD,
         "recommended_skill": recommended,
         "handoff": handoff,
+        "landing": landing,
         "mode": mode,
         "rationale": rationale,
         "notes": [

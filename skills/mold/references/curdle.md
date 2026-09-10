@@ -50,6 +50,11 @@ gate_applicability:
   work_class: behavior | docs-only | refactor-only | test-only | appearance-only
   ui_surface: browser | non-browser | not-applicable
   reason: <required only for not-applicable>
+landing:
+  shape: single | orthogonal_flat | stacked_linear | diamond_stack   # default single; mini-spec mode writes single
+  layers: []   # ordered groups of canonical curd ids from the approved CurdPlan, as a one-line flow list, e.g. [["<plan>/curd/1"], ["<plan>/curd/2"]]; must be [] when shape is single
+  per_layer_green: required | tip-only
+  review_fixes: fold | top-up
 
 # <Title>
 
@@ -192,6 +197,7 @@ rule contract-matrix-row-requires-both: "Contract-matrix rows require both Inter
 rule grounding-probe-recorded: "The Grounding table must record the wiki probe exactly once with non-empty evidence."
 rule delegation-digest-recorded: "The Grounding table must record the explorer probe exactly once with non-empty evidence."
 rule not-applicable-closed-class: "red-required requires Test Contracts; not-applicable forbids them and requires a reason."
+rule landing-closed-class: "landing fields take only their declared values; layers is empty when shape is single."
 
 type GateApplicability {
   disposition GateApplicabilityDisposition
@@ -204,6 +210,13 @@ type GroundingRow {
   probe GroundingProbe
   outcome GroundingOutcome
   evidence str
+}
+
+type Landing {
+  shape LandingShape
+  layers? tuple[tuple[str, ...], ...] = ()
+  per_layer_green? PerLayerGreen = <PerLayerGreen.REQUIRED: 'required'>
+  review_fixes? ReviewFixes = <ReviewFixes.FOLD: 'fold'>
 }
 
 type MoldSpecDocument {
@@ -223,6 +236,7 @@ type MoldSpecFrontmatter {
   gates_overridden? tuple[str, ...] = ()
   agent_introduced_scope? tuple[str, ...] = ()
   entity_referent_bindings? tuple[Mapping[str, object], ...] = ()
+  landing? Landing | None = None
 }
 
 type TestContractRow {
@@ -240,6 +254,12 @@ enum GateApplicabilityDisposition = "red-required" | "not-applicable"
 enum GroundingOutcome = "hit" | "miss" | "unavailable"
 
 enum GroundingProbe = "wiki" | "explorer"
+
+enum LandingShape = "single" | "orthogonal_flat" | "stacked_linear" | "diamond_stack"
+
+enum PerLayerGreen = "required" | "tip-only"
+
+enum ReviewFixes = "fold" | "top-up"
 
 enum SpecConfidence = "low" | "medium" | "high"
 
@@ -383,7 +403,7 @@ Before this procedure, run the digest-bound fresh-context fork taste test on the
 1. **Dispatch** a fresh-context planner on a `PlannerRequest` built from the current draft spec text. The planner returns a `PlannerResultWriterView`; it does not own contract versions, identifiers, digests, lineage, or evidence references.
 2. **Validate and normalize** the writer view on the host. The normal selected path is the typed `PlannerResult` containing a typed `CurdPlan`; reject malformed or wrong-kind output before approval.
 3. **Still invalid after one retry** — stop before the two-key handshake. Do not approve or persist an invalid plan.
-4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` with the final approval request. The typed plan is part of what both handshake keys approve.
+4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` with the final approval request. The typed plan is part of what both handshake keys approve. When candidate curds are two or more, ask the landing shape once in that same approval request, alongside the curd-independence confirmation.
 5. **During Curdle phase one**, persist the approved spec, typed `PlannerResult`, and typed `CurdPlan`. Put them after `## Quality gates` or the natural equivalent section for this spec's shape. Do not regenerate or mutate them after approval.
 
 The legacy `CurdBlock`/`Decomposition` projection is not the normal path. Use it only when an explicit migration consumer requests it; the projection must be lossless or return `UnsupportedProjection`. Never invoke the legacy curd-block decomposer or persist its block as the selected production artifact.
@@ -410,6 +430,6 @@ After writing, suggest the next step inline. **Never auto-invoke.**
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Red-required Spec | `/cook --auto <pointer path>` (add `--hard` when the user passed it) |
-| Spec | `/cook <pointer path>` (add `--hard` when the user passed it) |
+| Red-required Spec | `/cook --auto <pointer path> --spec "$SPEC"` (add `--hard` when the user passed it) |
+| Spec | `/cook <pointer path> --spec "$SPEC"` (add `--hard` when the user passed it) |
 | Issues | Paste each into your tracker, or `gh issue create --body-file <path>` |

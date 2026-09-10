@@ -21,14 +21,18 @@ from easy_cheese_schemas import (
     CURD_PLAN_SCHEMA_URI,
     SCHEMA_ROOT,
     ContractValidationError,
+    CurdPlan,
+    Landing,
     TransitionError,
     canonical_bytes,
+    landing_layer_errors,
     normalize_agent_output,
     supported_version_for,
     validate_contract,
 )
 
 from easy_cheese.shared.publication import PublicationError, accept
+from easy_cheese.shared.taste_test import ApplicabilityError, parse_landing, read_spec_text
 
 __all__ = ["accept_main", "normalize_main", "validate_main"]
 
@@ -114,11 +118,20 @@ def validate_main(argv: list[str]) -> int:
     return 0
 
 
+def _landing_layer_violations(
+    spec_path: Path, curd_plan: CurdPlan
+) -> tuple[Landing, tuple[str, ...]]:
+    landing = parse_landing(read_spec_text(spec_path))
+    return landing, landing_layer_errors(curd_plan, landing)
+
+
 def accept_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="accept.py")
     _ = parser.add_argument("pointer")
+    _ = parser.add_argument("--spec", type=Path, default=None)
     args = parser.parse_args(argv)
     pointer_source = cast(str, args.pointer)
+    spec_path = cast("Path | None", args.spec)
     try:
         accepted = accept(
             pointer_source,
@@ -128,6 +141,32 @@ def accept_main(argv: list[str]) -> int:
     except (ContractValidationError, TransitionError, PublicationError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+    if spec_path is None:
+        print("NOTE: landing layers not checked (no --spec)", file=sys.stderr)
+    else:
+        try:
+            landing, violations = _landing_layer_violations(
+                spec_path, cast(CurdPlan, accepted.canonical.value)
+            )
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"ERROR: cannot read spec {str(spec_path)!r}: {exc}", file=sys.stderr)
+            return 1
+        except ApplicabilityError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        if violations:
+            for error in violations:
+                print(f"ERROR: {error}", file=sys.stderr)
+            return 1
+        if landing.layers:
+            print(
+                f"NOTE: landing layers checked against {str(spec_path)!r}", file=sys.stderr
+            )
+        else:
+            print(
+                f"NOTE: landing layers not checked ({str(spec_path)!r} declares no layers)",
+                file=sys.stderr,
+            )
     wrapper = {
         "value": accepted.canonical.value,
         "digest": _digest_of(accepted.canonical.canonical_bytes),

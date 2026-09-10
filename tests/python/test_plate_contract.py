@@ -508,3 +508,24 @@ def test_plate_is_installed_and_routed() -> None:
         body = read(path)
         assert "/commit" not in body
         assert "/pr-stack" not in body
+
+
+def test_landing_block_answers_the_layout_question() -> None:
+    topology = read("skills/plate/references/topology.md")
+    fan_pathway = read("skills/cook/references/fan-pathway.md")
+    cook_skill = read("skills/cook/SKILL.md")
+    flat_topology = " ".join(topology.split())
+    assert "`landing` block" in topology
+    assert "names the layer and the files in conflict" in flat_topology
+    assert "Never ask the plain layout question while a `landing` block exists" in flat_topology
+    assert "`single` maps to `single`, and every other shape maps to `stacked`" in fan_pathway
+    assert "Ask only when the spec has no `landing` block" in fan_pathway
+    assert "--spec <spec-path>" in cook_skill
+    assert "refused before any coder dispatch" in cook_skill
+    mini_spec = read("skills/mold/references/mini-spec-mode.md")
+    curdle = read("skills/mold/references/curdle.md")
+    assert "landing:\n  shape: single | orthogonal_flat | stacked_linear | diamond_stack" in mini_spec
+    assert "Mini-spec mode writes `shape: single`" in mini_spec
+    assert "landing:\n  shape: single | orthogonal_flat | stacked_linear | diamond_stack" in curdle
+    assert "ask the landing shape once" in curdle
+    assert '/cook --auto <pointer path> --spec "$SPEC"' in curdle
