@@ -5,7 +5,6 @@ from typing import cast
 import attrs
 import pytest
 
-import easy_cheese_schemas.contracts as contract_module
 from easy_cheese_schemas.contracts import (
     MAX_ARTIFACT_BYTES,
     AgentWriterView,
@@ -70,8 +69,12 @@ from easy_cheese_schemas.contracts import (
     UnsupportedProjection,
     WriterViewKind,
     canonical_digest,
+    contract,
     curd_plan_digest,
     derive_curd_disposition,
+)
+from easy_cheese_schemas.contracts import (
+    __all__ as CONTRACT_EXPORTS,
 )
 from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
@@ -218,7 +221,7 @@ def test_contract_rejects_invalid_slugs_at_decorator_construction(
     slug: object,
 ) -> None:
     with pytest.raises(ValueError, match=r"^contract slug must be a non-empty string$"):
-        _ = contract_module.contract(slug)  # pyright: ignore[reportArgumentType]
+        _ = contract(slug)  # pyright: ignore[reportArgumentType]
 
 
 def test_canonical_contracts_are_deeply_frozen() -> None:
@@ -895,7 +898,7 @@ def test_writer_views_expose_only_agent_authored_fields() -> None:
         "deliverables",
         "unresolved_work",
     }
-    assert {name for name in contract_module.__all__ if "Writer" in name} == {
+    assert {name for name in CONTRACT_EXPORTS if "Writer" in name} == {
         "AgentWriterView",
         "BoundedContextWriterView",
         "CriterionResultWriterView",

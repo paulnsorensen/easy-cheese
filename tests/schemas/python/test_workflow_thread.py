@@ -7,7 +7,6 @@ from typing import cast
 
 import attrs
 import pytest
-from attrs import Attribute
 
 import easy_cheese.shared.workflow as workflow_module
 from easy_cheese.shared.artifacts import (
@@ -266,7 +265,7 @@ def run_complete(root: Path, events: list[str], contexts: list[Mapping[str, obje
 
 def field_names(value: object) -> set[str]:
     if attrs.has(type(value)):
-        fields = cast("tuple[Attribute[object], ...]", attrs.fields(type(value)))
+        fields = cast("tuple[attrs.Attribute[object], ...]", attrs.fields(type(value)))
         names = {attribute.name for attribute in fields}
         return names | set().union(
             *(field_names(cast(object, getattr(value, name))) for name in names)
