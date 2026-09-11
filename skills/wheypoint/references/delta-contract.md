@@ -4,11 +4,12 @@ This contract covers the durable revision written at the end of the Cook, Press,
 The record is keyed by the phase slug and work id.
 A terminal phase handoff writes its phase artifact and then commits one revision for that phase.
 Mold publication and Plate publication do not call this writer and do not create a wheypoint revision.
-No plugin hook is part of this contract.
+No plugin hook is part of this contract. Issue #654 ask 4 (a `/compact` hook that emits the grounded manifest) is deferred follow-up work until a host-neutral compaction trigger exists; the compaction hook itself is host-specific and out of scope here.
 
 ## Entry resolution
 
 Each phase uses its own archive for entry resolution: `python3 skills/<phase>/scripts/<phase>.pyz wheypoint-resolve --ref <slug>`.
+Plate also runs this command on entry, but only to resolve; it creates no revision.
 The six outcomes are `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, and `error`.
 An `authoritative` record is the primary input.
 Its `working_context` is authoritative and supplies the first batched `tilth_read`.

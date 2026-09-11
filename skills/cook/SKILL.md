@@ -179,7 +179,6 @@ python3 skills/cook/scripts/cook.pyz write-handoff-artifact \
   --payload-schema https://schemas.easy-cheese.dev/curd-result \
   --grounded <path[#start-end]> \
   --body-file <path to the package report body>
-
 ```
 
 The writer replaces the target file.

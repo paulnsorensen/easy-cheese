@@ -145,7 +145,6 @@ COMMANDS = (
         _write_handoff_artifact,
         "Write an age handoff atomically after the review lock verifies the tree; pass --grounded paths",
     ),
-
     derive_command(
         _read_handoff_slug, "Read the handoff preamble back from a phase artifact"
     ),

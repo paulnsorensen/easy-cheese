@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +22,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
+from easy_cheese.shared.git_utils import run_git
 from easy_cheese.shared.wheypoint import canonical, projection, records, storage
 
 
@@ -69,8 +69,8 @@ def _artifact(root: Path, phase: str, slug: str = SLUG) -> Path:
     return root / ".cheese" / phase / f"{slug}.md"
 
 
-def _writer_args(
-    phase: str, *, slug: str = SLUG, grounded: tuple[str, ...] = ()
+def _write_args(
+    root: Path, phase: str, *, slug: str = SLUG, grounded: tuple[str, ...] = ()
 ) -> list[str]:
     following = {"cook": "age", "press": "age", "age": "cure", "cure": "age"}
     args = [
@@ -88,20 +88,11 @@ def _writer_args(
         "--orientation",
         f"{phase} phase handoff",
         "--root",
-        "{root}",
+        str(root),
     ]
     for entry in grounded:
         args.extend(("--grounded", entry))
     return args
-
-
-def _write_args(
-    root: Path, phase: str, *, slug: str = SLUG, grounded: tuple[str, ...] = ()
-) -> list[str]:
-    return [
-        arg if arg != "{root}" else str(root)
-        for arg in _writer_args(phase, slug=slug, grounded=grounded)
-    ]
 
 
 def _seed_git(root: Path) -> None:
@@ -114,9 +105,8 @@ def _seed_git(root: Path) -> None:
         ("add", "-A"),
         ("commit", "-m", "seed"),
     ):
-        _ = subprocess.run(
-            ["git", *args], cwd=str(root), check=True, capture_output=True, text=True
-        )
+        result = run_git(list(args), cwd=root)
+        assert result.returncode == 0, result.stderr
 
 
 def test_curd_2_chain_writes_revisions_and_validates_grounded_genesis(
@@ -562,27 +552,95 @@ def test_curd_4c_resolves_error_outcome_per_phase_bundle(
     payload = _json(result)
     assert payload["outcome"] == "error"
     assert payload["ok"] is False
-    assert result.returncode != 0
+    assert result.returncode == 1, result.stderr
 
 
-def test_curd_4_documents_entry_resolution_and_preserves_publication_guard(
-    tmp_path: Path,
-) -> None:
-    writer_docs = (
-        REPO_ROOT / "skills" / "cook" / "SKILL.md",
-        REPO_ROOT / "skills" / "press" / "SKILL.md",
-        REPO_ROOT / "skills" / "age" / "SKILL.md",
-        REPO_ROOT / "skills" / "cure" / "SKILL.md",
-        REPO_ROOT / "skills" / "cook" / "references" / "commands.md",
-        REPO_ROOT / "skills" / "press" / "references" / "commands.md",
-        REPO_ROOT / "skills" / "age" / "references" / "commands.md",
-        REPO_ROOT / "skills" / "cure" / "references" / "commands.md",
+PHASE_ENTRY_OUTCOMES = (
+    "authoritative",
+    "not-found",
+    "legacy",
+    "gated",
+    "ambiguous",
+    "error",
+)
+
+ENTRY_SKILLS = ("cook", "press", "age", "cure", "plate", "affinage")
+
+WRITER_DOCS = tuple(
+    REPO_ROOT / "skills" / phase / part
+    for phase in ("cook", "press", "age", "cure")
+    for part in ("SKILL.md", "references/commands.md")
+)
+
+
+def _phase_entry_section(phase: str) -> str:
+    lines = (
+        (REPO_ROOT / "skills" / phase / "SKILL.md")
+        .read_text(encoding="utf-8")
+        .splitlines()
     )
-    for path in writer_docs:
-        text = path.read_text(encoding="utf-8")
-        for match in re.finditer("write-handoff-artifact", text):
-            assert "--grounded" in text[match.start() : match.start() + 500], path
+    assert "## Phase entry" in lines, phase
+    start = lines.index("## Phase entry")
+    for offset, line in enumerate(lines[start + 1 :], start=start + 1):
+        if line.startswith("## "):
+            return "\n".join(lines[start:offset])
+    return "\n".join(lines[start:])
 
+
+def _command_blocks(text: str) -> list[str]:
+    """Fenced code blocks and blank-line-delimited paragraphs, in file order."""
+    blocks: list[str] = []
+    current: list[str] = []
+    fenced = False
+    for line in text.splitlines():
+        if line.startswith("```"):
+            if fenced:
+                current.append(line)
+                blocks.append("\n".join(current))
+                current = []
+            else:
+                if current:
+                    blocks.append("\n".join(current))
+                current = [line]
+            fenced = not fenced
+            continue
+        if not fenced and not line.strip():
+            if current:
+                blocks.append("\n".join(current))
+                current = []
+            continue
+        current.append(line)
+    if current:
+        blocks.append("\n".join(current))
+    return blocks
+
+
+@pytest.mark.parametrize("phase", ENTRY_SKILLS)
+def test_curd_4_phase_skill_documents_wheypoint_resolve_entry(phase: str) -> None:
+    section = _phase_entry_section(phase)
+    assert f"skills/{phase}/scripts/{phase}.pyz wheypoint-resolve" in section, phase
+    for outcome in PHASE_ENTRY_OUTCOMES:
+        assert f"`{outcome}`" in section, (phase, outcome)
+    assert "`working_context` is the first batched `tilth_read`" in section, phase
+
+
+@pytest.mark.parametrize(
+    "doc",
+    WRITER_DOCS,
+    ids=[str(doc.relative_to(REPO_ROOT)) for doc in WRITER_DOCS],
+)
+def test_curd_4_writer_docs_pair_grounded_with_every_handoff_command(doc: Path) -> None:
+    blocks = [
+        block
+        for block in _command_blocks(doc.read_text(encoding="utf-8"))
+        if "write-handoff-artifact" in block
+    ]
+    assert blocks, doc
+    for block in blocks:
+        assert "--grounded" in block, (doc, block)
+
+
+def test_curd_4_mold_publication_creates_no_wheypoint_revision(tmp_path: Path) -> None:
     root = tmp_path / "guard"
     root.mkdir()
     env = _env(root, f"{SLUG}-guard")
@@ -617,6 +675,9 @@ def test_curd_4_documents_entry_resolution_and_preserves_publication_guard(
     assert publish.returncode == 0, publish.stderr
     corpus = Path(env["EASY_CHEESE_HOME"]) / env["EASY_CHEESE_PROJECT"]
     assert not (corpus / "work").exists()
+
+
+def test_curd_4_plugin_manifest_declares_no_hooks() -> None:
     manifest = cast(
         dict[str, object],
         json.loads((REPO_ROOT / ".claude-plugin" / "plugin.json").read_text()),

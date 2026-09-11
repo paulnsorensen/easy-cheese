@@ -182,7 +182,6 @@ python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
   --grounded <path[#start-end]> \
   --body-file <body-path> \
   --payload-schema https://schemas.easy-cheese.dev/curd-result
-
 ```
 
 Use a second command for the terminal state.
@@ -194,7 +193,6 @@ python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
   --artifact <consumed-report-path> --orientation "<one-line orientation>" \
   --baseline "<copied baseline block>" --grounded <path[#start-end]> \
   --body-file <body-path>
-
 ```
 
 Omit `--baseline` and `--durable-flags` when this run has no such value.

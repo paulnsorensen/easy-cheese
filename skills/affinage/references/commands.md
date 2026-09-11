@@ -8,3 +8,4 @@
 | `post-reply` | Post a PR reply carrying the mandatory agent attribution |
 | `pr-status` | Fetch a PR's build and merge status for grading |
 | `review-surface` | Score the reviewable git surface that routing sizes against (JSON out) |
+| `wheypoint-resolve` | Resolve a phase slug through the shared Wheypoint kernel (JSON out) |

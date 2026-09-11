@@ -250,7 +250,6 @@ COMMANDS = (
         _write_handoff_artifact,
         "Write a handoff preamble plus optional body atomically; pass --grounded paths",
     ),
-
     derive_command(
         _read_handoff_slug, "Read the handoff preamble back from a phase artifact"
     ),

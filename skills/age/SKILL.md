@@ -130,7 +130,7 @@ If `.cheese/glossary/<slug>.md` exists, read it to flag naming drift as a deslop
    Set `<next>` to `done` when that set is empty.
    Set `<artifact>` to the upstream report path from step 2. Use `""` only when no upstream report exists.
    Set `<baseline>` to the baseline block from that upstream handoff. Omit `--baseline` only when the upstream handoff has none.
-   Run python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --grounded <path[#start-end]> --body-file ".cheese/age/<slug>-body.md".
+   Run `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --grounded <path[#start-end]> --body-file ".cheese/age/<slug>-body.md"`.
 
    Print the path.
    The write fails when the production tree moved after step 1. Do not retry it with a new lock.
