@@ -587,34 +587,6 @@ def _phase_entry_section(phase: str) -> str:
     return "\n".join(lines[start:])
 
 
-def _command_blocks(text: str) -> list[str]:
-    """Fenced code blocks and blank-line-delimited paragraphs, in file order."""
-    blocks: list[str] = []
-    current: list[str] = []
-    fenced = False
-    for line in text.splitlines():
-        if line.startswith("```"):
-            if fenced:
-                current.append(line)
-                blocks.append("\n".join(current))
-                current = []
-            else:
-                if current:
-                    blocks.append("\n".join(current))
-                current = [line]
-            fenced = not fenced
-            continue
-        if not fenced and not line.strip():
-            if current:
-                blocks.append("\n".join(current))
-                current = []
-            continue
-        current.append(line)
-    if current:
-        blocks.append("\n".join(current))
-    return blocks
-
-
 @pytest.mark.parametrize("phase", ENTRY_SKILLS)
 def test_curd_4_phase_skill_documents_wheypoint_resolve_entry(phase: str) -> None:
     section = _phase_entry_section(phase)
@@ -630,9 +602,10 @@ def test_curd_4_phase_skill_documents_wheypoint_resolve_entry(phase: str) -> Non
     ids=[str(doc.relative_to(REPO_ROOT)) for doc in WRITER_DOCS],
 )
 def test_curd_4_writer_docs_pair_grounded_with_every_handoff_command(doc: Path) -> None:
+    # Blank-line-delimited blocks: a command, its fence, or its table row.
     blocks = [
         block
-        for block in _command_blocks(doc.read_text(encoding="utf-8"))
+        for block in doc.read_text(encoding="utf-8").split("\n\n")
         if "write-handoff-artifact" in block
     ]
     assert blocks, doc

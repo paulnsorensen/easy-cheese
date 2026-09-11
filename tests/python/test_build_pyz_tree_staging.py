@@ -24,17 +24,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 
-KERNEL_MODULES = (
-    "canonical",
-    "checkpoint",
-    "commit",
-    "legacy",
-    "lineage",
-    "lint",
-    "projection",
-    "records",
-    "resolve",
-    "storage",
+_KERNEL_DIR = REPO_ROOT / "src" / "easy_cheese" / "shared" / "wheypoint"
+# Derived from the tree so a new kernel module cannot be added without the
+# bundles being required to carry it.
+KERNEL_MODULE_FILES = frozenset(path.name for path in _KERNEL_DIR.glob("*.py"))
+KERNEL_MODULES = tuple(
+    sorted(
+        name.removesuffix(".py")
+        for name in KERNEL_MODULE_FILES
+        if name != "__init__.py"
+    )
 )
 
 _needs_build_tooling = pytest.mark.skipif(  # noqa: V107
@@ -452,9 +451,14 @@ def test_committed_chain_bundles_carry_the_wheypoint_kernel() -> None:
     """Runs without build tooling: reads the already-committed .pyz artifacts
     directly, so the bundle-membership contract stays checked on any job,
     including one without shiv/pip/build installed."""
+    assert KERNEL_MODULE_FILES, _KERNEL_DIR
+    prefix = "easy_cheese/shared/wheypoint/"
     for phase in CHAIN_PHASES:
         pyz = REPO_ROOT / "skills" / phase / "scripts" / f"{phase}.pyz"
         assert pyz.is_file(), pyz
-        names = _bundle_members(pyz)
-        for module in ("__init__.py", *(f"{name}.py" for name in KERNEL_MODULES)):
-            assert f"easy_cheese/shared/wheypoint/{module}" in names, (phase, module)
+        bundled = {
+            name.removeprefix(prefix)
+            for name in _bundle_members(pyz)
+            if name.startswith(prefix) and name.endswith(".py")
+        }
+        assert bundled == set(KERNEL_MODULE_FILES), phase

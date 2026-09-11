@@ -68,12 +68,13 @@ from easy_cheese.shared.wheypoint.resolve_cli import (
     EXIT_OK,
     EXIT_REFUSED,
     EXIT_USAGE,
-    BadUsage as _BadUsage,
-    Parser as _Parser,
-    emit as _emit,
-    findings_payload as _findings,
-    maybe_payload as _maybe,
-    refuse as _refuse,
+    BadUsage,
+    Parser,
+    emit,
+    findings_payload,
+    maybe_payload,
+    refuse,
+    resolve_status,
 )
 from . import transcript
 
@@ -111,8 +112,8 @@ class _PendingMirror:
     target: str
 
 
-def _parser(command: str) -> _Parser:
-    parser = _Parser(prog=f"wheypoint.pyz {command}")
+def _parser(command: str) -> Parser:
+    parser = Parser(prog=f"wheypoint.pyz {command}")
     if command == "checkpoint":
         _ = parser.add_argument(
             "--compacted",
@@ -167,12 +168,15 @@ def _parser(command: str) -> _Parser:
             required=True,
             help="an absolute projection path, a work id, or a slug",
         )
-        _ = parser.add_argument(
+        # A legacy note lives beside the repository, not in a corpus, so a
+        # corpus root given with --legacy would be silently dropped.
+        where = parser.add_mutually_exclusive_group()
+        _ = where.add_argument(
             "--legacy",
             action="store_true",
             help="resolve a pre-kernel .cheese/notes/<slug>.md instead",
         )
-        _ = parser.add_argument(
+        _ = where.add_argument(
             "--corpus-root",
             dest="corpus_root",
             default=None,
@@ -570,8 +574,8 @@ def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     return {
         "path": path,
         "clean": report.ok,
-        "findings": _findings(report.findings),
-        "projection": _maybe(report.projection),
+        "findings": findings_payload(report.findings),
+        "projection": maybe_payload(report.projection),
     }
 
 
@@ -868,7 +872,7 @@ def main(
 
     command, rest = _command_of(argv2)
     if command is None:
-        return _refuse(
+        return refuse(
             stdout2,
             "unknown",
             "usage",
@@ -877,23 +881,23 @@ def main(
         )
     try:
         args = _parser(command).parse_args(rest)
-    except _BadUsage as exc:
-        return _refuse(stdout2, command, "usage", str(exc), EXIT_USAGE)
+    except BadUsage as exc:
+        return refuse(stdout2, command, "usage", str(exc), EXIT_USAGE)
     try:
         payload = _RUNNERS[command](args, stdin2)
     except _Refused as exc:
-        return _refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED, exc.extra)
+        return refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED, exc.extra)
     except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
         traceback.print_exc(file=sys.stderr)
-        return _refuse(
+        return refuse(
             stdout2,
             command,
             "internal-error",
             f"{type(exc).__name__}: {exc}",
             EXIT_INTERNAL,
         )
-    status = resolve_cli.resolve_status(payload) if command == "resolve" else EXIT_OK
-    _emit(stdout2, {"ok": status == EXIT_OK, "command": command, **payload})
+    status = resolve_status(payload)
+    emit(stdout2, {"ok": status == EXIT_OK, "command": command, **payload})
     return status
 
 

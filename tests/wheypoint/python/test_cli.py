@@ -432,6 +432,25 @@ def test_resolve_legacy_answers_not_found_for_an_absent_note(
     assert payload["dispatchable"] is False
 
 
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_refuses_a_corpus_root_given_with_legacy() -> None:
+    """A legacy note lives outside any corpus, so the pair is a usage error, not a silent drop."""
+    status, payload = _run(
+        "resolve",
+        "--ref",
+        "no-such-note",
+        "--legacy",
+        "--corpus-root",
+        "/nowhere/corpus",
+    )
+
+    assert status == 2
+    assert payload["ok"] is False
+    assert _get(payload, "error", "code") == "usage"
+    message = cast(str, _get(payload, "error", "message"))
+    assert "--corpus-root" in message and "--legacy" in message
+
+
 def test_lint_reports_a_clean_projection(
     tmp_path: Path, make_promotion: Callable[..., Promotion]
 ) -> None:

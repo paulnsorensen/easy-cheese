@@ -9,7 +9,9 @@ No plugin hook is part of this contract. Issue #654 ask 4 (a `/compact` hook tha
 ## Entry resolution
 
 Each phase uses its own archive for entry resolution: `python3 skills/<phase>/scripts/<phase>.pyz wheypoint-resolve --ref <slug>`.
-Pass `--corpus-root <dir>` to read a non-default corpus; the writer accepts the same flag.
+Pass `--corpus-root <dir>` to read this project's corpus from another location; the writer accepts the same flag.
+A corpus belonging to another project resolves but gates on `project-mismatch`, so the flag relocates a corpus rather than borrowing one.
+`--corpus-root` is not accepted with `--legacy`, which reads a note beside the repository rather than any corpus; the pair exits `2`.
 Plate also runs this command on entry, but only to resolve; it creates no revision.
 The six outcomes are `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, and `error`.
 An `authoritative` record is the primary input.
@@ -41,10 +43,11 @@ The writer anchors relative paths and `.cheese/` at the git toplevel (or `--root
 Exit `2` is caller usage: a bad `--grounded` entry or a first revision without one; nothing is written.
 Exit `4` is a kernel failure before the artifact write; nothing is written.
 Exit `5` means the artifact was written but the revision failed; stderr carries `wheypoint: artifact-orphaned <path>` and the next resolve gates on `stale-artifact-link`.
-Every writer message on stderr starts with `wheypoint:` and is plain ASCII, identical on every host.
+Every `wheypoint:`-tagged line on stderr is one plain-ASCII line, identical on every host.
+A refusal, exit `2` or exit `4`, is reported by the shared CLI as `ERROR: <message>` instead.
 A successful write prints `wheypoint: revision work_id=<id> revision_id=<id> revision_number=<n> retried=<bool>`.
 A stale-parent retry prints one `wheypoint: retry ...` line and one `wheypoint: retry outcome=...` line.
-Set `EASY_CHEESE_DEBUG` or `CHEESE_DEBUG` to include a traceback for unexpected failures.
+An unexpected failure always prints a traceback to stderr; set `EASY_CHEESE_DEBUG` or `CHEESE_DEBUG` to add one to deliberate refusals as well.
 
 ## Lint findings
 
