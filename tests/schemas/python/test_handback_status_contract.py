@@ -19,7 +19,7 @@ import pytest
 
 from easy_cheese.shared import cli, handoff, write_handoff_artifact
 from easy_cheese.shared.fanout import phase_decision
-from easy_cheese.skills.wheypoint import legacy
+from easy_cheese.shared.wheypoint import legacy
 
 import easy_cheese_schemas
 from easy_cheese_schemas import handback_status

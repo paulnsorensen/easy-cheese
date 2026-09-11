@@ -107,7 +107,7 @@ def test_wheypoint_refuses_a_baseline_key_rather_than_drop_it() -> None:
     command must refuse it. The handwritten legacy note still carries a
     `baseline:` line, and the doc must say both things.
     """
-    from easy_cheese.skills.wheypoint import legacy
+    from easy_cheese.shared.wheypoint import legacy
 
     assert "baseline" in legacy._ALLOWED_HEADER_KEYS  # pyright: ignore[reportPrivateUsage]
 

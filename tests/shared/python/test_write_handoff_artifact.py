@@ -5,13 +5,19 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 import sys
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, TypedDict
 
 import pytest
 
+from easy_cheese.shared.wheypoint import commit as commit_module
+from easy_cheese.shared.wheypoint import storage as wheypoint_storage
+
 if TYPE_CHECKING:
+    from easy_cheese_schemas.contracts import CheckpointIntent
     from easy_cheese.shared.cli import CliError
     from easy_cheese.shared.handoff import HandoffParseError, HandoffSlug
 
@@ -20,12 +26,44 @@ SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
 WRITER_CLI = SHARED_SCRIPTS / "write_handoff_artifact.py"
 
 
+@pytest.fixture(autouse=True)
+def _isolated_writer_environment(  # pyright: ignore[reportUnusedFunction]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "corpus"))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "writer-tests")
+    _ = (tmp_path / "context.md").write_text("grounded\n", encoding="utf-8")
+
+
 class _CliModule(Protocol):
     CliError: type[CliError]
 
 
+class _PhaseCommitModule(Protocol):
+    def commit_phase_revision(self, **kwargs: object) -> object: ...
+
+
+@dataclass(frozen=True)
+class _FakeRecord:
+    revision_id: str
+
+
+class _FakeStore:
+    work_id: str
+    _records: Iterator[_FakeRecord | None]
+
+    def __init__(self, records: Iterator[_FakeRecord | None]) -> None:
+        self.work_id = "seam"
+        self._records = records
+
+    def read_record(self) -> _FakeRecord | None:
+        return next(self._records)
+
+
 class _WriterModule(Protocol):
     cli: _CliModule
+    phase_commit: _PhaseCommitModule
 
     def write_artifact(
         self,
@@ -42,6 +80,7 @@ class _WriterModule(Protocol):
         taste_test: str | None = None,
         durable_flags: str | None = None,
         baseline: str | None = None,
+        grounded: Sequence[str] = (),
     ) -> Path: ...
 
 
@@ -102,6 +141,7 @@ class TestPreambleRoundTrip:
             orientation="implemented widget",
             body=None,
             root=tmp_path,
+            grounded=("context.md#1-1",),
         )
         assert target == tmp_path / ".cheese" / "press" / "my-task.md"
         slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
@@ -124,6 +164,7 @@ class TestPreambleRoundTrip:
             artifact=".cheese/age/blocked.md",
             orientation="three findings remain",
             body=None,
+            grounded=("context.md#1-1",),
             root=tmp_path,
         )
         slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
@@ -149,6 +190,25 @@ class TestPathTraversalRejected:
                 slug="ok-slug", status="ok", next_skill="done", artifact="",
                 orientation="x", body=None, root=tmp_path, phase="../etc",
             )
+    def test_genesis_requires_grounded_context(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(
+            writer.cli.CliError,
+            match="--grounded requires at least one entry",
+        ):
+            _ = writer.write_artifact(
+                slug="empty-genesis",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="x",
+                body=None,
+                root=tmp_path,
+            )
+        assert not (tmp_path / ".cheese" / "cook" / "empty-genesis.md").exists()
+
 
 
 class TestRerunOverwrite:
@@ -160,8 +220,16 @@ class TestRerunOverwrite:
             "next_skill": "age", "artifact": "",
             "body": None, "root": tmp_path,
         }
-        target = writer.write_artifact(orientation="first pass", **common)
-        rewritten = writer.write_artifact(orientation="second pass", **common)
+        target = writer.write_artifact(
+            orientation="first pass",
+            grounded=("context.md#1-1",),
+            **common,
+        )
+        rewritten = writer.write_artifact(
+            orientation="second pass",
+            grounded=("context.md#1-1",),
+            **common,
+        )
         assert rewritten == target
         assert "second pass" in target.read_text(encoding="utf-8")
         assert "first pass" not in target.read_text(encoding="utf-8")
@@ -252,6 +320,7 @@ class TestOptionalKeyedLines:
             body=None,
             root=tmp_path,
             phase="age",
+            grounded=("context.md#1-1",),
             durable_flags="keyed-line contract -> handoff-contract",
         )
         slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
@@ -269,6 +338,7 @@ class TestOptionalKeyedLines:
                 "--slug", "cli-flagged", "--status", "ok", "--phase", "age",
                 "--next", "cure", "--artifact", "", "--orientation", "demo",
                 "--taste-test", "inline-pass", "--durable-flags", "none",
+                "--grounded", "context.md#1-1",
             ],
             capture_output=True,
             text=True,
@@ -337,6 +407,7 @@ class TestOptionalKeyedLines:
             orientation="reviewed widget",
             body=None,
             root=tmp_path,
+            grounded=("context.md#1-1",),
             phase="age",
             baseline="none",
         )
@@ -354,6 +425,7 @@ class TestOptionalKeyedLines:
                 "--slug", "cli-baselined", "--status", "ok", "--phase", "age",
                 "--next", "cure", "--artifact", "", "--orientation", "demo",
                 "--baseline", "none",
+                "--grounded", "context.md#1-1",
             ],
             capture_output=True,
             text=True,
@@ -385,6 +457,7 @@ class TestBodyFile:
                 "--orientation", "demo",
                 "--body-file", str(body_src),
                 "--root", str(tmp_path),
+                "--grounded", "context.md#1-1",
             ],
             capture_output=True,
             text=True,
@@ -473,6 +546,7 @@ class TestPathDerivation:
             artifact="",
             orientation="curd 7 done",
             body=None,
+            grounded=("context.md#1-1",),
             root=tmp_path,
         )
         assert target == tmp_path / ".cheese" / "age" / "curd-7.md"
@@ -496,6 +570,7 @@ class TestPhaseFlag:
             orientation="press hardened the diff",
             body=None,
             root=tmp_path,
+            grounded=("context.md#1-1",),
             phase="press",
         )
         assert target == tmp_path / ".cheese" / "press" / "my-task.md"
@@ -519,6 +594,7 @@ class TestPhaseFlag:
                 "--artifact", ".cheese/press/phase-flag.md",
                 "--orientation", "age reviewed press output",
                 "--root", str(tmp_path),
+                "--grounded", "context.md#1-1",
             ],
             capture_output=True,
             text=True,
@@ -569,6 +645,7 @@ class TestAtomicRename:
             _ = writer.write_artifact(
                 slug="never",
                 status="ok",
+                grounded=("context.md#1-1",),
                 phase="age",
                 next_skill="done",
                 artifact="",
@@ -596,6 +673,7 @@ class TestAtomicRename:
                     "--slug", "locked", "--status", "ok", "--phase", "age",
                     "--next", "done", "--artifact", "", "--orientation", "demo",
                     "--root", str(tmp_path),
+                    "--grounded", "context.md#1-1",
                 ],
                 capture_output=True,
                 text=True,
@@ -665,3 +743,178 @@ class TestContractErrorContext:
         assert "--phase cook" in result.stderr
         assert "--slug hop" in result.stderr
         assert not (tmp_path / ".cheese").exists()
+
+
+class TestGroundedValidation:
+    @pytest.mark.parametrize(
+        ("entry", "message"),
+        [
+            ("missing.md#1-1", "path not found"),
+            ("context.md#1", "path\\[#start-end\\]"),
+            ("context.md#2-1", "range must ascend"),
+        ],
+    )
+    def test_invalid_grounded_entry_rejected_before_write(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        entry: str,
+        message: str,
+    ) -> None:
+        with pytest.raises(writer.cli.CliError, match=message):
+            _ = writer.write_artifact(
+                slug="invalid-grounded",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=(entry,),
+            )
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_grounded_cap_rejected_before_write(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        entries = tuple("context.md#1-1" for _ in range(17))
+        with pytest.raises(writer.cli.CliError, match="at most 16"):
+            _ = writer.write_artifact(
+                slug="over-cap",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=entries,
+            )
+        assert not (tmp_path / ".cheese").exists()
+
+
+class TestWheypointCommitFailure:
+    def test_commit_failure_keeps_written_artifact(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        phase_module = writer.phase_commit
+
+        def fail(**_kwargs: object) -> None:
+            raise RuntimeError("corpus unavailable")
+
+        monkeypatch.setattr(phase_module, "commit_phase_revision", fail)
+        with pytest.raises(writer.cli.CliError) as excinfo:
+            _ = writer.write_artifact(
+                slug="commit-failed",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        target = tmp_path / ".cheese" / "cook" / "commit-failed.md"
+        assert target.is_file()
+        assert excinfo.value.exit_code == 4
+        assert "wheypoint: corpus unavailable" in str(excinfo.value)
+
+
+def _phase_commit_seam(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    always_conflict: bool,
+    genesis: bool = False,
+) -> tuple[list[CheckpointIntent], list[object], Path]:
+    from easy_cheese.shared.wheypoint import phase_commit
+
+    target = tmp_path / ".cheese" / "cook" / "seam.md"
+    target.parent.mkdir(parents=True)
+    _ = target.write_text("phase\n", encoding="utf-8")
+    revisions: Iterator[_FakeRecord | None] = iter(
+        [
+            None if genesis else _FakeRecord(revision_id="rev-old"),
+            _FakeRecord(revision_id="rev-new"),
+        ]
+    )
+    store = _FakeStore(revisions)
+
+    def open_store(
+        _work_id: str, corpus_root: Path | str | None = None
+    ) -> _FakeStore:
+        _ = corpus_root
+        return store
+
+    monkeypatch.setattr(wheypoint_storage.WorkStore, "open", open_store)
+    intents: list[CheckpointIntent] = []
+
+    def build_delta(
+        intent: CheckpointIntent, _current: _FakeRecord | None
+    ) -> object:
+        intents.append(intent)
+        return object()
+
+    monkeypatch.setattr(phase_commit, "_build_delta", build_delta)
+    commits: list[object] = []
+
+    def commit_delta(
+        delta: object, *, store: _FakeStore, artifact_root: Path | str | None
+    ) -> str:
+        _ = (store, artifact_root)
+        commits.append(delta)
+        if always_conflict or len(commits) == 1:
+            raise commit_module.StaleParentError("race")
+        return "committed"
+
+    monkeypatch.setattr(commit_module, "commit", commit_delta)
+    return intents, commits, target
+
+
+class TestWheypointConflictRetry:
+    def test_retry_rebinds_base_and_drops_genesis_notes(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        intents, commits, target = _phase_commit_seam(
+            monkeypatch, tmp_path, always_conflict=False, genesis=True
+        )
+        _ = phase_commit.commit_phase_revision(
+            work_id="seam",
+            phase="cook",
+            next_skill="press",
+            artifact=str(target),
+            orientation="demo",
+            grounded=("context.md#1-1",),
+            root=tmp_path,
+        )
+        assert len(commits) == 2
+        assert len(intents) == 2
+        assert intents[1].base_revision_id == "rev-new"
+        assert intents[1].notes is None
+
+    def test_persistent_parent_conflict_stops_after_one_retry(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        _intents, commits, target = _phase_commit_seam(
+            monkeypatch, tmp_path, always_conflict=True
+        )
+        with pytest.raises(commit_module.StaleParentError):
+            _ = phase_commit.commit_phase_revision(
+                work_id="seam",
+                phase="cook",
+                next_skill="press",
+                artifact=str(target),
+                orientation="demo",
+                grounded=("context.md#1-1",),
+                root=tmp_path,
+            )
+        assert len(commits) == 2

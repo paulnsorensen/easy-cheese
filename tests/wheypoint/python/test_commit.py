@@ -33,7 +33,7 @@ from easy_cheese_schemas import (
 )
 
 from easy_cheese.shared import paths
-from easy_cheese.skills.wheypoint import commit, records, storage
+from easy_cheese.shared.wheypoint import commit, records, storage
 
 from conftest import PLACEHOLDER_DIGEST, WORK_ID, Promotion
 
@@ -900,7 +900,6 @@ def test_artifact_digest_root_is_resolved_lazily_only_when_links_are_present(
         calls.append(None)
         return tmp_path
 
-    commit._digest_root.cache_clear()  # pyright: ignore[reportPrivateUsage]
     monkeypatch.setattr(paths, "git_toplevel", counting_toplevel)
     seed = _seed(store, make_promotion)
 
@@ -953,13 +952,13 @@ def test_an_explicitly_emptied_field_replaces_while_an_omitted_one_carries(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., Promotion],
 ) -> None:
-    parent = make_record(working_context=["src/wheypoint/storage.py"])
+    parent = make_record(working_context=["src/easy_cheese/shared/wheypoint/storage.py"])
     seed = _seed(store, make_promotion, record=parent)
 
     carried = commit.commit(
         _delta(seed.record.revision_id, orientation="Omits the context."), store=store
     )
-    assert carried.record.working_context == ["src/wheypoint/storage.py"]
+    assert carried.record.working_context == ["src/easy_cheese/shared/wheypoint/storage.py"]
 
     emptied = commit.commit(
         _delta(carried.record.revision_id, working_context=[]), store=store
@@ -977,7 +976,7 @@ def _projection_files(store: storage.WorkStore) -> list[str]:
 def _genesis_delta(**overrides: object) -> WheypointDelta:
     fields: dict[str, object] = {
         "orientation": "Genesis orientation.\nA second line the title drops.",
-        "working_context": ["src/wheypoint/commit.py"],
+        "working_context": ["src/easy_cheese/shared/wheypoint/commit.py"],
         "next_action": NextAction(
             move=NextMove.COOK,
             orientation="Write the wheypoint CLI.",
@@ -1018,7 +1017,7 @@ def test_genesis_creates_the_first_record_when_the_store_is_empty(
     assert record.created == GENESIS_CAPTURED_AT
     assert record.project_key == "paulnsorensen-easy-cheese"
     assert record.orientation == "Genesis orientation.\nA second line the title drops."
-    assert record.working_context == ["src/wheypoint/commit.py"]
+    assert record.working_context == ["src/easy_cheese/shared/wheypoint/commit.py"]
     assert [entry.summary for entry in record.decisions] == ["Genesis is a commit."]
     assert result.revision.applied_additions == list(record.decisions)
     assert result.revision.preserved_entry_ids == []

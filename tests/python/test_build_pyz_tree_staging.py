@@ -178,17 +178,36 @@ def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> 
     """The app and shared distributions retain their package namespaces."""
     names = _bundle_members(wheypoint_pyz)
     for module in (
+        "__init__.py",
         "canonical.py",
+        "checkpoint.py",
         "commit.py",
         "legacy.py",
+        "lineage.py",
         "lint.py",
         "projection.py",
         "records.py",
         "resolve.py",
         "storage.py",
-        "wheypoint.py",
     ):
+        assert f"easy_cheese/shared/wheypoint/{module}" in names, module
+    for module in ("__init__.py", "commands.py", "transcript.py", "wheypoint.py"):
         assert f"easy_cheese/skills/wheypoint/{module}" in names, module
+    assert not any(
+        f"easy_cheese/skills/wheypoint/{module}" in names
+        for module in (
+            "canonical.py",
+            "checkpoint.py",
+            "commit.py",
+            "legacy.py",
+            "lineage.py",
+            "lint.py",
+            "projection.py",
+            "records.py",
+            "resolve.py",
+            "storage.py",
+        )
+    )
     # The shared library it reuses rather than reimplements.
     assert "easy_cheese/shared/paths.py" in names
     # Schemas and locked deps ride along, nested, exactly as for ultracook.
@@ -205,7 +224,7 @@ def test_the_wheypoint_runtime_imports_from_inside_the_zip(wheypoint_pyz: Path) 
     module must resolve out of the archive, not the developer's checkout."""
     result = _run_isolated(
         wheypoint_pyz,
-        "from easy_cheese.skills.wheypoint import "
+        "from easy_cheese.shared.wheypoint import "
         + "commit, resolve, lint, storage, projection, records, canonical\n"
         + "import easy_cheese_schemas as ecs\n"
         + "for mod in (commit, resolve, lint, storage, ecs):\n"

@@ -29,10 +29,12 @@ import contextlib
 import os
 import sys
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, TextIO, cast
 
-from easy_cheese.shared import cli, handoff
+from easy_cheese.shared import cli, handoff, paths
+from easy_cheese.shared.wheypoint import phase_commit
 
 from easy_cheese_schemas.phase_contracts import (
     COMPILED_TRANSITION_REGISTRY,
@@ -136,6 +138,7 @@ def write_artifact(
     taste_test: str | None = None,
     durable_flags: str | None = None,
     baseline: str | None = None,
+    grounded: Sequence[str] = (),
 ) -> Path:
     """Write the artifact atomically; return the final path."""
     if not slug:
@@ -160,6 +163,23 @@ def write_artifact(
         durable_flags=durable_flags,
         baseline=baseline,
     )
+    current = None
+    try:
+        grounded_entries = phase_commit.validate_grounded(grounded, root=root)
+    except phase_commit.GroundedEntryError as exc:
+        raise cli.CliError(str(exc)) from exc
+
+    if phase in paths.CHAIN_PHASES:
+        try:
+            current = phase_commit.read_current_record(slug)
+        except Exception as exc:
+            raise cli.CliError(
+                f"wheypoint: {exc}", exit_code=cli.WHEYPOINT_EXIT_CODE
+            ) from exc
+        if current is None and not grounded_entries:
+            raise cli.CliError(
+                "--grounded requires at least one entry for a first wheypoint revision"
+            )
 
     cheese_root = (root / ".cheese").resolve()
     target = cheese_root / phase / f"{slug}.md"
@@ -194,6 +214,24 @@ def write_artifact(
     except BaseException:
         _cleanup_tmp(fd, tmp_name)
         raise
+    if phase in paths.CHAIN_PHASES:
+        try:
+            _ = phase_commit.commit_phase_revision(
+                work_id=slug,
+                phase=phase,
+                next_skill=next_skill,
+                artifact=str(target),
+                orientation=orientation,
+                grounded=grounded_entries,
+                provenance=phase_commit.session_provenance_from_environment(),
+                root=root,
+                current_record=current,
+            )
+        except Exception as exc:
+            raise cli.CliError(
+                f"wheypoint: {exc}", exit_code=cli.WHEYPOINT_EXIT_CODE
+            ) from exc
+
     return target
 
 
@@ -207,6 +245,7 @@ class _Args(Protocol):
     durable_flags: str | None
     baseline: str | None
     body_file: str | None
+    grounded: list[str]
     phase: str
     payload_schema: str | None
     root: str | None
@@ -236,6 +275,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
         taste_test=a.taste_test,
         durable_flags=a.durable_flags,
         baseline=a.baseline,
+        grounded=a.grounded,
     )
     cli.emit(str(target), stdout=a.stdout)
 
@@ -267,6 +307,13 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     )
     _ = parser.add_argument(
         "--body-file", default=None, help="optional path to body content"
+    )
+    _ = parser.add_argument(
+        "--grounded",
+        action="append",
+        default=[],
+        metavar="PATH[#START-END]",
+        help="grounded file path, optionally pinned to a positive line range; repeatable",
     )
     _ = parser.add_argument(
         "--phase",

@@ -52,17 +52,16 @@ from easy_cheese_schemas import (
 )
 from easy_cheese_schemas import schema_runtime
 
-from easy_cheese.shared import paths
-
-from . import canonical
-from . import checkpoint as checkpoint_mod
-from . import commit as commit_mod
-from . import legacy as legacy_mod
-from . import lint as lint_mod
-from . import projection
-from . import records
-from . import resolve as resolve_mod
-from . import storage
+from easy_cheese.shared import handoff, paths
+from easy_cheese.shared.wheypoint import canonical
+from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
+from easy_cheese.shared.wheypoint import commit as commit_mod
+from easy_cheese.shared.wheypoint import legacy as legacy_mod
+from easy_cheese.shared.wheypoint import lint as lint_mod
+from easy_cheese.shared.wheypoint import projection
+from easy_cheese.shared.wheypoint import records
+from easy_cheese.shared.wheypoint import resolve as resolve_mod
+from easy_cheese.shared.wheypoint import storage
 from . import transcript
 
 COMMANDS = (
@@ -570,6 +569,11 @@ def _run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
             None if resolution.legacy_note is None else str(resolution.legacy_note)
         ),
         "legacy_slug": _maybe(resolution.legacy_slug),
+        "phase_slug": (
+            None
+            if resolution.phase_slug is None
+            else handoff.slug_payload(resolution.phase_slug)
+        ),
         "detail": resolution.detail,
     }
 

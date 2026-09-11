@@ -17,4 +17,5 @@
 | `review-surface` | Score the git surface that the age router sizes (JSON out) |
 | `severity` | Compute per-finding severity and fix-cost-now buckets |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text |
-| `write-handoff-artifact` | Write an age handoff atomically after the review lock verifies the tree |
+| `wheypoint-resolve` | Resolve a phase slug through the shared Wheypoint kernel (JSON out) |
+| `write-handoff-artifact` | Write an age handoff atomically after the review lock verifies the tree; pass --grounded paths |

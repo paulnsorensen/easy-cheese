@@ -17,6 +17,14 @@ press(spec_ref)
 
 Press never owns first coverage. Press never edits production code. Cook owns the implementation. Press attacks the approved contract and preserves failure evidence for a bounded Cook repair.
 
+## Phase entry
+
+Run `python3 skills/press/scripts/press.pyz wheypoint-resolve --ref <slug>`.
+`authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
+`not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
+`gated`, `ambiguous`, and `error` stop and show the payload.
+Show advisory `stale-commit` and `grounded-path-missing` findings.
+
 ## Inputs
 
 Press accepts this invocation:
@@ -25,7 +33,7 @@ Press accepts this invocation:
 /press <slug> [--auto] [--hard] [--open-pr]
 ```
 
-`<slug>` names the pipeline slug. Press requires it. Press reads `.cheese/cook/<slug>.md` for the Cook handoff.
+After phase entry, Press reads `.cheese/cook/<slug>.md` for the Cook handoff.
 
 `--auto` selects the autonomous chain. See `## Auto mode`.
 
@@ -145,7 +153,15 @@ Honor the no-chain directive when the caller supplies it. Write the Press handof
 
 Write `.cheese/press/<slug>.md` only at a terminal Press result. A corrective `Continue` stays inside the Press phase. It writes no durable handoff.
 
-Write the file with `write-handoff-artifact`. Use the canonical preamble:
+Write the file with `python3 skills/press/scripts/press.pyz write-handoff-artifact`; include one or more `--grounded <path[#start-end]>` arguments. Use the canonical preamble:
+
+```text
+python3 skills/press/scripts/press.pyz write-handoff-artifact \
+  --slug <slug> --status <status> --phase press --next <next> \
+  --artifact .cheese/cook/<slug>.md --orientation "<one-line orientation>" \
+  --durable-flags "<preserved Cook value>" --baseline "<baseline artifact path>" \
+  --grounded <path[#start-end]> --body-file <body-path>
+```
 
 ```markdown
 status: <canonical status field>

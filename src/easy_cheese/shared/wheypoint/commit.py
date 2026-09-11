@@ -42,7 +42,6 @@ first: an identical genesis resubmission is a replay, not a conflict.
 
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -161,11 +160,27 @@ def commit(
     repository: RepositoryProvenance | None = None,
     durability: Durability = Durability.CANONICAL_LOCAL,
     finalize: Callable[[PendingRevision], None] | None = None,
+    artifact_root: Path | str | None = None,
 ) -> CommitResult:
     """Apply `delta` to the store's current record under the record lock."""
     repository_value: RepositoryProvenance = (
         RepositoryProvenance() if repository is None else repository
     )
+    digest_of_impl: Callable[[str], str | None] | None = None
+
+    def digest_of(path: str) -> str | None:
+        nonlocal digest_of_impl
+        digestor = digest_of_impl
+        if digestor is None:
+            digest_root = (
+                _digest_root()
+                if artifact_root is None
+                else Path(artifact_root).resolve()
+            )
+            digestor = lint_mod.artifact_digest_in(digest_root)
+            digest_of_impl = digestor
+        return digestor(path)
+
     if delta.work_id != store.work_id:
         raise CommitError(
             f"delta names work {delta.work_id!r} but the store holds "
@@ -212,6 +227,7 @@ def commit(
                     fingerprint=fingerprint,
                     repository=repository_value,
                     durability=durability,
+                    digest_of=digest_of,
                 ),
                 finalize=finalize,
             )
@@ -246,6 +262,7 @@ def commit(
                 lineage=checked_lineage,
                 fingerprint=fingerprint,
                 repository=repository_value,
+                digest_of=digest_of,
                 durability=durability,
             ),
             finalize=finalize,
@@ -547,21 +564,14 @@ def _existing_entries(
     return cast(list[ProtectedEntry], getattr(current, _RECORD_FIELDS[kind]))
 
 
-@functools.cache
 def _digest_root() -> Path:
-    """The repository root artifact paths are digested from (S3).
+    """Return the default repository root for artifact links.
 
-    The root is the Git toplevel when there is one, so the digest does not
-    depend on which subdirectory the checkpoint was run from; outside a
-    repository the working directory is the root. Cached so it is resolved
-    lazily, on the first path actually digested, and never spawns
-    `git rev-parse --show-toplevel` more than once per process.
+    ``commit`` resolves this root once per transaction and passes the resulting
+    digest callback through the revision builder, so a multi-link revision does
+    not rediscover the Git root for every path.
     """
     return paths.git_toplevel() or Path.cwd()
-
-
-def _digest_of(path: str) -> str | None:
-    return lint_mod.artifact_digest_in(_digest_root())(path)
 
 
 def _merge_artifact_links(
@@ -625,6 +635,7 @@ def _apply(
     lineage: lineage.Lineage,
     fingerprint: str,
     repository: RepositoryProvenance,
+    digest_of: Callable[[str], str | None],
     durability: Durability,
 ) -> PendingRevision:
     transitions = list(delta.transitions or [])
@@ -654,6 +665,7 @@ def _apply(
         number=number,
         kept=kept,
         additions=additions,
+        digest_of=digest_of,
     )
     compaction = (
         None
@@ -688,6 +700,7 @@ def _genesis(
     *,
     fingerprint: str,
     repository: RepositoryProvenance,
+    digest_of: Callable[[str], str | None],
     durability: Durability,
 ) -> PendingRevision:
     """The first record for a work id, built from the delta alone.
@@ -761,7 +774,7 @@ def _genesis(
                 delta.add_artifact_links,
                 delta.remove_artifact_links,
                 revision_id=revision_id,
-                digest_of=_digest_of,
+                digest_of=digest_of,
             ),
             decision_dossier=list(delta.decision_dossier or []),
         )
@@ -845,6 +858,7 @@ def _draft_record(
     number: int,
     kept: dict[EntryKind, list[ProtectedEntry]],
     additions: dict[EntryKind, list[ProtectedEntry]],
+    digest_of: Callable[[str], str | None],
 ) -> WheypointRecord:
     """The next record: replacements where the delta spoke, carry-forward else."""
     try:
@@ -871,7 +885,7 @@ def _draft_record(
                 delta.add_artifact_links,
                 delta.remove_artifact_links,
                 revision_id=revision_id,
-                digest_of=_digest_of,
+                digest_of=digest_of,
             ),
         )
     except ValueError as exc:

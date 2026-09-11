@@ -31,8 +31,13 @@ READER = SHARED / "read_handoff_slug.py"
 
 
 def _run(script: Path, *args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    argv = list(args)
+    if script == WRITER:
+        grounded = cwd / "grounded.md"
+        _ = grounded.write_text("grounded context\n", encoding="utf-8")
+        argv.extend(("--grounded", "grounded.md#1-1"))
     return subprocess.run(
-        [sys.executable, str(script), *args],
+        [sys.executable, str(script), *argv],
         capture_output=True,
         text=True,
         cwd=str(cwd),

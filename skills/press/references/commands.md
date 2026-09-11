@@ -6,3 +6,5 @@
 | --- | --- |
 | `press-route` | Return the Press action: continue, dispatch /age, or stop (JSON in, JSON out) |
 | `press-telemetry` | Build the Press attempt telemetry record (JSON in, JSON out) |
+| `wheypoint-resolve` | Resolve a phase slug through the shared Wheypoint kernel (JSON out) |
+| `write-handoff-artifact` | Write a handoff preamble plus optional body atomically |

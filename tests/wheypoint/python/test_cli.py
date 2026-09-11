@@ -18,7 +18,8 @@ from typing import cast
 import pytest
 
 from easy_cheese_schemas import CheckpointIntent
-from easy_cheese.skills.wheypoint import commit, records, storage, wheypoint
+from easy_cheese.shared.wheypoint import commit, records, storage
+from easy_cheese.skills.wheypoint import wheypoint
 
 from conftest import WORK_ID, Promotion
 
@@ -519,7 +520,7 @@ def _intent_json(**fields: object) -> str:
 def _first_intent(**fields: object) -> str:
     base: dict[str, object] = {
         "orientation": "Genesis orientation.\nNot the title.",
-        "working_context": ["src/easy_cheese/skills/wheypoint/checkpoint.py"],
+        "working_context": [],
         "next": "cook",
         "artifact": ".cheese/cook/wheypoint-ergonomics.md",
         "notes": "First record.",
@@ -959,7 +960,7 @@ def _tasks_intent(**fields: object) -> str:
 
 @pytest.mark.usefixtures("store")
 def test_cure_a_tasks_projection_parses_and_lints_clean() -> None:
-    from easy_cheese.skills.wheypoint import lint, projection
+    from easy_cheese.shared.wheypoint import lint, projection
 
     status, payload = _run("checkpoint", stdin=_tasks_intent())
     assert status == 0, payload

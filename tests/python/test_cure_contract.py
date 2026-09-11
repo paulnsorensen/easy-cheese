@@ -80,6 +80,7 @@ class TestDocumentedWriterBehaviour:
     """Run the documented commands: the body must survive both transitions."""
 
     def test_review_transition_preserves_the_body(self, tmp_path: Path) -> None:
+        _ = (tmp_path / "context.md").write_text("grounded context\n", encoding="utf-8")
         body = "# Cure report\n\n### Applied\n\n- 1 — fixed\n"
         written = write_artifact(
             slug="demo",
@@ -93,6 +94,7 @@ class TestDocumentedWriterBehaviour:
             payload_schema_uri=CURD_RESULT_SCHEMA,
             durable_flags="none",
             baseline="none",
+            grounded=("context.md#1-1",),
         )
         text = written.read_text(encoding="utf-8")
         assert "### Applied" in text
@@ -101,6 +103,7 @@ class TestDocumentedWriterBehaviour:
         assert text.index("next: age") < text.index("### Applied")
 
     def test_terminal_transition_without_a_payload_schema(self, tmp_path: Path) -> None:
+        _ = (tmp_path / "context.md").write_text("grounded context\n", encoding="utf-8")
         written = write_artifact(
             slug="demo",
             status="ok",
@@ -111,6 +114,7 @@ class TestDocumentedWriterBehaviour:
             root=tmp_path,
             phase="cure",
             baseline="none",
+            grounded=("context.md#1-1",),
         )
         text = written.read_text(encoding="utf-8")
         assert "next: done" in text

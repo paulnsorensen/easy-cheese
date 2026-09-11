@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from easy_cheese.skills.wheypoint import resolve as resolve_mod
+from easy_cheese.shared.wheypoint import resolve as resolve_mod
 
 _NOTE = "status: ok\nnext: {move}\nartifact: {artifact}\nPick the loop back up.\n"
 

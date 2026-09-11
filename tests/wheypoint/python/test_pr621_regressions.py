@@ -13,7 +13,8 @@ import pytest
 from easy_cheese_schemas import EntryKind, ProposedEntry
 from easy_cheese_schemas.compat import load
 from easy_cheese.shared.handoff import HandoffSlug, parse_handoff_slug, render_handoff_slug
-from easy_cheese.skills.wheypoint import projection, storage, wheypoint
+from easy_cheese.shared.wheypoint import projection, storage
+from easy_cheese.skills.wheypoint import wheypoint
 
 
 def _run(command: str, *args: str, **fields: object) -> tuple[int, dict[str, object]]:
@@ -28,7 +29,7 @@ def _intent(**fields: object) -> dict[str, object]:
     return {
         "work_id": "review-fixes",
         "orientation": "Continue the review.",
-        "working_context": ["Review the checkpoint contract."],
+        "working_context": ["checkpoint.md"],
         "next": "hold",
         "notes": "Preserve the review.",
         **fields,
@@ -53,6 +54,7 @@ def _error(reply: dict[str, object]) -> dict[str, object]:
 
 @pytest.fixture
 def store(corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> storage.WorkStore:
+    _ = (tmp_path / "checkpoint.md").write_text("Review the checkpoint contract.\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     return storage.WorkStore.open("review-fixes", corpus_root=corpus_root)
 

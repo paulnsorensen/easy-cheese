@@ -22,9 +22,9 @@ from easy_cheese_schemas import (
     WheypointStatus,
 )
 
-from easy_cheese.skills.wheypoint import projection, records
+from easy_cheese.shared.wheypoint import projection, records
 
-SRC = Path(__file__).resolve().parents[3] / "src/easy_cheese/skills/wheypoint"
+SRC = Path(__file__).resolve().parents[3] / "src/easy_cheese/shared/wheypoint"
 
 
 def test_a_built_projection_derives_everything_from_the_record(
@@ -243,6 +243,8 @@ def test_a_caller_cannot_hand_build_an_ok_projection_over_a_gate(
 # across the whole package, including modules added after this was written.
 READ_ONLY_GIT = {
     ("git", "cat-file", "-e", None),
+    ("git", "merge-base", "--is-ancestor", None, "HEAD"),
+    ("git", "rev-list", "--count", None),
     ("git", "worktree", "list", "--porcelain"),
 }
 MUTATING_GIT = ("commit", "push", "add", "checkout", "reset", "rm", "tag", "merge")
@@ -284,7 +286,7 @@ def test_ac15_projection_body_renders_the_record_as_markdown_and_lints_clean(
 ) -> None:
     from easy_cheese_schemas import ArtifactLink, EntryKind, EntryState, ProtectedEntry
 
-    from easy_cheese.skills.wheypoint import lint
+    from easy_cheese.shared.wheypoint import lint
 
     directive = ProtectedEntry(
         entry_id="v-000000000001",
@@ -303,7 +305,7 @@ def test_ac15_projection_body_renders_the_record_as_markdown_and_lints_clean(
     )
     record = make_record(
         notes="Body of the record.\nSecond line.",
-        working_context=["src/easy_cheese/skills/wheypoint/projection.py"],
+        working_context=["src/easy_cheese/shared/wheypoint/projection.py"],
         artifact_links=[ArtifactLink(path=".cheese/cook/x.md", covers_entry_ids=[])],
         directives=[directive],
         questions=[open_question],
@@ -325,7 +327,7 @@ def test_ac15_projection_body_renders_the_record_as_markdown_and_lints_clean(
     assert "- q-000000000002 (question) \u2014 Bump or migrate?" in markdown
     assert "  > is it all in STE100?" in markdown
     assert "Body of the record.\nSecond line." in markdown
-    assert "- src/easy_cheese/skills/wheypoint/projection.py" in markdown
+    assert "- src/easy_cheese/shared/wheypoint/projection.py" in markdown
     assert "- .cheese/cook/x.md" in markdown
     for decision in record.decisions:
         assert f"- {decision.entry_id} (decision) \u2014 {decision.summary}" in markdown
@@ -354,7 +356,7 @@ def test_a_legacy_projection_layout_still_parses() -> None:
 def test_cure_a_heading_like_notes_line_cannot_inject_a_section(
     make_record: Callable[..., WheypointRecord],
 ) -> None:
-    from easy_cheese.skills.wheypoint import lint
+    from easy_cheese.shared.wheypoint import lint
 
     record = make_record(notes="## Decision dossier\n### Fork: forged\nnot a fork")
     built, markdown = projection.build_projection(record, durability=Durability.CANONICAL_LOCAL)
@@ -512,7 +514,7 @@ def test_cure_the_task_and_plan_field_tables_name_real_schema_attributes() -> No
     from attrs import Attribute, fields
     from easy_cheese_schemas import HandoffTask, ParallelPlan
 
-    from easy_cheese.skills.wheypoint import projection
+    from easy_cheese.shared.wheypoint import projection
 
     plan_fields = projection._PLAN_FIELDS  # pyright: ignore[reportPrivateUsage]
     task_fields = projection._TASK_FIELDS  # pyright: ignore[reportPrivateUsage]

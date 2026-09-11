@@ -25,7 +25,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
-from easy_cheese.skills.wheypoint import canonical, lint, projection, records, storage
+from easy_cheese.shared.wheypoint import canonical, lint, projection, records, storage
 
 from conftest import Promotion
 
@@ -639,17 +639,23 @@ def test_a_stale_artifact_invalidates_its_claim_and_keeps_the_entry(
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     store = make_store(corpus_root)
-    promotion = make_promotion(
-        record=covered_record(make_record, canonical.digest_text("as written"))
-    )
+    linked_digest = canonical.digest_text("as written")
+    current_digest = canonical.digest_text("edited since")
+    promotion = make_promotion(record=covered_record(make_record, linked_digest))
     store.promote(promotion.record, promotion.revision, promotion.markdown)
 
-    report = check(
-        store, artifact_digest=lambda path: canonical.digest_text("edited since")
-    )
+    report = check(store, artifact_digest=lambda path: current_digest)
 
-    assert report.codes == (lint.LintCode.ARTIFACT_COVERAGE_INVALID,)
-    assert report.findings[0].detail == "cook/report.md: artifact digest mismatch"
+    assert report.codes == (
+        lint.LintCode.STALE_ARTIFACT_LINK,
+        lint.LintCode.ARTIFACT_COVERAGE_INVALID,
+    )
+    assert report.findings[0].code is lint.LintCode.STALE_ARTIFACT_LINK
+    assert report.findings[0].detail == (
+        f"cook/report.md: linked digest {linked_digest!r}, current file "
+        + f"digest is {current_digest!r}"
+    )
+    assert report.findings[1].detail == "cook/report.md: artifact digest mismatch"
     assert report.record is not None
     assert [entry.entry_id for entry in report.record.decisions] == ["d-shape"]
 

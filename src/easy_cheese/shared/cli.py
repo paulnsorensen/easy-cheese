@@ -3,8 +3,7 @@
 Public API:
     CliError       -- one-line message with `exit_code` (default 2); cli.run
                       reports 'ERROR: <msg>' and returns that code.
-    contract_error -- wrap a contract-violation exception as a CliError
-                      that exits 3.
+    contract_error -- convert a contract violation to exit 3.
     cli.run        -- dispatch and return integer statuses for normal,
                       missing-handler, and CliError paths; argparse
                       help/errors retain SystemExit.
@@ -17,6 +16,8 @@ import json
 import sys
 from collections.abc import Callable, Iterable, Sequence
 from typing import TextIO, cast
+
+WHEYPOINT_EXIT_CODE = 4
 
 
 class CliError(Exception):

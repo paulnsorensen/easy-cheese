@@ -58,7 +58,10 @@ class LintCode(str, Enum):
     PARENT_NOT_CONTIGUOUS = "parent-not-contiguous"
     PROJECT_MISMATCH = "project-mismatch"
     GIT_OBJECT_MISSING = "git-object-missing"
+    STALE_COMMIT = "stale-commit"
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
+    STALE_ARTIFACT_LINK = "stale-artifact-link"
+    GROUNDED_PATH_MISSING = "grounded-path-missing"
     ENTRY_DROPPED = "entry-dropped"
     DURABILITY_LOCAL_ONLY = "durability-local-only"
     COMPACTION_PARENT_UNRESOLVED = "compaction-parent-unresolved"
@@ -77,7 +80,12 @@ class LintCode(str, Enum):
 # the human-owed state it holds, which no commit or publish has carried
 # anywhere. That is a choice for the operator, so it warns and does not block.
 ADVISORY_CODES = frozenset(
-    {LintCode.REVISION_INCOMPLETE, LintCode.DURABILITY_LOCAL_ONLY}
+    {
+        LintCode.REVISION_INCOMPLETE,
+        LintCode.DURABILITY_LOCAL_ONLY,
+        LintCode.STALE_COMMIT,
+        LintCode.GROUNDED_PATH_MISSING,
+    }
 )
 
 
@@ -202,8 +210,14 @@ def lint_work(
     project_key: str,
     git_object_exists: Callable[[str], bool],
     artifact_digest: Callable[[str], str | None],
+    repository_root: Path | str | None = None,
 ) -> LintReport:
     """Validate the whole current checkpoint of one work store."""
+    root = (
+        Path(repository_root).resolve()
+        if repository_root is not None
+        else Path.cwd().resolve()
+    )
     recovery = store.recover()
     record = recovery.record
     stamped_schema_version = recovery.stamped_schema_version
@@ -275,11 +289,17 @@ def lint_work(
         findings.extend(_lineage_finding(issue) for issue in chain.issues)
         findings.extend(_compaction_findings(chain))
         findings.extend(_conservation_findings(chain, record))
-        findings.extend(_git_findings(current, git_object_exists))
+        findings.extend(
+            _git_findings(
+                current, git_object_exists, repository_root=root
+            )
+        )
 
+    findings.extend(_artifact_link_findings(record, artifact_digest))
     findings.extend(_coverage_findings(ancestry, record, artifact_digest))
     if projection is not None:
         findings.extend(_durability_findings(projection, record))
+    findings.extend(_grounded_path_findings(record, root))
     return LintReport(findings=tuple(findings), record=record, projection=projection)
 
 
@@ -554,18 +574,23 @@ def _conservation_findings(
 
 
 def _git_findings(
-    revision: WheypointRevision, git_object_exists: Callable[[str], bool]
+    revision: WheypointRevision,
+    git_object_exists: Callable[[str], bool],
+    *,
+    repository_root: Path,
 ) -> list[LintFinding]:
     commit = revision.repository.commit
-    if commit is None or git_object_exists(commit):
+    if commit is None:
         return []
-    return [
-        LintFinding(
-            LintCode.GIT_OBJECT_MISSING,
-            f"revision {revision.revision_id!r} cites commit {commit}, which "
-            + "does not resolve in this repository",
-        )
-    ]
+    if not git_object_exists(commit):
+        return [
+            LintFinding(
+                LintCode.GIT_OBJECT_MISSING,
+                f"revision {revision.revision_id!r} cites commit {commit}, which "
+                + "does not resolve in this repository",
+            )
+        ]
+    return _stale_commit_findings(commit, repository_root=repository_root)
 
 
 def _coverage_findings(
@@ -585,3 +610,102 @@ def _coverage_findings(
         )
         for failure in report.failures
     ]
+
+
+def _stale_commit_findings(
+    commit: str,
+    *,
+    repository_root: Path,
+) -> list[LintFinding]:
+    """Report a revision written on a history HEAD no longer descends from."""
+    try:
+        ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+            cwd=str(repository_root),
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if ancestor.returncode == 0:
+        return []
+    if ancestor.returncode != 1:
+        return []
+    try:
+        distance_result = subprocess.run(
+            ["git", "rev-list", "--count", f"{commit}..HEAD"],
+            cwd=str(repository_root),
+            capture_output=True,
+            text=True,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if distance_result.returncode != 0:
+        return []
+    try:
+        distance = int(distance_result.stdout.strip())
+    except ValueError:
+        return []
+    if distance < 0:
+        return []
+    return [
+        LintFinding(
+            LintCode.STALE_COMMIT,
+            f"HEAD does not descend from repository commit {commit}; "
+            + f"distance is {distance}",
+        )
+    ]
+
+
+def _artifact_link_findings(
+    record: WheypointRecord,
+    artifact_digest: Callable[[str], str | None],
+) -> list[LintFinding]:
+    """Re-check each digest-bearing artifact link against its current file."""
+    findings: list[LintFinding] = []
+    for link in record.artifact_links:
+        if link.digest is None:
+            continue
+        actual = artifact_digest(link.path)
+        if actual == link.digest:
+            continue
+        current = "missing" if actual is None else repr(actual)
+        findings.append(
+            LintFinding(
+                LintCode.STALE_ARTIFACT_LINK,
+                f"{link.path}: linked digest {link.digest!r}, current file "
+                + f"digest is {current}",
+            )
+        )
+    return findings
+
+
+def _grounded_path_findings(
+    record: WheypointRecord, repository_root: Path
+) -> list[LintFinding]:
+    """Warn when a grounded path no longer names a file in the repository."""
+    findings: list[LintFinding] = []
+    for entry in record.working_context:
+        path_text = entry.split("#", 1)[0]
+        if not path_text:
+            continue
+        candidate = Path(path_text)
+        if not candidate.is_absolute():
+            candidate = repository_root / candidate
+        try:
+            resolved = candidate.resolve()
+            present = (
+                resolved.is_relative_to(repository_root) and resolved.is_file()
+            )
+        except (OSError, RuntimeError):
+            present = False
+        if not present:
+            findings.append(
+                LintFinding(
+                    LintCode.GROUNDED_PATH_MISSING,
+                    f"working_context path {entry!r} is missing",
+                )
+            )
+    return findings

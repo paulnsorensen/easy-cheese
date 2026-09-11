@@ -26,7 +26,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
-from easy_cheese.skills.wheypoint import projection, records, storage
+from easy_cheese.shared.wheypoint import projection, records, storage
 
 
 class _Promotion(Protocol):

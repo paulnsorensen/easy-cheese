@@ -26,6 +26,7 @@
 | `validate-decomposition` | Validate a fan-out decomposition manifest |
 | `validate-manifest` | Validate a fan-out run manifest |
 | `validate-pr-plan` | Validate a fan-out PR-plan document |
+| `wheypoint-resolve` | Resolve a phase slug through the shared Wheypoint kernel (JSON out) |
 | `wiring-topo-sort` | Topologically sort a manifest's wiring into ordered waves |
 | `worktree` | Create, harvest, and tear down isolated sub-agent worktrees |
-| `write-handoff-artifact` | Write a handoff preamble plus optional body atomically |
+| `write-handoff-artifact` | Write a handoff preamble plus optional body atomically; pass --grounded paths |

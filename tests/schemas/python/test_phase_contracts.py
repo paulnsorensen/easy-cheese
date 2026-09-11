@@ -4,6 +4,7 @@ import importlib.util
 import os
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, cast
@@ -81,6 +82,7 @@ class _WriterModule(Protocol):
         taste_test: str | None = None,
         durable_flags: str | None = None,
         baseline: str | None = None,
+        grounded: Sequence[str] = (),
     ) -> Path: ...
 
 
@@ -110,6 +112,10 @@ def writer() -> _WriterModule:
 
 def as_dict(value: object) -> dict[str, object]:
     return cast(dict[str, object], value)
+
+def _grounded(root: Path) -> tuple[str, ...]:
+    _ = (root / "grounded.md").write_text("grounded context\n", encoding="utf-8")
+    return ("grounded.md#1-1",)
 
 
 def as_list(value: object) -> list[object]:
@@ -675,6 +681,7 @@ def test_writer_never_follows_preplaced_predictable_tmp_symlink(
         orientation="press completed",
         body=None,
         root=tmp_path,
+        grounded=_grounded(tmp_path),
     )
 
     assert target.exists()
@@ -693,6 +700,7 @@ def test_unregistered_legacy_age_route_preserves_phase_path(
         orientation="legacy age handoff",
         body=None,
         root=tmp_path,
+        grounded=_grounded(tmp_path),
     )
 
     assert target == tmp_path / ".cheese" / "age" / "legacy-age-route.md"
@@ -710,6 +718,7 @@ def test_registered_writer_route_can_infer_its_only_payload_schema(
         orientation="cook completed its curds",
         body=None,
         root=tmp_path,
+        grounded=_grounded(tmp_path),
     )
 
     assert target == tmp_path / ".cheese" / "cook" / "legacy-cook-call.md"
@@ -727,6 +736,7 @@ def test_terminal_outcome_preserves_registered_phase_path(
         orientation="cure completed the review cycle",
         body=None,
         root=tmp_path,
+        grounded=_grounded(tmp_path),
     )
 
     assert target == tmp_path / ".cheese" / "cure" / "terminal-cure.md"

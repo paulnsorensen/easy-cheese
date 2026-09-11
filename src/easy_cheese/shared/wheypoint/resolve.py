@@ -1,12 +1,13 @@
 """Turn a reference into something it is safe to continue from -- or a refusal.
 
-Authoritative lookup has one fixed precedence, followed only by the legacy
-fallback:
+Authoritative lookup has one fixed precedence, followed by phase artifacts and
+then the legacy fallback:
 
 1. an explicit path to a projection document;
 2. an exact work id in the project's XDG corpus;
 3. a *unique* slug in that corpus;
-4. a safe legacy slug or exact `.cheese/notes/<slug>.md` path after an
+4. `.cheese/{cure,age,press,cook}/<slug>.md` in fixed order;
+5. a safe legacy slug or exact `.cheese/notes/<slug>.md` path after an
    authoritative miss.
 
 A slug is an alias, not an identity, so two work ids answering to one slug is an
@@ -40,7 +41,7 @@ from easy_cheese_schemas import (
     phase_contracts,
 )
 
-from easy_cheese.shared import paths
+from easy_cheese.shared import handoff, paths
 
 from . import checkpoint as checkpoint_mod
 from . import legacy as legacy_mod
@@ -65,6 +66,7 @@ class ResolutionSource(str, Enum):
     PATH = "path"
     WORK_ID = "work-id"
     SLUG = "slug"
+    PHASE_ARTIFACT = "phase-artifact"
     LEGACY = "legacy"
 
 
@@ -82,6 +84,7 @@ class Resolution:
     searched: tuple[str, ...] = field(default=())
     legacy_note: Path | None = None
     legacy_slug: legacy_mod.LegacyHandoffSlug | None = None
+    phase_slug: handoff.HandoffSlug | None = None
     detail: str | None = None
 
     @property
@@ -106,6 +109,7 @@ def resolve(
     """Resolve an authoritative reference, then fall back to one legacy note."""
     root = Path(workspace_root) if workspace_root is not None else Path.cwd()
     checks = _Checks(
+        workspace_root=root,
         corpus_root=(
             Path(corpus_root)
             if corpus_root is not None
@@ -138,6 +142,12 @@ def resolve(
             return _validate(ref, ResolutionSource.WORK_ID, checks)
         authoritative = _resolve_slug(ref, checks)
 
+    if authoritative.outcome is ResolutionOutcome.NOT_FOUND and not _is_path_ref(ref):
+        phase = _resolve_phase_artifact(
+            ref, checks, searched=authoritative.searched
+        )
+        if phase is not None:
+            return phase
     if authoritative.outcome is ResolutionOutcome.NOT_FOUND or _is_legacy_path_ref(ref):
         legacy = resolve_legacy(ref, start=root)
         if legacy.outcome is not ResolutionOutcome.NOT_FOUND:
@@ -159,6 +169,7 @@ def _is_legacy_path_ref(ref: str) -> bool:
 class _Checks:
     """The corpus and the validators every resolution runs against."""
 
+    workspace_root: Path
     corpus_root: Path
     project_key: str
     git_object_exists: Callable[[str], bool]
@@ -252,6 +263,36 @@ def _resolve_slug(slug: str, checks: _Checks) -> Resolution:
     return _validate(only_match, ResolutionSource.SLUG, checks, searched=searched)
 
 
+def _resolve_phase_artifact(
+    slug: str, checks: _Checks, *, searched: tuple[str, ...]
+) -> Resolution | None:
+    """Resolve the first matching phase artifact before legacy notes."""
+    phase_paths: list[str] = []
+    for phase in ("cure", "age", "press", "cook"):
+        path = checks.workspace_root / ".cheese" / phase / f"{slug}.md"
+        phase_paths.append(str(path))
+        if not path.is_file():
+            continue
+        try:
+            phase_slug = handoff.parse_handoff_slug(
+                path.read_text(encoding="utf-8")
+            )
+        except (handoff.HandoffParseError, OSError) as exc:
+            return Resolution(
+                ResolutionOutcome.ERROR,
+                source=ResolutionSource.PHASE_ARTIFACT,
+                searched=(*searched, *phase_paths),
+                detail=f"{path} is not a readable handoff artifact: {exc}",
+            )
+        return Resolution(
+            ResolutionOutcome.LEGACY,
+            source=ResolutionSource.PHASE_ARTIFACT,
+            phase_slug=phase_slug,
+            searched=(*searched, *phase_paths),
+        )
+    return None
+
+
 def _validate(
     work_id: str,
     source: ResolutionSource,
@@ -273,6 +314,7 @@ def _validate(
             project_key=checks.project_key,
             git_object_exists=checks.git_object_exists,
             artifact_digest=checks.artifact_digest,
+            repository_root=checks.workspace_root,
         )
     except (records.RecordError, ValueError, OSError) as exc:
         return Resolution(

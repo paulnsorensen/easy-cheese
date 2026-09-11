@@ -13,6 +13,16 @@ license: MIT
 
 Plate completes local work before review. It finishes required artifacts, validates, commits safely, and selects the correct publication path.
 
+## Phase entry
+
+Run `python3 skills/plate/scripts/plate.pyz wheypoint-resolve --ref <slug>`.
+`authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
+`not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
+`gated`, `ambiguous`, and `error` stop and show the payload.
+Show advisory `stale-commit` and `grounded-path-missing` findings.
+
+Plate resolves the slug and reads the result, but it does not commit a wheypoint revision or publish a wheypoint revision.
+
 ## Routing guard
 
 Check ownership before you select a mode.

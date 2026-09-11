@@ -19,7 +19,8 @@ from typing import cast
 import pytest
 from easy_cheese_schemas import HandoffTask, NextMove, WheypointRecord
 
-from easy_cheese.skills.wheypoint import checkpoint, commit, storage, wheypoint
+from easy_cheese.shared.wheypoint import checkpoint, commit, storage
+from easy_cheese.skills.wheypoint import wheypoint
 
 from conftest import WORK_ID
 
@@ -57,7 +58,7 @@ def _first(**overrides: object) -> str:
     """A genesis intent: everything a first record cannot carry forward."""
     payload: dict[str, object] = {
         "orientation": "Bind the parent in the runtime.\nNot the title line.",
-        "working_context": ["src/easy_cheese/skills/wheypoint/checkpoint.py"],
+        "working_context": ["src/easy_cheese/shared/wheypoint/checkpoint.py"],
         "next": "cook",
         "artifact": ".cheese/cook/wheypoint-checkpoint.md",
         # AC-26: a first checkpoint must capture something beyond orientation.
@@ -377,9 +378,8 @@ def test_omitted_protected_state_carries_forward() -> None:
         "The kernel keeps every check."
     ]
     assert [entry["state"] for entry in decisions] == ["active"]
-    # The working context and next action were not restated and were not lost.
     assert _get(payload, "record", "working_context") == [
-        "src/easy_cheese/skills/wheypoint/checkpoint.py"
+        "src/easy_cheese/shared/wheypoint/checkpoint.py"
     ]
     assert _get(payload, "record", "next_action", "move") == "cook"
     assert (

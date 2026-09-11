@@ -12,8 +12,8 @@ import pytest
 from attrs import evolve
 from easy_cheese_schemas import CompactionRecord, WheypointRecord, WheypointRevision
 
-from easy_cheese.skills.wheypoint import canonical, lint, records, storage
-from easy_cheese.skills.wheypoint import resolve as resolve_mod
+from easy_cheese.shared.wheypoint import canonical, lint, records, storage
+from easy_cheese.shared.wheypoint import resolve as resolve_mod
 
 PROJECT = "paulnsorensen-easy-cheese"
 NOTE = "status: ok\nnext: cook\nartifact: {artifact}\nPick the loop back up.\n"
@@ -956,8 +956,8 @@ def test_ac24_the_v2_golden_store_resolves_authoritative_with_its_pinned_digests
     import io
     import json
 
-    from easy_cheese.skills.wheypoint import records, storage, wheypoint
-
+    from easy_cheese.shared.wheypoint import records, storage
+    from easy_cheese.skills.wheypoint import wheypoint
     fixtures = Path(__file__).resolve().parents[1] / "fixtures"
     monkeypatch.setenv("EASY_CHEESE_HOME", str(fixtures))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "golden-v2")

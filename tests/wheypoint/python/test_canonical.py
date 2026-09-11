@@ -25,7 +25,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
-from easy_cheese.skills.wheypoint import canonical, records
+from easy_cheese.shared.wheypoint import canonical, records
 
 
 class _HasRevision(Protocol):
@@ -189,7 +189,7 @@ def test_canonical_payload_of_a_record_is_sorted_utf8_json(
 ) -> None:
     payload = records.canonical_payload(make_record())
     assert payload.startswith(b'{"artifact_links":[],"blockers":[],"created":')
-    assert payload.endswith(b'"working_context":["src/wheypoint/storage.py"]}')
+    assert payload.endswith(b'"working_context":["src/easy_cheese/shared/wheypoint/storage.py"]}')
 
 
 def test_v3_fields_at_their_default_leave_v2_canonical_bytes_untouched(
