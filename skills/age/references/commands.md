@@ -6,11 +6,11 @@
 | --- | --- |
 | `age-route` | Size an /age review into single-pass or fan-out lanes (JSON in, JSON out) |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
-| `findings-cli` | Render an /age report's selection table and resolve selection verbs |
-| `gates-cli` | Map each quality-gate result to a readiness verdict |
-| `handoff-cli` | Render, parse, and dispatch-split handoff preambles |
+| `findings` | Render an /age report's selection table and resolve selection verbs |
+| `gates` | Map each quality-gate result to a readiness verdict |
+| `handoff` | Render, parse, and dispatch-split handoff preambles |
 | `html-report` | Render an /age markdown report into one offline HTML file |
-| `paths-cli` | Slugify, validate, resolve, and list .cheese artifact paths |
+| `paths` | Slugify, validate, resolve, and list .cheese artifact paths |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
 | `review-lock` | Record the production tree digest that keeps /age review-only |

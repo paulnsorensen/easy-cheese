@@ -8,6 +8,26 @@ pip install easy-cheese-schemas
 
 Requires Python 3.11 or newer. cattrs floors at 3.10; 3.11+ skips the `exceptiongroup` dependency, and 3.10 reaches end of life in October 2026.
 
+## Package boundary
+
+`easy_cheese_schemas` defines shared contracts, not workflow execution.
+It owns types, invariants, pure normalization, validation, canonical serialization, and schema generation.
+Pure planner materialization stays here because it transforms supplied values without dispatch or artifact access.
+
+Runtime consumers depend on schemas; schemas must not depend on runtime consumers.
+
+| Responsibility | Owner |
+| --- | --- |
+| Planner, Cook, Cure, and callback execution | `easy_cheese.shared.workflow` |
+| Artifact resolution, verification, and local retention | `easy_cheese.shared.artifacts` |
+| Artifact publication and handoff acceptance | `easy_cheese.shared.publication` |
+| Repository benchmarks and build compilers | `scripts/` |
+
+Import runtime functions from their owning module.
+The schema package does not provide compatibility re-exports.
+Runtime callback records and exceptions stay with their runtime module.
+Persisted semantic contracts stay in schemas.
+
 ## What this is, and what it is not
 
 It is the artifact vocabulary: the types an external producer or consumer needs to write or read an easy-cheese document without reimplementing its field rules.

@@ -49,7 +49,7 @@ from easy_cheese_schemas import (
     validate_contract,
     validate_transition,
 )
-from easy_cheese_schemas.artifacts import (
+from easy_cheese.shared.artifacts import (
     ArtifactDigestMismatchError,
     ArtifactResolutionError,
     resolve_artifact,

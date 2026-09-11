@@ -126,7 +126,7 @@ def test_cli_rejects_extra_request_keys(
         encoding="utf-8",
     )
     assert press_route_cli.main([str(request)]) == 1
-    assert "repair_cycles" in capsys.readouterr().err
+    assert "unknown ['current_receipt']" in capsys.readouterr().err
 
 
 def test_cli_rejects_invalid_outcome(

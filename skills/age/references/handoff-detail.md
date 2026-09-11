@@ -11,7 +11,7 @@ The tail (**Plate it**, **Checkpoint & stop**, **Stop**) follows.
 1. Render the numbered selection table:
 
    ```
-   python3 skills/age/scripts/age.pyz findings-cli render-table --report .cheese/age/<slug>.md
+   python3 skills/age/scripts/age.pyz findings render-table --report .cheese/age/<slug>.md
    ```
 
    Mark any sprawling/structural-fix row as *heavy*.
@@ -42,7 +42,7 @@ Offer the non-floor and standard-tail options last.
   Expand the verb to finding ids.
 
   ```
-  python3 skills/age/scripts/age.pyz findings-cli parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
+  python3 skills/age/scripts/age.pyz findings parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
   ```
 
 - **Plate it** — apply the recommended composite via `/cure <slug> --auto --open-pr --stake medium+`.

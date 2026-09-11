@@ -10,6 +10,7 @@ slug accepted by one validator is accepted by all.
 
 from __future__ import annotations
 
+import argparse
 import difflib
 import functools
 import os
@@ -17,9 +18,9 @@ import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal, NamedTuple, TypedDict
+from typing import Literal, NamedTuple, TextIO, TypedDict, cast
 
-from easy_cheese.shared import git_utils
+from easy_cheese.shared import cli, git_utils
 
 # Source of truth: skills/ultracook/references/manifest-schema.json.
 # Kebab-case, no leading/trailing hyphen, no double hyphens, 1-64 chars.
@@ -138,7 +139,7 @@ def slugify(text: str, *, max_words: int = 5) -> str:
     artifacts.
 
     The result always satisfies ``validate_slug`` unless it is empty; callers
-    must reject the empty slug themselves (see ``paths_cli._cmd_slugify``).
+    must reject the empty slug themselves (see ``_cmd_slugify``).
     """
     lowered = re.sub(r"[^a-z0-9\s-]+", "", text.lower())
     words = [w for w in lowered.split() if w and w not in _STOPWORDS]
@@ -346,14 +347,14 @@ def git_toplevel() -> Path | None:
     return None
 
 
-def _resolve_repo_root(repo_root: Path | str | None) -> Path:
+def resolve_repo_root(repo_root: Path | str | None) -> Path:
     """Absolute repo root: the given value, else git toplevel, else cwd."""
     if repo_root is not None:
         return Path(repo_root).resolve()
     return (git_toplevel() or Path.cwd()).resolve()
 
 
-def _phase_dirpath(phase: str, repo_root: Path) -> Path:
+def phase_dirpath(phase: str, repo_root: Path) -> Path:
     """Absolute artifact directory for a phase/aux token."""
     base = project_corpus_root() if phase in XDG_PHASES else repo_root / ".cheese"
     return base / phase_dir(phase)
@@ -367,7 +368,7 @@ def _phase_entries(phase: str, repo_root: Path) -> list[tuple[str, Path]]:
     ``ultracook/<slug>/manifest.yaml`` (dir + manifest), and the flat
     ``<dir>/<slug>.md`` everywhere else.
     """
-    dirpath = _phase_dirpath(phase, repo_root)
+    dirpath = phase_dirpath(phase, repo_root)
     if not dirpath.is_dir():
         return []
     entries: list[tuple[str, Path]] = []
@@ -430,14 +431,14 @@ def resolve_slug(
     known = sorted(PHASES | AUX_PHASES)
     if phase_hint is not None and phase_hint not in known:
         raise ValueError(f"unknown phase {phase_hint!r}; expected one of {known}")
-    repo = _resolve_repo_root(repo_root)
+    repo = resolve_repo_root(repo_root)
     phases = [phase_hint] if phase_hint is not None else known
 
     exact: list[SlugMatch] = []
     fuzzy_pool: list[tuple[str, Path, str]] = []
     searched_roots: list[str] = []
     for phase in phases:
-        searched_roots.append(str(_phase_dirpath(phase, repo)))
+        searched_roots.append(str(phase_dirpath(phase, repo)))
         for stem, path in _phase_entries(phase, repo):
             if stem == slug:
                 exact.append(
@@ -477,13 +478,13 @@ def resolve_slug(
 def list_artifacts(phase: str, *, repo_root: Path | str | None = None) -> list[dict[str, str]]:
     """Return ``[{"slug": stem, "path": abs_path}, ...]`` for a phase's artifacts.
 
-    Reuses ``_phase_entries``/``_phase_dirpath`` (also driving ``resolve_slug``) so
+    Reuses ``_phase_entries``/``phase_dirpath`` (also driving ``resolve_slug``) so
     durable phases (specs, research) list from the XDG corpus and transient phases
     list from ``.cheese/`` -- one routing source, not a second copy of it.
     """
     if phase not in PHASES:
         raise ValueError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
-    repo = _resolve_repo_root(repo_root)
+    repo = resolve_repo_root(repo_root)
     entries = sorted(_phase_entries(phase, repo), key=lambda e: (e[0], str(e[1])))
     return [{"slug": stem, "path": str(path)} for stem, path in entries]
 
@@ -578,7 +579,7 @@ def domain_model_target(
     failed wiki-model probe cannot confirm presence, so existing file stores
     still win while a listed corpus remains the creation target.
     """
-    repo = _resolve_repo_root(repo_root)
+    repo = resolve_repo_root(repo_root)
     docs_root = repo / "docs"
     xdg_root = project_corpus_root(project)
 
@@ -600,3 +601,144 @@ def domain_model_target(
     return DomainModelTarget(
         "file", create_root / f"{DOMAIN_MODEL_STEM}.md", probe.reachable
     )
+
+
+# ---- CLI: slugify, validate, existing, resolve, list ----
+def _cmd_slugify(args: argparse.Namespace) -> None:
+    text = cast(str, args.text)
+    if not text:
+        raise cli.CliError("slugify requires non-empty --text")
+    slug = slugify(text)
+    if not slug:
+        raise cli.CliError(f"slugify produced an empty slug from {text!r}")
+    cli.emit(slug, json_mode=cast(bool, args.json_mode), stdout=cast(TextIO, args.stdout))
+
+
+def _cmd_validate(args: argparse.Namespace) -> None:
+    err = validate_slug(cast(str, args.slug))
+    if err is not None:
+        raise cli.CliError(err)
+
+
+def _cmd_existing(args: argparse.Namespace) -> None:
+    slug = cast(str, args.slug)
+    phase = cast(str, args.phase)
+    err = validate_slug(slug)
+    if err is not None:
+        raise cli.CliError(err)
+    if phase not in PHASES:
+        raise cli.CliError(
+            f"unknown phase {phase!r}; expected one of {sorted(PHASES)}"
+        )
+    found = existing_artifacts(
+        slug, root=cast("str | None", args.root), phases=(phase,)
+    )
+    items = [str(p) for p in found.values()]
+    cli.emit(
+        items,
+        limit=cast("int | None", args.limit),
+        full=cast(bool, args.full),
+        json_mode=cast(bool, args.json_mode),
+        stdout=cast(TextIO, args.stdout),
+    )
+
+
+def _cmd_list(args: argparse.Namespace) -> None:
+    phase = cast(str, args.phase)
+    if phase not in PHASES:
+        raise cli.CliError(
+            f"unknown phase {phase!r}; expected one of {sorted(PHASES)}"
+        )
+    try:
+        entries = list_artifacts(phase, repo_root=cast("str | None", args.repo_root))
+    except ValueError as exc:
+        raise cli.CliError(str(exc)) from exc
+    json_mode = cast(bool, args.json_mode)
+    limit = cast("int | None", args.limit)
+    full = cast(bool, args.full)
+    stdout = cast(TextIO, args.stdout)
+    if json_mode:
+        shown = entries if (full or limit is None) else entries[:limit]
+        cli.emit(shown, json_mode=True, stdout=stdout)
+    else:
+        cli.emit([e["slug"] for e in entries], limit=limit, full=full, stdout=stdout)
+
+
+def _cmd_resolve(args: argparse.Namespace) -> None:
+    slug = cast(str, args.slug)
+    err = validate_slug(slug)
+    if err is not None:
+        raise cli.CliError(err)
+    try:
+        result = resolve_slug(
+            slug,
+            phase_hint=cast("str | None", args.phase),
+            repo_root=cast("str | None", args.repo_root),
+        )
+    except ValueError as exc:
+        raise cli.CliError(str(exc)) from exc
+    cli.emit(result, json_mode=True, stdout=cast(TextIO, args.stdout))
+
+
+def _setup(parser: argparse.ArgumentParser) -> None:
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    slugify = sub.add_parser("slugify", help="kebab-slug arbitrary text")
+    _ = slugify.add_argument("--text", required=True, help="source text to slugify")
+    slugify.set_defaults(func=_cmd_slugify)
+
+    validate = sub.add_parser("validate", help="exit 0 if slug is valid kebab-case")
+    _ = validate.add_argument("--slug", required=True)
+    validate.set_defaults(func=_cmd_validate)
+
+    existing = sub.add_parser(
+        "existing",
+        help="list .cheese/<phase>/<slug>.md artifacts present on disk",
+    )
+    _ = existing.add_argument("--slug", required=True)
+    _ = existing.add_argument("--phase", required=True, help=f"one of {sorted(PHASES)}")
+    _ = existing.add_argument(
+        "--root",
+        default=None,
+        help="artifact root override (default: phase-appropriate -- XDG corpus for durable phases, .cheese/ otherwise)",
+    )
+    _ = existing.add_argument("--limit", type=int, default=None, help="cap list length")
+    existing.set_defaults(func=_cmd_existing)
+
+    resolve = sub.add_parser(
+        "resolve",
+        help="resolve a slug to absolute artifact path(s) across all phases",
+    )
+    _ = resolve.add_argument("--slug", required=True)
+    _ = resolve.add_argument(
+        "--phase", default=None, help="restrict the search to this phase/aux token"
+    )
+    _ = resolve.add_argument(
+        "--repo-root",
+        dest="repo_root",
+        default=None,
+        help="repo root for .cheese/ (default: git toplevel or cwd)",
+    )
+    resolve.set_defaults(func=_cmd_resolve)
+
+    list_cmd = sub.add_parser(
+        "list",
+        help="enumerate slugs (and paths) for a phase's artifacts on disk",
+    )
+    _ = list_cmd.add_argument("--phase", required=True, help=f"one of {sorted(PHASES)}")
+    _ = list_cmd.add_argument(
+        "--repo-root",
+        dest="repo_root",
+        default=None,
+        help="repo root for .cheese/ (default: git toplevel or cwd)",
+    )
+    _ = list_cmd.add_argument("--limit", type=int, default=None, help="cap list length")
+    list_cmd.set_defaults(func=_cmd_list)
+
+
+def main(argv: list[str]) -> int:
+    return cli.run(_setup, argv=argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli.run(_setup))

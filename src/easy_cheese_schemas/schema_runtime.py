@@ -5,15 +5,25 @@ import types
 from collections.abc import Mapping
 from enum import Enum
 from functools import cache
-from typing import Any, TypeVar, Union, cast, get_args, get_origin, get_type_hints  # pyright: ignore[reportDeprecated]
+from typing import (
+    Any,
+    TypeVar,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 import attrs
 from attrs import Attribute
+
 from easy_cheese_schemas._schema_catalog import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     SCHEMA_ROOT,
 )
 from easy_cheese_schemas.contracts import (
+    MAX_CONTRACT_BYTES,
+    MAX_CONTRACT_DEPTH,
     AgentWriterView,
     ArtifactRef,
     BoundedContext,
@@ -34,8 +44,6 @@ from easy_cheese_schemas.contracts import (
     HandoffPointer,
     IdentityAction,
     IdentityLineage,
-    MAX_CONTRACT_BYTES,
-    MAX_CONTRACT_DEPTH,
     PlannerResult,
     PlannerResultWriterView,
     PlannerUncertainty,
@@ -58,6 +66,7 @@ from easy_cheese_schemas.contracts import (
     derive_curd_disposition,
     registered_contracts,
 )
+
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -98,7 +107,6 @@ _HOST_OWNED_FIELDS = {
     "contract_version",
     "coverage",
     "curd_id",
-    "criterion_id",
     "digest",
     "diagnosis_id",
     "evidence",
@@ -112,7 +120,7 @@ _HOST_OWNED_FIELDS = {
     "result_id",
     "review_id",
     "revision",
-    "runtime_refs",
+    "provenance_refs",
     "schema_uri",
     "size_bytes",
     "source_curd_ref",
@@ -181,11 +189,11 @@ def _apply_schema_constraints(
     constrained = dict(schema)
     constrained.update(constraints)
     return constrained
+
+
 _REPOSITORY_RELATIVE_PATH_PATTERN = (
     r"^(?!/)(?!\.{1,2}$)(?!.*(?:^|/)\.\.(?:/|$))[\s\S]+$"
 )
-
-
 
 
 def _contract_version_definition(
@@ -244,6 +252,7 @@ def _contract_version_definition(
             }
         definitions[name] = schema
     return {"$ref": f"#/$defs/{name}"}
+
 
 _UNIQUE_COLLECTION_FIELDS = {
     "BoundedContext": {"shared_inputs"},
@@ -327,7 +336,7 @@ def _type_schema(
                 "pattern": _REPOSITORY_RELATIVE_PATH_PATTERN,
             }
     origin = get_origin(annotation)
-    if origin in {types.UnionType, Union}:  # pyright: ignore[reportDeprecated]
+    if origin is types.UnionType:
         members = cast("tuple[object, ...]", get_args(annotation))
         schema: dict[str, object] = {
             "anyOf": [
@@ -523,7 +532,6 @@ def _raw_mapping(raw: object) -> Mapping[str, object]:
     return cast("Mapping[str, object]", raw)
 
 
-
 @cache
 def _class_hints_and_fields(
     cls: type,
@@ -535,7 +543,7 @@ def _class_hints_and_fields(
 
 def _structure(value: object, annotation: object, path: str = "$") -> object:
     origin = get_origin(annotation)
-    if origin in {types.UnionType, Union}:  # pyright: ignore[reportDeprecated]
+    if origin is types.UnionType:
         failures: list[str] = []
         for member in cast("tuple[object, ...]", get_args(annotation)):
             try:
@@ -640,9 +648,7 @@ def _artifact(
     return CanonicalArtifact(value, canonical_bytes(value), source_version)
 
 
-def _validate_curd_plan_against(
-    plan: CurdPlan, supported: ContractVersion
-) -> CurdPlan:
+def _validate_curd_plan_against(plan: CurdPlan, supported: ContractVersion) -> CurdPlan:
     registered = _registered(CurdPlan)
     source = plan.contract_version
     if source.schema_uri != registered.schema_uri:
@@ -659,7 +665,9 @@ def _validate_curd_plan_against(
 
 def validate_curd_plan(plan: object) -> CurdPlan:
     if not isinstance(plan, CurdPlan):
-        raise TypeError(f"validate_curd_plan expects CurdPlan, not {type(plan).__name__}")
+        raise TypeError(
+            f"validate_curd_plan expects CurdPlan, not {type(plan).__name__}"
+        )
     supported = supported_version_for(CurdPlan)
     if supported is None:
         raise ContractValidationError("CurdPlan has no host-supported contract version")
@@ -761,18 +769,14 @@ def _typed_host(value: object, type_: type[_T], path: str) -> _T:
     return cast(_T, _structure(value, type_, path))
 
 
-def _host_mapping(
-    invocation: Mapping[str, object], name: str
-) -> Mapping[str, object]:
+def _host_mapping(invocation: Mapping[str, object], name: str) -> Mapping[str, object]:
     value = _invocation_value(invocation, name, {})
     if not isinstance(value, Mapping):
         raise ContractValidationError(f"invocation.{name} must be an object")
     return cast("Mapping[str, object]", value)
 
 
-def _version_for(
-    invocation: Mapping[str, object], schema_uri: str
-) -> ContractVersion:
+def _version_for(invocation: Mapping[str, object], schema_uri: str) -> ContractVersion:
     versions = invocation.get("versions")
     if versions is not None:
         if not isinstance(versions, Mapping) or schema_uri not in versions:
@@ -819,8 +823,6 @@ def _source_location(
     )
 
 
-
-
 def _normalize_plan(
     view: CurdPlanWriterView, invocation: Mapping[str, object]
 ) -> CurdPlan:
@@ -845,9 +847,7 @@ def _normalize_plan(
     curds: list[SemanticCurd] = []
     for writer_curd in view.curds:
         try:
-            dependencies = tuple(
-                curd_ids[key] for key in writer_curd.dependencies
-            )
+            dependencies = tuple(curd_ids[key] for key in writer_curd.dependencies)
         except KeyError as error:
             raise ContractValidationError(
                 f"curd {writer_curd.key!r} references unknown dependency "
@@ -919,7 +919,6 @@ def _normalize_plan(
         context=context,
         parent_plan_ref=parent,
     )
-
 
 
 def _normalize_planner_result(
@@ -1085,8 +1084,6 @@ def _normalize_diagnosis_result(
     )
 
 
-
-
 def _normalize_curd_result(
     view: CurdResultWriterView, invocation: Mapping[str, object]
 ) -> CurdResult:
@@ -1098,26 +1095,29 @@ def _normalize_curd_result(
         )
     expected_raw = cast("list[object] | tuple[object, ...]", expected_raw)
     expected = cast("tuple[str, ...]", tuple(expected_raw))
-    if len(expected) != len(view.criterion_results):
+    rows_by_id = {item.criterion_id: item for item in view.criterion_results}
+    if len(rows_by_id) != len(view.criterion_results):
         raise ContractValidationError(
-            "writer criterion results must match expected_criterion_ids"
+            "writer criterion results must contain one row per criterion_id"
+        )
+    if set(rows_by_id) != set(expected):
+        raise ContractValidationError(
+            "writer criterion results must cover expected_criterion_ids exactly"
         )
     evidence = _host_mapping(invocation, "evidence")
     rows = tuple(
         CriterionResult(
             criterion_id=criterion_id,
-            disposition=item.disposition,
+            disposition=rows_by_id[criterion_id].disposition,
             evidence=_host_refs(
-                item.evidence_keys,
+                rows_by_id[criterion_id].evidence_keys,
                 evidence,
                 EvidenceRef,
-                f"criterion result {index} evidence",
+                f"criterion result {criterion_id!r} evidence",
             ),
-            reason=item.reason,
+            reason=rows_by_id[criterion_id].reason,
         )
-        for index, (criterion_id, item) in enumerate(
-            zip(expected, view.criterion_results), start=1
-        )
+        for criterion_id in expected
     )
     deliverables = _host_mapping(invocation, "deliverables")
     resolved_deliverables: list[ArtifactRef] = []
@@ -1146,11 +1146,11 @@ def _normalize_curd_result(
         SourceCurdRef,
         "invocation.source_curd_ref",
     )
-    runtime_refs = _invocation_value(invocation, "runtime_refs", ())
-    if not isinstance(runtime_refs, list | tuple):
-        raise ContractValidationError("invocation.runtime_refs must be an array")
-    runtime_refs = cast("list[object] | tuple[object, ...]", runtime_refs)
-    runtime_refs = cast("tuple[str, ...]", tuple(runtime_refs))
+    provenance_refs = _invocation_value(invocation, "provenance_refs", ())
+    if not isinstance(provenance_refs, list | tuple):
+        raise ContractValidationError("invocation.provenance_refs must be an array")
+    provenance_refs = cast("list[object] | tuple[object, ...]", provenance_refs)
+    provenance_refs = cast("tuple[str, ...]", tuple(provenance_refs))
     return CurdResult(
         contract_version=_version_for(invocation, schema_uri),
         result_id=cast(str, _invocation_value(invocation, "result_id")),
@@ -1161,7 +1161,7 @@ def _normalize_curd_result(
         criterion_results=rows,
         deliverables=tuple(resolved_deliverables),
         unresolved_work=view.unresolved_work,
-        runtime_refs=runtime_refs,
+        provenance_refs=provenance_refs,
     )
 
 
@@ -1176,9 +1176,7 @@ def normalize_agent_value(view: object, invocation: object) -> object:
         forbidden = _forbidden_field("$", raw)
         if forbidden is not None:
             path, name = forbidden
-            raise ContractValidationError(
-                f"{path} supplies host-owned field {name!r}"
-            )
+            raise ContractValidationError(f"{path} supplies host-owned field {name!r}")
         writer = _structure(raw, AgentWriterView)
         assert isinstance(writer, AgentWriterView)
 
@@ -1196,9 +1194,7 @@ def normalize_agent_value(view: object, invocation: object) -> object:
     raise ContractValidationError(f"unsupported writer view kind {writer.kind!r}")
 
 
-def normalize_agent_output(
-    view: object, invocation: object
-) -> CanonicalArtifact:
+def normalize_agent_output(view: object, invocation: object) -> CanonicalArtifact:
     value = normalize_agent_value(view, invocation)
     version = cast(ContractVersion, getattr(value, "contract_version"))
     return _artifact(value, version)

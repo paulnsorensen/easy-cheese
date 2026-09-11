@@ -9,11 +9,17 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from pathlib import PurePosixPath
 from typing import ClassVar, Literal, Protocol, cast
 
 import attrs
 from attrs import define, field
+
+from easy_cheese_schemas.validate import (
+    is_int,
+    require_int,
+    require_relative_path,
+    require_str,
+)
 
 __all__ = [
     "BaselineCheck",
@@ -69,8 +75,7 @@ class _NamedAttribute(Protocol):
 def _non_empty_string(
     _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{attribute.name} must be a non-empty string")
+    _ = require_str(value, attribute.name)
 
 
 def _optional_non_empty_string(
@@ -119,19 +124,7 @@ def _argv(_instance: object, attribute: _NamedAttribute, value: object) -> None:
 def _project_relative_path(
     _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
-    _non_empty_string(_instance, attribute, value)
-    assert isinstance(value, str)
-    first = value.split("/", 1)[0]
-    path = PurePosixPath(value)
-    if (
-        path.is_absolute()
-        or value.startswith("\\")
-        or "\\" in value
-        or ":" in first
-        or ".." in path.parts
-        or "\x00" in value
-    ):
-        raise ValueError(f"{attribute.name} must be a project-relative path")
+    _ = require_relative_path(value, attribute.name)
 
 
 _DIGEST_RE = re.compile(r"(?:sha256:)?[0-9A-Fa-f]{64}")
@@ -163,25 +156,15 @@ def _enum(enum_type: type[Enum]):
     return validate
 
 
-def _schema_version(
-    _instance: object, attribute: _NamedAttribute, value: object
-) -> None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{attribute.name} must be an integer")
+def _integer(_instance: object, attribute: _NamedAttribute, value: object) -> None:
+    _ = require_int(value, attribute.name)
 
 
 def _zero_exit_code(
     _instance: object, attribute: _NamedAttribute, value: object
 ) -> None:
-    if isinstance(value, bool) or value != 0:
+    if not is_int(value) or value != 0:
         raise ValueError(f"{attribute.name} must be exactly 0")
-
-
-def _observed_exit_code(
-    _instance: object, attribute: _NamedAttribute, value: object
-) -> None:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{attribute.name} must be an integer")
 
 
 def _contract_source(
@@ -273,7 +256,7 @@ class RedCase(_GateRecord):
     kind: RedKind = field(validator=_enum(RedKind))
     origin: EvidenceOrigin = field(validator=_enum(EvidenceOrigin))
     expected_witness: list[str] = field(validator=_non_empty_string_list)
-    observed_exit_code: int = field(validator=_observed_exit_code)
+    observed_exit_code: int = field(validator=_integer)
     observed_witness: str = field(validator=_non_empty_string)
     matrix_row: str | None = field(
         default=None,
@@ -301,7 +284,7 @@ def _phase_token_pair(
 @define(frozen=True)
 class GateReceipt(_GateRecord):
     __schema_forbidden_fields__: ClassVar[frozenset[str]] = frozenset({"mode"})
-    schema_version: int = field(validator=_schema_version)
+    schema_version: int = field(validator=_integer)
     work_id: str = field(validator=_non_empty_string)
     project_key: str = field(validator=_non_empty_string)
     producer: GateProducer = field(validator=_enum(GateProducer))

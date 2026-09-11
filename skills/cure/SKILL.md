@@ -61,14 +61,14 @@ Slash commands are host renderings, not the control model.
    Expand a user verb with this command:
 
    ```text
-   python3 skills/cure/scripts/cure.pyz findings-cli parse-selection --report <path> --selection "<verb>"
+   python3 skills/cure/scripts/cure.pyz findings parse-selection --report <path> --selection "<verb>"
    ```
 
    Use the same bundle command when the host only ships the bundle.
 3. **Apply.** Fix one logical group at a time.
    Confirm each anchor with a fresh bounded read.
    The report path stops here and continues at step 4.
-   The typed path also invokes `easy_cheese_schemas.cure` with the validated plan.
+   The typed path also invokes `easy_cheese.shared.workflow.cure` with the validated plan.
    Add one `CureDiagnosisBinding` for each selected curd.
    Create each binding with `bind_diagnosis(plan, curd, diagnosis_result)`.
    Use only a confirmed `DiagnosisResult`.
@@ -86,8 +86,8 @@ Slash commands are host renderings, not the control model.
    Identical baseline failures do not block a clean cure or trigger a halt.
    Fix only new or changed failures.
 5. **Taste-test behavioral fixes.** Run the fresh-context taste test before you write the handoff slug.
-   Resolve the read-only `reviewer` phase agent through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
-   Request the powerful minimum power and high effort.
+   Resolve the read-only `reviewer (taste-test)` phase agent through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
+   Request `default` minimum power and `medium` effort.
    Use the Cook review lenses over the cure diff.
    Halt when fresh-context isolation is unavailable.
    Use an inline self-check only under the small-diff cost gate in [`tdd-loop.md`](../cook/references/tdd-loop.md).
@@ -137,7 +137,7 @@ The agent judges the gate values.
 The CLI maps those values to a readiness verdict:
 
 ```text
-python3 skills/cure/scripts/cure.pyz gates-cli classify \
+python3 skills/cure/scripts/cure.pyz gates classify \
   --press-status <label> \
   [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
 ```

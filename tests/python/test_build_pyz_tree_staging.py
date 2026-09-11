@@ -192,7 +192,8 @@ def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> 
     # The shared library it reuses rather than reimplements.
     assert "easy_cheese/shared/paths.py" in names
     # Schemas and locked deps ride along, nested, exactly as for ultracook.
-    assert "easy_cheese_schemas/wheypoint.py" in names
+    assert "easy_cheese_schemas/wheypoint.py" not in names  # moved into contracts.py
+    assert "easy_cheese_schemas/contracts.py" in names
     assert "attr/_make.py" in names
     assert "cattrs/converters.py" in names
     assert "attrs-26.1.0.dist-info/METADATA" in names
@@ -317,7 +318,7 @@ def test_build_cli_preserves_resolver_diagnostics(
 
     assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path), "cook"]) == 1
     diagnostics = capsys.readouterr().err
-    assert "cook" in diagnostics
+    assert "pip" in diagnostics
     assert "subprocess stdout" in diagnostics
     assert "subprocess stderr" in diagnostics
 

@@ -13,7 +13,7 @@ sources:
 
 # Schema similarity and consolidation audit
 
-The Easy Cheese schema package should consolidate implementations and authorities, not collapse its eleven registered contract roots. The audit found **zero safe root-contract merges**, **three concrete consolidation programs**, and **four supporting opportunities**. The central distinction is semantic: two records can look structurally similar while serving different authors, trust boundaries, lifecycles, or persistence obligations.
+The Easy Cheese schema package should consolidate implementations and authorities, not collapse its distinct registered contract roots. The audit found **zero safe root-contract merges**, **three concrete consolidation programs**, and **four supporting opportunities**. The central distinction is semantic: two records can look structurally similar while serving different authors, trust boundaries, lifecycles, or persistence obligations.
 
 The three recommended programs are:
 
@@ -29,6 +29,67 @@ The supporting opportunities are:
 - shared private value validators for repeated source spans, criterion text, checks, and identifiers.
 
 These changes reduce duplication without erasing the seams that make the workflow auditable.
+
+## Verification update: 2026-09-05
+
+### Redesign constraint: clean break
+
+The owner permits breaking schema and Python API changes for this redesign.
+The owner states that the project is not public and requires no migrations.[^clean-break]
+Do not preserve compatibility adapters, old formats, aliases, or dual-write paths solely for backward compatibility.
+The historical migration recommendations below do not constrain this redesign.
+Preserve required semantics and update active consumers to the chosen contracts instead.
+This decision does not authorize deletion of stored user work.
+
+[^clean-break]: Owner decision in the schema design conversation, 2026-09-05: "We can break. This isn't public yet. No migrations needed."
+
+
+This update supersedes the historical inventory and absence claims below.
+The current package exposes 15 registered JSON contract roots.
+The historical count includes a separate Markdown document contract and must not serve as the current runtime inventory.[^current-catalog]
+
+NormalizationReceipt, HandoffPointer, AcceptedArtifact, and PublishedArtifact now have implementations.
+The shared publication module uses pointer-last publication and validates pointers before it exposes accepted payloads.[^current-publication]
+
+Versioned canonical contracts currently require exact catalog-version equality.
+The older-minor policy below remains historical design discussion, not current runtime behavior.[^current-version]
+Wheypoint still uses the compatibility loader and its own digest-preservation serialization rules.
+Registration alone therefore does not identify the persistence path or version policy.[^current-wheypoint]
+
+The workflow is not dead merely because Python skill modules do not call it.
+Cook's fan-path instructions explicitly call plan, cook, and cure in `easy_cheese.shared.workflow`.[^current-fan]
+
+### Hard package boundary
+
+The owner requires a contract library, not an execution runtime.
+Workflow callbacks and artifact access belong in `easy_cheese.shared`.
+Repository compilers and offline benchmarks belong in `scripts/`.
+
+Pure planner materialization stays in schemas because it transforms supplied values without dispatch or artifact access.
+Runtime callback records and exceptions move with their runtime owner because they are not persisted semantic contracts.
+This distinction avoids new schema roots for internal execution state.
+Do not leave compatibility re-exports in schemas.[^package-boundary]
+
+The phase compiler loads the generated catalog without package initialization.
+A normal package import loads schema runtime dependencies and can prevent registry regeneration.[^compiler-bootstrap]
+
+[^compiler-bootstrap]: scripts/_phase_registry_compiler.py:19-25; tests/schemas/python/test_phase_contracts.py.
+
+[^package-boundary]: Owner decision in the schema review conversation, 2026-09-05; src/easy_cheese_schemas/AGENTS.md; .cheese/specs/schema-package-boundary.md.
+
+### Remaining semantic review issue
+
+Review coverage has a remaining evidence limit.
+The workflow marks every requested target covered for clean or findings results.
+The writer view cannot report individual uncovered targets.
+Treat that ledger as a dispatch-derived claim, not independent proof of completed review.[^current-coverage]
+
+[^current-catalog]: src/easy_cheese_schemas/_schema_catalog.py:6-39; registered_contracts() inspection at commit 0487a748a7c1c80c621a645d104d248ca3afb0db.
+[^current-publication]: src/easy_cheese_schemas/contracts.py:647-716; src/easy_cheese_schemas/schema_runtime.py:137-147; src/easy_cheese/shared/publication.py:695-798.
+[^current-version]: src/easy_cheese_schemas/schema_runtime.py:669-723.
+[^current-wheypoint]: src/easy_cheese/skills/wheypoint/records.py:56-125.
+[^current-fan]: skills/cook/references/fan-pathway.md:56-109.
+[^current-coverage]: src/easy_cheese/shared/workflow.py:528-580; skills/cook/references/writer-views.md:117-121.
 
 ## Scope
 

@@ -77,7 +77,7 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
 1. **Resolve PR.** Use `<pr-ref>` or `gh pr view --json number`.
    Normalize a `PR#<n>` reference or a PR URL to its integer.
    Resolve `<owner>/<repo>` from the Git remote.
-2. **Fetch PR status.** Run `affinage.pyz pr-status <pr>`.
+2. **Fetch PR status.** Run `python3 skills/affinage/scripts/affinage.pyz pr-status <pr>`.
    Exit 3 stops with `status: halt: pr-status-logs-expired`.
    Any other nonzero exit stops with `status: halt: pr-status-unavailable`.
    Route a conflicting or dirty merge state to `## Merge-conflict resolution`.
@@ -111,7 +111,7 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
     Draft `Attempted fix reverted — <reason>.` for deferred comment findings.
 11. **Post replies.** Show one reply gate for every drafted reply.
     Skip the gate only when `--auto` is active.
-    Post approved replies with `affinage.pyz post-reply`.
+    Post approved replies with `python3 skills/affinage/scripts/affinage.pyz post-reply`.
 12. **Publish.** Run this step only after all approved replies post.
     Publish when `/cure` applies at least one fix.
     Also publish when `/melt` resolved a merge conflict.
@@ -168,9 +168,9 @@ Use these affinage tools:
 
 | Need | Prefer | Fallback |
 | --- | --- | --- |
-| PR status | `skills/affinage/scripts/affinage.pyz pr-status` | `gh pr checks` and `gh pr view` |
+| PR status | `python3 skills/affinage/scripts/affinage.pyz pr-status` | `gh pr checks` and `gh pr view` |
 | GitHub fetch | `gh api` | none; stop the skill |
-| Reply posting | `skills/affinage/scripts/affinage.pyz post-reply` | none; direct `gh api` calls omit attribution |
+| Reply posting | `python3 skills/affinage/scripts/affinage.pyz post-reply` | none; direct `gh api` calls omit attribution |
 | Diff inspection | `delta` | `git diff --unified=3` |
 
 ## Output
@@ -260,7 +260,7 @@ The gate therefore runs once at the publication boundary.
 - Never apply code fixes in affinage.
 - Send code fixes to `/cure` and merge conflicts to `/melt`.
 - Never post a reply without approval, unless `--auto` is active.
-- Post replies only through `skills/affinage/scripts/affinage.pyz post-reply`.
+- Post replies only through `python3 skills/affinage/scripts/affinage.pyz post-reply`.
 - End every reply with `agent on behalf of <handle>`.
 - Resolve `<handle>` from `RESPOND_GH_HANDLE`, `gh api user --jq .login`, or `git config user.name`.
 - Skip a thread when the resolved handle wrote its latest comment.

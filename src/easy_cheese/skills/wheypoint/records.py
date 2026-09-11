@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Container, Sequence
 from enum import Enum
-from typing import TypeVar, cast
+from typing import Protocol, TypeVar, cast, runtime_checkable
 
 import attrs
 from attrs import define, field
@@ -53,14 +53,67 @@ def _serialize(_instance: object, _attribute: object, value: object) -> object:
     return cast(object, value.value) if isinstance(value, Enum) else value
 
 
+# Fields added after schema_version 2 carry `metadata={"since": 3}` on the
+# producer side (ADR wheypoint-ergonomics-004). They are omitted from canonical
+# bytes while they hold their declared default, so a record or receipt written
+# by the v2 runtime re-serializes byte-identically and keeps its digests. The
+# rule is read from the field itself: a new field needs no entry here, and a
+# field without the marker is never omitted.
+_SINCE_KEY = "since"
+# The permanent v2 digest floor: canonical bytes for a schema_version-2 record
+# must never change, so a field is compat-additive only when declared after
+# this floor. This is fixed by ADR wheypoint-ergonomics-004 and is NOT derived
+# from `SCHEMA_VERSION`, which keeps advancing as the schema grows.
+_DIGEST_COMPAT_FLOOR = 2
+
+
+# `attrs.Factory` is a class at runtime, but the stub types it as a function
+# returning `_T`, so `isinstance(default, attrs.Factory)` cannot type-check.
+# A structural protocol over its two attributes is the narrowest honest check.
+@runtime_checkable
+class _Factory(Protocol):
+    factory: Callable[[], object]
+    takes_self: bool
+
+
+def _added_after_compat(attribute: attrs.Attribute[object]) -> bool:
+    metadata = attribute.metadata or {}
+    since = metadata.get(_SINCE_KEY)
+    return isinstance(since, int) and since > _DIGEST_COMPAT_FLOOR
+
+
+def _is_declared_default(attribute: attrs.Attribute[object], value: object) -> bool:
+    default = attribute.default
+    if isinstance(default, _Factory):
+        # takes_self=True factories derive from the instance under
+        # construction, which is not available here; treat as never-default.
+        return False if default.takes_self else value == default.factory()
+    return value is default
+
+
+def _omit_post_compat_defaults(attribute: attrs.Attribute[object], value: object) -> bool:
+    return not (_added_after_compat(attribute) and _is_declared_default(attribute, value))
+
+
 def unstructure(obj: AttrsInstance) -> dict[str, object]:
-    """A schema instance as plain JSON data, enums flattened to their values."""
-    return attrs.asdict(obj, recurse=True, value_serializer=_serialize)
+    """A schema instance as plain JSON data, enums flattened to their values.
+
+    Fields marked `since: 3` are dropped while at their declared default.
+    """
+    return attrs.asdict(
+        obj, recurse=True, value_serializer=_serialize, filter=_omit_post_compat_defaults
+    )
 
 
-def structure(payload: object, cls: type[T]) -> T:
-    """Structure `payload` into `cls` or raise with everything that was wrong."""
-    loaded = load(cast(dict[str, object], payload), cls, strict=True)
+def structure(payload: object, cls: type[T], *, forbid_unknown: bool = False) -> T:
+    """Structure `payload` into `cls` or raise with everything that was wrong.
+
+    `forbid_unknown` names every key `cls` cannot hold by its path; it is the
+    rule on every write path (S6), never on a read.
+    """
+    loaded = load(
+        cast(dict[str, object], payload), cls, strict=True, forbid_unknown=forbid_unknown
+    )
     if loaded.value is None:
         detail = "; ".join(loaded.problems) or "payload is not readable"
         raise RecordError(f"{cls.__name__}: {detail}")
@@ -92,8 +145,8 @@ def request_fingerprint(delta: WheypointDelta) -> str:
 
 
 def entries(record: WheypointRecord) -> tuple[ProtectedEntry, ...]:
-    """Every protected entry, decisions then questions then blockers."""
-    return (*record.decisions, *record.questions, *record.blockers)
+    """Every protected entry: decisions, questions, blockers, then directives."""
+    return (*record.decisions, *record.questions, *record.blockers, *record.directives)
 
 
 def find_entry(record: WheypointRecord, entry_id: str) -> ProtectedEntry | None:

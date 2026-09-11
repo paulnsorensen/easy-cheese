@@ -9,12 +9,16 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-
-from easy_cheese_schemas._schema_catalog_compiler import (
+from _schema_catalog_compiler import (
     _ContractModule,  # pyright: ignore[reportPrivateUsage]
+)
+from _schema_catalog_compiler import (
     collect as collect_schema_markers,
+)
+from _schema_catalog_compiler import (
     render as render_schema_catalog,
 )
+
 from easy_cheese_schemas.contracts import (
     MAX_CONTRACT_BYTES,
     MAX_CONTRACT_DEPTH,
@@ -27,8 +31,8 @@ from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
     canonical_digest,
     normalize_agent_output,
-    schema_bytes,
     normalize_agent_value,
+    schema_bytes,
     supported_version_for,
     validate_contract,
 )
@@ -125,7 +129,7 @@ def test_marker_authority_rejects_duplicate_slugs() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
     contract_type = cast(type, contracts.CurdPlan)
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts._registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
     )
     original_slug = cast(object, getattr(contract_type, "__contract_slug__"))
     try:
@@ -140,9 +144,7 @@ def test_marker_authority_rejects_duplicate_slugs() -> None:
 
 @pytest.mark.parametrize("slug", ["", "  ", 7])
 def test_contract_rejects_invalid_markers(slug: object) -> None:
-    with pytest.raises(
-        ValueError, match="contract slug must be a non-empty string"
-    ):
+    with pytest.raises(ValueError, match="contract slug must be a non-empty string"):
         _ = contract(slug)  # pyright: ignore[reportArgumentType]
 
 
@@ -151,7 +153,7 @@ def test_marker_authority_rejects_invalid_registered_markers(slug: object) -> No
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
     contract_type = cast(type, contracts.CurdPlan)
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts._registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
     )
     original_slug = cast(object, getattr(contract_type, "__contract_slug__"))
     try:
@@ -168,20 +170,16 @@ def test_runtime_and_compiler_project_one_marker_authority() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
     runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts._registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
     )
     entries = registered()
-    marked_contracts = cast(
-        tuple[tuple[str, type], ...], runtime._MARKED_CONTRACTS
-    )
+    marked_contracts = cast(tuple[tuple[str, type], ...], runtime._MARKED_CONTRACTS)
 
     assert entries == tuple(sorted(entries, key=lambda entry: entry[0]))
     assert marked_contracts == entries
     assert collect_schema_markers(
         cast(_ContractModule, cast(object, contracts))
-    ) == tuple(
-        (slug, contract_type.__name__) for slug, contract_type in entries
-    )
+    ) == tuple((slug, contract_type.__name__) for slug, contract_type in entries)
 
 
 def test_compiler_retains_constant_name_collision_validation() -> None:
@@ -239,14 +237,14 @@ finally:
         check=False,
     )
     assert result.returncode == 0, (
-        f"isolated marker probe failed:\nstdout={result.stdout}\n"
-        f"stderr={result.stderr}"
+        f"isolated marker probe failed:\nstdout={result.stdout}\nstderr={result.stderr}"
     )
 
 
 def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
     assert set(REGISTERED_CONTRACT_SCHEMA_URIS) == {
         f"{SCHEMA_ROOT}/agent-writer-view",
+        f"{SCHEMA_ROOT}/checkpoint-intent",
         f"{SCHEMA_ROOT}/curd-plan",
         f"{SCHEMA_ROOT}/curd-result",
         f"{SCHEMA_ROOT}/diagnosis-request",
@@ -258,9 +256,14 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         f"{SCHEMA_ROOT}/planner-result",
         f"{SCHEMA_ROOT}/review-request",
         f"{SCHEMA_ROOT}/review-result",
+        f"{SCHEMA_ROOT}/wheypoint-record",
+        f"{SCHEMA_ROOT}/wheypoint-revision",
     }
     first = {uri: schema_bytes(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS}
-    second = {uri: schema_bytes(uri) for uri in reversed(sorted(REGISTERED_CONTRACT_SCHEMA_URIS))}
+    second = {
+        uri: schema_bytes(uri)
+        for uri in reversed(sorted(REGISTERED_CONTRACT_SCHEMA_URIS))
+    }
 
     assert first == second
     for uri, payload in first.items():
@@ -269,11 +272,11 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         assert schema["$id"] == uri
         assert payload.endswith(b"\n")
 
-
-
     plan_schema = cast(dict[str, object], json.loads(first[PLAN_SCHEMA]))
     defs = as_dict(plan_schema["$defs"])
-    contract_version_properties = as_dict(as_dict(defs["ContractVersion"])["properties"])
+    contract_version_properties = as_dict(
+        as_dict(defs["ContractVersion"])["properties"]
+    )
     curd_plan_properties = as_dict(as_dict(defs["CurdPlan"])["properties"])
 
     assert as_dict(contract_version_properties["schema_uri"]) == {
@@ -298,24 +301,29 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
 
 @pytest.mark.parametrize("schema_uri", sorted(REGISTERED_CONTRACT_SCHEMA_URIS))
 def test_registered_schema_matches_pre_migration_golden(schema_uri: str) -> None:
-    golden = Path(__file__).with_name("goldens") / f"{schema_uri.rsplit('/', 1)[-1]}.json"
+    golden = (
+        Path(__file__).with_name("goldens") / f"{schema_uri.rsplit('/', 1)[-1]}.json"
+    )
 
     assert schema_bytes(schema_uri) == golden.read_bytes()
 
 
-def test_registered_schema_registry_is_immutable_and_private_authority_is_not_public() -> None:
+def test_registered_schema_registry_is_immutable_and_private_authority_is_not_public() -> (
+    None
+):
     assert isinstance(REGISTERED_CONTRACT_SCHEMA_URIS, frozenset)
     with pytest.raises(AttributeError):
         REGISTERED_CONTRACT_SCHEMA_URIS.add(PLAN_SCHEMA)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
     import easy_cheese_schemas.schema_runtime as runtime
+
     assert not hasattr(runtime, "REGISTERED_CONTRACTS")
     assert not hasattr(runtime, "SUPPORTED_CONTRACT_VERSIONS")
-
 
 
 def test_supported_version_lookup_is_authoritative_for_registered_schema() -> None:
     assert supported_version_for(PLAN_SCHEMA) == version()
     assert supported_version_for(CurdPlan) == version()
+
 
 def test_validate_contract_strictly_structures_tuple_backed_contracts() -> None:
     raw = raw_plan()
@@ -394,11 +402,13 @@ def test_validate_contract_rejects_supported_version_for_other_schema() -> None:
             version(schema_uri="https://schemas.easy-cheese.dev/curd-result"),
         )
 
+
 def test_validate_contract_rejects_huge_future_minor_as_typed_error() -> None:
     huge_minor = "9" * 5_000
 
     with pytest.raises(
-        ContractValidationError, match=r"unsupported contract version 1\.9+ for .*; expected 1\.0"
+        ContractValidationError,
+        match=r"unsupported contract version 1\.9+ for .*; expected 1\.0",
     ):
         _ = validate_contract(
             raw_plan(minor=huge_minor),
@@ -428,6 +438,7 @@ def test_validate_contract_rejects_deep_json_before_parser_recursion() -> None:
 
     with pytest.raises(ContractValidationError, match="MAX_CONTRACT_DEPTH"):
         _ = validate_contract(deeply_nested, PLAN_SCHEMA, version())
+
 
 def _runtime_accepts(raw: object, schema_uri: str = PLAN_SCHEMA) -> bool:
     try:
@@ -468,9 +479,14 @@ def test_nested_contract_version_schema_is_exact_for_each_enclosing_model() -> N
     )
     result_defs = as_dict(result_schema["$defs"])
     version_schema = as_dict(as_dict(result_defs["ContractVersion"])["properties"])
-    nested_schema = as_dict(as_dict(result_defs["CurdPlanContractVersion"])["properties"])
+    nested_schema = as_dict(
+        as_dict(result_defs["CurdPlanContractVersion"])["properties"]
+    )
 
-    assert as_dict(version_schema["schema_uri"])["const"] == f"{SCHEMA_ROOT}/planner-result"
+    assert (
+        as_dict(version_schema["schema_uri"])["const"]
+        == f"{SCHEMA_ROOT}/planner-result"
+    )
     assert as_dict(nested_schema["schema_uri"])["const"] == PLAN_SCHEMA
     assert (
         as_dict(version_schema["major"])["const"]
@@ -503,7 +519,9 @@ def test_validate_contract_rejects_non_string_version_components() -> None:
         _ = validate_contract(raw_plan(major=1), PLAN_SCHEMA, version())
 
 
-def test_validate_contract_rejects_invented_target_minor_without_catalog_support() -> None:
+def test_validate_contract_rejects_invented_target_minor_without_catalog_support() -> (
+    None
+):
     with pytest.raises(
         ContractValidationError,
         match="supported_version must equal the catalog's current version",
@@ -532,8 +550,7 @@ def test_normalize_agent_output_adds_host_owned_plan_fields_deterministically() 
     assert first.value.revision == 3
     assert first.value.curds[0].curd_id == "plan-host/curd/1"
     assert (
-        first.value.curds[0].criteria[0].criterion_id
-        == "plan-host/curd/1/criterion/1"
+        first.value.curds[0].criteria[0].criterion_id == "plan-host/curd/1/criterion/1"
     )
     assert first.value.curds[0].outcome == "Implement strict validation"
     assert first.value.digest.startswith("sha256:")
@@ -570,7 +587,7 @@ def test_normalize_agent_output_rejects_stale_lineage_for_unknown_writer_curd() 
         (
             ("payload", "curds", 0, "criteria", 0, "criterion_id"),
             "agent-criterion",
-            "host-owned field 'criterion_id'",
+            "unknown fields: criterion_id",
         ),
     ],
 )

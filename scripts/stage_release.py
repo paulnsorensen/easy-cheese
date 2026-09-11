@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import build_pyz  # noqa: E402  (sibling module in scripts/)  # pyright: ignore[reportImplicitRelativeImport]
+import build_pyz  # noqa: E402  (sibling module in scripts/)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 

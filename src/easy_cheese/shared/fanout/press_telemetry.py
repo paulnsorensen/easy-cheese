@@ -19,9 +19,16 @@ from __future__ import annotations
 from collections import Counter
 from enum import Enum
 from pathlib import PurePosixPath
-from typing import cast
 
 from easy_cheese.shared.paths import validate_slug
+from easy_cheese_schemas.validate import (
+    require_exact_keys,
+    require_int,
+    require_list,
+    require_mapping,
+    require_relative_path,
+    require_str,
+)
 
 from .press_route import MAX_ATTEMPTS, Outcome, coerce_outcome
 
@@ -92,37 +99,15 @@ def classify_path(path: str) -> FileClass:
     return FileClass.PRODUCTION_SOURCE
 
 
-def _require_str(value: object, field: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{field} must be a non-empty string")
-    return value
-
-
-def _require_int(value: object, field: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{field} must be an integer")
-    return value
-
-
-def _require_list(value: object, field: str) -> list[object]:
-    if not isinstance(value, list):
-        raise ValueError(f"{field} must be a list")
-    return cast(list[object], value)
-
-
 def _require_entry(value: object, field: str, keys: set[str]) -> dict[str, object]:
-    if not isinstance(value, dict):
-        raise ValueError(f"each {field} entry must be a mapping")
-    entry = cast(dict[str, object], value)
-    if set(entry) != keys:
-        raise ValueError(
-            f"each {field} entry must contain exactly {', '.join(sorted(keys))}"
-        )
+    label = f"each {field} entry"
+    entry = require_mapping(value, label)
+    require_exact_keys(entry, keys, label)
     return entry
 
 
 def _require_phase(value: object) -> Phase:
-    phase = _require_str(value, "tool_errors[].phase")
+    phase = require_str(value, "tool_errors[].phase")
     try:
         return Phase(phase)
     except ValueError as exc:
@@ -132,10 +117,16 @@ def _require_phase(value: object) -> Phase:
         ) from exc
 
 
-def _require_attempt(value: object, repair_cycles: int) -> int:
-    attempt = _require_int(value, "attempt")
+def require_attempt_number(value: object) -> int:
+    """The 1-based Press attempt number, bounded by ``MAX_ATTEMPTS``."""
+    attempt = require_int(value, "attempt")
     if not 1 <= attempt <= MAX_ATTEMPTS:
         raise ValueError(f"attempt must be between 1 and {MAX_ATTEMPTS}")
+    return attempt
+
+
+def _require_attempt(value: object, repair_cycles: int) -> int:
+    attempt = require_attempt_number(value)
     if attempt != repair_cycles + 1:
         raise ValueError(
             f"attempt {attempt} contradicts repair_cycles {repair_cycles}; "
@@ -145,7 +136,7 @@ def _require_attempt(value: object, repair_cycles: int) -> int:
 
 
 def _require_repair_cycles(value: object) -> int:
-    repair_cycles = _require_int(value, "repair_cycles")
+    repair_cycles = require_int(value, "repair_cycles")
     if repair_cycles < 0:
         raise ValueError("repair_cycles must be a non-negative integer")
     return repair_cycles
@@ -157,7 +148,7 @@ def _operations(tool_errors: list[object]) -> list[dict[str, object]]:
         entry = _require_entry(value, "tool_errors", _TOOL_ERROR_KEYS)
         phase = _require_phase(entry["phase"])
         operation = (
-            _require_str(entry["operation"], "tool_errors[].operation")
+            require_str(entry["operation"], "tool_errors[].operation")
             .strip()
             .casefold()
         )
@@ -179,8 +170,8 @@ def _delegations(delegations: list[object]) -> list[dict[str, object]]:
         entry = _require_entry(value, "delegations", _DELEGATION_KEYS)
         recorded.append(
             {
-                "role": _require_str(entry["role"], "delegations[].role"),
-                "purpose": _require_str(entry["purpose"], "delegations[].purpose"),
+                "role": require_str(entry["role"], "delegations[].role"),
+                "purpose": require_str(entry["purpose"], "delegations[].purpose"),
             }
         )
     return recorded
@@ -189,21 +180,8 @@ def _delegations(delegations: list[object]) -> list[dict[str, object]]:
 def _changed_paths(changed_files: list[object]) -> list[str]:
     paths: list[str] = []
     for value in changed_files:
-        text = _require_str(value, "changed_files[]")
+        text = require_relative_path(value, "changed_files[]")
         pure = PurePosixPath(text)
-        # Backslash and drive-letter checks mirror
-        # easy_cheese_schemas.gates._project_relative_path (private, so the
-        # two extra rules are duplicated here rather than imported).
-        first = text.split("/", 1)[0]
-        if (
-            pure.is_absolute()
-            or ".." in pure.parts
-            or "\\" in text
-            or ":" in first
-        ):
-            raise ValueError(
-                f"changed_files entry {text!r} must be a repository-relative path"
-            )
         if not pure.parts:
             raise ValueError(
                 f"changed_files entry {text!r} must name a file or directory"
@@ -238,10 +216,10 @@ def telemetry_record(
     resolved_outcome = coerce_outcome(outcome)
     cycles = _require_repair_cycles(repair_cycles)
     resolved_attempt = _require_attempt(attempt, cycles)
-    errors = _require_list(tool_errors, "tool_errors")
+    errors = require_list(tool_errors, "tool_errors")
     operations = _operations(errors)
-    recorded_delegations = _delegations(_require_list(delegations, "delegations"))
-    paths = _changed_paths(_require_list(changed_files, "changed_files"))
+    recorded_delegations = _delegations(require_list(delegations, "delegations"))
+    paths = _changed_paths(require_list(changed_files, "changed_files"))
 
     classified = [(path, classify_path(path)) for path in paths]
     production_source_files = sorted(
@@ -276,5 +254,6 @@ __all__ = [
     "FileClass",
     "Phase",
     "classify_path",
+    "require_attempt_number",
     "telemetry_record",
 ]

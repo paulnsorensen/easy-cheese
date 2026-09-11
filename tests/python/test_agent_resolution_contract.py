@@ -106,6 +106,23 @@ def test_shared_reference_is_normative_and_linked() -> None:
     ).read_text(encoding="utf-8")
 
 
+def test_prompt_only_fallback_covers_eligible_specialists() -> None:
+    reference = (SKILLS / "cheese" / "references" / "agent-resolution.md").read_text(
+        encoding="utf-8"
+    )
+    lowered = reference.lower()
+
+    assert "eligible specialist or general worker" in lowered
+    assert "can fill a read-only role only when the caller states an explicit no-write constraint" in lowered
+    assert "artifact-capable explorer under the same explicit no-write constraint" in lowered
+    assert "permission_enforcement: prompt-only" in lowered
+    assert "degraded: true" in lowered
+    assert "prompt-only enforcement cannot satisfy write work or stronger isolation" in lowered
+    assert "missing required tools or write capability stops dispatch" in lowered
+    assert "halt when required worktree or fresh-context isolation is unavailable" in lowered
+    assert "a general worker can fill a read-only role" not in lowered
+
+
 def test_each_dispatching_skill_has_local_resolution_contract() -> None:
     for name in DISPATCHING:
         body = _body(name)

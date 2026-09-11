@@ -234,7 +234,9 @@ groups:
 YAML
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"shape must be one of"* ]]
+    # AC-2 of wheypoint-ergonomics: an enum problem names the field, the value, and the allowed set.
+    [[ "$output" == *"shape must be valid: unknown value 'marbled'"* ]]
+    [[ "$output" == *"allowed: single, orthogonal_flat, stacked_linear, diamond_stack"* ]]
 }
 
 @test "script rejects empty groups" {

@@ -59,11 +59,11 @@ ARTIFACT_PATH_SKILLS = ("mold", "briesearch", "cook")
 TYPED_RUNTIME_BUNDLES = ("cook", "cure", "wheypoint")
 REQUIRED_WORKFLOW_MODULES = (
     "easy_cheese_schemas/__init__.py",
-    "easy_cheese_schemas/artifacts.py",
+    "easy_cheese/shared/artifacts.py",
     "easy_cheese_schemas/contracts.py",
     "easy_cheese_schemas/planner.py",
     "easy_cheese_schemas/schema_runtime.py",
-    "easy_cheese_schemas/workflow.py",
+    "easy_cheese/shared/workflow.py",
     "easy_cheese_schemas/_schema_catalog.py",
 )
 
@@ -200,16 +200,18 @@ def _run(
     *args: str,
     extra_env: dict[str, str] | None = None,
     stdin: str | None = None,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    # Run from the bundle's own dir with PYTHONPATH stripped, so the only way an
-    # import can resolve is from inside the .pyz itself.
+    # Run from the bundle's own dir (unless a command resolves files against
+    # `cwd`) with PYTHONPATH stripped, so the only way an import can resolve
+    # is from inside the .pyz itself.
     env = dict(os.environ)
     _ = env.pop("PYTHONPATH", None)
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
         [sys.executable, str(pyz), *args],
-        cwd=str(pyz.parent),
+        cwd=str(cwd or pyz.parent),
         capture_output=True,
         text=True,
         env=env,
@@ -271,7 +273,7 @@ def test_subcommand_resolves_inside_bundle(bundles: Path, skill: str, sub: str) 
     [
         ("age", "write-handoff-artifact", "write_handoff_artifact"),
         ("cook", "read-handoff-slug", "read_handoff_slug"),
-        ("cure", "findings-cli", "findings_cli"),
+        ("cure", "read-handoff-slug", "read_handoff_slug"),
         ("mold", "render-html", "render_html"),
     ],
 )
@@ -284,6 +286,12 @@ def test_kebab_commands_and_legacy_aliases_dispatch_from_committed_bundles(
         assert "ModuleNotFoundError" not in combined, combined
         assert "Traceback" not in combined, combined
         assert not combined.strip().startswith("usage: <pyz>"), combined
+
+
+@pytest.mark.parametrize("skill", sorted(SKILL_SUBCOMMANDS))
+def test_no_bundle_command_carries_the_cli_suffix(skill: str) -> None:
+    """Every bundle command is a CLI, so the suffix is noise (#615, #621)."""
+    assert [sub for sub in SKILL_SUBCOMMANDS[skill] if sub.endswith(("-cli", "_cli"))] == []
 
 
 @pytest.mark.parametrize("skill", list(SKILL_SUBCOMMANDS))
@@ -373,13 +381,18 @@ def test_briesearch_bundle_uses_internal_distributions(bundles: Path) -> None:
     assert not any(name.startswith("easy_cheese/skills/mold/") for name in content)
 
 
-def test_press_bundle_emits_a_telemetry_record(bundles: Path) -> None:
+def test_press_bundle_emits_a_telemetry_record(bundles: Path, tmp_path: Path) -> None:
+    # `outcome` and `repair_cycles` come from the attempt's route artifact under
+    # the working directory, never from the request (#611).
+    press_dir = tmp_path / ".cheese" / "press"
+    press_dir.mkdir(parents=True)
+    _ = (press_dir / "outer-tdd-gates.attempt-2.route.json").write_text(
+        '{"outcome": "green", "repair_cycles": 1}', encoding="utf-8"
+    )
     request = json.dumps(
         {
             "slug": "outer-tdd-gates",
             "attempt": 2,
-            "outcome": "green",
-            "repair_cycles": 1,
             "tool_errors": [
                 {"phase": "attack", "operation": "pytest"},
                 {"phase": "attack", "operation": "pytest"},
@@ -389,7 +402,7 @@ def test_press_bundle_emits_a_telemetry_record(bundles: Path) -> None:
         }
     )
 
-    result = _run(bundles / "press.pyz", "press-telemetry", stdin=request)
+    result = _run(bundles / "press.pyz", "press-telemetry", stdin=request, cwd=tmp_path)
 
     assert result.returncode == 0, result.stderr
     record = cast(dict[str, object], json.loads(result.stdout))
@@ -410,7 +423,7 @@ def test_press_bundle_loads_router_and_rejects_receipt_keys(bundles: Path) -> No
     assert result.returncode == 1
     assert (
         result.stderr.strip()
-        == "ERROR: request must contain exactly outcome and repair_cycles"
+        == "ERROR: request keys mismatch: missing ['repair_cycles'], unknown ['current_receipt']"
     )
 
 
@@ -1183,9 +1196,10 @@ def test_cook_and_cure_installed_paths_expose_canonical_workflow_api(
         "import easy_cheese_schemas as schemas;"
         "from easy_cheese_schemas import "
         "CurdPlan, CurdResult, DiagnosisResult, PlannerResult, "
-        "bind_diagnosis, cook, cure, materialize_planner_result, "
-        "normalize_agent_output, resolve_artifact, run_workflow, "
+        "materialize_planner_result, normalize_agent_output, "
         "schema_bytes, validate_curd_plan;"
+        "from easy_cheese.shared.artifacts import resolve_artifact;"
+        "from easy_cheese.shared.workflow import bind_diagnosis, cook, cure, run_workflow;"
         "assert all(callable(item) for item in ("
         "bind_diagnosis, cook, cure, materialize_planner_result, "
         "normalize_agent_output, resolve_artifact, run_workflow, "

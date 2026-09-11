@@ -117,7 +117,7 @@ LEDGER = [
 ]
 
 
-def verdict(taste: _MoldTasteTestModule, draft: str = DRAFT) -> dict[str, object]:
+def verdict(taste: _MoldTasteTestModule, draft: object = DRAFT) -> dict[str, object]:
     return {
         "draft_sha256": taste.draft_sha256(draft),
         "verdict": "pass",
@@ -395,6 +395,133 @@ def test_contradictions_orphans_assumptions_and_gaps_reject_pass(
     assert not result.passed
     assert result.reopened_forks == ("F-1",)
     assert not taste.decomposition_gate(result).allowed
+
+
+GOAL = "Users can resume an interrupted session"
+GOAL_DRAFT = DRAFT.replace(
+    "# Draft\n",
+    f"# Draft\n\n## Problem statement\n{GOAL}, without re-authenticating.\n",
+    1,
+)
+GOAL_LEDGER: dict[str, object] = {"goal": GOAL, "forks": LEDGER}
+
+
+def test_pinned_goal_in_problem_statement_passes(taste: _MoldTasteTestModule) -> None:
+    result = taste.taste_test(GOAL_DRAFT, GOAL_LEDGER, verdict(taste, GOAL_DRAFT))
+    assert result.passed, result.acceptance_gaps
+
+
+def test_goal_missing_from_problem_statement_is_goal_drift(
+    taste: _MoldTasteTestModule,
+) -> None:
+    drifted = GOAL_DRAFT.replace(GOAL, "Sessions have a retry policy")
+    result = taste.taste_test(drifted, GOAL_LEDGER, verdict(taste, drifted))
+    assert not result.passed
+    assert result.acceptance_gaps == ("goal-drift",)
+    assert not taste.decomposition_gate(result).allowed
+
+
+def test_goal_without_problem_section_is_a_missing_section(
+    taste: _MoldTasteTestModule,
+) -> None:
+    result = taste.taste_test(DRAFT, GOAL_LEDGER, verdict(taste))
+    assert not result.passed
+    assert result.acceptance_gaps == ("missing-section:goal:problem",)
+
+
+def test_goal_less_ledger_skips_the_goal_gate(taste: _MoldTasteTestModule) -> None:
+    result = taste.taste_test(DRAFT, {"forks": LEDGER}, verdict(taste))
+    assert result.passed, result.acceptance_gaps
+
+
+def test_blank_goal_is_a_ledger_error(taste: _MoldTasteTestModule) -> None:
+    with pytest.raises(taste.TasteTestError, match="ledger-goal-empty"):
+        _ = taste.taste_test(DRAFT, {"goal": "  ", "forks": LEDGER}, verdict(taste))
+
+
+def test_id_keyed_ledger_with_goal_passes(taste: _MoldTasteTestModule) -> None:
+    id_keyed_ledger: dict[str, object] = {
+        "goal": GOAL,
+        "F-1": {"decision": "outer tracer", "status": "settled", "consequential": True},
+        "F-2": {"decision": "browser seam", "status": "settled", "consequential": True},
+    }
+    result = taste.taste_test(GOAL_DRAFT, id_keyed_ledger, verdict(taste, GOAL_DRAFT))
+    assert result.passed, result.acceptance_gaps
+
+
+def test_trailing_goal_heading_does_not_override_problem_statement(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = GOAL_DRAFT + "\n## Goal\nsomething else\n"
+    result = taste.taste_test(draft, GOAL_LEDGER, verdict(taste, draft))
+    assert result.passed, result.acceptance_gaps
+
+
+def test_reflected_in_problem_alias_is_rejected(taste: _MoldTasteTestModule) -> None:
+    bad = verdict(taste)
+    forks = cast(list[dict[str, object]], bad["forks"])
+    forks[0]["reflected_in"] = ["problem"]
+    with pytest.raises(
+        taste.TasteTestError, match="fork-invalid-reflection:F-1:problem"
+    ):
+        _ = taste.taste_test(DRAFT, LEDGER, bad)
+
+
+def test_goal_match_is_case_and_whitespace_insensitive(
+    taste: _MoldTasteTestModule,
+) -> None:
+    spaced_goal = "Users  can Resume  an interrupted   session"
+    draft = GOAL_DRAFT.replace(GOAL, "USERS CAN  resume an INTERRUPTED session")
+    ledger: dict[str, object] = {"goal": spaced_goal, "forks": LEDGER}
+    result = taste.taste_test(draft, ledger, verdict(taste, draft))
+    assert result.passed, result.acceptance_gaps
+
+
+GOAL_MAPPING_DRAFT: dict[str, object] = {
+    "Goal:": f"{GOAL}, without re-authenticating.",
+    "Approach": "F-1 outer tracer; F-2 browser seam",
+    "Interface sketches": "F-1 outer tracer; F-2 browser seam",
+    "Acceptance": "F-1 outer tracer; F-2 browser seam",
+    "Test Contracts": "F-1 outer tracer; F-2 browser seam",
+}
+
+
+def test_punctuated_goal_key_in_mapping_draft_is_recognized(
+    taste: _MoldTasteTestModule,
+) -> None:
+    result = taste.taste_test(
+        GOAL_MAPPING_DRAFT, GOAL_LEDGER, verdict(taste, GOAL_MAPPING_DRAFT)
+    )
+    assert result.passed
+    assert result.acceptance_gaps == ()
+
+
+UNDERSCORE_MAPPING_DRAFT: dict[str, object] = {
+    **{key: value for key, value in GOAL_MAPPING_DRAFT.items() if key != "Test Contracts"},
+    "test_contracts": "F-1 outer tracer; F-2 browser seam",
+}
+
+
+def test_underscore_reflection_key_in_mapping_draft_is_recognized(
+    taste: _MoldTasteTestModule,
+) -> None:
+    result = taste.taste_test(
+        UNDERSCORE_MAPPING_DRAFT, GOAL_LEDGER, verdict(taste, UNDERSCORE_MAPPING_DRAFT)
+    )
+    assert result.acceptance_gaps == ()
+
+
+def test_goal_alignment_heading_is_not_recognized(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = DRAFT.replace(
+        "# Draft\n",
+        f"# Draft\n\n## Goal alignment\n{GOAL}, without re-authenticating.\n",
+        1,
+    )
+    result = taste.taste_test(draft, GOAL_LEDGER, verdict(taste, draft))
+    assert not result.passed
+    assert result.acceptance_gaps == ("missing-section:goal:problem",)
 
 
 def test_third_failed_verdict_halts_after_two_corrections(taste: _MoldTasteTestModule) -> None:

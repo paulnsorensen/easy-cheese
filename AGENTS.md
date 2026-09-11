@@ -60,8 +60,8 @@ The durable rationale and migration boundary live in
 |---|---|
 | `/cheese` | Unified entry — classifies input and routes to the right downstream skill |
 | `/briesearch` | External research router (Context7, Tavily, gh, local code) |
-| `/mold` | Iterative dialogue to converge a fuzzy idea into an approved spec |
-| `/culture` | Deep no-write exploration of a codebase or topic |
+| `/mold` | Iterative dialogue to converge a fuzzy idea into an approved spec, with ceremony tiered (quick / light / full) to the size of the job |
+| `/culture` | No-code thinking partner that records the session's ideas, decisions, and info to the durable knowledge lane |
 | `/pasteurize` | Hard-bug diagnosis — feedback-loop-first investigation, regression test, minimal fix, then handoff to `/cook` |
 | `/cook` | Single implementation orchestrator: TDD-disciplined single-coder execution or fresh-context fan-out of an approved curd block |
 | `/press` | Adversarial test hardening after `/cook` |

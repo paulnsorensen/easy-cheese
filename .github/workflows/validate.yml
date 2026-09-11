@@ -122,12 +122,18 @@ jobs:
       - name: Run fan-out pr_plan_to_branches tests
         run: bats tests/fanout/bash/test_pr_plan_to_branches.bats
 
-      # Real (un-stubbed) smoke test: actually resolve every brew formula,
-      # exercise the npm tilth install path, and run the gh-skill
-      # install on a fresh macos-latest runner. Catches "phantom formula"
-      # / "tap doesn't exist" / "this skill doesn't publish" bugs that the
-      # bats suite (which stubs everything) cannot. --skip-mcp avoids
-      # needing claude/tavily creds.
+      # Real (un-stubbed) smoke test: actually resolve every brew formula
+      # and run the gh-skill install on a fresh macos-latest runner.
+      # Catches "phantom formula" / "tap doesn't exist" / "this skill
+      # doesn't publish" bugs that the bats suite (which stubs everything)
+      # cannot. --skip-mcp avoids needing claude/tavily creds.
+      #
+      # tilth is left out of --tools: its npm package downloads a binary
+      # from the tilth repo's rolling `nightly` release, which that repo
+      # deletes and recreates before its per-target builds finish. Until
+      # the macOS arm64 build lands (hours, when runners are queued) every
+      # Apple Silicon install 404s — see #639. That gap is upstream, not
+      # something this script can fix; the bats suite pins the npm command.
       - name: Real install smoke test (--skip-mcp)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -136,7 +142,7 @@ jobs:
           # the latest released tag (which can lag behind main when new
           # skills are added).
           EC_SKILL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: bash scripts/install.sh --skip-mcp
+        run: bash scripts/install.sh --skip-mcp --tools gh,ripgrep,fd,jq,ast-grep,git-delta,just,mergiraf
 
   typecheck:
     name: type-check python

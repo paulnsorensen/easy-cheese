@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TypeAlias
 
+from easy_cheese_schemas.validate import is_int
+
 
 class Outcome(str, Enum):
     """Closed set of outcomes that Press can expose at its boundary."""
@@ -63,7 +65,7 @@ def coerce_outcome(outcome: object) -> Outcome:
 
 
 def _check_repair_cycles(repair_cycles: int) -> None:
-    if isinstance(repair_cycles, bool):
+    if not is_int(repair_cycles):
         raise TypeError("repair_cycles must be a non-negative integer")
     if repair_cycles < 0:
         raise ValueError("repair_cycles must be a non-negative integer")

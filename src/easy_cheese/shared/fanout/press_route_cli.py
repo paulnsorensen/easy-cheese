@@ -6,10 +6,9 @@ import sys
 from dataclasses import asdict
 
 from easy_cheese.shared.manifest_io import json_command
+from easy_cheese_schemas.validate import is_int
 
 from .press_route import Continue, Dispatch, Stop, press_route
-
-_EXPECTED_KEYS = {"outcome", "repair_cycles"}
 
 
 def _action_payload(action: Continue | Dispatch | Stop) -> dict[str, object]:
@@ -22,20 +21,19 @@ def _action_payload(action: Continue | Dispatch | Stop) -> dict[str, object]:
     return {"action": name, **asdict(action)}
 
 
-def _route(**payload: object) -> dict[str, object]:
-    if set(payload) != _EXPECTED_KEYS:
-        raise ValueError("request must contain exactly outcome and repair_cycles")
-    outcome = payload["outcome"]
-    repair_cycles = payload["repair_cycles"]
+def _route(*, outcome: object, repair_cycles: object) -> dict[str, object]:
     if not isinstance(outcome, str):
         raise ValueError("outcome must be a string")
-    if isinstance(repair_cycles, bool) or not isinstance(repair_cycles, int):
+    if not is_int(repair_cycles):
         raise ValueError("repair_cycles must be a non-negative integer")
-    action = press_route(outcome, repair_cycles)
-    return _action_payload(action)
+    return _action_payload(press_route(outcome, repair_cycles))
 
 
-main = json_command(_route, "usage: press_route_cli.py [<request.json>]")
+main = json_command(
+    _route,
+    "usage: press_route_cli.py [<request.json>]",
+    keys=("outcome", "repair_cycles"),
+)
 
 
 if __name__ == "__main__":

@@ -79,6 +79,8 @@ python3 skills/press/scripts/press.pyz press-telemetry \
   .cheese/press/<slug>.attempt-N.telemetry-request.json
 ```
 
+The request carries only what the attempt observed. Run `press-route` for the attempt first: the command reads `outcome` and `repair_cycles` from that route request.
+
 Save the output at `.cheese/press/<slug>.attempt-N.telemetry.json`. The record contains these values:
 
 - Attempt outcome
@@ -114,7 +116,7 @@ See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)
 1. **Read** — Load the approved spec, Cook handoff, and baseline block. Use canonical terms from `.cheese/glossary/<slug>.md` when that file exists.
 2. **Attack** — Add or run only adversarial tests. Do not add first-coverage tests. Do not change production paths.
 3. **Classify** — Select `green`, `in_contract_red`, `invalid_evidence`, or `production_changed` from the adversarial run.
-4. **Continue or stop** — Run `press.pyz press-route` with `outcome` and `repair_cycles`. Only `Continue`, `Dispatch`, and `Stop` action shapes are public.
+4. **Continue or stop** — Run `python3 skills/press/scripts/press.pyz press-route` with `outcome` and `repair_cycles`. Only `Continue`, `Dispatch`, and `Stop` action shapes are public.
 5. **Report** — Write `.cheese/press/<slug>.md` at a terminal result. Include the attempts, evidence, and review follow-ups.
 6. **Hand off** — Send only a GREEN `Dispatch("/age")` to the global Age route.
 

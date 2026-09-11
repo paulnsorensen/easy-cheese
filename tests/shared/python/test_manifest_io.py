@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 class _ManifestIoModule(Protocol):
     ManifestLoadError: type[Exception]
+    json_command: Callable[..., Callable[[list[str]], int]]
     parse_mapping: Callable[..., dict[str, object]]
     read_mapping_arg_or_stdin: Callable[[list[str], str], dict[str, object]]
 
@@ -107,6 +108,20 @@ class TestReadMappingArgOrStdin:
                 [str(bogus)], "usage: prog [<plan>]"
             )
 
+    def test_non_notfound_oserror_wraps_as_load_error(
+        self,
+        manifest_io: _ManifestIoModule,
+        tmp_path: Path,
+    ) -> None:
+        # A directory path makes read_text raise IsADirectoryError — an OSError
+        # that is not FileNotFoundError. It must still surface as a
+        # ManifestLoadError so the CLI keeps its single-ERROR-line/exit-code
+        # contract instead of leaking an unhandled traceback.
+        with pytest.raises(manifest_io.ManifestLoadError, match="cannot read manifest"):
+            _ = manifest_io.read_mapping_arg_or_stdin(
+                [str(tmp_path)], "usage: prog [<plan>]"
+            )
+
     def test_too_many_args_yields_usage(self, manifest_io: _ManifestIoModule) -> None:
         # The CLI scripts inspect the error message — anything starting with
         # "usage:" maps to exit code 2 (argument error), anything else to 1
@@ -117,3 +132,39 @@ class TestReadMappingArgOrStdin:
                 ["a", "b"], usage
             )
         assert str(exc.value) == usage
+
+
+class TestJsonCommandKeys:
+    def test_key_mismatch_exits_one_naming_missing_and_unknown(
+        self,
+        manifest_io: _ManifestIoModule,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        calls: list[dict[str, object]] = []
+
+        def record(**payload: object) -> dict[str, object]:
+            calls.append(payload)
+            return payload
+
+        monkeypatch.setattr(sys, "stdin", io.StringIO('{"a": 1, "c": 3}'))
+        main = manifest_io.json_command(record, "usage: prog [<req>]", keys=("b", "a"))
+        assert main([]) == 1
+        assert capsys.readouterr().err == (
+            "ERROR: request keys mismatch: missing ['b'], unknown ['c']\n"
+        )
+        assert calls == []
+
+    def test_exact_keys_reach_the_function_in_payload_order(
+        self,
+        manifest_io: _ManifestIoModule,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def echo(**payload: object) -> dict[str, object]:
+            return payload
+
+        monkeypatch.setattr(sys, "stdin", io.StringIO('{"b": 2, "a": 1}'))
+        main = manifest_io.json_command(echo, "usage: prog [<req>]", keys=("a", "b"))
+        assert main([]) == 0
+        assert capsys.readouterr().out == '{\n  "b": 2,\n  "a": 1\n}\n'

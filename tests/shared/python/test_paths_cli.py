@@ -1,10 +1,10 @@
-"""Tests for shared/scripts/paths_cli.py — slugify / validate / existing CLI."""
+"""Tests for shared/paths.py's slugify / validate / existing / resolve / list CLI."""
 
 from __future__ import annotations
 
 import os
 
-import importlib.util
+import importlib
 import json
 import subprocess
 import sys
@@ -20,32 +20,20 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-class _PathsSubmodule(Protocol):
+class _PathsCliModule(Protocol):
     KEBAB_SLUG: re.Pattern[str]
     PHASES: frozenset[str]
-
-
-class _PathsCliModule(Protocol):
     _setup: Callable[[argparse.ArgumentParser], None]
-    paths: _PathsSubmodule
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
-PATHS_CLI = SHARED_SCRIPTS / "paths_cli.py"
+PATHS_CLI = SHARED_SCRIPTS / "paths.py"
 
 
 @pytest.fixture(scope="module")
 def paths_cli_mod() -> ModuleType:
-    # Sibling imports (cli, paths) resolve via sys.path; conftest already inserts it.
-    if str(SHARED_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SHARED_SCRIPTS))
-    spec = importlib.util.spec_from_file_location("paths_cli", PATHS_CLI)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["paths_cli"] = module
-    spec.loader.exec_module(module)
-    return module
+    return importlib.import_module("easy_cheese.shared.paths")
 
 
 def _run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -362,7 +350,7 @@ class TestModuleImport:
         # Sanity: the module exports the argparse setup hook cli.run consumes.
         assert callable(paths_cli_mod._setup)  # pyright: ignore[reportPrivateUsage]
 
-    def test_delegates_to_paths_module(self, paths_cli_mod: _PathsCliModule) -> None:
-        # paths_cli must use the shared paths module, not redefine the regex/phases.
-        assert paths_cli_mod.paths.KEBAB_SLUG is not None
-        assert "age" in paths_cli_mod.paths.PHASES
+    def test_cli_shares_the_slug_rules(self, paths_cli_mod: _PathsCliModule) -> None:
+        # One module owns the regex and phase list the CLI validates against.
+        assert paths_cli_mod.KEBAB_SLUG is not None
+        assert "age" in paths_cli_mod.PHASES

@@ -3,6 +3,7 @@
 Read this when `/mold` uses agent-invoked mini-spec mode. This mode is the tier-1 escalation from `/cheese`, per `SKILL.md` § Agent-invoked mini-spec mode. It provides the full procedure, mini-spec schema, and `## Provenance` rules.
 
 1. **Derive slug** from the user's ask (kebab-case noun-phrase, ≤ 4 words).
+   Check the leverage triggers in `../../cheese/references/routing-policy.md` first. A mini-spec always carries `leverage: []`. When any trigger fires, refuse the mint, name the trigger ids, and return the ask to `/cheese` for `/mold`'s user mode.
 2. **Write the resolver-owned `<spec-path>`** with the mini-spec schema below. Resolve it via `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>`. Never hardcode a repo-local spec path: the resolver anchors it at the durable corpus, matching the Curdle step.
 3. **Validate the minted spec** with `python3 skills/mold/scripts/mold.pyz validate-spec --strict <spec-path>`. Stop on a nonzero exit; no malformed or legacy-compatible artifact advances to Cook.
 4. **Return the resolved spec path** to `/cheese`: every disposition dispatches `/cook --auto <spec-path>`. Return the full resolver path, never a bare slug.
@@ -23,6 +24,7 @@ created: <YYYY-MM-DD>
 confidence: <low | medium | high>
 intent: <one-sentence restatement of the user's ask>
 blast_radius: low | medium | high
+leverage: []
 inputs: <one-line>
 outputs: <one-line>
 agent_resolution: []

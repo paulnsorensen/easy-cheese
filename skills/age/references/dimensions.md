@@ -176,7 +176,7 @@ Recommendation shape: "Validate at the boundary" / "Use the project's existing `
 
 ### encapsulation
 
-Look for cross-module access to internals, public APIs that leak implementation types, and parameters that carry excess context. Look for new exports without a use case. Also look for a domain invariant lifted from its producer and enforced above it by every caller. Check whether the producer could absorb error, default, or configuration decisions instead of exporting them.
+Look for cross-module access to internals, public APIs that leak implementation types, and parameters that carry excess context. Look for new exports without a use case. Check import direction and crust integrity against [`../../cheese/references/sliced-bread.md`](../../cheese/references/sliced-bread.md), and flag a crust delta the spec's Placement block did not name. Also look for a domain invariant lifted from its producer and enforced above it by every caller. Check whether the producer could absorb error, default, or configuration decisions instead of exporting them.
 
 | Base | Trigger |
 | --- | --- |
@@ -266,6 +266,7 @@ Look for dead code.
 Look for an AI signature: a generic catch, an empty docstring, a "// TODO: implement" comment, or a placeholder such as "// in a real implementation".
 Look for duplicated logic where a reusable helper exists.
 Look for a vague or container-typed name such as `user_data_dictionary`.
+Look for an abbreviated or single-letter identifier whose scope exceeds about ten lines or crosses a function boundary. A conventional short name used conventionally (`i` as a loop index, `db`, `ctx`) is exempt at any scope. Full-word identifiers speed defect finding by about 19% (Hofmeister et al., 2019). Lint coverage is partial: Ruff `E741`, pep8-naming `N8xx`; eslint `id-length`, `@typescript-eslint/naming-convention`.
 Look for a reimplementation of an existing repository utility.
 Look for a false module boundary, such as a one-function utility file or a class with no cohesion.
 Look for a lint suppression (`# noqa`, `@ts-ignore`, `#[allow(...)]`, `//nolint`) that hides the real fix.
@@ -279,7 +280,7 @@ The per-language pattern catalogs and lint-rule mappings live in `deslop-rust.md
 | Base | Trigger |
 | --- | --- |
 | `high` | Assign `high` to large duplicated logic with diverging behavior or AI residue that actively misshapes flow |
-| `medium` | Assign `medium` to a dead branch left "for reference", a duplicated small block, or a committed "// TODO: implement" |
+| `medium` | Assign `medium` to a dead branch left "for reference", a duplicated small block, a committed "// TODO: implement", or an abbreviated or single-letter identifier whose scope exceeds about ten lines or crosses a function boundary |
 | `low` | Assign `low` to a vague name or a single weak copy-paste |
 
 The diff can inherit duplicated logic or a dead branch that it copies or leaves beside its change. Read the surrounding block, not only the hunk.
@@ -294,6 +295,7 @@ Use one of these recommendation shapes:
 - "Reuse `<existing-helper>`"
 - "Extract shared `<helper>` from the two near-duplicate blocks"
 - "Rename `data` to `<noun>`"
+- "Rename `<abbreviation>` to `<full-word-name>`"
 - "Remove `<allow/noqa/ts-ignore>` and fix the underlying `<lint-rule>`"
 - "Delete the placeholder comment at <line> and implement the real branch"
 

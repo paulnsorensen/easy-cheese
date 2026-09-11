@@ -6,7 +6,7 @@ The repository builds every Python-backed skill as a hash-locked Shiv applicatio
 
 `scripts/build_pyz.py` discovers applications from `src/easy_cheese/skills/*/commands.py`. Each discovered package becomes one `easy-cheese-<skill>` wheel with a same-named console script.[^2]
 
-Each `commands.py` declares the application's public subcommands as an immutable tuple of `Command(name, "module:callable")` values. Dispatch validates unique command names, imports only the selected target, passes it a command-local `list[str]`, and requires an integer status return. Command targets write result text to stdout or diagnostics to stderr; dispatch does not mutate `sys.argv`, execute modules through `runpy`, or use decorator registration.[^12]
+Each `commands.py` declares the application's public subcommands as an immutable `COMMANDS` tuple: every handler is a `@bundle_command("name")`-decorated function that imports its target lazily, and `derive_command(handler, summary)` compiles it into a `Command(name, "module:callable", summary)`. Dispatch validates unique command names, imports only the selected target, passes it a command-local `list[str]`, and requires an integer status return. Command targets write result text to stdout or diagnostics to stderr; dispatch does not mutate `sys.argv` or execute modules through `runpy`.[^12]
 
 A build creates three distribution layers:
 
@@ -51,6 +51,10 @@ The output is written to `skills/<skill>/scripts/<skill>.pyz` and marked executa
 
 Before building wheels, the builder recompiles the phase registry, schema catalog, and document rules in memory. Any mismatch with the checked-in runtime modules stops the build. Compiler modules are excluded from the published schema wheel.[^7]
 
+Three further gates make the build itself the rejection point for AC-7's "built" clause. Before any wheel is built, `build_pyz.validate_command_surfaces` imports every selected `commands.py` from `src/` (refusing an `easy_cheese` that resolves anywhere else) and runs the dispatcher's own `validate_command_surface` and `command_map`, so an unreferenced declaration, an undeclared manifest entry, a duplicate name, or a manifest that fails to import stops the build naming the skill. Before any archive is assembled, `check_bundles.check_pyz_references` rejects a skill document or source that names another skill's archive, which is AC-7's cross-skill clause. After Shiv, each archive is assembled in the build's temporary directory, handed to `check_bundles.verify_archive` (Shiv layout, native members, first-party import closure, then per-command dispatch and self-contained execution in isolated subprocesses under a scratch `SHIV_ROOT`), and only then moved into `skills/<skill>/scripts/`. A rejected archive stops the build with one line per problem, and that skill's checked-in bundle stays untouched.
+
+`check_bundles.py` no longer repeats the per-archive rejections: the paths that reach it in `just check`, `just ci`, and the bundle workflow all rebuild through `build_pyz.py` first, so the checker owns currency and the cross-skill reference scan only. A bare `python3 scripts/check_bundles.py` against an unrebuilt working tree checks currency alone. The "or executed" half of AC-7 (a runtime provenance signal at user-execution time) is still open in issue #596.
+
 ## CI and release
 
 `.github/workflows/build-pyz.yml` runs the bundle build, freshness comparison, and isolation tests under both Python 3.12 and 3.14. This keeps 3.12 as the runtime baseline while proving that newer build interpreters produce the same canonical bundle content from the committed external lock. Regular validation installs no Shiv.[^8]
@@ -89,4 +93,4 @@ just bundle
 [^11]: justfile; .github/workflows/build-pyz.yml
 [^12]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py; tests/python/test_bundle_commands.py
 
-_Source: implemented repository architecture · Updated: 2026-08-28 · Supersedes: committed internal-wheel hashes, inaccurate bundle-comparison wording, and implicit command registration_
+_Source: implemented repository architecture · Updated: 2026-09-09 · Supersedes: committed internal-wheel hashes, inaccurate bundle-comparison wording, implicit command registration, and the literal `Command(...)` manifest form_

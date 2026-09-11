@@ -114,6 +114,7 @@ Collapse this section to one line when ten or more low findings exist.>
 
 ## Next step
 <when press was skipped, lead with>: Hardening was skipped for this diff. Run `/press <slug>` before curing, or continue the review.
+<when the review-surface score exceeded 400, lead with>: Review surface exceeded the 400-point ceiling (`durable_flags: coverage-degraded`). Recommend a stacked split through `/plate`.
 <then state the selection>: Fixing the recommended set through `/cure`.
 <or, on a reason to ask or `--safe`>: Rendering the selection prompt.
 ```

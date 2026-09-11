@@ -58,15 +58,5 @@ def slugify_mod() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
-def handoff_cli_mod() -> ModuleType:
-    return importlib.import_module("easy_cheese.shared.handoff_cli")
-
-
-@pytest.fixture(scope="session")
-def paths_cli_mod() -> ModuleType:
-    return importlib.import_module("easy_cheese.shared.paths_cli")
-
-
-@pytest.fixture(scope="session")
 def hallouminate_setup() -> ModuleType:
     return importlib.import_module("easy_cheese.shared.hallouminate_setup")

@@ -17,7 +17,7 @@ from typing import cast
 
 import pytest
 
-from easy_cheese.shared import cli, handoff, handoff_cli, write_handoff_artifact
+from easy_cheese.shared import cli, handoff, write_handoff_artifact
 from easy_cheese.shared.fanout import phase_decision
 from easy_cheese.skills.wheypoint import legacy
 
@@ -280,7 +280,7 @@ def test_handoff_cli_render_accepts_every_registered_status(
     name: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert (
-        handoff_cli.main(
+        handoff.main(
             [
                 "render",
                 "--status",
@@ -305,7 +305,7 @@ def test_handoff_cli_parse_publishes_the_disposition(
         encoding="utf-8",
     )
 
-    assert handoff_cli.main(["parse", "--file", str(artifact)]) == 0
+    assert handoff.main(["parse", "--file", str(artifact)]) == 0
     payload = cast("dict[str, object]", json.loads(capsys.readouterr().out))
     assert payload["status"] == "gated"
     assert payload["reason"] == REASON

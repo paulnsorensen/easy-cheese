@@ -22,22 +22,7 @@ def _cmd(args: argparse.Namespace) -> None:
         slug = handoff.parse_handoff_slug(artifact.read_text(encoding="utf-8"))
     except handoff.HandoffParseError as exc:
         raise cli.CliError(f"malformed handoff preamble in {artifact}: {exc}") from exc
-    cli.emit(
-        {
-            "status": slug.status,
-            "next": slug.next_skill,
-            "artifact": slug.artifact,
-            "orientation": slug.orientation,
-            "reason": slug.reason,
-            # Deprecated alias, kept for the r014 stack; same value as `reason`.
-            "halt_reason": slug.reason,
-            "taste_test": slug.taste_test,
-            "durable_flags": slug.durable_flags,
-            "baseline": slug.baseline,
-        },
-        json_mode=True,
-        stdout=cast(TextIO, args.stdout),
-    )
+    cli.emit(handoff.slug_payload(slug), json_mode=True, stdout=cast(TextIO, args.stdout))
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:

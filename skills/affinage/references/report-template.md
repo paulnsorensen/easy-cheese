@@ -6,7 +6,7 @@ Downstream skills parse that slug.
 
 Each severity bullet uses the shared finding grammar.
 The bullet holds one `[<dimension>:<severity>]` tag, then the location in backticks, then the summary.
-`/cure` parses that grammar with `findings-cli`.
+`/cure` parses that grammar with `findings`.
 Put the provenance tag on an indented `source:` line under the bullet.
 The `## Needs-investigation` and `## Reviewer-rejected` sections do not use this grammar.
 `/cure` does not parse those two sections.

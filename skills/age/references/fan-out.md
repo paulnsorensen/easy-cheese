@@ -14,6 +14,7 @@ Grep added lines outside `skills/**` and `.hallouminate/**` for the bundled age 
 Scope this search so a diff that only documents the override vocabulary does not trip its own tokens.
 A missed token means no promoted lens, not a missing security lens.
 Treat each hit as a hint, not a guarantee.
+When the review has a spec, also read its `leverage:` frontmatter list and add the flag each fired id promotes, per the `/age` column in `../../cheese/references/routing-policy.md` § Leverage triggers (`new-slice` and `cross-slice-dep` add `public-api-change`; `invariant-gap` adds `weak-integration-coverage`).
 Then call:
 
 ```python
@@ -42,6 +43,10 @@ The base ladder uses these score bands before any override promotion:
 - A score from `60–250` returns `n=2`.
 - A score `>250` returns `n=5`.
 - A score `>900` selects high effort.
+
+**Comprehension ceiling.** The score is a weighted review surface, not a line count: `sum(weight × lines) + 8 × sum(weight)` (`src/easy_cheese/shared/fanout/review_surface.py`). 400 code lines across ten files score 480; 400 prose lines score about 100.
+The router raises `n` above the ceiling, but it does not shrink what each worker reads.
+`SKILL.md § Output` owns the `coverage-degraded` flag that a score above 400 sets, in every width including forced single-parent runs.
 
 The base ladder partitions lenses at `n>1`, before any override promotion:
 
