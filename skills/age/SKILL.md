@@ -15,6 +15,14 @@ metadata: {dispatches-agents: true}
 
 Review a diff or scoped path before merging or after `/press`. Use this skill whenever the user wants evidence-backed observations rather than an approval verdict. Do not apply fixes in this skill. Let `/cure` apply them.
 
+## Phase entry
+
+Run `python3 skills/age/scripts/age.pyz wheypoint-resolve --ref <slug>`.
+`authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
+`not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
+`gated`, `ambiguous`, and `error` stop and show the payload.
+Show advisory `stale-commit` and `grounded-path-missing` findings.
+
 ## Inputs
 
 ```text
@@ -36,7 +44,8 @@ The default report collapses that section to a one-line summary.
 `--open-pr` propagates through `/cure` to terminal `/plate`.
 A new PR follows `/plate`'s explicit-choice and review-shape policy.
 
-For a `<slug>`, resolve `.cheese/press/<slug>.md` (if present) for press context.
+After phase entry, use `.cheese/press/<slug>.md` (if present) as Press context.
+
 Review the current working diff.
 For a `<ref-or-range>`, review that range.
 Review the current working diff when the user supplies neither input.
@@ -69,26 +78,10 @@ Remember: slash commands are host renderings, not the control model.
 
 ## Review dimensions
 
-Dimensions answer **what kind of problem**.
-Assign one severity (`blocker / high / medium / low`) to each finding.
-Compute severity from base, location, and compounding modifiers (see `references/dimensions.md` § Severity computation).
-
-| Dimension | Base range |
-| --- | --- |
-| correctness | low → blocker |
-| security | low → blocker |
-| encapsulation | low → blocker |
-| spec | low → blocker |
-| complexity | low → high |
-| deslop | low → high |
-| assertions | low → blocker |
-| nih | low → high |
-| efficiency | low → blocker |
-| telemetry | low → blocker |
-
-`references/dimensions.md` contains per-dimension base-severity tables, location sensitivity, fix-cost-now / fix-cost-later, and recommendation shapes.
-Read it before computing any finding's severity.
-This workflow intentionally omits the git-history/precedent dimension.
+Review correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, and telemetry.
+Assign one `blocker`, `high`, `medium`, or `low` severity to each finding.
+Use `references/dimensions.md` for severity rules and recommendation shapes.
+This workflow omits the git-history/precedent dimension.
 
 ## Flow
 
@@ -137,7 +130,8 @@ If `.cheese/glossary/<slug>.md` exists, read it to flag naming drift as a deslop
    Set `<next>` to `done` when that set is empty.
    Set `<artifact>` to the upstream report path from step 2. Use `""` only when no upstream report exists.
    Set `<baseline>` to the baseline block from that upstream handoff. Omit `--baseline` only when the upstream handoff has none.
-   Run `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --body-file ".cheese/age/<slug>-body.md"`.
+   Run `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --grounded <path[#start-end]> --body-file ".cheese/age/<slug>-body.md"`.
+
    Print the path.
    The write fails when the production tree moved after step 1. Do not retry it with a new lock.
 6. Hand off (see `## Handoff` below).

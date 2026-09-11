@@ -24,7 +24,7 @@ from easy_cheese_schemas import (
 from easy_cheese_schemas.handback_status import MAX_REASON_LENGTH, status_disposition
 
 from easy_cheese.shared.handoff import parse_handoff_slug
-from easy_cheese.skills.wheypoint import projection
+from easy_cheese.shared.wheypoint import projection
 
 
 def test_an_ok_projection_parses_as_a_shared_handoff(

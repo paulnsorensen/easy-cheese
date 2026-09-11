@@ -16,9 +16,8 @@ to cover stay exactly where they were.
 
 from __future__ import annotations
 
-import subprocess
+import functools
 from collections.abc import Callable
-from enum import Enum
 from pathlib import Path
 
 from attrs import define, field
@@ -31,65 +30,20 @@ from easy_cheese_schemas import (
     WheypointRevision,
     WheypointStatus,
 )
-from easy_cheese_schemas.validate import is_relative_path
+
+from easy_cheese.shared import paths
 
 from . import lineage
+from . import lint_freshness
+from .lint_types import (
+    ADVISORY_CODES as ADVISORY_CODES,
+    LintCode as LintCode,
+    LintFinding as LintFinding,
+    gates_continuation as gates_continuation,
+)
 from . import projection as projection_mod
 from . import records, storage
 from .lineage import Lineage
-
-_GIT_TIMEOUT_SECONDS = 5
-
-
-
-class LintCode(str, Enum):
-    """Why a checkpoint cannot be acted on automatically."""
-
-    RECORD_MISSING = "record-missing"
-    STORE_INCONSISTENT = "store-inconsistent"
-    RUNTIME_BEHIND = "runtime-behind"
-    REVISION_INCOMPLETE = "revision-incomplete"
-    PROJECTION_UNREADABLE = "projection-unreadable"
-    PROJECTION_DIGEST_MISMATCH = "projection-digest-mismatch"
-    PROJECTION_STATUS_MISMATCH = "projection-status-mismatch"
-    PROJECTION_RECORD_MISMATCH = "projection-record-mismatch"
-    PARENT_UNRESOLVED = "parent-unresolved"
-    PARENT_DIGEST_MISMATCH = "parent-digest-mismatch"
-    PARENT_NOT_CONTIGUOUS = "parent-not-contiguous"
-    PROJECT_MISMATCH = "project-mismatch"
-    GIT_OBJECT_MISSING = "git-object-missing"
-    ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
-    ENTRY_DROPPED = "entry-dropped"
-    DURABILITY_LOCAL_ONLY = "durability-local-only"
-    COMPACTION_PARENT_UNRESOLVED = "compaction-parent-unresolved"
-
-
-# Findings that describe the store's surroundings rather than the authority of
-# the record being resumed. An interrupted promotion leaves an orphan no reader
-# can have quoted, and the retry overwrites it; blocking continuation on one
-# would strand a valid current record in exactly the crash it survived. The
-# spec gates automatic continuation on projection and record digests, the
-# parent chain, project identity, referenced Git objects, and required artifact
-# coverage -- an orphan is none of those, so it is reported, not enforced.
-#
-# A canonical-local checkpoint over an open gate is likewise not an authority
-# problem: the record is exactly as valid as it says it is. What is at risk is
-# the human-owed state it holds, which no commit or publish has carried
-# anywhere. That is a choice for the operator, so it warns and does not block.
-ADVISORY_CODES = frozenset(
-    {LintCode.REVISION_INCOMPLETE, LintCode.DURABILITY_LOCAL_ONLY}
-)
-
-
-def gates_continuation(finding: LintFinding) -> bool:
-    """Whether this finding must stop automatic dispatch."""
-    return finding.code not in ADVISORY_CODES
-
-
-@define(frozen=True)
-class LintFinding:
-    code: LintCode
-    detail: str
 
 
 @define(frozen=True)
@@ -107,48 +61,6 @@ class LintReport:
     @property
     def codes(self) -> tuple[LintCode, ...]:
         return tuple(finding.code for finding in self.findings)
-
-
-def git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
-    """Read-only `git cat-file -e <object>^{object}` in `root`.
-
-    Inspection only: the runtime never commits, never publishes, and treats an
-    unrunnable git as an unresolved reference rather than a pass.
-    """
-
-    def exists(obj: str) -> bool:
-        try:
-            completed = subprocess.run(
-                ["git", "cat-file", "-e", f"{obj}^{{object}}"],
-                cwd=str(root),
-                capture_output=True,
-                text=True,
-                timeout=_GIT_TIMEOUT_SECONDS,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return False
-        return completed.returncode == 0
-
-    return exists
-
-
-def artifact_digest_in(root: Path | str) -> Callable[[str], str | None]:
-    """Digest a regular artifact file contained by `root`."""
-    resolved_root = Path(root).resolve()
-
-    def digest(path: str) -> str | None:
-        if not is_relative_path(path):
-            return None
-        candidate = Path(path)
-        try:
-            resolved = (resolved_root / candidate).resolve()
-            if not resolved.is_relative_to(resolved_root) or not resolved.is_file():
-                return None
-            return storage.file_digest(resolved)
-        except (OSError, RuntimeError):
-            return None
-
-    return digest
 
 
 def lint_projection_text(text: str) -> LintReport:
@@ -196,17 +108,30 @@ def lint_projection_file(path: Path | str) -> LintReport:
     return lint_projection_text(text)
 
 
+@lint_freshness.git_warnings_once()
 def lint_work(
     store: storage.WorkStore,
     *,
     project_key: str,
     git_object_exists: Callable[[str], bool],
     artifact_digest: Callable[[str], str | None],
+    repository_root: Path | str | None = None,
 ) -> LintReport:
-    """Validate the whole current checkpoint of one work store."""
-    recovery = store.recover()
-    record = recovery.record
-    stamped_schema_version = recovery.stamped_schema_version
+    """Validate the whole current checkpoint of one work store.
+
+    Lineage is walked over receipts, and the only projection whose bytes are
+    read is the one the record points at -- the single revision a caller is
+    about to act on. Every other projection's bytes are a question for
+    `recover()`, not for a dispatch gate. Presence, though, is not: the survey
+    drops a receipt whose projection file is gone, so an ancestor missing its
+    projection reports `REVISION_INCOMPLETE` and stops the walk, which is
+    stricter than `commit._check_lineage` over the same chain.
+    """
+    root = paths.resolve_repo_root(repository_root)
+    digest_of = _memoized(artifact_digest)
+    survey = store.survey_receipts()
+    record = survey.record
+    stamped_schema_version = survey.stamped_schema_version
     if stamped_schema_version is not None and stamped_schema_version > SCHEMA_VERSION:
         # A newer runtime wrote this store. Its bytes may not round-trip through
         # this reader's canonical form, so a digest disagreement here says
@@ -226,8 +151,7 @@ def lint_work(
             record=record,
         )
     findings = [
-        LintFinding(LintCode.STORE_INCONSISTENT, problem)
-        for problem in recovery.problems
+        LintFinding(LintCode.STORE_INCONSISTENT, problem) for problem in survey.problems
     ]
     if record is None:
         if not findings:
@@ -237,10 +161,10 @@ def lint_work(
                     f"no record at {store.record_path}",
                 )
             )
-        findings.extend(_incomplete_findings(recovery))
+        findings.extend(_incomplete_findings(survey.incomplete))
         return LintReport(findings=tuple(findings))
 
-    findings.extend(_incomplete_findings(recovery))
+    findings.extend(_incomplete_findings(survey.incomplete))
 
     if record.project_key != project_key:
         findings.append(
@@ -251,7 +175,20 @@ def lint_work(
             )
         )
 
-    current = store.read_revision(record.revision_number, record.revision_id)
+    current = next(
+        (
+            revision
+            for revision in survey.revisions
+            if revision.revision_number == record.revision_number
+            and revision.revision_id == record.revision_id
+        ),
+        None,
+    )
+    if current is None:
+        # The survey drops a revision whose projection file is gone. Read the
+        # current receipt directly so that case is reported as the unreadable
+        # projection it is, rather than as ancestry no receipt proves.
+        current = store.read_revision(record.revision_number, record.revision_id)
     projection = None
     # No receipt for the current revision means no proven ancestry, so every
     # revision pin is unresolved rather than resolved against the whole store.
@@ -268,18 +205,18 @@ def lint_work(
         projection_report = _lint_current_projection(store, record, current)
         findings.extend(projection_report.findings)
         projection = projection_report.projection
-        chain = lineage.walk(
-            (file.revision for file in recovery.complete), current
-        )
+        chain = lineage.walk(survey.revisions, current)
         ancestry = chain.revision_ids
         findings.extend(_lineage_finding(issue) for issue in chain.issues)
         findings.extend(_compaction_findings(chain))
         findings.extend(_conservation_findings(chain, record))
-        findings.extend(_git_findings(current, git_object_exists))
+        findings.extend(_git_findings(current, git_object_exists, repository_root=root))
 
-    findings.extend(_coverage_findings(ancestry, record, artifact_digest))
+    findings.extend(lint_freshness.artifact_link_findings(record, digest_of))
+    findings.extend(_coverage_findings(ancestry, record, digest_of))
     if projection is not None:
         findings.extend(_durability_findings(projection, record))
+    findings.extend(lint_freshness.grounded_path_findings(record, root))
     return LintReport(findings=tuple(findings), record=record, projection=projection)
 
 
@@ -312,14 +249,18 @@ def _durability_findings(
     ]
 
 
-def _incomplete_findings(
-    recovery: storage.RecoveryReport,
-) -> list[LintFinding]:
+def _memoized(digest: Callable[[str], str | None]) -> Callable[[str], str | None]:
+    """One digest per path for the life of one lint.
+
+    Artifact links and coverage claims ask about the same files, so an
+    unmemoized digest hashes a linked-and-covering artifact twice.
+    """
+    return functools.cache(digest)
+
+
+def _incomplete_findings(incomplete: tuple[str, ...]) -> list[LintFinding]:
     """Name every half-written pair: an interrupted promotion is not clean."""
-    return [
-        LintFinding(LintCode.REVISION_INCOMPLETE, detail)
-        for detail in recovery.incomplete
-    ]
+    return [LintFinding(LintCode.REVISION_INCOMPLETE, detail) for detail in incomplete]
 
 
 def _lint_current_projection(
@@ -341,9 +282,7 @@ def _lint_current_projection(
         )
     expected_digest = records.record_digest(record)
     if parsed.record_digest != expected_digest:
-        mismatches.append(
-            f"record_digest {parsed.record_digest} != {expected_digest}"
-        )
+        mismatches.append(f"record_digest {parsed.record_digest} != {expected_digest}")
     if not mismatches:
         return report
     return LintReport(
@@ -351,8 +290,7 @@ def _lint_current_projection(
             *report.findings,
             LintFinding(
                 LintCode.PROJECTION_RECORD_MISMATCH,
-                f"{path.name} describes a different record: "
-                + "; ".join(mismatches),
+                f"{path.name} describes a different record: " + "; ".join(mismatches),
             ),
         ),
         projection=parsed,
@@ -406,8 +344,6 @@ def _lineage_finding(issue: lineage.LineageIssue) -> LintFinding:
     return LintFinding(LintCode.PARENT_DIGEST_MISMATCH, detail)
 
 
-
-
 def _held_entry_ids(revision: WheypointRevision) -> set[str]:
     """The protected entries the record held after `revision` was written."""
     return {addition.entry_id for addition in revision.applied_additions} | set(
@@ -442,7 +378,9 @@ def _compaction_proof_findings(
                 + f"{parent.revision_id!r} recorded {parent.record_digest}",
             )
         )
-    unreconciled = sorted(_held_entry_ids(parent) - set(compaction.reconciled_entry_ids))
+    unreconciled = sorted(
+        _held_entry_ids(parent) - set(compaction.reconciled_entry_ids)
+    )
     if unreconciled:
         findings.append(
             LintFinding(
@@ -554,18 +492,23 @@ def _conservation_findings(
 
 
 def _git_findings(
-    revision: WheypointRevision, git_object_exists: Callable[[str], bool]
+    revision: WheypointRevision,
+    git_object_exists: Callable[[str], bool],
+    *,
+    repository_root: Path,
 ) -> list[LintFinding]:
     commit = revision.repository.commit
-    if commit is None or git_object_exists(commit):
+    if commit is None:
         return []
-    return [
-        LintFinding(
-            LintCode.GIT_OBJECT_MISSING,
-            f"revision {revision.revision_id!r} cites commit {commit}, which "
-            + "does not resolve in this repository",
-        )
-    ]
+    if not git_object_exists(commit):
+        return [
+            LintFinding(
+                LintCode.GIT_OBJECT_MISSING,
+                f"revision {revision.revision_id!r} cites commit {commit}, which "
+                + "does not resolve in this repository",
+            )
+        ]
+    return lint_freshness.stale_commit_findings(commit, repository_root=repository_root)
 
 
 def _coverage_findings(

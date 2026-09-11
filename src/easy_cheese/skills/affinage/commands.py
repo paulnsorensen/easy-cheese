@@ -11,6 +11,13 @@ from easy_cheese.shared.bundle_commands import (
 )
 
 
+@bundle_command("wheypoint-resolve")
+def _wheypoint_resolve(argv: list[str]) -> int:
+    from easy_cheese.shared.wheypoint.resolve_cli import main
+
+    return main(argv)
+
+
 @bundle_command("pr-status")
 def _pr_status(argv: list[str]) -> int:
     from easy_cheese.skills.affinage.pr_status import main
@@ -40,6 +47,10 @@ def _review_surface(argv: list[str]) -> int:
 
 
 COMMANDS = (
+    derive_command(
+        _wheypoint_resolve,
+        "Resolve a phase slug through the shared Wheypoint kernel (JSON out)",
+    ),
     derive_command(_pr_status, "Fetch a PR's build and merge status for grading"),
     derive_command(
         _post_reply, "Post a PR reply carrying the mandatory agent attribution"

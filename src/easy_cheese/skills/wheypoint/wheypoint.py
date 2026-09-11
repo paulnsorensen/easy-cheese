@@ -38,7 +38,7 @@ import sys
 import traceback
 from collections.abc import Callable
 from pathlib import Path
-from typing import NoReturn, TextIO, cast, override
+from typing import TextIO, cast
 
 from attrs import define, evolve
 
@@ -53,16 +53,29 @@ from easy_cheese_schemas import (
 from easy_cheese_schemas import schema_runtime
 
 from easy_cheese.shared import paths
-
-from . import canonical
-from . import checkpoint as checkpoint_mod
-from . import commit as commit_mod
-from . import legacy as legacy_mod
-from . import lint as lint_mod
-from . import projection
-from . import records
-from . import resolve as resolve_mod
-from . import storage
+from easy_cheese.shared.wheypoint import canonical
+from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
+from easy_cheese.shared.wheypoint import commit as commit_mod
+from easy_cheese.shared.wheypoint import legacy as legacy_mod
+from easy_cheese.shared.wheypoint import lint as lint_mod
+from easy_cheese.shared.wheypoint import projection
+from easy_cheese.shared.wheypoint import records
+from easy_cheese.shared.wheypoint import resolve as resolve_mod
+from easy_cheese.shared.wheypoint import resolve_cli
+from easy_cheese.shared.wheypoint import storage
+from easy_cheese.shared.wheypoint.resolve_cli import (
+    EXIT_INTERNAL,
+    EXIT_OK,
+    EXIT_REFUSED,
+    EXIT_USAGE,
+    BadUsage,
+    Parser,
+    emit,
+    findings_payload,
+    maybe_payload,
+    refuse,
+    resolve_status,
+)
 from . import transcript
 
 COMMANDS = (
@@ -77,16 +90,13 @@ COMMANDS = (
     "turns",
 )
 
-EXIT_OK = 0
-EXIT_REFUSED = 1
-EXIT_USAGE = 2
-EXIT_INTERNAL = 3
-
 
 class _Refused(Exception):
     """A command that has an error shape to report rather than a payload."""
 
-    def __init__(self, code: str, message: str, extra: dict[str, object] | None = None) -> None:
+    def __init__(
+        self, code: str, message: str, extra: dict[str, object] | None = None
+    ) -> None:
         super().__init__(message)
         self.code: str = code
         self.extra: dict[str, object] = {} if extra is None else extra
@@ -102,18 +112,8 @@ class _PendingMirror:
     target: str
 
 
-class _BadUsage(Exception):
-    """argparse's complaint, raised instead of printed so it can be JSON."""
-
-
-class _Parser(argparse.ArgumentParser):
-    @override
-    def error(self, message: str) -> NoReturn:
-        raise _BadUsage(message)
-
-
-def _parser(command: str) -> _Parser:
-    parser = _Parser(prog=f"wheypoint.pyz {command}")
+def _parser(command: str) -> Parser:
+    parser = Parser(prog=f"wheypoint.pyz {command}")
     if command == "checkpoint":
         _ = parser.add_argument(
             "--compacted",
@@ -141,7 +141,9 @@ def _parser(command: str) -> _Parser:
             help="write no mirror; the checkpoint stays canonical-local",
         )
     elif command == "schema":
-        _ = parser.add_argument("slug", help="a registered contract slug, e.g. checkpoint-intent")
+        _ = parser.add_argument(
+            "slug", help="a registered contract slug, e.g. checkpoint-intent"
+        )
     elif command in ("list", "log"):
         _ = parser.add_argument(
             "--corpus-root",
@@ -152,34 +154,39 @@ def _parser(command: str) -> _Parser:
         if command == "log":
             _ = parser.add_argument("--work-id", required=True, dest="work_id")
     elif command == "turns":
-        _ = parser.add_argument("--transcript", default=None, help="path to a session .jsonl transcript")
-        _ = parser.add_argument("--session", default=None, help="session id under the derived projects directory")
+        _ = parser.add_argument(
+            "--transcript", default=None, help="path to a session .jsonl transcript"
+        )
+        _ = parser.add_argument(
+            "--session",
+            default=None,
+            help="session id under the derived projects directory",
+        )
     elif command == "resolve":
         _ = parser.add_argument(
             "--ref",
             required=True,
             help="an absolute projection path, a work id, or a slug",
         )
-        _ = parser.add_argument(
+        # A legacy note lives beside the repository, not in a corpus, so a
+        # corpus root given with --legacy would be silently dropped.
+        where = parser.add_mutually_exclusive_group()
+        _ = where.add_argument(
             "--legacy",
             action="store_true",
             help="resolve a pre-kernel .cheese/notes/<slug>.md instead",
+        )
+        _ = where.add_argument(
+            "--corpus-root",
+            dest="corpus_root",
+            default=None,
+            help="the corpus to resolve in; defaults to this project's XDG corpus",
         )
     elif command == "show":
         _ = parser.add_argument("--work-id", required=True, dest="work_id")
     elif command == "lint":
         _ = parser.add_argument("path", help="path to a rendered projection document")
     return parser
-
-
-def _findings(findings: tuple[lint_mod.LintFinding, ...]) -> list[dict[str, str]]:
-    return [
-        {"code": finding.code.value, "detail": finding.detail} for finding in findings
-    ]
-
-
-def _maybe(obj: object) -> dict[str, object] | None:
-    return None if obj is None else records.unstructure(obj)
 
 
 def _note_dir(args: argparse.Namespace) -> Path | None:
@@ -268,12 +275,17 @@ def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object
     )
 
 
-def request_identity_for(intent: CheckpointIntent, proof: CompactionRecord | None) -> str:
+def request_identity_for(
+    intent: CheckpointIntent, proof: CompactionRecord | None
+) -> str:
     """The pending-mirror ledger key: the intent, plus the proof when one rides with it."""
     if proof is None:
         return canonical.digest_value(records.unstructure(intent))
     return canonical.digest_value(
-        {"intent": records.unstructure(intent), "compaction": records.unstructure(proof)}
+        {
+            "intent": records.unstructure(intent),
+            "compaction": records.unstructure(proof),
+        }
     )
 
 
@@ -288,7 +300,9 @@ def _compaction_proof(args: argparse.Namespace) -> CompactionRecord | None:
     except OSError as exc:
         raise _Refused("compaction-proof-unreadable", f"{path_arg}: {exc}") from exc
     except ValueError as exc:
-        raise _Refused("compaction-proof-unreadable", f"{path_arg} is not one JSON value: {exc}") from exc
+        raise _Refused(
+            "compaction-proof-unreadable", f"{path_arg} is not one JSON value: {exc}"
+        ) from exc
     try:
         return records.structure(raw, CompactionRecord, forbid_unknown=True)
     except records.RecordError as exc:
@@ -545,33 +559,13 @@ def _run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
 def _run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     ref = cast(str, args.ref)
     legacy_flag = cast(bool, args.legacy)
+    corpus_root = cast("str | None", args.corpus_root)
     resolution = (
         resolve_mod.resolve_legacy(ref, start=Path.cwd())
         if legacy_flag
-        else resolve_mod.resolve(ref)
+        else resolve_mod.resolve(ref, corpus_root=corpus_root)
     )
-    if resolution.outcome is resolve_mod.ResolutionOutcome.ERROR:
-        raise _Refused(
-            "invalid-reference",
-            resolution.detail or f"reference {ref!r} could not be interpreted",
-        )
-    return {
-        "ref": ref,
-        "outcome": resolution.outcome.value,
-        "dispatchable": resolution.dispatchable,
-        "source": None if resolution.source is None else resolution.source.value,
-        "work_id": resolution.work_id,
-        "record": _maybe(resolution.record),
-        "projection": _maybe(resolution.projection),
-        "findings": _findings(resolution.findings),
-        "matches": list(resolution.matches),
-        "searched": list(resolution.searched),
-        "legacy_note": (
-            None if resolution.legacy_note is None else str(resolution.legacy_note)
-        ),
-        "legacy_slug": _maybe(resolution.legacy_slug),
-        "detail": resolution.detail,
-    }
+    return resolve_cli.resolve_payload(resolution, ref)
 
 
 def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
@@ -580,8 +574,8 @@ def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     return {
         "path": path,
         "clean": report.ok,
-        "findings": _findings(report.findings),
-        "projection": _maybe(report.projection),
+        "findings": findings_payload(report.findings),
+        "projection": maybe_payload(report.projection),
     }
 
 
@@ -607,17 +601,31 @@ def _run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
     }
     loaded = load(scrubbed, CheckpointIntent, strict=True, forbid_unknown=True)
     problems.extend(loaded.problems)
-    problems.extend(f"{hit} looks like a credential" for hit in checkpoint_mod.secret_fields(intent_payload))
+    problems.extend(
+        f"{hit} looks like a credential"
+        for hit in checkpoint_mod.secret_fields(intent_payload)
+    )
     action_intent = loaded.value
     if action_intent is None:
         # Invalid entries or unknown keys do not suppress independent action checks.
-        action_fields = {"work_id", "next", "orientation", "artifact", "tasks", "parallel"}
+        action_fields = {
+            "work_id",
+            "next",
+            "orientation",
+            "artifact",
+            "tasks",
+            "parallel",
+        }
         action_intent = load(
             {key: value for key, value in scrubbed.items() if key in action_fields},
-            CheckpointIntent, strict=True, forbid_unknown=True,
+            CheckpointIntent,
+            strict=True,
+            forbid_unknown=True,
         ).value
     if action_intent is not None:
-        problems.extend(checkpoint_mod.delta_problems(action_intent, None, schema_only=True))
+        problems.extend(
+            checkpoint_mod.delta_problems(action_intent, None, schema_only=True)
+        )
     if problems:
         raise _Refused("invalid-intent", "; ".join(problems), {"problems": problems})
     return {"valid": True, "work_id": loaded.value.work_id if loaded.value else None}
@@ -633,7 +641,9 @@ def _run_schema(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
             f"no contract is registered as {slug!r}; known: {', '.join(sorted(table))}",
             {"known": sorted(table)},
         )
-    document = cast(dict[str, object], json.loads(schema_runtime.schema_bytes(table[slug])))
+    document = cast(
+        dict[str, object], json.loads(schema_runtime.schema_bytes(table[slug]))
+    )
     return {"slug": slug, "schema": document}
 
 
@@ -668,7 +678,12 @@ def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
             record = store.read_record()
         except (storage.StorageError, records.RecordError, ValueError) as exc:
             items.append(
-                {"work_id": work_id, "status": "unreadable", "unreadable": str(exc), "orientation": str(exc)}
+                {
+                    "work_id": work_id,
+                    "status": "unreadable",
+                    "unreadable": str(exc),
+                    "orientation": str(exc),
+                }
             )
             continue
         if record is None:
@@ -684,7 +699,9 @@ def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                 "orientation": head,
             }
         )
-    lines = _tsv_lines(items, ("work_id", "revision_number", "status", "next", "orientation"))
+    lines = _tsv_lines(
+        items, ("work_id", "revision_number", "status", "next", "orientation")
+    )
     return {"corpus_root": str(root), "items": items, "lines": lines}
 
 
@@ -700,7 +717,10 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
         except (storage.StorageError, OSError, ValueError) as exc:
             raise _Refused("record-unreadable", str(exc)) from exc
         if record is None:
-            raise _Refused("record-missing", f"work {work_id!r} has no record at {store.record_path}")
+            raise _Refused(
+                "record-missing",
+                f"work {work_id!r} has no record at {store.record_path}",
+            )
         raise _Refused(
             "store-inconsistent",
             f"work {work_id!r} has a record but no complete revisions"
@@ -740,7 +760,12 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
         {"path": path, "reason": reason}
         for path, _, reason in (entry.partition(": ") for entry in skipped)
     ]
-    return {"work_id": work_id, "revisions": entries, "lines": lines, "unreadable": unreadable}
+    return {
+        "work_id": work_id,
+        "revisions": entries,
+        "lines": lines,
+        "unreadable": unreadable,
+    }
 
 
 def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
@@ -765,13 +790,15 @@ def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                     "modified": (
                         None
                         if mtime is None
-                        else _dt.datetime.fromtimestamp(mtime, tz=_dt.timezone.utc).strftime(
-                            "%Y-%m-%dT%H:%M:%SZ"
-                        )
+                        else _dt.datetime.fromtimestamp(
+                            mtime, tz=_dt.timezone.utc
+                        ).strftime(checkpoint_mod.TIMESTAMP_FORMAT)
                     ),
                 }
                 for mtime, stem in sorted(
-                    stamped, key=lambda pair: (pair[0] is not None, pair[0] or 0.0), reverse=True
+                    stamped,
+                    key=lambda pair: (pair[0] is not None, pair[0] or 0.0),
+                    reverse=True,
                 )
             ]
             raise _Refused(
@@ -781,10 +808,15 @@ def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                 {"projects_dir": str(directory), "candidates": listing},
             )
         if transcript.SESSION_ID_RE.fullmatch(session) is None:
-            raise _Refused("invalid-session", f"session id {session!r} must be one safe file-name segment")
+            raise _Refused(
+                "invalid-session",
+                f"session id {session!r} must be one safe file-name segment",
+            )
         path = directory / f"{session}.jsonl"
     if not path.is_file():
-        raise _Refused("transcript-missing", f"no transcript at {path}", {"path": str(path)})
+        raise _Refused(
+            "transcript-missing", f"no transcript at {path}", {"path": str(path)}
+        )
     turns, skipped = transcript.user_turns(path)
     rows: list[dict[str, object]] = [
         {"timestamp": turn["timestamp"], "text": turn["text"]} for turn in turns
@@ -828,29 +860,6 @@ def _command_of(argv: list[str]) -> tuple[str | None, list[str]]:
     return None, []
 
 
-def _emit(stdout: TextIO, payload: dict[str, object]) -> None:
-    _ = stdout.write(json.dumps(payload, sort_keys=True) + "\n")
-
-
-def _refuse(
-    stdout: TextIO,
-    command: str,
-    code: str,
-    message: str,
-    status: int,
-    extra: dict[str, object] | None = None,
-) -> int:
-    _emit(
-        stdout,
-        {
-            "ok": False,
-            "command": command,
-            "error": {"code": code, "message": message, **(extra or {})},
-        },
-    )
-    return status
-
-
 def main(
     argv: list[str] | None = None,
     *,
@@ -863,7 +872,7 @@ def main(
 
     command, rest = _command_of(argv2)
     if command is None:
-        return _refuse(
+        return refuse(
             stdout2,
             "unknown",
             "usage",
@@ -872,23 +881,24 @@ def main(
         )
     try:
         args = _parser(command).parse_args(rest)
-    except _BadUsage as exc:
-        return _refuse(stdout2, command, "usage", str(exc), EXIT_USAGE)
+    except BadUsage as exc:
+        return refuse(stdout2, command, "usage", str(exc), EXIT_USAGE)
     try:
         payload = _RUNNERS[command](args, stdin2)
     except _Refused as exc:
-        return _refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED, exc.extra)
+        return refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED, exc.extra)
     except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
         traceback.print_exc(file=sys.stderr)
-        return _refuse(
+        return refuse(
             stdout2,
             command,
             "internal-error",
             f"{type(exc).__name__}: {exc}",
             EXIT_INTERNAL,
         )
-    _emit(stdout2, {"ok": True, "command": command, **payload})
-    return EXIT_OK
+    status = resolve_status(payload)
+    emit(stdout2, {"ok": status == EXIT_OK, "command": command, **payload})
+    return status
 
 
 if __name__ == "__main__":

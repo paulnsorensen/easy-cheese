@@ -41,7 +41,11 @@ def _prose_lines(text: str) -> list[str]:
 def test_ac21_skill_md_is_short_and_one_sentence_per_line() -> None:
     text = SKILL.read_text(encoding="utf-8")
     assert len(text.splitlines()) <= 130
-    offenders = [line for line in _prose_lines(text) if _TWO_SENTENCES.search(re.sub(r"`[^`]*`", "", line))]
+    offenders = [
+        line
+        for line in _prose_lines(text)
+        if _TWO_SENTENCES.search(re.sub(r"`[^`]*`", "", line))
+    ]
     assert offenders == [], offenders
 
 
@@ -80,9 +84,14 @@ def test_ac29_parallel_handoffs_documents_the_intent_fields() -> None:
     assert "refuses" not in text
     assert "`tasks` and `parallel` are `CheckpointIntent` fields" in text
     cheese = SKILL_DIR.parent / "cheese" / "references" / "continue-resume.md"
-    assert "`mode:` is a keyed line between `next:` and `artifact:`" in cheese.read_text(encoding="utf-8")
+    assert (
+        "`mode:` is a keyed line between `next:` and `artifact:`"
+        in cheese.read_text(encoding="utf-8")
+    )
     checked = 0
-    for block in _preamble_blocks(text) + _preamble_blocks(cheese.read_text(encoding="utf-8")):
+    for block in _preamble_blocks(text) + _preamble_blocks(
+        cheese.read_text(encoding="utf-8")
+    ):
         keys = [line.split(":", 1)[0] for line in block if ":" in line]
         if "mode" in keys:
             assert keys.index("mode") == keys.index("next") + 1, block

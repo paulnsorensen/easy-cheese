@@ -25,7 +25,16 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
-from easy_cheese.skills.wheypoint import canonical, lint, projection, records, storage
+from easy_cheese.shared import git_utils
+from easy_cheese.shared.wheypoint import (
+    canonical,
+    grounded,
+    lint,
+    lint_freshness,
+    projection,
+    records,
+    storage,
+)
 
 from conftest import Promotion
 
@@ -443,9 +452,7 @@ def test_a_settled_canonical_local_checkpoint_is_not_warned_about(
     assert report.codes == ()
 
 
-@pytest.mark.parametrize(
-    "durability", [Durability.REPO_SNAPSHOT, Durability.PUBLISHED]
-)
+@pytest.mark.parametrize("durability", [Durability.REPO_SNAPSHOT, Durability.PUBLISHED])
 def test_a_gated_checkpoint_that_has_travelled_is_not_warned_about(
     corpus_root: Path,
     make_promotion: Callable[..., _PromotionLike],
@@ -458,9 +465,7 @@ def test_a_gated_checkpoint_that_has_travelled_is_not_warned_about(
     projected, markdown = projection.build_projection(
         promotion.record, durability=durability
     )
-    revision = evolve(
-        promotion.revision, projection_digest=projected.projection_digest
-    )
+    revision = evolve(promotion.revision, projection_digest=projected.projection_digest)
     store.promote(
         evolve(promotion.record, revision_digest=records.revision_digest(revision)),
         revision,
@@ -539,9 +544,7 @@ def test_a_narrowed_rewrite_that_drops_a_prior_decision_is_reported(
         2,
         "rev-0002",
         parent=full,
-        record=make_record(
-            revision_id="rev-0002", revision_number=2, decisions=[kept]
-        ),
+        record=make_record(revision_id="rev-0002", revision_number=2, decisions=[kept]),
         preserved=["d-authority"],
     )
     store.promote(narrowed.record, narrowed.revision, narrowed.markdown)
@@ -639,17 +642,23 @@ def test_a_stale_artifact_invalidates_its_claim_and_keeps_the_entry(
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     store = make_store(corpus_root)
-    promotion = make_promotion(
-        record=covered_record(make_record, canonical.digest_text("as written"))
-    )
+    linked_digest = canonical.digest_text("as written")
+    current_digest = canonical.digest_text("edited since")
+    promotion = make_promotion(record=covered_record(make_record, linked_digest))
     store.promote(promotion.record, promotion.revision, promotion.markdown)
 
-    report = check(
-        store, artifact_digest=lambda path: canonical.digest_text("edited since")
-    )
+    report = check(store, artifact_digest=lambda path: current_digest)
 
-    assert report.codes == (lint.LintCode.ARTIFACT_COVERAGE_INVALID,)
-    assert report.findings[0].detail == "cook/report.md: artifact digest mismatch"
+    assert report.codes == (
+        lint.LintCode.STALE_ARTIFACT_LINK,
+        lint.LintCode.ARTIFACT_COVERAGE_INVALID,
+    )
+    assert report.findings[0].code is lint.LintCode.STALE_ARTIFACT_LINK
+    assert report.findings[0].detail == (
+        f"cook/report.md: linked digest {linked_digest!r}, current file "
+        + f"digest is {current_digest!r}"
+    )
+    assert report.findings[1].detail == "cook/report.md: artifact digest mismatch"
     assert report.record is not None
     assert [entry.entry_id for entry in report.record.decisions] == ["d-shape"]
 
@@ -703,9 +712,7 @@ def test_a_revision_pin_resolves_against_the_ancestry_not_the_directory(
     """An abandoned sibling is still a file on disk. A claim pinned to one
     describes work this record never took, so it must not read as fresh."""
     store = make_store(corpus_root)
-    sibling = make_promotion(
-        1, "rev-0009", record=make_record(revision_id="rev-0009")
-    )
+    sibling = make_promotion(1, "rev-0009", record=make_record(revision_id="rev-0009"))
     store.promote(sibling.record, sibling.revision, sibling.markdown)
     current = make_promotion(
         1, "rev-0001", record=revision_pinned_record(make_record, "rev-0009")
@@ -749,9 +756,7 @@ def test_a_revision_pinned_artifact_that_is_gone_invalidates_its_claim(
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     store = make_store(corpus_root)
-    promotion = make_promotion(
-        record=revision_pinned_record(make_record, "rev-0001")
-    )
+    promotion = make_promotion(record=revision_pinned_record(make_record, "rev-0001"))
     store.promote(promotion.record, promotion.revision, promotion.markdown)
 
     report = check(store)
@@ -805,7 +810,7 @@ def test_lint_projection_file_reports_a_missing_file(tmp_path: Path) -> None:
 def test_artifact_digest_in_hashes_relative_paths(tmp_path: Path) -> None:
     (tmp_path / "cook").mkdir()
     _ = (tmp_path / "cook" / "report.md").write_text("body", encoding="utf-8")
-    digest = lint.artifact_digest_in(tmp_path)
+    digest = lint_freshness.artifact_digest_in(tmp_path)
 
     assert digest("cook/report.md") == canonical.digest_text("body")
     assert digest("cook/absent.md") is None
@@ -817,7 +822,7 @@ def test_artifact_digest_in_rejects_absolute_paths(tmp_path: Path) -> None:
     outside = tmp_path / "outside.md"
     _ = outside.write_text("body", encoding="utf-8")
 
-    assert lint.artifact_digest_in(root)(str(outside)) is None
+    assert lint_freshness.artifact_digest_in(root)(str(outside)) is None
 
 
 def test_artifact_digest_in_rejects_parent_traversal(tmp_path: Path) -> None:
@@ -825,7 +830,7 @@ def test_artifact_digest_in_rejects_parent_traversal(tmp_path: Path) -> None:
     root.mkdir()
     _ = (tmp_path / "outside.md").write_text("body", encoding="utf-8")
 
-    assert lint.artifact_digest_in(root)("../outside.md") is None
+    assert lint_freshness.artifact_digest_in(root)("../outside.md") is None
 
 
 def test_artifact_digest_in_rejects_symlink_escapes(tmp_path: Path) -> None:
@@ -835,7 +840,7 @@ def test_artifact_digest_in_rejects_symlink_escapes(tmp_path: Path) -> None:
     _ = outside.write_text("body", encoding="utf-8")
     (root / "link.md").symlink_to(outside)
 
-    assert lint.artifact_digest_in(root)("link.md") is None
+    assert lint_freshness.artifact_digest_in(root)("link.md") is None
 
 
 def test_artifact_digest_in_rejects_non_regular_paths(tmp_path: Path) -> None:
@@ -843,7 +848,7 @@ def test_artifact_digest_in_rejects_non_regular_paths(tmp_path: Path) -> None:
     root.mkdir()
     (root / "reports").mkdir()
 
-    assert lint.artifact_digest_in(root)("reports") is None
+    assert lint_freshness.artifact_digest_in(root)("reports") is None
 
 
 def test_ac16_a_future_record_this_reader_cannot_structure_reports_runtime_behind_only(
@@ -856,7 +861,9 @@ def test_ac16_a_future_record_this_reader_cannot_structure_reports_runtime_behin
     store = make_store(corpus_root)
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
-    raw = cast(dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8")))
+    raw = cast(
+        dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8"))
+    )
     raw["schema_version"] = SCHEMA_VERSION + 1
     # An identifier the schema's own validator refuses: the reader cannot
     # structure this record at all, so `record` stays None below.
@@ -882,7 +889,10 @@ def test_git_object_exists_in_answers_from_a_real_repository(tmp_path: Path) -> 
         "GIT_COMMITTER_NAME": "t",
         "GIT_COMMITTER_EMAIL": "t@example.com",
     }
-    for args in (["init", "-q", "-b", "main"], ["commit", "-q", "--allow-empty", "-m", "s"]):
+    for args in (
+        ["init", "-q", "-b", "main"],
+        ["commit", "-q", "--allow-empty", "-m", "s"],
+    ):
         _ = subprocess.run(
             ["git", *args], cwd=tmp_path, env=env, check=True, capture_output=True
         )
@@ -894,10 +904,11 @@ def test_git_object_exists_in_answers_from_a_real_repository(tmp_path: Path) -> 
         capture_output=True,
         text=True,
     ).stdout.strip()
-    exists = lint.git_object_exists_in(tmp_path)
+    exists = lint_freshness.git_object_exists_in(tmp_path)
 
     assert exists(head) is True
     assert exists("0" * 40) is False
+
 
 def test_ac16_a_store_from_a_newer_runtime_reports_runtime_behind_only(
     corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
@@ -909,7 +920,9 @@ def test_ac16_a_store_from_a_newer_runtime_reports_runtime_behind_only(
     store = make_store(corpus_root)
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
-    raw = cast(dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8")))
+    raw = cast(
+        dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8"))
+    )
     raw["schema_version"] = SCHEMA_VERSION + 1
     raw["field_from_the_future"] = {"still": "ignored on read"}
     _ = store.record_path.write_text(json.dumps(raw, sort_keys=True), encoding="utf-8")
@@ -920,3 +933,267 @@ def test_ac16_a_store_from_a_newer_runtime_reports_runtime_behind_only(
     assert lint.LintCode.STORE_INCONSISTENT not in report.codes
     assert f"schema version {SCHEMA_VERSION + 1}" in report.findings[0].detail
     assert lint.gates_continuation(report.findings[0])
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_stale_commit_check_swallows_an_unrunnable_git_but_says_so(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def boom(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise OSError("git executable not found")
+
+    monkeypatch.setattr(git_utils, "run_git", boom)
+
+    findings = lint_freshness.stale_commit_findings(
+        "deadbeef", repository_root=tmp_path
+    )
+
+    assert findings == []
+    assert capsys.readouterr().err.splitlines() == [
+        f"wheypoint: git-unavailable command=merge-base cwd={tmp_path} error=OSError"
+    ]
+
+
+def test_an_unrunnable_git_is_named_once_per_lint(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Every probe in one lint hits the same broken git; one line says so."""
+
+    def boom(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise OSError("git executable not found")
+
+    monkeypatch.setattr(git_utils, "run_git", boom)
+
+    with lint_freshness.git_warnings_once():
+        assert lint_freshness.git_object_exists_in(tmp_path)("deadbeef") is False
+        assert (
+            lint_freshness.stale_commit_findings("deadbeef", repository_root=tmp_path)
+            == []
+        )
+
+    assert capsys.readouterr().err.splitlines() == [
+        f"wheypoint: git-unavailable command=cat-file cwd={tmp_path} error=OSError"
+    ]
+
+
+def test_each_lint_work_names_an_unrunnable_git_again(
+    corpus_root: Path,
+    make_promotion: Callable[..., _PromotionLike],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The latch is scoped to one lint, so the next lint still reports."""
+    store = make_store(corpus_root)
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    def boom(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise OSError("git executable not found")
+
+    monkeypatch.setattr(git_utils, "run_git", boom)
+
+    _ = check(store)
+    first = capsys.readouterr().err.splitlines()
+    _ = check(store)
+    second = capsys.readouterr().err.splitlines()
+
+    assert len(first) == 1
+    assert first == second
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_stale_commit_fires_when_head_no_longer_descends_from_the_recorded_commit(
+    tmp_path: Path,
+) -> None:
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args],
+            cwd=tmp_path,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    _ = git("init", "-q", "-b", "main")
+    _ = git("commit", "-q", "--allow-empty", "-m", "first")
+    recorded = git("rev-parse", "HEAD").stdout.strip()
+    # Amending the tip gives HEAD a sibling commit that never descends from
+    # the one the revision recorded, without deleting that commit object.
+    _ = git("commit", "-q", "--allow-empty", "--amend", "-m", "first (rewritten)")
+
+    findings = lint_freshness.stale_commit_findings(recorded, repository_root=tmp_path)
+
+    assert [f.code for f in findings] == [lint.LintCode.STALE_COMMIT]
+    assert recorded in findings[0].detail
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_grounded_path_findings_matches_the_writer_grammar(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    _ = (repo / "src.py").write_text("x\n", encoding="utf-8")
+    monkeypatch.chdir(repo)
+    record = make_record(working_context=["src.py", "/abs/path#1-1", "bad#x"])
+    promotion = make_promotion(record=record)
+    store = make_store(corpus_root)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = check(store)
+
+    assert [
+        finding.detail
+        for finding in report.findings
+        if finding.code is lint.LintCode.GROUNDED_PATH_MISSING
+    ] == [
+        "working_context path '/abs/path#1-1' is absolute",
+        "working_context path 'bad#x' is missing",
+    ]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_lint_work_anchors_grounded_paths_to_the_repo_root_not_bare_cwd(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    grounded = repo / "src" / "module.py"
+    grounded.parent.mkdir(parents=True)
+    _ = grounded.write_text("x\n", encoding="utf-8")
+    subdir = repo / "sub"
+    subdir.mkdir()
+    monkeypatch.chdir(subdir)
+
+    record = make_record(working_context=["src/module.py"])
+    promotion = make_promotion(record=record)
+    store = make_store(corpus_root)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = check(store)
+
+    assert lint.LintCode.GROUNDED_PATH_MISSING not in report.codes
+
+
+def test_lint_work_reads_only_the_current_projection(
+    corpus_root: Path,
+    make_promotion: Callable[..., _PromotionLike],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lineage is proved from receipts, so depth costs no extra projection."""
+    store = make_store(corpus_root)
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    second = make_promotion(2, "rev-0002", parent=first)
+    store.promote(second.record, second.revision, second.markdown)
+    third = make_promotion(3, "rev-0003", parent=second)
+    store.promote(third.record, third.revision, third.markdown)
+
+    reads: list[Path] = []
+    original_read_text = Path.read_text
+    original_read_bytes = Path.read_bytes
+
+    def spy_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        reads.append(self)
+        return original_read_text(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
+
+    def spy_read_bytes(self: Path) -> bytes:
+        reads.append(self)
+        return original_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_text", spy_read_text)
+    monkeypatch.setattr(Path, "read_bytes", spy_read_bytes)
+
+    report = check(store)
+
+    assert report.codes == ()
+    assert [path for path in reads if path.parent.name == "projections"] == [
+        store.projection_path(3, "rev-0003")
+    ]
+    # One receipt read apiece: the survey already holds the current revision,
+    # so nothing re-reads it to name what the record points at.
+    receipt_reads = [path for path in reads if path.parent == store.revisions_dir]
+    assert len(receipt_reads) == len(list(store.revisions_dir.glob("*.json"))) == 3
+
+
+def test_lint_work_digests_each_artifact_path_once(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """An artifact that is both linked and covering is hashed once, not twice."""
+    store = make_store(corpus_root)
+    pinned = canonical.digest_text("as written")
+    promotion = make_promotion(record=covered_record(make_record, pinned))
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    asked: list[str] = []
+
+    def counting_digest(path: str) -> str | None:
+        asked.append(path)
+        return pinned
+
+    report = check(store, artifact_digest=counting_digest)
+
+    assert report.codes == ()
+    assert asked == ["cook/report.md"]
+
+
+def test_external_pointers_in_working_context_are_not_grounded_paths(
+    make_record: Callable[..., WheypointRecord], tmp_path: Path
+) -> None:
+    record = make_record(
+        working_context=["src/x.py", "PR#412", "https://example.test/a"]
+    )
+
+    findings = lint_freshness.grounded_path_findings(record, tmp_path)
+
+    assert [f.detail for f in findings] == [
+        "working_context path 'src/x.py' is missing"
+    ]
+
+
+def test_grounded_path_findings_say_why_a_path_is_unusable(
+    make_record: Callable[..., WheypointRecord], tmp_path: Path
+) -> None:
+    record = make_record(working_context=["/etc/passwd", "../outside.md", "gone.py"])
+
+    findings = lint_freshness.grounded_path_findings(record, tmp_path)
+
+    assert [f.detail for f in findings] == [
+        "working_context path '/etc/passwd' is absolute",
+        "working_context path '../outside.md' escapes the repository root",
+        "working_context path 'gone.py' is missing",
+    ]
+
+
+def test_a_file_name_carrying_its_own_hash_still_grounds(
+    make_record: Callable[..., WheypointRecord], tmp_path: Path
+) -> None:
+    _ = (tmp_path / "notes#1.md").write_text("x\n", encoding="utf-8")
+    entry = "notes#1.md#1-1"
+
+    validated = grounded.validate_grounded([entry], root=tmp_path)
+
+    assert validated == (entry,)
+    record = make_record(working_context=[entry])
+    findings = lint_freshness.grounded_path_findings(record, tmp_path)
+    assert findings == []

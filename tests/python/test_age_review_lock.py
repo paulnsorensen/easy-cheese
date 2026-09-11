@@ -32,6 +32,9 @@ def repo(tmp_path: Path) -> Path:
     _ = (tmp_path / "app.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
     _git(tmp_path, "add", "-A")
     _git(tmp_path, "commit", "-m", "seed")
+    grounded = tmp_path / ".cheese" / "grounded.md"
+    grounded.parent.mkdir(parents=True)
+    _ = grounded.write_text("grounded context\n", encoding="utf-8")
     return tmp_path
 
 
@@ -44,6 +47,7 @@ def _write_args(repo: Path, slug: str) -> list[str]:
         "--artifact", "",
         "--orientation", "reviewed the diff",
         "--root", str(repo),
+        "--grounded", ".cheese/grounded.md#1-1",
     ]
 
 
@@ -249,6 +253,9 @@ def test_a_malformed_lock_blocks_rather_than_silently_passing(
 def test_outside_a_git_work_tree_the_gate_degrades_to_a_no_op(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    grounded = tmp_path / ".cheese" / "grounded.md"
+    grounded.parent.mkdir(parents=True)
+    _ = grounded.write_text("grounded context\n", encoding="utf-8")
     assert review_lock.tree_digest(tmp_path, slug="demo") is None
     assert review_lock.gated_write_handoff_artifact(_write_args(tmp_path, "demo")) == 0
     assert _report(tmp_path, "demo").is_file()
@@ -259,6 +266,7 @@ def test_non_age_phases_are_not_gated(repo: Path, capsys: pytest.CaptureFixture[
     args = [
         "--slug", "demo", "--status", "ok", "--phase", "press", "--next", "age",
         "--artifact", "", "--orientation", "hardened", "--root", str(repo),
+        "--grounded", ".cheese/grounded.md#1-1",
     ]
     assert review_lock.gated_write_handoff_artifact(args) == 0
     assert (repo / ".cheese" / "press" / "demo.md").is_file()

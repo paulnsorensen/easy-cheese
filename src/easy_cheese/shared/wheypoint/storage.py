@@ -30,7 +30,7 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
@@ -108,6 +108,23 @@ class RecoveryReport:
     @property
     def revision_ids(self) -> frozenset[str]:
         return frozenset(file.revision.revision_id for file in self.complete)
+
+
+@define(frozen=True)
+class ReceiptSurvey:
+    """What a reader needs, reconciled from receipts alone.
+
+    No projection is read or hashed here. Whether a projection agrees with
+    the receipt beside it is a question about the one revision the record
+    points at, and the reader that cares reads exactly that one -- so a
+    resolve costs one projection read rather than one per revision.
+    """
+
+    record: WheypointRecord | None
+    revisions: tuple[WheypointRevision, ...]
+    incomplete: tuple[str, ...]
+    problems: tuple[str, ...]
+    stamped_schema_version: int | None = None
 
 
 def file_digest(path: Path) -> str | None:
@@ -242,7 +259,11 @@ class WorkStore:
     @classmethod
     def enumerate(cls, corpus_root: Path | str | None = None) -> list[WorkStore]:
         """Every work store under the corpus root that holds a record, by work id."""
-        base = Path(corpus_root) if corpus_root is not None else paths.project_corpus_root()
+        base = (
+            Path(corpus_root)
+            if corpus_root is not None
+            else paths.project_corpus_root()
+        )
         work_dir = base / WORK_DIRNAME
         stores: list[WorkStore] = []
         for record_path in sorted(work_dir.glob(f"*/{RECORD_FILENAME}")):
@@ -263,16 +284,92 @@ class WorkStore:
         incomplete: list[str] = []
         receipts: set[str] = set()
         if self.revisions_dir.is_dir():
-            for path in sorted(self.revisions_dir.glob("*.json")):
+            for path in self.revisions_dir.glob("*.json"):
                 receipts.add(path.stem)
                 reason, file = self._inspect_revision(path)
                 if file is not None:
                     complete.append(file)
                 else:
                     incomplete.append(f"{path.name}: {reason}")
-        incomplete.extend(self._unclaimed_projections(receipts))
+        incomplete.sort()
+        incomplete.extend(_unclaimed_projections(self._projection_stems(), receipts))
         complete.sort(key=lambda file: file.revision.revision_number)
         return RevisionScan(tuple(complete), tuple(incomplete))
+
+    def receipt_revisions(self) -> tuple[WheypointRevision, ...]:
+        """Every revision receipt that structures, oldest first.
+
+        Unlike `revisions()`, this never reads or hashes the projection
+        markdown beside a receipt: a caller that only needs lineage --
+        `parent_revision_id` and the digests a revision pins -- does not
+        need the projection to be present or to agree with its digest.
+        An unreadable or unstructurable receipt is skipped exactly as
+        `revisions()` would skip it -- both read identity through
+        `_structure_receipt` -- minus the projection check.
+        """
+        revisions = [
+            structured
+            for _, structured in self._structured_receipts()
+            if not isinstance(structured, str)
+        ]
+        revisions.sort(key=lambda revision: revision.revision_number)
+        return tuple(revisions)
+
+    def survey_receipts(self) -> ReceiptSurvey:
+        """Reconcile the record against its receipts without hashing a projection.
+
+        The stamped schema version is always read from the raw bytes, so a
+        record written by a newer runtime is reported as such however the
+        caller found this store.
+        """
+        record, problems, stamped_schema_version = self._read_record_for_recovery()
+        revisions, incomplete = self._projected_receipts()
+        if record is not None:
+            problems = [*problems, *_record_problems(record, revisions)]
+        return ReceiptSurvey(
+            record=record,
+            revisions=tuple(revisions),
+            incomplete=tuple(incomplete),
+            problems=tuple(problems),
+            stamped_schema_version=stamped_schema_version,
+        )
+
+    def _structured_receipts(
+        self,
+    ) -> Iterator[tuple[Path, WheypointRevision | str]]:
+        """Each receipt file paired with its revision or its skip reason."""
+        if not self.revisions_dir.is_dir():
+            return
+        for path in sorted(self.revisions_dir.glob("*.json")):
+            yield path, self._structure_receipt(path)
+
+    def _projected_receipts(self) -> tuple[list[WheypointRevision], list[str]]:
+        """Receipts whose projection is at least present, and why the rest are not.
+
+        This adds the one cheap half of completeness -- the projection file
+        exists -- without reading or hashing its bytes. The projection
+        directory is listed once and answers both that question and which
+        projections no receipt claims.
+        """
+        projection_stems = self._projection_stems()
+        receipts: list[WheypointRevision] = []
+        skipped: list[str] = []
+        stems: set[str] = set()
+        for path, structured in self._structured_receipts():
+            stems.add(path.stem)
+            if isinstance(structured, str):
+                skipped.append(f"{path.name}: {structured}")
+                continue
+            # The filename matched the identity inside it, so the receipt and
+            # its projection share this stem.
+            if path.stem not in projection_stems:
+                skipped.append(f"{path.name}: projection file is missing")
+                continue
+            receipts.append(structured)
+        receipts.sort(key=lambda revision: revision.revision_number)
+        skipped.sort()
+        skipped.extend(_unclaimed_projections(projection_stems, stems))
+        return receipts, skipped
 
     def read_record(self) -> WheypointRecord | None:
         try:
@@ -410,7 +507,9 @@ class WorkStore:
         scan = self.revisions()
         record, problems, stamped_schema_version = self._read_record_for_recovery()
         if record is not None:
-            problems.extend(_record_problems(record, list(scan.files)))
+            problems.extend(
+                _record_problems(record, [file.revision for file in scan.files])
+            )
         return RecoveryReport(
             record=record,
             complete=scan.files,
@@ -419,34 +518,38 @@ class WorkStore:
             stamped_schema_version=stamped_schema_version,
         )
 
-    def _unclaimed_projections(self, receipts: set[str]) -> list[str]:
-        """Projections no receipt on disk names.
-
-        A receipt and its projection share a filename stem, so a projection
-        with no `.json` beside it is half a promotion exactly as much as a
-        receipt with no `.md`. Scanning only the receipts would leave a store
-        holding a whole lineage in its readable half reporting nothing at all.
-        """
+    def _projection_stems(self) -> set[str]:
+        """The filename stems of every projection on disk, listed once."""
         if not self.projections_dir.is_dir():
-            return []
-        return [
-            f"{path.name}: no revision receipt names this projection"
-            for path in sorted(self.projections_dir.glob("*.md"))
-            if path.stem not in receipts
-        ]
+            return set()
+        return {path.stem for path in self.projections_dir.glob("*.md")}
 
-    def _inspect_revision(self, path: Path) -> tuple[str, RevisionFile | None]:
+    def _structure_receipt(self, path: Path) -> WheypointRevision | str:
+        """The revision this receipt holds, or why it is not one.
+
+        The identity half of completeness -- readable JSON, a structurable
+        revision, a filename that matches the identity inside it -- stated
+        once, so every reader of this store skips for the same reasons in
+        the same words.
+        """
         try:
             payload = _parse_json(path.read_bytes())
         except ValueError:
-            return "malformed JSON", None
+            return "malformed JSON"
         try:
             revision = records.structure(payload, WheypointRevision)
         except records.RecordError as exc:
-            return f"not a readable revision: {exc}", None
+            return f"not a readable revision: {exc}"
         expected = self.revision_path(revision.revision_number, revision.revision_id)
         if path.name != expected.name:
-            return "filename does not match the revision identity inside it", None
+            return "filename does not match the revision identity inside it"
+        return revision
+
+    def _inspect_revision(self, path: Path) -> tuple[str, RevisionFile | None]:
+        structured = self._structure_receipt(path)
+        if isinstance(structured, str):
+            return structured, None
+        revision = structured
         projection_path = self.projection_path(
             revision.revision_number, revision.revision_id
         )
@@ -486,15 +589,29 @@ class WorkStore:
             )
 
 
+def _unclaimed_projections(projection_stems: set[str], receipts: set[str]) -> list[str]:
+    """Projections no receipt on disk names.
+
+    A receipt and its projection share a filename stem, so a projection with
+    no `.json` beside it is half a promotion exactly as much as a receipt
+    with no `.md`. Scanning only the receipts would leave a store holding a
+    whole lineage in its readable half reporting nothing at all.
+    """
+    return [
+        f"{stem}.md: no revision receipt names this projection"
+        for stem in sorted(projection_stems - receipts)
+    ]
+
+
 def _record_problems(
-    record: WheypointRecord, complete: list[RevisionFile]
+    record: WheypointRecord, revisions: list[WheypointRevision]
 ) -> list[str]:
     match = next(
         (
-            file
-            for file in complete
-            if file.revision.revision_id == record.revision_id
-            and file.revision.revision_number == record.revision_number
+            revision
+            for revision in revisions
+            if revision.revision_id == record.revision_id
+            and revision.revision_number == record.revision_number
         ),
         None,
     )
@@ -504,12 +621,12 @@ def _record_problems(
             + "not a complete immutable revision"
         ]
     problems: list[str] = []
-    if match.revision.record_digest != records.record_digest(record):
+    if match.record_digest != records.record_digest(record):
         problems.append(
             f"{RECORD_FILENAME} does not match the record digest in revision "
             + f"{record.revision_id!r}"
         )
-    if record.revision_digest != records.revision_digest(match.revision):
+    if record.revision_digest != records.revision_digest(match):
         problems.append(
             f"{RECORD_FILENAME} revision_digest does not match revision "
             + f"{record.revision_id!r}"

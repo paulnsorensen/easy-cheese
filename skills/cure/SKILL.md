@@ -9,11 +9,19 @@ metadata: {dispatches-agents: true}
 
 Use this skill after `/age`, failed validation, or a request to fix selected review findings.
 
+## Phase entry
+
+Run `python3 skills/cure/scripts/cure.pyz wheypoint-resolve --ref <slug>`.
+`authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
+`not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
+`gated`, `ambiguous`, and `error` stop and show the payload.
+Show advisory `stale-commit` and `grounded-path-missing` findings.
+
 ## Inputs
 
 Accept an `/age` slug, a pasted findings list, a CI failure summary, or a scoped fix instruction.
 
-`/cure <slug>` reads `.cheese/age/<slug>.md`.
+After phase entry, `/cure <slug>` reads `.cheese/age/<slug>.md`.
 
 Adopt a locked selection from `/age` or `/affinage`.
 The canonical format is in `references/selection.md#handoff-from-age`.
@@ -171,6 +179,7 @@ python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cure --next age \
   --artifact <consumed-report-path> --orientation "<one-line orientation>" \
   --baseline "<copied baseline block>" --durable-flags "<one line per flag>" \
+  --grounded <path[#start-end]> \
   --body-file <body-path> \
   --payload-schema https://schemas.easy-cheese.dev/curd-result
 ```
@@ -182,7 +191,8 @@ Omit `--payload-schema`, because a terminal transition rejects a payload schema.
 python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cure --next done \
   --artifact <consumed-report-path> --orientation "<one-line orientation>" \
-  --baseline "<copied baseline block>" --body-file <body-path>
+  --baseline "<copied baseline block>" --grounded <path[#start-end]> \
+  --body-file <body-path>
 ```
 
 Omit `--baseline` and `--durable-flags` when this run has no such value.
@@ -267,19 +277,9 @@ Read `skills/hard-cheese/SKILL.md` and `../hard-cheese/references/composition.md
 
 ## Auto mode
 
-With `--auto --stake <floor>`, skip the selection list and handoff gate.
-Select each finding that meets the floor.
-Apply and validate each finding.
-Revert and defer a finding when its test fails.
-Then invoke `/age <slug> --scope <touched-path> [--scope <touched-path>] --auto`.
-Forward `--open-pr` and `--hard` when they are in scope.
-`/age --auto` owns the two-pass cap.
-On `next: done`, run § Post-PR write-back.
-Then dispatch `/plate` once.
-
-Read `references/auto-mode.md` before you use this mode.
-It defines the empty-floor case and the `--auto --hard` puncture clause.
-It also defines Cook worker exceptions that suppress `/plate`.
+Read `references/auto-mode.md` before auto mode.
+It defines selection, validation, reversion, Age limits, flag forwarding, publication, and Cook worker exceptions.
+It also defines the `--auto --hard` puncture clause.
 
 ## Rules
 

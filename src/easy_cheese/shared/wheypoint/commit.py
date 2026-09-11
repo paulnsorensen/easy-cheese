@@ -15,9 +15,11 @@ The order of the checks is the contract:
    replay is one the record has not caught up to: a complete pair whose parent
    is still the current revision is an interrupted promotion, and the retry
    finishes it instead of reporting a save no reader can serve.
-2. **Lineage before application.** The parent the record names has to be a
-   complete immutable revision whose digest the record still quotes; a chain
-   that cannot be walked backwards is not extended forwards.
+2. **Lineage before application.** The parent the record names has to have a
+   structurable receipt whose digest the record still quotes, and the receipts
+   behind it have to walk back to genesis; a chain that cannot be walked
+   backwards is not extended forwards. The walk reads receipts only: whether
+   an ancestor's projection is present is lint's question, not this one's.
 3. **Rehydration before compaction.** A delta written after a context
    compaction has to prove it read the *current* revision, not the revision the
    compacted session remembered.
@@ -42,7 +44,6 @@ first: an identical genesis resubmission is a replay, not a conflict.
 
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -70,7 +71,7 @@ from easy_cheese.shared import paths
 
 from . import canonical
 from . import lineage
-from . import lint as lint_mod
+from . import lint_freshness
 from . import projection as projection_mod
 from . import records, storage
 
@@ -161,11 +162,17 @@ def commit(
     repository: RepositoryProvenance | None = None,
     durability: Durability = Durability.CANONICAL_LOCAL,
     finalize: Callable[[PendingRevision], None] | None = None,
+    artifact_root: Path | str | None = None,
 ) -> CommitResult:
     """Apply `delta` to the store's current record under the record lock."""
     repository_value: RepositoryProvenance = (
         RepositoryProvenance() if repository is None else repository
     )
+    digest_root = (
+        _digest_root() if artifact_root is None else Path(artifact_root).resolve()
+    )
+    digest_of = lint_freshness.artifact_digest_in(digest_root)
+
     if delta.work_id != store.work_id:
         raise CommitError(
             f"delta names work {delta.work_id!r} but the store holds "
@@ -212,6 +219,7 @@ def commit(
                     fingerprint=fingerprint,
                     repository=repository_value,
                     durability=durability,
+                    digest_of=digest_of,
                 ),
                 finalize=finalize,
             )
@@ -246,6 +254,7 @@ def commit(
                 lineage=checked_lineage,
                 fingerprint=fingerprint,
                 repository=repository_value,
+                digest_of=digest_of,
                 durability=durability,
             ),
             finalize=finalize,
@@ -290,10 +299,7 @@ def _find_replay(
     revision = store.find_complete_revision(_revision_id(delta, fingerprint))
     if revision is None:
         return None
-    if (
-        revision.parent_revision_id != parent
-        or revision.request_digest != fingerprint
-    ):
+    if revision.parent_revision_id != parent or revision.request_digest != fingerprint:
         return None
     return revision
 
@@ -369,7 +375,16 @@ def _finalize(
 def _check_lineage(
     store: storage.WorkStore, current: WheypointRecord
 ) -> lineage.Lineage:
-    parent = store.read_revision(current.revision_number, current.revision_id)
+    receipts = store.receipt_revisions()
+    parent = next(
+        (
+            receipt
+            for receipt in receipts
+            if receipt.revision_id == current.revision_id
+            and receipt.revision_number == current.revision_number
+        ),
+        None,
+    )
     if parent is None:
         raise CommitError(
             f"current revision {current.revision_id!r} has no immutable receipt "
@@ -380,10 +395,7 @@ def _check_lineage(
             f"current revision {current.revision_id!r} does not match the digest "
             + "the record quotes"
         )
-    checked = lineage.walk(
-        (file.revision for file in store.recover().complete),
-        parent,
-    )
+    checked = lineage.walk(receipts, parent)
     if checked.issues:
         raise CommitError(_lineage_issue_detail(checked.issues[0]))
     return checked
@@ -422,8 +434,6 @@ def _lineage_issue_detail(issue: lineage.LineageIssue) -> str:
         + f"{issue.parent_revision_id!r} at {issue.expected_digest}, but that "
         + f"receipt now hashes to {issue.actual_digest}"
     )
-
-
 
 
 def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
@@ -481,8 +491,6 @@ def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
         )
 
 
-
-
 def _entry_id(delta: WheypointDelta, proposed: ProposedEntry, index: int) -> str:
     """A name derived from the request that proposed the entry.
 
@@ -517,7 +525,9 @@ def _revision_id(delta: WheypointDelta, fingerprint: str) -> str:
 
 
 def _proposed_entries(delta: WheypointDelta, kind: EntryKind) -> list[ProposedEntry]:
-    return list(cast("list[ProposedEntry] | None", getattr(delta, ADDITION_FIELDS[kind])) or [])
+    return list(
+        cast("list[ProposedEntry] | None", getattr(delta, ADDITION_FIELDS[kind])) or []
+    )
 
 
 def _additions(delta: WheypointDelta, kind: EntryKind) -> list[ProtectedEntry]:
@@ -547,21 +557,14 @@ def _existing_entries(
     return cast(list[ProtectedEntry], getattr(current, _RECORD_FIELDS[kind]))
 
 
-@functools.cache
 def _digest_root() -> Path:
-    """The repository root artifact paths are digested from (S3).
+    """Return the default repository root for artifact links.
 
-    The root is the Git toplevel when there is one, so the digest does not
-    depend on which subdirectory the checkpoint was run from; outside a
-    repository the working directory is the root. Cached so it is resolved
-    lazily, on the first path actually digested, and never spawns
-    `git rev-parse --show-toplevel` more than once per process.
+    ``commit`` resolves this root once per transaction and passes the resulting
+    digest callback through the revision builder, so a multi-link revision does
+    not rediscover the Git root for every path.
     """
-    return paths.git_toplevel() or Path.cwd()
-
-
-def _digest_of(path: str) -> str | None:
-    return lint_mod.artifact_digest_in(_digest_root())(path)
+    return paths.resolve_repo_root(None)
 
 
 def _merge_artifact_links(
@@ -625,6 +628,7 @@ def _apply(
     lineage: lineage.Lineage,
     fingerprint: str,
     repository: RepositoryProvenance,
+    digest_of: Callable[[str], str | None],
     durability: Durability,
 ) -> PendingRevision:
     transitions = list(delta.transitions or [])
@@ -654,6 +658,7 @@ def _apply(
         number=number,
         kept=kept,
         additions=additions,
+        digest_of=digest_of,
     )
     compaction = (
         None
@@ -688,6 +693,7 @@ def _genesis(
     *,
     fingerprint: str,
     repository: RepositoryProvenance,
+    digest_of: Callable[[str], str | None],
     durability: Durability,
 ) -> PendingRevision:
     """The first record for a work id, built from the delta alone.
@@ -761,7 +767,7 @@ def _genesis(
                 delta.add_artifact_links,
                 delta.remove_artifact_links,
                 revision_id=revision_id,
-                digest_of=_digest_of,
+                digest_of=digest_of,
             ),
             decision_dossier=list(delta.decision_dossier or []),
         )
@@ -805,9 +811,7 @@ def _finish(
     durability: Durability,
 ) -> PendingRevision:
     """Render the draft into one typed pending revision."""
-    projected, markdown = projection_mod.build_projection(
-        draft, durability=durability
-    )
+    projected, markdown = projection_mod.build_projection(draft, durability=durability)
     revision = WheypointRevision(
         schema_version=SCHEMA_VERSION,
         work_id=store.work_id,
@@ -845,6 +849,7 @@ def _draft_record(
     number: int,
     kept: dict[EntryKind, list[ProtectedEntry]],
     additions: dict[EntryKind, list[ProtectedEntry]],
+    digest_of: Callable[[str], str | None],
 ) -> WheypointRecord:
     """The next record: replacements where the delta spoke, carry-forward else."""
     try:
@@ -854,9 +859,7 @@ def _draft_record(
             revision_number=number,
             revision_digest=_UNPINNED_DIGEST,
             orientation=_replaced(delta.orientation, current.orientation),
-            working_context=_replaced(
-                delta.working_context, current.working_context
-            ),
+            working_context=_replaced(delta.working_context, current.working_context),
             notes=_replaced(delta.notes, current.notes),
             next_action=_replaced(delta.next_action, current.next_action),
             decision_dossier=_replaced(
@@ -871,7 +874,7 @@ def _draft_record(
                 delta.add_artifact_links,
                 delta.remove_artifact_links,
                 revision_id=revision_id,
-                digest_of=_digest_of,
+                digest_of=digest_of,
             ),
         )
     except ValueError as exc:

@@ -1,12 +1,13 @@
 """Turn a reference into something it is safe to continue from -- or a refusal.
 
-Authoritative lookup has one fixed precedence, followed only by the legacy
-fallback:
+Authoritative lookup has one fixed precedence, followed by phase artifacts and
+then the legacy fallback:
 
 1. an explicit path to a projection document;
 2. an exact work id in the project's XDG corpus;
 3. a *unique* slug in that corpus;
-4. a safe legacy slug or exact `.cheese/notes/<slug>.md` path after an
+4. `.cheese/{cure,age,press,cook}/<slug>.md` in fixed order;
+5. a safe legacy slug or exact `.cheese/notes/<slug>.md` path after an
    authoritative miss.
 
 A slug is an alias, not an identity, so two work ids answering to one slug is an
@@ -40,11 +41,11 @@ from easy_cheese_schemas import (
     phase_contracts,
 )
 
-from easy_cheese.shared import paths
+from easy_cheese.shared import handoff, paths
 
 from . import checkpoint as checkpoint_mod
 from . import legacy as legacy_mod
-from . import lint, records, storage
+from . import lint, lint_freshness, lint_types, records, storage
 
 _IDENTIFIER_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 # A parent may live outside every worktree, but only as a reference someone can
@@ -65,6 +66,7 @@ class ResolutionSource(str, Enum):
     PATH = "path"
     WORK_ID = "work-id"
     SLUG = "slug"
+    PHASE_ARTIFACT = "phase-artifact"
     LEGACY = "legacy"
 
 
@@ -77,11 +79,12 @@ class Resolution:
     work_id: str | None = None
     record: WheypointRecord | None = None
     projection: WheypointProjection | None = None
-    findings: tuple[lint.LintFinding, ...] = field(default=())
+    findings: tuple[lint_types.LintFinding, ...] = field(default=())
     matches: tuple[str, ...] = field(default=())
     searched: tuple[str, ...] = field(default=())
     legacy_note: Path | None = None
     legacy_slug: legacy_mod.LegacyHandoffSlug | None = None
+    phase_slug: handoff.HandoffSlug | None = None
     detail: str | None = None
 
     @property
@@ -104,16 +107,19 @@ def resolve(
     artifact_digest: Callable[[str], str | None] | None = None,
 ) -> Resolution:
     """Resolve an authoritative reference, then fall back to one legacy note."""
-    root = Path(workspace_root) if workspace_root is not None else Path.cwd()
+    root = paths.resolve_repo_root(workspace_root)
     checks = _Checks(
+        workspace_root=root,
         corpus_root=(
             Path(corpus_root)
             if corpus_root is not None
             else paths.project_corpus_root()
         ),
         project_key=project_key if project_key is not None else paths.project_key(),
-        git_object_exists=git_object_exists or lint.git_object_exists_in(root),
-        artifact_digest=artifact_digest or lint.artifact_digest_in(root),
+        git_object_exists=(
+            git_object_exists or lint_freshness.git_object_exists_in(root)
+        ),
+        artifact_digest=artifact_digest or lint_freshness.artifact_digest_in(root),
     )
 
     if not ref.strip():
@@ -138,6 +144,10 @@ def resolve(
             return _validate(ref, ResolutionSource.WORK_ID, checks)
         authoritative = _resolve_slug(ref, checks)
 
+    if authoritative.outcome is ResolutionOutcome.NOT_FOUND and not _is_path_ref(ref):
+        phase = _resolve_phase_artifact(ref, checks, searched=authoritative.searched)
+        if phase is not None:
+            return phase
     if authoritative.outcome is ResolutionOutcome.NOT_FOUND or _is_legacy_path_ref(ref):
         legacy = resolve_legacy(ref, start=root)
         if legacy.outcome is not ResolutionOutcome.NOT_FOUND:
@@ -159,6 +169,7 @@ def _is_legacy_path_ref(ref: str) -> bool:
 class _Checks:
     """The corpus and the validators every resolution runs against."""
 
+    workspace_root: Path
     corpus_root: Path
     project_key: str
     git_object_exists: Callable[[str], bool]
@@ -208,7 +219,8 @@ def _slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
     """Every work id whose record claims `slug`, in work-id order.
 
     Work-id order is reporting order for an ambiguity, never a preference: a
-    second match is refused, not ranked.
+    second match is refused, not ranked -- and the walk stops there, so an
+    ambiguous slug never pays for a full corpus scan.
     """
     if not checks.work_root.is_dir():
         return ()
@@ -218,38 +230,79 @@ def _slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
         if not record_path.is_file():
             continue
         try:
-            record = storage.WorkStore(
-                work_id=directory.name, root=directory
+            # The same guard `_validate` re-opens with: a directory whose name is
+            # not a safe work id is not a store, whatever record it holds.
+            record = storage.WorkStore.open(
+                directory.name, corpus_root=checks.corpus_root
             ).read_record()
-        except (ValueError, OSError):
+        except (storage.StorageError, ValueError, OSError):
             continue
         if record is not None and record.slug == slug:
             matched.append(directory.name)
+            if len(matched) > 1:
+                break
     return tuple(matched)
 
 
 def _resolve_slug(slug: str, checks: _Checks) -> Resolution:
-    matches = _slug_matches(slug, checks)
+    work_ids = _slug_matches(slug, checks)
     searched = _corpus_locations(slug, checks)
-    if not matches:
+    if not work_ids:
         return Resolution(
             ResolutionOutcome.NOT_FOUND,
             source=ResolutionSource.SLUG,
             searched=searched,
         )
-    if len(matches) > 1:
+    if len(work_ids) > 1:
         return Resolution(
             ResolutionOutcome.AMBIGUOUS,
             source=ResolutionSource.SLUG,
-            matches=matches,
+            matches=work_ids,
             searched=searched,
             detail=(
-                f"slug {slug!r} names {len(matches)} work records: "
-                + ", ".join(matches)
+                f"slug {slug!r} names {len(work_ids)} work records: "
+                + ", ".join(work_ids)
             ),
         )
-    only_match = next(iter(matches))
-    return _validate(only_match, ResolutionSource.SLUG, checks, searched=searched)
+    return _validate(
+        next(iter(work_ids)),
+        ResolutionSource.SLUG,
+        checks,
+        searched=searched,
+    )
+
+
+def _resolve_phase_artifact(
+    slug: str, checks: _Checks, *, searched: tuple[str, ...]
+) -> Resolution | None:
+    """Resolve the first matching phase artifact before legacy notes."""
+    if paths.validate_slug(slug) is not None:
+        # An identifier the artifact grammar rejects names no artifact path;
+        # that is a miss, not a failure to look.
+        return None
+    root = checks.workspace_root / ".cheese"
+    phase_paths: list[str] = []
+    for phase in reversed(paths.CHAIN_PHASES):
+        path = paths.artifact_path(phase, slug, root=root)
+        phase_paths.append(str(path))
+        if not path.is_file():
+            continue
+        try:
+            phase_slug = handoff.parse_handoff_slug(path.read_text(encoding="utf-8"))
+        except (handoff.HandoffParseError, OSError) as exc:
+            return Resolution(
+                ResolutionOutcome.ERROR,
+                source=ResolutionSource.PHASE_ARTIFACT,
+                searched=(*searched, *phase_paths),
+                detail=f"{path} is not a readable handoff artifact: {exc}",
+            )
+        return Resolution(
+            ResolutionOutcome.LEGACY,
+            source=ResolutionSource.PHASE_ARTIFACT,
+            phase_slug=phase_slug,
+            searched=(*searched, *phase_paths),
+        )
+    return None
 
 
 def _validate(
@@ -258,7 +311,7 @@ def _validate(
     checks: _Checks,
     *,
     searched: tuple[str, ...] = (),
-    document_findings: tuple[lint.LintFinding, ...] = (),
+    document_findings: tuple[lint_types.LintFinding, ...] = (),
     expected_revision_id: str | None = None,
 ) -> Resolution:
     try:
@@ -273,6 +326,7 @@ def _validate(
             project_key=checks.project_key,
             git_object_exists=checks.git_object_exists,
             artifact_digest=checks.artifact_digest,
+            repository_root=checks.workspace_root,
         )
     except (records.RecordError, ValueError, OSError) as exc:
         return Resolution(
@@ -299,7 +353,7 @@ def _validate(
         findings=findings,
         searched=searched,
     )
-    gating = tuple(f for f in findings if lint.gates_continuation(f))
+    gating = tuple(f for f in findings if lint_types.gates_continuation(f))
     if gating:
         return _gate(resolution, f"{len(gating)} validation failure(s)")
     if (
@@ -314,8 +368,7 @@ def _validate(
     if report.record.status is WheypointStatus.GATED:
         return _gate(
             resolution,
-            "active gating entries: "
-            + ", ".join(report.record.gating_entry_ids),
+            "active gating entries: " + ", ".join(report.record.gating_entry_ids),
         )
     return resolution
 
@@ -344,8 +397,12 @@ def _parent_resolves(token: str, roots: tuple[Path, ...]) -> bool:
     if "/" in token or token in {".", ".."}:
         return False
     return any(
-        (root / legacy_mod.NOTES_DIR_PARTS[0] / legacy_mod.NOTES_DIR_PARTS[1]
-         / f"{token}.md").is_file()
+        (
+            root
+            / legacy_mod.NOTES_DIR_PARTS[0]
+            / legacy_mod.NOTES_DIR_PARTS[1]
+            / f"{token}.md"
+        ).is_file()
         for root in roots
     )
 
@@ -363,9 +420,7 @@ def _unresolved_parents(
     if not tokens:
         return ()
     roots = (note_worktree, *(root for root in roots if root != note_worktree))
-    return tuple(
-        token for token in tokens if not _parent_resolves(token, roots)
-    )
+    return tuple(token for token in tokens if not _parent_resolves(token, roots))
 
 
 def _legacy_artifact_gate(
@@ -381,7 +436,9 @@ def _legacy_artifact_gate(
     value = slug_block.artifact
     assert value is not None
     if slug_block.next_skill == "affinage":
-        if checkpoint_mod.PR_REFERENCE_RE.fullmatch(value.strip()) or _PARENT_URL_RE.fullmatch(value):
+        if checkpoint_mod.PR_REFERENCE_RE.fullmatch(
+            value.strip()
+        ) or _PARENT_URL_RE.fullmatch(value):
             return None
         return (
             f"declared artifact {value!r} must be 'PR#<n>' or a pull request "
@@ -404,7 +461,9 @@ def _legacy_artifact_gate(
     try:
         _ = resolved_artifact.relative_to(worktree)
     except ValueError:
-        return f"declared artifact {value!r} resolves outside legacy worktree {worktree}"
+        return (
+            f"declared artifact {value!r} resolves outside legacy worktree {worktree}"
+        )
     if not resolved_artifact.is_file():
         return f"declared artifact {value!r} must be an existing regular file"
     return None
@@ -443,9 +502,7 @@ def resolve_legacy(
             detail=lookup.error,
         )
     try:
-        slug_block = legacy_mod.parse_legacy_note(
-            note.path.read_text(encoding="utf-8")
-        )
+        slug_block = legacy_mod.parse_legacy_note(note.path.read_text(encoding="utf-8"))
     except (legacy_mod.LegacyDecodeError, OSError) as exc:
         return Resolution(
             ResolutionOutcome.ERROR,

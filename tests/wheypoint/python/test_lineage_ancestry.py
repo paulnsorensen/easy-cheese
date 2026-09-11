@@ -12,7 +12,7 @@ from pathlib import Path
 
 from attrs import evolve
 
-from easy_cheese.skills.wheypoint import lineage, lint, records, storage
+from easy_cheese.shared.wheypoint import lineage, lint, records, storage
 
 from conftest import Promotion
 

@@ -6,3 +6,4 @@
 | --- | --- |
 | `stack-tools` | Detect supported stacked-PR providers without mutating the repository |
 | `validate-publication` | Validate terminal publication evidence |
+| `wheypoint-resolve` | Resolve a phase slug through the shared Wheypoint kernel (JSON out) |

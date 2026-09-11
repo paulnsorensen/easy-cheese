@@ -27,6 +27,14 @@ Its entry path controls whether it also finds new `/age` findings:
 See `## Fresh review` for the entry rule.
 See `## Merge-conflict resolution` for the conflict path.
 
+## Phase entry
+
+Run `python3 skills/affinage/scripts/affinage.pyz wheypoint-resolve --ref <slug>`.
+`authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
+`not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
+`gated`, `ambiguous`, and `error` stop and show the payload.
+Show advisory `stale-commit` and `grounded-path-missing` findings.
+
 ## Inputs
 
 ```text

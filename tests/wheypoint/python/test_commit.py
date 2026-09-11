@@ -33,7 +33,7 @@ from easy_cheese_schemas import (
 )
 
 from easy_cheese.shared import paths
-from easy_cheese.skills.wheypoint import commit, records, storage
+from easy_cheese.shared.wheypoint import commit, records, storage
 
 from conftest import PLACEHOLDER_DIGEST, WORK_ID, Promotion
 
@@ -813,7 +813,9 @@ def test_a_new_gating_blocker_derives_gated_and_needs_a_dossier(
     assert result.record.status is WheypointStatus.GATED
     assert result.projection.status is WheypointStatus.GATED
     assert result.projection.gating_entry_ids == [gate]
-    assert result.markdown.splitlines()[0] == f"status: gated: 1 open gating entry: {gate}"
+    assert (
+        result.markdown.splitlines()[0] == f"status: gated: 1 open gating entry: {gate}"
+    )
 
 
 def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
@@ -827,8 +829,12 @@ def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
     carried link and is pinned to the revision being written (S3)."""
     repo_root = tmp_path / "repo"
     (repo_root / ".cheese" / "cook").mkdir(parents=True)
-    _ = (repo_root / ".cheese" / "cook" / "wave-2.md").write_text("wave-2", encoding="utf-8")
-    _ = (repo_root / ".cheese" / "cook" / "wave-3.md").write_text("wave-3", encoding="utf-8")
+    _ = (repo_root / ".cheese" / "cook" / "wave-2.md").write_text(
+        "wave-2", encoding="utf-8"
+    )
+    _ = (repo_root / ".cheese" / "cook" / "wave-3.md").write_text(
+        "wave-3", encoding="utf-8"
+    )
     monkeypatch.setattr(paths, "git_toplevel", lambda: repo_root)
 
     carried = ArtifactLink(path=".cheese/cook/wave-2.md")
@@ -854,12 +860,19 @@ def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
         ),
         store=store,
     )
-    assert [link.path for link in second.record.artifact_links] == [".cheese/cook/wave-2.md"]
+    assert [link.path for link in second.record.artifact_links] == [
+        ".cheese/cook/wave-2.md"
+    ]
     assert second.record.artifact_links[0].revision_id == second.record.revision_id
 
-    with pytest.raises(commit.CommitError, match="does not carry: '.cheese/cook/nope.md'"):
+    with pytest.raises(
+        commit.CommitError, match="does not carry: '.cheese/cook/nope.md'"
+    ):
         _ = commit.commit(
-            _delta(second.record.revision_id, remove_artifact_links=[".cheese/cook/nope.md"]),
+            _delta(
+                second.record.revision_id,
+                remove_artifact_links=[".cheese/cook/nope.md"],
+            ),
             store=store,
         )
 
@@ -886,40 +899,78 @@ def test_added_artifact_link_naming_an_undigestable_path_is_refused(
     assert store.read_record() == seed.record
 
 
-def test_artifact_digest_root_is_resolved_lazily_only_when_links_are_present(
+def test_artifact_digest_root_is_resolved_once_per_transaction(
     store: storage.WorkStore,
     make_promotion: Callable[..., Promotion],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The Git toplevel is spawned only when a path actually needs digesting,
-    never for a delta that adds no artifact links."""
+    """The Git toplevel is spawned once for the whole transaction, however many
+    links the delta pins: a multi-link revision never rediscovers the root per
+    path."""
     calls: list[None] = []
 
     def counting_toplevel() -> Path:
         calls.append(None)
         return tmp_path
 
-    commit._digest_root.cache_clear()  # pyright: ignore[reportPrivateUsage]
     monkeypatch.setattr(paths, "git_toplevel", counting_toplevel)
     seed = _seed(store, make_promotion)
+    for name in ("report.md", "notes.md"):
+        _ = (tmp_path / name).write_text("body", encoding="utf-8")
+    before = len(calls)
 
-    no_links = commit.commit(
-        _delta(seed.record.revision_id, orientation="No artifact links here."),
-        store=store,
-    )
-    assert calls == []
-
-    _ = (tmp_path / "report.md").write_text("body", encoding="utf-8")
-    with_link = commit.commit(
+    with_links = commit.commit(
         _delta(
-            no_links.record.revision_id,
-            add_artifact_links=[ArtifactLink(path="report.md")],
+            seed.record.revision_id,
+            add_artifact_links=[
+                ArtifactLink(path="report.md"),
+                ArtifactLink(path="notes.md"),
+            ],
         ),
         store=store,
     )
-    assert len(calls) == 1
-    assert with_link.record.artifact_links[0].digest is not None
+
+    assert len(calls) - before == 1
+    assert [link.digest is not None for link in with_links.record.artifact_links] == [
+        True,
+        True,
+    ]
+
+
+def test_lineage_reads_the_current_receipt_once_per_commit(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lineage structures the whole chain from the one receipt scan, so the
+    record's own pointer costs no second read of the receipt it names."""
+    seed = _seed(store, make_promotion)
+    second = commit.commit(
+        _delta(seed.record.revision_id, orientation="Second."), store=store
+    )
+    third = commit.commit(
+        _delta(second.record.revision_id, orientation="Third."), store=store
+    )
+    receipts = [
+        store.revision_path(record.revision_number, record.revision_id)
+        for record in (seed.record, second.record, third.record)
+    ]
+    revisions_dir = receipts[-1].parent
+    reads: list[str] = []
+    real_read_bytes = Path.read_bytes
+
+    def counting_read_bytes(self: Path) -> bytes:
+        if self.parent == revisions_dir:
+            reads.append(self.name)
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", counting_read_bytes)
+    _ = commit.commit(
+        _delta(third.record.revision_id, orientation="Fourth."), store=store
+    )
+
+    assert [reads.count(receipt.name) for receipt in receipts] == [1, 1, 1]
 
 
 def test_a_held_record_lock_blocks_the_transaction_until_it_is_released(
@@ -953,13 +1004,17 @@ def test_an_explicitly_emptied_field_replaces_while_an_omitted_one_carries(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., Promotion],
 ) -> None:
-    parent = make_record(working_context=["src/wheypoint/storage.py"])
+    parent = make_record(
+        working_context=["src/easy_cheese/shared/wheypoint/storage.py"]
+    )
     seed = _seed(store, make_promotion, record=parent)
 
     carried = commit.commit(
         _delta(seed.record.revision_id, orientation="Omits the context."), store=store
     )
-    assert carried.record.working_context == ["src/wheypoint/storage.py"]
+    assert carried.record.working_context == [
+        "src/easy_cheese/shared/wheypoint/storage.py"
+    ]
 
     emptied = commit.commit(
         _delta(carried.record.revision_id, working_context=[]), store=store
@@ -977,7 +1032,7 @@ def _projection_files(store: storage.WorkStore) -> list[str]:
 def _genesis_delta(**overrides: object) -> WheypointDelta:
     fields: dict[str, object] = {
         "orientation": "Genesis orientation.\nA second line the title drops.",
-        "working_context": ["src/wheypoint/commit.py"],
+        "working_context": ["src/easy_cheese/shared/wheypoint/commit.py"],
         "next_action": NextAction(
             move=NextMove.COOK,
             orientation="Write the wheypoint CLI.",
@@ -1018,7 +1073,7 @@ def test_genesis_creates_the_first_record_when_the_store_is_empty(
     assert record.created == GENESIS_CAPTURED_AT
     assert record.project_key == "paulnsorensen-easy-cheese"
     assert record.orientation == "Genesis orientation.\nA second line the title drops."
-    assert record.working_context == ["src/wheypoint/commit.py"]
+    assert record.working_context == ["src/easy_cheese/shared/wheypoint/commit.py"]
     assert [entry.summary for entry in record.decisions] == ["Genesis is a commit."]
     assert result.revision.applied_additions == list(record.decisions)
     assert result.revision.preserved_entry_ids == []
@@ -1323,3 +1378,34 @@ def test_a_normal_delta_applies_on_top_of_a_genesis_record(
     assert second.record.title == created.record.title
     assert store.read_record() == second.record
     assert store.recover().problems == ()
+
+
+def test_committing_a_new_revision_never_reads_projection_files(
+    store: storage.WorkStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created = commit.commit(_genesis_delta(), store=store)
+    second = commit.commit(_delta(created.record.revision_id), store=store)
+    third = commit.commit(_delta(second.record.revision_id), store=store)
+
+    reads: list[Path] = []
+    original_read_bytes = Path.read_bytes
+    original_read_text = Path.read_text
+
+    def spy_read_bytes(self: Path, *args: object, **kwargs: object) -> bytes:
+        reads.append(self)
+        return original_read_bytes(self, *args, **kwargs)
+
+    def spy_read_text(
+        self: Path, encoding: str | None = None, errors: str | None = None
+    ) -> str:
+        reads.append(self)
+        return original_read_text(self, encoding, errors)
+
+    monkeypatch.setattr(Path, "read_bytes", spy_read_bytes)
+    monkeypatch.setattr(Path, "read_text", spy_read_text)
+
+    fourth = commit.commit(_delta(third.record.revision_id), store=store)
+
+    assert fourth.record.revision_number == 4
+    assert not any("projections" in path.parts for path in reads)

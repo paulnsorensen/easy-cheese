@@ -20,8 +20,7 @@ Use it for culture sessions, for work without a phase slug, and when a phase off
 ## Inputs
 
 - The conversation is the primary input.
-- The optional argument names the next session's focus.
-- The focus shapes the orientation line only.
+- The optional argument shapes only the orientation line.
 - The focus never removes a decision, question, blocker, or directive.
 
 ## Runtime commands
@@ -44,7 +43,10 @@ python3 skills/wheypoint/scripts/wheypoint.pyz log --work-id <id>
 
 `/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
 
-See [`references/commands.md`](references/commands.md) for the generated command list.
+Phase skills run `python3 skills/wheypoint/scripts/wheypoint.pyz resolve --ref <slug>`.
+The command returns `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, or `error`.
+Use authoritative `working_context` as the first batched `tilth_read`; follow [`references/delta-contract.md`](references/delta-contract.md) for all outcomes and findings.
+`phase-artifact` is fallback context, and the handoff parser exposes its `phase_slug`.
 
 ## Flow
 
@@ -122,8 +124,6 @@ Handwritten notes, their legacy values, and their provenance fields are in [`ref
 
 ## Handoff
 
-End with the orientation line, a Markdown link to the projection, and the resume commands.
-
-Use this link form: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
+End with the orientation and this link: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
 
 From the repository run `/cheese --continue <slug>`; from elsewhere run `/cheese --continue <absolute-repo-path>/.cheese/notes/<slug>.md`.

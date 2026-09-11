@@ -24,18 +24,33 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 
-pytestmark = pytest.mark.skipif(  # noqa: V107
+_KERNEL_DIR = REPO_ROOT / "src" / "easy_cheese" / "shared" / "wheypoint"
+# Derived from the tree so a new kernel module cannot be added without the
+# bundles being required to carry it.
+KERNEL_MODULE_FILES = frozenset(path.name for path in _KERNEL_DIR.glob("*.py"))
+KERNEL_MODULES = tuple(
+    sorted(
+        name.removesuffix(".py")
+        for name in KERNEL_MODULE_FILES
+        if name != "__init__.py"
+    )
+)
+
+_needs_build_tooling = pytest.mark.skipif(  # noqa: V107
     importlib.util.find_spec("build") is None
     or importlib.util.find_spec("pip") is None
     or (shutil.which("shiv") is None and importlib.util.find_spec("shiv") is None),
     reason="bundle integration requires requirements-build.txt",
 )
 
+CHAIN_PHASES = ("cook", "press", "age", "cure")
+
 
 @pytest.fixture(scope="module")
 def ultracook_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("tree-staging")
     return build_pyz.build_bundle("cook", out / "cook.pyz")
+
 
 @pytest.fixture(scope="module")
 def press_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
@@ -52,6 +67,7 @@ def _bundle_members(pyz: Path) -> set[str]:
         }
 
 
+@_needs_build_tooling
 def test_press_tree_staging_keeps_schema_and_helpers_nested(press_pyz: Path) -> None:
     names = _bundle_members(press_pyz)
     assert "easy_cheese/shared/fanout/press_route.py" in names
@@ -64,6 +80,7 @@ def test_press_tree_staging_keeps_schema_and_helpers_nested(press_pyz: Path) -> 
     assert "gates.py" not in names
 
 
+@_needs_build_tooling
 def test_press_cli_runs_from_isolated_bundle(press_pyz: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-S", "-I", str(press_pyz), "nope"],
@@ -75,6 +92,7 @@ def test_press_cli_runs_from_isolated_bundle(press_pyz: Path) -> None:
     assert "press-route" in usage
 
 
+@_needs_build_tooling
 def test_press_bundle_is_byte_deterministic(tmp_path: Path) -> None:
     first = build_pyz.build_bundle("press", tmp_path / "a" / "press.pyz")
     second = build_pyz.build_bundle("press", tmp_path / "b" / "press.pyz")
@@ -109,6 +127,7 @@ def _run_isolated(pyz: Path, code: str) -> subprocess.CompletedProcess[str]:
         )
 
 
+@_needs_build_tooling
 def test_package_trees_keep_their_nesting(ultracook_pyz: Path) -> None:
     """Staged dirs must land as nested archive members with posix separators;
     a flattened basename would collide across packages and break imports."""
@@ -122,10 +141,15 @@ def test_package_trees_keep_their_nesting(ultracook_pyz: Path) -> None:
     # Nothing was flattened into the archive root on the way in.
     assert "compat.py" not in names
     assert "_make.py" not in names
-    assert not any(name.startswith("__pycache__") or "/__pycache__/" in name for name in names)
+    assert not any(
+        name.startswith("__pycache__") or "/__pycache__/" in name for name in names
+    )
 
 
-def test_schemas_stack_imports_and_round_trips_from_inside_the_zip(ultracook_pyz: Path) -> None:
+@_needs_build_tooling
+def test_schemas_stack_imports_and_round_trips_from_inside_the_zip(
+    ultracook_pyz: Path,
+) -> None:
     """The spec's key verification: the bundle runs on a bare interpreter with no
     site-packages. Every import must resolve inside the .pyz, and a real load()
     round-trip must work -- not just the import statement.
@@ -160,6 +184,7 @@ def test_schemas_stack_imports_and_round_trips_from_inside_the_zip(ultracook_pyz
     assert result.stdout.strip() == "ok"
 
 
+@_needs_build_tooling
 def test_attrs_version_resolves_from_bundled_dist_info(ultracook_pyz: Path) -> None:
     """attrs.__version__ reads its own dist-info metadata, so dropping the
     .dist-info dirs from the staged tree would break a public attrs API."""
@@ -174,21 +199,17 @@ def wheypoint_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return build_pyz.build_bundle("wheypoint", out / "wheypoint.pyz")
 
 
+@_needs_build_tooling
 def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> None:
     """The app and shared distributions retain their package namespaces."""
     names = _bundle_members(wheypoint_pyz)
-    for module in (
-        "canonical.py",
-        "commit.py",
-        "legacy.py",
-        "lint.py",
-        "projection.py",
-        "records.py",
-        "resolve.py",
-        "storage.py",
-        "wheypoint.py",
-    ):
+    for module in ("__init__.py", *(f"{name}.py" for name in KERNEL_MODULES)):
+        assert f"easy_cheese/shared/wheypoint/{module}" in names, module
+    for module in ("__init__.py", "commands.py", "transcript.py", "wheypoint.py"):
         assert f"easy_cheese/skills/wheypoint/{module}" in names, module
+    assert not any(
+        f"easy_cheese/skills/wheypoint/{name}.py" in names for name in KERNEL_MODULES
+    )
     # The shared library it reuses rather than reimplements.
     assert "easy_cheese/shared/paths.py" in names
     # Schemas and locked deps ride along, nested, exactly as for ultracook.
@@ -197,15 +218,18 @@ def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> 
     assert "attr/_make.py" in names
     assert "cattrs/converters.py" in names
     assert "attrs-26.1.0.dist-info/METADATA" in names
-    assert not any(name.startswith("__pycache__") or "/__pycache__/" in name for name in names)
+    assert not any(
+        name.startswith("__pycache__") or "/__pycache__/" in name for name in names
+    )
 
 
+@_needs_build_tooling
 def test_the_wheypoint_runtime_imports_from_inside_the_zip(wheypoint_pyz: Path) -> None:
     """Acceptance: the bundle runs under -S with no ambient site packages. Every
     module must resolve out of the archive, not the developer's checkout."""
     result = _run_isolated(
         wheypoint_pyz,
-        "from easy_cheese.skills.wheypoint import "
+        "from easy_cheese.shared.wheypoint import "
         + "commit, resolve, lint, storage, projection, records, canonical\n"
         + "import easy_cheese_schemas as ecs\n"
         + "for mod in (commit, resolve, lint, storage, ecs):\n"
@@ -218,6 +242,7 @@ def test_the_wheypoint_runtime_imports_from_inside_the_zip(wheypoint_pyz: Path) 
     assert result.stdout.strip() == "ok"
 
 
+@_needs_build_tooling
 def test_the_wheypoint_bundle_is_deterministic(tmp_path: Path) -> None:
     """Byte-equality against the committed artifact is CI's job (check_bundles.py
     compares canonical member content, because ZIP metadata differs). What is verifiable
@@ -227,6 +252,7 @@ def test_the_wheypoint_bundle_is_deterministic(tmp_path: Path) -> None:
     assert first.read_bytes() == second.read_bytes()
 
 
+@_needs_build_tooling
 def test_tree_staging_stays_byte_deterministic(tmp_path: Path) -> None:
     """CI rebuilds every committed bundle and byte-compares it, so walking a
     nested tree must not leak filesystem ordering or mtimes into the archive."""
@@ -235,6 +261,7 @@ def test_tree_staging_stays_byte_deterministic(tmp_path: Path) -> None:
     assert first.read_bytes() == second.read_bytes()
 
 
+@_needs_build_tooling
 def test_internal_wheel_normalization_ignores_compressor_and_member_order(
     tmp_path: Path,
 ) -> None:
@@ -268,11 +295,13 @@ def test_internal_wheel_normalization_ignores_compressor_and_member_order(
         }
 
 
+@_needs_build_tooling
 def test_builder_does_not_expose_a_custom_wheel_writer() -> None:
     assert not hasattr(build_pyz, "_wheel")
     assert not hasattr(build_pyz, "WHEEL_TIMESTAMP")
 
 
+@_needs_build_tooling
 def test_members_are_stored(ultracook_pyz: Path) -> None:
     """Shiv's --uncompressed mode stores all members for deterministic startup."""
     with zipfile.ZipFile(ultracook_pyz) as archive:
@@ -280,7 +309,7 @@ def test_members_are_stored(ultracook_pyz: Path) -> None:
     assert kinds == {zipfile.ZIP_STORED}
 
 
-
+@_needs_build_tooling
 def test_shiv_command_uses_a_local_hash_locked_wheelhouse(tmp_path: Path) -> None:
     requirements = tmp_path / "requirements.txt"
     wheelhouse = tmp_path / "wheelhouse"
@@ -300,6 +329,7 @@ def test_shiv_command_uses_a_local_hash_locked_wheelhouse(tmp_path: Path) -> Non
     assert command[command.index("--requirement") + 1] == str(requirements)
 
 
+@_needs_build_tooling
 def test_build_cli_preserves_resolver_diagnostics(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -323,10 +353,14 @@ def test_build_cli_preserves_resolver_diagnostics(
     assert "subprocess stderr" in diagnostics
 
 
+@_needs_build_tooling
 def test_runtime_lock_contains_only_external_pure_wheels() -> None:
     lines = (REPO_ROOT / "requirements" / "runtime.txt").read_text().splitlines()
     locked = [line for line in lines if line and not line.startswith("#")]
-    assert all(re.fullmatch(r"[^=]+==[^ ]+ --hash=sha256:[0-9a-f]{64}", line) for line in locked)
+    assert all(
+        re.fullmatch(r"[^=]+==[^ ]+ --hash=sha256:[0-9a-f]{64}", line)
+        for line in locked
+    )
     assert not any(line.startswith("easy-cheese-") for line in locked)
 
 
@@ -348,6 +382,7 @@ def _test_wheel(
     return path
 
 
+@_needs_build_tooling
 @pytest.mark.parametrize("suffix", [".so", ".pyd", ".dylib"])
 def test_validate_pure_wheel_rejects_native_suffixes(
     tmp_path: Path, suffix: str
@@ -360,25 +395,70 @@ def test_validate_pure_wheel_rejects_native_suffixes(
         build_pyz.validate_pure_wheel(native)
 
 
+@_needs_build_tooling
 def test_validate_pure_wheel_rejects_false_root_is_purelib(tmp_path: Path) -> None:
     wheel = _test_wheel(tmp_path / "demo-1.0.0-py3-none-any.whl", pure=False)
     with pytest.raises(ValueError, match="Root-Is-Purelib: true"):
         build_pyz.validate_pure_wheel(wheel)
 
 
+@_needs_build_tooling
 def test_validate_pure_wheel_rejects_non_universal_tag(tmp_path: Path) -> None:
-    renamed = _test_wheel(
-        tmp_path / "demo-1.0.0-cp314-cp314-macosx_14_0_arm64.whl"
-    )
+    renamed = _test_wheel(tmp_path / "demo-1.0.0-cp314-cp314-macosx_14_0_arm64.whl")
     with pytest.raises(ValueError, match="not py3-none-any"):
         build_pyz.validate_pure_wheel(renamed)
 
 
+@_needs_build_tooling
 def test_shiv_bundle_has_no_loose_source_or_vendor_roots(ultracook_pyz: Path) -> None:
     with zipfile.ZipFile(ultracook_pyz) as archive:
         names = archive.namelist()
     assert "site-packages" in {name.split("/", 1)[0] for name in names}
     assert not any(
-        name.startswith(("src/", "shared/", "vendor/", "common.pyz"))
-        for name in names
+        name.startswith(("src/", "shared/", "vendor/", "common.pyz")) for name in names
     )
+
+
+@pytest.fixture(scope="module")
+def all_bundles_pyz(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    out = tmp_path_factory.mktemp("all-bundles")
+    return build_pyz.build_bundles(
+        {skill: out / f"{skill}.pyz" for skill in build_pyz.SKILLS}
+    )
+
+
+@_needs_build_tooling
+def test_shared_kernel_is_present_in_every_bundle_and_old_kernel_is_absent(
+    all_bundles_pyz: dict[str, Path],
+) -> None:
+    assert {path.stem for path in all_bundles_pyz.values()} == set(build_pyz.SKILLS)
+    expected_new_modules = {
+        f"site-packages/easy_cheese/shared/wheypoint/{module}.py"
+        for module in KERNEL_MODULES
+    }
+    old_kernel_modules = {
+        f"site-packages/easy_cheese/skills/wheypoint/{module}.py"
+        for module in KERNEL_MODULES
+    }
+    for bundle in all_bundles_pyz.values():
+        with zipfile.ZipFile(bundle) as archive:
+            members = set(archive.namelist())
+        assert expected_new_modules <= members, bundle.name
+        assert members.isdisjoint(old_kernel_modules), bundle.name
+
+
+def test_committed_chain_bundles_carry_the_wheypoint_kernel() -> None:
+    """Runs without build tooling: reads the already-committed .pyz artifacts
+    directly, so the bundle-membership contract stays checked on any job,
+    including one without shiv/pip/build installed."""
+    assert KERNEL_MODULE_FILES, _KERNEL_DIR
+    prefix = "easy_cheese/shared/wheypoint/"
+    for phase in CHAIN_PHASES:
+        pyz = REPO_ROOT / "skills" / phase / "scripts" / f"{phase}.pyz"
+        assert pyz.is_file(), pyz
+        bundled = {
+            name.removeprefix(prefix)
+            for name in _bundle_members(pyz)
+            if name.startswith(prefix) and name.endswith(".py")
+        }
+        assert bundled == set(KERNEL_MODULE_FILES), phase

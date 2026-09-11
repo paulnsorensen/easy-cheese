@@ -14,7 +14,7 @@ from pathlib import Path
 from attrs import evolve
 from easy_cheese_schemas import CompactionRecord, EntryKind, EntryState, ProtectedEntry
 
-from easy_cheese.skills.wheypoint import lint, records, storage
+from easy_cheese.shared.wheypoint import lint, records, storage
 
 from conftest import Promotion
 

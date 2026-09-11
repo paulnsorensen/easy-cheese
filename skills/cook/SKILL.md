@@ -29,6 +29,14 @@ N/A does not remove requested work.
 Use `correction = true` only for the active Press correction loop.
 Do not weaken an existing test.
 
+## Phase entry
+
+Run `python3 skills/cook/scripts/cook.pyz wheypoint-resolve --ref <slug>`.
+`authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
+`not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
+`gated`, `ambiguous`, and `error` stop and show the payload.
+Show advisory `stale-commit` and `grounded-path-missing` findings.
+
 ## Inputs
 
 Accept a pasted spec or issue, focused acceptance criteria, or an unambiguous task.
@@ -169,6 +177,7 @@ python3 skills/cook/scripts/cook.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cook --next age \
   --artifact <artifact-path> --orientation "<one-line orientation>" \
   --payload-schema https://schemas.easy-cheese.dev/curd-result \
+  --grounded <path[#start-end]> \
   --body-file <path to the package report body>
 ```
 
@@ -226,30 +235,11 @@ Take the route for the applicable disposition directly.
 
 ## Auto mode
 
-`--auto` does not bypass applicable validation.
-Run behavior work through `/press --auto → /age --auto → /cure --auto --stake medium+`.
-Closed N/A skips Press and runs through `/age --auto → /cure --auto --stake medium+`.
-Limit Cure to two passes on both routes.
+Read [`references/auto-mode.md`](references/auto-mode.md) before auto mode.
+It defines validation, phase chains, early stops, Cure limits, publication ownership, fan isolation, and failure handling.
+Show each stopping report and reason; never downgrade the result.
 In the linear chain, Cook does not invoke `/plate`.
-Terminal Cure then owns publication.
 In the fan pathway, the Cook orchestrator owns its own terminal `/plate` dispatch.
-[`references/fan-pathway.md`](references/fan-pathway.md) defines that dispatch.
-
-Auto mode stops early in these conditions:
-
-- A quality gate reports a new or changed failure, and the fix rounds end.
-- The no-progress check stops the run.
-- The fix requires a design change.
-- `/press` returns `blocked`.
-- A Cure pass cannot apply a finding.
-- Two Cure passes complete the success path.
-
-For each early stop, show the failing skill report.
-State which limit or blocker stopped the run.
-Do not silently downgrade the result.
-
-Read [`references/auto-mode.md`](references/auto-mode.md) before you run or dispatch auto mode.
-It defines the complete phase chain, the limit controls, fan-path isolation, and Cure failure handling.
 
 ## No-chain isolation directive
 

@@ -32,7 +32,7 @@ from easy_cheese_schemas import (  # noqa: E402
     WheypointRevision,
 )
 
-from easy_cheese.skills.wheypoint import canonical, projection, records  # noqa: E402
+from easy_cheese.shared.wheypoint import canonical, projection, records  # noqa: E402
 
 PLACEHOLDER_DIGEST = "sha256:" + "0" * 64
 WORK_ID = "work-0001"
@@ -112,7 +112,7 @@ def _record(**overrides: object) -> WheypointRecord:
         "revision_number": 1,
         "revision_digest": PLACEHOLDER_DIGEST,
         "orientation": "Wave 2 owns storage and projection.",
-        "working_context": ["src/wheypoint/storage.py"],
+        "working_context": ["src/easy_cheese/shared/wheypoint/storage.py"],
         "next_action": _next_action(),
         "decisions": [],
         "questions": [_gate_entry()] if gating else [],

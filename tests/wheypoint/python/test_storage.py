@@ -26,7 +26,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
-from easy_cheese.skills.wheypoint import projection, records, storage
+from easy_cheese.shared.wheypoint import projection, records, storage
 
 
 class _Promotion(Protocol):
@@ -117,9 +117,10 @@ def test_promotion_writes_the_three_files_with_exact_bytes(
     assert store.revision_path(1, "rev-0001").read_bytes() == records.canonical_payload(
         promotion.revision
     )
-    assert store.projection_path(1, "rev-0001").read_text(
-        encoding="utf-8"
-    ) == promotion.markdown
+    assert (
+        store.projection_path(1, "rev-0001").read_text(encoding="utf-8")
+        == promotion.markdown
+    )
 
 
 def test_record_json_is_replaced_last_and_after_the_immutable_fsyncs(
@@ -317,8 +318,7 @@ def test_the_identical_retry_over_a_complete_pair_moves_only_the_record(
     assert store.read_record() == promotion.record
     assert store.recover().consistent
     assert [
-        (path, path.read_bytes(), path.stat().st_mtime_ns)
-        for path, _, _ in untouched
+        (path, path.read_bytes(), path.stat().st_mtime_ns) for path, _, _ in untouched
     ] == untouched
 
 
@@ -353,9 +353,7 @@ def test_a_complete_pair_is_refused_when_the_projection_is_what_changed(
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
     before_receipt = store.revision_path(1, "rev-0001").read_bytes()
-    before_projection = store.projection_path(1, "rev-0001").read_text(
-        encoding="utf-8"
-    )
+    before_projection = store.projection_path(1, "rev-0001").read_text(encoding="utf-8")
 
     rewritten = promotion.markdown.replace(
         "Implement the canonical record runtime.", "Ship it, no gates."
@@ -370,9 +368,10 @@ def test_a_complete_pair_is_refused_when_the_projection_is_what_changed(
         store.promote(promotion.record, reprojected, rewritten)
 
     assert store.revision_path(1, "rev-0001").read_bytes() == before_receipt
-    assert store.projection_path(1, "rev-0001").read_text(
-        encoding="utf-8"
-    ) == before_projection
+    assert (
+        store.projection_path(1, "rev-0001").read_text(encoding="utf-8")
+        == before_projection
+    )
 
 
 def test_a_projection_no_receipt_names_is_reported_rather_than_unseen(
@@ -457,11 +456,15 @@ def test_recovery_never_writes_anything(
 ) -> None:
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
-    before = {path: path.read_bytes() for path in store.root.rglob("*") if path.is_file()}
+    before = {
+        path: path.read_bytes() for path in store.root.rglob("*") if path.is_file()
+    }
 
     _ = store.recover()
 
-    after = {path: path.read_bytes() for path in store.root.rglob("*") if path.is_file()}
+    after = {
+        path: path.read_bytes() for path in store.root.rglob("*") if path.is_file()
+    }
     assert after == before
 
 
@@ -657,7 +660,9 @@ def _report(
 
 
 def test_a_pinned_artifact_that_still_matches_covers_its_entries(
-    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     artifact = tmp_path / "cook.md"
     _ = artifact.write_text("the cook report", encoding="utf-8")
@@ -675,7 +680,9 @@ def test_a_pinned_artifact_that_still_matches_covers_its_entries(
 
 
 def test_a_missing_artifact_invalidates_the_claim_and_keeps_the_entry(
-    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     link = ArtifactLink(
         path="gone.md", digest="sha256:" + "a" * 64, covers_entry_ids=["d-store"]
@@ -694,7 +701,9 @@ def test_a_missing_artifact_invalidates_the_claim_and_keeps_the_entry(
 
 
 def test_a_stale_artifact_digest_invalidates_the_claim(
-    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     artifact = tmp_path / "cook.md"
     _ = artifact.write_text("the cook report", encoding="utf-8")
@@ -715,7 +724,9 @@ def test_a_stale_artifact_digest_invalidates_the_claim(
 
 
 def test_an_unpinned_coverage_claim_is_refused(
-    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     _ = (tmp_path / "cook.md").write_text("the cook report", encoding="utf-8")
     record = _covered_record(
@@ -732,7 +743,9 @@ def test_an_unpinned_coverage_claim_is_refused(
 
 
 def test_a_claim_naming_an_unknown_entry_is_refused(
-    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     artifact = tmp_path / "cook.md"
     _ = artifact.write_text("the cook report", encoding="utf-8")
@@ -766,13 +779,17 @@ def test_a_revision_pinned_claim_needs_that_revision_to_exist(
 
     known = _covered_record(
         make_record,
-        ArtifactLink(path="cook.md", revision_id="rev-0001", covers_entry_ids=["d-store"]),
+        ArtifactLink(
+            path="cook.md", revision_id="rev-0001", covers_entry_ids=["d-store"]
+        ),
     )
     assert _report(known, tmp_path, store).failures == ()
 
     unknown = _covered_record(
         make_record,
-        ArtifactLink(path="cook.md", revision_id="rev-9999", covers_entry_ids=["d-store"]),
+        ArtifactLink(
+            path="cook.md", revision_id="rev-9999", covers_entry_ids=["d-store"]
+        ),
     )
     assert _report(unknown, tmp_path, store).failures == (
         records.CoverageFailure(
@@ -839,7 +856,9 @@ def test_a_revision_pinned_claim_needs_the_artifact_to_still_be_there(
 
     record = _covered_record(
         make_record,
-        ArtifactLink(path="gone.md", revision_id="rev-0001", covers_entry_ids=["d-store"]),
+        ArtifactLink(
+            path="gone.md", revision_id="rev-0001", covers_entry_ids=["d-store"]
+        ),
     )
 
     report = _report(record, tmp_path, store)
@@ -851,7 +870,9 @@ def test_a_revision_pinned_claim_needs_the_artifact_to_still_be_there(
 
 
 def test_a_link_without_a_coverage_claim_is_not_a_failure(
-    tmp_path: Path, store: storage.WorkStore, make_record: Callable[..., WheypointRecord]
+    tmp_path: Path,
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
 ) -> None:
     record = _covered_record(make_record, ArtifactLink(path="never-written.md"))
     report = _report(record, tmp_path, store)
@@ -938,3 +959,80 @@ def test_find_entry_spans_all_three_protected_lists(
     assert records.find_entry(record, "q-durability") is record.questions[0]
     assert records.find_entry(record, "missing") is None
     assert [entry.entry_id for entry in records.entries(record)] == ["q-durability"]
+
+
+def test_receipt_revisions_yields_the_same_ids_as_recover_without_reading_projections(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = make_promotion()
+    store.promote(first.record, first.revision, first.markdown)
+    second = make_promotion(2, "rev-0002", parent=first)
+    store.promote(second.record, second.revision, second.markdown)
+
+    reads: list[Path] = []
+    original_read_bytes = Path.read_bytes
+    original_read_text = Path.read_text
+
+    def spy_read_bytes(self: Path, *args: object, **kwargs: object) -> bytes:
+        reads.append(self)
+        return original_read_bytes(self, *args, **kwargs)
+
+    def spy_read_text(
+        self: Path, encoding: str | None = None, errors: str | None = None
+    ) -> str:
+        reads.append(self)
+        return original_read_text(self, encoding, errors)
+
+    monkeypatch.setattr(Path, "read_bytes", spy_read_bytes)
+    monkeypatch.setattr(Path, "read_text", spy_read_text)
+
+    receipts = store.receipt_revisions()
+    reads_during_receipt_revisions = list(reads)
+    expected = tuple(f.revision.revision_id for f in store.recover().complete)
+
+    assert tuple(r.revision_id for r in receipts) == expected
+    assert not any(
+        "projections" in path.parts for path in reads_during_receipt_revisions
+    )
+
+
+def _truncate_receipt(path: Path) -> None:
+    _ = path.write_bytes(path.read_bytes()[:40])
+
+
+def _empty_receipt(path: Path) -> None:
+    _ = path.write_bytes(b"{}")
+
+
+def _rename_receipt(path: Path) -> None:
+    _ = path.rename(path.parent / "1-rev-9999.json")
+
+
+@pytest.mark.parametrize(
+    ("corrupt", "expected"),
+    [
+        (_truncate_receipt, "1-rev-0001.json: malformed JSON"),
+        (_empty_receipt, "1-rev-0001.json: not a readable revision: "),
+        (
+            _rename_receipt,
+            "1-rev-9999.json: filename does not match the revision identity "
+            + "inside it",
+        ),
+    ],
+    ids=["malformed", "unstructurable", "identity-lie"],
+)
+def test_both_readers_skip_a_broken_receipt_in_the_same_words(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    corrupt: Callable[[Path], None],
+    expected: str,
+) -> None:
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    corrupt(store.revision_path(1, "rev-0001"))
+
+    skipped = store.revisions().skipped
+    assert store.survey_receipts().incomplete == skipped
+    assert skipped[0].startswith(expected)

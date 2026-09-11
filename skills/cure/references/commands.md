@@ -11,4 +11,5 @@
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text |
-| `write-handoff-artifact` | Write a handoff preamble plus optional body atomically |
+| `wheypoint-resolve` | Resolve a phase slug through the shared Wheypoint kernel (JSON out) |
+| `write-handoff-artifact` | Write a handoff preamble plus optional body atomically; pass --grounded paths |
