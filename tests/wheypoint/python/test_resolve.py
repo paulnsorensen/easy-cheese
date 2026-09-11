@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import cast
@@ -10,7 +12,12 @@ from typing import Protocol
 
 import pytest
 from attrs import evolve
-from easy_cheese_schemas import CompactionRecord, WheypointRecord, WheypointRevision
+from easy_cheese_schemas import (
+    ArtifactLink,
+    CompactionRecord,
+    WheypointRecord,
+    WheypointRevision,
+)
 
 from easy_cheese.shared.wheypoint import canonical, lint, records, storage
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
@@ -23,6 +30,7 @@ class _PromotionLike(Protocol):
     record: WheypointRecord
     revision: WheypointRevision
     markdown: str
+
 
 def seed(
     corpus_root: Path,
@@ -85,7 +93,6 @@ def test_an_exact_work_id_beats_another_record_holding_that_slug(
     assert found.work_id == "alpha"
 
 
-
 def test_a_work_id_ending_in_md_is_not_treated_as_a_path(
     corpus_root: Path,
     make_record: Callable[..., WheypointRecord],
@@ -98,6 +105,7 @@ def test_a_work_id_ending_in_md_is_not_treated_as_a_path(
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.source is resolve_mod.ResolutionSource.WORK_ID
     assert found.work_id == "alpha.md"
+
 
 def test_an_explicit_path_beats_the_corpus_lookups(
     corpus_root: Path,
@@ -122,7 +130,9 @@ def test_a_unique_slug_resolves_when_no_work_id_matches(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
-    _ = seed(corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel")
+    _ = seed(
+        corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel"
+    )
 
     found = run("kernel", corpus_root)
 
@@ -467,6 +477,7 @@ def test_a_legacy_affinage_artifact_with_a_trailing_route_resolves(
 
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
 
+
 def write_note_with_parents(root: Path, slug: str, parents: str) -> Path:
     path = root / ".cheese" / "notes" / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -551,9 +562,7 @@ def test_an_absolute_http_parent_is_accepted_and_a_bare_path_is_not(
 ) -> None:
     start = tmp_path / "start"
     start.mkdir()
-    _ = write_note_with_parents(
-        start, "child", "[https://github.com/o/r/pull/1]"
-    )
+    _ = write_note_with_parents(start, "child", "[https://github.com/o/r/pull/1]")
     linked = resolve_mod.resolve_legacy(
         "child", start=start, run=fake_runner(porcelain(start))
     )
@@ -622,7 +631,9 @@ def test_an_orphaned_revision_is_reported_but_does_not_block_continuation(
         corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
     )
     orphan = store.revision_path(2, "rev-0002")
-    _ = orphan.write_text(store.revision_path(1, "rev-0001").read_text(), encoding="utf-8")
+    _ = orphan.write_text(
+        store.revision_path(1, "rev-0001").read_text(), encoding="utf-8"
+    )
 
     found = run("alpha", corpus_root)
 
@@ -642,12 +653,15 @@ def test_a_real_integrity_failure_still_blocks_continuation(
         corpus_root, make_record, make_promotion, work_id="alpha", slug="alpha"
     )
     path = store.projection_path(1, "rev-0001")
-    _ = path.write_text(path.read_text(encoding="utf-8").replace("cook", "press"), encoding="utf-8")
+    _ = path.write_text(
+        path.read_text(encoding="utf-8").replace("cook", "press"), encoding="utf-8"
+    )
 
     found = run("alpha", corpus_root)
 
     assert found.dispatchable is False
     assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+
 
 def test_an_unresolved_compaction_lineage_blocks_continuation(
     corpus_root: Path,
@@ -716,7 +730,9 @@ def test_real_wrapped_legacy_note_decodes_additive_header(tmp_path: Path) -> Non
     note = start / ".cheese" / "notes" / "wrapped.md"
     note.parent.mkdir(parents=True)
     _ = note.write_text(WRAPPED_NOTE, encoding="utf-8")
-    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = (start / ".cheese" / "notes" / "context.md").write_text(
+        "context\n", encoding="utf-8"
+    )
 
     found = resolve_mod.resolve_legacy(
         "wrapped", start=start, run=fake_runner(porcelain(start))
@@ -737,7 +753,9 @@ def test_normal_resolve_falls_back_to_a_legacy_slug(tmp_path: Path) -> None:
     note.parent.mkdir(parents=True)
     _ = note.write_text(WRAPPED_NOTE, encoding="utf-8")
 
-    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = (start / ".cheese" / "notes" / "context.md").write_text(
+        "context\n", encoding="utf-8"
+    )
     found = resolve_mod.resolve("wrapped", workspace_root=start)
 
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
@@ -745,14 +763,18 @@ def test_normal_resolve_falls_back_to_a_legacy_slug(tmp_path: Path) -> None:
     assert not found.dispatchable
 
 
-def test_absolute_legacy_path_resolves_exact_note_without_worktree_scan(tmp_path: Path) -> None:
+def test_absolute_legacy_path_resolves_exact_note_without_worktree_scan(
+    tmp_path: Path,
+) -> None:
     start = tmp_path / "start"
     start.mkdir()
     note = start / ".cheese" / "notes" / "wrapped.md"
     note.parent.mkdir(parents=True)
     _ = note.write_text(WRAPPED_NOTE, encoding="utf-8")
 
-    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = (start / ".cheese" / "notes" / "context.md").write_text(
+        "context\n", encoding="utf-8"
+    )
     found = resolve_mod.resolve(str(note), workspace_root=tmp_path / "elsewhere")
 
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
@@ -767,7 +789,9 @@ def test_wrapped_needs_context_status_gates_and_carries_the_gap(tmp_path: Path) 
     start.mkdir()
     note = start / ".cheese" / "notes" / "needs-context.md"
     note.parent.mkdir(parents=True)
-    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = (start / ".cheese" / "notes" / "context.md").write_text(
+        "context\n", encoding="utf-8"
+    )
     _ = note.write_text(
         WRAPPED_NOTE.replace(
             "status: ok", "status: needs-context: missing the migration plan"
@@ -793,7 +817,9 @@ def test_wrapped_ok_with_concerns_resolves_without_gating_and_keeps_its_reason(
     start.mkdir()
     note = start / ".cheese" / "notes" / "ok-with-concerns.md"
     note.parent.mkdir(parents=True)
-    _ = (start / ".cheese" / "notes" / "context.md").write_text("context\n", encoding="utf-8")
+    _ = (start / ".cheese" / "notes" / "context.md").write_text(
+        "context\n", encoding="utf-8"
+    )
     _ = note.write_text(
         WRAPPED_NOTE.replace(
             "status: ok", "status: ok-with-concerns: double-check the migration"
@@ -816,7 +842,9 @@ def test_wrapped_gated_status_blocks_legacy_resume(tmp_path: Path) -> None:
     start.mkdir()
     note = start / ".cheese" / "notes" / "gated.md"
     note.parent.mkdir(parents=True)
-    _ = note.write_text(WRAPPED_NOTE.replace("status: ok", "status: gated: decide"), encoding="utf-8")
+    _ = note.write_text(
+        WRAPPED_NOTE.replace("status: ok", "status: gated: decide"), encoding="utf-8"
+    )
 
     found = resolve_mod.resolve_legacy(
         "gated", start=start, run=fake_runner(porcelain(start))
@@ -950,6 +978,7 @@ def test_repo_relative_regular_legacy_artifact_is_accepted(tmp_path: Path) -> No
     assert found.detail is None
     assert not found.dispatchable
 
+
 def test_ac24_the_v2_golden_store_resolves_authoritative_with_its_pinned_digests(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -958,13 +987,21 @@ def test_ac24_the_v2_golden_store_resolves_authoritative_with_its_pinned_digests
 
     from easy_cheese.shared.wheypoint import records, storage
     from easy_cheese.skills.wheypoint import wheypoint
+
     fixtures = Path(__file__).resolve().parents[1] / "fixtures"
     monkeypatch.setenv("EASY_CHEESE_HOME", str(fixtures))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "golden-v2")
     out = io.StringIO()
-    status = wheypoint.main(["resolve", "--ref", "golden-v2"], stdin=io.StringIO(""), stdout=out)
+    status = wheypoint.main(
+        ["resolve", "--ref", "golden-v2"], stdin=io.StringIO(""), stdout=out
+    )
     payload = cast(dict[str, object], json.loads(out.getvalue()))
-    assert (status, payload["outcome"], payload["dispatchable"], payload["findings"]) == (
+    assert (
+        status,
+        payload["outcome"],
+        payload["dispatchable"],
+        payload["findings"],
+    ) == (
         0,
         "authoritative",
         True,
@@ -972,12 +1009,146 @@ def test_ac24_the_v2_golden_store_resolves_authoritative_with_its_pinned_digests
     )
 
     store = storage.WorkStore.open("golden-v2", corpus_root=fixtures / "golden-v2")
-    pins = cast(dict[str, object], json.loads((store.record_path.parent / "pins.json").read_text(encoding="utf-8")))
+    pins = cast(
+        dict[str, object],
+        json.loads(
+            (store.record_path.parent / "pins.json").read_text(encoding="utf-8")
+        ),
+    )
     record = store.read_record()
     assert record is not None and record.schema_version == 2
     assert records.record_digest(record) == pins["record_digest"]
     assert record.revision_digest == pins["revision_digest"]
     for file in store.recover().complete:
-        assert records.revision_digest(file.revision) == cast(dict[str, str], pins["revisions"])[file.revision.revision_id]
+        assert (
+            records.revision_digest(file.revision)
+            == cast(dict[str, str], pins["revisions"])[file.revision.revision_id]
+        )
     # Re-serializing the loaded record reproduces the stored bytes exactly.
     assert records.canonical_payload(record) == store.record_path.read_bytes()
+
+
+def test_phase_artifact_precedence_prefers_cure_then_age_then_press_then_cook(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    cheese = workspace / ".cheese"
+    for phase in ("cook", "press", "age", "cure"):
+        d = cheese / phase
+        d.mkdir(parents=True)
+        _ = (d / "widget.md").write_text(
+            f"status: ok\nnext: cook\nartifact: none\nFrom {phase}.\n", encoding="utf-8"
+        )
+
+    for phase in ("cure", "age", "press", "cook"):
+        found = resolve_mod.resolve(
+            "widget",
+            corpus_root=workspace / ".cheese" / "corpus-unused",
+            project_key=PROJECT,
+            workspace_root=workspace,
+            git_object_exists=lambda _o: True,
+        )
+        assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
+        assert found.source is resolve_mod.ResolutionSource.PHASE_ARTIFACT
+        assert found.phase_slug is not None
+        assert found.phase_slug.orientation == f"From {phase}."
+        (cheese / phase / "widget.md").unlink()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_a_subdirectory_cwd_still_anchors_artifact_digests_to_the_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+    for args in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "s"]):
+        _ = subprocess.run(
+            ["git", *args], cwd=repo, env=env, check=True, capture_output=True
+        )
+    notes = repo / "notes.md"
+    _ = notes.write_text("hello\n", encoding="utf-8")
+    digest = storage.file_digest(notes)
+    assert digest is not None
+    record = make_record(
+        work_id="work-0001",
+        slug="widget",
+        artifact_links=[
+            ArtifactLink(path="notes.md", digest=digest, revision_id="rev-0001")
+        ],
+    )
+    promotion = make_promotion(1, "rev-0001", record=record)
+    store = storage.WorkStore.open("work-0001", corpus_root=corpus_root)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    subdir = repo / "sub"
+    subdir.mkdir()
+    monkeypatch.chdir(subdir)
+
+    found = resolve_mod.resolve(
+        "widget",
+        corpus_root=corpus_root,
+        project_key=PROJECT,
+        git_object_exists=lambda _o: True,
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert all(f.code.value != "stale-artifact-link" for f in found.findings)
+
+
+def test_a_third_matching_slug_reads_the_winners_record_exactly_once(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for work_id, slug in (
+        ("work-0001", "other-one"),
+        ("work-0002", "other-two"),
+        ("work-0003", "widget"),
+    ):
+        _ = seed(
+            corpus_root,
+            make_record,
+            make_promotion,
+            work_id=work_id,
+            slug=slug,
+        )
+    winner_record_path = corpus_root / "work" / "work-0003" / storage.RECORD_FILENAME
+
+    reads: list[Path] = []
+    original_read_bytes = Path.read_bytes
+
+    def spy_read_bytes(self: Path, *args: object, **kwargs: object) -> bytes:
+        reads.append(self)
+        return original_read_bytes(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_bytes", spy_read_bytes)
+
+    found = run("widget", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0003"
+    assert reads.count(winner_record_path) == 1
+
+    _ = seed(
+        corpus_root,
+        make_record,
+        make_promotion,
+        work_id="work-0004",
+        slug="widget",
+    )
+
+    ambiguous = run("widget", corpus_root)
+
+    assert ambiguous.outcome is resolve_mod.ResolutionOutcome.AMBIGUOUS
+    assert set(ambiguous.matches) == {"work-0003", "work-0004"}

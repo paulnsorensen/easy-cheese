@@ -397,10 +397,7 @@ def _check_lineage(
             f"current revision {current.revision_id!r} does not match the digest "
             + "the record quotes"
         )
-    checked = lineage.walk(
-        (file.revision for file in store.recover().complete),
-        parent,
-    )
+    checked = lineage.walk(store.receipt_revisions(), parent)
     if checked.issues:
         raise CommitError(_lineage_issue_detail(checked.issues[0]))
     return checked
@@ -571,7 +568,7 @@ def _digest_root() -> Path:
     digest callback through the revision builder, so a multi-link revision does
     not rediscover the Git root for every path.
     """
-    return paths.git_toplevel() or Path.cwd()
+    return paths.resolve_repo_root(None)
 
 
 def _merge_artifact_links(

@@ -18,7 +18,7 @@ from typing import cast
 import pytest
 
 from easy_cheese_schemas import CheckpointIntent
-from easy_cheese.shared.wheypoint import commit, records, storage
+from easy_cheese.shared.wheypoint import commit, records, resolve_cli, storage
 from easy_cheese.skills.wheypoint import wheypoint
 
 from conftest import WORK_ID, Promotion
@@ -26,23 +26,13 @@ from conftest import WORK_ID, Promotion
 CAPTURED_AT = "2026-08-02T00:00:00Z"
 
 
-def _run(
-    command: str, *args: str, stdin: str = ""
-) -> tuple[int, dict[str, object]]:
+def _run(command: str, *args: str, stdin: str = "") -> tuple[int, dict[str, object]]:
     """Invoke the CLI the way the bundle does and parse its single JSON line."""
     out = io.StringIO()
-    status = wheypoint.main(
-        [command, *args], stdin=io.StringIO(stdin), stdout=out
-    )
+    status = wheypoint.main([command, *args], stdin=io.StringIO(stdin), stdout=out)
     lines = out.getvalue().splitlines()
     assert len(lines) == 1, f"expected exactly one JSON line, got {lines!r}"
     return status, json.loads(lines[0])
-
-
-
-
-
-
 
 
 def _get(container: object, *path: str) -> object:
@@ -77,7 +67,9 @@ def test_checkpoint_creates_the_first_record_from_an_intent_on_stdin(
 ) -> None:
     status, payload = _run(
         "checkpoint",
-        stdin=_first_intent(entries=[{"kind": "decision", "summary": "Four subcommands."}]),
+        stdin=_first_intent(
+            entries=[{"kind": "decision", "summary": "Four subcommands."}]
+        ),
     )
 
     assert status == 0
@@ -135,7 +127,9 @@ def test_checkpoint_refuses_a_genesis_intent_over_a_live_record(
 
     status, payload = _run(
         "checkpoint",
-        stdin=_first_intent(orientation="A second creation.", base_revision_id=commit.GENESIS_PARENT),
+        stdin=_first_intent(
+            orientation="A second creation.", base_revision_id=commit.GENESIS_PARENT
+        ),
     )
 
     assert status == 1
@@ -151,12 +145,16 @@ def test_checkpoint_reports_a_stale_parent_as_its_own_code() -> None:
     created = _run("checkpoint", stdin=_first_intent())[1]
     _ = _run(
         "checkpoint",
-        stdin=_intent_json(base_revision_id=created["revision_id"], orientation="First writer wins."),
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="First writer wins."
+        ),
     )
 
     status, payload = _run(
         "checkpoint",
-        stdin=_intent_json(base_revision_id=created["revision_id"], orientation="Second writer loses."),
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="Second writer loses."
+        ),
     )
 
     assert status == 1
@@ -186,7 +184,9 @@ def test_checkpoint_refuses_stdin_that_is_not_json() -> None:
 
 @pytest.mark.usefixtures("corpus_root")
 def test_checkpoint_refuses_json_that_is_not_an_intent() -> None:
-    status, payload = _run("checkpoint", stdin=json.dumps({"work_id": WORK_ID, "bogus": 1}))
+    status, payload = _run(
+        "checkpoint", stdin=json.dumps({"work_id": WORK_ID, "bogus": 1})
+    )
 
     assert status == 1
     assert _get(payload, "error", "code") == "invalid-intent"
@@ -390,8 +390,30 @@ def test_resolve_refuses_a_reference_it_cannot_interpret() -> None:
     status, payload = _run("resolve", "--ref", "   ")
 
     assert status == 1
+    assert payload["outcome"] == "error"
     assert payload["ok"] is False
-    assert _get(payload, "error", "code") == "invalid-reference"
+    assert payload["dispatchable"] is False
+    assert payload["findings"] == []
+    assert payload["searched"] == []
+    assert payload["source"] is None
+    assert payload["detail"] == "reference is empty"
+
+
+@pytest.mark.usefixtures("store")
+def test_resolve_cli_and_the_bundle_produce_byte_identical_json_for_the_same_ref() -> (
+    None
+):
+    """Both adapters share `resolve_cli.resolve_payload`; their JSON must match."""
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    _, bundle_payload = _run("resolve", "--ref", WORK_ID)
+
+    cli_out = io.StringIO()
+    cli_status = resolve_cli.main(["--ref", WORK_ID], stdout=cli_out)
+    cli_payload = cast(dict[str, object], json.loads(cli_out.getvalue().splitlines()[0]))
+
+    assert cli_status == 0
+    assert cli_payload == {**bundle_payload, "command": resolve_cli.COMMAND}
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -460,14 +482,18 @@ def test_the_subcommand_is_read_from_argv0_and_from_argv1_alike() -> None:
     )
 
     assert from_entry_point.getvalue() == from_module.getvalue()
-    entry_point_payload = cast(dict[str, object], json.loads(from_entry_point.getvalue()))
+    entry_point_payload = cast(
+        dict[str, object], json.loads(from_entry_point.getvalue())
+    )
     assert _get(entry_point_payload, "error", "code") == "record-missing"
 
 
 def test_an_unknown_command_is_a_usage_error_in_the_same_json_shape() -> None:
     out = io.StringIO()
 
-    status = wheypoint.main(["wheypoint.py", "destroy"], stdin=io.StringIO(), stdout=out)
+    status = wheypoint.main(
+        ["wheypoint.py", "destroy"], stdin=io.StringIO(), stdout=out
+    )
 
     payload = cast(dict[str, object], json.loads(out.getvalue()))
     assert status == 2
@@ -503,7 +529,15 @@ def test_every_reply_is_one_line_of_sorted_json() -> None:
 
 def test_the_command_surface_is_exactly_nine_commands() -> None:
     assert wheypoint.COMMANDS == (
-        "checkpoint", "validate", "schema", "resolve", "show", "lint", "list", "log", "turns",
+        "checkpoint",
+        "validate",
+        "schema",
+        "resolve",
+        "show",
+        "lint",
+        "list",
+        "log",
+        "turns",
     )
     assert "commit" not in wheypoint.COMMANDS and "create" not in wheypoint.COMMANDS
 
@@ -544,7 +578,9 @@ def test_ac1_an_unknown_key_is_refused_by_path_on_every_write_path() -> None:
 
     status, payload = _run(
         "checkpoint",
-        stdin=_first_intent(entries=[{"kind": "decision", "summary": "s", "nested_bogus": 1}]),
+        stdin=_first_intent(
+            entries=[{"kind": "decision", "summary": "s", "nested_bogus": 1}]
+        ),
     )
     code, message = _error(payload)
     assert (status, code) == (1, "invalid-intent")
@@ -561,9 +597,17 @@ def test_ac3_entries_are_promoted_per_kind_with_their_rationale() -> None:
         "checkpoint",
         stdin=_first_intent(
             entries=[
-                {"kind": "decision", "summary": "Keep canonical JSON.", "rationale": "digests need it"},
+                {
+                    "kind": "decision",
+                    "summary": "Keep canonical JSON.",
+                    "rationale": "digests need it",
+                },
                 {"kind": "question", "summary": "Bump or migrate?"},
-                {"kind": "blocker", "summary": "Bundle is stale.", "blocks_continuation": False},
+                {
+                    "kind": "blocker",
+                    "summary": "Bundle is stale.",
+                    "blocks_continuation": False,
+                },
             ]
         ),
     )
@@ -579,7 +623,13 @@ def test_ac25_a_directive_keeps_its_quote_and_is_carried_forward() -> None:
     status, payload = _run(
         "checkpoint",
         stdin=_first_intent(
-            entries=[{"kind": "directive", "summary": "Prose stays STE100.", "quote": "is it all in STE100?"}]
+            entries=[
+                {
+                    "kind": "directive",
+                    "summary": "Prose stays STE100.",
+                    "quote": "is it all in STE100?",
+                }
+            ]
         ),
     )
     assert status == 0, payload
@@ -587,22 +637,33 @@ def test_ac25_a_directive_keeps_its_quote_and_is_carried_forward() -> None:
     assert directives[0]["quote"] == "is it all in STE100?"
     assert cast(str, directives[0]["entry_id"]).startswith("v-")
 
-    status, payload = _run("checkpoint", stdin=_intent_json(orientation="Says nothing new."))
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(orientation="Says nothing new.")
+    )
     assert status == 0, payload
-    assert cast(list[dict[str, object]], _get(payload, "record", "directives")) == directives
+    assert (
+        cast(list[dict[str, object]], _get(payload, "record", "directives"))
+        == directives
+    )
 
     status, payload = _run(
         "checkpoint",
-        stdin=_first_intent(entries=[{"kind": "directive", "summary": "x", "blocks_continuation": True}]),
+        stdin=_first_intent(
+            entries=[{"kind": "directive", "summary": "x", "blocks_continuation": True}]
+        ),
     )
     assert status == 1 and "directive" in _error(payload)[1]
 
 
 @pytest.mark.usefixtures("store")
 def test_ac8_notes_are_stored_and_carried_forward_when_omitted() -> None:
-    status, payload = _run("checkpoint", stdin=_first_intent(notes="Body of the record."))
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(notes="Body of the record.")
+    )
     assert status == 0 and _get(payload, "record", "notes") == "Body of the record."
-    status, payload = _run("checkpoint", stdin=_intent_json(orientation="Only orientation."))
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(orientation="Only orientation.")
+    )
     assert status == 0 and _get(payload, "record", "notes") == "Body of the record."
     status, payload = _run("checkpoint", stdin=_intent_json(notes="Replaced."))
     assert status == 0 and _get(payload, "record", "notes") == "Replaced."
@@ -624,17 +685,34 @@ def test_ac9_tasks_persist_typed_and_an_empty_tasks_move_is_refused() -> None:
             next="tasks",
             artifact=None,
             tasks=[task],
-            parallel={"isolation": "worktree", "worktree_strategy": "create", "worktree_root": "../wt"},
+            parallel={
+                "isolation": "worktree",
+                "worktree_strategy": "create",
+                "worktree_root": "../wt",
+            },
         ),
     )
     assert status == 0, payload
-    assert _get(payload, "record", "next_action", "tasks") == [{**task, "worktree": None}]
-    assert _get(payload, "record", "next_action", "parallel", "worktree_strategy") == "create"
+    assert _get(payload, "record", "next_action", "tasks") == [
+        {**task, "worktree": None}
+    ]
+    assert (
+        _get(payload, "record", "next_action", "parallel", "worktree_strategy")
+        == "create"
+    )
 
     status, payload = _run("checkpoint", stdin=_intent_json(next="tasks"))
-    assert status == 1 and "tasks must be non-empty when move is 'tasks'" in _error(payload)[1]
-    status, payload = _run("checkpoint", stdin=_intent_json(next="cook", artifact="x.md", tasks=[task]))
-    assert status == 1 and "tasks may only be set when move is 'tasks'" in _error(payload)[1]
+    assert (
+        status == 1
+        and "tasks must be non-empty when move is 'tasks'" in _error(payload)[1]
+    )
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(next="cook", artifact="x.md", tasks=[task])
+    )
+    assert (
+        status == 1
+        and "tasks may only be set when move is 'tasks'" in _error(payload)[1]
+    )
 
 
 def test_ac4_ac5_ac6_ac23_artifact_links_are_a_set_pinned_by_the_host(
@@ -644,7 +722,9 @@ def test_ac4_ac5_ac6_ac23_artifact_links_are_a_set_pinned_by_the_host(
     doc = tmp_path / "doc.md"
     _ = doc.write_text("hello\n", encoding="utf-8")
 
-    status, payload = _run("checkpoint", stdin=_first_intent(artifact_links=[{"path": "doc.md"}]))
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(artifact_links=[{"path": "doc.md"}])
+    )
     assert status == 0, payload
     links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
     assert links[0]["digest"] == storage.file_digest(doc)
@@ -652,7 +732,9 @@ def test_ac4_ac5_ac6_ac23_artifact_links_are_a_set_pinned_by_the_host(
 
     status, payload = _run(
         "checkpoint",
-        stdin=_intent_json(artifact_links=[{"path": "doc.md", "covers_entry_ids": cast(list[str], [])}]),
+        stdin=_intent_json(
+            artifact_links=[{"path": "doc.md", "covers_entry_ids": cast(list[str], [])}]
+        ),
     )
     assert status == 0, payload
     links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
@@ -665,18 +747,26 @@ def test_ac4_ac5_ac6_ac23_artifact_links_are_a_set_pinned_by_the_host(
     assert (status, code) == (1, "invalid-intent") and "artifact_links" in message
     assert store.read_record() == before
 
-    status, payload = _run("checkpoint", stdin=_intent_json(remove_artifact_links=["nope.md"]))
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(remove_artifact_links=["nope.md"])
+    )
     assert status == 1 and "does not carry" in _error(payload)[1]
 
-    status, payload = _run("checkpoint", stdin=_intent_json(remove_artifact_links=["doc.md"]))
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(remove_artifact_links=["doc.md"])
+    )
     assert status == 0 and _get(payload, "record", "artifact_links") == []
 
 
 @pytest.mark.usefixtures("store")
 def test_ac19_next_and_artifact_must_cohere() -> None:
-    status, payload = _run("checkpoint", stdin=_first_intent(next="affinage", artifact="a report"))
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(next="affinage", artifact="a report")
+    )
     assert status == 1 and "PR#" in _error(payload)[1]
-    status, payload = _run("checkpoint", stdin=_first_intent(next="affinage", artifact="PR#615"))
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(next="affinage", artifact="PR#615")
+    )
     assert status == 0, payload
     status, payload = _run("checkpoint", stdin=_intent_json(next="cook"))
     assert status == 1 and "artifact is required" in _error(payload)[1]
@@ -685,7 +775,9 @@ def test_ac19_next_and_artifact_must_cohere() -> None:
 @pytest.mark.usefixtures("store")
 def test_ac20_a_secret_pattern_refuses_the_checkpoint_naming_the_field() -> None:
     token = "ghp_" + "a" * 36
-    status, payload = _run("checkpoint", stdin=_first_intent(orientation=f"token {token} pasted"))
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(orientation=f"token {token} pasted")
+    )
     code, message = _error(payload)
     assert (status, code) == (1, "secret-pattern")
     assert message.startswith("orientation (GitHub token)")
@@ -717,7 +809,9 @@ def test_ac10_checkpoint_compacted_commits_a_compacted_delta(
             {
                 "rehydrated_from_revision_id": current.revision_id,
                 "rehydrated_record_digest": records.record_digest(current),
-                "reconciled_entry_ids": [entry.entry_id for entry in records.entries(current)],
+                "reconciled_entry_ids": [
+                    entry.entry_id for entry in records.entries(current)
+                ],
             }
         ),
         encoding="utf-8",
@@ -726,15 +820,23 @@ def test_ac10_checkpoint_compacted_commits_a_compacted_delta(
         "checkpoint",
         "--compacted",
         str(proof),
-        stdin=_intent_json(orientation="Rehydrated.", session={"harness": "claude", "session_id": "s-1"}),
+        stdin=_intent_json(
+            orientation="Rehydrated.",
+            session={"harness": "claude", "session_id": "s-1"},
+        ),
     )
     assert status == 0, payload
     revision = store.find_complete_revision(cast(str, payload["revision_id"]))
     assert revision is not None and revision.compaction is not None
     assert revision.compaction.rehydrated_from_revision_id == current.revision_id
 
-    _ = proof.write_text(json.dumps({"rehydrated_from_revision_id": current.revision_id}), encoding="utf-8")
-    status, payload = _run("checkpoint", "--compacted", str(proof), stdin=_intent_json(orientation="x"))
+    _ = proof.write_text(
+        json.dumps({"rehydrated_from_revision_id": current.revision_id}),
+        encoding="utf-8",
+    )
+    status, payload = _run(
+        "checkpoint", "--compacted", str(proof), stdin=_intent_json(orientation="x")
+    )
     assert status == 1 and _error(payload)[0] == "invalid-compaction-proof"
 
 
@@ -743,7 +845,16 @@ def test_ac10_commit_is_no_longer_a_listed_command() -> None:
 
     assert "commit" not in wheypoint.COMMANDS
     assert [command.name for command in commands.COMMANDS] == [
-        "checkpoint", "validate", "schema", "resolve", "show", "lint", "list", "log", "turns", "handoff",
+        "checkpoint",
+        "validate",
+        "schema",
+        "resolve",
+        "show",
+        "lint",
+        "list",
+        "log",
+        "turns",
+        "handoff",
     ]
 
 
@@ -753,8 +864,12 @@ def test_ac11_validate_reports_every_problem_and_never_opens_the_store(
     status, payload = _run("validate", stdin=_first_intent(bogus=1, compacted=True))
     assert status == 1
     problems = cast(list[str], _get(payload, "error", "problems"))
-    assert any("bogus" in p for p in problems) and any("compacted" in p for p in problems)
-    status, payload = _run("validate", stdin=_first_intent(next="affinage", artifact="x"))
+    assert any("bogus" in p for p in problems) and any(
+        "compacted" in p for p in problems
+    )
+    status, payload = _run(
+        "validate", stdin=_first_intent(next="affinage", artifact="x")
+    )
     assert status == 1
     assert any("PR#" in p for p in cast(list[str], _get(payload, "error", "problems")))
     assert not store.record_path.exists()
@@ -779,7 +894,10 @@ def test_ac12_schema_prints_the_registered_json_schema() -> None:
 
 def test_ac13_list_prints_one_line_per_work_item(corpus_root: Path) -> None:
     _ = _run("checkpoint", stdin=_first_intent())
-    _ = _run("checkpoint", stdin=_first_intent(work_id="other-work", orientation="Other.\nMore."))
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(work_id="other-work", orientation="Other.\nMore."),
+    )
 
     status, payload = _run("list")
     assert status == 0
@@ -792,7 +910,10 @@ def test_ac13_list_prints_one_line_per_work_item(corpus_root: Path) -> None:
 
 @pytest.mark.usefixtures("store")
 def test_ac14_log_walks_revisions_oldest_first() -> None:
-    _ = _run("checkpoint", stdin=_first_intent(entries=[{"kind": "decision", "summary": "One."}]))
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(entries=[{"kind": "decision", "summary": "One."}]),
+    )
     _ = _run("checkpoint", stdin=_intent_json(orientation="Second."))
 
     status, payload = _run("log", "--work-id", WORK_ID)
@@ -801,7 +922,12 @@ def test_ac14_log_walks_revisions_oldest_first() -> None:
     assert len(lines) == 2
     first, second = (line.split("\t") for line in lines)
     assert first[0] == "1" and second[0] == "2"
-    assert first[2] == CAPTURED_AT and first[3] == "+1" and first[4] == "~0" and first[5] == "-"
+    assert (
+        first[2] == CAPTURED_AT
+        and first[3] == "+1"
+        and first[4] == "~0"
+        and first[5] == "-"
+    )
     assert second[3] == "+0"
 
     status, payload = _run("log", "--work-id", "never-written")
@@ -810,14 +936,46 @@ def test_ac14_log_walks_revisions_oldest_first() -> None:
 
 def _transcript(path: Path) -> None:
     entries = [
-        {"type": "user", "timestamp": "2026-09-05T06:17:04Z", "message": {"content": "What are our gh issues?"}},
-        {"type": "assistant", "timestamp": "2026-09-05T06:17:10Z", "message": {"content": [{"type": "text", "text": "ignored"}]}},
-        {"type": "user", "timestamp": "2026-09-05T06:18:00Z", "message": {"content": [{"type": "tool_result", "content": "x"}]}},
-        {"type": "user", "timestamp": "2026-09-05T06:18:30Z", "message": {"content": "<system-reminder>not the user</system-reminder>"}},
-        {"type": "user", "timestamp": "2026-09-05T06:19:00Z", "message": {"content": [{"type": "text", "text": "Base directory for this skill: /x"}]}},
-        {"type": "user", "timestamp": "2026-09-05T06:20:00Z", "message": {"content": [{"type": "text", "text": "Double down on ergonomics."}]}},
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:17:04Z",
+            "message": {"content": "What are our gh issues?"},
+        },
+        {
+            "type": "assistant",
+            "timestamp": "2026-09-05T06:17:10Z",
+            "message": {"content": [{"type": "text", "text": "ignored"}]},
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:18:00Z",
+            "message": {"content": [{"type": "tool_result", "content": "x"}]},
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:18:30Z",
+            "message": {"content": "<system-reminder>not the user</system-reminder>"},
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:19:00Z",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Base directory for this skill: /x"}
+                ]
+            },
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:20:00Z",
+            "message": {
+                "content": [{"type": "text", "text": "Double down on ergonomics."}]
+            },
+        },
     ]
-    _ = path.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+    _ = path.write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
 
 
 def test_ac27_turns_prints_the_users_turns_from_a_transcript(tmp_path: Path) -> None:
@@ -840,7 +998,12 @@ def test_ac28_turns_derives_the_projects_dir_and_never_guesses_a_session(
     home = tmp_path / "home"
     cwd = tmp_path / "Dev" / "easy.cheese_x"
     cwd.mkdir(parents=True)
-    projects = home / ".claude" / "projects" / str(cwd).replace("/", "-").replace(".", "-").replace("_", "-")
+    projects = (
+        home
+        / ".claude"
+        / "projects"
+        / str(cwd).replace("/", "-").replace(".", "-").replace("_", "-")
+    )
     projects.mkdir(parents=True)
     _transcript(projects / "aaa.jsonl")
     _transcript(projects / "bbb.jsonl")
@@ -857,25 +1020,47 @@ def test_ac28_turns_derives_the_projects_dir_and_never_guesses_a_session(
     assert status == 0 and payload["transcript"] == str(projects / "bbb.jsonl")
     assert (payload["count"], payload["skipped_lines"]) == (2, 0)
 
+
 # --- cure of the curd 2/3 review ------------------------------------------
 
 
 @pytest.mark.usefixtures("store")
 def test_cure_secret_scan_covers_every_string_field() -> None:
     token = "ghp_" + "b" * 36
-    task = {"slug": "s", "intent": "cook", "repo": "r", "branch": "b", "branch_from": "main", "command": f"/cook --token {token}"}
-    status, payload = _run("checkpoint", stdin=_first_intent(next="tasks", artifact=None, tasks=[task]))
+    task = {
+        "slug": "s",
+        "intent": "cook",
+        "repo": "r",
+        "branch": "b",
+        "branch_from": "main",
+        "command": f"/cook --token {token}",
+    }
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(next="tasks", artifact=None, tasks=[task])
+    )
     code, message = _error(payload)
-    assert (status, code) == (1, "secret-pattern") and message.startswith("tasks[0].command")
+    assert (status, code) == (1, "secret-pattern") and message.startswith(
+        "tasks[0].command"
+    )
 
     status, payload = _run(
         "checkpoint",
         stdin=_first_intent(
-            decision_dossier=[{"fork": "f", "options": [{"option": "o", "evidence": [f"AKIA{'C' * 16}"], "breaks": "x"}], "prior_leaning": None}],
+            decision_dossier=[
+                {
+                    "fork": "f",
+                    "options": [
+                        {"option": "o", "evidence": [f"AKIA{'C' * 16}"], "breaks": "x"}
+                    ],
+                    "prior_leaning": None,
+                }
+            ],
             entries=[{"kind": "question", "summary": "q", "blocks_continuation": True}],
         ),
     )
-    assert status == 1 and _error(payload)[1].startswith("decision_dossier[0].options[0].evidence[0]")
+    assert status == 1 and _error(payload)[1].startswith(
+        "decision_dossier[0].options[0].evidence[0]"
+    )
 
 
 def test_cure_a_compaction_proof_is_part_of_the_request_identity(
@@ -887,7 +1072,10 @@ def test_cure_a_compaction_proof_is_part_of_the_request_identity(
     _ = _run("checkpoint", stdin=_first_intent())
     current = store.read_record()
     assert current is not None
-    intent = records.structure(cast(object, json.loads(_intent_json(orientation="Same words."))), CheckpointIntent)
+    intent = records.structure(
+        cast(object, json.loads(_intent_json(orientation="Same words."))),
+        CheckpointIntent,
+    )
     proof = CompactionRecord(
         rehydrated_from_revision_id=current.revision_id,
         rehydrated_record_digest=records.record_digest(current),
@@ -903,22 +1091,47 @@ def test_cure_a_compaction_proof_is_part_of_the_request_identity(
 def test_cure_pr_urls_with_a_trailing_route_satisfy_the_affinage_gate() -> None:
     status, payload = _run(
         "checkpoint",
-        stdin=_first_intent(next="affinage", artifact="https://github.com/o/r/pull/12/files"),
+        stdin=_first_intent(
+            next="affinage", artifact="https://github.com/o/r/pull/12/files"
+        ),
     )
     assert status == 0, payload
 
 
-def test_cure_turns_strips_host_wrappers_but_keeps_the_users_words(tmp_path: Path) -> None:
+def test_cure_turns_strips_host_wrappers_but_keeps_the_users_words(
+    tmp_path: Path,
+) -> None:
     transcript = tmp_path / "s.jsonl"
     entries = [
-        {"type": "user", "timestamp": "t1", "message": {"content": "<system-reminder>ignored</system-reminder>Pull the ten turns in too."}},
-        {"type": "user", "timestamp": "t2", "message": {"content": "Curdle.\n<task-notification><task-id>x</task-id></task-notification>"}},
-        {"type": "user", "timestamp": "t3", "message": {"content": "<local-command-stdout></local-command-stdout>"}},
+        {
+            "type": "user",
+            "timestamp": "t1",
+            "message": {
+                "content": "<system-reminder>ignored</system-reminder>Pull the ten turns in too."
+            },
+        },
+        {
+            "type": "user",
+            "timestamp": "t2",
+            "message": {
+                "content": "Curdle.\n<task-notification><task-id>x</task-id></task-notification>"
+            },
+        },
+        {
+            "type": "user",
+            "timestamp": "t3",
+            "message": {"content": "<local-command-stdout></local-command-stdout>"},
+        },
     ]
-    _ = transcript.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+    _ = transcript.write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
     status, payload = _run("turns", "--transcript", str(transcript))
     assert status == 0
-    assert cast(list[str], payload["lines"]) == ["t1\tPull the ten turns in too.", "t2\tCurdle."]
+    assert cast(list[str], payload["lines"]) == [
+        "t1\tPull the ten turns in too.",
+        "t2\tCurdle.",
+    ]
 
 
 def test_cure_turns_refuses_a_session_id_that_escapes_the_projects_dir(
@@ -939,21 +1152,37 @@ def test_cure_artifact_digests_resolve_from_the_repository_root(
     doc = checkout / "doc.md"
     _ = doc.write_text("root-relative\n", encoding="utf-8")
     monkeypatch.chdir(checkout / "sub")
-    status, payload = _run("checkpoint", "--no-note", stdin=_first_intent(artifact_links=[{"path": "doc.md"}]))
+    status, payload = _run(
+        "checkpoint",
+        "--no-note",
+        stdin=_first_intent(artifact_links=[{"path": "doc.md"}]),
+    )
     assert status == 0, payload
     links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
     assert links[0]["digest"] == storage.file_digest(doc)
+
 
 # --- cure of the whole-diff review ------------------------------------------
 
 
 def _tasks_intent(**fields: object) -> str:
-    task = {"slug": "s", "intent": "cook", "repo": "r", "branch": "b", "branch_from": "main", "command": "/cook s"}
+    task = {
+        "slug": "s",
+        "intent": "cook",
+        "repo": "r",
+        "branch": "b",
+        "branch_from": "main",
+        "command": "/cook s",
+    }
     return _first_intent(
         next="tasks",
         artifact=None,
         tasks=[task],
-        parallel={"isolation": "wt", "worktree_strategy": "create", "worktree_root": "../wt"},
+        parallel={
+            "isolation": "wt",
+            "worktree_strategy": "create",
+            "worktree_root": "../wt",
+        },
         **fields,
     )
 
@@ -966,8 +1195,14 @@ def test_cure_a_tasks_projection_parses_and_lints_clean() -> None:
     assert status == 0, payload
     markdown = cast(str, payload["markdown"])
     parsed = projection.parse(markdown)
-    assert parsed.next_action.tasks is not None and parsed.next_action.tasks[0].command == "/cook s"
-    assert parsed.next_action.parallel is not None and parsed.next_action.parallel.worktree_root == "../wt"
+    assert (
+        parsed.next_action.tasks is not None
+        and parsed.next_action.tasks[0].command == "/cook s"
+    )
+    assert (
+        parsed.next_action.parallel is not None
+        and parsed.next_action.parallel.worktree_root == "../wt"
+    )
     assert lint.lint_projection_text(markdown).findings == ()
 
 
@@ -975,26 +1210,53 @@ def test_cure_a_tasks_projection_parses_and_lints_clean() -> None:
 def test_cure_validate_reports_next_action_and_delta_invariants() -> None:
     status, payload = _run("validate", stdin=_first_intent(next="tasks", artifact=None))
     assert status == 1
-    assert any("tasks must be non-empty" in p for p in cast(list[str], _get(payload, "error", "problems")))
-    status, payload = _run("validate", stdin=_first_intent(expected_revision_id="rev-000000000000"))
+    assert any(
+        "tasks must be non-empty" in p
+        for p in cast(list[str], _get(payload, "error", "problems"))
+    )
+    status, payload = _run(
+        "validate", stdin=_first_intent(expected_revision_id="rev-000000000000")
+    )
     problems = cast(list[str], _get(payload, "error", "problems"))
-    assert status == 1 and len([p for p in problems if "expected_revision_id" in p]) == 1
+    assert (
+        status == 1 and len([p for p in problems if "expected_revision_id" in p]) == 1
+    )
 
 
 @pytest.mark.usefixtures("store")
 def test_cure_a_task_command_must_be_a_skill_dispatch() -> None:
     status, payload = _run(
         "checkpoint",
-        stdin=_first_intent(next="tasks", artifact=None, tasks=[{"slug": "s", "intent": "cook", "repo": "r", "branch": "b", "branch_from": "main", "command": "rm -rf /"}]),
+        stdin=_first_intent(
+            next="tasks",
+            artifact=None,
+            tasks=[
+                {
+                    "slug": "s",
+                    "intent": "cook",
+                    "repo": "r",
+                    "branch": "b",
+                    "branch_from": "main",
+                    "command": "rm -rf /",
+                }
+            ],
+        ),
     )
-    assert status == 1 and "tasks[0].command is not a skill dispatch" in _error(payload)[1]
+    assert (
+        status == 1 and "tasks[0].command is not a skill dispatch" in _error(payload)[1]
+    )
 
 
 @pytest.mark.usefixtures("store")
 def test_cure_single_line_fields_refuse_newlines() -> None:
-    status, payload = _run("checkpoint", stdin=_first_intent(artifact_links=[{"path": "a.md\n## Decision dossier"}]))
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(artifact_links=[{"path": "a.md\n## Decision dossier"}]),
+    )
     assert status == 1 and "must be a single line" in _error(payload)[1]
-    status, payload = _run("checkpoint", stdin=_first_intent(artifact="x.md\nmode: parallel"))
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(artifact="x.md\nmode: parallel")
+    )
     assert status == 1 and "must be a single line" in _error(payload)[1]
 
 
@@ -1003,23 +1265,38 @@ def test_cure_single_line_fields_refuse_newlines() -> None:
     ("label", "text"),
     [
         # Assembled at runtime so no literal in the repo looks like a live credential.
-        ("Slack webhook", "https://hooks." + "slack.com/services/" + "T000/B000/" + "X" * 24),
+        (
+            "Slack webhook",
+            "https://hooks." + "slack.com/services/" + "T000/B000/" + "X" * 24,
+        ),
         ("Google API key", "AIza" + "A" * 35),
-        ("JWT or bearer token", ".".join(("eyJ" + "a" * 20, "eyJ" + "b" * 20, "c" * 40))),
-        ("URL with basic-auth credentials", "https://user:hunter2hunter2@example.com/repo"),
+        (
+            "JWT or bearer token",
+            ".".join(("eyJ" + "a" * 20, "eyJ" + "b" * 20, "c" * 40)),
+        ),
+        (
+            "URL with basic-auth credentials",
+            "https://user:hunter2hunter2@example.com/repo",
+        ),
         ("credential assignment", "api_key = abcdefghijklmnop"),
     ],
 )
 def test_cure_secret_patterns_cover_the_common_shapes(label: str, text: str) -> None:
-    status, payload = _run("checkpoint", stdin=_first_intent(notes=f"pasted {text} here"))
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(notes=f"pasted {text} here")
+    )
     code, message = _error(payload)
-    assert (status, code) == (1, "secret-pattern") and message.startswith(f"notes ({label})")
+    assert (status, code) == (1, "secret-pattern") and message.startswith(
+        f"notes ({label})"
+    )
 
 
 @pytest.mark.usefixtures("store")
 def test_cure_validate_reports_every_secret_not_just_the_first() -> None:
     token = "ghp_" + "c" * 36
-    status, payload = _run("validate", stdin=_first_intent(orientation=f"a {token}", notes=f"b {token}"))
+    status, payload = _run(
+        "validate", stdin=_first_intent(orientation=f"a {token}", notes=f"b {token}")
+    )
     problems = cast(list[str], _get(payload, "error", "problems"))
     assert status == 1 and sum("looks like a credential" in p for p in problems) == 2
 
@@ -1028,19 +1305,25 @@ def test_cure_turns_counts_unreadable_lines(tmp_path: Path) -> None:
     transcript = tmp_path / "s.jsonl"
     _transcript(transcript)
     with transcript.open("a", encoding="utf-8") as handle:
-        _ = handle.write('{"type": "user", "timestamp": "t9", "message": {"content": "truncated')
+        _ = handle.write(
+            '{"type": "user", "timestamp": "t9", "message": {"content": "truncated'
+        )
     status, payload = _run("turns", "--transcript", str(transcript))
     assert status == 0 and (payload["count"], payload["skipped_lines"]) == (2, 1)
 
 
-def test_cure_enumerate_ignores_directories_that_are_not_work_ids(corpus_root: Path) -> None:
+def test_cure_enumerate_ignores_directories_that_are_not_work_ids(
+    corpus_root: Path,
+) -> None:
     _ = _run("checkpoint", stdin=_first_intent())
     rogue = corpus_root / storage.WORK_DIRNAME / "Not_A_Work-ID"
     rogue.mkdir(parents=True)
     _ = (rogue / storage.RECORD_FILENAME).write_text("{}", encoding="utf-8")
     status, payload = _run("list")
     assert status == 0
-    assert [line.split("\t")[0] for line in cast(list[str], payload["lines"])] == [WORK_ID]
+    assert [line.split("\t")[0] for line in cast(list[str], payload["lines"])] == [
+        WORK_ID
+    ]
 
 
 # --- cure of pr-621 review findings ----------------------------------------
@@ -1082,7 +1365,10 @@ def test_cure_log_survives_a_missing_projection_and_names_it_unreadable(
     assert [r["revision_number"] for r in revisions] == [2]
     unreadable = cast(list[dict[str, str]], payload["unreadable"])
     assert len(unreadable) == 1
-    assert unreadable[0]["path"] == store.revision_path(1, cast(str, first["revision_id"])).name
+    assert (
+        unreadable[0]["path"]
+        == store.revision_path(1, cast(str, first["revision_id"])).name
+    )
     assert "projection file is missing" in unreadable[0]["reason"]
 
 
@@ -1092,8 +1378,12 @@ def test_cure_log_refuses_store_inconsistent_when_every_revision_is_lost(
 ) -> None:
     first = _run("checkpoint", stdin=_first_intent())[1]
     second = _run("checkpoint", stdin=_intent_json(orientation="Second."))[1]
-    _ = store.revision_path(1, cast(str, first["revision_id"])).write_text("not json", encoding="utf-8")
-    _ = store.revision_path(2, cast(str, second["revision_id"])).write_text("not json", encoding="utf-8")
+    _ = store.revision_path(1, cast(str, first["revision_id"])).write_text(
+        "not json", encoding="utf-8"
+    )
+    _ = store.revision_path(2, cast(str, second["revision_id"])).write_text(
+        "not json", encoding="utf-8"
+    )
 
     status, payload = _run("log", "--work-id", WORK_ID)
 
@@ -1102,9 +1392,15 @@ def test_cure_log_refuses_store_inconsistent_when_every_revision_is_lost(
 
 
 @pytest.mark.usefixtures("store")
-def test_cure_validate_reports_the_next_action_gate_and_the_task_command_together() -> None:
+def test_cure_validate_reports_the_next_action_gate_and_the_task_command_together() -> (
+    None
+):
     task = {
-        "slug": "s", "intent": "cook", "repo": "r", "branch": "b", "branch_from": "main",
+        "slug": "s",
+        "intent": "cook",
+        "repo": "r",
+        "branch": "b",
+        "branch_from": "main",
         "command": "rm -rf /",
     }
     status, payload = _run(
@@ -1123,9 +1419,19 @@ def test_cure_ac7_a_non_gating_question_with_a_dossier_renders_open_entries() ->
     status, payload = _run(
         "checkpoint",
         stdin=_first_intent(
-            entries=[{"kind": "question", "summary": "Bump or migrate?", "blocks_continuation": False}],
+            entries=[
+                {
+                    "kind": "question",
+                    "summary": "Bump or migrate?",
+                    "blocks_continuation": False,
+                }
+            ],
             decision_dossier=[
-                {"fork": "f", "options": [{"option": "o", "evidence": ["e"], "breaks": "x"}], "prior_leaning": None}
+                {
+                    "fork": "f",
+                    "options": [{"option": "o", "evidence": ["e"], "breaks": "x"}],
+                    "prior_leaning": None,
+                }
             ],
         ),
     )
@@ -1138,20 +1444,30 @@ def test_cure_ac7_a_non_gating_question_with_a_dossier_renders_open_entries() ->
 def test_cure_turns_lines_escape_a_multiline_user_turn(tmp_path: Path) -> None:
     transcript = tmp_path / "s.jsonl"
     entries = [
-        {"type": "user", "timestamp": "t1", "message": {"content": [{"type": "text", "text": "Line one.\nLine two."}]}},
+        {
+            "type": "user",
+            "timestamp": "t1",
+            "message": {"content": [{"type": "text", "text": "Line one.\nLine two."}]},
+        },
     ]
-    _ = transcript.write_text("\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8")
+    _ = transcript.write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
 
     status, payload = _run("turns", "--transcript", str(transcript))
 
     assert status == 0
-    assert cast(list[dict[str, str]], payload["turns"]) == [{"timestamp": "t1", "text": "Line one.\nLine two."}]
+    assert cast(list[dict[str, str]], payload["turns"]) == [
+        {"timestamp": "t1", "text": "Line one.\nLine two."}
+    ]
     assert cast(list[str], payload["lines"]) == ["t1\tLine one.\\nLine two."]
 
 
 @pytest.mark.usefixtures("store")
 def test_cure_list_and_log_lines_are_the_escaped_tab_join_of_typed_rows() -> None:
-    _ = _run("checkpoint", stdin=_first_intent(orientation="Tab\ttest line.\nSecond line."))
+    _ = _run(
+        "checkpoint", stdin=_first_intent(orientation="Tab\ttest line.\nSecond line.")
+    )
 
     status, payload = _run("list")
     assert status == 0
@@ -1175,7 +1491,12 @@ def test_cure_turns_lists_a_candidate_even_when_stat_fails(
     home = tmp_path / "home"
     cwd = tmp_path / "Dev" / "easy.cheese_x"
     cwd.mkdir(parents=True)
-    projects = home / ".claude" / "projects" / str(cwd).replace("/", "-").replace(".", "-").replace("_", "-")
+    projects = (
+        home
+        / ".claude"
+        / "projects"
+        / str(cwd).replace("/", "-").replace(".", "-").replace("_", "-")
+    )
     projects.mkdir(parents=True)
     _transcript(projects / "aaa.jsonl")
     _transcript(projects / "bbb.jsonl")
@@ -1219,7 +1540,9 @@ def test_cure_a_resumed_promotion_never_reuses_a_prior_note_dir(
         raise RuntimeError("simulated crash before the ledger entry is cleared")
 
     monkeypatch.setattr(wheypoint, "_clear_pending", crash_once)
-    interrupted_status, _interrupted = _run("checkpoint", "--note-dir", str(prior), stdin=body)
+    interrupted_status, _interrupted = _run(
+        "checkpoint", "--note-dir", str(prior), stdin=body
+    )
     assert interrupted_status == wheypoint.EXIT_INTERNAL
 
     default_notes = checkout / ".cheese" / "notes" / f"{WORK_ID}.md"

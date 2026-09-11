@@ -107,7 +107,7 @@ def resolve(
     artifact_digest: Callable[[str], str | None] | None = None,
 ) -> Resolution:
     """Resolve an authoritative reference, then fall back to one legacy note."""
-    root = Path(workspace_root) if workspace_root is not None else Path.cwd()
+    root = paths.resolve_repo_root(workspace_root)
     checks = _Checks(
         workspace_root=root,
         corpus_root=(
@@ -215,15 +215,20 @@ def _resolve_path(ref: str, checks: _Checks) -> Resolution:
     )
 
 
-def _slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
+def _slug_matches(
+    slug: str, checks: _Checks
+) -> tuple[tuple[str, WheypointRecord], ...]:
     """Every work id whose record claims `slug`, in work-id order.
 
     Work-id order is reporting order for an ambiguity, never a preference: a
-    second match is refused, not ranked.
+    second match is refused, not ranked -- and the walk stops there, so an
+    ambiguous slug never pays for a full corpus scan. Each match carries the
+    record already read and structured, so the single-match caller has no
+    reason to open and re-read it.
     """
     if not checks.work_root.is_dir():
         return ()
-    matched: list[str] = []
+    matched: list[tuple[str, WheypointRecord]] = []
     for directory in sorted(checks.work_root.iterdir(), key=lambda p: p.name):
         record_path = directory / storage.RECORD_FILENAME
         if not record_path.is_file():
@@ -235,12 +240,15 @@ def _slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
         except (ValueError, OSError):
             continue
         if record is not None and record.slug == slug:
-            matched.append(directory.name)
+            matched.append((directory.name, record))
+            if len(matched) > 1:
+                break
     return tuple(matched)
 
 
 def _resolve_slug(slug: str, checks: _Checks) -> Resolution:
     matches = _slug_matches(slug, checks)
+    work_ids = tuple(work_id for work_id, _ in matches)
     searched = _corpus_locations(slug, checks)
     if not matches:
         return Resolution(
@@ -252,37 +260,47 @@ def _resolve_slug(slug: str, checks: _Checks) -> Resolution:
         return Resolution(
             ResolutionOutcome.AMBIGUOUS,
             source=ResolutionSource.SLUG,
-            matches=matches,
+            matches=work_ids,
             searched=searched,
             detail=(
                 f"slug {slug!r} names {len(matches)} work records: "
-                + ", ".join(matches)
+                + ", ".join(work_ids)
             ),
         )
-    only_match = next(iter(matches))
-    return _validate(only_match, ResolutionSource.SLUG, checks, searched=searched)
+    only_match, only_record = next(iter(matches))
+    return _validate(
+        only_match,
+        ResolutionSource.SLUG,
+        checks,
+        searched=searched,
+        preloaded_record=only_record,
+    )
 
 
 def _resolve_phase_artifact(
     slug: str, checks: _Checks, *, searched: tuple[str, ...]
 ) -> Resolution | None:
     """Resolve the first matching phase artifact before legacy notes."""
+    root = checks.workspace_root / ".cheese"
+    phases = tuple(reversed(paths.CHAIN_PHASES))
+    found = paths.existing_artifacts(slug, root=root, phases=phases)
     phase_paths: list[str] = []
-    for phase in ("cure", "age", "press", "cook"):
-        path = checks.workspace_root / ".cheese" / phase / f"{slug}.md"
+    for phase in phases:
+        path = root / paths.phase_dir(phase) / f"{slug}.md"
         phase_paths.append(str(path))
-        if not path.is_file():
+        match = found.get(phase)
+        if match is None:
             continue
         try:
             phase_slug = handoff.parse_handoff_slug(
-                path.read_text(encoding="utf-8")
+                match.read_text(encoding="utf-8")
             )
         except (handoff.HandoffParseError, OSError) as exc:
             return Resolution(
                 ResolutionOutcome.ERROR,
                 source=ResolutionSource.PHASE_ARTIFACT,
                 searched=(*searched, *phase_paths),
-                detail=f"{path} is not a readable handoff artifact: {exc}",
+                detail=f"{match} is not a readable handoff artifact: {exc}",
             )
         return Resolution(
             ResolutionOutcome.LEGACY,
@@ -301,6 +319,7 @@ def _validate(
     searched: tuple[str, ...] = (),
     document_findings: tuple[lint.LintFinding, ...] = (),
     expected_revision_id: str | None = None,
+    preloaded_record: WheypointRecord | None = None,
 ) -> Resolution:
     try:
         store = storage.WorkStore.open(work_id, corpus_root=checks.corpus_root)
@@ -315,6 +334,7 @@ def _validate(
             git_object_exists=checks.git_object_exists,
             artifact_digest=checks.artifact_digest,
             repository_root=checks.workspace_root,
+            preloaded_record=preloaded_record,
         )
     except (records.RecordError, ValueError, OSError) as exc:
         return Resolution(

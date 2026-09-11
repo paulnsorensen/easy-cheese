@@ -29,12 +29,12 @@ import contextlib
 import os
 import sys
 import tempfile
-from collections.abc import Sequence
+import traceback
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol, TextIO, cast
 
 from easy_cheese.shared import cli, handoff, paths
-from easy_cheese.shared.wheypoint import phase_commit
 
 from easy_cheese_schemas.phase_contracts import (
     COMPILED_TRANSITION_REGISTRY,
@@ -111,6 +111,99 @@ def _build_contents(*, preamble: str, body: str | None) -> str:
     return preamble + "\n\n" + body
 
 
+def _wheypoint_error(exc: Exception, *, message: str | None = None) -> cli.CliError:
+    """Classify a wheypoint kernel failure and print its traceback to stderr."""
+    traceback.print_exc(file=sys.stderr)
+    detail = f"{type(exc).__name__}: {exc}"
+    text = f"wheypoint: {detail}" if message is None else message.format(detail)
+    return cli.CliError(text, exit_code=cli.WHEYPOINT_EXIT_CODE)
+
+
+def _atomic_write(target: Path, contents: str) -> None:
+    """Write ``contents`` into ``target`` atomically via a sibling tmp file."""
+    target_dir = target.parent
+    target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            dir=target_dir,
+        )
+    except OSError as exc:
+        raise cli.CliError(f"cannot write {target}: {exc}") from exc
+
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
+            _ = handle.write(contents)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_name, target)
+    except OSError as exc:
+        _cleanup_tmp(fd, tmp_name)
+        raise cli.CliError(f"cannot write {target}: {exc}") from exc
+    except BaseException:
+        _cleanup_tmp(fd, tmp_name)
+        raise
+
+
+def _wheypoint_revision(
+    *,
+    slug: str,
+    phase: str,
+    next_skill: str,
+    target: Path,
+    orientation: str,
+    grounded: Sequence[str],
+    root: Path,
+    corpus_root: Path | str | None,
+    write_contents: Callable[[], None],
+) -> None:
+    """Validate, write, then commit one chain-phase revision; no-op otherwise."""
+    if phase not in paths.CHAIN_PHASES:
+        write_contents()
+        return
+
+    from easy_cheese.shared.wheypoint import phase_commit
+    from easy_cheese.shared.wheypoint import storage as wheypoint_storage
+
+    try:
+        grounded_entries = phase_commit.validate_grounded(grounded, root=root)
+    except phase_commit.GroundedEntryError as exc:
+        raise cli.CliError(str(exc)) from exc
+
+    store = wheypoint_storage.WorkStore.open(slug, corpus_root=corpus_root)
+    try:
+        current = phase_commit.read_current_record(slug, store=store)
+        phase_commit.require_genesis_grounding(current, grounded_entries)
+    except Exception as exc:
+        raise _wheypoint_error(exc) from exc
+
+    write_contents()
+
+    try:
+        _ = phase_commit.commit_phase_revision(
+            work_id=slug,
+            phase=phase,
+            next_skill=next_skill,
+            artifact=str(target),
+            orientation=orientation,
+            grounded=grounded_entries,
+            provenance=phase_commit.session_provenance_from_environment(),
+            root=root,
+            current_record=current,
+            store=store,
+        )
+    except Exception as exc:
+        raise _wheypoint_error(
+            exc,
+            message=(
+                f"wrote {target}, but the wheypoint revision failed: {{}}; "
+                "the next resolve will gate on stale-artifact-link"
+            ),
+        ) from exc
+
+
 def _cleanup_tmp(fd: int, tmp_name: str) -> None:
     """Close the open fd (if any) and remove the tmp file, reporting orphans."""
     if fd != -1:
@@ -139,6 +232,7 @@ def write_artifact(
     durable_flags: str | None = None,
     baseline: str | None = None,
     grounded: Sequence[str] = (),
+    corpus_root: Path | str | None = None,
 ) -> Path:
     """Write the artifact atomically; return the final path."""
     if not slug:
@@ -152,6 +246,8 @@ def write_artifact(
     _reject_traversal("--slug", slug)
     _reject_traversal("--phase", phase)
     _validate_transition(phase, next_skill, payload_schema_uri, slug=slug)
+    if phase not in paths.CHAIN_PHASES and grounded:
+        raise cli.CliError(f"--grounded is only valid for chain phases, not {phase!r}")
     preamble = _render_preamble(
         status=status,
         next_skill=next_skill,
@@ -163,23 +259,6 @@ def write_artifact(
         durable_flags=durable_flags,
         baseline=baseline,
     )
-    current = None
-    try:
-        grounded_entries = phase_commit.validate_grounded(grounded, root=root)
-    except phase_commit.GroundedEntryError as exc:
-        raise cli.CliError(str(exc)) from exc
-
-    if phase in paths.CHAIN_PHASES:
-        try:
-            current = phase_commit.read_current_record(slug)
-        except Exception as exc:
-            raise cli.CliError(
-                f"wheypoint: {exc}", exit_code=cli.WHEYPOINT_EXIT_CODE
-            ) from exc
-        if current is None and not grounded_entries:
-            raise cli.CliError(
-                "--grounded requires at least one entry for a first wheypoint revision"
-            )
 
     cheese_root = (root / ".cheese").resolve()
     target = cheese_root / phase / f"{slug}.md"
@@ -187,50 +266,20 @@ def write_artifact(
     # select exactly one directory beneath .cheese/.
     if cheese_root not in target.resolve().parents:
         raise cli.CliError(f"--phase must stay under .cheese/: {phase!r}")
-    target_dir = target.parent
-    target_dir.mkdir(parents=True, exist_ok=True)
 
     contents = _build_contents(preamble=preamble, body=body)
 
-    try:
-        fd, tmp_name = tempfile.mkstemp(
-            prefix=f".{target.name}.",
-            suffix=".tmp",
-            dir=target_dir,
-        )
-    except OSError as exc:
-        raise cli.CliError(f"cannot write {target}: {exc}") from exc
-
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            fd = -1
-            _ = handle.write(contents)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_name, target)
-    except OSError as exc:
-        _cleanup_tmp(fd, tmp_name)
-        raise cli.CliError(f"cannot write {target}: {exc}") from exc
-    except BaseException:
-        _cleanup_tmp(fd, tmp_name)
-        raise
-    if phase in paths.CHAIN_PHASES:
-        try:
-            _ = phase_commit.commit_phase_revision(
-                work_id=slug,
-                phase=phase,
-                next_skill=next_skill,
-                artifact=str(target),
-                orientation=orientation,
-                grounded=grounded_entries,
-                provenance=phase_commit.session_provenance_from_environment(),
-                root=root,
-                current_record=current,
-            )
-        except Exception as exc:
-            raise cli.CliError(
-                f"wheypoint: {exc}", exit_code=cli.WHEYPOINT_EXIT_CODE
-            ) from exc
+    _wheypoint_revision(
+        slug=slug,
+        phase=phase,
+        next_skill=next_skill,
+        target=target,
+        orientation=orientation,
+        grounded=grounded,
+        root=root,
+        corpus_root=corpus_root,
+        write_contents=lambda: _atomic_write(target, contents),
+    )
 
     return target
 
@@ -249,6 +298,7 @@ class _Args(Protocol):
     phase: str
     payload_schema: str | None
     root: str | None
+    corpus_root: str | None
     stdout: TextIO
 
 
@@ -276,6 +326,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
         durable_flags=a.durable_flags,
         baseline=a.baseline,
         grounded=a.grounded,
+        corpus_root=a.corpus_root,
     )
     cli.emit(str(target), stdout=a.stdout)
 
@@ -313,7 +364,10 @@ def _setup(parser: argparse.ArgumentParser) -> None:
         action="append",
         default=[],
         metavar="PATH[#START-END]",
-        help="grounded file path, optionally pinned to a positive line range; repeatable",
+        help=(
+            "grounded file path, optionally pinned to a positive line range; "
+            "repeatable; chain phases only"
+        ),
     )
     _ = parser.add_argument(
         "--phase",
@@ -329,6 +383,11 @@ def _setup(parser: argparse.ArgumentParser) -> None:
         "--root",
         default=None,
         help="repo root (default: cwd); .cheese/<phase>/<slug>.md is written under this",
+    )
+    _ = parser.add_argument(
+        "--corpus-root",
+        default=None,
+        help="wheypoint corpus root override (default: the per-project XDG corpus)",
     )
     parser.set_defaults(func=_cmd_write)
 

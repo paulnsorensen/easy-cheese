@@ -813,7 +813,9 @@ def test_a_new_gating_blocker_derives_gated_and_needs_a_dossier(
     assert result.record.status is WheypointStatus.GATED
     assert result.projection.status is WheypointStatus.GATED
     assert result.projection.gating_entry_ids == [gate]
-    assert result.markdown.splitlines()[0] == f"status: gated: 1 open gating entry: {gate}"
+    assert (
+        result.markdown.splitlines()[0] == f"status: gated: 1 open gating entry: {gate}"
+    )
 
 
 def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
@@ -827,8 +829,12 @@ def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
     carried link and is pinned to the revision being written (S3)."""
     repo_root = tmp_path / "repo"
     (repo_root / ".cheese" / "cook").mkdir(parents=True)
-    _ = (repo_root / ".cheese" / "cook" / "wave-2.md").write_text("wave-2", encoding="utf-8")
-    _ = (repo_root / ".cheese" / "cook" / "wave-3.md").write_text("wave-3", encoding="utf-8")
+    _ = (repo_root / ".cheese" / "cook" / "wave-2.md").write_text(
+        "wave-2", encoding="utf-8"
+    )
+    _ = (repo_root / ".cheese" / "cook" / "wave-3.md").write_text(
+        "wave-3", encoding="utf-8"
+    )
     monkeypatch.setattr(paths, "git_toplevel", lambda: repo_root)
 
     carried = ArtifactLink(path=".cheese/cook/wave-2.md")
@@ -854,12 +860,19 @@ def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
         ),
         store=store,
     )
-    assert [link.path for link in second.record.artifact_links] == [".cheese/cook/wave-2.md"]
+    assert [link.path for link in second.record.artifact_links] == [
+        ".cheese/cook/wave-2.md"
+    ]
     assert second.record.artifact_links[0].revision_id == second.record.revision_id
 
-    with pytest.raises(commit.CommitError, match="does not carry: '.cheese/cook/nope.md'"):
+    with pytest.raises(
+        commit.CommitError, match="does not carry: '.cheese/cook/nope.md'"
+    ):
         _ = commit.commit(
-            _delta(second.record.revision_id, remove_artifact_links=[".cheese/cook/nope.md"]),
+            _delta(
+                second.record.revision_id,
+                remove_artifact_links=[".cheese/cook/nope.md"],
+            ),
             store=store,
         )
 
@@ -952,13 +965,17 @@ def test_an_explicitly_emptied_field_replaces_while_an_omitted_one_carries(
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., Promotion],
 ) -> None:
-    parent = make_record(working_context=["src/easy_cheese/shared/wheypoint/storage.py"])
+    parent = make_record(
+        working_context=["src/easy_cheese/shared/wheypoint/storage.py"]
+    )
     seed = _seed(store, make_promotion, record=parent)
 
     carried = commit.commit(
         _delta(seed.record.revision_id, orientation="Omits the context."), store=store
     )
-    assert carried.record.working_context == ["src/easy_cheese/shared/wheypoint/storage.py"]
+    assert carried.record.working_context == [
+        "src/easy_cheese/shared/wheypoint/storage.py"
+    ]
 
     emptied = commit.commit(
         _delta(carried.record.revision_id, working_context=[]), store=store
@@ -1322,3 +1339,34 @@ def test_a_normal_delta_applies_on_top_of_a_genesis_record(
     assert second.record.title == created.record.title
     assert store.read_record() == second.record
     assert store.recover().problems == ()
+
+
+def test_committing_a_new_revision_never_reads_projection_files(
+    store: storage.WorkStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created = commit.commit(_genesis_delta(), store=store)
+    second = commit.commit(_delta(created.record.revision_id), store=store)
+    third = commit.commit(_delta(second.record.revision_id), store=store)
+
+    reads: list[Path] = []
+    original_read_bytes = Path.read_bytes
+    original_read_text = Path.read_text
+
+    def spy_read_bytes(self: Path, *args: object, **kwargs: object) -> bytes:
+        reads.append(self)
+        return original_read_bytes(self, *args, **kwargs)
+
+    def spy_read_text(
+        self: Path, encoding: str | None = None, errors: str | None = None
+    ) -> str:
+        reads.append(self)
+        return original_read_text(self, encoding, errors)
+
+    monkeypatch.setattr(Path, "read_bytes", spy_read_bytes)
+    monkeypatch.setattr(Path, "read_text", spy_read_text)
+
+    fourth = commit.commit(_delta(third.record.revision_id), store=store)
+
+    assert fourth.record.revision_number == 4
+    assert not any("projections" in path.parts for path in reads)

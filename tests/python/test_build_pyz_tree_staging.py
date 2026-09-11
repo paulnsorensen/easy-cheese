@@ -24,6 +24,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 
+KERNEL_MODULES = (
+    "canonical",
+    "checkpoint",
+    "commit",
+    "legacy",
+    "lineage",
+    "lint",
+    "projection",
+    "records",
+    "resolve",
+    "storage",
+)
+
 pytestmark = pytest.mark.skipif(  # noqa: V107
     importlib.util.find_spec("build") is None
     or importlib.util.find_spec("pip") is None
@@ -36,6 +49,7 @@ pytestmark = pytest.mark.skipif(  # noqa: V107
 def ultracook_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("tree-staging")
     return build_pyz.build_bundle("cook", out / "cook.pyz")
+
 
 @pytest.fixture(scope="module")
 def press_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
@@ -122,10 +136,14 @@ def test_package_trees_keep_their_nesting(ultracook_pyz: Path) -> None:
     # Nothing was flattened into the archive root on the way in.
     assert "compat.py" not in names
     assert "_make.py" not in names
-    assert not any(name.startswith("__pycache__") or "/__pycache__/" in name for name in names)
+    assert not any(
+        name.startswith("__pycache__") or "/__pycache__/" in name for name in names
+    )
 
 
-def test_schemas_stack_imports_and_round_trips_from_inside_the_zip(ultracook_pyz: Path) -> None:
+def test_schemas_stack_imports_and_round_trips_from_inside_the_zip(
+    ultracook_pyz: Path,
+) -> None:
     """The spec's key verification: the bundle runs on a bare interpreter with no
     site-packages. Every import must resolve inside the .pyz, and a real load()
     round-trip must work -- not just the import statement.
@@ -177,36 +195,12 @@ def wheypoint_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> None:
     """The app and shared distributions retain their package namespaces."""
     names = _bundle_members(wheypoint_pyz)
-    for module in (
-        "__init__.py",
-        "canonical.py",
-        "checkpoint.py",
-        "commit.py",
-        "legacy.py",
-        "lineage.py",
-        "lint.py",
-        "projection.py",
-        "records.py",
-        "resolve.py",
-        "storage.py",
-    ):
+    for module in ("__init__.py", *(f"{name}.py" for name in KERNEL_MODULES)):
         assert f"easy_cheese/shared/wheypoint/{module}" in names, module
     for module in ("__init__.py", "commands.py", "transcript.py", "wheypoint.py"):
         assert f"easy_cheese/skills/wheypoint/{module}" in names, module
     assert not any(
-        f"easy_cheese/skills/wheypoint/{module}" in names
-        for module in (
-            "canonical.py",
-            "checkpoint.py",
-            "commit.py",
-            "legacy.py",
-            "lineage.py",
-            "lint.py",
-            "projection.py",
-            "records.py",
-            "resolve.py",
-            "storage.py",
-        )
+        f"easy_cheese/skills/wheypoint/{name}.py" in names for name in KERNEL_MODULES
     )
     # The shared library it reuses rather than reimplements.
     assert "easy_cheese/shared/paths.py" in names
@@ -216,7 +210,9 @@ def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> 
     assert "attr/_make.py" in names
     assert "cattrs/converters.py" in names
     assert "attrs-26.1.0.dist-info/METADATA" in names
-    assert not any(name.startswith("__pycache__") or "/__pycache__/" in name for name in names)
+    assert not any(
+        name.startswith("__pycache__") or "/__pycache__/" in name for name in names
+    )
 
 
 def test_the_wheypoint_runtime_imports_from_inside_the_zip(wheypoint_pyz: Path) -> None:
@@ -299,7 +295,6 @@ def test_members_are_stored(ultracook_pyz: Path) -> None:
     assert kinds == {zipfile.ZIP_STORED}
 
 
-
 def test_shiv_command_uses_a_local_hash_locked_wheelhouse(tmp_path: Path) -> None:
     requirements = tmp_path / "requirements.txt"
     wheelhouse = tmp_path / "wheelhouse"
@@ -345,7 +340,10 @@ def test_build_cli_preserves_resolver_diagnostics(
 def test_runtime_lock_contains_only_external_pure_wheels() -> None:
     lines = (REPO_ROOT / "requirements" / "runtime.txt").read_text().splitlines()
     locked = [line for line in lines if line and not line.startswith("#")]
-    assert all(re.fullmatch(r"[^=]+==[^ ]+ --hash=sha256:[0-9a-f]{64}", line) for line in locked)
+    assert all(
+        re.fullmatch(r"[^=]+==[^ ]+ --hash=sha256:[0-9a-f]{64}", line)
+        for line in locked
+    )
     assert not any(line.startswith("easy-cheese-") for line in locked)
 
 
@@ -386,9 +384,7 @@ def test_validate_pure_wheel_rejects_false_root_is_purelib(tmp_path: Path) -> No
 
 
 def test_validate_pure_wheel_rejects_non_universal_tag(tmp_path: Path) -> None:
-    renamed = _test_wheel(
-        tmp_path / "demo-1.0.0-cp314-cp314-macosx_14_0_arm64.whl"
-    )
+    renamed = _test_wheel(tmp_path / "demo-1.0.0-cp314-cp314-macosx_14_0_arm64.whl")
     with pytest.raises(ValueError, match="not py3-none-any"):
         build_pyz.validate_pure_wheel(renamed)
 
@@ -398,6 +394,32 @@ def test_shiv_bundle_has_no_loose_source_or_vendor_roots(ultracook_pyz: Path) ->
         names = archive.namelist()
     assert "site-packages" in {name.split("/", 1)[0] for name in names}
     assert not any(
-        name.startswith(("src/", "shared/", "vendor/", "common.pyz"))
-        for name in names
+        name.startswith(("src/", "shared/", "vendor/", "common.pyz")) for name in names
     )
+
+
+@pytest.fixture(scope="module")
+def all_bundles_pyz(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    out = tmp_path_factory.mktemp("all-bundles")
+    return build_pyz.build_bundles(
+        {skill: out / f"{skill}.pyz" for skill in build_pyz.SKILLS}
+    )
+
+
+def test_shared_kernel_is_present_in_every_bundle_and_old_kernel_is_absent(
+    all_bundles_pyz: dict[str, Path],
+) -> None:
+    assert {path.stem for path in all_bundles_pyz.values()} == set(build_pyz.SKILLS)
+    expected_new_modules = {
+        f"site-packages/easy_cheese/shared/wheypoint/{module}.py"
+        for module in KERNEL_MODULES
+    }
+    old_kernel_modules = {
+        f"site-packages/easy_cheese/skills/wheypoint/{module}.py"
+        for module in KERNEL_MODULES
+    }
+    for bundle in all_bundles_pyz.values():
+        with zipfile.ZipFile(bundle) as archive:
+            members = set(archive.namelist())
+        assert expected_new_modules <= members, bundle.name
+        assert members.isdisjoint(old_kernel_modules), bundle.name

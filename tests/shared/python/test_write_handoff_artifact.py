@@ -5,8 +5,7 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 import sys
-from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
+from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, TypedDict
@@ -16,8 +15,11 @@ import pytest
 from easy_cheese.shared.wheypoint import commit as commit_module
 from easy_cheese.shared.wheypoint import storage as wheypoint_storage
 
+from easy_cheese_schemas.contracts import CheckpointIntent, NextMove, WheypointDelta
+from easy_cheese_schemas.phase_contracts import CURD_PLAN_SCHEMA_URI
+from easy_cheese.shared.wheypoint import checkpoint
+
 if TYPE_CHECKING:
-    from easy_cheese_schemas.contracts import CheckpointIntent
     from easy_cheese.shared.cli import CliError
     from easy_cheese.shared.handoff import HandoffParseError, HandoffSlug
 
@@ -40,30 +42,8 @@ class _CliModule(Protocol):
     CliError: type[CliError]
 
 
-class _PhaseCommitModule(Protocol):
-    def commit_phase_revision(self, **kwargs: object) -> object: ...
-
-
-@dataclass(frozen=True)
-class _FakeRecord:
-    revision_id: str
-
-
-class _FakeStore:
-    work_id: str
-    _records: Iterator[_FakeRecord | None]
-
-    def __init__(self, records: Iterator[_FakeRecord | None]) -> None:
-        self.work_id = "seam"
-        self._records = records
-
-    def read_record(self) -> _FakeRecord | None:
-        return next(self._records)
-
-
 class _WriterModule(Protocol):
     cli: _CliModule
-    phase_commit: _PhaseCommitModule
 
     def write_artifact(
         self,
@@ -81,6 +61,7 @@ class _WriterModule(Protocol):
         durable_flags: str | None = None,
         baseline: str | None = None,
         grounded: Sequence[str] = (),
+        corpus_root: Path | str | None = None,
     ) -> Path: ...
 
 
@@ -180,23 +161,38 @@ class TestPathTraversalRejected:
     ) -> None:
         with pytest.raises(writer.cli.CliError):
             _ = writer.write_artifact(
-                slug=bad_slug, status="ok", phase="age", next_skill="done",
-                artifact="", orientation="x", body=None, root=tmp_path,
+                slug=bad_slug,
+                status="ok",
+                phase="age",
+                next_skill="done",
+                artifact="",
+                orientation="x",
+                body=None,
+                root=tmp_path,
             )
 
-    def test_traversal_phase_rejected(self, writer: _WriterModule, tmp_path: Path) -> None:
+    def test_traversal_phase_rejected(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
         with pytest.raises(writer.cli.CliError):
             _ = writer.write_artifact(
-                slug="ok-slug", status="ok", next_skill="done", artifact="",
-                orientation="x", body=None, root=tmp_path, phase="../etc",
+                slug="ok-slug",
+                status="ok",
+                next_skill="done",
+                artifact="",
+                orientation="x",
+                body=None,
+                root=tmp_path,
+                phase="../etc",
             )
+
     def test_genesis_requires_grounded_context(
         self, writer: _WriterModule, tmp_path: Path
     ) -> None:
         with pytest.raises(
             writer.cli.CliError,
-            match="--grounded requires at least one entry",
-        ):
+            match="a genesis phase write requires at least one --grounded entry",
+        ) as excinfo:
             _ = writer.write_artifact(
                 slug="empty-genesis",
                 status="ok",
@@ -207,18 +203,24 @@ class TestPathTraversalRejected:
                 body=None,
                 root=tmp_path,
             )
+        assert excinfo.value.exit_code == 4
         assert not (tmp_path / ".cheese" / "cook" / "empty-genesis.md").exists()
 
 
-
 class TestRerunOverwrite:
-    def test_rerun_same_slug_overwrites(self, writer: _WriterModule, tmp_path: Path) -> None:
+    def test_rerun_same_slug_overwrites(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
         # os.replace (not os.rename) must overwrite an existing artifact cleanly
         # on a re-run — the cross-platform atomic-overwrite contract.
         common: _RerunKwargs = {
-            "slug": "rerun", "status": "ok", "phase": "press",
-            "next_skill": "age", "artifact": "",
-            "body": None, "root": tmp_path,
+            "slug": "rerun",
+            "status": "ok",
+            "phase": "press",
+            "next_skill": "age",
+            "artifact": "",
+            "body": None,
+            "root": tmp_path,
         }
         target = writer.write_artifact(
             orientation="first pass",
@@ -282,7 +284,9 @@ class TestOptionalKeyedLines:
         assert slug.durable_flags == "keyed-line parsing added -> handoff-contract"
         assert slug.orientation == "cook implemented widget"
 
-    def test_render_parse_roundtrip_with_keyed_lines(self, handoff_mod: _HandoffModule) -> None:
+    def test_render_parse_roundtrip_with_keyed_lines(
+        self, handoff_mod: _HandoffModule
+    ) -> None:
         original = handoff_mod.HandoffSlug(
             status="ok",
             halt_reason=None,
@@ -300,10 +304,14 @@ class TestOptionalKeyedLines:
             "status: ok\nnext: cure\nartifact:\n"
             "durable_flags: none\ndurable_flags: none\norient\n"
         )
-        with pytest.raises(handoff_mod.HandoffParseError, match="duplicate 'durable_flags:'"):
+        with pytest.raises(
+            handoff_mod.HandoffParseError, match="duplicate 'durable_flags:'"
+        ):
             _ = handoff_mod.parse_handoff_slug(text)
 
-    def test_keyed_line_without_value_fails_loud(self, handoff_mod: _HandoffModule) -> None:
+    def test_keyed_line_without_value_fails_loud(
+        self, handoff_mod: _HandoffModule
+    ) -> None:
         text = "status: ok\nnext: cure\nartifact:\ndurable_flags:\norient\n"
         with pytest.raises(handoff_mod.HandoffParseError, match="requires a value"):
             _ = handoff_mod.parse_handoff_slug(text)
@@ -334,11 +342,26 @@ class TestOptionalKeyedLines:
         # Locks the argparse dest wiring (--taste-test/--durable-flags).
         result = subprocess.run(
             [
-                sys.executable, str(WRITER_CLI),
-                "--slug", "cli-flagged", "--status", "ok", "--phase", "age",
-                "--next", "cure", "--artifact", "", "--orientation", "demo",
-                "--taste-test", "inline-pass", "--durable-flags", "none",
-                "--grounded", "context.md#1-1",
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "cli-flagged",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "cure",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--taste-test",
+                "inline-pass",
+                "--durable-flags",
+                "none",
+                "--grounded",
+                "context.md#1-1",
             ],
             capture_output=True,
             text=True,
@@ -421,11 +444,24 @@ class TestOptionalKeyedLines:
         # Locks the argparse dest wiring (--baseline).
         result = subprocess.run(
             [
-                sys.executable, str(WRITER_CLI),
-                "--slug", "cli-baselined", "--status", "ok", "--phase", "age",
-                "--next", "cure", "--artifact", "", "--orientation", "demo",
-                "--baseline", "none",
-                "--grounded", "context.md#1-1",
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "cli-baselined",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "cure",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--baseline",
+                "none",
+                "--grounded",
+                "context.md#1-1",
             ],
             capture_output=True,
             text=True,
@@ -449,15 +485,24 @@ class TestBodyFile:
             [
                 sys.executable,
                 str(WRITER_CLI),
-                "--slug", "with-body",
-                "--status", "ok",
-                "--phase", "age",
-                "--next", "cure",
-                "--artifact", "",
-                "--orientation", "demo",
-                "--body-file", str(body_src),
-                "--root", str(tmp_path),
-                "--grounded", "context.md#1-1",
+                "--slug",
+                "with-body",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "cure",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--body-file",
+                str(body_src),
+                "--root",
+                str(tmp_path),
+                "--grounded",
+                "context.md#1-1",
             ],
             capture_output=True,
             text=True,
@@ -473,7 +518,9 @@ class TestBodyFile:
         assert slug.orientation == "demo"
         assert slug.artifact is None
         assert lines[4] == ""
-        assert "\n".join(lines[5:]) + ("\n" if content.endswith("\n") else "") == body_text
+        assert (
+            "\n".join(lines[5:]) + ("\n" if content.endswith("\n") else "") == body_text
+        )
 
 
 class TestCliErrors:
@@ -482,12 +529,18 @@ class TestCliErrors:
             [
                 sys.executable,
                 str(WRITER_CLI),
-                "--slug", "x",
-                "--status", "ok",
-                "--phase", "age",
-                "--next", "age",
-                "--artifact", "",
-                "--root", str(tmp_path),
+                "--slug",
+                "x",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--root",
+                str(tmp_path),
             ],
             capture_output=True,
             text=True,
@@ -500,12 +553,18 @@ class TestCliErrors:
             [
                 sys.executable,
                 str(WRITER_CLI),
-                "--slug", "x",
-                "--status", "ok",
-                "--next", "age",
-                "--artifact", "",
-                "--orientation", "demo",
-                "--root", str(tmp_path),
+                "--slug",
+                "x",
+                "--status",
+                "ok",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
             ],
             capture_output=True,
             text=True,
@@ -518,14 +577,22 @@ class TestCliErrors:
             [
                 sys.executable,
                 str(WRITER_CLI),
-                "--slug", "x",
-                "--status", "ok",
-                "--phase", "age",
-                "--next", "age",
-                "--artifact", "",
-                "--orientation", "demo",
-                "--body-file", str(tmp_path / "nope.md"),
-                "--root", str(tmp_path),
+                "--slug",
+                "x",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--body-file",
+                str(tmp_path / "nope.md"),
+                "--root",
+                str(tmp_path),
             ],
             capture_output=True,
             text=True,
@@ -587,14 +654,22 @@ class TestPhaseFlag:
             [
                 sys.executable,
                 str(WRITER_CLI),
-                "--slug", "phase-flag",
-                "--status", "ok",
-                "--phase", "age",
-                "--next", "cure",
-                "--artifact", ".cheese/press/phase-flag.md",
-                "--orientation", "age reviewed press output",
-                "--root", str(tmp_path),
-                "--grounded", "context.md#1-1",
+                "--slug",
+                "phase-flag",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "cure",
+                "--artifact",
+                ".cheese/press/phase-flag.md",
+                "--orientation",
+                "age reviewed press output",
+                "--root",
+                str(tmp_path),
+                "--grounded",
+                "context.md#1-1",
             ],
             capture_output=True,
             text=True,
@@ -669,11 +744,24 @@ class TestAtomicRename:
         try:
             result = subprocess.run(
                 [
-                    sys.executable, str(WRITER_CLI),
-                    "--slug", "locked", "--status", "ok", "--phase", "age",
-                    "--next", "done", "--artifact", "", "--orientation", "demo",
-                    "--root", str(tmp_path),
-                    "--grounded", "context.md#1-1",
+                    sys.executable,
+                    str(WRITER_CLI),
+                    "--slug",
+                    "locked",
+                    "--status",
+                    "ok",
+                    "--phase",
+                    "age",
+                    "--next",
+                    "done",
+                    "--artifact",
+                    "",
+                    "--orientation",
+                    "demo",
+                    "--root",
+                    str(tmp_path),
+                    "--grounded",
+                    "context.md#1-1",
                 ],
                 capture_output=True,
                 text=True,
@@ -690,13 +778,27 @@ class TestContractErrorContext:
     """A rejected `--status` (or any render-time contract violation) exits 3
     and names the `--phase`/`--slug` dispatch it came from."""
 
-    def test_bad_status_exits_3_with_phase_and_slug_context(self, tmp_path: Path) -> None:
+    def test_bad_status_exits_3_with_phase_and_slug_context(
+        self, tmp_path: Path
+    ) -> None:
         result = subprocess.run(
             [
-                sys.executable, str(WRITER_CLI),
-                "--slug", "my-task", "--status", "bogus-status", "--phase", "press",
-                "--next", "age", "--artifact", "", "--orientation", "demo",
-                "--root", str(tmp_path),
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "my-task",
+                "--status",
+                "bogus-status",
+                "--phase",
+                "press",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
             ],
             capture_output=True,
             text=True,
@@ -713,10 +815,22 @@ class TestContractErrorContext:
         # tmp file are created.
         result = subprocess.run(
             [
-                sys.executable, str(WRITER_CLI),
-                "--slug", "hurt", "--status", "ok", "--phase", "press",
-                "--next", "age", "--artifact", "line1\nline2", "--orientation", "demo",
-                "--root", str(tmp_path),
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "hurt",
+                "--status",
+                "ok",
+                "--phase",
+                "press",
+                "--next",
+                "age",
+                "--artifact",
+                "line1\nline2",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
             ],
             capture_output=True,
             text=True,
@@ -731,10 +845,22 @@ class TestContractErrorContext:
     ) -> None:
         result = subprocess.run(
             [
-                sys.executable, str(WRITER_CLI),
-                "--slug", "hop", "--status", "ok", "--phase", "cook",
-                "--next", "plate", "--artifact", "", "--orientation", "demo",
-                "--root", str(tmp_path),
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "hop",
+                "--status",
+                "ok",
+                "--phase",
+                "cook",
+                "--next",
+                "plate",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
             ],
             capture_output=True,
             text=True,
@@ -752,6 +878,8 @@ class TestGroundedValidation:
             ("missing.md#1-1", "path not found"),
             ("context.md#1", "path\\[#start-end\\]"),
             ("context.md#2-1", "range must ascend"),
+            ("/etc/passwd#1-1", "must be under root"),
+            ("../outside.md#1-1", "escapes the repository root"),
         ],
     )
     def test_invalid_grounded_entry_rejected_before_write(
@@ -793,6 +921,31 @@ class TestGroundedValidation:
             )
         assert not (tmp_path / ".cheese").exists()
 
+    def test_grounded_symlink_escape_rejected(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        tmp_path_factory: pytest.TempPathFactory,
+    ) -> None:
+        outside_dir = tmp_path_factory.mktemp("outside")
+        outside = outside_dir / "secret.md"
+        _ = outside.write_text("secret\n", encoding="utf-8")
+        link = tmp_path / "linked.md"
+        link.symlink_to(outside)
+        with pytest.raises(writer.cli.CliError, match="escapes the repository root"):
+            _ = writer.write_artifact(
+                slug="symlink-escape",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("linked.md#1-1",),
+            )
+        assert not (tmp_path / ".cheese").exists()
+
 
 class TestWheypointCommitFailure:
     def test_commit_failure_keeps_written_artifact(
@@ -801,7 +954,7 @@ class TestWheypointCommitFailure:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        phase_module = writer.phase_commit
+        from easy_cheese.shared.wheypoint import phase_commit as phase_module
 
         def fail(**_kwargs: object) -> None:
             raise RuntimeError("corpus unavailable")
@@ -822,70 +975,140 @@ class TestWheypointCommitFailure:
         target = tmp_path / ".cheese" / "cook" / "commit-failed.md"
         assert target.is_file()
         assert excinfo.value.exit_code == 4
-        assert "wheypoint: corpus unavailable" in str(excinfo.value)
+        message = str(excinfo.value)
+        assert str(target) in message
+        assert "RuntimeError" in message
+        assert "the next resolve will gate on stale-artifact-link" in message
+
+    def test_commit_failure_prints_traceback_for_unclassified_exception(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit as phase_module
+
+        def fail(**_kwargs: object) -> None:
+            raise KeyError("missing")
+
+        monkeypatch.setattr(phase_module, "commit_phase_revision", fail)
+        with pytest.raises(writer.cli.CliError) as excinfo:
+            _ = writer.write_artifact(
+                slug="commit-failed-keyerror",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert "KeyError" in str(excinfo.value)
+        assert "Traceback" in capsys.readouterr().err
 
 
-def _phase_commit_seam(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    *,
-    always_conflict: bool,
-    genesis: bool = False,
-) -> tuple[list[CheckpointIntent], list[object], Path]:
-    from easy_cheese.shared.wheypoint import phase_commit
+class TestGroundedRejectedOnNonChainPhase:
+    def test_grounded_rejected_for_non_chain_phase(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(writer.cli.CliError, match="mold"):
+            _ = writer.write_artifact(
+                slug="approved-plan",
+                status="ok",
+                phase="mold",
+                next_skill="cook",
+                payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+                artifact="",
+                orientation="mold produced a curd plan",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert not (tmp_path / ".cheese").exists()
 
-    target = tmp_path / ".cheese" / "cook" / "seam.md"
-    target.parent.mkdir(parents=True)
-    _ = target.write_text("phase\n", encoding="utf-8")
-    revisions: Iterator[_FakeRecord | None] = iter(
-        [
-            None if genesis else _FakeRecord(revision_id="rev-old"),
-            _FakeRecord(revision_id="rev-new"),
-        ]
-    )
-    store = _FakeStore(revisions)
 
-    def open_store(
-        _work_id: str, corpus_root: Path | str | None = None
-    ) -> _FakeStore:
-        _ = corpus_root
-        return store
+class TestCorpusRootPlumbing:
+    def test_corpus_root_override_lands_revision_under_given_root(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("EASY_CHEESE_HOME", raising=False)
+        monkeypatch.delenv("EASY_CHEESE_PROJECT", raising=False)
+        corpus_root = tmp_path / "explicit-corpus"
+        calls: list[Path | str | None] = []
+        real_open = wheypoint_storage.WorkStore.open
 
-    monkeypatch.setattr(wheypoint_storage.WorkStore, "open", open_store)
-    intents: list[CheckpointIntent] = []
+        def counted_open(
+            work_id: str, *, corpus_root: Path | str | None = None
+        ) -> wheypoint_storage.WorkStore:
+            calls.append(corpus_root)
+            return real_open(work_id, corpus_root=corpus_root)
 
-    def build_delta(
-        intent: CheckpointIntent, _current: _FakeRecord | None
-    ) -> object:
-        intents.append(intent)
-        return object()
+        monkeypatch.setattr(wheypoint_storage.WorkStore, "open", counted_open)
 
-    monkeypatch.setattr(phase_commit, "_build_delta", build_delta)
-    commits: list[object] = []
-
-    def commit_delta(
-        delta: object, *, store: _FakeStore, artifact_root: Path | str | None
-    ) -> str:
-        _ = (store, artifact_root)
-        commits.append(delta)
-        if always_conflict or len(commits) == 1:
-            raise commit_module.StaleParentError("race")
-        return "committed"
-
-    monkeypatch.setattr(commit_module, "commit", commit_delta)
-    return intents, commits, target
+        target = writer.write_artifact(
+            slug="corpus-plumbed",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+            corpus_root=corpus_root,
+        )
+        assert target.is_file()
+        assert len(calls) == 1
+        assert (corpus_root / "work" / "corpus-plumbed" / "record.json").is_file()
 
 
 class TestWheypointConflictRetry:
     def test_retry_rebinds_base_and_drops_genesis_notes(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         from easy_cheese.shared.wheypoint import phase_commit
 
-        intents, commits, target = _phase_commit_seam(
-            monkeypatch, tmp_path, always_conflict=False, genesis=True
-        )
-        _ = phase_commit.commit_phase_revision(
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        target.parent.mkdir(parents=True)
+        _ = target.write_text("phase\n", encoding="utf-8")
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        real_commit = commit_module.commit
+        calls = {"n": 0}
+
+        def commit_with_concurrent_landing(
+            delta: WheypointDelta,
+            *,
+            store: wheypoint_storage.WorkStore,
+            artifact_root: Path | str | None = None,
+        ) -> commit_module.CommitResult:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                concurrent_delta = checkpoint.build_delta(
+                    CheckpointIntent(
+                        work_id="seam",
+                        orientation="concurrent handoff",
+                        working_context=["context.md#1-1"],
+                        notes="concurrent handoff",
+                        next=NextMove("press"),
+                        artifact="seam.md",
+                    ),
+                    None,
+                )
+                _ = real_commit(concurrent_delta, store=store, artifact_root=artifact_root)
+            return real_commit(delta, store=store, artifact_root=artifact_root)
+
+        monkeypatch.setattr(commit_module, "commit", commit_with_concurrent_landing)
+
+        outcome = phase_commit.commit_phase_revision(
             work_id="seam",
             phase="cook",
             next_skill="press",
@@ -893,20 +1116,53 @@ class TestWheypointConflictRetry:
             orientation="demo",
             grounded=("context.md#1-1",),
             root=tmp_path,
+            store=store,
         )
-        assert len(commits) == 2
-        assert len(intents) == 2
-        assert intents[1].base_revision_id == "rev-new"
-        assert intents[1].notes is None
+        current = store.read_record()
+        assert current is not None
+        assert outcome.retried is True
+        assert outcome.result.record.revision_id == current.revision_id
+        assert outcome.result.revision.parent_revision_id is not None
+        assert outcome.result.record.working_context == ["context.md#1-1"]
+        assert [link.path for link in outcome.result.record.artifact_links] == [
+            ".cheese/cook/seam.md"
+        ]
+        assert "stale parent conflict; retrying" in capsys.readouterr().err
 
     def test_persistent_parent_conflict_stops_after_one_retry(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         from easy_cheese.shared.wheypoint import phase_commit
 
-        _intents, commits, target = _phase_commit_seam(
-            monkeypatch, tmp_path, always_conflict=True
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        target.parent.mkdir(parents=True)
+        _ = target.write_text("phase\n", encoding="utf-8")
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        genesis_delta = checkpoint.build_delta(
+            CheckpointIntent(
+                work_id="seam",
+                orientation="genesis handoff",
+                notes="genesis handoff",
+                next=NextMove("press"),
+                artifact="seam.md",
+                working_context=["context.md#1-1"],
+            ),
+            None,
         )
+        _ = commit_module.commit(genesis_delta, store=store, artifact_root=tmp_path)
+
+        commits: list[object] = []
+
+        def always_conflict(*_args: object, **_kwargs: object) -> None:
+            commits.append(object())
+            raise commit_module.StaleParentError("race")
+
+        monkeypatch.setattr(commit_module, "commit", always_conflict)
+
         with pytest.raises(commit_module.StaleParentError):
             _ = phase_commit.commit_phase_revision(
                 work_id="seam",
@@ -916,5 +1172,7 @@ class TestWheypointConflictRetry:
                 orientation="demo",
                 grounded=("context.md#1-1",),
                 root=tmp_path,
+                store=store,
             )
         assert len(commits) == 2
+        assert "stale parent conflict; retrying" in capsys.readouterr().err

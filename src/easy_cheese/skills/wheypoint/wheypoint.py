@@ -52,7 +52,7 @@ from easy_cheese_schemas import (
 )
 from easy_cheese_schemas import schema_runtime
 
-from easy_cheese.shared import handoff, paths
+from easy_cheese.shared import paths
 from easy_cheese.shared.wheypoint import canonical
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
 from easy_cheese.shared.wheypoint import commit as commit_mod
@@ -61,6 +61,7 @@ from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import projection
 from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
+from easy_cheese.shared.wheypoint import resolve_cli
 from easy_cheese.shared.wheypoint import storage
 from . import transcript
 
@@ -85,7 +86,9 @@ EXIT_INTERNAL = 3
 class _Refused(Exception):
     """A command that has an error shape to report rather than a payload."""
 
-    def __init__(self, code: str, message: str, extra: dict[str, object] | None = None) -> None:
+    def __init__(
+        self, code: str, message: str, extra: dict[str, object] | None = None
+    ) -> None:
         super().__init__(message)
         self.code: str = code
         self.extra: dict[str, object] = {} if extra is None else extra
@@ -140,7 +143,9 @@ def _parser(command: str) -> _Parser:
             help="write no mirror; the checkpoint stays canonical-local",
         )
     elif command == "schema":
-        _ = parser.add_argument("slug", help="a registered contract slug, e.g. checkpoint-intent")
+        _ = parser.add_argument(
+            "slug", help="a registered contract slug, e.g. checkpoint-intent"
+        )
     elif command in ("list", "log"):
         _ = parser.add_argument(
             "--corpus-root",
@@ -151,8 +156,14 @@ def _parser(command: str) -> _Parser:
         if command == "log":
             _ = parser.add_argument("--work-id", required=True, dest="work_id")
     elif command == "turns":
-        _ = parser.add_argument("--transcript", default=None, help="path to a session .jsonl transcript")
-        _ = parser.add_argument("--session", default=None, help="session id under the derived projects directory")
+        _ = parser.add_argument(
+            "--transcript", default=None, help="path to a session .jsonl transcript"
+        )
+        _ = parser.add_argument(
+            "--session",
+            default=None,
+            help="session id under the derived projects directory",
+        )
     elif command == "resolve":
         _ = parser.add_argument(
             "--ref",
@@ -267,12 +278,17 @@ def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object
     )
 
 
-def request_identity_for(intent: CheckpointIntent, proof: CompactionRecord | None) -> str:
+def request_identity_for(
+    intent: CheckpointIntent, proof: CompactionRecord | None
+) -> str:
     """The pending-mirror ledger key: the intent, plus the proof when one rides with it."""
     if proof is None:
         return canonical.digest_value(records.unstructure(intent))
     return canonical.digest_value(
-        {"intent": records.unstructure(intent), "compaction": records.unstructure(proof)}
+        {
+            "intent": records.unstructure(intent),
+            "compaction": records.unstructure(proof),
+        }
     )
 
 
@@ -287,7 +303,9 @@ def _compaction_proof(args: argparse.Namespace) -> CompactionRecord | None:
     except OSError as exc:
         raise _Refused("compaction-proof-unreadable", f"{path_arg}: {exc}") from exc
     except ValueError as exc:
-        raise _Refused("compaction-proof-unreadable", f"{path_arg} is not one JSON value: {exc}") from exc
+        raise _Refused(
+            "compaction-proof-unreadable", f"{path_arg} is not one JSON value: {exc}"
+        ) from exc
     try:
         return records.structure(raw, CompactionRecord, forbid_unknown=True)
     except records.RecordError as exc:
@@ -549,33 +567,7 @@ def _run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
         if legacy_flag
         else resolve_mod.resolve(ref)
     )
-    if resolution.outcome is resolve_mod.ResolutionOutcome.ERROR:
-        raise _Refused(
-            "invalid-reference",
-            resolution.detail or f"reference {ref!r} could not be interpreted",
-        )
-    return {
-        "ref": ref,
-        "outcome": resolution.outcome.value,
-        "dispatchable": resolution.dispatchable,
-        "source": None if resolution.source is None else resolution.source.value,
-        "work_id": resolution.work_id,
-        "record": _maybe(resolution.record),
-        "projection": _maybe(resolution.projection),
-        "findings": _findings(resolution.findings),
-        "matches": list(resolution.matches),
-        "searched": list(resolution.searched),
-        "legacy_note": (
-            None if resolution.legacy_note is None else str(resolution.legacy_note)
-        ),
-        "legacy_slug": _maybe(resolution.legacy_slug),
-        "phase_slug": (
-            None
-            if resolution.phase_slug is None
-            else handoff.slug_payload(resolution.phase_slug)
-        ),
-        "detail": resolution.detail,
-    }
+    return resolve_cli.resolve_payload(resolution, ref)
 
 
 def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
@@ -611,17 +603,31 @@ def _run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
     }
     loaded = load(scrubbed, CheckpointIntent, strict=True, forbid_unknown=True)
     problems.extend(loaded.problems)
-    problems.extend(f"{hit} looks like a credential" for hit in checkpoint_mod.secret_fields(intent_payload))
+    problems.extend(
+        f"{hit} looks like a credential"
+        for hit in checkpoint_mod.secret_fields(intent_payload)
+    )
     action_intent = loaded.value
     if action_intent is None:
         # Invalid entries or unknown keys do not suppress independent action checks.
-        action_fields = {"work_id", "next", "orientation", "artifact", "tasks", "parallel"}
+        action_fields = {
+            "work_id",
+            "next",
+            "orientation",
+            "artifact",
+            "tasks",
+            "parallel",
+        }
         action_intent = load(
             {key: value for key, value in scrubbed.items() if key in action_fields},
-            CheckpointIntent, strict=True, forbid_unknown=True,
+            CheckpointIntent,
+            strict=True,
+            forbid_unknown=True,
         ).value
     if action_intent is not None:
-        problems.extend(checkpoint_mod.delta_problems(action_intent, None, schema_only=True))
+        problems.extend(
+            checkpoint_mod.delta_problems(action_intent, None, schema_only=True)
+        )
     if problems:
         raise _Refused("invalid-intent", "; ".join(problems), {"problems": problems})
     return {"valid": True, "work_id": loaded.value.work_id if loaded.value else None}
@@ -637,7 +643,9 @@ def _run_schema(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
             f"no contract is registered as {slug!r}; known: {', '.join(sorted(table))}",
             {"known": sorted(table)},
         )
-    document = cast(dict[str, object], json.loads(schema_runtime.schema_bytes(table[slug])))
+    document = cast(
+        dict[str, object], json.loads(schema_runtime.schema_bytes(table[slug]))
+    )
     return {"slug": slug, "schema": document}
 
 
@@ -672,7 +680,12 @@ def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
             record = store.read_record()
         except (storage.StorageError, records.RecordError, ValueError) as exc:
             items.append(
-                {"work_id": work_id, "status": "unreadable", "unreadable": str(exc), "orientation": str(exc)}
+                {
+                    "work_id": work_id,
+                    "status": "unreadable",
+                    "unreadable": str(exc),
+                    "orientation": str(exc),
+                }
             )
             continue
         if record is None:
@@ -688,7 +701,9 @@ def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                 "orientation": head,
             }
         )
-    lines = _tsv_lines(items, ("work_id", "revision_number", "status", "next", "orientation"))
+    lines = _tsv_lines(
+        items, ("work_id", "revision_number", "status", "next", "orientation")
+    )
     return {"corpus_root": str(root), "items": items, "lines": lines}
 
 
@@ -704,7 +719,10 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
         except (storage.StorageError, OSError, ValueError) as exc:
             raise _Refused("record-unreadable", str(exc)) from exc
         if record is None:
-            raise _Refused("record-missing", f"work {work_id!r} has no record at {store.record_path}")
+            raise _Refused(
+                "record-missing",
+                f"work {work_id!r} has no record at {store.record_path}",
+            )
         raise _Refused(
             "store-inconsistent",
             f"work {work_id!r} has a record but no complete revisions"
@@ -744,7 +762,12 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
         {"path": path, "reason": reason}
         for path, _, reason in (entry.partition(": ") for entry in skipped)
     ]
-    return {"work_id": work_id, "revisions": entries, "lines": lines, "unreadable": unreadable}
+    return {
+        "work_id": work_id,
+        "revisions": entries,
+        "lines": lines,
+        "unreadable": unreadable,
+    }
 
 
 def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
@@ -769,13 +792,15 @@ def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                     "modified": (
                         None
                         if mtime is None
-                        else _dt.datetime.fromtimestamp(mtime, tz=_dt.timezone.utc).strftime(
-                            "%Y-%m-%dT%H:%M:%SZ"
-                        )
+                        else _dt.datetime.fromtimestamp(
+                            mtime, tz=_dt.timezone.utc
+                        ).strftime("%Y-%m-%dT%H:%M:%SZ")
                     ),
                 }
                 for mtime, stem in sorted(
-                    stamped, key=lambda pair: (pair[0] is not None, pair[0] or 0.0), reverse=True
+                    stamped,
+                    key=lambda pair: (pair[0] is not None, pair[0] or 0.0),
+                    reverse=True,
                 )
             ]
             raise _Refused(
@@ -785,10 +810,15 @@ def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                 {"projects_dir": str(directory), "candidates": listing},
             )
         if transcript.SESSION_ID_RE.fullmatch(session) is None:
-            raise _Refused("invalid-session", f"session id {session!r} must be one safe file-name segment")
+            raise _Refused(
+                "invalid-session",
+                f"session id {session!r} must be one safe file-name segment",
+            )
         path = directory / f"{session}.jsonl"
     if not path.is_file():
-        raise _Refused("transcript-missing", f"no transcript at {path}", {"path": str(path)})
+        raise _Refused(
+            "transcript-missing", f"no transcript at {path}", {"path": str(path)}
+        )
     turns, skipped = transcript.user_turns(path)
     rows: list[dict[str, object]] = [
         {"timestamp": turn["timestamp"], "text": turn["text"]} for turn in turns
@@ -882,6 +912,9 @@ def main(
         payload = _RUNNERS[command](args, stdin2)
     except _Refused as exc:
         return _refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED, exc.extra)
+    except resolve_cli.Refusal as exc:
+        _emit(stdout2, {"ok": False, "command": command, **exc.payload})
+        return EXIT_REFUSED
     except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
         traceback.print_exc(file=sys.stderr)
         return _refuse(

@@ -242,7 +242,11 @@ class WorkStore:
     @classmethod
     def enumerate(cls, corpus_root: Path | str | None = None) -> list[WorkStore]:
         """Every work store under the corpus root that holds a record, by work id."""
-        base = Path(corpus_root) if corpus_root is not None else paths.project_corpus_root()
+        base = (
+            Path(corpus_root)
+            if corpus_root is not None
+            else paths.project_corpus_root()
+        )
         work_dir = base / WORK_DIRNAME
         stores: list[WorkStore] = []
         for record_path in sorted(work_dir.glob(f"*/{RECORD_FILENAME}")):
@@ -273,6 +277,37 @@ class WorkStore:
         incomplete.extend(self._unclaimed_projections(receipts))
         complete.sort(key=lambda file: file.revision.revision_number)
         return RevisionScan(tuple(complete), tuple(incomplete))
+
+    def receipt_revisions(self) -> tuple[WheypointRevision, ...]:
+        """Every revision receipt that structures, oldest first.
+
+        Unlike `revisions()`, this never reads or hashes the projection
+        markdown beside a receipt: a caller that only needs lineage --
+        `parent_revision_id` and the digests a revision pins -- does not
+        need the projection to be present or to agree with its digest.
+        An unreadable or unstructurable receipt is skipped exactly as
+        `_inspect_revision` would skip it, minus the projection check.
+        """
+        if not self.revisions_dir.is_dir():
+            return ()
+        receipts: list[WheypointRevision] = []
+        for path in sorted(self.revisions_dir.glob("*.json")):
+            try:
+                payload = _parse_json(path.read_bytes())
+            except ValueError:
+                continue
+            try:
+                revision = records.structure(payload, WheypointRevision)
+            except records.RecordError:
+                continue
+            expected = self.revision_path(
+                revision.revision_number, revision.revision_id
+            )
+            if path.name != expected.name:
+                continue
+            receipts.append(revision)
+        receipts.sort(key=lambda revision: revision.revision_number)
+        return tuple(receipts)
 
     def read_record(self) -> WheypointRecord | None:
         try:
@@ -405,10 +440,17 @@ class WorkStore:
         ):
             raise StorageError("projection text does not match its declared digest")
 
-    def recover(self) -> RecoveryReport:
-        """Reconcile what is on disk. Reads only; invents nothing."""
+    def recover(self, *, record: WheypointRecord | None = None) -> RecoveryReport:
+        """Reconcile what is on disk. Reads only; invents nothing.
+
+        `record`, when given, is used in place of re-reading and structuring
+        `record.json` -- for a caller that already did so for its own reason.
+        """
         scan = self.revisions()
-        record, problems, stamped_schema_version = self._read_record_for_recovery()
+        stamped_schema_version: int | None = None
+        problems: list[str] = []
+        if record is None:
+            record, problems, stamped_schema_version = self._read_record_for_recovery()
         if record is not None:
             problems.extend(_record_problems(record, list(scan.files)))
         return RecoveryReport(

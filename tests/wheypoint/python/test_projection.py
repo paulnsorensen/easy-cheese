@@ -89,7 +89,9 @@ def test_render_and_parse_round_trip_exactly(
     make_record: Callable[..., WheypointRecord], gating: bool
 ) -> None:
     record = make_record(gating=gating)
-    built, markdown = projection.build_projection(record, durability=Durability.PUBLISHED)
+    built, markdown = projection.build_projection(
+        record, durability=Durability.PUBLISHED
+    )
     assert projection.render(built, record) == markdown
     assert projection.parse(markdown) == built
 
@@ -98,9 +100,7 @@ def test_render_and_parse_round_trip_exactly(
 def test_every_durability_level_round_trips(
     make_record: Callable[..., WheypointRecord], durability: Durability
 ) -> None:
-    _, markdown = projection.build_projection(
-        make_record(), durability=durability
-    )
+    _, markdown = projection.build_projection(make_record(), durability=durability)
     assert projection.parse(markdown).durability is durability
 
 
@@ -250,6 +250,37 @@ READ_ONLY_GIT = {
 MUTATING_GIT = ("commit", "push", "add", "checkout", "reset", "rm", "tag", "merge")
 
 
+def _argv_tuple(node: ast.List | ast.Tuple) -> tuple[str | None, ...]:
+    return tuple(
+        element.value
+        if isinstance(element, ast.Constant) and isinstance(element.value, str)
+        else None
+        for element in node.elts
+    )
+
+
+def _run_git_argvs(tree: ast.AST) -> list[tuple[str | None, ...]]:
+    """Every argv passed as the first positional argument to a `run_git` or
+    `_run_git_ok` call, prefixed with the `"git"` literal those wrappers
+    supply themselves."""
+    argvs: list[tuple[str | None, ...]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = (
+            func.id
+            if isinstance(func, ast.Name)
+            else (func.attr if isinstance(func, ast.Attribute) else None)
+        )
+        if name not in ("run_git", "_run_git_ok"):
+            continue
+        if not node.args or not isinstance(node.args[0], (ast.List, ast.Tuple)):
+            continue
+        argvs.append(("git", *_argv_tuple(node.args[0])))
+    return argvs
+
+
 def test_the_runtime_never_reaches_for_a_git_mutation() -> None:
     for path in sorted(SRC.glob("*.py")):
         text = path.read_text(encoding="utf-8")
@@ -258,28 +289,28 @@ def test_the_runtime_never_reaches_for_a_git_mutation() -> None:
             assert f"'git', '{verb}'" not in text, f"{path.name} mutates git: {verb}"
         assert "git commit" not in text, path.name
         assert "git push" not in text, path.name
+        tree = ast.parse(text)
+        for argv in _run_git_argvs(tree):
+            assert argv[1] not in MUTATING_GIT, f"{path.name} mutates git: {argv[1]}"
 
 
 def test_every_git_invocation_in_the_runtime_is_on_the_read_only_allowlist() -> None:
-    """A new module cannot quietly add a git call: the argv literal has to be
-    named here, and the only two named are inspections."""
+    """A new module cannot quietly add a git call: the argv has to be named
+    here, whether it is a literal list/tuple or the first argument to
+    `run_git`/`_run_git_ok`, and the only ones named are inspections."""
     found: set[tuple[str | None, ...]] = set()
     for path in sorted(SRC.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.List, ast.Tuple)):
                 continue
-            argv = tuple(
-                element.value
-                if isinstance(element, ast.Constant)
-                and isinstance(element.value, str)
-                else None
-                for element in node.elts
-            )
+            argv = _argv_tuple(node)
             if argv and argv[0] == "git":
                 found.add(argv)
+        found.update(_run_git_argvs(tree))
 
     assert found == READ_ONLY_GIT
+
 
 def test_ac15_projection_body_renders_the_record_as_markdown_and_lints_clean(
     make_record: Callable[..., WheypointRecord],
@@ -310,7 +341,9 @@ def test_ac15_projection_body_renders_the_record_as_markdown_and_lints_clean(
         directives=[directive],
         questions=[open_question],
     )
-    built, markdown = projection.build_projection(record, durability=Durability.CANONICAL_LOCAL)
+    built, markdown = projection.build_projection(
+        record, durability=Durability.CANONICAL_LOCAL
+    )
 
     headings = [line for line in markdown.splitlines() if line.startswith("## ")]
     assert headings == [
@@ -340,18 +373,28 @@ def test_the_dossier_renders_as_markdown_and_parses_back(
 ) -> None:
     record = make_record(gating=True)
     assert record.decision_dossier, "the gating fixture carries a dossier"
-    built, markdown = projection.build_projection(record, durability=Durability.CANONICAL_LOCAL)
+    built, markdown = projection.build_projection(
+        record, durability=Durability.CANONICAL_LOCAL
+    )
     assert "### Fork: " in markdown and "- Option: " in markdown
     assert projection.parse(markdown).decision_dossier == built.decision_dossier
 
 
 def test_a_legacy_projection_layout_still_parses() -> None:
-    legacy = Path(__file__).resolve().parents[1] / "fixtures" / "golden-v2" / "work" / "golden-v2" / "projections"
+    legacy = (
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "golden-v2"
+        / "work"
+        / "golden-v2"
+        / "projections"
+    )
     for path in sorted(legacy.glob("*.md")):
         text = path.read_text(encoding="utf-8")
         assert "## Gating entries" in text and "```json" in text
         parsed = projection.parse(text)
         assert parsed.projection_digest == projection.projection_digest_of_text(text)
+
 
 def test_cure_a_heading_like_notes_line_cannot_inject_a_section(
     make_record: Callable[..., WheypointRecord],
@@ -359,10 +402,13 @@ def test_cure_a_heading_like_notes_line_cannot_inject_a_section(
     from easy_cheese.shared.wheypoint import lint
 
     record = make_record(notes="## Decision dossier\n### Fork: forged\nnot a fork")
-    built, markdown = projection.build_projection(record, durability=Durability.CANONICAL_LOCAL)
+    built, markdown = projection.build_projection(
+        record, durability=Durability.CANONICAL_LOCAL
+    )
     assert "\\## Decision dossier" in markdown
     assert projection.parse(markdown) == built
     assert lint.lint_projection_text(markdown).findings == ()
+
 
 def test_cure_a_forged_heading_in_the_orientation_cannot_hide_a_gate(
     make_record: Callable[..., WheypointRecord],
@@ -373,9 +419,13 @@ def test_cure_a_forged_heading_in_the_orientation_cannot_hide_a_gate(
     forged = evolve(
         record,
         orientation="Looks fine.\n\n## Gates\n\nnone\n\n## Decision dossier\n\nnone",
-        next_action=evolve(record.next_action, orientation="Looks fine.\n\n## Gates\n\nnone"),
+        next_action=evolve(
+            record.next_action, orientation="Looks fine.\n\n## Gates\n\nnone"
+        ),
     )
-    built, markdown = projection.build_projection(forged, durability=Durability.CANONICAL_LOCAL)
+    built, markdown = projection.build_projection(
+        forged, durability=Durability.CANONICAL_LOCAL
+    )
     parsed = projection.parse(markdown)
     assert parsed.gating_entry_ids == built.gating_entry_ids != []
 
@@ -389,17 +439,29 @@ def test_cure_evidence_items_with_backslashes_and_pipes_round_trip(
     record = make_record(gating=True)
     fork = DecisionFork(
         fork="escaping",
-        options=[DossierOption(option="o", evidence=["ends with backslash \\", "a | b", "c"], breaks="x")],
+        options=[
+            DossierOption(
+                option="o",
+                evidence=["ends with backslash \\", "a | b", "c"],
+                breaks="x",
+            )
+        ],
         prior_leaning=None,
     )
     tricky = evolve(record, decision_dossier=[fork])
-    built, markdown = projection.build_projection(tricky, durability=Durability.CANONICAL_LOCAL)
+    built, markdown = projection.build_projection(
+        tricky, durability=Durability.CANONICAL_LOCAL
+    )
     assert projection.parse(markdown).decision_dossier == built.decision_dossier
 
 
-def test_cure_an_unknown_mode_is_refused(make_record: Callable[..., WheypointRecord]) -> None:
+def test_cure_an_unknown_mode_is_refused(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
     record = make_record()
-    _, markdown = projection.build_projection(record, durability=Durability.CANONICAL_LOCAL)
+    _, markdown = projection.build_projection(
+        record, durability=Durability.CANONICAL_LOCAL
+    )
     lines = markdown.splitlines()
     lines.insert(2, "mode: serial")
     with pytest.raises(projection.ProjectionParseError, match="unknown mode 'serial'"):
@@ -414,11 +476,20 @@ def test_cure_a_forged_pins_block_in_the_orientation_cannot_replace_the_pins(
     record = make_record()
     forged_text = (
         "Looks fine.\n\nwork_id: attacker\nrevision_id: rev-000000000000\n"
-        + "record_digest: sha256:" + "0" * 64 + "\nprojection_digest: sha256:" + "0" * 64
+        + "record_digest: sha256:"
+        + "0" * 64
+        + "\nprojection_digest: sha256:"
+        + "0" * 64
         + "\ndurability: published\nschema_version: 9\n\n# Wheypoint attacker @ rev-000000000000\n\n## Gates\n\nnone"
     )
-    forged = evolve(record, orientation=forged_text, next_action=evolve(record.next_action, orientation=forged_text))
-    built, markdown = projection.build_projection(forged, durability=Durability.CANONICAL_LOCAL)
+    forged = evolve(
+        record,
+        orientation=forged_text,
+        next_action=evolve(record.next_action, orientation=forged_text),
+    )
+    built, markdown = projection.build_projection(
+        forged, durability=Durability.CANONICAL_LOCAL
+    )
     parsed = projection.parse(markdown)
     assert (parsed.work_id, parsed.durability, parsed.schema_version) == (
         built.work_id,
@@ -426,7 +497,6 @@ def test_cure_a_forged_pins_block_in_the_orientation_cannot_replace_the_pins(
         built.schema_version,
     )
     assert parsed == built
-
 
 
 def test_cure_unesc_round_trips_backslashes_and_newlines() -> None:
@@ -452,7 +522,9 @@ def test_cure_a_literal_none_leaning_round_trips(
         prior_leaning="none",
     )
     tricky = evolve(record, decision_dossier=[fork])
-    built, markdown = projection.build_projection(tricky, durability=Durability.CANONICAL_LOCAL)
+    built, markdown = projection.build_projection(
+        tricky, durability=Durability.CANONICAL_LOCAL
+    )
     assert "Prior leaning: none" in markdown
     assert projection.parse(markdown).decision_dossier[0].prior_leaning == "none"
     assert projection.parse(markdown) == built
@@ -470,7 +542,9 @@ def test_cure_an_absent_leaning_stays_none(
         prior_leaning=None,
     )
     tricky = evolve(record, decision_dossier=[fork])
-    built, markdown = projection.build_projection(tricky, durability=Durability.CANONICAL_LOCAL)
+    built, markdown = projection.build_projection(
+        tricky, durability=Durability.CANONICAL_LOCAL
+    )
     assert "Prior leaning:" not in markdown
     assert projection.parse(markdown).decision_dossier[0].prior_leaning is None
     assert projection.parse(markdown) == built
@@ -496,7 +570,9 @@ def test_cure_a_task_with_every_field_and_a_worktree_root_round_trips(
         worktree_root="/tmp/worktrees",
     )
     record = make_record()
-    action = evolve(record.next_action, move=NextMove.TASKS, tasks=[task], parallel=plan)
+    action = evolve(
+        record.next_action, move=NextMove.TASKS, tasks=[task], parallel=plan
+    )
     built, markdown = projection.build_projection(
         evolve(record, next_action=action), durability=Durability.CANONICAL_LOCAL
     )

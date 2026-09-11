@@ -8,9 +8,22 @@ import os
 import re
 import subprocess
 import sys
-import zipfile
 from pathlib import Path
 from typing import cast
+
+import pytest
+from attrs import evolve
+from easy_cheese_schemas import (
+    SCHEMA_VERSION,
+    Durability,
+    NextAction,
+    NextMove,
+    RepositoryProvenance,
+    WheypointRecord,
+    WheypointRevision,
+)
+
+from easy_cheese.shared.wheypoint import canonical, projection, records, storage
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -82,8 +95,13 @@ def _writer_args(
     return args
 
 
-def _write_args(root: Path, phase: str, *, slug: str = SLUG, grounded: tuple[str, ...] = ()) -> list[str]:
-    return [arg if arg != "{root}" else str(root) for arg in _writer_args(phase, slug=slug, grounded=grounded)]
+def _write_args(
+    root: Path, phase: str, *, slug: str = SLUG, grounded: tuple[str, ...] = ()
+) -> list[str]:
+    return [
+        arg if arg != "{root}" else str(root)
+        for arg in _writer_args(phase, slug=slug, grounded=grounded)
+    ]
 
 
 def _seed_git(root: Path) -> None:
@@ -96,42 +114,9 @@ def _seed_git(root: Path) -> None:
         ("add", "-A"),
         ("commit", "-m", "seed"),
     ):
-        _ = subprocess.run(["git", *args], cwd=str(root), check=True, capture_output=True, text=True)
-
-
-def test_curd_1_shared_kernel_is_present_in_every_bundle(tmp_path: Path) -> None:
-    out = tmp_path / "bundles"
-    result = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "scripts" / "build_pyz.py"), "--out-dir", str(out)],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stderr
-    archives = sorted(out.glob("*.pyz"))
-    assert archives
-    for archive in archives:
-        with zipfile.ZipFile(archive) as bundle:
-            members = set(bundle.namelist())
-        assert any(
-            name.startswith("site-packages/easy_cheese/shared/wheypoint/") for name in members
-        ), archive.name
-        old_kernel_modules = {
-            f"site-packages/easy_cheese/skills/wheypoint/{module}.py"
-            for module in (
-                "canonical",
-                "checkpoint",
-                "commit",
-                "legacy",
-                "lineage",
-                "lint",
-                "projection",
-                "records",
-                "resolve",
-                "storage",
-            )
-        }
-        assert members.isdisjoint(old_kernel_modules), archive.name
+        _ = subprocess.run(
+            ["git", *args], cwd=str(root), check=True, capture_output=True, text=True
+        )
 
 
 def test_curd_2_chain_writes_revisions_and_validates_grounded_genesis(
@@ -144,7 +129,16 @@ def test_curd_2_chain_writes_revisions_and_validates_grounded_genesis(
         _ = (root / "context.md").write_text("grounded\n", encoding="utf-8")
         if phase == "age":
             _seed_git(root)
-            lock = _run("age", "review-lock", "--slug", SLUG, "--root", str(root), cwd=root, env=_env(tmp_path / "age"))
+            lock = _run(
+                "age",
+                "review-lock",
+                "--slug",
+                SLUG,
+                "--root",
+                str(root),
+                cwd=root,
+                env=_env(tmp_path / "age"),
+            )
             assert lock.returncode == 0, lock.stderr
         attempts[phase] = _run(
             phase,
@@ -171,10 +165,11 @@ def test_curd_2_chain_writes_revisions_and_validates_grounded_genesis(
         assert shown.returncode == 0, shown.stderr
         record = cast(dict[str, object], _json(shown)["record"])
         next_action = cast(dict[str, object], record["next_action"])
-        assert Path(cast(str, next_action["artifact"])).name == target.name
+        assert next_action["artifact"] == f".cheese/{phase}/{SLUG}.md"
         links = cast(list[dict[str, object]], record["artifact_links"])
         assert any(
-            link.get("digest") == "sha256:" + hashlib.sha256(target.read_bytes()).hexdigest()
+            link.get("digest")
+            == "sha256:" + hashlib.sha256(target.read_bytes()).hexdigest()
             for link in links
         )
 
@@ -188,7 +183,9 @@ def test_curd_2_chain_writes_revisions_and_validates_grounded_genesis(
     (genesis / "scripts").mkdir()
     _ = (genesis / "scripts" / "tf.sh").write_text("terraform\n", encoding="utf-8")
     entries = ("infra.tf#1-1", "scripts/tf.sh#1-1")
-    grounded = _run("cook", *_write_args(genesis, "cook", grounded=entries), cwd=genesis, env=env)
+    grounded = _run(
+        "cook", *_write_args(genesis, "cook", grounded=entries), cwd=genesis, env=env
+    )
     assert grounded.returncode == 0, grounded.stderr
     shown = _run("wheypoint", "show", "--work-id", SLUG, cwd=genesis, env=env)
     assert shown.returncode == 0, shown.stderr
@@ -203,7 +200,9 @@ def test_curd_2_chain_writes_revisions_and_validates_grounded_genesis(
     assert carried_record["working_context"] == list(entries)
 
 
-def test_curd_3_resolves_phase_artifacts_and_reports_stale_inputs(tmp_path: Path) -> None:
+def test_curd_3_resolves_phase_artifacts_and_reports_stale_inputs(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "fallback"
     root.mkdir()
     env = _env(root, f"{SLUG}-fallback")
@@ -230,6 +229,34 @@ def test_curd_3_resolves_phase_artifacts_and_reports_stale_inputs(tmp_path: Path
     preferred = _json(_run("wheypoint", "resolve", "--ref", SLUG, cwd=root, env=env))
     assert preferred["outcome"] == "legacy" and preferred["source"] == "phase-artifact"
 
+    order_root = tmp_path / "order"
+    order_root.mkdir()
+    order_env = _env(order_root, f"{SLUG}-order")
+    order_slug = f"{SLUG}-order"
+    for phase in ("cure", "age", "press", "cook"):
+        target = _artifact(order_root, phase, slug=order_slug)
+        target.parent.mkdir(parents=True)
+        _ = target.write_text(
+            f"status: ok\nnext: press\nartifact: \n{phase} orientation marker\n",
+            encoding="utf-8",
+        )
+    for phase in ("cure", "age", "press", "cook"):
+        found = _json(
+            _run(
+                "wheypoint",
+                "resolve",
+                "--ref",
+                order_slug,
+                cwd=order_root,
+                env=order_env,
+            )
+        )
+        assert found["outcome"] == "legacy"
+        assert found["source"] == "phase-artifact"
+        found_slug = cast(dict[str, object], found["phase_slug"])
+        assert phase in cast(str, found_slug["orientation"])
+        _artifact(order_root, phase, slug=order_slug).unlink()
+
     lint_root = tmp_path / "lint"
     lint_root.mkdir()
     lint_env = _env(lint_root, f"{SLUG}-lint")
@@ -244,7 +271,9 @@ def test_curd_3_resolves_phase_artifacts_and_reports_stale_inputs(tmp_path: Path
         "working_context": ["context.md#1-1"],
         "next": "cook",
         "artifact": ".cheese/cook/phase.md",
-        "artifact_links": [{"path": "linked.md", "digest": original_digest, "covers_entry_ids": []}],
+        "artifact_links": [
+            {"path": "linked.md", "digest": original_digest, "covers_entry_ids": []}
+        ],
         "notes": "Lint record.",
     }
     checkpoint = _run(
@@ -267,8 +296,13 @@ def test_curd_3_resolves_phase_artifacts_and_reports_stale_inputs(tmp_path: Path
         env=lint_env,
     )
     payload = _json(checked)
-    codes = {cast(dict[str, str], item)["code"] for item in cast(list[object], payload["findings"])}
+    codes = {
+        cast(dict[str, str], item)["code"]
+        for item in cast(list[object], payload["findings"])
+    }
     assert {"stale-artifact-link", "grounded-path-missing"} <= codes
+    assert payload["outcome"] == "gated"
+    assert payload["dispatchable"] is False
 
     carried = _run("cook", *_write_args(lint_root, "cook"), cwd=lint_root, env=lint_env)
     assert carried.returncode == 0, carried.stderr
@@ -279,26 +313,268 @@ def test_curd_3_resolves_phase_artifacts_and_reports_stale_inputs(tmp_path: Path
     assert carried_record["working_context"] == ["context.md#1-1"]
 
 
+def test_curd_3b_grounded_path_missing_alone_stays_authoritative(
+    tmp_path: Path,
+) -> None:
+    lint_root = tmp_path / "lint-alone"
+    lint_root.mkdir()
+    lint_env = _env(lint_root, f"{SLUG}-lint-alone")
+    context = lint_root / "context.md"
+    linked = lint_root / "linked.md"
+    _ = context.write_text("context\n", encoding="utf-8")
+    _ = linked.write_text("original\n", encoding="utf-8")
+    original_digest = "sha256:" + hashlib.sha256(linked.read_bytes()).hexdigest()
+    intent: dict[str, object] = {
+        "work_id": SLUG,
+        "orientation": "lint inputs",
+        "working_context": ["context.md#1-1"],
+        "next": "cook",
+        "artifact": ".cheese/cook/phase.md",
+        "artifact_links": [
+            {"path": "linked.md", "digest": original_digest, "covers_entry_ids": []}
+        ],
+        "notes": "Lint record.",
+    }
+    checkpoint = _run(
+        "wheypoint",
+        "checkpoint",
+        "--no-note",
+        cwd=lint_root,
+        env=lint_env,
+        stdin=json.dumps(intent),
+    )
+    assert checkpoint.returncode == 0, checkpoint.stderr
+    _ = context.unlink()
+    checked = _run(
+        "wheypoint",
+        "resolve",
+        "--ref",
+        SLUG,
+        cwd=lint_root,
+        env=lint_env,
+    )
+    payload = _json(checked)
+    codes = {
+        cast(dict[str, str], item)["code"]
+        for item in cast(list[object], payload["findings"])
+    }
+    assert codes == {"grounded-path-missing"}
+    assert payload["outcome"] == "authoritative"
+    assert payload["dispatchable"] is True
+
+
+PHASE_SKILLS = ("cook", "press", "age", "cure", "plate")
+
+
+def _resolve(
+    phase: str, ref: str, *, cwd: Path, env: dict[str, str]
+) -> dict[str, object]:
+    return _json(_run(phase, "wheypoint-resolve", "--ref", ref, cwd=cwd, env=env))
+
+
+def _seed_ambiguous_slug(corpus_root: Path, slug: str, project_key: str) -> None:
+    """Two work ids answering to `slug` in one corpus, the ambiguity itself."""
+    placeholder_digest = "sha256:" + "0" * 64
+    for suffix in ("a", "b"):
+        work_id = f"{slug}-{suffix}"
+        record = WheypointRecord(
+            schema_version=SCHEMA_VERSION,
+            work_id=work_id,
+            slug=slug,
+            title=slug,
+            created="2026-08-02T00:00:00Z",
+            project_key=project_key,
+            revision_id="rev-0001",
+            revision_number=1,
+            revision_digest=placeholder_digest,
+            orientation="ambiguous seed",
+            working_context=[],
+            next_action=NextAction(move=NextMove.COOK, orientation="proceed"),
+            decisions=[],
+            questions=[],
+            blockers=[],
+            artifact_links=[],
+            decision_dossier=[],
+        )
+        projected, markdown = projection.build_projection(
+            record, durability=Durability.CANONICAL_LOCAL
+        )
+        revision = WheypointRevision(
+            schema_version=SCHEMA_VERSION,
+            work_id=work_id,
+            parent_revision_id=None,
+            parent_revision_digest=None,
+            revision_id=record.revision_id,
+            revision_number=record.revision_number,
+            request_digest=canonical.digest_text(f"seed-{work_id}"),
+            record_digest=records.record_digest(record),
+            applied_additions=[],
+            applied_transitions=[],
+            preserved_entry_ids=[],
+            projection_path=f"projections/{record.revision_number}-{record.revision_id}.md",
+            projection_digest=projected.projection_digest,
+            repository=RepositoryProvenance(
+                branch="claude/wheypoint", commit="abc1234"
+            ),
+        )
+        seeded = evolve(record, revision_digest=records.revision_digest(revision))
+        storage.WorkStore.open(work_id, corpus_root=corpus_root).promote(
+            seeded, revision, markdown
+        )
+
+
+@pytest.mark.parametrize("phase", PHASE_SKILLS)
+def test_curd_4b_resolves_entry_outcomes_per_phase_bundle(
+    phase: str, tmp_path: Path
+) -> None:
+    slug = f"{SLUG}-{phase}"
+
+    not_found_root = tmp_path / "not-found"
+    not_found_root.mkdir()
+    not_found_env = _env(not_found_root, f"{slug}-not-found")
+    not_found = _resolve(
+        phase, "nonexistent-slug-xyz", cwd=not_found_root, env=not_found_env
+    )
+    assert not_found["outcome"] == "not-found"
+
+    legacy_root = tmp_path / "legacy"
+    legacy_root.mkdir()
+    legacy_env = _env(legacy_root, f"{slug}-legacy")
+    legacy_artifact = _artifact(legacy_root, "cook", slug=slug)
+    legacy_artifact.parent.mkdir(parents=True)
+    _ = legacy_artifact.write_text(
+        "status: ok\nnext: press\nartifact: \nbare phase report\n",
+        encoding="utf-8",
+    )
+    legacy = _resolve(phase, slug, cwd=legacy_root, env=legacy_env)
+    assert legacy["outcome"] == "legacy"
+    assert legacy["source"] == "phase-artifact"
+
+    ambiguous_root = tmp_path / "ambiguous"
+    ambiguous_root.mkdir()
+    ambiguous_env = _env(ambiguous_root, f"{slug}-ambiguous")
+    ambiguous_corpus = (
+        Path(ambiguous_env["EASY_CHEESE_HOME"]) / ambiguous_env["EASY_CHEESE_PROJECT"]
+    )
+    _seed_ambiguous_slug(ambiguous_corpus, slug, ambiguous_env["EASY_CHEESE_PROJECT"])
+    ambiguous = _resolve(phase, slug, cwd=ambiguous_root, env=ambiguous_env)
+    assert ambiguous["outcome"] == "ambiguous"
+    assert ambiguous["dispatchable"] is False
+
+    gated_root = tmp_path / "gated"
+    gated_root.mkdir()
+    gated_env = _env(gated_root, f"{slug}-gated")
+    context = gated_root / "context.md"
+    linked = gated_root / "linked.md"
+    _ = context.write_text("context\n", encoding="utf-8")
+    _ = linked.write_text("original\n", encoding="utf-8")
+    original_digest = "sha256:" + hashlib.sha256(linked.read_bytes()).hexdigest()
+    gated_intent: dict[str, object] = {
+        "work_id": slug,
+        "orientation": "lint inputs",
+        "working_context": ["context.md#1-1"],
+        "next": "cook",
+        "artifact": ".cheese/cook/phase.md",
+        "artifact_links": [
+            {"path": "linked.md", "digest": original_digest, "covers_entry_ids": []}
+        ],
+        "notes": "Lint record.",
+    }
+    checkpoint = _run(
+        "wheypoint",
+        "checkpoint",
+        "--no-note",
+        cwd=gated_root,
+        env=gated_env,
+        stdin=json.dumps(gated_intent),
+    )
+    assert checkpoint.returncode == 0, checkpoint.stderr
+    _ = linked.write_text("edited\n", encoding="utf-8")
+    gated = _resolve(phase, slug, cwd=gated_root, env=gated_env)
+    codes = {
+        cast(dict[str, str], item)["code"]
+        for item in cast(list[object], gated["findings"])
+    }
+    assert "stale-artifact-link" in codes
+    assert gated["outcome"] == "gated"
+    assert gated["dispatchable"] is False
+
+    authoritative_root = tmp_path / "authoritative"
+    authoritative_root.mkdir()
+    authoritative_env = _env(authoritative_root, f"{slug}-authoritative")
+    if phase == "plate":
+        auth_intent: dict[str, object] = {
+            "work_id": slug,
+            "orientation": "plate genesis",
+            "working_context": [],
+            "next": "cook",
+            "artifact": ".cheese/cook/phase.md",
+            "notes": "Plate genesis record.",
+        }
+        genesis = _run(
+            "wheypoint",
+            "checkpoint",
+            "--no-note",
+            cwd=authoritative_root,
+            env=authoritative_env,
+            stdin=json.dumps(auth_intent),
+        )
+        assert genesis.returncode == 0, genesis.stderr
+    else:
+        _ = (authoritative_root / "context.md").write_text(
+            "grounded\n", encoding="utf-8"
+        )
+        if phase == "age":
+            _seed_git(authoritative_root)
+            lock = _run(
+                "age",
+                "review-lock",
+                "--slug",
+                slug,
+                "--root",
+                str(authoritative_root),
+                cwd=authoritative_root,
+                env=authoritative_env,
+            )
+            assert lock.returncode == 0, lock.stderr
+        genesis = _run(
+            phase,
+            *_write_args(
+                authoritative_root, phase, slug=slug, grounded=("context.md#1-1",)
+            ),
+            cwd=authoritative_root,
+            env=authoritative_env,
+        )
+        assert genesis.returncode == 0, genesis.stderr
+    authoritative = _resolve(phase, slug, cwd=authoritative_root, env=authoritative_env)
+    assert authoritative["outcome"] == "authoritative"
+    assert authoritative["dispatchable"] is True
+
+
+@pytest.mark.parametrize("phase", PHASE_SKILLS)
+def test_curd_4c_resolves_error_outcome_per_phase_bundle(
+    phase: str, tmp_path: Path
+) -> None:
+    root = tmp_path / "error"
+    root.mkdir()
+    env = _env(root, f"{SLUG}-{phase}-error")
+    result = _run(phase, "wheypoint-resolve", "--ref", "", cwd=root, env=env)
+    payload = _json(result)
+    assert payload["outcome"] == "error"
+    assert payload["ok"] is False
+    assert result.returncode != 0
+
+
 def test_curd_4_documents_entry_resolution_and_preserves_publication_guard(
     tmp_path: Path,
 ) -> None:
-    phase_skills = ("cook", "press", "age", "cure", "plate")
-    for phase in phase_skills:
-        text = (REPO_ROOT / "skills" / phase / "SKILL.md").read_text(encoding="utf-8")
-        assert f"{phase}.pyz wheypoint-resolve" in text
-        assert all(word in text for word in ("authoritative", "not-found", "legacy", "gated", "ambiguous", "error"))
-        assert re.search(
-            r"working_context.{0,160}first.{0,160}tilth_read|first.{0,160}tilth_read.{0,160}working_context",
-            text,
-            re.IGNORECASE | re.DOTALL,
-        )
-
     writer_docs = (
         REPO_ROOT / "skills" / "cook" / "SKILL.md",
         REPO_ROOT / "skills" / "press" / "SKILL.md",
         REPO_ROOT / "skills" / "age" / "SKILL.md",
         REPO_ROOT / "skills" / "cure" / "SKILL.md",
         REPO_ROOT / "skills" / "cook" / "references" / "commands.md",
+        REPO_ROOT / "skills" / "press" / "references" / "commands.md",
         REPO_ROOT / "skills" / "age" / "references" / "commands.md",
         REPO_ROOT / "skills" / "cure" / "references" / "commands.md",
     )
@@ -314,9 +590,23 @@ def test_curd_4_documents_entry_resolution_and_preserves_publication_guard(
     publish = _run(
         "mold",
         "publish",
-        str(REPO_ROOT / "tests" / "python" / "fixtures" / "cook_payloads" / "clean_writer_view.json"),
+        str(
+            REPO_ROOT
+            / "tests"
+            / "python"
+            / "fixtures"
+            / "cook_payloads"
+            / "clean_writer_view.json"
+        ),
         "--invocation",
-        str(REPO_ROOT / "tests" / "python" / "fixtures" / "cook_payloads" / "clean_invocation.json"),
+        str(
+            REPO_ROOT
+            / "tests"
+            / "python"
+            / "fixtures"
+            / "cook_payloads"
+            / "clean_invocation.json"
+        ),
         "--operation-id",
         "phase-rehydration-guard",
         "--artifact-root",
@@ -327,5 +617,8 @@ def test_curd_4_documents_entry_resolution_and_preserves_publication_guard(
     assert publish.returncode == 0, publish.stderr
     corpus = Path(env["EASY_CHEESE_HOME"]) / env["EASY_CHEESE_PROJECT"]
     assert not (corpus / "work").exists()
-    manifest = cast(dict[str, object], json.loads((REPO_ROOT / ".claude-plugin" / "plugin.json").read_text()))
+    manifest = cast(
+        dict[str, object],
+        json.loads((REPO_ROOT / ".claude-plugin" / "plugin.json").read_text()),
+    )
     assert "hooks" not in manifest

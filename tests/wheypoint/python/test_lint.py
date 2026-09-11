@@ -25,6 +25,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
+from easy_cheese.shared import git_utils
 from easy_cheese.shared.wheypoint import canonical, lint, projection, records, storage
 
 from conftest import Promotion
@@ -443,9 +444,7 @@ def test_a_settled_canonical_local_checkpoint_is_not_warned_about(
     assert report.codes == ()
 
 
-@pytest.mark.parametrize(
-    "durability", [Durability.REPO_SNAPSHOT, Durability.PUBLISHED]
-)
+@pytest.mark.parametrize("durability", [Durability.REPO_SNAPSHOT, Durability.PUBLISHED])
 def test_a_gated_checkpoint_that_has_travelled_is_not_warned_about(
     corpus_root: Path,
     make_promotion: Callable[..., _PromotionLike],
@@ -458,9 +457,7 @@ def test_a_gated_checkpoint_that_has_travelled_is_not_warned_about(
     projected, markdown = projection.build_projection(
         promotion.record, durability=durability
     )
-    revision = evolve(
-        promotion.revision, projection_digest=projected.projection_digest
-    )
+    revision = evolve(promotion.revision, projection_digest=projected.projection_digest)
     store.promote(
         evolve(promotion.record, revision_digest=records.revision_digest(revision)),
         revision,
@@ -539,9 +536,7 @@ def test_a_narrowed_rewrite_that_drops_a_prior_decision_is_reported(
         2,
         "rev-0002",
         parent=full,
-        record=make_record(
-            revision_id="rev-0002", revision_number=2, decisions=[kept]
-        ),
+        record=make_record(revision_id="rev-0002", revision_number=2, decisions=[kept]),
         preserved=["d-authority"],
     )
     store.promote(narrowed.record, narrowed.revision, narrowed.markdown)
@@ -709,9 +704,7 @@ def test_a_revision_pin_resolves_against_the_ancestry_not_the_directory(
     """An abandoned sibling is still a file on disk. A claim pinned to one
     describes work this record never took, so it must not read as fresh."""
     store = make_store(corpus_root)
-    sibling = make_promotion(
-        1, "rev-0009", record=make_record(revision_id="rev-0009")
-    )
+    sibling = make_promotion(1, "rev-0009", record=make_record(revision_id="rev-0009"))
     store.promote(sibling.record, sibling.revision, sibling.markdown)
     current = make_promotion(
         1, "rev-0001", record=revision_pinned_record(make_record, "rev-0009")
@@ -755,9 +748,7 @@ def test_a_revision_pinned_artifact_that_is_gone_invalidates_its_claim(
     make_promotion: Callable[..., _PromotionLike],
 ) -> None:
     store = make_store(corpus_root)
-    promotion = make_promotion(
-        record=revision_pinned_record(make_record, "rev-0001")
-    )
+    promotion = make_promotion(record=revision_pinned_record(make_record, "rev-0001"))
     store.promote(promotion.record, promotion.revision, promotion.markdown)
 
     report = check(store)
@@ -862,7 +853,9 @@ def test_ac16_a_future_record_this_reader_cannot_structure_reports_runtime_behin
     store = make_store(corpus_root)
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
-    raw = cast(dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8")))
+    raw = cast(
+        dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8"))
+    )
     raw["schema_version"] = SCHEMA_VERSION + 1
     # An identifier the schema's own validator refuses: the reader cannot
     # structure this record at all, so `record` stays None below.
@@ -888,7 +881,10 @@ def test_git_object_exists_in_answers_from_a_real_repository(tmp_path: Path) -> 
         "GIT_COMMITTER_NAME": "t",
         "GIT_COMMITTER_EMAIL": "t@example.com",
     }
-    for args in (["init", "-q", "-b", "main"], ["commit", "-q", "--allow-empty", "-m", "s"]):
+    for args in (
+        ["init", "-q", "-b", "main"],
+        ["commit", "-q", "--allow-empty", "-m", "s"],
+    ):
         _ = subprocess.run(
             ["git", *args], cwd=tmp_path, env=env, check=True, capture_output=True
         )
@@ -905,6 +901,7 @@ def test_git_object_exists_in_answers_from_a_real_repository(tmp_path: Path) -> 
     assert exists(head) is True
     assert exists("0" * 40) is False
 
+
 def test_ac16_a_store_from_a_newer_runtime_reports_runtime_behind_only(
     corpus_root: Path, make_promotion: Callable[..., _PromotionLike]
 ) -> None:
@@ -915,7 +912,9 @@ def test_ac16_a_store_from_a_newer_runtime_reports_runtime_behind_only(
     store = make_store(corpus_root)
     promotion = make_promotion()
     store.promote(promotion.record, promotion.revision, promotion.markdown)
-    raw = cast(dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8")))
+    raw = cast(
+        dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8"))
+    )
     raw["schema_version"] = SCHEMA_VERSION + 1
     raw["field_from_the_future"] = {"still": "ignored on read"}
     _ = store.record_path.write_text(json.dumps(raw, sort_keys=True), encoding="utf-8")
@@ -926,3 +925,129 @@ def test_ac16_a_store_from_a_newer_runtime_reports_runtime_behind_only(
     assert lint.LintCode.STORE_INCONSISTENT not in report.codes
     assert f"schema version {SCHEMA_VERSION + 1}" in report.findings[0].detail
     assert lint.gates_continuation(report.findings[0])
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_stale_commit_check_swallows_an_unrunnable_git(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def boom(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise OSError("git executable not found")
+
+    monkeypatch.setattr(git_utils, "run_git", boom)
+
+    findings = lint._stale_commit_findings("deadbeef", repository_root=tmp_path)  # pyright: ignore[reportPrivateUsage]
+
+    assert findings == []
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_stale_commit_fires_when_head_no_longer_descends_from_the_recorded_commit(
+    tmp_path: Path,
+) -> None:
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args],
+            cwd=tmp_path,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    _ = git("init", "-q", "-b", "main")
+    _ = git("commit", "-q", "--allow-empty", "-m", "first")
+    recorded = git("rev-parse", "HEAD").stdout.strip()
+    # Amending the tip gives HEAD a sibling commit that never descends from
+    # the one the revision recorded, without deleting that commit object.
+    _ = git("commit", "-q", "--allow-empty", "--amend", "-m", "first (rewritten)")
+
+    findings = lint._stale_commit_findings(recorded, repository_root=tmp_path)  # pyright: ignore[reportPrivateUsage]
+
+    assert [f.code for f in findings] == [lint.LintCode.STALE_COMMIT]
+    assert recorded in findings[0].detail
+
+
+def test_grounded_path_findings_matches_the_writer_grammar(
+    make_record: Callable[..., WheypointRecord], tmp_path: Path
+) -> None:
+    _ = (tmp_path / "src.py").write_text("x\n", encoding="utf-8")
+    record = make_record(working_context=["src.py", "/abs/path#1-1", "bad#x"])
+
+    findings = lint._grounded_path_findings(record, tmp_path)  # pyright: ignore[reportPrivateUsage]
+
+    assert [f.code for f in findings] == [
+        lint.LintCode.GROUNDED_PATH_MISSING,
+        lint.LintCode.GROUNDED_PATH_MISSING,
+    ]
+    assert "/abs/path#1-1" in findings[0].detail
+    assert "bad#x" in findings[1].detail
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_lint_work_anchors_grounded_paths_to_the_repo_root_not_bare_cwd(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    grounded = repo / "src" / "module.py"
+    grounded.parent.mkdir(parents=True)
+    _ = grounded.write_text("x\n", encoding="utf-8")
+    subdir = repo / "sub"
+    subdir.mkdir()
+    monkeypatch.chdir(subdir)
+
+    record = make_record(working_context=["src/module.py"])
+    promotion = make_promotion(record=record)
+    store = make_store(corpus_root)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = check(store)
+
+    assert lint.LintCode.GROUNDED_PATH_MISSING not in report.codes
+
+
+def test_lint_work_with_a_preloaded_record_never_rereads_record_json(
+    corpus_root: Path,
+    make_promotion: Callable[..., _PromotionLike],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = make_store(corpus_root)
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    preloaded = store.read_record()
+    assert preloaded is not None
+
+    reads: list[Path] = []
+    original_read_bytes = Path.read_bytes
+
+    def spy_read_bytes(self: Path, *args: object, **kwargs: object) -> bytes:
+        reads.append(self)
+        return original_read_bytes(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_bytes", spy_read_bytes)
+
+    report = lint.lint_work(
+        store,
+        project_key=PROJECT,
+        git_object_exists=all_objects_exist,
+        artifact_digest=no_artifacts,
+        preloaded_record=preloaded,
+    )
+
+    assert store.record_path not in reads
+    assert report.record == preloaded
+    assert report.codes == ()

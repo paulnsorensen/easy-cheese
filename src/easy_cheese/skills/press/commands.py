@@ -42,7 +42,7 @@ COMMANDS = (
     ),
     derive_command(
         _write_handoff_artifact,
-        "Write a handoff preamble plus optional body atomically",
+        "Write a handoff preamble plus optional body atomically; pass --grounded paths",
     ),
     derive_command(
         _press_route,

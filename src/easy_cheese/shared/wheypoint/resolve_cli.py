@@ -2,8 +2,11 @@
 
 Phase bundles expose this adapter as ``wheypoint-resolve`` so each phase can
 resolve its own entry reference without importing the Wheypoint skill bundle.
-The resolver remains the single source of truth; this module only owns argv
-parsing and the native resolve payload's JSON projection.
+The resolver remains the single source of truth; this module is also the
+single owner of the resolve payload's JSON projection, the refusal/usage
+exception types, the argv parser, and the exit codes. The skill bundle's own
+``wheypoint.py::_run_resolve`` imports them rather than keeping a second copy,
+adding only its own ``--legacy`` branch.
 """
 
 from __future__ import annotations
@@ -28,26 +31,33 @@ EXIT_USAGE = 2
 EXIT_INTERNAL = 3
 
 
-class _BadUsage(Exception):
+class BadUsage(Exception):
     """argparse's complaint, raised instead of printed so it can be JSON."""
 
 
-class _Refused(Exception):
-    """A resolver refusal that has an error code for its JSON reply."""
+class Refusal(Exception):
+    """A reference that could not be interpreted; carries the full JSON payload.
 
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code: str = code
+    The ``error`` outcome is still an answer about the corpus, not a bare
+    refusal envelope, so the caller emits ``payload`` with ``ok: false``
+    rather than the ``{code, message}`` shape usage and internal errors use.
+    """
+
+    def __init__(self, payload: dict[str, object]) -> None:
+        super().__init__(
+            str(payload.get("detail") or "reference could not be interpreted")
+        )
+        self.payload: dict[str, object] = payload
 
 
-class _Parser(argparse.ArgumentParser):
+class Parser(argparse.ArgumentParser):
     @override
     def error(self, message: str) -> NoReturn:
-        raise _BadUsage(message)
+        raise BadUsage(message)
 
 
-def _parser() -> _Parser:
-    parser = _Parser(prog=COMMAND)
+def _parser() -> Parser:
+    parser = Parser(prog=COMMAND)
     _ = parser.add_argument(
         "--ref",
         required=True,
@@ -66,14 +76,14 @@ def _maybe(obj: object) -> dict[str, object] | None:
     return None if obj is None else records.unstructure(cast(AttrsInstance, obj))
 
 
-def _payload(ref: str) -> dict[str, object]:
-    resolution = resolve_mod.resolve(ref)
-    if resolution.outcome is resolve_mod.ResolutionOutcome.ERROR:
-        raise _Refused(
-            "invalid-reference",
-            resolution.detail or f"reference {ref!r} could not be interpreted",
-        )
-    return {
+def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, object]:
+    """Project a ``Resolution`` into the native Wheypoint JSON shape.
+
+    Raises `Refusal` carrying the full payload when the reference could not
+    be interpreted at all, so both adapters emit the same ``outcome: "error"``
+    answer instead of a bare refusal envelope.
+    """
+    payload: dict[str, object] = {
         "ref": ref,
         "outcome": resolution.outcome.value,
         "dispatchable": resolution.dispatchable,
@@ -95,6 +105,9 @@ def _payload(ref: str) -> dict[str, object]:
         ),
         "detail": resolution.detail,
     }
+    if resolution.outcome is resolve_mod.ResolutionOutcome.ERROR:
+        raise Refusal(payload)
+    return payload
 
 
 def _emit(stdout: TextIO, payload: dict[str, object]) -> None:
@@ -128,12 +141,14 @@ def main(
     stdout2 = sys.stdout if stdout is None else stdout
     try:
         args = _parser().parse_args(argv2)
-    except _BadUsage as exc:
+    except BadUsage as exc:
         return _refuse(stdout2, "usage", str(exc), EXIT_USAGE)
     try:
-        payload = _payload(cast(str, args.ref))
-    except _Refused as exc:
-        return _refuse(stdout2, exc.code, str(exc), EXIT_REFUSED)
+        ref = cast(str, args.ref)
+        payload = resolve_payload(resolve_mod.resolve(ref), ref)
+    except Refusal as exc:
+        _emit(stdout2, {"ok": False, "command": COMMAND, **exc.payload})
+        return EXIT_REFUSED
     except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
         traceback.print_exc(file=sys.stderr)
         return _refuse(

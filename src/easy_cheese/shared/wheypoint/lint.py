@@ -33,13 +33,14 @@ from easy_cheese_schemas import (
 )
 from easy_cheese_schemas.validate import is_relative_path
 
-from . import lineage
+from easy_cheese.shared import git_utils, paths
+
+from . import grounded, lineage
 from . import projection as projection_mod
 from . import records, storage
 from .lineage import Lineage
 
 _GIT_TIMEOUT_SECONDS = 5
-
 
 
 class LintCode(str, Enum):
@@ -117,6 +118,16 @@ class LintReport:
         return tuple(finding.code for finding in self.findings)
 
 
+def _run_git_ok(
+    args: list[str], *, cwd: Path | str, timeout: float
+) -> subprocess.CompletedProcess[str] | None:
+    """Run one advisory git command, or None when it could not run at all."""
+    try:
+        return git_utils.run_git(args, cwd=cwd, timeout=timeout)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
     """Read-only `git cat-file -e <object>^{object}` in `root`.
 
@@ -125,17 +136,12 @@ def git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
     """
 
     def exists(obj: str) -> bool:
-        try:
-            completed = subprocess.run(
-                ["git", "cat-file", "-e", f"{obj}^{{object}}"],
-                cwd=str(root),
-                capture_output=True,
-                text=True,
-                timeout=_GIT_TIMEOUT_SECONDS,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return False
-        return completed.returncode == 0
+        completed = _run_git_ok(
+            ["cat-file", "-e", f"{obj}^{{object}}"],
+            cwd=root,
+            timeout=_GIT_TIMEOUT_SECONDS,
+        )
+        return completed is not None and completed.returncode == 0
 
     return exists
 
@@ -211,14 +217,20 @@ def lint_work(
     git_object_exists: Callable[[str], bool],
     artifact_digest: Callable[[str], str | None],
     repository_root: Path | str | None = None,
+    preloaded_record: WheypointRecord | None = None,
 ) -> LintReport:
-    """Validate the whole current checkpoint of one work store."""
-    root = (
-        Path(repository_root).resolve()
-        if repository_root is not None
-        else Path.cwd().resolve()
+    """Validate the whole current checkpoint of one work store.
+
+    `preloaded_record` lets a caller that already read and structured
+    `record.json` for its own reason (deciding this store is the one it
+    wants) skip reading it again here.
+    """
+    root = paths.resolve_repo_root(repository_root)
+    recovery = (
+        store.recover(record=preloaded_record)
+        if preloaded_record is not None
+        else store.recover()
     )
-    recovery = store.recover()
     record = recovery.record
     stamped_schema_version = recovery.stamped_schema_version
     if stamped_schema_version is not None and stamped_schema_version > SCHEMA_VERSION:
@@ -282,18 +294,12 @@ def lint_work(
         projection_report = _lint_current_projection(store, record, current)
         findings.extend(projection_report.findings)
         projection = projection_report.projection
-        chain = lineage.walk(
-            (file.revision for file in recovery.complete), current
-        )
+        chain = lineage.walk((file.revision for file in recovery.complete), current)
         ancestry = chain.revision_ids
         findings.extend(_lineage_finding(issue) for issue in chain.issues)
         findings.extend(_compaction_findings(chain))
         findings.extend(_conservation_findings(chain, record))
-        findings.extend(
-            _git_findings(
-                current, git_object_exists, repository_root=root
-            )
-        )
+        findings.extend(_git_findings(current, git_object_exists, repository_root=root))
 
     findings.extend(_artifact_link_findings(record, artifact_digest))
     findings.extend(_coverage_findings(ancestry, record, artifact_digest))
@@ -361,9 +367,7 @@ def _lint_current_projection(
         )
     expected_digest = records.record_digest(record)
     if parsed.record_digest != expected_digest:
-        mismatches.append(
-            f"record_digest {parsed.record_digest} != {expected_digest}"
-        )
+        mismatches.append(f"record_digest {parsed.record_digest} != {expected_digest}")
     if not mismatches:
         return report
     return LintReport(
@@ -371,8 +375,7 @@ def _lint_current_projection(
             *report.findings,
             LintFinding(
                 LintCode.PROJECTION_RECORD_MISMATCH,
-                f"{path.name} describes a different record: "
-                + "; ".join(mismatches),
+                f"{path.name} describes a different record: " + "; ".join(mismatches),
             ),
         ),
         projection=parsed,
@@ -426,8 +429,6 @@ def _lineage_finding(issue: lineage.LineageIssue) -> LintFinding:
     return LintFinding(LintCode.PARENT_DIGEST_MISMATCH, detail)
 
 
-
-
 def _held_entry_ids(revision: WheypointRevision) -> set[str]:
     """The protected entries the record held after `revision` was written."""
     return {addition.entry_id for addition in revision.applied_additions} | set(
@@ -462,7 +463,9 @@ def _compaction_proof_findings(
                 + f"{parent.revision_id!r} recorded {parent.record_digest}",
             )
         )
-    unreconciled = sorted(_held_entry_ids(parent) - set(compaction.reconciled_entry_ids))
+    unreconciled = sorted(
+        _held_entry_ids(parent) - set(compaction.reconciled_entry_ids)
+    )
     if unreconciled:
         findings.append(
             LintFinding(
@@ -618,37 +621,23 @@ def _stale_commit_findings(
     repository_root: Path,
 ) -> list[LintFinding]:
     """Report a revision written on a history HEAD no longer descends from."""
-    try:
-        ancestor = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
-            cwd=str(repository_root),
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
-        )
-    except (OSError, subprocess.SubprocessError):
+    ancestor = _run_git_ok(
+        ["merge-base", "--is-ancestor", commit, "HEAD"],
+        cwd=repository_root,
+        timeout=_GIT_TIMEOUT_SECONDS,
+    )
+    if ancestor is None or ancestor.returncode != 1:
         return []
-    if ancestor.returncode == 0:
-        return []
-    if ancestor.returncode != 1:
-        return []
-    try:
-        distance_result = subprocess.run(
-            ["git", "rev-list", "--count", f"{commit}..HEAD"],
-            cwd=str(repository_root),
-            capture_output=True,
-            text=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return []
-    if distance_result.returncode != 0:
+    distance_result = _run_git_ok(
+        ["rev-list", "--count", f"{commit}..HEAD"],
+        cwd=repository_root,
+        timeout=_GIT_TIMEOUT_SECONDS,
+    )
+    if distance_result is None or distance_result.returncode != 0:
         return []
     try:
         distance = int(distance_result.stdout.strip())
     except ValueError:
-        return []
-    if distance < 0:
         return []
     return [
         LintFinding(
@@ -685,22 +674,37 @@ def _artifact_link_findings(
 def _grounded_path_findings(
     record: WheypointRecord, repository_root: Path
 ) -> list[LintFinding]:
-    """Warn when a grounded path no longer names a file in the repository."""
+    """Warn when a grounded entry violates the writer's own path grammar.
+
+    Parses with `grounded.parse_grounded_entry` (the same grammar
+    `validate_grounded` enforces at write time) so an entry one side calls
+    valid the other cannot silently accept.
+    """
     findings: list[LintFinding] = []
     for entry in record.working_context:
-        path_text = entry.split("#", 1)[0]
+        try:
+            path_text, _range = grounded.parse_grounded_entry(entry)
+        except grounded.GroundedEntryError:
+            findings.append(
+                LintFinding(
+                    LintCode.GROUNDED_PATH_MISSING,
+                    f"working_context entry {entry!r} does not satisfy the "
+                    + "grounded path grammar",
+                )
+            )
+            continue
         if not path_text:
             continue
         candidate = Path(path_text)
+        present = False
         if not candidate.is_absolute():
-            candidate = repository_root / candidate
-        try:
-            resolved = candidate.resolve()
-            present = (
-                resolved.is_relative_to(repository_root) and resolved.is_file()
-            )
-        except (OSError, RuntimeError):
-            present = False
+            try:
+                resolved = (repository_root / candidate).resolve()
+                present = (
+                    resolved.is_relative_to(repository_root) and resolved.is_file()
+                )
+            except (OSError, RuntimeError):
+                present = False
         if not present:
             findings.append(
                 LintFinding(
