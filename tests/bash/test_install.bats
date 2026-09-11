@@ -66,10 +66,7 @@ count_skills() {
 # -- ec_tool_binary -----------------------------------------------------------
 
 @test "ec_tool_binary maps formula names to binaries" {
-    [[ "$(ec_tool_binary ripgrep)" == "rg" ]]
     [[ "$(ec_tool_binary ast-grep)" == "sg" ]]
-    [[ "$(ec_tool_binary jq)" == "jq" ]]
-    [[ "$(ec_tool_binary fd)" == "fd" ]]
     [[ "$(ec_tool_binary just)" == "just" ]]
     [[ "$(ec_tool_binary mergiraf)" == "mergiraf" ]]
     [[ "$(ec_tool_binary tilth)" == "tilth" ]]
@@ -79,12 +76,12 @@ count_skills() {
 # -- ec_validate_selection ----------------------------------------------------
 
 @test "ec_validate_selection accepts subset of allowed list" {
-    run ec_validate_selection "ripgrep,jq" "$EC_KNOWN_TOOLS"
+    run ec_validate_selection "just,mergiraf" "$EC_KNOWN_TOOLS"
     [ "$status" -eq 0 ]
 }
 
 @test "ec_validate_selection rejects unknown token" {
-    run ec_validate_selection "ripgrep,bogus" "$EC_KNOWN_TOOLS"
+    run ec_validate_selection "just,bogus" "$EC_KNOWN_TOOLS"
     [ "$status" -ne 0 ]
     [[ "$output" == *"Unknown selection: bogus"* ]]
 }
@@ -108,13 +105,13 @@ count_skills() {
 }
 
 @test "ec_parse_args --tools with value parses comma list" {
-    ec_parse_args --tools ripgrep,jq
-    [[ "$EC_TOOLS" == "ripgrep,jq" ]]
+    ec_parse_args --tools just,mergiraf
+    [[ "$EC_TOOLS" == "just,mergiraf" ]]
 }
 
 @test "ec_parse_args --tools=value parses inline value" {
-    ec_parse_args --tools=fd
-    [[ "$EC_TOOLS" == "fd" ]]
+    ec_parse_args --tools=just
+    [[ "$EC_TOOLS" == "just" ]]
 }
 
 @test "ec_parse_args --skip-mcp sets MCP to none" {
@@ -175,7 +172,7 @@ count_skills() {
 }
 
 @test "ec_parse_args rejects unknown tool selection" {
-    run ec_parse_args --tools ripgrep,foobar
+    run ec_parse_args --tools just,foobar
     [ "$status" -eq 2 ]
     [[ "$output" == *"foobar"* ]]
 }
@@ -231,10 +228,10 @@ STUB
 # -- ec_brew_install_if_missing ----------------------------------------------
 
 @test "ec_brew_install_if_missing skips when binary already on PATH" {
-    make_stub jq
+    make_stub just
     make_stub brew
     export EC_BREW="$STUB_BIN/brew"
-    run ec_brew_install_if_missing jq
+    run ec_brew_install_if_missing just
     [ "$status" -eq 0 ]
     [[ "$output" == *"already installed"* ]]
     # brew should NOT have been invoked
@@ -242,34 +239,34 @@ STUB
 }
 
 @test "ec_brew_install_if_missing dry-run prints would-run line" {
-    EC_DRY_RUN=1 run ec_brew_install_if_missing ripgrep
+    EC_DRY_RUN=1 run ec_brew_install_if_missing just
     [ "$status" -eq 0 ]
-    [[ "$output" == *"would run 'brew install ripgrep'"* ]]
+    [[ "$output" == *"would run 'brew install just'"* ]]
 }
 
 @test "ec_brew_install_if_missing invokes brew when missing" {
     make_stub brew
     export EC_BREW="$STUB_BIN/brew"
-    run ec_brew_install_if_missing ripgrep
+    run ec_brew_install_if_missing just
     [ "$status" -eq 0 ]
-    grep -q "^brew install ripgrep$" "$STUB_LOG"
+    grep -q "^brew install just$" "$STUB_LOG"
 }
 
 @test "ec_brew_install_if_missing surfaces brew failure" {
     make_stub brew 1
     export EC_BREW="$STUB_BIN/brew"
-    run ec_brew_install_if_missing ripgrep
+    run ec_brew_install_if_missing just
     [ "$status" -ne 0 ]
 }
 
 # -- ec_install_tools ---------------------------------------------------------
 
 @test "ec_install_tools (dry-run) iterates each formula in the list" {
-    PATH="$STUB_BIN" EC_DRY_RUN=1 run ec_install_tools "ripgrep,jq,fd"
+    PATH="$STUB_BIN" EC_DRY_RUN=1 run ec_install_tools "just,mergiraf,ast-grep"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"would run 'brew install ripgrep'"* ]]
-    [[ "$output" == *"would run 'brew install jq'"* ]]
-    [[ "$output" == *"would run 'brew install fd'"* ]]
+    [[ "$output" == *"would run 'brew install just'"* ]]
+    [[ "$output" == *"would run 'brew install mergiraf'"* ]]
+    [[ "$output" == *"would run 'brew install ast-grep'"* ]]
 }
 
 @test "ec_install_tools routes tilth through ec_install_tilth, not brew" {
