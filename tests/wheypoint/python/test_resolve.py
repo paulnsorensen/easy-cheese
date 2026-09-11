@@ -1105,7 +1105,7 @@ def test_a_subdirectory_cwd_still_anchors_artifact_digests_to_the_repo_root(
     assert all(f.code.value != "stale-artifact-link" for f in found.findings)
 
 
-def test_a_third_matching_slug_reads_the_winners_record_exactly_once(
+def test_resolving_a_slug_reads_each_candidate_once_and_revalidates_the_winner(
     corpus_root: Path,
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
@@ -1138,7 +1138,9 @@ def test_a_third_matching_slug_reads_the_winners_record_exactly_once(
 
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.work_id == "work-0003"
-    assert reads.count(winner_record_path) == 1
+    # _slug_matches reads it once to check the slug, lint_work's
+    # survey_receipts() reads it again to validate the winner.
+    assert reads.count(winner_record_path) == 2
 
     _ = seed(
         corpus_root,
@@ -1152,3 +1154,27 @@ def test_a_third_matching_slug_reads_the_winners_record_exactly_once(
 
     assert ambiguous.outcome is resolve_mod.ResolutionOutcome.AMBIGUOUS
     assert set(ambiguous.matches) == {"work-0003", "work-0004"}
+
+
+def test_a_slug_from_a_newer_runtime_resolves_gated_with_runtime_behind(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    import json
+
+    from easy_cheese_schemas import SCHEMA_VERSION
+
+    store, _promotion = seed(
+        corpus_root, make_record, make_promotion, work_id="work-0001", slug="widget"
+    )
+    raw = cast(
+        dict[str, object], json.loads(store.record_path.read_text(encoding="utf-8"))
+    )
+    raw["schema_version"] = SCHEMA_VERSION + 1
+    _ = store.record_path.write_text(json.dumps(raw, sort_keys=True), encoding="utf-8")
+
+    found = run("widget", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert [f.code for f in found.findings] == [lint.LintCode.RUNTIME_BEHIND]

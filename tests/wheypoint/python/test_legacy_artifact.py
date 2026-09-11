@@ -29,9 +29,7 @@ def _runner(root: Path) -> Callable[[Sequence[str], Path], str]:
 def _resolve(root: Path, slug: str, *, move: str, artifact: str):
     path = root / ".cheese" / "notes" / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    _ = path.write_text(
-        _NOTE.format(move=move, artifact=artifact), encoding="utf-8"
-    )
+    _ = path.write_text(_NOTE.format(move=move, artifact=artifact), encoding="utf-8")
     return resolve_mod.resolve_legacy(slug, start=root, run=_runner(root))
 
 
@@ -78,8 +76,6 @@ def test_a_file_move_accepts_a_present_repository_file(tmp_path: Path) -> None:
         "context\n", encoding="utf-8"
     )
 
-    found = _resolve(
-        root, "build", move="cook", artifact=".cheese/notes/context.md"
-    )
+    found = _resolve(root, "build", move="cook", artifact=".cheese/notes/context.md")
 
     assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY

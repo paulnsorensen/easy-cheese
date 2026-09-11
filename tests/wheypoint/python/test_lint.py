@@ -26,7 +26,14 @@ from easy_cheese_schemas import (
 )
 
 from easy_cheese.shared import git_utils
-from easy_cheese.shared.wheypoint import canonical, lint, projection, records, storage
+from easy_cheese.shared.wheypoint import (
+    canonical,
+    grounded,
+    lint,
+    projection,
+    records,
+    storage,
+)
 
 from conftest import Promotion
 
@@ -928,8 +935,8 @@ def test_ac16_a_store_from_a_newer_runtime_reports_runtime_behind_only(
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
-def test_stale_commit_check_swallows_an_unrunnable_git(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_stale_commit_check_swallows_an_unrunnable_git_but_says_so(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     def boom(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         raise OSError("git executable not found")
@@ -939,6 +946,10 @@ def test_stale_commit_check_swallows_an_unrunnable_git(
     findings = lint._stale_commit_findings("deadbeef", repository_root=tmp_path)  # pyright: ignore[reportPrivateUsage]
 
     assert findings == []
+    assert capsys.readouterr().err.splitlines() == [
+        "wheypoint: git-unavailable git merge-base --is-ancestor "
+        + f"cwd={tmp_path} OSError"
+    ]
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
@@ -1020,34 +1031,96 @@ def test_lint_work_anchors_grounded_paths_to_the_repo_root_not_bare_cwd(
     assert lint.LintCode.GROUNDED_PATH_MISSING not in report.codes
 
 
-def test_lint_work_with_a_preloaded_record_never_rereads_record_json(
+def test_lint_work_reads_only_the_current_projection(
     corpus_root: Path,
     make_promotion: Callable[..., _PromotionLike],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Lineage is proved from receipts, so depth costs no extra projection."""
     store = make_store(corpus_root)
-    promotion = make_promotion()
-    store.promote(promotion.record, promotion.revision, promotion.markdown)
-    preloaded = store.read_record()
-    assert preloaded is not None
+    first = make_promotion(1, "rev-0001")
+    store.promote(first.record, first.revision, first.markdown)
+    second = make_promotion(2, "rev-0002", parent=first)
+    store.promote(second.record, second.revision, second.markdown)
+    third = make_promotion(3, "rev-0003", parent=second)
+    store.promote(third.record, third.revision, third.markdown)
 
     reads: list[Path] = []
-    original_read_bytes = Path.read_bytes
+    original_read_text = Path.read_text
 
-    def spy_read_bytes(self: Path, *args: object, **kwargs: object) -> bytes:
+    def spy_read_text(self: Path, *args: object, **kwargs: object) -> str:
         reads.append(self)
-        return original_read_bytes(self, *args, **kwargs)
+        return original_read_text(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
 
-    monkeypatch.setattr(Path, "read_bytes", spy_read_bytes)
+    monkeypatch.setattr(Path, "read_text", spy_read_text)
 
-    report = lint.lint_work(
-        store,
-        project_key=PROJECT,
-        git_object_exists=all_objects_exist,
-        artifact_digest=no_artifacts,
-        preloaded_record=preloaded,
+    report = check(store)
+
+    assert report.codes == ()
+    assert [path for path in reads if path.parent.name == "projections"] == [
+        store.projection_path(3, "rev-0003")
+    ]
+
+
+def test_lint_work_digests_each_artifact_path_once(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """An artifact that is both linked and covering is hashed once, not twice."""
+    store = make_store(corpus_root)
+    pinned = canonical.digest_text("as written")
+    promotion = make_promotion(record=covered_record(make_record, pinned))
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    asked: list[str] = []
+
+    def counting_digest(path: str) -> str | None:
+        asked.append(path)
+        return pinned
+
+    report = check(store, artifact_digest=counting_digest)
+
+    assert report.codes == ()
+    assert asked == ["cook/report.md"]
+
+
+def test_external_pointers_in_working_context_are_not_grounded_paths(
+    make_record: Callable[..., WheypointRecord], tmp_path: Path
+) -> None:
+    record = make_record(
+        working_context=["src/x.py", "PR#412", "https://example.test/a"]
     )
 
-    assert store.record_path not in reads
-    assert report.record == preloaded
-    assert report.codes == ()
+    findings = lint._grounded_path_findings(record, tmp_path)  # pyright: ignore[reportPrivateUsage]
+
+    assert [f.detail for f in findings] == [
+        "working_context path 'src/x.py' is missing"
+    ]
+
+
+def test_grounded_path_findings_say_why_a_path_is_unusable(
+    make_record: Callable[..., WheypointRecord], tmp_path: Path
+) -> None:
+    record = make_record(working_context=["/etc/passwd", "../outside.md", "gone.py"])
+
+    findings = lint._grounded_path_findings(record, tmp_path)  # pyright: ignore[reportPrivateUsage]
+
+    assert [f.detail for f in findings] == [
+        "working_context path '/etc/passwd' is absolute",
+        "working_context path '../outside.md' escapes the repository root",
+        "working_context path 'gone.py' is missing",
+    ]
+
+
+def test_a_file_name_carrying_its_own_hash_still_grounds(
+    make_record: Callable[..., WheypointRecord], tmp_path: Path
+) -> None:
+    _ = (tmp_path / "notes#1.md").write_text("x\n", encoding="utf-8")
+    entry = "notes#1.md#1-1"
+
+    validated = grounded.validate_grounded([entry], root=tmp_path)
+
+    assert validated == (entry,)
+    record = make_record(working_context=[entry])
+    findings = lint._grounded_path_findings(record, tmp_path)  # pyright: ignore[reportPrivateUsage]
+    assert findings == []

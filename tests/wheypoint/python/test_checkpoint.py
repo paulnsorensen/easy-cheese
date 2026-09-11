@@ -363,14 +363,14 @@ def test_omitted_protected_state_carries_forward() -> None:
         "checkpoint",
         stdin=_first(
             session={"captured_at": CAPTURED_AT},
-            entries=[
-                {"kind": "decision", "summary": "The kernel keeps every check."}
-            ],
+            entries=[{"kind": "decision", "summary": "The kernel keeps every check."}],
         ),
     )
     assert status == 0
 
-    status, payload = _run("checkpoint", stdin=_intent(orientation="Says nothing else."))
+    status, payload = _run(
+        "checkpoint", stdin=_intent(orientation="Says nothing else.")
+    )
 
     assert status == 0, payload
     decisions = cast(list[dict[str, object]], _get(payload, "record", "decisions"))
@@ -439,9 +439,7 @@ def test_retirement_still_needs_a_caller_authored_transition() -> None:
 def test_a_transition_without_a_rationale_is_not_a_retirement() -> None:
     status, payload = _run(
         "checkpoint",
-        stdin=_intent(
-            transitions=[{"entry_id": "q-nothing", "action": "resolve"}]
-        ),
+        stdin=_intent(transitions=[{"entry_id": "q-nothing", "action": "resolve"}]),
     )
 
     assert status == 1
@@ -488,6 +486,8 @@ def test_a_gating_addition_derives_gated_status_and_a_projection(
     assert (store.root / cast(str, payload["projection_path"])).read_text(
         encoding="utf-8"
     ) == generated
+
+
 @pytest.mark.usefixtures("genesis")
 def test_mirror_failure_then_retry_resumes_the_committed_revision(
     store: storage.WorkStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -541,6 +541,7 @@ def test_mirror_failure_then_retry_resumes_the_committed_revision(
     revision_files = sorted(path.name for path in store.revisions_dir.glob("*.json"))
     assert len(revision_files) == 2
     assert f"2-{retried.revision_id}.json" in revision_files
+
 
 @pytest.mark.usefixtures("genesis")
 def test_an_artifact_without_a_next_move_refuses() -> None:
@@ -654,7 +655,10 @@ def test_affinage_refuses_a_pr_reference_embedded_in_prose(artifact: str) -> Non
 
 
 _SECRET_POSITIVES: list[tuple[str, str]] = [
-    ("AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "AWS secret key"),
+    (
+        "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        "AWS secret key",
+    ),
     ("ASIA" + "A" * 16, "AWS access key"),
     ("Authorization: Bearer " + "a" * 30, "bearer token"),
     ("token=" + "a" * 15, "credential assignment"),
@@ -729,4 +733,7 @@ def test_the_checkpoint_command_is_registered_for_the_bundle() -> None:
 
     assert "checkpoint" in wheypoint.COMMANDS
     # The bundle also registers the shared `handoff` command, which is not a runner here.
-    assert [command.name for command in commands.COMMANDS] == [*wheypoint.COMMANDS, "handoff"]
+    assert [command.name for command in commands.COMMANDS] == [
+        *wheypoint.COMMANDS,
+        "handoff",
+    ]

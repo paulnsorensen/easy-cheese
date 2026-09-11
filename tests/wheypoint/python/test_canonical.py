@@ -189,7 +189,9 @@ def test_canonical_payload_of_a_record_is_sorted_utf8_json(
 ) -> None:
     payload = records.canonical_payload(make_record())
     assert payload.startswith(b'{"artifact_links":[],"blockers":[],"created":')
-    assert payload.endswith(b'"working_context":["src/easy_cheese/shared/wheypoint/storage.py"]}')
+    assert payload.endswith(
+        b'"working_context":["src/easy_cheese/shared/wheypoint/storage.py"]}'
+    )
 
 
 def test_v3_fields_at_their_default_leave_v2_canonical_bytes_untouched(
@@ -210,7 +212,10 @@ def test_v3_fields_at_their_default_leave_v2_canonical_bytes_untouched(
     # Setting a v3 field changes the bytes; clearing it restores them.
     with_notes = evolve(record, notes="body")
     assert "notes" in records.unstructure(with_notes)
-    assert records.canonical_payload(evolve(with_notes, notes=None)) == records.canonical_payload(record)
+    assert records.canonical_payload(
+        evolve(with_notes, notes=None)
+    ) == records.canonical_payload(record)
+
 
 def test_a_since3_dict_factory_field_is_omitted_only_while_empty() -> None:
     """A future field declared with `factory=dict` follows the same rule as
@@ -221,7 +226,9 @@ def test_a_since3_dict_factory_field_is_omitted_only_while_empty() -> None:
         payload: dict[str, int] = attrs.field(factory=dict, metadata={"since": 3})
 
     assert records.unstructure(_WithDictFactory()) == {}
-    assert records.unstructure(_WithDictFactory(payload={"a": 1})) == {"payload": {"a": 1}}
+    assert records.unstructure(_WithDictFactory(payload={"a": 1})) == {
+        "payload": {"a": 1}
+    }
 
 
 def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
@@ -232,10 +239,16 @@ def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
 
     fixtures = Path(__file__).resolve().parents[1] / "fixtures"
     raw = (fixtures / "golden-record-v3.json").read_bytes()
-    pins = cast(dict[str, object], json.loads((fixtures / "golden-record-v3.pins.json").read_text(encoding="utf-8")))
+    pins = cast(
+        dict[str, object],
+        json.loads(
+            (fixtures / "golden-record-v3.pins.json").read_text(encoding="utf-8")
+        ),
+    )
     record = records.structure(cast(object, json.loads(raw)), WheypointRecord)
     revision = records.structure(
-        cast(object, json.loads((fixtures / "golden-revision-v3.json").read_bytes())), WheypointRevision
+        cast(object, json.loads((fixtures / "golden-revision-v3.json").read_bytes())),
+        WheypointRevision,
     )
     bump = (
         f"canonical bytes changed for schema_version {SCHEMA_VERSION}: bump SCHEMA_VERSION "
@@ -246,4 +259,9 @@ def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
     assert records.record_digest(record) == pins["record_digest"], bump
     assert records.revision_digest(revision) == pins["revision_digest"], bump
     mutated = raw.replace(b"Golden v3 record.", b"Golden v3 record!")
-    assert records.record_digest(records.structure(cast(object, json.loads(mutated)), WheypointRecord)) != pins["record_digest"]
+    assert (
+        records.record_digest(
+            records.structure(cast(object, json.loads(mutated)), WheypointRecord)
+        )
+        != pins["record_digest"]
+    )

@@ -410,7 +410,9 @@ def test_resolve_cli_and_the_bundle_produce_byte_identical_json_for_the_same_ref
 
     cli_out = io.StringIO()
     cli_status = resolve_cli.main(["--ref", WORK_ID], stdout=cli_out)
-    cli_payload = cast(dict[str, object], json.loads(cli_out.getvalue().splitlines()[0]))
+    cli_payload = cast(
+        dict[str, object], json.loads(cli_out.getvalue().splitlines()[0])
+    )
 
     assert cli_status == 0
     assert cli_payload == {**bundle_payload, "command": resolve_cli.COMMAND}

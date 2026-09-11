@@ -139,9 +139,7 @@ def test_unlistable_git_degrades_to_start_and_says_so(tmp_path: Path) -> None:
 
     found = legacy.find_legacy_note("absent", start=start, run=fake_runner(None))
 
-    assert found.searched == (
-        str(start.resolve() / ".cheese" / "notes" / "absent.md"),
-    )
+    assert found.searched == (str(start.resolve() / ".cheese" / "notes" / "absent.md"),)
     assert found.error == (
         f"git worktree list --porcelain could not be run in {start.resolve()}"
     )
@@ -161,9 +159,7 @@ def test_ancestor_note_is_found_from_a_subdirectory_without_git(
     deep.mkdir(parents=True)
     expected = write_note(repo, "cold-start")
 
-    found = legacy.find_legacy_note(
-        "cold-start", start=deep, run=fake_runner(None)
-    )
+    found = legacy.find_legacy_note("cold-start", start=deep, run=fake_runner(None))
 
     assert found.outcome is legacy.LegacyOutcome.FOUND
     assert found.note is not None

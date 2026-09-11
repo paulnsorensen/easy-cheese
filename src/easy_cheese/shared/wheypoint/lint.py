@@ -16,7 +16,10 @@ to cover stay exactly where they were.
 
 from __future__ import annotations
 
+import functools
+import re
 import subprocess
+import sys
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
@@ -41,6 +44,9 @@ from . import records, storage
 from .lineage import Lineage
 
 _GIT_TIMEOUT_SECONDS = 5
+# A `PR#<n>` or URL pointer in working_context references something outside the
+# checkout, so the grounded path grammar has nothing local to check it against.
+_EXTERNAL_POINTER_RE = re.compile(r"PR#[0-9]+|[a-z][a-z0-9+.-]*://.*")
 
 
 class LintCode(str, Enum):
@@ -124,7 +130,16 @@ def _run_git_ok(
     """Run one advisory git command, or None when it could not run at all."""
     try:
         return git_utils.run_git(args, cwd=cwd, timeout=timeout)
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as exc:
+        # Advisory checks degrade to silence, but a silence with no cause is
+        # indistinguishable from a pass. Name the command, where it ran, and
+        # what stopped it -- in plain ASCII, because this stream belongs to
+        # whatever harness is watching, not to a particular one.
+        print(
+            f"wheypoint: git-unavailable git {' '.join(args[:2])} cwd={cwd} "
+            + type(exc).__name__,
+            file=sys.stderr,
+        )
         return None
 
 
@@ -217,22 +232,19 @@ def lint_work(
     git_object_exists: Callable[[str], bool],
     artifact_digest: Callable[[str], str | None],
     repository_root: Path | str | None = None,
-    preloaded_record: WheypointRecord | None = None,
 ) -> LintReport:
     """Validate the whole current checkpoint of one work store.
 
-    `preloaded_record` lets a caller that already read and structured
-    `record.json` for its own reason (deciding this store is the one it
-    wants) skip reading it again here.
+    Lineage is walked over receipts alone, and the only projection read is
+    the one the record points at -- the single revision whose projection a
+    caller is about to act on. Every other projection's bytes are a question
+    for `recover()`, not for a dispatch gate.
     """
     root = paths.resolve_repo_root(repository_root)
-    recovery = (
-        store.recover(record=preloaded_record)
-        if preloaded_record is not None
-        else store.recover()
-    )
-    record = recovery.record
-    stamped_schema_version = recovery.stamped_schema_version
+    digest_of = _memoized(artifact_digest)
+    survey = store.survey_receipts()
+    record = survey.record
+    stamped_schema_version = survey.stamped_schema_version
     if stamped_schema_version is not None and stamped_schema_version > SCHEMA_VERSION:
         # A newer runtime wrote this store. Its bytes may not round-trip through
         # this reader's canonical form, so a digest disagreement here says
@@ -252,8 +264,7 @@ def lint_work(
             record=record,
         )
     findings = [
-        LintFinding(LintCode.STORE_INCONSISTENT, problem)
-        for problem in recovery.problems
+        LintFinding(LintCode.STORE_INCONSISTENT, problem) for problem in survey.problems
     ]
     if record is None:
         if not findings:
@@ -263,10 +274,10 @@ def lint_work(
                     f"no record at {store.record_path}",
                 )
             )
-        findings.extend(_incomplete_findings(recovery))
+        findings.extend(_incomplete_findings(survey.incomplete))
         return LintReport(findings=tuple(findings))
 
-    findings.extend(_incomplete_findings(recovery))
+    findings.extend(_incomplete_findings(survey.incomplete))
 
     if record.project_key != project_key:
         findings.append(
@@ -294,15 +305,15 @@ def lint_work(
         projection_report = _lint_current_projection(store, record, current)
         findings.extend(projection_report.findings)
         projection = projection_report.projection
-        chain = lineage.walk((file.revision for file in recovery.complete), current)
+        chain = lineage.walk(survey.revisions, current)
         ancestry = chain.revision_ids
         findings.extend(_lineage_finding(issue) for issue in chain.issues)
         findings.extend(_compaction_findings(chain))
         findings.extend(_conservation_findings(chain, record))
         findings.extend(_git_findings(current, git_object_exists, repository_root=root))
 
-    findings.extend(_artifact_link_findings(record, artifact_digest))
-    findings.extend(_coverage_findings(ancestry, record, artifact_digest))
+    findings.extend(_artifact_link_findings(record, digest_of))
+    findings.extend(_coverage_findings(ancestry, record, digest_of))
     if projection is not None:
         findings.extend(_durability_findings(projection, record))
     findings.extend(_grounded_path_findings(record, root))
@@ -338,14 +349,18 @@ def _durability_findings(
     ]
 
 
-def _incomplete_findings(
-    recovery: storage.RecoveryReport,
-) -> list[LintFinding]:
+def _memoized(digest: Callable[[str], str | None]) -> Callable[[str], str | None]:
+    """One digest per path for the life of one lint.
+
+    Artifact links and coverage claims ask about the same files, so an
+    unmemoized digest hashes a linked-and-covering artifact twice.
+    """
+    return functools.cache(digest)
+
+
+def _incomplete_findings(incomplete: tuple[str, ...]) -> list[LintFinding]:
     """Name every half-written pair: an interrupted promotion is not clean."""
-    return [
-        LintFinding(LintCode.REVISION_INCOMPLETE, detail)
-        for detail in recovery.incomplete
-    ]
+    return [LintFinding(LintCode.REVISION_INCOMPLETE, detail) for detail in incomplete]
 
 
 def _lint_current_projection(
@@ -678,10 +693,14 @@ def _grounded_path_findings(
 
     Parses with `grounded.parse_grounded_entry` (the same grammar
     `validate_grounded` enforces at write time) so an entry one side calls
-    valid the other cannot silently accept.
+    valid the other cannot silently accept. A `PR#<n>` or URL pointer is
+    exempt: it names something outside the checkout, so no local file can
+    confirm or deny it and the writer never promised one would.
     """
     findings: list[LintFinding] = []
     for entry in record.working_context:
+        if _EXTERNAL_POINTER_RE.fullmatch(entry):
+            continue
         try:
             path_text, _range = grounded.parse_grounded_entry(entry)
         except grounded.GroundedEntryError:
@@ -693,23 +712,12 @@ def _grounded_path_findings(
                 )
             )
             continue
-        if not path_text:
-            continue
-        candidate = Path(path_text)
-        present = False
-        if not candidate.is_absolute():
-            try:
-                resolved = (repository_root / candidate).resolve()
-                present = (
-                    resolved.is_relative_to(repository_root) and resolved.is_file()
-                )
-            except (OSError, RuntimeError):
-                present = False
-        if not present:
+        landed = grounded.resolve_within(path_text, repository_root)
+        if isinstance(landed, grounded.GroundedPathIssue):
             findings.append(
                 LintFinding(
                     LintCode.GROUNDED_PATH_MISSING,
-                    f"working_context path {entry!r} is missing",
+                    f"working_context path {entry!r} {landed.value}",
                 )
             )
     return findings

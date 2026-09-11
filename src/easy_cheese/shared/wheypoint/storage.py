@@ -110,6 +110,23 @@ class RecoveryReport:
         return frozenset(file.revision.revision_id for file in self.complete)
 
 
+@define(frozen=True)
+class ReceiptSurvey:
+    """What a reader needs, reconciled from receipts alone.
+
+    No projection is read or hashed here. Whether a projection agrees with
+    the receipt beside it is a question about the one revision the record
+    points at, and the reader that cares reads exactly that one -- so a
+    resolve costs one projection read rather than one per revision.
+    """
+
+    record: WheypointRecord | None
+    revisions: tuple[WheypointRevision, ...]
+    incomplete: tuple[str, ...]
+    problems: tuple[str, ...]
+    stamped_schema_version: int | None = None
+
+
 def file_digest(path: Path) -> str | None:
     """The digest of a file's bytes, or None when it is not there."""
     try:
@@ -267,13 +284,14 @@ class WorkStore:
         incomplete: list[str] = []
         receipts: set[str] = set()
         if self.revisions_dir.is_dir():
-            for path in sorted(self.revisions_dir.glob("*.json")):
+            for path in self.revisions_dir.glob("*.json"):
                 receipts.add(path.stem)
                 reason, file = self._inspect_revision(path)
                 if file is not None:
                     complete.append(file)
                 else:
                     incomplete.append(f"{path.name}: {reason}")
+        incomplete.sort()
         incomplete.extend(self._unclaimed_projections(receipts))
         complete.sort(key=lambda file: file.revision.revision_number)
         return RevisionScan(tuple(complete), tuple(incomplete))
@@ -288,26 +306,75 @@ class WorkStore:
         An unreadable or unstructurable receipt is skipped exactly as
         `_inspect_revision` would skip it, minus the projection check.
         """
+        return tuple(self._scan_receipts(require_projection=False)[0])
+
+    def survey_receipts(self) -> ReceiptSurvey:
+        """Reconcile the record against its receipts without hashing a projection.
+
+        The stamped schema version is always read from the raw bytes, so a
+        record written by a newer runtime is reported as such however the
+        caller found this store.
+        """
+        record, problems, stamped_schema_version = self._read_record_for_recovery()
+        revisions, incomplete = self._scan_receipts(require_projection=True)
+        if record is not None:
+            problems = [*problems, *_record_problems(record, revisions)]
+        return ReceiptSurvey(
+            record=record,
+            revisions=tuple(revisions),
+            incomplete=tuple(incomplete),
+            problems=tuple(problems),
+            stamped_schema_version=stamped_schema_version,
+        )
+
+    def _scan_receipts(
+        self, *, require_projection: bool
+    ) -> tuple[list[WheypointRevision], list[str]]:
+        """Structure every receipt, oldest first, and name the ones skipped.
+
+        `require_projection` adds the one cheap half of completeness -- the
+        projection file exists -- without reading or hashing its bytes.
+        """
         if not self.revisions_dir.is_dir():
-            return ()
+            return [], []
         receipts: list[WheypointRevision] = []
-        for path in sorted(self.revisions_dir.glob("*.json")):
+        skipped: list[str] = []
+        stems: set[str] = set()
+        for path in self.revisions_dir.glob("*.json"):
+            stems.add(path.stem)
             try:
                 payload = _parse_json(path.read_bytes())
             except ValueError:
+                skipped.append(f"{path.name}: malformed JSON")
                 continue
             try:
                 revision = records.structure(payload, WheypointRevision)
-            except records.RecordError:
+            except records.RecordError as exc:
+                skipped.append(f"{path.name}: not a readable revision: {exc}")
                 continue
             expected = self.revision_path(
                 revision.revision_number, revision.revision_id
             )
             if path.name != expected.name:
+                skipped.append(
+                    f"{path.name}: filename does not match the revision identity "
+                    + "inside it"
+                )
+                continue
+            if (
+                require_projection
+                and not self.projection_path(
+                    revision.revision_number, revision.revision_id
+                ).is_file()
+            ):
+                skipped.append(f"{path.name}: projection file is missing")
                 continue
             receipts.append(revision)
         receipts.sort(key=lambda revision: revision.revision_number)
-        return tuple(receipts)
+        skipped.sort()
+        if require_projection:
+            skipped.extend(self._unclaimed_projections(stems))
+        return receipts, skipped
 
     def read_record(self) -> WheypointRecord | None:
         try:
@@ -440,19 +507,14 @@ class WorkStore:
         ):
             raise StorageError("projection text does not match its declared digest")
 
-    def recover(self, *, record: WheypointRecord | None = None) -> RecoveryReport:
-        """Reconcile what is on disk. Reads only; invents nothing.
-
-        `record`, when given, is used in place of re-reading and structuring
-        `record.json` -- for a caller that already did so for its own reason.
-        """
+    def recover(self) -> RecoveryReport:
+        """Reconcile what is on disk. Reads only; invents nothing."""
         scan = self.revisions()
-        stamped_schema_version: int | None = None
-        problems: list[str] = []
-        if record is None:
-            record, problems, stamped_schema_version = self._read_record_for_recovery()
+        record, problems, stamped_schema_version = self._read_record_for_recovery()
         if record is not None:
-            problems.extend(_record_problems(record, list(scan.files)))
+            problems.extend(
+                _record_problems(record, [file.revision for file in scan.files])
+            )
         return RecoveryReport(
             record=record,
             complete=scan.files,
@@ -529,14 +591,14 @@ class WorkStore:
 
 
 def _record_problems(
-    record: WheypointRecord, complete: list[RevisionFile]
+    record: WheypointRecord, revisions: list[WheypointRevision]
 ) -> list[str]:
     match = next(
         (
-            file
-            for file in complete
-            if file.revision.revision_id == record.revision_id
-            and file.revision.revision_number == record.revision_number
+            revision
+            for revision in revisions
+            if revision.revision_id == record.revision_id
+            and revision.revision_number == record.revision_number
         ),
         None,
     )
@@ -546,12 +608,12 @@ def _record_problems(
             + "not a complete immutable revision"
         ]
     problems: list[str] = []
-    if match.revision.record_digest != records.record_digest(record):
+    if match.record_digest != records.record_digest(record):
         problems.append(
             f"{RECORD_FILENAME} does not match the record digest in revision "
             + f"{record.revision_id!r}"
         )
-    if record.revision_digest != records.revision_digest(match.revision):
+    if record.revision_digest != records.revision_digest(match):
         problems.append(
             f"{RECORD_FILENAME} revision_digest does not match revision "
             + f"{record.revision_id!r}"
