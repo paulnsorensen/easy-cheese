@@ -213,20 +213,16 @@ def _resolve_path(ref: str, checks: _Checks) -> Resolution:
     )
 
 
-def _slug_matches(
-    slug: str, checks: _Checks
-) -> tuple[tuple[str, WheypointRecord], ...]:
+def _slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
     """Every work id whose record claims `slug`, in work-id order.
 
     Work-id order is reporting order for an ambiguity, never a preference: a
     second match is refused, not ranked -- and the walk stops there, so an
-    ambiguous slug never pays for a full corpus scan. Each match carries the
-    record that claimed the slug, so an ambiguity can be reported without
-    re-reading either record.
+    ambiguous slug never pays for a full corpus scan.
     """
     if not checks.work_root.is_dir():
         return ()
-    matched: list[tuple[str, WheypointRecord]] = []
+    matched: list[str] = []
     for directory in sorted(checks.work_root.iterdir(), key=lambda p: p.name):
         record_path = directory / storage.RECORD_FILENAME
         if not record_path.is_file():
@@ -240,36 +236,34 @@ def _slug_matches(
         except (storage.StorageError, ValueError, OSError):
             continue
         if record is not None and record.slug == slug:
-            matched.append((directory.name, record))
+            matched.append(directory.name)
             if len(matched) > 1:
                 break
     return tuple(matched)
 
 
 def _resolve_slug(slug: str, checks: _Checks) -> Resolution:
-    matches = _slug_matches(slug, checks)
-    work_ids = tuple(work_id for work_id, _ in matches)
+    work_ids = _slug_matches(slug, checks)
     searched = _corpus_locations(slug, checks)
-    if not matches:
+    if not work_ids:
         return Resolution(
             ResolutionOutcome.NOT_FOUND,
             source=ResolutionSource.SLUG,
             searched=searched,
         )
-    if len(matches) > 1:
+    if len(work_ids) > 1:
         return Resolution(
             ResolutionOutcome.AMBIGUOUS,
             source=ResolutionSource.SLUG,
             matches=work_ids,
             searched=searched,
             detail=(
-                f"slug {slug!r} names {len(matches)} work records: "
+                f"slug {slug!r} names {len(work_ids)} work records: "
                 + ", ".join(work_ids)
             ),
         )
-    only_match, _only_record = next(iter(matches))
     return _validate(
-        only_match,
+        next(iter(work_ids)),
         ResolutionSource.SLUG,
         checks,
         searched=searched,

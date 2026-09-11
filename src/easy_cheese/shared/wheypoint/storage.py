@@ -30,7 +30,7 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
@@ -292,7 +292,7 @@ class WorkStore:
                 else:
                     incomplete.append(f"{path.name}: {reason}")
         incomplete.sort()
-        incomplete.extend(self._unclaimed_projections(receipts))
+        incomplete.extend(_unclaimed_projections(self._projection_stems(), receipts))
         complete.sort(key=lambda file: file.revision.revision_number)
         return RevisionScan(tuple(complete), tuple(incomplete))
 
@@ -304,9 +304,16 @@ class WorkStore:
         `parent_revision_id` and the digests a revision pins -- does not
         need the projection to be present or to agree with its digest.
         An unreadable or unstructurable receipt is skipped exactly as
-        `_inspect_revision` would skip it, minus the projection check.
+        `revisions()` would skip it -- both read identity through
+        `_structure_receipt` -- minus the projection check.
         """
-        return tuple(self._scan_receipts(require_projection=False)[0])
+        revisions = [
+            structured
+            for _, structured in self._structured_receipts()
+            if not isinstance(structured, str)
+        ]
+        revisions.sort(key=lambda revision: revision.revision_number)
+        return tuple(revisions)
 
     def survey_receipts(self) -> ReceiptSurvey:
         """Reconcile the record against its receipts without hashing a projection.
@@ -316,7 +323,7 @@ class WorkStore:
         caller found this store.
         """
         record, problems, stamped_schema_version = self._read_record_for_recovery()
-        revisions, incomplete = self._scan_receipts(require_projection=True)
+        revisions, incomplete = self._projected_receipts()
         if record is not None:
             problems = [*problems, *_record_problems(record, revisions)]
         return ReceiptSurvey(
@@ -327,53 +334,41 @@ class WorkStore:
             stamped_schema_version=stamped_schema_version,
         )
 
-    def _scan_receipts(
-        self, *, require_projection: bool
-    ) -> tuple[list[WheypointRevision], list[str]]:
-        """Structure every receipt, oldest first, and name the ones skipped.
-
-        `require_projection` adds the one cheap half of completeness -- the
-        projection file exists -- without reading or hashing its bytes.
-        """
+    def _structured_receipts(
+        self,
+    ) -> Iterator[tuple[Path, WheypointRevision | str]]:
+        """Each receipt file paired with its revision or its skip reason."""
         if not self.revisions_dir.is_dir():
-            return [], []
+            return
+        for path in sorted(self.revisions_dir.glob("*.json")):
+            yield path, self._structure_receipt(path)
+
+    def _projected_receipts(self) -> tuple[list[WheypointRevision], list[str]]:
+        """Receipts whose projection is at least present, and why the rest are not.
+
+        This adds the one cheap half of completeness -- the projection file
+        exists -- without reading or hashing its bytes. The projection
+        directory is listed once and answers both that question and which
+        projections no receipt claims.
+        """
+        projection_stems = self._projection_stems()
         receipts: list[WheypointRevision] = []
         skipped: list[str] = []
         stems: set[str] = set()
-        for path in self.revisions_dir.glob("*.json"):
+        for path, structured in self._structured_receipts():
             stems.add(path.stem)
-            try:
-                payload = _parse_json(path.read_bytes())
-            except ValueError:
-                skipped.append(f"{path.name}: malformed JSON")
+            if isinstance(structured, str):
+                skipped.append(f"{path.name}: {structured}")
                 continue
-            try:
-                revision = records.structure(payload, WheypointRevision)
-            except records.RecordError as exc:
-                skipped.append(f"{path.name}: not a readable revision: {exc}")
-                continue
-            expected = self.revision_path(
-                revision.revision_number, revision.revision_id
-            )
-            if path.name != expected.name:
-                skipped.append(
-                    f"{path.name}: filename does not match the revision identity "
-                    + "inside it"
-                )
-                continue
-            if (
-                require_projection
-                and not self.projection_path(
-                    revision.revision_number, revision.revision_id
-                ).is_file()
-            ):
+            # The filename matched the identity inside it, so the receipt and
+            # its projection share this stem.
+            if path.stem not in projection_stems:
                 skipped.append(f"{path.name}: projection file is missing")
                 continue
-            receipts.append(revision)
+            receipts.append(structured)
         receipts.sort(key=lambda revision: revision.revision_number)
         skipped.sort()
-        if require_projection:
-            skipped.extend(self._unclaimed_projections(stems))
+        skipped.extend(_unclaimed_projections(projection_stems, stems))
         return receipts, skipped
 
     def read_record(self) -> WheypointRecord | None:
@@ -523,34 +518,38 @@ class WorkStore:
             stamped_schema_version=stamped_schema_version,
         )
 
-    def _unclaimed_projections(self, receipts: set[str]) -> list[str]:
-        """Projections no receipt on disk names.
-
-        A receipt and its projection share a filename stem, so a projection
-        with no `.json` beside it is half a promotion exactly as much as a
-        receipt with no `.md`. Scanning only the receipts would leave a store
-        holding a whole lineage in its readable half reporting nothing at all.
-        """
+    def _projection_stems(self) -> set[str]:
+        """The filename stems of every projection on disk, listed once."""
         if not self.projections_dir.is_dir():
-            return []
-        return [
-            f"{path.name}: no revision receipt names this projection"
-            for path in sorted(self.projections_dir.glob("*.md"))
-            if path.stem not in receipts
-        ]
+            return set()
+        return {path.stem for path in self.projections_dir.glob("*.md")}
 
-    def _inspect_revision(self, path: Path) -> tuple[str, RevisionFile | None]:
+    def _structure_receipt(self, path: Path) -> WheypointRevision | str:
+        """The revision this receipt holds, or why it is not one.
+
+        The identity half of completeness -- readable JSON, a structurable
+        revision, a filename that matches the identity inside it -- stated
+        once, so every reader of this store skips for the same reasons in
+        the same words.
+        """
         try:
             payload = _parse_json(path.read_bytes())
         except ValueError:
-            return "malformed JSON", None
+            return "malformed JSON"
         try:
             revision = records.structure(payload, WheypointRevision)
         except records.RecordError as exc:
-            return f"not a readable revision: {exc}", None
+            return f"not a readable revision: {exc}"
         expected = self.revision_path(revision.revision_number, revision.revision_id)
         if path.name != expected.name:
-            return "filename does not match the revision identity inside it", None
+            return "filename does not match the revision identity inside it"
+        return revision
+
+    def _inspect_revision(self, path: Path) -> tuple[str, RevisionFile | None]:
+        structured = self._structure_receipt(path)
+        if isinstance(structured, str):
+            return structured, None
+        revision = structured
         projection_path = self.projection_path(
             revision.revision_number, revision.revision_id
         )
@@ -588,6 +587,20 @@ class WorkStore:
                 [f"{RECORD_FILENAME} is not a readable record: {exc}"],
                 stamped_schema_version,
             )
+
+
+def _unclaimed_projections(projection_stems: set[str], receipts: set[str]) -> list[str]:
+    """Projections no receipt on disk names.
+
+    A receipt and its projection share a filename stem, so a projection with
+    no `.json` beside it is half a promotion exactly as much as a receipt
+    with no `.md`. Scanning only the receipts would leave a store holding a
+    whole lineage in its readable half reporting nothing at all.
+    """
+    return [
+        f"{stem}.md: no revision receipt names this projection"
+        for stem in sorted(projection_stems - receipts)
+    ]
 
 
 def _record_problems(

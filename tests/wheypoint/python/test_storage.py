@@ -996,3 +996,43 @@ def test_receipt_revisions_yields_the_same_ids_as_recover_without_reading_projec
     assert not any(
         "projections" in path.parts for path in reads_during_receipt_revisions
     )
+
+
+def _truncate_receipt(path: Path) -> None:
+    _ = path.write_bytes(path.read_bytes()[:40])
+
+
+def _empty_receipt(path: Path) -> None:
+    _ = path.write_bytes(b"{}")
+
+
+def _rename_receipt(path: Path) -> None:
+    _ = path.rename(path.parent / "1-rev-9999.json")
+
+
+@pytest.mark.parametrize(
+    ("corrupt", "expected"),
+    [
+        (_truncate_receipt, "1-rev-0001.json: malformed JSON"),
+        (_empty_receipt, "1-rev-0001.json: not a readable revision: "),
+        (
+            _rename_receipt,
+            "1-rev-9999.json: filename does not match the revision identity "
+            + "inside it",
+        ),
+    ],
+    ids=["malformed", "unstructurable", "identity-lie"],
+)
+def test_both_readers_skip_a_broken_receipt_in_the_same_words(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., _Promotion],
+    corrupt: Callable[[Path], None],
+    expected: str,
+) -> None:
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    corrupt(store.revision_path(1, "rev-0001"))
+
+    skipped = store.revisions().skipped
+    assert store.survey_receipts().incomplete == skipped
+    assert skipped[0].startswith(expected)

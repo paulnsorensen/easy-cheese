@@ -62,17 +62,17 @@ _WRITER_MESSAGES = {
 }
 
 
-def resolve_within(path_text: str, root: Path | str) -> Path | GroundedPathIssue:
-    """The file `path_text` names under `root`, or why it names none.
+def resolve_within(path_text: str, resolved_root: Path) -> GroundedPathIssue | None:
+    """Why `path_text` names no readable file under `resolved_root`, or None.
 
     One containment rule for both sides of the contract: the writer refuses
     what this reports, and the reader reports what the writer would have
-    refused.
+    refused. `resolved_root` is already resolved, so a manifest of entries
+    costs one root resolution rather than one per entry.
     """
     candidate = Path(path_text)
     if candidate.is_absolute():
         return GroundedPathIssue.ABSOLUTE
-    resolved_root = Path(root).resolve()
     try:
         resolved = (resolved_root / candidate).resolve()
     except (OSError, RuntimeError, ValueError):
@@ -83,7 +83,7 @@ def resolve_within(path_text: str, root: Path | str) -> Path | GroundedPathIssue
         return GroundedPathIssue.ESCAPES_ROOT
     if not resolved.is_file():
         return GroundedPathIssue.MISSING
-    return resolved
+    return None
 
 
 def validate_grounded(entries: Sequence[str], *, root: Path | str) -> tuple[str, ...]:
@@ -96,8 +96,8 @@ def validate_grounded(entries: Sequence[str], *, root: Path | str) -> tuple[str,
     validated: list[str] = []
     for entry in entries:
         path_text, _range = parse_grounded_entry(entry)
-        landed = resolve_within(path_text, resolved_root)
-        if isinstance(landed, GroundedPathIssue):
-            raise GroundedEntryError(f"{_WRITER_MESSAGES[landed]}: {path_text!r}")
+        issue = resolve_within(path_text, resolved_root)
+        if issue is not None:
+            raise GroundedEntryError(f"{_WRITER_MESSAGES[issue]}: {path_text!r}")
         validated.append(entry)
     return tuple(validated)

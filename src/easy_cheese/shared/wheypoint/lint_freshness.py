@@ -163,6 +163,7 @@ def grounded_path_findings(
     confirm or deny it and the writer never promised one would.
     """
     findings: list[LintFinding] = []
+    resolved_root = repository_root.resolve()
     for entry in record.working_context:
         if _EXTERNAL_POINTER_RE.fullmatch(entry):
             continue
@@ -177,12 +178,12 @@ def grounded_path_findings(
                 )
             )
             continue
-        landed = grounded.resolve_within(path_text, repository_root)
-        if isinstance(landed, grounded.GroundedPathIssue):
+        issue = grounded.resolve_within(path_text, resolved_root)
+        if issue is not None:
             findings.append(
                 LintFinding(
                     LintCode.GROUNDED_PATH_MISSING,
-                    f"working_context path {entry!r} {landed.value}",
+                    f"working_context path {entry!r} {issue.value}",
                 )
             )
     return findings
