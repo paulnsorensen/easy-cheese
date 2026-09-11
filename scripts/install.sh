@@ -18,7 +18,7 @@
 # All known CLI tools. tilth is included but installed via npm from the
 # @paulnsorensen/tilth-nightly package (not brew — tilth has no Homebrew
 # formula upstream).
-EC_KNOWN_TOOLS="gh ripgrep fd jq ast-grep git-delta just mergiraf tilth"
+EC_KNOWN_TOOLS="gh ripgrep fd jq ast-grep just mergiraf tilth"
 
 # Repository the installer pulls skills from. Centralized so discovery and
 # install both reference the same source.
@@ -40,7 +40,6 @@ ec_tool_binary() {
     case "$1" in
         ripgrep)   echo "rg" ;;
         ast-grep)  echo "sg" ;;
-        git-delta) echo "delta" ;;
         *)         echo "$1" ;;
     esac
 }
@@ -66,8 +65,8 @@ Usage:
 
 Options:
   --tools <list>       Comma-separated CLI tools to install. Default: all.
-                       Choices: gh, ripgrep, fd, jq, ast-grep, git-delta,
-                                just, mergiraf, tilth
+                       Choices: gh, ripgrep, fd, jq, ast-grep, just,
+                                mergiraf, tilth
   --mcp <list>         Comma-separated MCP servers to register. Default:
                        tilth,context7,hallouminate. Choices: tilth, context7,
                        tavily, hallouminate, milknado, none

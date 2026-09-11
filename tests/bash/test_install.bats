@@ -68,7 +68,6 @@ count_skills() {
 @test "ec_tool_binary maps formula names to binaries" {
     [[ "$(ec_tool_binary ripgrep)" == "rg" ]]
     [[ "$(ec_tool_binary ast-grep)" == "sg" ]]
-    [[ "$(ec_tool_binary git-delta)" == "delta" ]]
     [[ "$(ec_tool_binary jq)" == "jq" ]]
     [[ "$(ec_tool_binary fd)" == "fd" ]]
     [[ "$(ec_tool_binary just)" == "just" ]]

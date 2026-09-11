@@ -304,7 +304,6 @@ It follows the `age-route` bundle convention.
 | Code search and impact | semantic caller and dependency search | bounded text search with a precision warning |
 | Code read | fresh bounded read from the write backend | bounded read with stable line anchors |
 | Instrumentation edit | stale-safe anchored edit | LSP or snapshot edit with stale-write detection |
-| Diff view | `delta` | plain `git diff` |
 | GitHub context | `gh` | local Git history or user links |
 | External check | `/briesearch` | a clearly marked assumption |
 

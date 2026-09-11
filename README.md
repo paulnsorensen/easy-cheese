@@ -171,7 +171,6 @@ Workflow skills name preferred tools when they help, with bounded fallbacks for 
 | milknado (MCP) | Mikado task-graph backend for `/cook`'s fan-path curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
 | `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
-| `delta` | Readable diffs | plain `git diff` |
 | `mergiraf` | Structured merge conflict resolution | manual conflict resolution plus tests |
 | `jq` | JSON inspection for reports or tool output | manual inspection |
 | `fd` | Fast file discovery | `find` |
@@ -502,25 +501,6 @@ Fast text search used as a fallback when tilth is unavailable.
 brew install ripgrep           # macOS/Linux
 winget install BurntSushi.ripgrep.MSVC  # Windows
 cargo install ripgrep          # Rust/Cargo
-```
-
-### delta
-
-Human-readable diffs used by `/age` and `/cure`.
-
-```sh
-brew install git-delta         # macOS/Linux
-cargo install git-delta        # Rust/Cargo
-winget install dandavison.delta # Windows
-```
-
-Add to `~/.gitconfig` to enable globally:
-
-```ini
-[core]
-    pager = delta
-[interactive]
-    diffFilter = delta --color-only
 ```
 
 ### mergiraf
