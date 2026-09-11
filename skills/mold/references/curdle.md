@@ -36,6 +36,8 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 
 `landing.layers` records ordered groups of canonical curd ids from the approved CurdPlan, as a one-line flow list. Leave it `[]` only when `shape` is `single`; a non-single shape requires at least one layer.
 
+**Fork-id tags.** Every settled consequential fork in the decision ledger must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`. Each line that reflects a fork carries the fork id in parentheses, for example `- AC-3: WHEN ... THE SYSTEM SHALL ... (F-3)` or `public interface: parse(...) -> Result  (F-2)`. The taste test matches the fork id literally, or every 3+ letter word of the decision text; the tag is the reliable form. Run `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` before the reviewer dispatch; fix every reported gap first.
+
 ```markdown
 ---
 slug: <slug>
@@ -102,8 +104,8 @@ WHEN <trigger> THE SYSTEM SHALL <response>
 ```
 If the trigger cannot be stated precisely (e.g. pure internal utilities with no external event), use prose with a `[prose-fallback]` marker.
 
-- AC-1: WHEN <trigger> THE SYSTEM SHALL <response>
-- AC-2: WHEN <trigger> THE SYSTEM SHALL <response>
+- AC-1: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>)
+- AC-2: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>)
 
 ## Test Contracts
 
@@ -129,7 +131,7 @@ The Placement block from Sketch (`modes.md` § Sketch). Architecture at 10,000 f
 ```text
 slice:            <owning slice | NEW SLICE>
 spine step:       <entry | workflow | domain | infra | none>
-public interface: <one signature per new or changed crust export>
+public interface: <one signature per new or changed crust export>  (<fork-id>)
 private:          <responsibilities that stay behind the crust>
 crust delta:      <new exports | cross-slice imports | contract changes | none>
 arrows:           <dependency directions added, or none>
