@@ -211,7 +211,7 @@ def test_an_unexpected_crash_is_exit_3_with_a_traceback_on_stderr(
 
     status, payload = _run("show", "--work-id", WORK_ID)
 
-    assert status == wheypoint.EXIT_INTERNAL
+    assert status == resolve_cli.EXIT_INTERNAL
     assert _get(payload, "error", "code") == "internal-error"
     assert "RuntimeError" in capsys.readouterr().err
 
@@ -1545,7 +1545,7 @@ def test_cure_a_resumed_promotion_never_reuses_a_prior_note_dir(
     interrupted_status, _interrupted = _run(
         "checkpoint", "--note-dir", str(prior), stdin=body
     )
-    assert interrupted_status == wheypoint.EXIT_INTERNAL
+    assert interrupted_status == resolve_cli.EXIT_INTERNAL
 
     default_notes = checkout / ".cheese" / "notes" / f"{WORK_ID}.md"
     status, payload = _run("checkpoint", stdin=body)
@@ -1553,3 +1553,43 @@ def test_cure_a_resumed_promotion_never_reuses_a_prior_note_dir(
     assert status == 0
     assert payload["note_path"] == str(default_notes)
     assert default_notes.read_text(encoding="utf-8") == payload["markdown"]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_answers_not_found_for_an_identifier_the_slug_grammar_rejects() -> None:
+    """A ref no artifact path could name is an answer, never an internal error."""
+    out = io.StringIO()
+
+    status = resolve_cli.main(["--ref", "my_work"], stdout=out)
+    payload = cast(dict[str, object], json.loads(out.getvalue().splitlines()[0]))
+
+    assert status == 0
+    assert payload["ok"] is True
+    assert payload["outcome"] == "not-found"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_reads_only_the_corpus_root_it_is_given(
+    tmp_path: Path, make_promotion: Callable[..., Promotion]
+) -> None:
+    """A revision in a non-default corpus is invisible until `--corpus-root` names it."""
+    other = tmp_path / "other-corpus"
+    promotion = make_promotion()
+    store = storage.WorkStore.open(WORK_ID, corpus_root=other)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    default_status, default_payload = _run("resolve", "--ref", WORK_ID)
+    scoped_status, scoped_payload = _run(
+        "resolve", "--ref", WORK_ID, "--corpus-root", str(other)
+    )
+
+    assert (default_status, default_payload["outcome"]) == (0, "not-found")
+    # The scoped read reaches the revision; it gates only because the fixture
+    # pins a commit no repository can resolve, which is a provenance lint, not
+    # a corpus-scoping signal.
+    assert (scoped_status, scoped_payload["outcome"]) == (0, "gated")
+    findings = cast(list[dict[str, object]], scoped_payload["findings"])
+    assert "git-object-missing" in [f["code"] for f in findings]
+    assert scoped_payload["work_id"] == WORK_ID
+    projection = cast(dict[str, object], scoped_payload["projection"])
+    assert projection["revision_id"] == promotion.revision.revision_id

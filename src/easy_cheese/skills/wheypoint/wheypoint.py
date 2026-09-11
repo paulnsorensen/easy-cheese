@@ -38,7 +38,7 @@ import sys
 import traceback
 from collections.abc import Callable
 from pathlib import Path
-from typing import NoReturn, TextIO, cast, override
+from typing import TextIO, cast
 
 from attrs import define, evolve
 
@@ -63,6 +63,18 @@ from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
 from easy_cheese.shared.wheypoint import resolve_cli
 from easy_cheese.shared.wheypoint import storage
+from easy_cheese.shared.wheypoint.resolve_cli import (
+    EXIT_INTERNAL,
+    EXIT_OK,
+    EXIT_REFUSED,
+    EXIT_USAGE,
+    BadUsage as _BadUsage,
+    Parser as _Parser,
+    emit as _emit,
+    findings_payload as _findings,
+    maybe_payload as _maybe,
+    refuse as _refuse,
+)
 from . import transcript
 
 COMMANDS = (
@@ -76,11 +88,6 @@ COMMANDS = (
     "log",
     "turns",
 )
-
-EXIT_OK = 0
-EXIT_REFUSED = 1
-EXIT_USAGE = 2
-EXIT_INTERNAL = 3
 
 
 class _Refused(Exception):
@@ -102,16 +109,6 @@ class _PendingMirror:
     request_digest: str
     revision_id: str
     target: str
-
-
-class _BadUsage(Exception):
-    """argparse's complaint, raised instead of printed so it can be JSON."""
-
-
-class _Parser(argparse.ArgumentParser):
-    @override
-    def error(self, message: str) -> NoReturn:
-        raise _BadUsage(message)
 
 
 def _parser(command: str) -> _Parser:
@@ -175,21 +172,17 @@ def _parser(command: str) -> _Parser:
             action="store_true",
             help="resolve a pre-kernel .cheese/notes/<slug>.md instead",
         )
+        _ = parser.add_argument(
+            "--corpus-root",
+            dest="corpus_root",
+            default=None,
+            help="the corpus to resolve in; defaults to this project's XDG corpus",
+        )
     elif command == "show":
         _ = parser.add_argument("--work-id", required=True, dest="work_id")
     elif command == "lint":
         _ = parser.add_argument("path", help="path to a rendered projection document")
     return parser
-
-
-def _findings(findings: tuple[lint_mod.LintFinding, ...]) -> list[dict[str, str]]:
-    return [
-        {"code": finding.code.value, "detail": finding.detail} for finding in findings
-    ]
-
-
-def _maybe(obj: object) -> dict[str, object] | None:
-    return None if obj is None else records.unstructure(obj)
 
 
 def _note_dir(args: argparse.Namespace) -> Path | None:
@@ -562,10 +555,11 @@ def _run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
 def _run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     ref = cast(str, args.ref)
     legacy_flag = cast(bool, args.legacy)
+    corpus_root = cast("str | None", args.corpus_root)
     resolution = (
         resolve_mod.resolve_legacy(ref, start=Path.cwd())
         if legacy_flag
-        else resolve_mod.resolve(ref)
+        else resolve_mod.resolve(ref, corpus_root=corpus_root)
     )
     return resolve_cli.resolve_payload(resolution, ref)
 
@@ -862,29 +856,6 @@ def _command_of(argv: list[str]) -> tuple[str | None, list[str]]:
     return None, []
 
 
-def _emit(stdout: TextIO, payload: dict[str, object]) -> None:
-    _ = stdout.write(json.dumps(payload, sort_keys=True) + "\n")
-
-
-def _refuse(
-    stdout: TextIO,
-    command: str,
-    code: str,
-    message: str,
-    status: int,
-    extra: dict[str, object] | None = None,
-) -> int:
-    _emit(
-        stdout,
-        {
-            "ok": False,
-            "command": command,
-            "error": {"code": code, "message": message, **(extra or {})},
-        },
-    )
-    return status
-
-
 def main(
     argv: list[str] | None = None,
     *,
@@ -912,9 +883,6 @@ def main(
         payload = _RUNNERS[command](args, stdin2)
     except _Refused as exc:
         return _refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED, exc.extra)
-    except resolve_cli.Refusal as exc:
-        _emit(stdout2, {"ok": False, "command": command, **exc.payload})
-        return EXIT_REFUSED
     except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
         traceback.print_exc(file=sys.stderr)
         return _refuse(
@@ -924,8 +892,9 @@ def main(
             f"{type(exc).__name__}: {exc}",
             EXIT_INTERNAL,
         )
-    _emit(stdout2, {"ok": True, "command": command, **payload})
-    return EXIT_OK
+    status = resolve_cli.resolve_status(payload) if command == "resolve" else EXIT_OK
+    _emit(stdout2, {"ok": status == EXIT_OK, "command": command, **payload})
+    return status
 
 
 if __name__ == "__main__":

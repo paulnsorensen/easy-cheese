@@ -1178,3 +1178,37 @@ def test_a_slug_from_a_newer_runtime_resolves_gated_with_runtime_behind(
 
     assert found.outcome is resolve_mod.ResolutionOutcome.GATED
     assert [f.code for f in found.findings] == [lint.LintCode.RUNTIME_BEHIND]
+
+
+@pytest.mark.parametrize("ref", ["my_work", "foo.bar"])
+def test_an_identifier_the_slug_grammar_rejects_misses_rather_than_raising(
+    corpus_root: Path, ref: str
+) -> None:
+    """The identifier grammar is wider than the artifact slug grammar.
+
+    A ref the artifact path could never name is a miss, not an exception the
+    adapter has to report as an internal error.
+    """
+    found = run(ref, corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.NOT_FOUND
+
+
+def test_a_corpus_directory_with_an_illegal_name_never_claims_a_slug(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """A directory no `WorkStore.open` would accept is not a store, whatever it holds."""
+    store, _ = seed(
+        corpus_root, make_record, make_promotion, work_id="work-0001", slug="kernel"
+    )
+    intruder = corpus_root / "work" / "Work-0002!"
+    intruder.mkdir(parents=True)
+    _ = shutil.copy(store.record_path, intruder / "record.json")
+
+    found = run("kernel", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0001"
+    assert found.matches == ()

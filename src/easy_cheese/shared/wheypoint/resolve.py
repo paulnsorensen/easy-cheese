@@ -232,10 +232,12 @@ def _slug_matches(
         if not record_path.is_file():
             continue
         try:
-            record = storage.WorkStore(
-                work_id=directory.name, root=directory
+            # The same guard `_validate` re-opens with: a directory whose name is
+            # not a safe work id is not a store, whatever record it holds.
+            record = storage.WorkStore.open(
+                directory.name, corpus_root=checks.corpus_root
             ).read_record()
-        except (ValueError, OSError):
+        except (storage.StorageError, ValueError, OSError):
             continue
         if record is not None and record.slug == slug:
             matched.append((directory.name, record))
@@ -278,24 +280,25 @@ def _resolve_phase_artifact(
     slug: str, checks: _Checks, *, searched: tuple[str, ...]
 ) -> Resolution | None:
     """Resolve the first matching phase artifact before legacy notes."""
+    if paths.validate_slug(slug) is not None:
+        # An identifier the artifact grammar rejects names no artifact path;
+        # that is a miss, not a failure to look.
+        return None
     root = checks.workspace_root / ".cheese"
-    phases = tuple(reversed(paths.CHAIN_PHASES))
-    found = paths.existing_artifacts(slug, root=root, phases=phases)
     phase_paths: list[str] = []
-    for phase in phases:
-        path = root / paths.phase_dir(phase) / f"{slug}.md"
+    for phase in reversed(paths.CHAIN_PHASES):
+        path = paths.artifact_path(phase, slug, root=root)
         phase_paths.append(str(path))
-        match = found.get(phase)
-        if match is None:
+        if not path.is_file():
             continue
         try:
-            phase_slug = handoff.parse_handoff_slug(match.read_text(encoding="utf-8"))
+            phase_slug = handoff.parse_handoff_slug(path.read_text(encoding="utf-8"))
         except (handoff.HandoffParseError, OSError) as exc:
             return Resolution(
                 ResolutionOutcome.ERROR,
                 source=ResolutionSource.PHASE_ARTIFACT,
                 searched=(*searched, *phase_paths),
-                detail=f"{match} is not a readable handoff artifact: {exc}",
+                detail=f"{path} is not a readable handoff artifact: {exc}",
             )
         return Resolution(
             ResolutionOutcome.LEGACY,
