@@ -10,5 +10,5 @@
 | `migrate` | Migrate a legacy artifact and emit its handoff pointer as canonical JSON |
 | `publish` | Publish a curd plan and emit its handoff pointer as canonical JSON |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
-| `taste-test` | Run the applicability, contract, and fork-coherence taste gate |
+| `taste-test` | Run the applicability, contract, and fork-coherence taste gate; --precheck runs the lexical pre-check on the draft without a verdict |
 | `validate-spec` | Check a spec against the current Mold specification requirements |

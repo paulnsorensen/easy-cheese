@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
+from _pytest.capture import CaptureFixture
 
 if TYPE_CHECKING:
     from easy_cheese.shared.taste_test import (  # noqa: V104 -- names used only in quoted Protocol annotations
@@ -61,6 +62,9 @@ class _MoldTasteTestModule(Protocol):
         self, spec: object, *, require_ui_surface: bool = ...
     ) -> "_RedRequired | _NotApplicable": ...
     def required_reflections(self, spec: object) -> tuple[str, ...]: ...
+    def lexical_precheck(
+        self, draft: object, decision_ledger: object
+    ) -> tuple[str, ...]: ...
     def auto_handoff(
         self,
         spec_ref: str | Path,
@@ -800,3 +804,98 @@ def test_red_required_handoff_preserves_pointer_and_metadata(taste: _MoldTasteTe
     assert gate_applicability["disposition"] == "red-required"
     assert gate_applicability["ui_surface"] == "non-browser"
     assert metadata == {"spec_sha256": "abc", "taste_sha256": "def"}
+
+
+def test_lexical_precheck_passes_on_reflected_draft(
+    taste: _MoldTasteTestModule,
+) -> None:
+    gaps = taste.lexical_precheck(DRAFT, LEDGER)
+    assert gaps == ()
+
+
+def test_lexical_precheck_names_unreflected_fork_per_section(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = DRAFT.replace(
+        "## Acceptance\nF-1 outer tracer; F-2 browser seam",
+        "## Acceptance\nF-1 outer tracer",
+    )
+    assert taste.lexical_precheck(draft, LEDGER) == (
+        "unreflected-decision:F-2:acceptance",
+    )
+
+
+def test_lexical_precheck_reports_missing_section(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = DRAFT.replace("## Interface sketches\n", "")
+    assert taste.lexical_precheck(draft, LEDGER) == (
+        "missing-section:F-1:interface",
+        "missing-section:F-2:interface",
+    )
+
+
+def test_lexical_precheck_matches_fork_id_tag_without_decision_words(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = """# Draft
+
+## Approach
+F-2 browser seam
+
+## Interface sketches
+F-2 browser seam
+
+## Acceptance
+AC-1: WHEN x THE SYSTEM SHALL y (F-2)
+
+## Test Contracts
+F-2 browser seam
+"""
+    ledger = [{"id": "F-2", "decision": "browser seam", "status": "settled", "consequential": True}]
+    gaps = taste.lexical_precheck(draft, ledger)
+    assert gaps == ()
+
+
+def test_cli_precheck_exits_zero_when_clean_and_one_with_gaps(
+    taste: _MoldTasteTestModule, tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    draft = tmp_path / "draft.md"
+    ledger = tmp_path / "ledger.json"
+    _ = draft.write_text(DRAFT, encoding="utf-8")
+    _ = ledger.write_text(json.dumps(LEDGER), encoding="utf-8")
+    exit_code = taste.main(["--draft", str(draft), "--ledger", str(ledger), "--precheck"])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    output = cast(dict[str, object], json.loads(captured.out))
+    assert output == {"gaps": []}
+
+    draft_with_gaps = DRAFT.replace(
+        "## Interface sketches\n", ""
+    )
+    _ = draft.write_text(draft_with_gaps, encoding="utf-8")
+    exit_code = taste.main(["--draft", str(draft), "--ledger", str(ledger), "--precheck"])
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {
+        "gaps": ["missing-section:F-1:interface", "missing-section:F-2:interface"]
+    }
+
+
+def test_cli_precheck_and_verdict_are_mutually_exclusive(
+    taste: _MoldTasteTestModule, tmp_path: Path
+) -> None:
+    draft = tmp_path / "draft.md"
+    ledger = tmp_path / "ledger.json"
+    verdict_file = tmp_path / "verdict.json"
+    _ = draft.write_text(DRAFT, encoding="utf-8")
+    _ = ledger.write_text(json.dumps(LEDGER), encoding="utf-8")
+    _ = verdict_file.write_text(json.dumps(verdict(taste)), encoding="utf-8")
+    with pytest.raises(SystemExit) as exc_info:
+        _ = taste.main([
+            "--draft", str(draft),
+            "--ledger", str(ledger),
+            "--verdict", str(verdict_file),
+            "--precheck"
+        ])
+    assert exc_info.value.code == 2

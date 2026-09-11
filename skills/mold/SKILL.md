@@ -96,9 +96,9 @@ reason, and no contracts. Mold never infers applicability. Row-level rules:
 
 ### Fork taste gate
 
-`python3 skills/mold/scripts/mold.pyz taste-test` binds the verdict to the draft SHA256 and each settled consequential ledger fork. Stale or partial coverage and blockers fail the gate; a failure reopens only the named forks, with two correction rounds. Approved `red-required` specs pass unchanged metadata and the published pointer to `/cook --auto`.
+`python3 skills/mold/scripts/mold.pyz taste-test` binds the verdict to draft SHA256 and each settled fork. Stale, partial, or blocked verdicts fail; a failure reopens only named forks, with two rounds. Approved `red-required` specs pass unchanged metadata and the published pointer to `/cook --auto`.
 
-Each settled consequential fork must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`; a `not-applicable` spec cannot contain Test Contracts. Do not rename a section to simulate the fourth reflection. `goal` must survive unchanged, case- and whitespace-insensitively, in Problem statement, else `goal-drift`; see `references/gate-graph.md` § Fork taste planner gate.
+Each fork appears in Approach, Interface sketches, Acceptance, plus Test Contracts for `red-required`; no Test Contracts in `not-applicable` specs. Do not rename sections. Tag reflecting lines with fork id and run `taste-test --precheck` before dispatch; see `references/curdle.md` § Spec template. `goal` must survive unchanged, case- and whitespace-insensitively, in Problem statement, or `goal-drift` fails; see `references/gate-graph.md` § Fork taste planner gate.
 
 ## Approval gate
 

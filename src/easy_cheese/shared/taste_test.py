@@ -1083,11 +1083,10 @@ def _draft_sections(draft: object) -> dict[str, str]:
     return result
 
 
-def _mentions(section: str, fork: ForkCoverage, expected: ForkDecision) -> bool:
+def _mentions(section: str, fork_id: str, decision: object) -> bool:
     haystack = section.casefold()
-    if fork.id.casefold() in haystack:
+    if fork_id.casefold() in haystack:
         return True
-    decision = expected.decision
     if isinstance(decision, str):
         needle = decision.strip().casefold()
         if needle and needle in haystack:
@@ -1122,6 +1121,28 @@ def _applicability_gaps(draft: object) -> list[str]:
             return ["gate-applicability:gate-applicability-declaration-required"]
         return [f"gate-applicability:{problem}" for problem in exc.problems]
     return []
+
+
+def lexical_precheck(draft: object, decision_ledger: object) -> tuple[str, ...]:
+    """Mechanical gaps a fresh-context reviewer cannot fix: ledger problems,
+    applicability, goal drift, and every settled consequential fork's
+    presence in each required reflection section. Consumes no correction round."""
+    ledger, ledger_problems, goal = _normalize_ledger(decision_ledger)
+    sections = _draft_sections(draft)
+    gaps: list[str] = [
+        *ledger_problems,
+        *_applicability_gaps(draft),
+        *_goal_gaps(sections, goal),
+    ]
+    required = required_reflections(draft)
+    for entry in ledger:
+        for location in required:
+            section = sections.get(location, "")
+            if not section:
+                gaps.append(f"missing-section:{entry.id}:{location}")
+            elif not _mentions(section, entry.id, entry.decision):
+                gaps.append(f"unreflected-decision:{entry.id}:{location}")
+    return tuple(dict.fromkeys(gaps))
 
 
 def taste_test(
@@ -1179,7 +1200,7 @@ def taste_test(
                 additions["acceptance_gaps"].append(
                     f"missing-section:{fork.id}:{location}"
                 )
-            elif not _mentions(section, fork, entry):
+            elif not _mentions(section, fork.id, entry.decision):
                 additions["acceptance_gaps"].append(
                     f"unreflected-decision:{fork.id}:{location}"
                 )
@@ -1299,16 +1320,26 @@ def main(argv: list[str]) -> int:
     )
     _ = parser.add_argument("--draft", type=Path, required=True)
     _ = parser.add_argument("--ledger", type=Path, required=True)
-    _ = parser.add_argument("--verdict", type=Path, required=True)
     _ = parser.add_argument("--correction-round", type=int, default=0)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    _ = mode.add_argument("--verdict", type=Path, help="fresh-context verdict JSON")
+    _ = mode.add_argument(
+        "--precheck",
+        action="store_true",
+        help="run the lexical pre-check on the draft alone; no verdict, no round",
+    )
     args = parser.parse_args(argv)
     try:
         draft_path = cast(Path, args.draft)
         ledger_path = cast(Path, args.ledger)
-        verdict_path = cast(Path, args.verdict)
-        correction_round = cast(int, args.correction_round)
         draft = draft_path.read_bytes()
         ledger = _load_json(ledger_path)
+        if cast(bool, args.precheck):
+            gaps = lexical_precheck(draft, ledger)
+            print(json.dumps({"gaps": list(gaps)}, sort_keys=True))
+            return 0 if not gaps else 1
+        verdict_path = cast(Path, args.verdict)
+        correction_round = cast(int, args.correction_round)
         verdict = _load_json(verdict_path)
         result = taste_test(
             draft,

@@ -86,7 +86,9 @@ COMMANDS = (
         "Render a markdown report into one self-contained offline HTML file",
     ),
     derive_command(
-        _taste_test, "Run the applicability, contract, and fork-coherence taste gate"
+        _taste_test,
+        "Run the applicability, contract, and fork-coherence taste gate;"
+        + " --precheck runs the lexical pre-check on the draft without a verdict",
     ),
     derive_command(
         _validate_spec, "Check a spec against the current Mold specification requirements"
