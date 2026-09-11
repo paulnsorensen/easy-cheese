@@ -792,7 +792,7 @@ def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                         if mtime is None
                         else _dt.datetime.fromtimestamp(
                             mtime, tz=_dt.timezone.utc
-                        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                        ).strftime(checkpoint_mod.TIMESTAMP_FORMAT)
                     ),
                 }
                 for mtime, stem in sorted(

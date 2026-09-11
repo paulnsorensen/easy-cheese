@@ -75,8 +75,9 @@ PR_REFERENCE_RE = re.compile(
     r"PR#\d+|https://github\.com/[^/\s]+/[^/\s]+/pull/\d+(?:[/#?]\S*)?"
 )
 
-# The shape `captured_at` already takes everywhere else in the record.
-_TIMESTAMP = "%Y-%m-%dT%H:%M:%SZ"
+# The shape `captured_at` already takes everywhere else in the record: the one
+# timestamp format the kernel emits and every boundary validates against.
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 # Delta fields a checkpoint intent may never carry. `expected_revision_id` is
 # bound from the record here, and the compaction pair is a proof rather than a
@@ -85,7 +86,7 @@ COMMIT_ONLY_FIELDS = ("expected_revision_id", "compacted", "compaction")
 
 
 def _utc_now() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).strftime(_TIMESTAMP)
+    return _dt.datetime.now(_dt.timezone.utc).strftime(TIMESTAMP_FORMAT)
 
 
 class IntentError(ValueError):
@@ -96,6 +97,7 @@ __all__ = [
     "CheckpointIntent",
     "IntentError",
     "PR_REFERENCE_RE",
+    "TIMESTAMP_FORMAT",
     "build_delta",
     "check_move_artifact",
     "commit_only_fields",

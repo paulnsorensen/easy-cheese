@@ -37,6 +37,8 @@ def _isolated_writer_environment(  # pyright: ignore[reportUnusedFunction]
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "corpus"))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "writer-tests")
+    for name in ("EASY_CHEESE_DEBUG", "CHEESE_DEBUG"):
+        monkeypatch.delenv(name, raising=False)
     _ = (tmp_path / "context.md").write_text("grounded\n", encoding="utf-8")
 
 
@@ -991,7 +993,10 @@ class TestWheypointCommitFailure:
         assert target.is_file()
         assert "second pass" in target.read_text(encoding="utf-8")
         assert excinfo.value.exit_code == 5
-        assert f"wheypoint: artifact-orphaned {target}" in capsys.readouterr().err
+        assert (
+            "wheypoint: artifact-orphaned .cheese/cook/commit-failed.md"
+            in capsys.readouterr().err
+        )
 
         resolution = resolve_module.resolve("commit-failed", workspace_root=tmp_path)
         assert resolution.outcome is resolve_module.ResolutionOutcome.GATED
@@ -1030,7 +1035,10 @@ class TestWheypointCommitFailure:
         target = tmp_path / ".cheese" / "cook" / "read-only.md"
         assert target.is_file()
         assert excinfo.value.exit_code == 5
-        assert f"wheypoint: artifact-orphaned {target}" in capsys.readouterr().err
+        assert (
+            "wheypoint: artifact-orphaned .cheese/cook/read-only.md"
+            in capsys.readouterr().err
+        )
 
     def test_commit_failure_prints_traceback_for_unclassified_exception(
         self,
@@ -1078,6 +1086,118 @@ class TestWheypointCommitFailure:
             )
         assert e.value.exit_code == 2
         assert "Traceback" not in capsys.readouterr().err
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_a_non_kebab_slug_is_refused_before_anything_is_written(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        with pytest.raises(writer.cli.CliError, match="kebab-case") as excinfo:
+            _ = writer.write_artifact(
+                slug="my_slug",
+                status="ok",
+                phase="press",
+                next_skill="age",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert excinfo.value.exit_code == 2
+        assert "Traceback" not in capsys.readouterr().err
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_a_non_kebab_slug_exits_2_through_the_cli(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        code = writer.main(
+            [
+                "--slug",
+                "my_slug",
+                "--status",
+                "ok",
+                "--phase",
+                "press",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
+            ]
+        )
+        assert code == 2
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_an_over_long_orientation_is_refused_before_the_write(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        with pytest.raises(writer.cli.CliError, match="orientation") as excinfo:
+            _ = writer.write_artifact(
+                slug="too-long",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="x" * 2001,
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert excinfo.value.exit_code == 2
+        assert "Traceback" not in capsys.readouterr().err
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_debug_environment_prints_a_traceback_for_a_refusal(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("CHEESE_DEBUG", "1")
+        with pytest.raises(writer.cli.CliError) as excinfo:
+            _ = writer.write_artifact(
+                slug="ungrounded-debug",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+            )
+        assert excinfo.value.exit_code == 2
+        assert "Traceback" in capsys.readouterr().err
+
+
+class TestGroundedRejectedOnNonChainPhase:
+    def test_grounded_on_a_non_chain_phase_is_caller_usage(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(
+            writer.cli.CliError, match="only valid for chain phases"
+        ) as excinfo:
+            _ = writer.write_artifact(
+                slug="non-chain",
+                status="ok",
+                phase="mold",
+                next_skill="cook",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert excinfo.value.exit_code == 2
         assert not (tmp_path / ".cheese").exists()
 
 
@@ -1161,6 +1281,57 @@ class TestSessionProvenanceFromEnvironment:
         assert record is not None
         assert record.created != value
         assert f"wheypoint: ignoring {name}" in capsys.readouterr().err
+
+    def test_an_invalid_primary_falls_through_to_its_alias(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("EASY_CHEESE_CAPTURED_AT", "yesterday")
+        monkeypatch.setenv("CHEESE_CAPTURED_AT", "2026-01-02T03:04:05Z")
+        _ = writer.write_artifact(
+            slug="env-alias",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        record = wheypoint_storage.WorkStore.open("env-alias").read_record()
+        assert record is not None
+        assert record.created == "2026-01-02T03:04:05Z"
+        assert "ignoring" not in capsys.readouterr().err
+
+    def test_a_multiline_harness_is_dropped(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("EASY_CHEESE_HARNESS", "one\ntwo")
+        _ = writer.write_artifact(
+            slug="env-harness",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        record = wheypoint_storage.WorkStore.open("env-harness").read_record()
+        assert record is not None
+        assert (
+            "wheypoint: ignoring EASY_CHEESE_HARNESS: not a single line"
+            in capsys.readouterr().err
+        )
 
 
 class TestRepoRootAnchoring:
@@ -1344,7 +1515,9 @@ class TestWheypointConflictRetry:
 
         reads = [seeded, None]
 
-        def read_record(_self: wheypoint_storage.WorkStore) -> object:
+        def read_record(_self: object) -> object:
+            if not reads:
+                raise AssertionError("read_record called more than twice")
             return reads.pop(0)
 
         def always_conflict(*_args: object, **_kwargs: object) -> None:
@@ -1353,9 +1526,7 @@ class TestWheypointConflictRetry:
         monkeypatch.setattr(type(store), "read_record", read_record)
         monkeypatch.setattr(commit_module, "commit", always_conflict)
 
-        with pytest.raises(
-            commit_module.CommitError, match="at least one --grounded entry"
-        ):
+        with pytest.raises(phase_commit.ArtifactOrphaned) as excinfo:
             _ = phase_commit.commit_phase_revision(
                 work_id="vanished",
                 phase="cook",
@@ -1367,6 +1538,8 @@ class TestWheypointConflictRetry:
                 store=store,
                 write_contents=lambda: None,
             )
+        assert isinstance(excinfo.value.cause, commit_module.CommitError)
+        assert "at least one --grounded entry" in str(excinfo.value.cause)
 
     def test_persistent_parent_conflict_stops_after_one_retry(
         self,
@@ -1402,7 +1575,7 @@ class TestWheypointConflictRetry:
 
         monkeypatch.setattr(commit_module, "commit", always_conflict)
 
-        with pytest.raises(commit_module.StaleParentError):
+        with pytest.raises(phase_commit.ArtifactOrphaned) as excinfo:
             _ = phase_commit.commit_phase_revision(
                 work_id="seam",
                 phase="cook",
@@ -1414,6 +1587,7 @@ class TestWheypointConflictRetry:
                 store=store,
                 write_contents=lambda: None,
             )
+        assert isinstance(excinfo.value.cause, commit_module.StaleParentError)
         assert len(commits) == 2
         err = capsys.readouterr().err
         assert "wheypoint: retry work_id=seam phase=cook" in err

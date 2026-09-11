@@ -45,6 +45,12 @@ from easy_cheese_schemas.phase_contracts import (
     validate_transition,
 )
 
+# Exit codes a caller branches on. Plain integers, identical on every host: a
+# chain driver distinguishes "nothing was written" from "the artifact is on disk
+# without a revision" without parsing prose.
+EXIT_WHEYPOINT = 4
+EXIT_ARTIFACT_ORPHANED = 5
+
 
 def _validate_transition(
     source: str, destination: str, payload_schema_uri: str | None, *, slug: str
@@ -128,11 +134,18 @@ def _traceback_if(*, unexpected: bool) -> None:
         traceback.print_exc(file=sys.stderr)
 
 
-def _orphaned(exc: Exception, *, target: Path, exit_code: int) -> cli.CliError:
-    """The artifact landed but its revision did not: one greppable line says so."""
-    print(f"wheypoint: artifact-orphaned {target}", file=sys.stderr)
+def _orphaned(
+    exc: BaseException, *, target: Path, root: Path, exit_code: int
+) -> cli.CliError:
+    """The artifact landed but its revision did not: one greppable line says so.
+
+    The path is printed relative to the repository root, so the line is the same
+    on every host and in every transcript.
+    """
+    shown = target.relative_to(root) if root in target.parents else target
+    print(f"wheypoint: artifact-orphaned {shown}", file=sys.stderr)
     return cli.CliError(
-        f"wrote {target}, but the wheypoint revision failed: "
+        f"wrote {shown}, but the wheypoint revision failed: "
         + f"{type(exc).__name__}: {exc}; "
         + "the next resolve will gate on stale-artifact-link",
         exit_code=exit_code,
@@ -182,25 +195,15 @@ def _wheypoint_revision(
     """Adapt the CLI to the phase-commit producer; write directly otherwise.
 
     `phase_commit` owns the validate -> read -> guard -> write -> commit
-    sequence; this wrapper only supplies the store and turns whatever escapes
-    into an exit code, using `written` to tell a refusal (nothing on disk) from
-    an orphaned artifact (written, unversioned).
+    sequence *and* the classification of its own failures, so this wrapper only
+    supplies the store and maps one producer exception type onto each exit code.
     """
     if phase not in paths.CHAIN_PHASES:
         write_contents()
         return
 
-    from easy_cheese.shared.wheypoint import commit as commit_mod
-    from easy_cheese.shared.wheypoint import grounded as grounded_mod
     from easy_cheese.shared.wheypoint import phase_commit
     from easy_cheese.shared.wheypoint import storage as wheypoint_storage
-
-    written = False
-
-    def write_and_mark() -> None:
-        nonlocal written
-        write_contents()
-        written = True
 
     try:
         store = wheypoint_storage.WorkStore.open(slug, corpus_root=corpus_root)
@@ -213,28 +216,25 @@ def _wheypoint_revision(
             grounded=grounded,
             root=root,
             store=store,
-            write_contents=write_and_mark,
+            write_contents=write_contents,
         )
     except cli.CliError:
         # The writer's own refusal (e.g. a failed atomic write) already carries
         # its caller-facing message and exit code; the kernel never raises one.
         raise
+    except phase_commit.PhaseCommitRefusal as exc:
+        _traceback_if(unexpected=False)
+        raise cli.CliError(str(exc)) from exc
+    except phase_commit.ArtifactOrphaned as exc:
+        _traceback_if(unexpected=not exc.expected)
+        raise _orphaned(
+            exc.cause, target=target, root=root, exit_code=EXIT_ARTIFACT_ORPHANED
+        ) from exc
     except Exception as exc:
-        usage = isinstance(
-            exc, (grounded_mod.GroundedEntryError, commit_mod.CommitError)
-        )
-        _traceback_if(
-            unexpected=not (usage or isinstance(exc, wheypoint_storage.StorageError))
-        )
-        if written:
-            raise _orphaned(
-                exc, target=target, exit_code=phase_commit.EXIT_ARTIFACT_ORPHANED
-            ) from exc
-        if usage:
-            raise cli.CliError(str(exc)) from exc
+        _traceback_if(unexpected=not isinstance(exc, wheypoint_storage.StorageError))
         raise cli.CliError(
             f"wheypoint: {type(exc).__name__}: {exc}",
-            exit_code=phase_commit.EXIT_WHEYPOINT,
+            exit_code=EXIT_WHEYPOINT,
         ) from exc
 
     revision = outcome.result.revision
@@ -287,6 +287,11 @@ def write_artifact(
         raise cli.CliError("--orientation must be non-empty")
     _reject_traversal("--slug", slug)
     _reject_traversal("--phase", phase)
+    slug_problem = paths.validate_slug(slug)
+    if slug_problem is not None:
+        # Every phase, chain or not: the readers that later resolve this
+        # artifact all route through `paths`, which admits only kebab-case.
+        raise cli.CliError(f"--slug: {slug_problem}")
     _validate_transition(phase, next_skill, payload_schema_uri, slug=slug)
     if phase not in paths.CHAIN_PHASES and grounded:
         raise cli.CliError(f"--grounded is only valid for chain phases, not {phase!r}")

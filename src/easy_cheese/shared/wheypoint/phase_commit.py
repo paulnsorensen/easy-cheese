@@ -31,25 +31,39 @@ from easy_cheese_schemas.contracts import (
 
 from easy_cheese.shared import paths
 from easy_cheese.shared.wheypoint import checkpoint, commit, storage
-from easy_cheese.shared.wheypoint.grounded import validate_grounded
+from easy_cheese.shared.wheypoint.grounded import (
+    GroundedEntryError,
+    validate_grounded,
+)
 
-# Exit codes a caller branches on. Plain integers, identical on every host: a
-# chain driver distinguishes "nothing was written" from "the artifact is on disk
-# without a revision" without parsing prose.
-EXIT_WHEYPOINT = 4
-EXIT_ARTIFACT_ORPHANED = 5
 
-# A writer normally runs with no session metadata. These names are deliberately
-# optional and harness-agnostic: the checkpoint kernel supplies the genesis
-# timestamp when absent.
-_SESSION_ENV = {
-    "harness": ("EASY_CHEESE_HARNESS", "CHEESE_HARNESS"),
-    "session_id": ("EASY_CHEESE_SESSION_ID", "CHEESE_SESSION_ID"),
-    "captured_at": ("EASY_CHEESE_CAPTURED_AT", "CHEESE_CAPTURED_AT"),
-}
-# The shape `captured_at` takes everywhere else in the record: the format the
-# checkpoint kernel's own clock emits.
-_CAPTURED_AT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+class PhaseCommitRefusal(Exception):
+    """Caller usage this phase write refuses with nothing on disk.
+
+    Every pre-write refusal -- a bad work id, an unusable `--grounded` entry, a
+    field the record schema will not hold, a genesis without grounding --
+    reaches the caller as this one type, so the adapter needs no knowledge of
+    the kernel's own exception hierarchy.
+    """
+
+
+class ArtifactOrphaned(Exception):
+    """The artifact landed on disk but its revision did not.
+
+    Raised for anything that fails after `write_contents()` returned. `expected`
+    says whether the underlying failure is one the kernel raises on purpose, so
+    a caller prints a stack only for the ones that carry no message of their own.
+    """
+
+    cause: BaseException
+    path: Path
+    expected: bool
+
+    def __init__(self, cause: BaseException, path: Path, *, expected: bool) -> None:
+        super().__init__(f"{type(cause).__name__}: {cause}")
+        self.cause = cause
+        self.path = path
+        self.expected = expected
 
 
 @define(frozen=True)
@@ -64,11 +78,68 @@ def _warn(text: str) -> None:
     print(f"wheypoint: {text}", file=sys.stderr)
 
 
-def _env_value(names: tuple[str, ...]) -> tuple[str, str] | None:
-    for name in names:
-        value = os.environ.get(name, "").strip()
-        if value:
+def _orphan(exc: Exception, path: Path) -> ArtifactOrphaned:
+    """Classify a post-write failure; only a deliberate refusal is expected."""
+    return ArtifactOrphaned(
+        exc,
+        path,
+        expected=isinstance(
+            exc, (PhaseCommitRefusal, commit.CommitError, storage.StorageError)
+        ),
+    )
+
+
+def _is_identifier(value: str) -> bool:
+    return LOWER_IDENTIFIER_RE.fullmatch(value) is not None
+
+
+def _is_timestamp(value: str) -> bool:
+    try:
+        _ = _dt.datetime.strptime(value, checkpoint.TIMESTAMP_FORMAT)
+    except ValueError:
+        return False
+    return True
+
+
+def _is_single_line(value: str) -> bool:
+    return "\n" not in value and "\r" not in value
+
+
+# A writer normally runs with no session metadata. These names are deliberately
+# optional and harness-agnostic: the checkpoint kernel supplies the genesis
+# timestamp when absent. Each field carries the predicate its value must pass,
+# so an unparseable primary falls through to its alias instead of shadowing it.
+_SESSION_ENV: dict[str, tuple[tuple[str, ...], Callable[[str], bool], str]] = {
+    "harness": (
+        ("EASY_CHEESE_HARNESS", "CHEESE_HARNESS"),
+        _is_single_line,
+        "not a single line",
+    ),
+    "session_id": (
+        ("EASY_CHEESE_SESSION_ID", "CHEESE_SESSION_ID"),
+        _is_identifier,
+        "not a lowercase identifier",
+    ),
+    "captured_at": (
+        ("EASY_CHEESE_CAPTURED_AT", "CHEESE_CAPTURED_AT"),
+        _is_timestamp,
+        f"not a {checkpoint.TIMESTAMP_FORMAT} timestamp",
+    ),
+}
+
+
+def _env_value(
+    names: tuple[str, ...], *, valid: Callable[[str], bool], requirement: str
+) -> tuple[str, str] | None:
+    """First alias whose value the schema accepts; warn only when none does."""
+    present = [
+        (name, value) for name in names if (value := os.environ.get(name, "").strip())
+    ]
+    for name, value in present:
+        if valid(value):
             return name, value
+    for name, _value in present:
+        _warn(f"ignoring {name}: {requirement}")
     return None
 
 
@@ -77,21 +148,15 @@ def _session_provenance_from_environment() -> SessionProvenance | None:
 
     Session metadata is evidence, never authority, so a malformed value must
     not fail a write: each one is validated here, at the environment boundary,
-    and dropped with one operator line when it does not parse.
+    and dropped with one operator line naming the variable it came from.
     """
+    sources: dict[str, str] = {}
     values: dict[str, str] = {}
-    for field, names in _SESSION_ENV.items():
-        found = _env_value(names)
+    for field, (names, valid, requirement) in _SESSION_ENV.items():
+        found = _env_value(names, valid=valid, requirement=requirement)
         if found is None:
             continue
-        name, value = found
-        if field == "session_id" and LOWER_IDENTIFIER_RE.fullmatch(value) is None:
-            _warn(f"ignoring {name}: not a lowercase identifier")
-            continue
-        if field == "captured_at" and not _is_timestamp(value):
-            _warn(f"ignoring {name}: not a {_CAPTURED_AT_FORMAT} timestamp")
-            continue
-        values[field] = value
+        sources[field], values[field] = found
     if not values:
         return None
     try:
@@ -101,16 +166,9 @@ def _session_provenance_from_environment() -> SessionProvenance | None:
             captured_at=values.get("captured_at"),
         )
     except ValueError as exc:
-        _warn(f"ignoring session provenance from the environment: {exc}")
+        named = ", ".join(sorted(sources.values()))
+        _warn(f"ignoring session provenance from {named}: {exc}")
         return None
-
-
-def _is_timestamp(value: str) -> bool:
-    try:
-        _ = _dt.datetime.strptime(value, _CAPTURED_AT_FORMAT)
-    except ValueError:
-        return False
-    return True
 
 
 def _base_revision_id(current: WheypointRecord | None) -> str:
@@ -181,7 +239,6 @@ def _retry_intent(
 def _retry(
     intent: CheckpointIntent,
     *,
-    work_id: str,
     phase: str,
     grounded: Sequence[str],
     links: list[ArtifactLink],
@@ -189,6 +246,7 @@ def _retry(
     root_path: Path,
 ) -> CommitOutcome:
     """Rebuild the intent against the record that landed first, and re-commit."""
+    work_id = intent.work_id
     refreshed = store.read_record()
     refreshed_base = _base_revision_id(refreshed)
     _warn(
@@ -218,36 +276,59 @@ def _retry(
     return CommitOutcome(result=result, retried=True)
 
 
-def commit_phase_revision(
+def _require_kebab_work_id(work_id: str) -> None:
+    """Refuse a work id no `.cheese/` reader can resolve, before any write.
+
+    The record schema admits any lowercase identifier, but the artifact path
+    this phase pins is resolved through `paths`, which admits only kebab-case.
+    """
+    problem = paths.validate_slug(work_id)
+    if problem is not None:
+        raise PhaseCommitRefusal(f"phase {problem}")
+
+
+def _refuse_unbindable_intent(
     *,
     work_id: str,
     phase: str,
     next_skill: str,
-    artifact: str,
+    artifact_path: str,
     orientation: str,
     grounded: Sequence[str],
-    store: storage.WorkStore,
-    write_contents: Callable[[], None],
-    root: Path | str | None = None,
-    provenance: SessionProvenance | None = None,
-) -> CommitOutcome:
-    """Validate, write the artifact, then commit one chain-phase revision.
+) -> None:
+    """Run the record schema's own field validators before anything is written.
 
-    Everything before `write_contents()` is a refusal the caller can still act
-    on with nothing on disk; everything after it leaves the artifact written.
-    One stale-parent conflict is retried against the record that landed first.
+    The intent this phase commits is rebuilt after the artifact lands; bounding
+    its fields here means an over-long orientation or an unknown next move is a
+    refusal with nothing on disk instead of an orphaned artifact.
     """
-    root_path = paths.resolve_repo_root(root)
-    artifact_path, _ = _relative_artifact(artifact, root=root_path)
-    grounded_entries = validate_grounded(grounded, root=root_path)
-    current = store.read_record()
-    _require_genesis_grounding(current, grounded_entries)
-    session = (
-        provenance if provenance is not None else _session_provenance_from_environment()
-    )
+    try:
+        _ = CheckpointIntent(
+            work_id=work_id,
+            orientation=orientation,
+            working_context=list(grounded) if grounded else None,
+            notes=f"{phase} phase handoff",
+            next=NextMove(next_skill),
+            artifact=artifact_path,
+        )
+    except ValueError as exc:
+        raise PhaseCommitRefusal(str(exc)) from exc
 
-    write_contents()
 
+def _commit_written(
+    *,
+    work_id: str,
+    phase: str,
+    next_skill: str,
+    artifact_path: str,
+    orientation: str,
+    grounded: Sequence[str],
+    current: WheypointRecord | None,
+    session: SessionProvenance | None,
+    store: storage.WorkStore,
+    root_path: Path,
+) -> CommitOutcome:
+    """Link the artifact that just landed and commit its revision."""
     links = _phase_links(root=root_path, work_id=work_id, phase=phase)
     if not any(link.path == artifact_path for link in links):
         raise commit.CommitError(
@@ -256,7 +337,7 @@ def commit_phase_revision(
     intent = CheckpointIntent(
         work_id=work_id,
         orientation=orientation,
-        working_context=list(grounded_entries) if grounded_entries else None,
+        working_context=list(grounded) if grounded else None,
         notes=None if current is not None else f"{phase} phase handoff",
         next=NextMove(next_skill),
         artifact=artifact_path,
@@ -273,18 +354,78 @@ def commit_phase_revision(
     except (commit.StaleParentError, commit.GenesisConflictError):
         return _retry(
             intent,
-            work_id=work_id,
             phase=phase,
-            grounded=grounded_entries,
+            grounded=grounded,
             links=links,
             store=store,
             root_path=root_path,
         )
 
 
+def commit_phase_revision(
+    *,
+    work_id: str,
+    phase: str,
+    next_skill: str,
+    artifact: str,
+    orientation: str,
+    grounded: Sequence[str],
+    store: storage.WorkStore,
+    write_contents: Callable[[], None],
+    root: Path | str | None = None,
+    provenance: SessionProvenance | None = None,
+) -> CommitOutcome:
+    """Validate, write the artifact, then commit one chain-phase revision.
+
+    Failure classification belongs to this producer, not its caller: everything
+    before `write_contents()` raises `PhaseCommitRefusal` (caller usage, nothing
+    on disk) or the kernel's own error for an environment failure, and anything
+    after it raises `ArtifactOrphaned`. One stale-parent conflict is retried
+    against the record that landed first.
+    """
+    try:
+        root_path = paths.resolve_repo_root(root)
+        artifact_path, artifact_target = _relative_artifact(artifact, root=root_path)
+        _require_kebab_work_id(work_id)
+        grounded_entries = validate_grounded(grounded, root=root_path)
+        _refuse_unbindable_intent(
+            work_id=work_id,
+            phase=phase,
+            next_skill=next_skill,
+            artifact_path=artifact_path,
+            orientation=orientation,
+            grounded=grounded_entries,
+        )
+        current = store.read_record()
+        _require_genesis_grounding(current, grounded_entries)
+    except (commit.CommitError, GroundedEntryError) as exc:
+        raise PhaseCommitRefusal(str(exc)) from exc
+    session = (
+        provenance if provenance is not None else _session_provenance_from_environment()
+    )
+
+    write_contents()
+
+    try:
+        return _commit_written(
+            work_id=work_id,
+            phase=phase,
+            next_skill=next_skill,
+            artifact_path=artifact_path,
+            orientation=orientation,
+            grounded=grounded_entries,
+            current=current,
+            session=session,
+            store=store,
+            root_path=root_path,
+        )
+    except Exception as exc:
+        raise _orphan(exc, artifact_target) from exc
+
+
 __all__ = [
-    "EXIT_ARTIFACT_ORPHANED",
-    "EXIT_WHEYPOINT",
+    "ArtifactOrphaned",
     "CommitOutcome",
+    "PhaseCommitRefusal",
     "commit_phase_revision",
 ]
