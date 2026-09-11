@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -13,10 +14,11 @@ from typing import TYPE_CHECKING, Protocol, TypedDict
 import pytest
 
 from easy_cheese.shared.wheypoint import commit as commit_module
+from easy_cheese.shared.wheypoint import lint as lint_module
+from easy_cheese.shared.wheypoint import resolve as resolve_module
 from easy_cheese.shared.wheypoint import storage as wheypoint_storage
 
 from easy_cheese_schemas.contracts import CheckpointIntent, NextMove, WheypointDelta
-from easy_cheese_schemas.phase_contracts import CURD_PLAN_SCHEMA_URI
 from easy_cheese.shared.wheypoint import checkpoint
 
 if TYPE_CHECKING:
@@ -63,6 +65,8 @@ class _WriterModule(Protocol):
         grounded: Sequence[str] = (),
         corpus_root: Path | str | None = None,
     ) -> Path: ...
+
+    def main(self, argv: list[str]) -> int: ...
 
 
 class _RerunKwargs(TypedDict):
@@ -203,7 +207,7 @@ class TestPathTraversalRejected:
                 body=None,
                 root=tmp_path,
             )
-        assert excinfo.value.exit_code == 4
+        assert excinfo.value.exit_code == 2
         assert not (tmp_path / ".cheese" / "cook" / "empty-genesis.md").exists()
 
 
@@ -707,12 +711,10 @@ class TestAtomicRename:
     ) -> None:
         # Force the atomic move to fail; it must surface as a CliError (exit 2)
         # naming the target path, not a raw traceback, and must not leak a .tmp file.
-        import os as _os
-
         def boom(_src: str, _dst: str) -> None:
             raise OSError("simulated rename failure")
 
-        monkeypatch.setattr(_os, "replace", boom)
+        monkeypatch.setattr(os, "replace", boom)
 
         target_dir = tmp_path / ".cheese" / "age"
         target = target_dir / "never.md"
@@ -953,13 +955,26 @@ class TestWheypointCommitFailure:
         writer: _WriterModule,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        from easy_cheese.shared.wheypoint import phase_commit as phase_module
+        """The artifact lands before the commit, and the next resolve gates on it."""
+        target = writer.write_artifact(
+            slug="commit-failed",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="first pass",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        _ = capsys.readouterr()
 
-        def fail(**_kwargs: object) -> None:
-            raise RuntimeError("corpus unavailable")
+        def fail(*_args: object, **_kwargs: object) -> commit_module.CommitResult:
+            raise commit_module.CommitError("corpus unavailable")
 
-        monkeypatch.setattr(phase_module, "commit_phase_revision", fail)
+        monkeypatch.setattr(commit_module, "commit", fail)
         with pytest.raises(writer.cli.CliError) as excinfo:
             _ = writer.write_artifact(
                 slug="commit-failed",
@@ -967,18 +982,54 @@ class TestWheypointCommitFailure:
                 phase="cook",
                 next_skill="press",
                 artifact="",
-                orientation="demo",
+                orientation="second pass",
                 body=None,
                 root=tmp_path,
                 grounded=("context.md#1-1",),
             )
-        target = tmp_path / ".cheese" / "cook" / "commit-failed.md"
         assert target.is_file()
-        assert excinfo.value.exit_code == 4
-        message = str(excinfo.value)
-        assert str(target) in message
-        assert "RuntimeError" in message
-        assert "the next resolve will gate on stale-artifact-link" in message
+        assert "second pass" in target.read_text(encoding="utf-8")
+        assert excinfo.value.exit_code == 5
+        assert f"wheypoint: artifact-orphaned {target}" in capsys.readouterr().err
+
+        resolution = resolve_module.resolve("commit-failed", workspace_root=tmp_path)
+        assert resolution.outcome is resolve_module.ResolutionOutcome.GATED
+        assert lint_module.LintCode.STALE_ARTIFACT_LINK in [
+            finding.code for finding in resolution.findings
+        ]
+
+    def test_read_only_corpus_orphans_the_artifact_through_the_real_kernel(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            pytest.skip("root ignores directory permissions")
+        corpus_root = tmp_path / "ro-corpus"
+        work_dir = corpus_root / "work" / "read-only"
+        work_dir.mkdir(parents=True)
+        work_dir.chmod(0o500)
+        try:
+            with pytest.raises(writer.cli.CliError) as excinfo:
+                _ = writer.write_artifact(
+                    slug="read-only",
+                    status="ok",
+                    phase="cook",
+                    next_skill="press",
+                    artifact="",
+                    orientation="demo",
+                    body=None,
+                    root=tmp_path,
+                    grounded=("context.md#1-1",),
+                    corpus_root=corpus_root,
+                )
+        finally:
+            work_dir.chmod(0o700)
+        target = tmp_path / ".cheese" / "cook" / "read-only.md"
+        assert target.is_file()
+        assert excinfo.value.exit_code == 5
+        assert f"wheypoint: artifact-orphaned {target}" in capsys.readouterr().err
 
     def test_commit_failure_prints_traceback_for_unclassified_exception(
         self,
@@ -987,12 +1038,10 @@ class TestWheypointCommitFailure:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        from easy_cheese.shared.wheypoint import phase_commit as phase_module
-
-        def fail(**_kwargs: object) -> None:
+        def fail(*_args: object, **_kwargs: object) -> commit_module.CommitResult:
             raise KeyError("missing")
 
-        monkeypatch.setattr(phase_module, "commit_phase_revision", fail)
+        monkeypatch.setattr(commit_module, "commit", fail)
         with pytest.raises(writer.cli.CliError) as excinfo:
             _ = writer.write_artifact(
                 slug="commit-failed-keyerror",
@@ -1006,52 +1055,40 @@ class TestWheypointCommitFailure:
                 grounded=("context.md#1-1",),
             )
         assert "KeyError" in str(excinfo.value)
+        assert excinfo.value.exit_code == 5
         assert "Traceback" in capsys.readouterr().err
 
-
-class TestGroundedRejectedOnNonChainPhase:
-    def test_grounded_rejected_for_non_chain_phase(
-        self, writer: _WriterModule, tmp_path: Path
-    ) -> None:
-        with pytest.raises(writer.cli.CliError, match="mold"):
-            _ = writer.write_artifact(
-                slug="approved-plan",
-                status="ok",
-                phase="mold",
-                next_skill="cook",
-                payload_schema_uri=CURD_PLAN_SCHEMA_URI,
-                artifact="",
-                orientation="mold produced a curd plan",
-                body=None,
-                root=tmp_path,
-                grounded=("context.md#1-1",),
-            )
-        assert not (tmp_path / ".cheese").exists()
-
-
-class TestCorpusRootPlumbing:
-    def test_corpus_root_override_lands_revision_under_given_root(
+    def test_missing_grounded_on_genesis_is_caller_usage_without_a_traceback(
         self,
         writer: _WriterModule,
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
-        monkeypatch.delenv("EASY_CHEESE_HOME", raising=False)
-        monkeypatch.delenv("EASY_CHEESE_PROJECT", raising=False)
-        corpus_root = tmp_path / "explicit-corpus"
-        calls: list[Path | str | None] = []
-        real_open = wheypoint_storage.WorkStore.open
+        with pytest.raises(writer.cli.CliError, match="at least one --grounded") as e:
+            _ = writer.write_artifact(
+                slug="ungrounded",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+            )
+        assert e.value.exit_code == 2
+        assert "Traceback" not in capsys.readouterr().err
+        assert not (tmp_path / ".cheese").exists()
 
-        def counted_open(
-            work_id: str, *, corpus_root: Path | str | None = None
-        ) -> wheypoint_storage.WorkStore:
-            calls.append(corpus_root)
-            return real_open(work_id, corpus_root=corpus_root)
 
-        monkeypatch.setattr(wheypoint_storage.WorkStore, "open", counted_open)
-
-        target = writer.write_artifact(
-            slug="corpus-plumbed",
+class TestSuccessTelemetry:
+    def test_success_reports_the_landed_revision(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _ = writer.write_artifact(
+            slug="reported",
             status="ok",
             phase="cook",
             next_skill="press",
@@ -1060,11 +1097,150 @@ class TestCorpusRootPlumbing:
             body=None,
             root=tmp_path,
             grounded=("context.md#1-1",),
-            corpus_root=corpus_root,
+        )
+        record = wheypoint_storage.WorkStore.open("reported").read_record()
+        assert record is not None
+        assert (
+            f"wheypoint: revision work_id=reported "
+            f"revision_id={record.revision_id} revision_number=1 retried=false"
+        ) in capsys.readouterr().err
+
+
+class TestSessionProvenanceFromEnvironment:
+    def test_valid_session_environment_lands_in_the_record(
+        self, writer: _WriterModule, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("EASY_CHEESE_SESSION_ID", "sess-01")
+        monkeypatch.setenv("EASY_CHEESE_CAPTURED_AT", "2026-01-02T03:04:05Z")
+        _ = writer.write_artifact(
+            slug="env-valid",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        record = wheypoint_storage.WorkStore.open("env-valid").read_record()
+        assert record is not None
+        assert record.created == "2026-01-02T03:04:05Z"
+
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("EASY_CHEESE_SESSION_ID", "Session One"),
+            ("CHEESE_CAPTURED_AT", "yesterday"),
+        ],
+    )
+    def test_unparseable_session_environment_is_dropped_not_fatal(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        name: str,
+        value: str,
+    ) -> None:
+        monkeypatch.setenv(name, value)
+        target = writer.write_artifact(
+            slug="env-invalid",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
         )
         assert target.is_file()
-        assert len(calls) == 1
-        assert (corpus_root / "work" / "corpus-plumbed" / "record.json").is_file()
+        record = wheypoint_storage.WorkStore.open("env-invalid").read_record()
+        assert record is not None
+        assert record.created != value
+        assert f"wheypoint: ignoring {name}" in capsys.readouterr().err
+
+
+class TestRepoRootAnchoring:
+    def test_write_from_a_subdirectory_lands_at_the_git_toplevel(
+        self, writer: _WriterModule, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for args in (("init",), ("config", "user.email", "t@example.com")):
+            _ = subprocess.run(
+                ["git", *args], cwd=tmp_path, check=True, capture_output=True
+            )
+        subdir = tmp_path / "nested" / "deeper"
+        subdir.mkdir(parents=True)
+        monkeypatch.chdir(subdir)
+
+        status = writer.main(
+            [
+                "--slug",
+                "anchored",
+                "--status",
+                "ok",
+                "--phase",
+                "cook",
+                "--next",
+                "press",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--grounded",
+                "context.md#1-1",
+            ]
+        )
+        assert status == 0
+        assert (tmp_path / ".cheese" / "cook" / "anchored.md").is_file()
+        assert not (subdir / ".cheese").exists()
+        record = wheypoint_storage.WorkStore.open("anchored").read_record()
+        assert record is not None
+        assert [link.path for link in record.artifact_links] == [
+            ".cheese/cook/anchored.md"
+        ]
+
+
+class TestSiblingArtifactLinks:
+    def test_a_phase_commit_does_not_repin_a_sibling_artifact(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        def write(phase: str, next_skill: str, orientation: str) -> Path:
+            return writer.write_artifact(
+                slug="siblings",
+                status="ok",
+                phase=phase,
+                next_skill=next_skill,
+                artifact="",
+                orientation=orientation,
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+
+        cook_target = write("cook", "press", "cook pass")
+        _ = write("press", "age", "press pass")
+        store = wheypoint_storage.WorkStore.open("siblings")
+        after_press = store.read_record()
+        assert after_press is not None
+        pinned = {link.path: link.digest for link in after_press.artifact_links}
+        assert sorted(pinned) == [
+            ".cheese/cook/siblings.md",
+            ".cheese/press/siblings.md",
+        ]
+
+        _ = cook_target.write_text("edited after cook committed\n", encoding="utf-8")
+        _ = write("press", "age", "press second pass")
+        after_second = store.read_record()
+        assert after_second is not None
+        repinned = {link.path: link.digest for link in after_second.artifact_links}
+        assert (
+            repinned[".cheese/cook/siblings.md"] == pinned[".cheese/cook/siblings.md"]
+        )
+        assert (
+            repinned[".cheese/press/siblings.md"] != pinned[".cheese/press/siblings.md"]
+        )
 
 
 class TestWheypointConflictRetry:
@@ -1103,7 +1279,9 @@ class TestWheypointConflictRetry:
                     ),
                     None,
                 )
-                _ = real_commit(concurrent_delta, store=store, artifact_root=artifact_root)
+                _ = real_commit(
+                    concurrent_delta, store=store, artifact_root=artifact_root
+                )
             return real_commit(delta, store=store, artifact_root=artifact_root)
 
         monkeypatch.setattr(commit_module, "commit", commit_with_concurrent_landing)
@@ -1117,6 +1295,7 @@ class TestWheypointConflictRetry:
             grounded=("context.md#1-1",),
             root=tmp_path,
             store=store,
+            write_contents=lambda: None,
         )
         current = store.read_record()
         assert current is not None
@@ -1127,7 +1306,66 @@ class TestWheypointConflictRetry:
         assert [link.path for link in outcome.result.record.artifact_links] == [
             ".cheese/cook/seam.md"
         ]
-        assert "stale parent conflict; retrying" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "wheypoint: retry work_id=seam phase=cook stale_parent=genesis" in err
+        assert (
+            f"wheypoint: retry outcome=committed work_id=seam phase=cook "
+            f"revision_id={outcome.result.revision.revision_id}"
+        ) in err
+
+    def test_retry_refuses_an_ungrounded_genesis_retry(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A record that vanished under the retry must not commit a bare genesis."""
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        target = tmp_path / ".cheese" / "cook" / "vanished.md"
+        target.parent.mkdir(parents=True)
+        _ = target.write_text("phase\n", encoding="utf-8")
+
+        store = wheypoint_storage.WorkStore.open("vanished")
+        genesis_delta = checkpoint.build_delta(
+            CheckpointIntent(
+                work_id="vanished",
+                orientation="genesis handoff",
+                notes="genesis handoff",
+                next=NextMove("press"),
+                artifact="vanished.md",
+                working_context=["context.md#1-1"],
+            ),
+            None,
+        )
+        _ = commit_module.commit(genesis_delta, store=store, artifact_root=tmp_path)
+        seeded = store.read_record()
+        assert seeded is not None
+
+        reads = [seeded, None]
+
+        def read_record(_self: wheypoint_storage.WorkStore) -> object:
+            return reads.pop(0)
+
+        def always_conflict(*_args: object, **_kwargs: object) -> None:
+            raise commit_module.StaleParentError("race")
+
+        monkeypatch.setattr(type(store), "read_record", read_record)
+        monkeypatch.setattr(commit_module, "commit", always_conflict)
+
+        with pytest.raises(
+            commit_module.CommitError, match="at least one --grounded entry"
+        ):
+            _ = phase_commit.commit_phase_revision(
+                work_id="vanished",
+                phase="cook",
+                next_skill="press",
+                artifact=str(target),
+                orientation="demo",
+                grounded=(),
+                root=tmp_path,
+                store=store,
+                write_contents=lambda: None,
+            )
 
     def test_persistent_parent_conflict_stops_after_one_retry(
         self,
@@ -1173,6 +1411,9 @@ class TestWheypointConflictRetry:
                 grounded=("context.md#1-1",),
                 root=tmp_path,
                 store=store,
+                write_contents=lambda: None,
             )
         assert len(commits) == 2
-        assert "stale parent conflict; retrying" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "wheypoint: retry work_id=seam phase=cook" in err
+        assert "wheypoint: retry outcome=failed work_id=seam phase=cook" in err

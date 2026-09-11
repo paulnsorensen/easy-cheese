@@ -17,8 +17,6 @@ import sys
 from collections.abc import Callable, Iterable, Sequence
 from typing import TextIO, cast
 
-WHEYPOINT_EXIT_CODE = 4
-
 
 class CliError(Exception):
     """One-line error; cli.run reports it on stderr and returns `exit_code`."""

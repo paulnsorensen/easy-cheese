@@ -111,12 +111,32 @@ def _build_contents(*, preamble: str, body: str | None) -> str:
     return preamble + "\n\n" + body
 
 
-def _wheypoint_error(exc: Exception, *, message: str | None = None) -> cli.CliError:
-    """Classify a wheypoint kernel failure and print its traceback to stderr."""
-    traceback.print_exc(file=sys.stderr)
-    detail = f"{type(exc).__name__}: {exc}"
-    text = f"wheypoint: {detail}" if message is None else message.format(detail)
-    return cli.CliError(text, exit_code=cli.WHEYPOINT_EXIT_CODE)
+def _debug_enabled() -> bool:
+    return any(
+        os.environ.get(name, "").strip()
+        for name in ("EASY_CHEESE_DEBUG", "CHEESE_DEBUG")
+    )
+
+
+def _traceback_if(*, unexpected: bool) -> None:
+    """Print a traceback only when it carries information a message cannot.
+
+    A refusal the kernel raises on purpose needs no stack, and the stack leaks
+    absolute bundle and corpus paths into transcripts.
+    """
+    if unexpected or _debug_enabled():
+        traceback.print_exc(file=sys.stderr)
+
+
+def _orphaned(exc: Exception, *, target: Path, exit_code: int) -> cli.CliError:
+    """The artifact landed but its revision did not: one greppable line says so."""
+    print(f"wheypoint: artifact-orphaned {target}", file=sys.stderr)
+    return cli.CliError(
+        f"wrote {target}, but the wheypoint revision failed: "
+        + f"{type(exc).__name__}: {exc}; "
+        + "the next resolve will gate on stale-artifact-link",
+        exit_code=exit_code,
+    )
 
 
 def _atomic_write(target: Path, contents: str) -> None:
@@ -140,10 +160,10 @@ def _atomic_write(target: Path, contents: str) -> None:
             os.fsync(handle.fileno())
         os.replace(tmp_name, target)
     except OSError as exc:
-        _cleanup_tmp(fd, tmp_name)
+        _cleanup_tmp(fd, tmp_name, target)
         raise cli.CliError(f"cannot write {target}: {exc}") from exc
     except BaseException:
-        _cleanup_tmp(fd, tmp_name)
+        _cleanup_tmp(fd, tmp_name, target)
         raise
 
 
@@ -159,52 +179,74 @@ def _wheypoint_revision(
     corpus_root: Path | str | None,
     write_contents: Callable[[], None],
 ) -> None:
-    """Validate, write, then commit one chain-phase revision; no-op otherwise."""
+    """Adapt the CLI to the phase-commit producer; write directly otherwise.
+
+    `phase_commit` owns the validate -> read -> guard -> write -> commit
+    sequence; this wrapper only supplies the store and turns whatever escapes
+    into an exit code, using `written` to tell a refusal (nothing on disk) from
+    an orphaned artifact (written, unversioned).
+    """
     if phase not in paths.CHAIN_PHASES:
         write_contents()
         return
 
+    from easy_cheese.shared.wheypoint import commit as commit_mod
+    from easy_cheese.shared.wheypoint import grounded as grounded_mod
     from easy_cheese.shared.wheypoint import phase_commit
     from easy_cheese.shared.wheypoint import storage as wheypoint_storage
 
-    try:
-        grounded_entries = phase_commit.validate_grounded(grounded, root=root)
-    except phase_commit.GroundedEntryError as exc:
-        raise cli.CliError(str(exc)) from exc
+    written = False
 
-    store = wheypoint_storage.WorkStore.open(slug, corpus_root=corpus_root)
-    try:
-        current = phase_commit.read_current_record(slug, store=store)
-        phase_commit.require_genesis_grounding(current, grounded_entries)
-    except Exception as exc:
-        raise _wheypoint_error(exc) from exc
-
-    write_contents()
+    def write_and_mark() -> None:
+        nonlocal written
+        write_contents()
+        written = True
 
     try:
-        _ = phase_commit.commit_phase_revision(
+        store = wheypoint_storage.WorkStore.open(slug, corpus_root=corpus_root)
+        outcome = phase_commit.commit_phase_revision(
             work_id=slug,
             phase=phase,
             next_skill=next_skill,
             artifact=str(target),
             orientation=orientation,
-            grounded=grounded_entries,
-            provenance=phase_commit.session_provenance_from_environment(),
+            grounded=grounded,
             root=root,
-            current_record=current,
             store=store,
+            write_contents=write_and_mark,
         )
+    except cli.CliError:
+        # The writer's own refusal (e.g. a failed atomic write) already carries
+        # its caller-facing message and exit code; the kernel never raises one.
+        raise
     except Exception as exc:
-        raise _wheypoint_error(
-            exc,
-            message=(
-                f"wrote {target}, but the wheypoint revision failed: {{}}; "
-                "the next resolve will gate on stale-artifact-link"
-            ),
+        usage = isinstance(
+            exc, (grounded_mod.GroundedEntryError, commit_mod.CommitError)
+        )
+        _traceback_if(
+            unexpected=not (usage or isinstance(exc, wheypoint_storage.StorageError))
+        )
+        if written:
+            raise _orphaned(
+                exc, target=target, exit_code=phase_commit.EXIT_ARTIFACT_ORPHANED
+            ) from exc
+        if usage:
+            raise cli.CliError(str(exc)) from exc
+        raise cli.CliError(
+            f"wheypoint: {type(exc).__name__}: {exc}",
+            exit_code=phase_commit.EXIT_WHEYPOINT,
         ) from exc
 
+    revision = outcome.result.revision
+    print(
+        f"wheypoint: revision work_id={slug} revision_id={revision.revision_id}"
+        + f" revision_number={revision.revision_number}"
+        + f" retried={str(outcome.retried).lower()}",
+        file=sys.stderr,
+    )
 
-def _cleanup_tmp(fd: int, tmp_name: str) -> None:
+
+def _cleanup_tmp(fd: int, tmp_name: str, target: Path) -> None:
     """Close the open fd (if any) and remove the tmp file, reporting orphans."""
     if fd != -1:
         with contextlib.suppress(OSError):
@@ -214,7 +256,7 @@ def _cleanup_tmp(fd: int, tmp_name: str) -> None:
     except FileNotFoundError:
         pass  # already gone: not an error for a cleanup path
     except OSError:
-        print(f"orphaned temp file: {tmp_name}", file=sys.stderr)
+        print(f"wheypoint: orphaned temp file {tmp_name} for {target}", file=sys.stderr)
 
 
 def write_artifact(
@@ -260,7 +302,11 @@ def write_artifact(
         baseline=baseline,
     )
 
-    cheese_root = (root / ".cheese").resolve()
+    # One resolved root for the artifact and for the link `phase_commit` pins,
+    # so a write from a subdirectory cannot land beside a `.cheese/` no reader
+    # anchors on.
+    root_path = paths.resolve_repo_root(root)
+    cheese_root = root_path / ".cheese"
     target = cheese_root / phase / f"{slug}.md"
     # Phase names are validated against the compiled registry and therefore
     # select exactly one directory beneath .cheese/.
@@ -276,7 +322,7 @@ def write_artifact(
         target=target,
         orientation=orientation,
         grounded=grounded,
-        root=root,
+        root=root_path,
         corpus_root=corpus_root,
         write_contents=lambda: _atomic_write(target, contents),
     )
@@ -311,7 +357,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
             raise cli.CliError(f"--body-file not found: {body_path}")
         body = body_path.read_text(encoding="utf-8")
 
-    root = Path(a.root) if a.root else Path.cwd()
+    root = paths.resolve_repo_root(a.root)
     target = write_artifact(
         slug=a.slug,
         status=a.status,
@@ -382,7 +428,10 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument(
         "--root",
         default=None,
-        help="repo root (default: cwd); .cheese/<phase>/<slug>.md is written under this",
+        help=(
+            "repo root (default: the git toplevel, else cwd); "
+            ".cheese/<phase>/<slug>.md is written under this"
+        ),
     )
     _ = parser.add_argument(
         "--corpus-root",
