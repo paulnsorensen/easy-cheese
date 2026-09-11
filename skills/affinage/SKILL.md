@@ -171,7 +171,6 @@ Use these affinage tools:
 | PR status | `python3 skills/affinage/scripts/affinage.pyz pr-status` | `gh pr checks` and `gh pr view` |
 | GitHub fetch | `gh api` | none; stop the skill |
 | Reply posting | `python3 skills/affinage/scripts/affinage.pyz post-reply` | none; direct `gh api` calls omit attribution |
-| Diff inspection | `delta` | `git diff --unified=3` |
 
 ## Output
 

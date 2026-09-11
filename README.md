@@ -169,12 +169,8 @@ Workflow skills name preferred tools when they help, with bounded fallbacks for 
 | LSP / [Serena](https://github.com/oraios/serena) (MCP) | Type-aware xrefs (`find_referencing_symbols`, `find_implementations`), symbol-bounded edits (`rename_symbol`, `replace_symbol_body`, `safe_delete_symbol`), and LSP diagnostics | `sg`, `tilth_search`, targeted reads via tilth |
 | hallouminate (MCP) | Per-repo wiki for cross-session design rationale, ADR grounding, and `/mold` evidence | Skip wiki grounding; proceed with diff + code evidence only; cap at `speculating` when design rationale is central |
 | milknado (MCP) | Mikado task-graph backend for `/cook`'s fan-path curd prerequisite tracking | In-report curd decomposition in manifest YAML; no external task-graph backend needed |
-| `ripgrep` | Fast text search | `grep`, `find`, editor search |
 | `gh` | GitHub issues, PRs, checks, examples | local git commands or user-provided links/logs |
-| `delta` | Readable diffs | plain `git diff` |
 | `mergiraf` | Structured merge conflict resolution | manual conflict resolution plus tests |
-| `jq` | JSON inspection for reports or tool output | manual inspection |
-| `fd` | Fast file discovery | `find` |
 | `just` | Project task discovery | package scripts or documented commands |
 
 When a preferred tool is unavailable, workflow skills say so once, use the strongest bounded fallback, and lower confidence only if evidence quality suffers.
@@ -443,9 +439,9 @@ bash /tmp/easy-cheese-install.sh --dry-run
 Common flags:
 
 ```sh
-# Install only ripgrep + jq, skip MCP registration
+# Install only just + mergiraf, skip MCP registration
 curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
-  | bash -s -- --tools ripgrep,jq --skip-mcp
+  | bash -s -- --tools just,mergiraf --skip-mcp
 
 # Register MCP servers only (assumes CLI tools and skills are already installed)
 curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh \
@@ -494,35 +490,6 @@ cargo install ast-grep         # Rust/Cargo
 scoop install ast-grep         # Windows (Scoop)
 ```
 
-### ripgrep (`rg`)
-
-Fast text search used as a fallback when tilth is unavailable.
-
-```sh
-brew install ripgrep           # macOS/Linux
-winget install BurntSushi.ripgrep.MSVC  # Windows
-cargo install ripgrep          # Rust/Cargo
-```
-
-### delta
-
-Human-readable diffs used by `/age` and `/cure`.
-
-```sh
-brew install git-delta         # macOS/Linux
-cargo install git-delta        # Rust/Cargo
-winget install dandavison.delta # Windows
-```
-
-Add to `~/.gitconfig` to enable globally:
-
-```ini
-[core]
-    pager = delta
-[interactive]
-    diffFilter = delta --color-only
-```
-
 ### mergiraf
 
 Structured merge-conflict resolution used by `/melt`.
@@ -530,27 +497,6 @@ Structured merge-conflict resolution used by `/melt`.
 ```sh
 cargo install mergiraf         # Rust/Cargo
 brew install mergiraf          # macOS/Linux (if tap is available)
-```
-
-### `jq`
-
-JSON inspection used by various skills for structured output.
-
-```sh
-brew install jq                # macOS/Linux
-winget install jqlang.jq       # Windows
-apt-get install jq             # Debian/Ubuntu
-```
-
-### `fd`
-
-Fast file discovery used as a fallback when tilth is unavailable.
-
-```sh
-brew install fd                # macOS/Linux
-cargo install fd-find          # Rust/Cargo
-winget install sharkdp.fd      # Windows
-apt-get install fd-find        # Debian/Ubuntu
 ```
 
 ### `just`

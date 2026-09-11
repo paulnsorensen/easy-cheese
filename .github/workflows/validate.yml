@@ -142,7 +142,7 @@ jobs:
           # the latest released tag (which can lag behind main when new
           # skills are added).
           EC_SKILL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: bash scripts/install.sh --skip-mcp --tools gh,ripgrep,fd,jq,ast-grep,git-delta,just,mergiraf
+        run: bash scripts/install.sh --skip-mcp --tools gh,ast-grep,just,mergiraf
 
   typecheck:
     name: type-check python
