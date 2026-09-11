@@ -102,6 +102,12 @@ Cross-skill linking is legitimate here — `skills/briesearch/SKILL.md`
 links `../cheese/references/formatting.md` — so an orphan check must run
 **repo-wide**. Scoped per-skill it produces 12 false positives.
 
+
+
+### Gotcha: `cook` sits at the ceiling, so merges tip it (2026-09-10)
+
+`skills/cook/SKILL.md` on `main` measures ~3595 tokens. Two branches that each add a few lines pass CI alone and fail `validate_skills.py` after the merge (PR #657 merge hit 3703). Trimming is constrained: ~340 exact sentences from cook's body are pinned by `tests/python/test_cook_prose_contract.py`, `test_plate_contract.py`, and `test_docs_emphasis_guard.py` (the last requires markdown-link form for `code-intelligence-routing.md`). Before merging prose into one sentence, grep the tests for the exact old wording. Long-term fix: move a section (Handoff slug or Auto mode) into `references/` and re-pin the tests there.
+
 ## Splitting without routing does not save tokens
 
 Across 55,315 public skills, arXiv 2603.29919 (SkillReducer) finds that

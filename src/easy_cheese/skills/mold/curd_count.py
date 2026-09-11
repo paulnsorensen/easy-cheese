@@ -36,7 +36,10 @@ from easy_cheese.shared.taste_test import (
     auto_handoff,
     is_new_mold_spec,
     parse_gate_applicability,
+    parse_landing,
+    read_spec_text,
 )
+from easy_cheese_schemas.contracts import Landing, LandingShape, landing_mapping
 
 HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 BULLET_RE = re.compile(r"^\s*[-*+]\s+\S", re.MULTILINE)
@@ -101,7 +104,7 @@ class SpecReadError(Exception):
 
 def _read_spec(spec_path: Path) -> str:
     try:
-        return spec_path.read_text(encoding="utf-8")
+        return read_spec_text(spec_path)
     except UnicodeDecodeError as exc:
         raise SpecReadError(
             f"spec is not valid UTF-8 ({exc.reason} at byte {exc.start})"
@@ -110,7 +113,10 @@ def _read_spec(spec_path: Path) -> str:
         raise SpecReadError(f"could not read spec: {exc.strerror or exc}") from exc
 
 
-def _gate_handoff(spec_path: Path, body: str) -> dict[str, object] | None:
+def _gate_handoff(
+    spec_path: Path, body: str, landing: dict[str, object]
+) -> dict[str, object] | None:
+    """Return the red-required handoff for ``body``, or ``None`` when the spec doesn't gate."""
     if (
         not re.search(r"(?m)^gate_applicability:\s*(?:\{|$)", body)
         and not is_new_mold_spec(body)
@@ -124,7 +130,7 @@ def _gate_handoff(spec_path: Path, body: str) -> dict[str, object] | None:
     except ApplicabilityError as exc:
         raise SpecReadError(f"invalid gate applicability: {exc}") from exc
     if isinstance(applicability, RedRequired):
-        return auto_handoff(spec_path, applicability)
+        return auto_handoff(spec_path, applicability, metadata={"landing": landing})
     return None
 
 
@@ -136,7 +142,12 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
     decisions = _count_bullets(_extract_section(body, DECISIONS_HEADINGS))
 
     recommended, mode, rationale = _recommend(candidate_curds, blast_radius)
-    handoff = _gate_handoff(spec_path, body)
+    try:
+        declared_landing = parse_landing(body) or Landing(shape=LandingShape.SINGLE)
+    except ApplicabilityError as exc:
+        raise SpecReadError(f"invalid landing: {exc}") from exc
+    landing = landing_mapping(declared_landing)
+    handoff = _gate_handoff(spec_path, body, landing)
     if handoff is not None:
         command = cast(list[str], handoff["command"])
         recommended = command[0]
@@ -156,6 +167,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
         "decomposable": candidate_curds >= PARALLEL_THRESHOLD,
         "recommended_skill": recommended,
         "handoff": handoff,
+        "landing": landing,
         "mode": mode,
         "rationale": rationale,
         "notes": [

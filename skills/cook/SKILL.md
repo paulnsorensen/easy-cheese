@@ -34,23 +34,21 @@ Do not weaken an existing test.
 Accept a pasted spec or issue, focused acceptance criteria, or an unambiguous task.
 Read explicit spec paths verbatim.
 Resolve a bare slug with `SPEC=$(python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>)`.
-Use `python3 skills/cook/scripts/cook.pyz accept <pointer>` for a Mold handoff pointer.
-This command verifies the route and referenced artifacts before execution.
-
+Use `python3 skills/cook/scripts/cook.pyz accept <pointer>` for a Mold handoff pointer; it verifies the route and referenced artifacts first.
 Flags:
 
 - `--auto` chains `/press → /age → /cure`.
 - `--hard` propagates through `/plate`.
 - `--open-pr` lets terminal `/plate` publish. Auto mode never adds this flag.
 - `--resume <slug>` resumes a typed fan handoff and its referenced artifacts.
+- `--spec <spec-path>` names the approved spec for a Mold pointer. A plan whose `dependencies` cross `landing.layers` is refused before any coder dispatch.
 
 Optional context payload:
 
 - `handoff_context.wiki_hits` carries `{page, line, why}` entries from the repository wiki corpus.
   The key is optional, and its default is absent.
   Reject an entry that omits `page`, `line`, or `why`.
-  Show every accepted hit in the **Contract** step, so the user can challenge a stale decision.
-  Prefer these decisions over an invented approach.
+  Show every accepted hit in the **Contract** step so the user can challenge a stale decision; prefer these decisions over an invented approach.
   [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md) defines the payload.
 
 Read `references/auto-mode.md`, `references/fan-pathway.md`, and `../cheese/references/formatting.md` for these policies.
@@ -58,11 +56,9 @@ Read `references/auto-mode.md`, `references/fan-pathway.md`, and `../cheese/refe
 ### Standalone fast-path
 
 `/cook` bypasses `/mold` only when the inputs, outputs, scope, and verification are clear.
-The task must name a bug or call site in one or two files.
-The task must also have a failing test or an expected-output check.
+The task must name a bug or call site in one or two files and have a failing test or an expected-output check.
 No leverage trigger may fire; see `../cheese/references/routing-policy.md` § Leverage triggers.
-Derive a slug.
-Then restate the **Contract**.
+Derive a slug, then restate the **Contract**.
 Route the task to `/mold` if an ambiguity check fails.
 
 ## Flow
@@ -71,14 +67,11 @@ Route the task to `/mold` if an ambiguity check fails.
    Print the shape-check block from `../mold/references/shape-check.md` inside the Contract, or the line `shape check skipped: single-module change` per `shape-check.md` § When to skip. No block, no code.
    If `.cheese/glossary/<slug>.md` exists, use its canonical terms.
 2. **Implement** — Use inner RED → GREEN for behavior changes.
-   Use the requested non-behavior path for closed N/A work.
-   Change only the applicable surface.
+   Use the requested non-behavior path for closed N/A work; change only the applicable surface.
 3. **Validate** — Run the relevant quality gates again.
-   Read the complete gate output.
-   For closed N/A, verify the requested non-behavior path.
+   Read the complete gate output; for closed N/A, verify the requested non-behavior path.
 4. **Taste-test** — Use a fresh-context review for multi-file or public-surface diffs.
-   Otherwise, use an inline review.
-   Limit the review to two rounds.
+   Otherwise use an inline review, limited to two rounds.
    Read `references/tdd-loop.md` for details.
 5. **Hand off** — Write the package report and slug.
    Route behavior work through `/press → /age → /cure`.
@@ -116,11 +109,10 @@ Propagate `--auto` through each dispatched phase when it is active.
 
 ## Baseline capture
 
-Fan mode records its quality-debt comparison before any curd cooks.
-Bare mode records it on the pre-change tree.
+Fan mode records its quality-debt comparison before any curd cooks; bare mode records it on the pre-change tree.
 [`references/quality-gates.md`](references/quality-gates.md) defines exact capture, classification, intentional-RED exclusion, and baseline-artifact rules.
 
-For source changes, follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) and [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md).
+For source changes, follow [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) and [`harness-portability.md`](../cheese/references/harness-portability.md).
 `slash commands are host renderings, not the control model`; invoke the equivalent installed capability.
 
 ## Quality gates
@@ -145,10 +137,9 @@ Use [`references/package-report.md`](references/package-report.md) to report fil
 ## Handoff slug
 
 Write a minimum-shape handoff slug at the top of `.cheese/cook/<slug>.md`.
-Use the same file for the report.
-Do not create a second file.
-This slug lets downstream phases resume or chain without reading the full report again.
-The fan pathway also uses this slug during wave orchestration.
+Use the same file for the report; do not create a second file.
+This slug lets downstream phases resume or chain without rereading the full report.
+The fan pathway also uses it during wave orchestration.
 Use this schema:
 
 ```markdown
@@ -237,8 +228,7 @@ Take the route for the applicable disposition directly.
 
 `--auto` does not bypass applicable validation.
 Run behavior work through `/press --auto → /age --auto → /cure --auto --stake medium+`.
-Closed N/A skips Press.
-Run it through `/age --auto → /cure --auto --stake medium+`.
+Closed N/A skips Press and runs through `/age --auto → /cure --auto --stake medium+`.
 Limit Cure to two passes on both routes.
 In the linear chain, Cook does not invoke `/plate`.
 Terminal Cure then owns publication.
@@ -259,13 +249,11 @@ State which limit or blocker stopped the run.
 Do not silently downgrade the result.
 
 Read [`references/auto-mode.md`](references/auto-mode.md) before you run or dispatch auto mode.
-It defines the complete phase chain and the limit controls.
-It also defines fan-path isolation and Cure failure handling.
+It defines the complete phase chain, the limit controls, fan-path isolation, and Cure failure handling.
 
 ## No-chain isolation directive
 
-A spawned phase agent does not chain forward by itself.
-The orchestrator controls the chain.
+A spawned phase agent does not chain forward by itself; the orchestrator controls the chain.
 
 A terminal Age is publishable only with `next: done`.
 `next: cure` or a missing `next` halts the chain.
@@ -279,18 +267,12 @@ The reference also contains the final report template.
 - Keep import direction and crust integrity per [`../cheese/references/sliced-bread.md`](../cheese/references/sliced-bread.md).
 - Stop before a new crust export, a cross-slice import of an internal, or a schema or contract change the spec does not name. Ask the user.
 - Do not invent architecture that the spec already rejected.
-- Stop when implementation reveals a design decision that the spec does not answer.
-- Ask the user that decision before you continue.
-- Stop if the spec or fast-path request uses a false premise.
-- Show the false premise before you write code.
+- Stop and ask the user when implementation reveals a design decision that the spec does not answer.
+- Stop and show the false premise before you write code if the spec or fast-path request uses one.
 - Do not use an incorrect approach to satisfy the request literally.
-- Apply the shared voice kernel in `../age/references/voice.md`.
-- Start the report with the answer.
-- Name loaded assumptions in the contract.
+- Apply the shared voice kernel in `../age/references/voice.md`; start the report with the answer and name loaded assumptions in the contract.
 - Mark residual risk as `certain | speculating | don't know`.
-- **Verification before `status: ok`:** Identify the gate command.
-- Run the gate command during the current turn.
-- Read the complete output before you make the claim.
+- **Verification before `status: ok`:** Identify the gate command, run it during the current turn, and read the complete output before you make the claim.
 - Do not use `should`, `probably`, or `I think`.
 - State what the gate output shows.
 

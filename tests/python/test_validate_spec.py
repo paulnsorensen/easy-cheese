@@ -10,6 +10,7 @@ semantic-rejection rules.
 
 from __future__ import annotations
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -868,3 +869,272 @@ def test_not_applicable_spec_still_requires_grounding(
     assert result.returncode == 1
     assert len(errors) == 1
     assert "grounding-probe-recorded" in errors[0]
+
+
+@pytest.mark.parametrize("flag", ["", "--strict"])
+def test_unknown_landing_shape_is_rejected(
+    tmp_path: Path, _run: _RunFn, flag: str
+) -> None:
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\nlanding:\n  shape: stacked\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path, *([flag] if flag else []))
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert any("landing-closed-class" in line for line in errors)
+
+
+def test_single_shape_with_layers_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        '  ui_surface: non-browser\nlanding:\n  shape: single\n  layers: [["c1"]]\n---',
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 1
+    assert any("landing-closed-class" in line for line in errors)
+
+
+@pytest.mark.parametrize("flag", ["", "--strict"])
+def test_valid_stacked_linear_landing_is_accepted(
+    tmp_path: Path, _run: _RunFn, flag: str
+) -> None:
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\n"
+        + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n'
+        + "  per_layer_green: required\n  review_fixes: fold\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path, *([flag] if flag else []))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_unknown_landing_key_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\n"
+        + "landing:\n  shape: single\n  per_layer_greeen: tip-only\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode != 0, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class landing.'per_layer_greeen' is not allowed" in errors
+
+
+def test_missing_landing_shape_is_rejected_without_a_sentinel(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\nlanding:\n  per_layer_green: required\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode != 0, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class landing.shape is required" in errors
+    assert "object at 0x" not in errors
+
+
+def test_empty_landing_mapping_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\nlanding: {}\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode != 0, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class landing.shape is required" in errors
+
+
+def test_landing_layers_block_sequence_of_scalars_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    # A plausible mistake: YAML block-list syntax naming bare curd ids instead
+    # of one-element groups, i.e. `- c1` instead of `- [c1]`.
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\n"
+        + "landing:\n  shape: stacked_linear\n  layers:\n    - c1\n    - c2\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class landing.layers must be a list of lists of strings" in errors
+    assert "Traceback" not in result.stdout + result.stderr
+
+
+def test_landing_layers_with_non_string_item_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\n"
+        + 'landing:\n  shape: stacked_linear\n  layers: [["c1", 1]]\n---',
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class landing.layers must be a list of lists of strings" in errors
+
+
+def test_landing_layers_with_duplicate_curd_id_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\n"
+        + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c1"]]\n---',
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 1, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class" in errors
+    assert "landing-layer-curd-ids-must-be-unique" in errors
+
+
+def test_single_shape_with_explicit_empty_layers_is_accepted(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\nlanding:\n  shape: single\n  layers: []\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+def test_legacy_spec_with_valid_landing_block_is_still_accepted(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = LEGACY_SPEC.replace(
+        "---\n\n# Legacy",
+        'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n---\n\n# Legacy',
+        1,
+    )
+    assert "landing:" in text
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+def test_not_applicable_spec_with_valid_landing_block_is_accepted(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = _isolated_gate_applicability_fixture(
+        reason="closed, no CLI change", rows=False
+    ).replace(
+        "gate_applicability:\n  disposition: not-applicable\n",
+        'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n'
+        + "gate_applicability:\n  disposition: not-applicable\n",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+def test_curdle_spec_template_landing_block_validates(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    """The Curdle spec template's documented landing block must itself be a
+    valid, real example once an author picks one value per `a | b` line: a
+    non-single shape needs a non-empty layers list, and no line may carry an
+    inline `#` comment because the front-matter reader keeps it as the value."""
+    curdle = (
+        REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
+    ).read_text(encoding="utf-8")
+    match = re.search(
+        r"^landing:\n(  shape: .*\n  layers: .*\n  per_layer_green: .*\n"
+        + r"  review_fixes: .*\n)",
+        curdle,
+        re.MULTILINE,
+    )
+    assert match is not None
+    landing_block = match.group(1)
+    assert "#" not in landing_block
+    # Every enum line documents its allowed values as pipe-separated
+    # alternatives; an author keeps exactly one. Pick the first non-single
+    # shape and the first alternative elsewhere.
+    landing_block = landing_block.replace(
+        "  shape: single | orthogonal_flat | stacked_linear | diamond_stack\n",
+        "  shape: stacked_linear\n",
+    )
+    landing_block = landing_block.replace(
+        "  layers: []\n", '  layers: [["c1"], ["c2"]]\n'
+    )
+    landing_block = re.sub(
+        r"^(  (?:per_layer_green|review_fixes): )([^|\n]+?) \|.*$",
+        r"\1\2",
+        landing_block,
+        flags=re.MULTILINE,
+    )
+    assert 'layers: [["c1"], ["c2"]]' in landing_block
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\nlanding:\n" + landing_block + "---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path, "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+def test_mini_spec_mode_template_landing_block_validates(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    """`mini-spec-mode.md`'s documented landing block, like Curdle's, must
+    validate once an author picks one value per `a | b` line and substitutes
+    a non-empty `layers` for its non-single shape."""
+    mini_spec_mode = (
+        REPO_ROOT / "skills" / "mold" / "references" / "mini-spec-mode.md"
+    ).read_text(encoding="utf-8")
+    match = re.search(
+        r"^landing:\n(  shape: .*\n  layers: .*\n)",
+        mini_spec_mode,
+        re.MULTILINE,
+    )
+    assert match is not None
+    landing_block = match.group(1)
+    assert "#" not in landing_block
+    landing_block = landing_block.replace(
+        "  shape: single | orthogonal_flat | stacked_linear | diamond_stack\n",
+        "  shape: stacked_linear\n",
+    )
+    landing_block = landing_block.replace(
+        "  layers: []\n", '  layers: [["c1"], ["c2"]]\n'
+    )
+    assert 'layers: [["c1"], ["c2"]]' in landing_block
+    text = BASE_SPEC.replace(
+        "  ui_surface: non-browser\n---",
+        "  ui_surface: non-browser\nlanding:\n" + landing_block + "---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path, "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)

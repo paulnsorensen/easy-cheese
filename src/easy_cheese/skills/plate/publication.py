@@ -11,13 +11,41 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
 
+from easy_cheese.shared.publication import BoundedReadOverflow, read_bounded
+from easy_cheese_schemas.contracts import LandingShape, parse_landing_mapping
+from easy_cheese_schemas.manifest import plate_layout_for
+
 _MODES = {"commit-only", "topology-preflight", "new-pr", "existing-pr", "stack-maintenance"}
 _TOPOLOGIES = {"single", "stacked", "n/a"}
 _PROVIDERS = {"ordinary", "graphite", "git-town", "gh-stack", "n/a"}
 _STACK_PROVIDERS = {"graphite", "git-town", "gh-stack"}
 _REQUIRED = {"mode", "topology", "provider", "artifacts", "gate", "commits", "prs", "risk"}
-_ALLOWED = _REQUIRED | {"pr_plan"}
+_ALLOWED = _REQUIRED | {"pr_plan", "landing"}
 _SHA = re.compile(r"[0-9a-fA-F]{7,40}")
+
+
+def _validate_landing(raw: object, topology: object, mode: object, errors: list[str]) -> None:
+    """Decode the spec's landing block with the schema's rules, then check topology."""
+    try:
+        landing = parse_landing_mapping(raw)
+    except ValueError as exc:
+        errors.append(str(exc))
+        return
+    expected = plate_layout_for(landing.shape).value
+    if topology in {"single", "stacked"} and topology != expected:
+        errors.append(
+            f"landing-topology-mismatch: landing.shape {landing.shape.value} "
+            + f"requires topology {expected}, got {topology!r}"
+        )
+    if (
+        mode in {"new-pr", "existing-pr"}
+        and topology == "n/a"
+        and landing.shape is not LandingShape.SINGLE
+    ):
+        errors.append(
+            f"landing-topology-unresolved: landing.shape {landing.shape.value} "
+            + f"requires topology {expected}, got 'n/a'"
+        )
 
 
 class PublicationValidationError(ValueError):
@@ -26,6 +54,21 @@ class PublicationValidationError(ValueError):
     def __init__(self, errors: list[str]) -> None:
         self.errors: tuple[str, ...] = tuple(errors)
         super().__init__("; ".join(errors))
+
+
+_MAX_STATE_BYTES = 1_000_000
+
+
+def _read_state_text(path: Path) -> str:
+    """Read the state file with a bounded size cap and explicit UTF-8 decoding."""
+    try:
+        raw = read_bounded(path, _MAX_STATE_BYTES)
+    except BoundedReadOverflow as exc:
+        raise PublicationValidationError([f"state file exceeds {_MAX_STATE_BYTES} bytes"]) from exc
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PublicationValidationError([f"state file is not valid UTF-8: {exc}"]) from exc
 
 
 def _object(value: object, path: str, errors: list[str]) -> dict[str, object] | None:
@@ -132,6 +175,9 @@ def validate_publication(data: object) -> dict[str, object]:
             if plan.get("plate_layout") != topology:
                 errors.append("pr_plan.plate_layout must match topology")
 
+    if "landing" in state:
+        _validate_landing(state["landing"], topology, mode, errors)
+
     if mode == "topology-preflight":
         if topology not in {"single", "stacked"}:
             errors.append("topology-preflight requires single or stacked topology")
@@ -180,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     state_path = cast(Path, args.state)
     try:
-        data = cast(object, json.loads(state_path.read_text()))
+        data = cast(object, json.loads(_read_state_text(state_path)))
         result = validate_publication(data)
     except (OSError, json.JSONDecodeError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
