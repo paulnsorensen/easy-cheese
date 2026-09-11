@@ -878,7 +878,8 @@ class TestGroundedValidation:
         ("entry", "message"),
         [
             ("missing.md#1-1", "path not found"),
-            ("context.md#1", "path\\[#start-end\\]"),
+            ("context.md#1", "path not found"),
+            ("", "path\\[#start-end\\]"),
             ("context.md#2-1", "range must ascend"),
             ("/etc/passwd#1-1", "must be under root"),
             ("../outside.md#1-1", "escapes the repository root"),

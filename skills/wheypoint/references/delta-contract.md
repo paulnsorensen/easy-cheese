@@ -9,6 +9,7 @@ No plugin hook is part of this contract. Issue #654 ask 4 (a `/compact` hook tha
 ## Entry resolution
 
 Each phase uses its own archive for entry resolution: `python3 skills/<phase>/scripts/<phase>.pyz wheypoint-resolve --ref <slug>`.
+Pass `--corpus-root <dir>` to read a non-default corpus; the writer accepts the same flag.
 Plate also runs this command on entry, but only to resolve; it creates no revision.
 The six outcomes are `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, and `error`.
 An `authoritative` record is the primary input.
@@ -31,6 +32,19 @@ Paths are repository-relative files with optional one-based inclusive line range
 A first revision requires at least one grounded entry.
 The writer accepts at most 16 grounded entries.
 Supplying a grounded list replaces `working_context`; omitting it carries the existing context.
+A `#` inside a file name is legal; the range is anchored on the last `#`.
+`PR#<n>` and URL entries in `working_context` are pointers, not grounded paths; lint skips them.
+The writer anchors relative paths and `.cheese/` at the git toplevel (or `--root`), never at the current directory.
+
+## Writer exit codes
+
+Exit `2` is caller usage: a bad `--grounded` entry or a first revision without one; nothing is written.
+Exit `4` is a kernel failure before the artifact write; nothing is written.
+Exit `5` means the artifact was written but the revision failed; stderr carries `wheypoint: artifact-orphaned <path>` and the next resolve gates on `stale-artifact-link`.
+Every writer message on stderr starts with `wheypoint:` and is plain ASCII, identical on every host.
+A successful write prints `wheypoint: revision work_id=<id> revision_id=<id> revision_number=<n> retried=<bool>`.
+A stale-parent retry prints one `wheypoint: retry ...` line and one `wheypoint: retry outcome=...` line.
+Set `EASY_CHEESE_DEBUG` or `CHEESE_DEBUG` to include a traceback for unexpected failures.
 
 ## Lint findings
 
@@ -43,7 +57,7 @@ It means the recorded repository commit exists but is not an ancestor of the cur
 Display the code and detail with the resolved payload, but do not stop solely for this finding.
 
 `grounded-path-missing` is advisory.
-It means a path named in `working_context` is no longer a file inside the repository.
+It means a path named in `working_context` is absolute, escapes the repository root, or is no longer a file; the detail names which.
 Display the code and detail with the resolved payload, but do not stop solely for this finding.
 
 Advisory findings never hide the outcome.
