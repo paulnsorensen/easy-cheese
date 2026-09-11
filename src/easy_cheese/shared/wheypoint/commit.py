@@ -15,9 +15,11 @@ The order of the checks is the contract:
    replay is one the record has not caught up to: a complete pair whose parent
    is still the current revision is an interrupted promotion, and the retry
    finishes it instead of reporting a save no reader can serve.
-2. **Lineage before application.** The parent the record names has to be a
-   complete immutable revision whose digest the record still quotes; a chain
-   that cannot be walked backwards is not extended forwards.
+2. **Lineage before application.** The parent the record names has to have a
+   structurable receipt whose digest the record still quotes, and the receipts
+   behind it have to walk back to genesis; a chain that cannot be walked
+   backwards is not extended forwards. The walk reads receipts only: whether
+   an ancestor's projection is present is lint's question, not this one's.
 3. **Rehydration before compaction.** A delta written after a context
    compaction has to prove it read the *current* revision, not the revision the
    compacted session remembered.
@@ -166,20 +168,10 @@ def commit(
     repository_value: RepositoryProvenance = (
         RepositoryProvenance() if repository is None else repository
     )
-    digest_of_impl: Callable[[str], str | None] | None = None
-
-    def digest_of(path: str) -> str | None:
-        nonlocal digest_of_impl
-        digestor = digest_of_impl
-        if digestor is None:
-            digest_root = (
-                _digest_root()
-                if artifact_root is None
-                else Path(artifact_root).resolve()
-            )
-            digestor = lint_mod.artifact_digest_in(digest_root)
-            digest_of_impl = digestor
-        return digestor(path)
+    digest_root = (
+        _digest_root() if artifact_root is None else Path(artifact_root).resolve()
+    )
+    digest_of = lint_mod.artifact_digest_in(digest_root)
 
     if delta.work_id != store.work_id:
         raise CommitError(
@@ -307,10 +299,7 @@ def _find_replay(
     revision = store.find_complete_revision(_revision_id(delta, fingerprint))
     if revision is None:
         return None
-    if (
-        revision.parent_revision_id != parent
-        or revision.request_digest != fingerprint
-    ):
+    if revision.parent_revision_id != parent or revision.request_digest != fingerprint:
         return None
     return revision
 
@@ -386,7 +375,16 @@ def _finalize(
 def _check_lineage(
     store: storage.WorkStore, current: WheypointRecord
 ) -> lineage.Lineage:
-    parent = store.read_revision(current.revision_number, current.revision_id)
+    receipts = store.receipt_revisions()
+    parent = next(
+        (
+            receipt
+            for receipt in receipts
+            if receipt.revision_id == current.revision_id
+            and receipt.revision_number == current.revision_number
+        ),
+        None,
+    )
     if parent is None:
         raise CommitError(
             f"current revision {current.revision_id!r} has no immutable receipt "
@@ -397,7 +395,7 @@ def _check_lineage(
             f"current revision {current.revision_id!r} does not match the digest "
             + "the record quotes"
         )
-    checked = lineage.walk(store.receipt_revisions(), parent)
+    checked = lineage.walk(receipts, parent)
     if checked.issues:
         raise CommitError(_lineage_issue_detail(checked.issues[0]))
     return checked
@@ -436,8 +434,6 @@ def _lineage_issue_detail(issue: lineage.LineageIssue) -> str:
         + f"{issue.parent_revision_id!r} at {issue.expected_digest}, but that "
         + f"receipt now hashes to {issue.actual_digest}"
     )
-
-
 
 
 def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
@@ -495,8 +491,6 @@ def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
         )
 
 
-
-
 def _entry_id(delta: WheypointDelta, proposed: ProposedEntry, index: int) -> str:
     """A name derived from the request that proposed the entry.
 
@@ -531,7 +525,9 @@ def _revision_id(delta: WheypointDelta, fingerprint: str) -> str:
 
 
 def _proposed_entries(delta: WheypointDelta, kind: EntryKind) -> list[ProposedEntry]:
-    return list(cast("list[ProposedEntry] | None", getattr(delta, ADDITION_FIELDS[kind])) or [])
+    return list(
+        cast("list[ProposedEntry] | None", getattr(delta, ADDITION_FIELDS[kind])) or []
+    )
 
 
 def _additions(delta: WheypointDelta, kind: EntryKind) -> list[ProtectedEntry]:
@@ -815,9 +811,7 @@ def _finish(
     durability: Durability,
 ) -> PendingRevision:
     """Render the draft into one typed pending revision."""
-    projected, markdown = projection_mod.build_projection(
-        draft, durability=durability
-    )
+    projected, markdown = projection_mod.build_projection(draft, durability=durability)
     revision = WheypointRevision(
         schema_version=SCHEMA_VERSION,
         work_id=store.work_id,
@@ -865,9 +859,7 @@ def _draft_record(
             revision_number=number,
             revision_digest=_UNPINNED_DIGEST,
             orientation=_replaced(delta.orientation, current.orientation),
-            working_context=_replaced(
-                delta.working_context, current.working_context
-            ),
+            working_context=_replaced(delta.working_context, current.working_context),
             notes=_replaced(delta.notes, current.notes),
             next_action=_replaced(delta.next_action, current.next_action),
             decision_dossier=_replaced(

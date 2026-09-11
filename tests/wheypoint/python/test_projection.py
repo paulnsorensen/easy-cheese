@@ -261,7 +261,7 @@ def _argv_tuple(node: ast.List | ast.Tuple) -> tuple[str | None, ...]:
 
 def _run_git_argvs(tree: ast.AST) -> list[tuple[str | None, ...]]:
     """Every argv passed as the first positional argument to a `run_git` or
-    `_run_git_ok` call, prefixed with the `"git"` literal those wrappers
+    `run_git_ok` call, prefixed with the `"git"` literal those wrappers
     supply themselves."""
     argvs: list[tuple[str | None, ...]] = []
     for node in ast.walk(tree):
@@ -273,7 +273,7 @@ def _run_git_argvs(tree: ast.AST) -> list[tuple[str | None, ...]]:
             if isinstance(func, ast.Name)
             else (func.attr if isinstance(func, ast.Attribute) else None)
         )
-        if name not in ("run_git", "_run_git_ok"):
+        if name not in ("run_git", "run_git_ok"):
             continue
         if not node.args or not isinstance(node.args[0], (ast.List, ast.Tuple)):
             continue
@@ -297,7 +297,7 @@ def test_the_runtime_never_reaches_for_a_git_mutation() -> None:
 def test_every_git_invocation_in_the_runtime_is_on_the_read_only_allowlist() -> None:
     """A new module cannot quietly add a git call: the argv has to be named
     here, whether it is a literal list/tuple or the first argument to
-    `run_git`/`_run_git_ok`, and the only ones named are inspections."""
+    `run_git`/`run_git_ok`, and the only ones named are inspections."""
     found: set[tuple[str | None, ...]] = set()
     for path in sorted(SRC.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))

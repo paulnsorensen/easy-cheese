@@ -899,14 +899,15 @@ def test_added_artifact_link_naming_an_undigestable_path_is_refused(
     assert store.read_record() == seed.record
 
 
-def test_artifact_digest_root_is_resolved_lazily_only_when_links_are_present(
+def test_artifact_digest_root_is_resolved_once_per_transaction(
     store: storage.WorkStore,
     make_promotion: Callable[..., Promotion],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The Git toplevel is spawned only when a path actually needs digesting,
-    never for a delta that adds no artifact links."""
+    """The Git toplevel is spawned once for the whole transaction, however many
+    links the delta pins: a multi-link revision never rediscovers the root per
+    path."""
     calls: list[None] = []
 
     def counting_toplevel() -> Path:
@@ -915,23 +916,61 @@ def test_artifact_digest_root_is_resolved_lazily_only_when_links_are_present(
 
     monkeypatch.setattr(paths, "git_toplevel", counting_toplevel)
     seed = _seed(store, make_promotion)
+    for name in ("report.md", "notes.md"):
+        _ = (tmp_path / name).write_text("body", encoding="utf-8")
+    before = len(calls)
 
-    no_links = commit.commit(
-        _delta(seed.record.revision_id, orientation="No artifact links here."),
-        store=store,
-    )
-    assert calls == []
-
-    _ = (tmp_path / "report.md").write_text("body", encoding="utf-8")
-    with_link = commit.commit(
+    with_links = commit.commit(
         _delta(
-            no_links.record.revision_id,
-            add_artifact_links=[ArtifactLink(path="report.md")],
+            seed.record.revision_id,
+            add_artifact_links=[
+                ArtifactLink(path="report.md"),
+                ArtifactLink(path="notes.md"),
+            ],
         ),
         store=store,
     )
-    assert len(calls) == 1
-    assert with_link.record.artifact_links[0].digest is not None
+
+    assert len(calls) - before == 1
+    assert [link.digest is not None for link in with_links.record.artifact_links] == [
+        True,
+        True,
+    ]
+
+
+def test_lineage_reads_the_current_receipt_once_per_commit(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lineage structures the whole chain from the one receipt scan, so the
+    record's own pointer costs no second read of the receipt it names."""
+    seed = _seed(store, make_promotion)
+    second = commit.commit(
+        _delta(seed.record.revision_id, orientation="Second."), store=store
+    )
+    third = commit.commit(
+        _delta(second.record.revision_id, orientation="Third."), store=store
+    )
+    receipts = [
+        store.revision_path(record.revision_number, record.revision_id)
+        for record in (seed.record, second.record, third.record)
+    ]
+    revisions_dir = receipts[-1].parent
+    reads: list[str] = []
+    real_read_bytes = Path.read_bytes
+
+    def counting_read_bytes(self: Path) -> bytes:
+        if self.parent == revisions_dir:
+            reads.append(self.name)
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", counting_read_bytes)
+    _ = commit.commit(
+        _delta(third.record.revision_id, orientation="Fourth."), store=store
+    )
+
+    assert [reads.count(receipt.name) for receipt in receipts] == [1, 1, 1]
 
 
 def test_a_held_record_lock_blocks_the_transaction_until_it_is_released(

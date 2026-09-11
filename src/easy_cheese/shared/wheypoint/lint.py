@@ -17,11 +17,7 @@ to cover stay exactly where they were.
 from __future__ import annotations
 
 import functools
-import re
-import subprocess
-import sys
 from collections.abc import Callable
-from enum import Enum
 from pathlib import Path
 
 from attrs import define, field
@@ -34,77 +30,17 @@ from easy_cheese_schemas import (
     WheypointRevision,
     WheypointStatus,
 )
-from easy_cheese_schemas.validate import is_relative_path
 
-from easy_cheese.shared import git_utils, paths
+from easy_cheese.shared import paths
 
-from . import grounded, lineage
+from . import lineage
+from . import lint_freshness
+from .lint_types import ADVISORY_CODES, LintCode, LintFinding, gates_continuation
 from . import projection as projection_mod
 from . import records, storage
 from .lineage import Lineage
 
-_GIT_TIMEOUT_SECONDS = 5
-# A `PR#<n>` or URL pointer in working_context references something outside the
-# checkout, so the grounded path grammar has nothing local to check it against.
-_EXTERNAL_POINTER_RE = re.compile(r"PR#[0-9]+|[a-z][a-z0-9+.-]*://.*")
-
-
-class LintCode(str, Enum):
-    """Why a checkpoint cannot be acted on automatically."""
-
-    RECORD_MISSING = "record-missing"
-    STORE_INCONSISTENT = "store-inconsistent"
-    RUNTIME_BEHIND = "runtime-behind"
-    REVISION_INCOMPLETE = "revision-incomplete"
-    PROJECTION_UNREADABLE = "projection-unreadable"
-    PROJECTION_DIGEST_MISMATCH = "projection-digest-mismatch"
-    PROJECTION_STATUS_MISMATCH = "projection-status-mismatch"
-    PROJECTION_RECORD_MISMATCH = "projection-record-mismatch"
-    PARENT_UNRESOLVED = "parent-unresolved"
-    PARENT_DIGEST_MISMATCH = "parent-digest-mismatch"
-    PARENT_NOT_CONTIGUOUS = "parent-not-contiguous"
-    PROJECT_MISMATCH = "project-mismatch"
-    GIT_OBJECT_MISSING = "git-object-missing"
-    STALE_COMMIT = "stale-commit"
-    ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"
-    STALE_ARTIFACT_LINK = "stale-artifact-link"
-    GROUNDED_PATH_MISSING = "grounded-path-missing"
-    ENTRY_DROPPED = "entry-dropped"
-    DURABILITY_LOCAL_ONLY = "durability-local-only"
-    COMPACTION_PARENT_UNRESOLVED = "compaction-parent-unresolved"
-
-
-# Findings that describe the store's surroundings rather than the authority of
-# the record being resumed. An interrupted promotion leaves an orphan no reader
-# can have quoted, and the retry overwrites it; blocking continuation on one
-# would strand a valid current record in exactly the crash it survived. The
-# spec gates automatic continuation on projection and record digests, the
-# parent chain, project identity, referenced Git objects, and required artifact
-# coverage -- an orphan is none of those, so it is reported, not enforced.
-#
-# A canonical-local checkpoint over an open gate is likewise not an authority
-# problem: the record is exactly as valid as it says it is. What is at risk is
-# the human-owed state it holds, which no commit or publish has carried
-# anywhere. That is a choice for the operator, so it warns and does not block.
-ADVISORY_CODES = frozenset(
-    {
-        LintCode.REVISION_INCOMPLETE,
-        LintCode.DURABILITY_LOCAL_ONLY,
-        LintCode.STALE_COMMIT,
-        LintCode.GROUNDED_PATH_MISSING,
-    }
-)
-
-
-def gates_continuation(finding: LintFinding) -> bool:
-    """Whether this finding must stop automatic dispatch."""
-    return finding.code not in ADVISORY_CODES
-
-
-@define(frozen=True)
-class LintFinding:
-    code: LintCode
-    detail: str
+__all__ = ["ADVISORY_CODES", "LintCode", "LintFinding", "gates_continuation"]
 
 
 @define(frozen=True)
@@ -124,60 +60,14 @@ class LintReport:
         return tuple(finding.code for finding in self.findings)
 
 
-def _run_git_ok(
-    args: list[str], *, cwd: Path | str, timeout: float
-) -> subprocess.CompletedProcess[str] | None:
-    """Run one advisory git command, or None when it could not run at all."""
-    try:
-        return git_utils.run_git(args, cwd=cwd, timeout=timeout)
-    except (OSError, subprocess.SubprocessError) as exc:
-        # Advisory checks degrade to silence, but a silence with no cause is
-        # indistinguishable from a pass. Name the command, where it ran, and
-        # what stopped it -- in plain ASCII, because this stream belongs to
-        # whatever harness is watching, not to a particular one.
-        print(
-            f"wheypoint: git-unavailable git {' '.join(args[:2])} cwd={cwd} "
-            + type(exc).__name__,
-            file=sys.stderr,
-        )
-        return None
-
-
 def git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
-    """Read-only `git cat-file -e <object>^{object}` in `root`.
-
-    Inspection only: the runtime never commits, never publishes, and treats an
-    unrunnable git as an unresolved reference rather than a pass.
-    """
-
-    def exists(obj: str) -> bool:
-        completed = _run_git_ok(
-            ["cat-file", "-e", f"{obj}^{{object}}"],
-            cwd=root,
-            timeout=_GIT_TIMEOUT_SECONDS,
-        )
-        return completed is not None and completed.returncode == 0
-
-    return exists
+    """Read-only git reachability probe in `root` (see `lint_freshness`)."""
+    return lint_freshness.git_object_exists_in(root)
 
 
 def artifact_digest_in(root: Path | str) -> Callable[[str], str | None]:
-    """Digest a regular artifact file contained by `root`."""
-    resolved_root = Path(root).resolve()
-
-    def digest(path: str) -> str | None:
-        if not is_relative_path(path):
-            return None
-        candidate = Path(path)
-        try:
-            resolved = (resolved_root / candidate).resolve()
-            if not resolved.is_relative_to(resolved_root) or not resolved.is_file():
-                return None
-            return storage.file_digest(resolved)
-        except (OSError, RuntimeError):
-            return None
-
-    return digest
+    """Digest a regular artifact file contained by `root` (see `lint_freshness`)."""
+    return lint_freshness.artifact_digest_in(root)
 
 
 def lint_projection_text(text: str) -> LintReport:
@@ -312,11 +202,11 @@ def lint_work(
         findings.extend(_conservation_findings(chain, record))
         findings.extend(_git_findings(current, git_object_exists, repository_root=root))
 
-    findings.extend(_artifact_link_findings(record, digest_of))
+    findings.extend(lint_freshness.artifact_link_findings(record, digest_of))
     findings.extend(_coverage_findings(ancestry, record, digest_of))
     if projection is not None:
         findings.extend(_durability_findings(projection, record))
-    findings.extend(_grounded_path_findings(record, root))
+    findings.extend(lint_freshness.grounded_path_findings(record, root))
     return LintReport(findings=tuple(findings), record=record, projection=projection)
 
 
@@ -608,7 +498,7 @@ def _git_findings(
                 + "does not resolve in this repository",
             )
         ]
-    return _stale_commit_findings(commit, repository_root=repository_root)
+    return lint_freshness.stale_commit_findings(commit, repository_root=repository_root)
 
 
 def _coverage_findings(
@@ -628,96 +518,3 @@ def _coverage_findings(
         )
         for failure in report.failures
     ]
-
-
-def _stale_commit_findings(
-    commit: str,
-    *,
-    repository_root: Path,
-) -> list[LintFinding]:
-    """Report a revision written on a history HEAD no longer descends from."""
-    ancestor = _run_git_ok(
-        ["merge-base", "--is-ancestor", commit, "HEAD"],
-        cwd=repository_root,
-        timeout=_GIT_TIMEOUT_SECONDS,
-    )
-    if ancestor is None or ancestor.returncode != 1:
-        return []
-    distance_result = _run_git_ok(
-        ["rev-list", "--count", f"{commit}..HEAD"],
-        cwd=repository_root,
-        timeout=_GIT_TIMEOUT_SECONDS,
-    )
-    if distance_result is None or distance_result.returncode != 0:
-        return []
-    try:
-        distance = int(distance_result.stdout.strip())
-    except ValueError:
-        return []
-    return [
-        LintFinding(
-            LintCode.STALE_COMMIT,
-            f"HEAD does not descend from repository commit {commit}; "
-            + f"distance is {distance}",
-        )
-    ]
-
-
-def _artifact_link_findings(
-    record: WheypointRecord,
-    artifact_digest: Callable[[str], str | None],
-) -> list[LintFinding]:
-    """Re-check each digest-bearing artifact link against its current file."""
-    findings: list[LintFinding] = []
-    for link in record.artifact_links:
-        if link.digest is None:
-            continue
-        actual = artifact_digest(link.path)
-        if actual == link.digest:
-            continue
-        current = "missing" if actual is None else repr(actual)
-        findings.append(
-            LintFinding(
-                LintCode.STALE_ARTIFACT_LINK,
-                f"{link.path}: linked digest {link.digest!r}, current file "
-                + f"digest is {current}",
-            )
-        )
-    return findings
-
-
-def _grounded_path_findings(
-    record: WheypointRecord, repository_root: Path
-) -> list[LintFinding]:
-    """Warn when a grounded entry violates the writer's own path grammar.
-
-    Parses with `grounded.parse_grounded_entry` (the same grammar
-    `validate_grounded` enforces at write time) so an entry one side calls
-    valid the other cannot silently accept. A `PR#<n>` or URL pointer is
-    exempt: it names something outside the checkout, so no local file can
-    confirm or deny it and the writer never promised one would.
-    """
-    findings: list[LintFinding] = []
-    for entry in record.working_context:
-        if _EXTERNAL_POINTER_RE.fullmatch(entry):
-            continue
-        try:
-            path_text, _range = grounded.parse_grounded_entry(entry)
-        except grounded.GroundedEntryError:
-            findings.append(
-                LintFinding(
-                    LintCode.GROUNDED_PATH_MISSING,
-                    f"working_context entry {entry!r} does not satisfy the "
-                    + "grounded path grammar",
-                )
-            )
-            continue
-        landed = grounded.resolve_within(path_text, repository_root)
-        if isinstance(landed, grounded.GroundedPathIssue):
-            findings.append(
-                LintFinding(
-                    LintCode.GROUNDED_PATH_MISSING,
-                    f"working_context path {entry!r} {landed.value}",
-                )
-            )
-    return findings

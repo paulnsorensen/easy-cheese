@@ -30,6 +30,7 @@ from easy_cheese.shared.wheypoint import (
     canonical,
     grounded,
     lint,
+    lint_freshness,
     projection,
     records,
     storage,
@@ -943,7 +944,9 @@ def test_stale_commit_check_swallows_an_unrunnable_git_but_says_so(
 
     monkeypatch.setattr(git_utils, "run_git", boom)
 
-    findings = lint._stale_commit_findings("deadbeef", repository_root=tmp_path)  # pyright: ignore[reportPrivateUsage]
+    findings = lint_freshness.stale_commit_findings(
+        "deadbeef", repository_root=tmp_path
+    )
 
     assert findings == []
     assert capsys.readouterr().err.splitlines() == [
@@ -981,26 +984,40 @@ def test_stale_commit_fires_when_head_no_longer_descends_from_the_recorded_commi
     # the one the revision recorded, without deleting that commit object.
     _ = git("commit", "-q", "--allow-empty", "--amend", "-m", "first (rewritten)")
 
-    findings = lint._stale_commit_findings(recorded, repository_root=tmp_path)  # pyright: ignore[reportPrivateUsage]
+    findings = lint_freshness.stale_commit_findings(recorded, repository_root=tmp_path)
 
     assert [f.code for f in findings] == [lint.LintCode.STALE_COMMIT]
     assert recorded in findings[0].detail
 
 
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 def test_grounded_path_findings_matches_the_writer_grammar(
-    make_record: Callable[..., WheypointRecord], tmp_path: Path
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _ = (tmp_path / "src.py").write_text("x\n", encoding="utf-8")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    _ = (repo / "src.py").write_text("x\n", encoding="utf-8")
+    monkeypatch.chdir(repo)
     record = make_record(working_context=["src.py", "/abs/path#1-1", "bad#x"])
+    promotion = make_promotion(record=record)
+    store = make_store(corpus_root)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
 
-    findings = lint._grounded_path_findings(record, tmp_path)  # pyright: ignore[reportPrivateUsage]
+    report = check(store)
 
-    assert [f.code for f in findings] == [
-        lint.LintCode.GROUNDED_PATH_MISSING,
-        lint.LintCode.GROUNDED_PATH_MISSING,
+    assert [
+        finding.detail
+        for finding in report.findings
+        if finding.code is lint.LintCode.GROUNDED_PATH_MISSING
+    ] == [
+        "working_context path '/abs/path#1-1' is absolute",
+        "working_context path 'bad#x' is missing",
     ]
-    assert "/abs/path#1-1" in findings[0].detail
-    assert "bad#x" in findings[1].detail
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
@@ -1091,7 +1108,7 @@ def test_external_pointers_in_working_context_are_not_grounded_paths(
         working_context=["src/x.py", "PR#412", "https://example.test/a"]
     )
 
-    findings = lint._grounded_path_findings(record, tmp_path)  # pyright: ignore[reportPrivateUsage]
+    findings = lint_freshness.grounded_path_findings(record, tmp_path)
 
     assert [f.detail for f in findings] == [
         "working_context path 'src/x.py' is missing"
@@ -1103,7 +1120,7 @@ def test_grounded_path_findings_say_why_a_path_is_unusable(
 ) -> None:
     record = make_record(working_context=["/etc/passwd", "../outside.md", "gone.py"])
 
-    findings = lint._grounded_path_findings(record, tmp_path)  # pyright: ignore[reportPrivateUsage]
+    findings = lint_freshness.grounded_path_findings(record, tmp_path)
 
     assert [f.detail for f in findings] == [
         "working_context path '/etc/passwd' is absolute",
@@ -1122,5 +1139,5 @@ def test_a_file_name_carrying_its_own_hash_still_grounds(
 
     assert validated == (entry,)
     record = make_record(working_context=[entry])
-    findings = lint._grounded_path_findings(record, tmp_path)  # pyright: ignore[reportPrivateUsage]
+    findings = lint_freshness.grounded_path_findings(record, tmp_path)
     assert findings == []
