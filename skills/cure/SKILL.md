@@ -94,8 +94,8 @@ Slash commands are host renderings, not the control model.
    Identical baseline failures do not block a clean cure or trigger a halt.
    Fix only new or changed failures.
 5. **Taste-test behavioral fixes.** Run the fresh-context taste test before you write the handoff slug.
-   Resolve the read-only `reviewer` phase agent through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
-   Request the powerful minimum power and high effort.
+   Resolve the read-only `reviewer (taste-test)` phase agent through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
+   Request `default` minimum power and `medium` effort.
    Use the Cook review lenses over the cure diff.
    Halt when fresh-context isolation is unavailable.
    Use an inline self-check only under the small-diff cost gate in [`tdd-loop.md`](../cook/references/tdd-loop.md).

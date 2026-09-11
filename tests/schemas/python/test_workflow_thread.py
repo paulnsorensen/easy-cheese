@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import cast
 
 import attrs
-from attrs import Attribute
 import pytest
 
 import easy_cheese.shared.workflow as workflow_module
@@ -14,15 +13,25 @@ from easy_cheese.shared.artifacts import (
     ResolvedAgentArtifact,
     resolve_artifact,
 )
+from easy_cheese.shared.workflow import (
+    WriterBudgetExceeded,
+    WriterCheckpoint,
+    bind_diagnosis,
+    cook,
+    cure,
+    plan,
+    run_workflow,
+)
 from easy_cheese_schemas.contracts import (
     AgentWriterView,
     ArtifactRef,
     BoundedContextWriterView,
     BoundedScope,
     CoverageDisposition,
+    Criterion,
+    CriterionDisposition,
     CriterionResultWriterView,
     CriterionWriterView,
-    CriterionDisposition,
     CurdDisposition,
     CurdPlan,
     CurdPlanWriterView,
@@ -58,22 +67,12 @@ from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
     supported_version_for,
 )
-from easy_cheese.shared.workflow import (
-    WriterBudgetExceeded,
-    WriterCheckpoint,
-    bind_diagnosis,
-    cook,
-    cure,
-    plan,
-    run_workflow,
-)
 
 HOST_ONLY_FIELDS = {
     "artifact_id",
     "contract_version",
     "coverage",
     "curd_id",
-    "criterion_id",
     "digest",
     "diagnosis_id",
     "evidence",
@@ -87,7 +86,7 @@ HOST_ONLY_FIELDS = {
     "result_id",
     "review_id",
     "revision",
-    "runtime_refs",
+    "provenance_refs",
     "schema_uri",
     "size_bytes",
     "source_curd_ref",
@@ -239,6 +238,7 @@ def run_complete(root: Path, events: list[str], contexts: list[Mapping[str, obje
         return CurdResultWriterView(
             criterion_results=[
                 CriterionResultWriterView(
+                    "workflow-request/plan/curd/1/criterion/1",
                     CriterionDisposition.PASSED,
                     evidence_keys=["result.txt"],
                 )
@@ -265,7 +265,7 @@ def run_complete(root: Path, events: list[str], contexts: list[Mapping[str, obje
 
 def field_names(value: object) -> set[str]:
     if attrs.has(type(value)):
-        fields = cast("tuple[Attribute[object], ...]", attrs.fields(type(value)))
+        fields = cast("tuple[attrs.Attribute[object], ...]", attrs.fields(type(value)))
         names = {attribute.name for attribute in fields}
         return names | set().union(
             *(field_names(cast(object, getattr(value, name))) for name in names)
@@ -306,7 +306,9 @@ def test_complete_thread_orders_real_callbacks_and_authors_contracts(
     result = results[0]
     assert result.result_id == "workflow-request/plan/revision/1/result/1"
     assert result.disposition is CurdDisposition.PASSED
-    assert result.runtime_refs == ("workflow-request/plan/revision/1/result/1/review",)
+    assert result.provenance_refs == (
+        "workflow-request/plan/revision/1/result/1/review",
+    )
     assert result.source_plan_ref.digest == planner.plan.digest
     assert result.source_curd_ref.curd_id == planner.plan.curds[0].curd_id
     assert result.deliverables[0].digest == digest(b"verified workflow output\n")
@@ -325,7 +327,8 @@ def test_writer_context_excludes_every_host_owned_field(tmp_path: Path) -> None:
         b"approved workflow contract\n"
     )
     assert contexts[0]["criteria"] == (
-        CriterionWriterView(
+        Criterion(
+            "workflow-request/plan/curd/1/criterion/1",
             "The workflow artifact is verified",
             "pytest tests/test_workflow.py",
         ),
@@ -381,6 +384,7 @@ def test_partial_plan_runs_runnable_curd_and_diagnoses_failure(tmp_path: Path) -
         return CurdResultWriterView(
             criterion_results=[
                 CriterionResultWriterView(
+                    "workflow-request/plan/curd/1/criterion/1",
                     CriterionDisposition.FAILED,
                     evidence_keys=["input-1"],
                 )
@@ -441,7 +445,7 @@ def test_partial_plan_runs_runnable_curd_and_diagnoses_failure(tmp_path: Path) -
     assert diagnosis_branch.regression_seam is not None
     assert diagnosis_branch.regression_seam.path == "src/workflow.py"
     assert results[0].disposition is CurdDisposition.FAILED
-    assert results[0].runtime_refs == (
+    assert results[0].provenance_refs == (
         "workflow-request/plan/revision/1/result/1/diagnosis",
     )
     retained_source = results[0].criterion_results[0].evidence[0].artifact
@@ -487,6 +491,7 @@ def test_multi_curd_branches_keep_subjects_and_evidence_isolated(
         return CurdResultWriterView(
             criterion_results=[
                 CriterionResultWriterView(
+                    cast(tuple[Criterion, ...], context["criteria"])[0].criterion_id,
                     disposition,
                     evidence_keys=["input-1"],
                 )
@@ -648,6 +653,7 @@ def test_duplicate_deliverable_path_blocks_the_curd_result(
         return CurdResultWriterView(
             criterion_results=[
                 CriterionResultWriterView(
+                    "workflow-request/plan/curd/1/criterion/1",
                     CriterionDisposition.PASSED,
                     evidence_keys=["result.txt"],
                 )
@@ -687,6 +693,7 @@ def test_distinct_deliverable_paths_are_all_retained(tmp_path: Path) -> None:
         return CurdResultWriterView(
             criterion_results=[
                 CriterionResultWriterView(
+                    "workflow-request/plan/curd/1/criterion/1",
                     CriterionDisposition.PASSED,
                     evidence_keys=["result.txt", "report.txt"],
                 )
@@ -971,6 +978,7 @@ def test_plan_wide_shared_inputs_and_evidence_resolve_once(
         return CurdResultWriterView(
             criterion_results=[
                 CriterionResultWriterView(
+                    "workflow-request/plan/curd/1/criterion/1",
                     CriterionDisposition.PASSED,
                     evidence_keys=["input-1"],
                 )
@@ -1075,6 +1083,7 @@ def test_budget_overrun_retains_completed_repairs_and_next_action(
             reason="context budget reached after the first repair",
             completed=[
                 CriterionResultWriterView(
+                    "workflow-request/plan/curd/1/criterion/1",
                     CriterionDisposition.PASSED,
                     evidence_keys=["repair.txt"],
                 )
@@ -1145,6 +1154,7 @@ def test_full_coverage_budget_checkpoint_is_rejected_without_review(
     _ = (tmp_path / "repair.txt").write_bytes(payload)
     events: list[str] = []
     passed = CriterionResultWriterView(
+        "workflow-request/plan/curd/1/criterion/1",
         CriterionDisposition.PASSED,
         evidence_keys=["repair.txt"],
     )
@@ -1177,6 +1187,7 @@ def test_invalid_budget_checkpoint_with_an_unreadable_deliverable_stays_blocked(
 ) -> None:
     events: list[str] = []
     passed = CriterionResultWriterView(
+        "workflow-request/plan/curd/1/criterion/1",
         CriterionDisposition.PASSED,
         evidence_keys=["missing.txt"],
     )
@@ -1217,6 +1228,7 @@ def test_budget_checkpoint_with_an_unfinished_completed_entry_is_rejected(
             reason="budget reached",
             completed=[
                 CriterionResultWriterView(
+                    "workflow-request/plan/curd/1/criterion/1",
                     CriterionDisposition.SKIPPED,
                     reason="not attempted yet",
                 )

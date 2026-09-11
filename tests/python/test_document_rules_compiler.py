@@ -82,6 +82,7 @@ def test_mold_spec_document_declares_cross_field_rules() -> None:
         "grounding-probe-recorded",
         "delegation-digest-recorded",
         "not-applicable-closed-class",
+        "landing-closed-class",
     }
 
 
@@ -272,6 +273,7 @@ def test_generated_document_rules_module_imports_only_stdlib_names() -> None:
         "grounding-probe-recorded",
         "delegation-digest-recorded",
         "not-applicable-closed-class",
+        "landing-closed-class",
     }
     assert set(cast(dict[str, object], rules["enums"])) == {
         "mode",
@@ -280,6 +282,9 @@ def test_generated_document_rules_module_imports_only_stdlib_names() -> None:
         "gate_applicability_disposition",
         "work_class",
         "ui_surface",
+        "landing_shape",
+        "per_layer_green",
+        "review_fixes",
     }
 
 

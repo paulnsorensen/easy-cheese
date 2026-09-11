@@ -15,16 +15,20 @@ Ordinary single pull request work never reads this file.
    Each layer's pull request body follows `ordinary-pr.md` § Body contract, including `## Non-obvious changes`.
    Put semantics-preserving layers below the semantic changes that depend on their reorganization.
 3. Create or adopt provider lineage in the approved bottom-to-top order.
-4. For **each layer**, bottom to top:
+4. Read the spec's `landing.per_layer_green` before publishing any layer.
+   `required` (the default) means every layer's quality gate must pass before the
+   next layer is published. `tip-only` means only the top layer's gate must pass
+   before the chain is submitted; a lower layer's gate failure does not block it.
+5. For **each layer**, bottom to top:
    1. Check out its provider-tracked branch.
    2. Run the final writing gate for that layer. Then read every write back.
    3. Run the repository quality gate.
    4. Inspect the layer diff. Then stage only its named paths.
    5. Create a new Conventional Commit without skipping hooks.
    6. Verify the commit's paths and the layer's parent.
-5. Inspect or restack the complete chain through the provider.
-6. Submit the complete chain after you verify all layers.
-7. Read back every PR, base and head pair, and provider stack map.
+6. Inspect or restack the complete chain through the provider.
+7. Submit the complete chain after you verify all layers.
+8. Read back every PR, base and head pair, and provider stack map.
 
 Never manufacture split boundaries. Never move a shared artifact to a convenient upper layer.
 Never submit a partially verified chain.

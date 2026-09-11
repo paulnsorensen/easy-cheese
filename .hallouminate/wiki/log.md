@@ -80,3 +80,7 @@
 
 
 - 2026-09-05 · bef0ae510984cffd · new-page · research/language-reviewability-evidence.md · promoted research report: diff size beats language choice (200–400 LOC), Ray et al. overturned by Berger et al., ~15% typed-JS bug catch, memory-safety class elimination, 19% faster defect finding with full-word identifiers, Python/TS/Go tiering, easy-cheese skill touchpoints.
+
+- 2026-09-10 · session-analytics:fan-out · new-page · research/subagent-model-selection-portability.md · per-harness model-selection bindings (Claude Code, Cursor, Copilot, Codex, OMP); Agent Skills spec has no model field; bind `cheap|default|powerful` once in routing-policy.md.
+- 2026-09-10 · session-analytics:fan-out · new-page · analytics/fanout-patterns-2026-09-10.md · no parallel fan-out, coder chains are continuations, age absorbs cure (67 coders), reviewer mode gate never fires, taste-test fix-rate parity → `reviewer (taste-test)` and `gate-runner` tier rows; time-ordered attribution gotcha.
+

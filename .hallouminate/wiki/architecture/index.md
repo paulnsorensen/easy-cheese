@@ -10,6 +10,7 @@
 - [pyz-bundling-pipeline](./pyz-bundling-pipeline.md) — Pyz bundling pipeline
 - [schema-similarity-and-consolidation-audit](./schema-similarity-and-consolidation-audit.md) — Schema similarity and consolidation audit
 - [skill-python-bundle-doctrine](./skill-python-bundle-doctrine.md) — Skill Python bundle doctrine
+- [spec-landing-block](./spec-landing-block.md) — Spec landing block: the PR shape is settled at mold time
 - [ultracook-agent-topology](./ultracook-agent-topology.md) — Ultracook agent topology (now owned by /cook's fan pathway)
 - [ultracook-runtime-retirement](./ultracook-runtime-retirement.md) — Ultracook runtime retirement
 - [workflow-contract-map](./workflow-contract-map.md) — Workflow contract map

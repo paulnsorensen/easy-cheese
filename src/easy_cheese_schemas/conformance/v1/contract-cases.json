@@ -484,7 +484,7 @@
         "unresolved_work": [
           "Start the CLI dependency"
         ],
-        "runtime_refs": []
+        "provenance_refs": []
       },
       "expected": {
         "status": "accept",

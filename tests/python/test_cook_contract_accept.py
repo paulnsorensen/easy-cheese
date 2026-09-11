@@ -49,6 +49,55 @@ DOC_PAYLOAD: dict[str, object] = {
 
 DOC = {"kind": "curd_plan", "payload": DOC_PAYLOAD}
 
+TWO_CURD_DOC_PAYLOAD: dict[str, object] = {
+    "objective": "Ship the approved behavior",
+    "curds": [
+        {
+            "key": "c1",
+            "outcome": "Implement the first curd",
+            "scope": {"paths": ["src/c1.py"]},
+            "outputs": ["c1 landed"],
+            "dependencies": ["c2"],
+            "criteria": [
+                {
+                    "description": "c1 behaves",
+                    "check": "uv run pytest tests/test_c1.py",
+                }
+            ],
+        },
+        {
+            "key": "c2",
+            "outcome": "Implement the second curd",
+            "scope": {"paths": ["src/c2.py"]},
+            "outputs": ["c2 landed"],
+            "criteria": [
+                {
+                    "description": "c2 behaves",
+                    "check": "uv run pytest tests/test_c2.py",
+                }
+            ],
+        },
+    ],
+}
+
+TWO_CURD_DOC = {"kind": "curd_plan", "payload": TWO_CURD_DOC_PAYLOAD}
+
+MINI_SPEC_FIXTURE = (
+    REPO_ROOT / "tests/python/fixtures/spec_format/valid_red_required_mini_spec.md"
+)
+
+
+def _spec_with_landing(tmp_path: Path, landing_block: str) -> Path:
+    text = MINI_SPEC_FIXTURE.read_text(encoding="utf-8")
+    text = text.replace(
+        "gate_applicability:",
+        f"{landing_block}\ngate_applicability:",
+    )
+    spec_path = tmp_path / "spec.md"
+    _ = spec_path.write_text(text, encoding="utf-8")
+    return spec_path
+
+
 CURD_PLAN_SCHEMA_URI = "https://schemas.easy-cheese.dev/curd-plan"
 
 INVOCATION = {
@@ -107,9 +156,9 @@ def _publish(
     return pointer_path, pointer
 
 
-def _accept(pointer_path: Path) -> subprocess.CompletedProcess[str]:
+def _accept(pointer_path: Path, *extra_args: str) -> subprocess.CompletedProcess[str]:
     cook_pyz = build_pyz.cached_bundle("cook")
-    return _run(cook_pyz, "accept", str(pointer_path))
+    return _run(cook_pyz, "accept", str(pointer_path), *extra_args)
 
 
 def _assert_canonical_wrapper(stdout: str) -> dict[str, object]:
@@ -294,3 +343,220 @@ def test_cook_pyz_accepts_bare_relative_pointer_from_pointers_dir(
     value = cast(dict[str, object], wrapper["value"])
     assert value["plan_id"] == INVOCATION["plan_id"]
     assert pointer["destination_phase"] == "cook"
+
+
+def test_cook_pyz_refuses_a_plan_that_crosses_landing_layers(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-landing-refused", doc=TWO_CURD_DOC)
+    spec_path = _spec_with_landing(
+        tmp_path,
+        "landing:\n  shape: stacked_linear\n"
+        + '  layers: [["curdplan-cook-accept-1/curd/1"], ["curdplan-cook-accept-1/curd/2"]]',
+    )
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert (
+        "landing-layer-order curd 'curdplan-cook-accept-1/curd/1' in layer 1 "
+        "depends on 'curdplan-cook-accept-1/curd/2' in layer 2"
+    ) in result.stderr
+    assert "Traceback" not in result.stderr
+    assert result.stdout == ""
+
+
+def test_cook_pyz_accepts_a_plan_that_matches_landing_layers(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-landing-matches", doc=TWO_CURD_DOC)
+    spec_path = _spec_with_landing(
+        tmp_path,
+        "landing:\n  shape: stacked_linear\n"
+        + '  layers: [["curdplan-cook-accept-1/curd/2"], ["curdplan-cook-accept-1/curd/1"]]',
+    )
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 0, result.stdout + result.stderr
+    wrapper = cast(dict[str, object], json.loads(result.stdout))
+    assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
+
+
+def test_cook_pyz_accepts_a_plan_when_spec_has_no_landing_block(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-landing-absent", doc=TWO_CURD_DOC)
+    result = _accept(pointer_path, "--spec", str(MINI_SPEC_FIXTURE))
+    assert result.returncode == 0, result.stdout + result.stderr
+    wrapper = cast(dict[str, object], json.loads(result.stdout))
+    assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
+
+
+def test_cook_pyz_rejects_a_missing_spec_file(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-missing-spec")
+    missing_spec = tmp_path / "does-not-exist.md"
+    result = _accept(pointer_path, "--spec", str(missing_spec))
+    assert result.returncode == 1, result.stdout + result.stderr
+    quoted = repr(str(missing_spec))
+    assert (
+        f"ERROR: cannot read spec {quoted}: "
+        f"[Errno 2] No such file or directory: {quoted}"
+    ) in result.stderr
+    assert "Traceback" not in result.stderr
+    assert result.stdout == ""
+
+
+def test_cook_pyz_rejects_a_malformed_landing_block(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-malformed-landing")
+    spec_path = _spec_with_landing(tmp_path, "landing:\n  shape: sideways")
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "landing-closed-class" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert result.stdout == ""
+
+
+def test_cook_pyz_refuses_a_plan_missing_a_curd_from_layers(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-missing-curd", doc=TWO_CURD_DOC)
+    spec_path = _spec_with_landing(
+        tmp_path,
+        "landing:\n  shape: stacked_linear\n"
+        + '  layers: [["curdplan-cook-accept-1/curd/1"]]',
+    )
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert (
+        "landing-layer-missing-curd curd 'curdplan-cook-accept-1/curd/2' is missing from "
+        + "landing.layers"
+    ) in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_cook_pyz_refuses_a_plan_naming_an_unknown_curd_in_layers(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-unknown-curd", doc=TWO_CURD_DOC)
+    spec_path = _spec_with_landing(
+        tmp_path,
+        "landing:\n  shape: stacked_linear\n"
+        + '  layers: [["curdplan-cook-accept-1/curd/1"], '
+        + '["curdplan-cook-accept-1/curd/2"], ["curdplan-cook-accept-1/curd/9"]]',
+    )
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "landing-layer-unknown-curd landing.layers names unknown curd" in result.stderr
+    assert "curdplan-cook-accept-1/curd/9" in result.stderr
+
+
+def test_cook_pyz_accepts_same_layer_dependency(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-same-layer", doc=TWO_CURD_DOC)
+    spec_path = _spec_with_landing(
+        tmp_path,
+        "landing:\n  shape: stacked_linear\n"
+        + '  layers: [["curdplan-cook-accept-1/curd/1", "curdplan-cook-accept-1/curd/2"]]',
+    )
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 0, result.stdout + result.stderr
+    wrapper = cast(dict[str, object], json.loads(result.stdout))
+    assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
+
+
+def test_cook_pyz_accepts_single_shape_with_empty_layers_for_two_curd_plan(
+    tmp_path: Path,
+) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-single-empty-layers", doc=TWO_CURD_DOC)
+    spec_path = _spec_with_landing(tmp_path, "landing:\n  shape: single\n  layers: []")
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 0, result.stdout + result.stderr
+    wrapper = cast(dict[str, object], json.loads(result.stdout))
+    assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
+
+
+def test_cook_pyz_says_on_stderr_whether_landing_layers_were_checked(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-landing-note", doc=TWO_CURD_DOC)
+    unchecked = _accept(pointer_path)
+    assert unchecked.returncode == 0, unchecked.stdout + unchecked.stderr
+    assert "NOTE: landing layers not checked (no --spec)" in unchecked.stderr
+    layered_spec = _spec_with_landing(
+        tmp_path,
+        "landing:\n  shape: stacked_linear\n"
+        + '  layers: [["curdplan-cook-accept-1/curd/2"], ["curdplan-cook-accept-1/curd/1"]]',
+    )
+    layered = _accept(pointer_path, "--spec", str(layered_spec))
+    assert layered.returncode == 0, layered.stdout + layered.stderr
+    assert "NOTE: landing layers checked against " in layered.stderr
+
+
+def test_cook_pyz_says_landing_layers_not_checked_when_spec_has_no_landing_block(
+    tmp_path: Path,
+) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-landing-none", doc=TWO_CURD_DOC)
+    result = _accept(pointer_path, "--spec", str(MINI_SPEC_FIXTURE))
+    assert result.returncode == 0, result.stdout + result.stderr
+    quoted = repr(str(MINI_SPEC_FIXTURE))
+    assert f"NOTE: landing layers not checked ({quoted} has no landing block)" in result.stderr
+    assert "ERROR:" not in result.stderr
+
+
+def test_cook_pyz_says_landing_layers_not_checked_when_spec_declares_shape_single(
+    tmp_path: Path,
+) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-landing-single", doc=TWO_CURD_DOC)
+    spec_path = _spec_with_landing(tmp_path, "landing:\n  shape: single\n  layers: []")
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 0, result.stdout + result.stderr
+    quoted = repr(str(spec_path))
+    assert f"NOTE: landing layers not checked ({quoted} declares shape single)" in result.stderr
+    assert "ERROR:" not in result.stderr
+
+
+def test_cook_pyz_rejects_a_non_utf8_spec_without_a_traceback(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-binary-spec", doc=TWO_CURD_DOC)
+    spec_path = tmp_path / "binary.md"
+    _ = spec_path.write_bytes(b"---\nlanding:\n  shape: single\n---\n\xff\xfe")
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert f"ERROR: cannot read spec {str(spec_path)!r}" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert result.stdout == ""
+
+
+def test_cook_pyz_rejects_a_spec_that_is_not_a_regular_file(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-dir-spec", doc=TWO_CURD_DOC)
+    result = _accept(pointer_path, "--spec", str(tmp_path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    quoted = repr(str(tmp_path))
+    assert (
+        f"ERROR: cannot read spec {quoted}: [Errno 21] Is a directory: {quoted}"
+        in result.stderr
+    )
+    assert "Traceback" not in result.stderr
+
+
+def test_cook_pyz_rejects_a_spec_larger_than_the_byte_cap(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-huge-spec", doc=TWO_CURD_DOC)
+    spec_path = tmp_path / "huge.md"
+    _ = spec_path.write_bytes(b"---\nlanding:\n  shape: single\n---\n" + b"x" * 1_000_001)
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert (
+        f"ERROR: cannot read spec {str(spec_path)!r}: larger than 1000000 bytes"
+        in result.stderr
+    )
+    assert "Traceback" not in result.stderr
+    assert result.stdout == ""
+
+
+def test_cook_pyz_escapes_a_spec_path_that_could_forge_a_stderr_line(tmp_path: Path) -> None:
+    pointer_path, _pointer = _publish(tmp_path, "op-evil-path", doc=TWO_CURD_DOC)
+    spec_path = tmp_path / "evil\nERROR: forged.md"
+    _ = spec_path.write_text(MINI_SPEC_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "\nERROR:" not in result.stderr
+    assert "evil\\nERROR: forged.md" in result.stderr
+
+
+def test_cook_pyz_escapes_a_newline_spec_path_that_is_not_a_regular_file(
+    tmp_path: Path,
+) -> None:
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("platform has no os.mkfifo")
+    pointer_path, _pointer = _publish(tmp_path, "op-evil-fifo", doc=TWO_CURD_DOC)
+    spec_path = tmp_path / "evil\nERROR: forged.md"
+    os.mkfifo(spec_path)
+    result = _accept(pointer_path, "--spec", str(spec_path))
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "\nERROR:" not in result.stderr
+    quoted = repr(str(spec_path))
+    assert f"ERROR: cannot read spec {quoted}: not a regular file: {quoted}" in result.stderr
+    assert "Traceback" not in result.stderr

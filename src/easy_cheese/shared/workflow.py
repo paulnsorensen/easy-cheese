@@ -13,20 +13,15 @@ from urllib.parse import quote, urlsplit
 
 import attrs
 from attrs import Attribute
-from .artifacts import (
-    MAX_ARTIFACT_BYTES,
-    read_repository_artifact,
-    resolve_verified_bytes,
-    resolve_artifact,
-)
+
 from easy_cheese_schemas.contracts import (
     AgentWriterView,
     ArtifactRef,
     ContractVersion,
     CoverageDisposition,
+    Criterion,
     CriterionDisposition,
     CriterionResultWriterView,
-    CriterionWriterView,
     CurdPlan,
     CurdResult,
     CurdResultWriterView,
@@ -67,6 +62,13 @@ from easy_cheese_schemas.schema_runtime import (
     normalize_agent_output,
     supported_version_for,
     validate_curd_plan,
+)
+
+from .artifacts import (
+    MAX_ARTIFACT_BYTES,
+    read_repository_artifact,
+    resolve_artifact,
+    resolve_verified_bytes,
 )
 
 PlannerDispatch = Callable[[PlannerRequest], object]
@@ -365,9 +367,7 @@ def _writer_context(
         "scope": curd.scope,
         "inputs": resolved_inputs,
         "outputs": curd.outputs,
-        "criteria": tuple(
-            CriterionWriterView(item.description, item.check) for item in curd.criteria
-        ),
+        "criteria": curd.criteria,
         "shared_inputs": shared_inputs,
         "constraints": () if plan.context is None else plan.context.constraints,
         "invariants": () if plan.context is None else plan.context.invariants,
@@ -596,16 +596,19 @@ def _reviewed_result_view(
         )
         rows = tuple(
             CriterionResultWriterView(
+                item.criterion_id,
                 CriterionDisposition.FAILED,
                 evidence_keys=evidence_keys,
             )
-            for _ in view.criterion_results
+            for item in view.criterion_results
         )
         return CurdResultWriterView(rows, view.deliverables, view.unresolved_work)
     reason = review.reason or "Review did not cover the curd result"
     rows = tuple(
-        CriterionResultWriterView(CriterionDisposition.BLOCKED, reason=reason)
-        for _ in view.criterion_results
+        CriterionResultWriterView(
+            item.criterion_id, CriterionDisposition.BLOCKED, reason=reason
+        )
+        for item in view.criterion_results
     )
     return CurdResultWriterView(
         rows,
@@ -683,10 +686,14 @@ def _writer_view(output: object) -> CurdResultWriterView:
     )
 
 
-def _blocked_rows(count: int, reason: str) -> Iterator[CriterionResultWriterView]:
+def _blocked_rows(
+    criteria: tuple[Criterion, ...], reason: str
+) -> Iterator[CriterionResultWriterView]:
     return (
-        CriterionResultWriterView(CriterionDisposition.BLOCKED, reason=reason)
-        for _row in range(count)
+        CriterionResultWriterView(
+            criterion.criterion_id, CriterionDisposition.BLOCKED, reason=reason
+        )
+        for criterion in criteria
     )
 
 
@@ -697,7 +704,7 @@ def _blocked_writer_view(
     deliverables: tuple[DeliverableWriterView, ...] = (),
 ) -> CurdResultWriterView:
     return CurdResultWriterView(
-        criterion_results=tuple(_blocked_rows(len(curd.criteria), reason)),
+        criterion_results=tuple(_blocked_rows(curd.criteria, reason)),
         deliverables=deliverables,
         unresolved_work=(reason,),
     )
@@ -708,19 +715,7 @@ def _checkpoint_writer_view(
     reason: str,
     checkpoint: WriterCheckpoint,
 ) -> CurdResultWriterView:
-    """Host-finalize an overrun into a partial result the next dispatch resumes.
-
-    ``checkpoint.completed`` is a prefix of ``curd.criteria`` in curd-definition
-    order: entry ``i`` reports the disposition of ``curd.criteria[i]``. A
-    checkpoint may only report criteria it actually finished — never a
-    criterion it has not reached yet — so every entry must be PASSED or
-    FAILED. Criteria the writer finished keep their disposition, evidence, and
-    deliverables; every criterion it did not reach is blocked on the overrun
-    reason. A checkpoint may never cover the whole curd: the review branch is
-    skipped on this path, so a full-coverage checkpoint would be a pass no
-    reviewer ever saw.
-    """
-
+    """Finalize completed criteria and block each criterion not completed."""
     for position, item in enumerate(checkpoint.completed, start=1):
         if item.disposition not in (
             CriterionDisposition.PASSED,
@@ -730,15 +725,26 @@ def _checkpoint_writer_view(
                 f"budget checkpoint completed[{position}] must be finished "
                 + f"(passed or failed), not {item.disposition.value}"
             )
+    completed_ids = [item.criterion_id for item in checkpoint.completed]
     if len(checkpoint.completed) >= len(curd.criteria):
         raise ValueError(
             "budget checkpoint must leave at least one criterion unfinished, "
             + f"not {len(checkpoint.completed)} of {len(curd.criteria)}"
         )
+    if len(completed_ids) != len(set(completed_ids)):
+        raise ValueError("budget checkpoint must not repeat criterion_id")
+    expected_ids = {criterion.criterion_id for criterion in curd.criteria}
+    if not set(completed_ids).issubset(expected_ids):
+        raise ValueError("budget checkpoint contains an unknown criterion_id")
+    remaining = tuple(
+        criterion
+        for criterion in curd.criteria
+        if criterion.criterion_id not in completed_ids
+    )
     return CurdResultWriterView(
         criterion_results=(
             *checkpoint.completed,
-            *_blocked_rows(len(curd.criteria) - len(checkpoint.completed), reason),
+            *_blocked_rows(remaining, reason),
         ),
         deliverables=checkpoint.deliverables,
         unresolved_work=(reason, *checkpoint.remaining),
@@ -752,7 +758,7 @@ def _result_invocation(
     *,
     evidence: Mapping[str, EvidenceRef],
     deliverables: Mapping[str, ArtifactRef],
-    runtime_refs: tuple[str, ...],
+    provenance_refs: tuple[str, ...],
 ) -> dict[str, object]:
     return {
         "result_id": f"{plan.plan_id}/revision/{plan.revision}/result/{index}",
@@ -761,7 +767,7 @@ def _result_invocation(
         "expected_criterion_ids": [item.criterion_id for item in curd.criteria],
         "evidence": evidence,
         "deliverables": deliverables,
-        "runtime_refs": runtime_refs,
+        "provenance_refs": provenance_refs,
         "contract_version": _version(CurdResult),
     }
 
@@ -783,7 +789,7 @@ def _blocked_result(
         index,
         evidence=resolved_evidence or {},
         deliverables=resolved_deliverables or {},
-        runtime_refs=provenance_refs,
+        provenance_refs=provenance_refs,
     )
     canonical = _normalize(
         _blocked_writer_view(curd, reason, deliverables=deliverable_views),
@@ -864,7 +870,7 @@ def _finalize_view(
         index,
         evidence=host_evidence,
         deliverables=deliverables,
-        runtime_refs=provenance_refs,
+        provenance_refs=provenance_refs,
     )
     return _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation), deliverables
 
@@ -1081,10 +1087,15 @@ def _execute_curd(
                 host_evidence[item.evidence_id] = item
         runtime_ref = branch.review_id
     else:
+        failed_ids = {
+            row.criterion_id
+            for row in writer_view.criterion_results
+            if row.disposition is not CriterionDisposition.PASSED
+        }
         failed = [
             criterion.description
-            for criterion, row in zip(curd.criteria, writer_view.criterion_results)
-            if row.disposition is not CriterionDisposition.PASSED
+            for criterion in curd.criteria
+            if criterion.criterion_id in failed_ids
         ]
         request = DiagnosisRequest(
             contract_version=_version(DiagnosisRequest),
@@ -1123,7 +1134,7 @@ def _execute_curd(
         index,
         evidence=host_evidence,
         deliverables=deliverables,
-        runtime_refs=(*provenance_refs, runtime_ref),
+        provenance_refs=(*provenance_refs, runtime_ref),
     )
     try:
         final = _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation)

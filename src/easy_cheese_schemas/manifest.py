@@ -22,6 +22,7 @@ from typing import Protocol, cast
 
 from attrs import define, field, validators
 
+from easy_cheese_schemas.contracts import LandingShape
 from easy_cheese_schemas.pr_plan import PrPlan
 from easy_cheese_schemas.wiring_graph import cycle_errors
 
@@ -69,6 +70,7 @@ __all__ = [
     "Phase",
     "PlateLayout",
     "PostReview",
+    "plate_layout_for",
     "Power",
     "RepairDispatch",
     "ResolvedAgent",
@@ -180,6 +182,14 @@ class PermissionEnforcement(str, Enum):
 class PlateLayout(str, Enum):
     SINGLE = "single"
     STACKED = "stacked"
+
+
+def plate_layout_for(shape: LandingShape) -> PlateLayout:
+    """Project a spec's landing shape onto the plate layout.
+
+    ``single`` stays single. Every other shape lands on a stacked plate.
+    """
+    return PlateLayout.SINGLE if shape is LandingShape.SINGLE else PlateLayout.STACKED
 
 
 def _non_empty_string(_instance: object, attribute: _NamedAttribute, value: object) -> None:

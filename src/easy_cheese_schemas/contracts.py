@@ -3,9 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
-from collections.abc import Iterable
 from typing import ClassVar, Protocol, TypeVar, cast
 
 import attrs
@@ -29,6 +28,7 @@ _MEDIA_TYPE_RE = re.compile(
     r"[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[^\r\n]+)?"
 )
 _URI_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:.+")
+
 
 class _NamedAttribute(Protocol):
     name: str
@@ -324,15 +324,11 @@ def _positive_integer(
 
 
 @schema_constraints(minimum=0, maximum=MAX_ARTIFACT_BYTES)
-def _artifact_size(
-    instance: object, attribute: _NamedAttribute, value: object
-) -> None:
+def _artifact_size(instance: object, attribute: _NamedAttribute, value: object) -> None:
     _non_negative_integer(instance, attribute, value)
     assert isinstance(value, int)
     if value > MAX_ARTIFACT_BYTES:
-        raise ValueError(
-            f"{attribute.name} must be at most {MAX_ARTIFACT_BYTES} bytes"
-        )
+        raise ValueError(f"{attribute.name} must be at most {MAX_ARTIFACT_BYTES} bytes")
 
 
 @schema_constraints(minimum=0)
@@ -343,7 +339,6 @@ def _non_negative_integer(
         raise ValueError(f"{attribute.name} must be a non-negative integer")
 
 
- 
 @schema_constraints(pattern=_VERSION_RE.pattern, minLength=1)
 def _version_component(
     _instance: object, attribute: _NamedAttribute, value: object
@@ -700,6 +695,7 @@ class HandoffPointer:
         validator=validators.optional(validators.instance_of(ArtifactRef)),
     )
 
+
 @schema_constraints(
     _if_equals(
         "identity_action",
@@ -709,11 +705,7 @@ class HandoffPointer:
     _if_equals(
         "identity_action",
         "retain",
-        {
-            "properties": {
-                "source_curd_ids": {"minItems": 1, "maxItems": 1}
-            }
-        },
+        {"properties": {"source_curd_ids": {"minItems": 1, "maxItems": 1}}},
     ),
     _if_equals(
         "identity_action",
@@ -910,6 +902,48 @@ def _validate_plan_curds(
 
     for curd_id in dependencies:
         visit(curd_id)
+
+
+def landing_layer_errors(plan: CurdPlan, landing: Landing) -> tuple[str, ...]:
+    """Return landing-layer errors for a plan against the spec's declared layers.
+
+    Reads only declared ``dependencies``, never final-state behavior. Empty
+    ``landing.layers`` means the spec named no layers and yields no errors.
+    Each error starts with one of three tokens: ``landing-layer-unknown-curd``
+    (a layer names a curd the plan lacks), ``landing-layer-missing-curd`` (a
+    plan curd appears in no layer), or ``landing-layer-order`` (a curd depends
+    on a curd in a later layer). ``Landing`` already forbids a curd id in two
+    layers, so the first layer that names an id is the only one.
+    """
+    if not landing.layers:
+        return ()
+    curd_ids = {curd.curd_id for curd in plan.curds}
+    layer_index: dict[str, int] = {}
+    unknown_errors: list[str] = []
+    for index, layer in enumerate(landing.layers):
+        for curd_id in layer:
+            layer_index[curd_id] = index
+            if curd_id not in curd_ids:
+                unknown_errors.append(
+                    f"landing-layer-unknown-curd landing.layers names unknown curd {curd_id!r}"
+                )
+    missing_errors: list[str] = []
+    order_errors: list[str] = []
+    for curd in plan.curds:
+        layer_of_curd = layer_index.get(curd.curd_id)
+        if layer_of_curd is None:
+            missing_errors.append(
+                f"landing-layer-missing-curd curd {curd.curd_id!r} is missing from landing.layers"
+            )
+            continue
+        for dependency in curd.dependencies:
+            layer_of_dependency = layer_index.get(dependency)
+            if layer_of_dependency is not None and layer_of_dependency > layer_of_curd:
+                order_errors.append(
+                    f"landing-layer-order curd {curd.curd_id!r} in layer {layer_of_curd + 1} "
+                    + f"depends on {dependency!r} in layer {layer_of_dependency + 1}"
+                )
+    return tuple(unknown_errors) + tuple(missing_errors) + tuple(order_errors)
 
 
 @contract("curd-plan")
@@ -1111,8 +1145,7 @@ def _validate_planner_disposition(
         if not unresolved_work:
             raise ValueError(f"partial {label} must describe omitted work")
         if any(
-            item.scope is not UncertaintyScope.OMITTED_WORK
-            for item in unresolved_work
+            item.scope is not UncertaintyScope.OMITTED_WORK for item in unresolved_work
         ):
             raise ValueError(
                 f"partial {label} uncertainty must concern omitted work only"
@@ -1133,9 +1166,7 @@ def _validate_planner_disposition(
         }
         and unresolved_work
     ):
-        raise ValueError(
-            f"{disposition.value} {label} must not carry unresolved work"
-        )
+        raise ValueError(f"{disposition.value} {label} must not carry unresolved work")
     if not reason:
         raise ValueError(f"{disposition.value} {label} must include a reason")
 
@@ -1158,9 +1189,7 @@ _PLANNER_RESULT_SCHEMA_CONSTRAINTS = (
             "properties": {
                 "unresolved_work": {
                     "minItems": 1,
-                    "items": {
-                        "properties": {"scope": {"const": "omitted_work"}}
-                    },
+                    "items": {"properties": {"scope": {"const": "omitted_work"}}},
                 }
             },
             **_without("reason"),
@@ -1227,7 +1256,9 @@ class PlannerResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         _validate_planner_disposition(
             self.disposition,
             self.plan,
@@ -1272,7 +1303,9 @@ class ReviewCoverage:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if self.disposition is CoverageDisposition.NOT_COVERED and not self.reason:
             raise ValueError("not_covered review coverage must include a reason")
         if self.disposition is CoverageDisposition.COVERED and self.reason is not None:
@@ -1317,9 +1350,7 @@ _REVIEW_RESULT_TERMINAL_SCHEMA_CONSTRAINTS = tuple(
                 "findings": {"maxItems": 0},
                 "coverage": {
                     "minItems": 1,
-                    "items": {
-                        "properties": {"disposition": {"const": "covered"}}
-                    },
+                    "items": {"properties": {"disposition": {"const": "covered"}}},
                 },
             },
         },
@@ -1356,7 +1387,9 @@ class ReviewResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         duplicate_target = _unique_by("target", self.coverage)
         if duplicate_target is not None:
             raise ValueError(f"coverage target {duplicate_target!r} must be unique")
@@ -1489,7 +1522,9 @@ class DiagnosisHypothesis:
     )
 
     @evidence.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if (
             self.disposition is not HypothesisDisposition.UNRESOLVED
             and not self.evidence
@@ -1595,7 +1630,9 @@ class DiagnosisResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         duplicate = _unique_by("hypothesis_id", self.hypotheses)
         if duplicate is not None:
             raise ValueError(f"hypothesis_id {duplicate!r} must be unique")
@@ -1650,9 +1687,7 @@ def _criterion_result_schema_constraints(
             for disposition in ("passed", "failed")
         ),
         *(
-            _if_equals(
-                "disposition", disposition, {"required": ["reason"]}
-            )
+            _if_equals("disposition", disposition, {"required": ["reason"]})
             for disposition in ("blocked", "skipped")
         ),
     )
@@ -1673,7 +1708,9 @@ class CriterionResult:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if (
             self.disposition
             in {
@@ -1748,11 +1785,11 @@ class CurdResult:
     unresolved_work: tuple[str, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
-    runtime_refs: tuple[str, ...] = field(
+    provenance_refs: tuple[str, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
 
-    @runtime_refs.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    @provenance_refs.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_result(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
         result_ids = [row.criterion_id for row in self.criterion_results]
         if len(result_ids) != len(set(result_ids)):
@@ -1929,7 +1966,9 @@ class PlannerResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         _validate_planner_disposition(
             self.disposition,
             self.plan,
@@ -1976,7 +2015,9 @@ class ReviewResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if self.disposition is ReviewDisposition.CLEAN and self.findings:
             raise ValueError("clean review writer view must not include findings")
         if self.disposition is ReviewDisposition.FINDINGS and not self.findings:
@@ -2036,9 +2077,7 @@ class ReproductionWriterView:
             raise ValueError("blocked writer reproduction must explain the blocker")
 
 
-@schema_constraints(
-    *_diagnosis_hypothesis_schema_constraints("evidence_keys")
-)
+@schema_constraints(*_diagnosis_hypothesis_schema_constraints("evidence_keys"))
 @define(frozen=True)
 class DiagnosisHypothesisWriterView:
     statement: str = field(validator=_bounded_string)
@@ -2050,7 +2089,9 @@ class DiagnosisHypothesisWriterView:
     )
 
     @evidence_keys.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if (
             self.disposition is not HypothesisDisposition.UNRESOLVED
             and not self.evidence_keys
@@ -2072,9 +2113,7 @@ class DiagnosisCauseWriterView:
     )
 
 
-@schema_constraints(
-    *_diagnosis_result_schema_constraints("unresolved_evidence_keys")
-)
+@schema_constraints(*_diagnosis_result_schema_constraints("unresolved_evidence_keys"))
 @define(frozen=True)
 class DiagnosisResultWriterView:
     disposition: DiagnosisDisposition = field(
@@ -2100,7 +2139,9 @@ class DiagnosisResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if self.disposition is DiagnosisDisposition.CONFIRMED:
             if self.reproduction.status is not ReproductionDisposition.REPRODUCED:
                 raise ValueError(
@@ -2144,6 +2185,7 @@ class DiagnosisResultWriterView:
 @schema_constraints(*_criterion_result_schema_constraints("evidence_keys"))
 @define(frozen=True)
 class CriterionResultWriterView:
+    criterion_id: str = field(validator=_identifier)
     disposition: CriterionDisposition = field(
         validator=validators.instance_of(CriterionDisposition)
     )
@@ -2153,7 +2195,9 @@ class CriterionResultWriterView:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_disposition(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+    def _validate_disposition(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
         if (
             self.disposition
             in {
@@ -2333,6 +2377,33 @@ class UiSurface(str, Enum):
     NOT_APPLICABLE = "not-applicable"
 
 
+class LandingShape(str, Enum):
+    """PR landing topology; values mirror ``pr_plan.PrShape`` by design.
+
+    Do not alias ``PrShape`` here. ``validate_spec._load_local_module`` and
+    ``scripts/build_pyz.py`` exec this file standalone; any
+    ``easy_cheese_schemas.*`` import runs the package ``__init__``, which
+    imports ``compat`` and fails without ``cattrs``
+    (``test_standalone_validator_falls_back_when_cattrs_is_missing``).
+    ``tests/python/test_schemas_types.py`` pins the two value lists.
+    """
+
+    SINGLE = "single"
+    ORTHOGONAL_FLAT = "orthogonal_flat"
+    STACKED_LINEAR = "stacked_linear"
+    DIAMOND_STACK = "diamond_stack"
+
+
+class PerLayerGreen(str, Enum):
+    REQUIRED = "required"
+    TIP_ONLY = "tip-only"
+
+
+class ReviewFixes(str, Enum):
+    FOLD = "fold"
+    TOP_UP = "top-up"
+
+
 class SpecConfidence(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
@@ -2376,9 +2447,7 @@ class GateApplicability:
     reason: str | None = field(default=None, validator=_optional_string)
 
     @ui_surface.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_combination(
-        self, _attribute: _NamedAttribute, value: object
-    ) -> None:  # noqa: V103
+    def _validate_combination(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
         if self.disposition is GateApplicabilityDisposition.RED_REQUIRED:
             if self.work_class is not WorkClass.BEHAVIOR:
                 raise ValueError("red-required-work-class-must-be-behavior")
@@ -2392,18 +2461,162 @@ class GateApplicability:
                     "not-applicable-work-class-must-be-closed-non-behavior"
                 )
             if value is not UiSurface.NOT_APPLICABLE:
-                raise ValueError(
-                    "not-applicable-ui-surface-must-be-not-applicable"
-                )
+                raise ValueError("not-applicable-ui-surface-must-be-not-applicable")
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_not_applicable_reason(
         self, _attribute: _NamedAttribute, value: object
     ) -> None:  # noqa: V103
-        if self.disposition is GateApplicabilityDisposition.NOT_APPLICABLE and not value:
+        if (
+            self.disposition is GateApplicabilityDisposition.NOT_APPLICABLE
+            and not value
+        ):
             raise ValueError(
                 "gate_applicability.reason is required when disposition is not-applicable"
             )
+
+
+def _landing_layers(
+    value: Iterable[Iterable[str]] | tuple[tuple[str, ...], ...],
+) -> tuple[tuple[str, ...], ...]:
+    if isinstance(value, (str, bytes)):
+        raise ValueError("landing.layers must be a list of lists of strings")
+    groups: list[tuple[str, ...]] = []
+    for group in value:
+        if isinstance(group, (str, bytes)):
+            raise ValueError("landing.layers must be a list of lists of strings")
+        groups.append(tuple(group))
+    return tuple(groups)
+
+
+@define(frozen=True)
+class Landing:
+    """The spec's PR landing shape; absent on a spec reads as ``single``."""
+
+    shape: LandingShape = field(validator=validators.instance_of(LandingShape))
+    layers: tuple[tuple[str, ...], ...] = field(
+        factory=tuple, converter=_landing_layers
+    )
+    per_layer_green: PerLayerGreen = field(
+        default=PerLayerGreen.REQUIRED,
+        validator=validators.instance_of(PerLayerGreen),
+    )
+    review_fixes: ReviewFixes = field(
+        default=ReviewFixes.FOLD, validator=validators.instance_of(ReviewFixes)
+    )
+
+    @layers.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_layers(
+        self, attribute: _NamedAttribute, value: object
+    ) -> None:  # noqa: V103
+        assert isinstance(value, tuple)
+        groups = cast(tuple[tuple[str, ...], ...], value)
+        if groups and self.shape is LandingShape.SINGLE:
+            raise ValueError("landing-layers-require-non-single-shape")
+        if not groups and self.shape is not LandingShape.SINGLE:
+            raise ValueError("landing-layers-required-for-stacked-shape")
+        total_ids = sum(len(group) for group in groups)
+        if total_ids > MAX_COLLECTION_ITEMS:
+            raise ValueError(
+                f"{attribute.name} must be at most {MAX_COLLECTION_ITEMS} ids total"
+            )
+        seen: set[str] = set()
+        for group_index, group in enumerate(groups):
+            for index, curd_id in enumerate(group):
+                _identifier(
+                    self,
+                    _ListItemAttribute(f"{attribute.name}[{group_index}][{index}]"),
+                    curd_id,
+                )
+                if curd_id in seen:
+                    raise ValueError(
+                        f"landing-layer-curd-ids-must-be-unique: {curd_id!r} appears twice"
+                    )
+                seen.add(curd_id)
+
+
+_LANDING_FIELD_NAMES: frozenset[str] = frozenset(attrs.fields_dict(Landing))
+
+
+def _landing_enum(
+    raw_mapping: Mapping[str, object],
+    key: str,
+    enum_cls: type[Enum],
+    default: object = None,
+) -> Enum:
+    raw_value = raw_mapping.get(key, default)
+    try:
+        return enum_cls(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"landing-closed-class landing.{key} {raw_value!r} is not a "
+            + f"recognized {key}"
+        ) from exc
+
+
+def parse_landing_mapping(raw: object) -> Landing:
+    """Decode a spec's ``landing`` mapping into a :class:`Landing`.
+
+    Raises ``ValueError`` prefixed with ``landing-closed-class`` on any
+    closed-class violation: an unknown key, a missing or unrecognized
+    ``shape``/``per_layer_green``/``review_fixes``, or a malformed ``layers``
+    shape.
+    """
+    if not isinstance(raw, Mapping):
+        raise ValueError("landing-closed-class landing must be a mapping")
+    raw_mapping = cast(Mapping[str, object], raw)
+    unknown = raw_mapping.keys() - _LANDING_FIELD_NAMES
+    if unknown:
+        raise ValueError(
+            "landing-closed-class landing."
+            + ", landing.".join(sorted(repr(name) for name in unknown))
+            + " is not allowed"
+        )
+    if "shape" not in raw_mapping:
+        raise ValueError("landing-closed-class landing.shape is required")
+
+    shape = _landing_enum(raw_mapping, "shape", LandingShape)
+    per_layer_green = _landing_enum(raw_mapping, "per_layer_green", PerLayerGreen, "required")
+    review_fixes = _landing_enum(raw_mapping, "review_fixes", ReviewFixes, "fold")
+
+    layers_raw: object = raw_mapping.get("layers", [])
+    if not isinstance(layers_raw, list):
+        raise ValueError(
+            "landing-closed-class landing.layers must be a list of lists of strings"
+        )
+    layers_list = cast("list[object]", layers_raw)
+    if len(layers_list) > MAX_COLLECTION_ITEMS:
+        raise ValueError(
+            f"landing-closed-class landing.layers must be at most {MAX_COLLECTION_ITEMS} groups"
+        )
+    total_ids = 0
+    for group in layers_list:
+        if not isinstance(group, list) or not all(
+            isinstance(item, str) for item in cast("list[object]", group)
+        ):
+            raise ValueError(
+                "landing-closed-class landing.layers must be a list of lists of strings"
+            )
+        total_ids += len(cast("list[object]", group))
+        if total_ids > MAX_COLLECTION_ITEMS:
+            raise ValueError(
+                f"landing-closed-class landing.layers must be at most {MAX_COLLECTION_ITEMS} ids total"
+            )
+
+    try:
+        return Landing(
+            shape=cast(LandingShape, shape),
+            layers=cast("list[list[str]]", layers_raw),
+            per_layer_green=cast(PerLayerGreen, per_layer_green),
+            review_fixes=cast(ReviewFixes, review_fixes),
+        )
+    except ValueError as exc:
+        raise ValueError(f"landing-closed-class {exc}") from exc
+
+
+def landing_mapping(landing: Landing) -> dict[str, object]:
+    """Project a :class:`Landing` onto its wire mapping via ``_unstructure``."""
+    return cast("dict[str, object]", _unstructure(landing))
 
 
 @define(frozen=True)
@@ -2424,6 +2637,9 @@ class MoldSpecFrontmatter:
     )
     entity_referent_bindings: tuple[Mapping[str, object], ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_list_of(Mapping)
+    )
+    landing: Landing | None = field(
+        default=None, validator=validators.optional(validators.instance_of(Landing))
     )
 
 
@@ -2450,10 +2666,10 @@ class TestContractRow:
             raise ValueError(
                 f"Test Contracts row {self.acceptance_id} is contract-matrix mode and requires both Interface version and Matrix rows"
             )
-        elif len(set(cast(tuple[str, ...], value))) != len(cast(tuple[str, ...], value)):
-            raise ValueError(
-                f"contract-matrix-rows-not-unique:{self.acceptance_id}"
-            )
+        elif len(set(cast(tuple[str, ...], value))) != len(
+            cast(tuple[str, ...], value)
+        ):
+            raise ValueError(f"contract-matrix-rows-not-unique:{self.acceptance_id}")
 
 
 @define(frozen=True)
@@ -2461,7 +2677,9 @@ class GroundingRow:
     """One recorded precondition probe standing behind the spec."""
 
     probe: GroundingProbe = field(validator=validators.instance_of(GroundingProbe))
-    outcome: GroundingOutcome = field(validator=validators.instance_of(GroundingOutcome))
+    outcome: GroundingOutcome = field(
+        validator=validators.instance_of(GroundingOutcome)
+    )
     evidence: str = field(validator=_bounded_string)
 
 
@@ -2522,6 +2740,9 @@ MOLD_SPEC_ENUMS: dict[str, tuple[str, ...]] = {
     ),
     "work_class": tuple(work_class.value for work_class in WorkClass),
     "ui_surface": tuple(ui_surface.value for ui_surface in UiSurface),
+    "landing_shape": tuple(shape.value for shape in LandingShape),
+    "per_layer_green": tuple(value.value for value in PerLayerGreen),
+    "review_fixes": tuple(value.value for value in ReviewFixes),
 }
 
 MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
@@ -2552,6 +2773,12 @@ MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
             "and requires a reason."
         ),
     ),
+    CrossFieldRule(
+        rule_id="landing-closed-class",
+        description=(
+            "landing fields take only their declared values; layers is empty when shape is single."
+        ),
+    ),
 )
 
 
@@ -2574,7 +2801,9 @@ class MoldSpecDocument:
 
     slug: ClassVar[str] = "mold-spec"
     sections: ClassVar[tuple[Section, ...]] = MOLD_SPEC_SECTIONS
-    cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = MOLD_SPEC_CROSS_FIELD_RULES
+    cross_field_rules: ClassVar[tuple[CrossFieldRule, ...]] = (
+        MOLD_SPEC_CROSS_FIELD_RULES
+    )
     enums: ClassVar[dict[str, tuple[str, ...]]] = MOLD_SPEC_ENUMS
 
     @acceptance_ids.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
@@ -2612,7 +2841,9 @@ class MoldSpecDocument:
             )
 
     @grounding_rows.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_grounding_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
+    def _validate_grounding_coverage(
+        self, _attribute: _NamedAttribute, value: object
+    ) -> None:  # noqa: V103
         assert isinstance(value, tuple)
         rows = cast(tuple[GroundingRow, ...], value)
         counts: dict[GroundingProbe, int] = {}
@@ -2625,6 +2856,7 @@ class MoldSpecDocument:
         ]
         if violations:
             raise ValueError("; ".join(violations))
+
 
 # ---------------------------------------------------------------------------
 # Wheypoint continuity types (moved from easy_cheese_schemas.wheypoint; ADR
@@ -2670,8 +2902,6 @@ _MAX_ID = 64
 LOWER_IDENTIFIER_RE = re.compile(rf"[a-z0-9][a-z0-9._-]{{0,{_MAX_ID - 1}}}")
 _LOWER_ID_RE = LOWER_IDENTIFIER_RE
 _COMMIT_RE = re.compile(r"[0-9a-f]{7,64}")
-
-
 
 
 class WheypointStatus(str, Enum):
@@ -2786,7 +3016,9 @@ def _bounded_text_list(
 
 
 @schema_constraints(pattern=_LOWER_ID_RE.pattern, minLength=1, maxLength=_MAX_ID)
-def _lower_identifier(_instance: object, attribute: _NamedAttribute, value: object) -> None:
+def _lower_identifier(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
     if not isinstance(value, str) or _LOWER_ID_RE.fullmatch(value) is None:
         raise ValueError(
             f"{attribute.name} must be a lowercase identifier of at most "
@@ -2937,7 +3169,9 @@ def _tasks_move_rule(
             + f"{NextMove.TASKS.value!r}, not {instance.move.value!r}"
         )
     if instance.parallel is not None and not value:
-        raise ValueError(f"parallel may only be set alongside a non-empty {attribute.name}")
+        raise ValueError(
+            f"parallel may only be set alongside a non-empty {attribute.name}"
+        )
 
 
 @define(frozen=True)
@@ -2950,7 +3184,9 @@ class NextAction:
     artifact: str | None = field(
         default=None, validator=validators.optional(_single_line_text)
     )
-    tasks: list[HandoffTask] | None = field(default=None, validator=_tasks_move_rule, metadata={"since": 3})
+    tasks: list[HandoffTask] | None = field(
+        default=None, validator=_tasks_move_rule, metadata={"since": 3}
+    )
     parallel: ParallelPlan | None = field(default=None, metadata={"since": 3})
 
 
@@ -3004,7 +3240,11 @@ class ProtectedEntry:
     blocks_continuation: bool = field(validator=_gating_kind_rule)
     rationale: str | None = field(default=None, validator=_rationale_rule)
     superseded_by: str | None = field(default=None, validator=_successor_rule)
-    quote: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
+    quote: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
 
 
 @define(frozen=True)
@@ -3016,12 +3256,22 @@ class ProposedEntry:
     kind: EntryKind
     summary: str = field(validator=_bounded_text)
     blocks_continuation: bool = field(default=False, validator=_gating_kind_rule)
-    rationale: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
-    quote: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
+    rationale: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
+    quote: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
 
     def __attrs_post_init__(self) -> None:
         if self.kind is EntryKind.DIRECTIVE and self.quote is None:
-            raise ValueError("quote must preserve the verbatim instruction for a directive")
+            raise ValueError(
+                "quote must preserve the verbatim instruction for a directive"
+            )
 
 
 def _target_rule(
@@ -3236,12 +3486,17 @@ class WheypointRecord:
     )
     artifact_links: list[ArtifactLink] = field(validator=_bounded_list)
     decision_dossier: list[DecisionFork] = field(validator=_record_dossier)
-    notes: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
+    notes: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
     directives: list[ProtectedEntry] = field(
         factory=list,
         validator=_protected_entries(
             EntryKind.DIRECTIVE, "decisions", "questions", "blockers"
-        ), metadata={"since": 3},
+        ),
+        metadata={"since": 3},
     )
 
     @property
@@ -3318,7 +3573,9 @@ class WheypointDelta:
         default=None, validator=_optional_bounded_text_list
     )
     notes: str | None = field(
-        default=None, validator=validators.optional(_bounded_text), metadata={"since": 3},
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
     )
     next_action: NextAction | None = None
     decision_dossier: list[DecisionFork] | None = field(
@@ -3334,13 +3591,17 @@ class WheypointDelta:
         default=None, validator=_optional_bounded_list
     )
     add_directives: list[ProposedEntry] | None = field(
-        default=None, validator=_optional_bounded_list, metadata={"since": 3},
+        default=None,
+        validator=_optional_bounded_list,
+        metadata={"since": 3},
     )
     add_artifact_links: list[ArtifactLink] | None = field(
         default=None, validator=_optional_bounded_list
     )
     remove_artifact_links: list[str] | None = field(
-        default=None, validator=_optional_bounded_list, metadata={"since": 3},
+        default=None,
+        validator=_optional_bounded_list,
+        metadata={"since": 3},
     )
     transitions: list[EntryTransition] | None = field(
         default=None, validator=_one_transition_per_entry
@@ -3370,14 +3631,14 @@ class WheypointRevision:
     schema_version: int = field(validator=validators.ge(1))
     work_id: str = field(validator=_lower_identifier)
     # Null exactly once, for the genesis revision.
-    parent_revision_id: str | None = field(validator=validators.optional(_lower_identifier))
+    parent_revision_id: str | None = field(
+        validator=validators.optional(_lower_identifier)
+    )
     revision_id: str = field(validator=_lower_identifier)
     revision_number: int = field(validator=validators.ge(1))
 
     @revision_number.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_genesis_is_revision_one(
-        self, _attribute: object, value: int
-    ) -> None:  # noqa: V103
+    def _validate_genesis_is_revision_one(self, _attribute: object, value: int) -> None:  # noqa: V103
         # A null parent means genesis, and genesis is revision one. Any later
         # revision that names no parent claims an impossible root.
         if self.parent_revision_id is None and value != 1:
@@ -3461,12 +3722,18 @@ class CheckpointIntent:
     working_context: list[str] | None = field(
         default=None, validator=_optional_bounded_text_list
     )
-    notes: str | None = field(default=None, validator=validators.optional(_bounded_text), metadata={"since": 3})
+    notes: str | None = field(
+        default=None,
+        validator=validators.optional(_bounded_text),
+        metadata={"since": 3},
+    )
     next: NextMove | None = None
     artifact: str | None = field(
         default=None, validator=validators.optional(_bounded_text)
     )
-    tasks: list[HandoffTask] | None = field(default=None, validator=_optional_bounded_list, metadata={"since": 3})
+    tasks: list[HandoffTask] | None = field(
+        default=None, validator=_optional_bounded_list, metadata={"since": 3}
+    )
     parallel: ParallelPlan | None = field(default=None, metadata={"since": 3})
     entries: list[ProposedEntry] | None = field(
         default=None, validator=_optional_bounded_list
@@ -3475,7 +3742,9 @@ class CheckpointIntent:
         default=None, validator=_optional_non_empty_bounded_list
     )
     remove_artifact_links: list[str] | None = field(
-        default=None, validator=_optional_non_empty_bounded_list, metadata={"since": 3},
+        default=None,
+        validator=_optional_non_empty_bounded_list,
+        metadata={"since": 3},
     )
     decision_dossier: list[DecisionFork] | None = field(
         default=None, validator=_optional_bounded_list
@@ -3536,6 +3805,13 @@ __all__ = [
     "GateApplicability",
     "GateApplicabilityDisposition",
     "GroundingOutcome",
+    "Landing",
+    "LandingShape",
+    "PerLayerGreen",
+    "ReviewFixes",
+    "landing_layer_errors",
+    "landing_mapping",
+    "parse_landing_mapping",
     "GroundingProbe",
     "GroundingRow",
     "HypothesisDisposition",

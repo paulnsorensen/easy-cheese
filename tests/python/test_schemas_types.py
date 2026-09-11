@@ -1018,3 +1018,16 @@ class TestLockedDependencyProvenance:
         import attrs
 
         assert _runtime_pins()["attrs"] == attrs.__version__
+
+
+class TestLandingShapeMirrorsPrShape:
+    """LandingShape duplicates PrShape on purpose: contracts.py is exec'd
+    standalone and cannot import the package. Pin the two value lists."""
+
+    def test_landing_shape_values_match_pr_shape(self) -> None:
+        from easy_cheese_schemas.contracts import LandingShape
+        from easy_cheese_schemas.pr_plan import PrShape
+
+        assert LandingShape is not PrShape
+        assert [m.value for m in LandingShape] == [m.value for m in PrShape]
+        assert [m.name for m in LandingShape] == [m.name for m in PrShape]

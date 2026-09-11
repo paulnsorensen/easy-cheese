@@ -10,7 +10,10 @@ import argparse
 import copy
 import hashlib
 import json
+import errno
+import os
 import re
+import stat
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -23,6 +26,7 @@ from easy_cheese_schemas.contracts import (
     GroundingOutcome,
     GroundingProbe,
     GroundingRow,
+    Landing,
     MoldSpecDocument,
     MoldSpecFrontmatter,
     SpecConfidence,
@@ -30,6 +34,7 @@ from easy_cheese_schemas.contracts import (
     TestContractRow,
     UiSurface,
     WorkClass,
+    parse_landing_mapping,
 )
 
 
@@ -78,6 +83,7 @@ class _FrontmatterFactory(Protocol):
         gates_overridden: tuple[str, ...],
         agent_introduced_scope: tuple[str, ...],
         entity_referent_bindings: tuple[Mapping[str, object], ...],
+        landing: Landing | None,
     ) -> MoldSpecFrontmatter: ...
 
 
@@ -505,8 +511,7 @@ def draft_sha256(draft: object) -> str:
 
 def _spec_text(spec: object) -> tuple[str, Mapping[str, object]]:
     if isinstance(spec, Path):
-        text = spec.read_text(encoding="utf-8")
-        return text, {}
+        return read_spec_text(spec), {}
     if isinstance(spec, Mapping):
         spec_map = cast(Mapping[str, object], spec)
         return _canonical(spec_map), spec_map
@@ -521,6 +526,10 @@ def _spec_text(spec: object) -> tuple[str, Mapping[str, object]]:
     if isinstance(parsed, Mapping):
         return spec, cast(Mapping[str, object], parsed)
     return spec, {}
+
+
+def _merged_frontmatter(text: str, raw_spec: Mapping[str, object]) -> dict[str, object]:
+    return {**_frontmatter(text), **raw_spec}
 
 
 def _frontmatter(text: str) -> dict[str, object]:
@@ -702,11 +711,21 @@ def _grounding_rows(text: str, spec: Mapping[str, object]) -> tuple[GroundingRow
     )
 
 
+def _typed_landing(merged: Mapping[str, object]) -> Landing | None:
+    landing_raw = merged.get("landing")
+    if landing_raw is None:
+        return None
+    try:
+        return parse_landing_mapping(landing_raw)
+    except ValueError as exc:
+        raise ApplicabilityError(str(exc)) from exc
+
+
 def _typed_mold_document(
     spec: object, *, require_ui_surface: bool = False
 ) -> tuple[MoldSpecDocument, str, Mapping[str, object]]:
     text, raw_spec = _spec_text(spec)
-    merged: dict[str, object] = {**_frontmatter(text), **raw_spec}
+    merged = _merged_frontmatter(text, raw_spec)
     declaration = merged.get("gate_applicability")
     if not isinstance(declaration, Mapping):
         raise ApplicabilityError("gate-applicability-declaration-required")
@@ -772,6 +791,7 @@ def _typed_mold_document(
         acceptance_ids = _acceptance_ids(text, merged)
         if rows and not acceptance_ids:
             raise ApplicabilityError("acceptance-ids-required")
+        landing = _typed_landing(merged)
         document = _document(
             frontmatter=_frontmatter_model(
                 slug=cast(str, merged.get("slug", "legacy-spec")),
@@ -790,6 +810,7 @@ def _typed_mold_document(
                     tuple[Mapping[str, object], ...],
                     merged.get("entity_referent_bindings", ()),
                 ),
+                landing=landing,
             ),
             acceptance_ids=acceptance_ids,
             test_contract_rows=tuple(rows),
@@ -856,6 +877,38 @@ def required_reflections(spec: object) -> tuple[str, ...]:
     ):
         return NOT_APPLICABLE_REFLECTIONS
     return REFLECTIONS
+
+
+MAX_SPEC_BYTES = 1_000_000
+
+
+def read_spec_text(spec_path: Path) -> str:
+    """Read a caller-named spec: a regular file only, capped at ``MAX_SPEC_BYTES``, UTF-8.
+
+    Raises ``OSError`` for a missing, non-regular, or oversized path and
+    ``UnicodeDecodeError`` for bytes that are not UTF-8.
+    """
+    fd = os.open(spec_path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        mode = os.fstat(fd).st_mode
+        if stat.S_ISDIR(mode):
+            raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(spec_path))
+        if not stat.S_ISREG(mode):
+            raise OSError(f"not a regular file: {str(spec_path)!r}")
+    except BaseException:
+        os.close(fd)
+        raise
+    with os.fdopen(fd, "rb") as handle:
+        raw = handle.read(MAX_SPEC_BYTES + 1)
+    if len(raw) > MAX_SPEC_BYTES:
+        raise OSError(f"larger than {MAX_SPEC_BYTES} bytes")
+    return raw.decode("utf-8")
+
+
+def parse_landing(spec: object) -> Landing | None:
+    """Read only the front matter's ``landing`` block; ``None`` when absent."""
+    text, raw_spec = _spec_text(spec)
+    return _typed_landing(_merged_frontmatter(text, raw_spec))
 
 
 def parse_gate_applicability(
@@ -1030,11 +1083,10 @@ def _draft_sections(draft: object) -> dict[str, str]:
     return result
 
 
-def _mentions(section: str, fork: ForkCoverage, expected: ForkDecision) -> bool:
+def _mentions(section: str, fork_id: str, decision: object) -> bool:
     haystack = section.casefold()
-    if fork.id.casefold() in haystack:
+    if fork_id.casefold() in haystack:
         return True
-    decision = expected.decision
     if isinstance(decision, str):
         needle = decision.strip().casefold()
         if needle and needle in haystack:
@@ -1069,6 +1121,28 @@ def _applicability_gaps(draft: object) -> list[str]:
             return ["gate-applicability:gate-applicability-declaration-required"]
         return [f"gate-applicability:{problem}" for problem in exc.problems]
     return []
+
+
+def lexical_precheck(draft: object, decision_ledger: object) -> tuple[str, ...]:
+    """Mechanical gaps a fresh-context reviewer cannot fix: ledger problems,
+    applicability, goal drift, and every settled consequential fork's
+    presence in each required reflection section. Consumes no correction round."""
+    ledger, ledger_problems, goal = _normalize_ledger(decision_ledger)
+    sections = _draft_sections(draft)
+    gaps: list[str] = [
+        *ledger_problems,
+        *_applicability_gaps(draft),
+        *_goal_gaps(sections, goal),
+    ]
+    required = required_reflections(draft)
+    for entry in ledger:
+        for location in required:
+            section = sections.get(location, "")
+            if not section:
+                gaps.append(f"missing-section:{entry.id}:{location}")
+            elif not _mentions(section, entry.id, entry.decision):
+                gaps.append(f"unreflected-decision:{entry.id}:{location}")
+    return tuple(dict.fromkeys(gaps))
 
 
 def taste_test(
@@ -1126,7 +1200,7 @@ def taste_test(
                 additions["acceptance_gaps"].append(
                     f"missing-section:{fork.id}:{location}"
                 )
-            elif not _mentions(section, fork, entry):
+            elif not _mentions(section, fork.id, entry.decision):
                 additions["acceptance_gaps"].append(
                     f"unreflected-decision:{fork.id}:{location}"
                 )
@@ -1246,16 +1320,26 @@ def main(argv: list[str]) -> int:
     )
     _ = parser.add_argument("--draft", type=Path, required=True)
     _ = parser.add_argument("--ledger", type=Path, required=True)
-    _ = parser.add_argument("--verdict", type=Path, required=True)
     _ = parser.add_argument("--correction-round", type=int, default=0)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    _ = mode.add_argument("--verdict", type=Path, help="fresh-context verdict JSON")
+    _ = mode.add_argument(
+        "--precheck",
+        action="store_true",
+        help="run the lexical pre-check on the draft alone; no verdict, no round",
+    )
     args = parser.parse_args(argv)
     try:
         draft_path = cast(Path, args.draft)
         ledger_path = cast(Path, args.ledger)
-        verdict_path = cast(Path, args.verdict)
-        correction_round = cast(int, args.correction_round)
         draft = draft_path.read_bytes()
         ledger = _load_json(ledger_path)
+        if cast(bool, args.precheck):
+            gaps = lexical_precheck(draft, ledger)
+            print(json.dumps({"gaps": list(gaps)}, sort_keys=True))
+            return 0 if not gaps else 1
+        verdict_path = cast(Path, args.verdict)
+        correction_round = cast(int, args.correction_round)
         verdict = _load_json(verdict_path)
         result = taste_test(
             draft,

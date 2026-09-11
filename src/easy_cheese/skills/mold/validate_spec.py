@@ -46,6 +46,7 @@ if TYPE_CHECKING:
         GroundingOutcome,
         GroundingProbe,
         GroundingRow,
+        Landing,
         MoldSpecDocument,
         MoldSpecFrontmatter,
         SpecConfidence,
@@ -91,6 +92,7 @@ class _SchemaModule(Protocol):
     TestContractRow: type[TestContractRow]
     UiSurface: type[UiSurface]
     WorkClass: type[WorkClass]
+    parse_landing_mapping: Callable[[object], Landing]
 
 
 is_hardened_provenance: Callable[[Mapping[str, object]], bool]
@@ -479,6 +481,15 @@ def _typed_frontmatter(
             )
             return None
 
+    landing: Landing | None = None
+    landing_raw = frontmatter.get("landing")
+    if landing_raw is not None:
+        try:
+            landing = schema.parse_landing_mapping(landing_raw)
+        except ValueError as error:
+            errors.append(f"ERROR: {error} in {path}")
+            return None
+
     try:
         gate_model = schema.GateApplicability(
             disposition=schema.GateApplicabilityDisposition(
@@ -507,6 +518,7 @@ def _typed_frontmatter(
                 tuple[Mapping[str, object], ...],
                 frontmatter.get("entity_referent_bindings", ()),
             ),
+            landing=landing,
         )
     except (TypeError, ValueError) as error:
         errors.extend(_typed_errors(str(error), path))

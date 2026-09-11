@@ -8,4 +8,5 @@ when its evidence should ground repository decisions across sessions.
 
 <!-- HALLOUMINATE:INDEX-START -->
 - [language-reviewability-evidence](./language-reviewability-evidence.md) — Language readability and reviewability evidence (AI-review era)
+- [subagent-model-selection-portability](./subagent-model-selection-portability.md) — Sub-agent model selection across harnesses
 <!-- HALLOUMINATE:INDEX-END -->

@@ -73,6 +73,8 @@ The ledger JSON may carry the pinned goal as a top-level `goal` string beside `f
 
 The required reflection set depends on the disposition. A `red-required` draft requires Approach, Interface sketches, Acceptance, and Test Contracts. A `not-applicable` draft requires the first three reflections. The applicability gate prohibits Test Contracts in a `not-applicable` draft.
 
+The lexical pre-check (`taste-test --precheck`) runs the deterministic sub-checks (section presence, fork-id or decision-text mention, goal drift, applicability) against the draft alone. It runs before the reviewer dispatch. It does not count toward the two correction rounds. The full `taste-test` with `--verdict` repeats the same checks on the digest-bound verdict.
+
 A third failure stops typed planning and the two-key handshake.
 
 The automatic handoff is `/cook --auto <pointer path>`. It passes the published pointer and the approved metadata without changes. This metadata includes applicability, contract, and taste data.
