@@ -45,7 +45,7 @@ from easy_cheese.shared import handoff, paths
 
 from . import checkpoint as checkpoint_mod
 from . import legacy as legacy_mod
-from . import lint, records, storage
+from . import lint, lint_freshness, lint_types, records, storage
 
 _IDENTIFIER_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 # A parent may live outside every worktree, but only as a reference someone can
@@ -79,7 +79,7 @@ class Resolution:
     work_id: str | None = None
     record: WheypointRecord | None = None
     projection: WheypointProjection | None = None
-    findings: tuple[lint.LintFinding, ...] = field(default=())
+    findings: tuple[lint_types.LintFinding, ...] = field(default=())
     matches: tuple[str, ...] = field(default=())
     searched: tuple[str, ...] = field(default=())
     legacy_note: Path | None = None
@@ -116,8 +116,10 @@ def resolve(
             else paths.project_corpus_root()
         ),
         project_key=project_key if project_key is not None else paths.project_key(),
-        git_object_exists=git_object_exists or lint.git_object_exists_in(root),
-        artifact_digest=artifact_digest or lint.artifact_digest_in(root),
+        git_object_exists=(
+            git_object_exists or lint_freshness.git_object_exists_in(root)
+        ),
+        artifact_digest=artifact_digest or lint_freshness.artifact_digest_in(root),
     )
 
     if not ref.strip():
@@ -309,7 +311,7 @@ def _validate(
     checks: _Checks,
     *,
     searched: tuple[str, ...] = (),
-    document_findings: tuple[lint.LintFinding, ...] = (),
+    document_findings: tuple[lint_types.LintFinding, ...] = (),
     expected_revision_id: str | None = None,
 ) -> Resolution:
     try:
@@ -351,7 +353,7 @@ def _validate(
         findings=findings,
         searched=searched,
     )
-    gating = tuple(f for f in findings if lint.gates_continuation(f))
+    gating = tuple(f for f in findings if lint_types.gates_continuation(f))
     if gating:
         return _gate(resolution, f"{len(gating)} validation failure(s)")
     if (

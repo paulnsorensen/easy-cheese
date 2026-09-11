@@ -10,10 +10,9 @@ They are all advisory by construction and all degrade to silence when the tool
 they need cannot run, so keeping them apart from the deterministic checks keeps
 the one git subprocess responsibility in one place.
 
-The two modules name each other: `lint_work` composes these checks, and these
-checks speak `lint`'s finding vocabulary. Nothing is read across the boundary
-at import time -- only attribute lookups inside function bodies -- so neither
-module needs the other to be fully initialised to be imported first.
+The dependency runs one way -- `lint -> lint_freshness -> lint_types`. These
+checks speak the shared finding vocabulary from `lint_types` and import nothing
+from `lint`, so the composer can import them directly.
 """
 
 from __future__ import annotations
@@ -21,7 +20,8 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 from easy_cheese_schemas import WheypointRecord
@@ -33,10 +33,26 @@ from . import grounded, storage
 from .lint_types import LintCode, LintFinding
 
 
-GIT_TIMEOUT_SECONDS = 5
+_GIT_TIMEOUT_SECONDS = 5
+# None outside a lint: every failure is named. Inside one, the first failure
+# flips it and the rest of that lint stays quiet -- a single unrunnable git
+# otherwise reports itself once per probe.
+_warned_within_run: bool | None = None
 # A `PR#<n>` or URL pointer in working_context references something outside the
 # checkout, so the grounded path grammar has nothing local to check it against.
 _EXTERNAL_POINTER_RE = re.compile(r"PR#[0-9]+|[a-z][a-z0-9+.-]*://.*")
+
+
+@contextmanager
+def git_warnings_once() -> Generator[None]:
+    """Name an unrunnable git at most once for the enclosing lint."""
+    global _warned_within_run
+    previous = _warned_within_run
+    _warned_within_run = False
+    try:
+        yield
+    finally:
+        _warned_within_run = previous
 
 
 def run_git_ok(
@@ -46,16 +62,28 @@ def run_git_ok(
     try:
         return git_utils.run_git(args, cwd=cwd, timeout=timeout)
     except (OSError, subprocess.SubprocessError) as exc:
-        # Advisory checks degrade to silence, but a silence with no cause is
-        # indistinguishable from a pass. Name the command, where it ran, and
-        # what stopped it -- in plain ASCII, because this stream belongs to
-        # whatever harness is watching, not to a particular one.
-        print(
-            f"wheypoint: git-unavailable git {' '.join(args[:2])} cwd={cwd} "
-            + type(exc).__name__,
-            file=sys.stderr,
-        )
+        _report_git_unavailable(args, cwd, exc)
         return None
+
+
+def _report_git_unavailable(args: list[str], cwd: Path | str, exc: Exception) -> None:
+    """Name the command, where it ran, and what stopped it.
+
+    Advisory checks degrade to silence, but a silence with no cause is
+    indistinguishable from a pass. One `key=value` per field, in plain ASCII,
+    because this stream belongs to whatever harness is watching, not to a
+    particular one.
+    """
+    global _warned_within_run
+    if _warned_within_run:
+        return
+    if _warned_within_run is not None:
+        _warned_within_run = True
+    print(
+        f"wheypoint: git-unavailable command={args[0]} cwd={cwd} "
+        + f"error={type(exc).__name__}",
+        file=sys.stderr,
+    )
 
 
 def git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
@@ -69,7 +97,7 @@ def git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
         completed = run_git_ok(
             ["cat-file", "-e", f"{obj}^{{object}}"],
             cwd=root,
-            timeout=GIT_TIMEOUT_SECONDS,
+            timeout=_GIT_TIMEOUT_SECONDS,
         )
         return completed is not None and completed.returncode == 0
 
@@ -104,14 +132,14 @@ def stale_commit_findings(
     ancestor = run_git_ok(
         ["merge-base", "--is-ancestor", commit, "HEAD"],
         cwd=repository_root,
-        timeout=GIT_TIMEOUT_SECONDS,
+        timeout=_GIT_TIMEOUT_SECONDS,
     )
     if ancestor is None or ancestor.returncode != 1:
         return []
     distance_result = run_git_ok(
         ["rev-list", "--count", f"{commit}..HEAD"],
         cwd=repository_root,
-        timeout=GIT_TIMEOUT_SECONDS,
+        timeout=_GIT_TIMEOUT_SECONDS,
     )
     if distance_result is None or distance_result.returncode != 0:
         return []

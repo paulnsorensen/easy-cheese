@@ -35,12 +35,15 @@ from easy_cheese.shared import paths
 
 from . import lineage
 from . import lint_freshness
-from .lint_types import ADVISORY_CODES, LintCode, LintFinding, gates_continuation
+from .lint_types import (
+    ADVISORY_CODES as ADVISORY_CODES,
+    LintCode as LintCode,
+    LintFinding as LintFinding,
+    gates_continuation as gates_continuation,
+)
 from . import projection as projection_mod
 from . import records, storage
 from .lineage import Lineage
-
-__all__ = ["ADVISORY_CODES", "LintCode", "LintFinding", "gates_continuation"]
 
 
 @define(frozen=True)
@@ -58,16 +61,6 @@ class LintReport:
     @property
     def codes(self) -> tuple[LintCode, ...]:
         return tuple(finding.code for finding in self.findings)
-
-
-def git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
-    """Read-only git reachability probe in `root` (see `lint_freshness`)."""
-    return lint_freshness.git_object_exists_in(root)
-
-
-def artifact_digest_in(root: Path | str) -> Callable[[str], str | None]:
-    """Digest a regular artifact file contained by `root` (see `lint_freshness`)."""
-    return lint_freshness.artifact_digest_in(root)
 
 
 def lint_projection_text(text: str) -> LintReport:
@@ -115,6 +108,7 @@ def lint_projection_file(path: Path | str) -> LintReport:
     return lint_projection_text(text)
 
 
+@lint_freshness.git_warnings_once()
 def lint_work(
     store: storage.WorkStore,
     *,
@@ -125,10 +119,13 @@ def lint_work(
 ) -> LintReport:
     """Validate the whole current checkpoint of one work store.
 
-    Lineage is walked over receipts alone, and the only projection read is
-    the one the record points at -- the single revision whose projection a
-    caller is about to act on. Every other projection's bytes are a question
-    for `recover()`, not for a dispatch gate.
+    Lineage is walked over receipts, and the only projection whose bytes are
+    read is the one the record points at -- the single revision a caller is
+    about to act on. Every other projection's bytes are a question for
+    `recover()`, not for a dispatch gate. Presence, though, is not: the survey
+    drops a receipt whose projection file is gone, so an ancestor missing its
+    projection reports `REVISION_INCOMPLETE` and stops the walk, which is
+    stricter than `commit._check_lineage` over the same chain.
     """
     root = paths.resolve_repo_root(repository_root)
     digest_of = _memoized(artifact_digest)
@@ -178,7 +175,20 @@ def lint_work(
             )
         )
 
-    current = store.read_revision(record.revision_number, record.revision_id)
+    current = next(
+        (
+            revision
+            for revision in survey.revisions
+            if revision.revision_number == record.revision_number
+            and revision.revision_id == record.revision_id
+        ),
+        None,
+    )
+    if current is None:
+        # The survey drops a revision whose projection file is gone. Read the
+        # current receipt directly so that case is reported as the unreadable
+        # projection it is, rather than as ancestry no receipt proves.
+        current = store.read_revision(record.revision_number, record.revision_id)
     projection = None
     # No receipt for the current revision means no proven ancestry, so every
     # revision pin is unresolved rather than resolved against the whole store.

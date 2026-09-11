@@ -810,7 +810,7 @@ def test_lint_projection_file_reports_a_missing_file(tmp_path: Path) -> None:
 def test_artifact_digest_in_hashes_relative_paths(tmp_path: Path) -> None:
     (tmp_path / "cook").mkdir()
     _ = (tmp_path / "cook" / "report.md").write_text("body", encoding="utf-8")
-    digest = lint.artifact_digest_in(tmp_path)
+    digest = lint_freshness.artifact_digest_in(tmp_path)
 
     assert digest("cook/report.md") == canonical.digest_text("body")
     assert digest("cook/absent.md") is None
@@ -822,7 +822,7 @@ def test_artifact_digest_in_rejects_absolute_paths(tmp_path: Path) -> None:
     outside = tmp_path / "outside.md"
     _ = outside.write_text("body", encoding="utf-8")
 
-    assert lint.artifact_digest_in(root)(str(outside)) is None
+    assert lint_freshness.artifact_digest_in(root)(str(outside)) is None
 
 
 def test_artifact_digest_in_rejects_parent_traversal(tmp_path: Path) -> None:
@@ -830,7 +830,7 @@ def test_artifact_digest_in_rejects_parent_traversal(tmp_path: Path) -> None:
     root.mkdir()
     _ = (tmp_path / "outside.md").write_text("body", encoding="utf-8")
 
-    assert lint.artifact_digest_in(root)("../outside.md") is None
+    assert lint_freshness.artifact_digest_in(root)("../outside.md") is None
 
 
 def test_artifact_digest_in_rejects_symlink_escapes(tmp_path: Path) -> None:
@@ -840,7 +840,7 @@ def test_artifact_digest_in_rejects_symlink_escapes(tmp_path: Path) -> None:
     _ = outside.write_text("body", encoding="utf-8")
     (root / "link.md").symlink_to(outside)
 
-    assert lint.artifact_digest_in(root)("link.md") is None
+    assert lint_freshness.artifact_digest_in(root)("link.md") is None
 
 
 def test_artifact_digest_in_rejects_non_regular_paths(tmp_path: Path) -> None:
@@ -848,7 +848,7 @@ def test_artifact_digest_in_rejects_non_regular_paths(tmp_path: Path) -> None:
     root.mkdir()
     (root / "reports").mkdir()
 
-    assert lint.artifact_digest_in(root)("reports") is None
+    assert lint_freshness.artifact_digest_in(root)("reports") is None
 
 
 def test_ac16_a_future_record_this_reader_cannot_structure_reports_runtime_behind_only(
@@ -904,7 +904,7 @@ def test_git_object_exists_in_answers_from_a_real_repository(tmp_path: Path) -> 
         capture_output=True,
         text=True,
     ).stdout.strip()
-    exists = lint.git_object_exists_in(tmp_path)
+    exists = lint_freshness.git_object_exists_in(tmp_path)
 
     assert exists(head) is True
     assert exists("0" * 40) is False
@@ -950,9 +950,55 @@ def test_stale_commit_check_swallows_an_unrunnable_git_but_says_so(
 
     assert findings == []
     assert capsys.readouterr().err.splitlines() == [
-        "wheypoint: git-unavailable git merge-base --is-ancestor "
-        + f"cwd={tmp_path} OSError"
+        f"wheypoint: git-unavailable command=merge-base cwd={tmp_path} error=OSError"
     ]
+
+
+def test_an_unrunnable_git_is_named_once_per_lint(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Every probe in one lint hits the same broken git; one line says so."""
+
+    def boom(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise OSError("git executable not found")
+
+    monkeypatch.setattr(git_utils, "run_git", boom)
+
+    with lint_freshness.git_warnings_once():
+        assert lint_freshness.git_object_exists_in(tmp_path)("deadbeef") is False
+        assert (
+            lint_freshness.stale_commit_findings("deadbeef", repository_root=tmp_path)
+            == []
+        )
+
+    assert capsys.readouterr().err.splitlines() == [
+        f"wheypoint: git-unavailable command=cat-file cwd={tmp_path} error=OSError"
+    ]
+
+
+def test_each_lint_work_names_an_unrunnable_git_again(
+    corpus_root: Path,
+    make_promotion: Callable[..., _PromotionLike],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The latch is scoped to one lint, so the next lint still reports."""
+    store = make_store(corpus_root)
+    promotion = make_promotion()
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    def boom(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise OSError("git executable not found")
+
+    monkeypatch.setattr(git_utils, "run_git", boom)
+
+    _ = check(store)
+    first = capsys.readouterr().err.splitlines()
+    _ = check(store)
+    second = capsys.readouterr().err.splitlines()
+
+    assert len(first) == 1
+    assert first == second
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
@@ -1064,12 +1110,18 @@ def test_lint_work_reads_only_the_current_projection(
 
     reads: list[Path] = []
     original_read_text = Path.read_text
+    original_read_bytes = Path.read_bytes
 
     def spy_read_text(self: Path, *args: object, **kwargs: object) -> str:
         reads.append(self)
         return original_read_text(self, *args, **kwargs)  # pyright: ignore[reportArgumentType]
 
+    def spy_read_bytes(self: Path) -> bytes:
+        reads.append(self)
+        return original_read_bytes(self)
+
     monkeypatch.setattr(Path, "read_text", spy_read_text)
+    monkeypatch.setattr(Path, "read_bytes", spy_read_bytes)
 
     report = check(store)
 
@@ -1077,6 +1129,10 @@ def test_lint_work_reads_only_the_current_projection(
     assert [path for path in reads if path.parent.name == "projections"] == [
         store.projection_path(3, "rev-0003")
     ]
+    # One receipt read apiece: the survey already holds the current revision,
+    # so nothing re-reads it to name what the record points at.
+    receipt_reads = [path for path in reads if path.parent == store.revisions_dir]
+    assert len(receipt_reads) == len(list(store.revisions_dir.glob("*.json"))) == 3
 
 
 def test_lint_work_digests_each_artifact_path_once(

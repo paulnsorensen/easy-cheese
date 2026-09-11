@@ -71,7 +71,7 @@ from easy_cheese.shared import paths
 
 from . import canonical
 from . import lineage
-from . import lint as lint_mod
+from . import lint_freshness
 from . import projection as projection_mod
 from . import records, storage
 
@@ -171,7 +171,7 @@ def commit(
     digest_root = (
         _digest_root() if artifact_root is None else Path(artifact_root).resolve()
     )
-    digest_of = lint_mod.artifact_digest_in(digest_root)
+    digest_of = lint_freshness.artifact_digest_in(digest_root)
 
     if delta.work_id != store.work_id:
         raise CommitError(
