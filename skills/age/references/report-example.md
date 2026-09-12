@@ -107,6 +107,7 @@ Collapse this section to one line when ten or more low findings exist.>
 
 ## Agent resolution
 <one bullet per resolved worker: role, selected type, effort, and `degraded: true` when a fallback ran.>
+<a `dispatched: <n> workers, one message: <true|false>` line for a fan-out run (`n>1`), or `verifier: skipped (sub-agent)` when `/age` ran as a sub-agent.>
 
 ## Confidence
 <`certain` | `speculating` | `don't know`> — <one line on the evidence, including each unavailable source>
