@@ -28,6 +28,13 @@ def _scoreboard(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("run")
+def _run(argv: list[str]) -> int:
+    from easy_cheese.skills.age_bench.run import main
+
+    return main(argv)
+
+
 COMMANDS = (
     derive_command(
         _prepare,
@@ -39,6 +46,10 @@ COMMANDS = (
     ),
     derive_command(
         _scoreboard, "Write a per-overlap-area scoreboard table for a benchmark run"
+    ),
+    derive_command(
+        _run,
+        "Drive a case's review unattended via a headless invocation and hand the report to judge",
     ),
 )
 
