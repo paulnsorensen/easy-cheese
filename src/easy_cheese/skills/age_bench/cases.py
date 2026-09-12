@@ -18,6 +18,13 @@ class CaseNotFoundError(Exception):
     """Raised when a case directory or its manifest is missing."""
 
 
+def validate_identifier(value: str, kind: str) -> str:
+    """Reject an id that could escape its intended directory via path traversal."""
+    if not value or "/" in value or "\\" in value or ".." in value:
+        raise ValueError(f"invalid {kind}: {value!r}")
+    return value
+
+
 @dataclass(frozen=True)
 class Case:
     case_id: str
@@ -41,6 +48,7 @@ def cases_root(repo_root: Path | str | None = None) -> Path:
 
 
 def load_case(case_id: str, *, repo_root: Path | str | None = None) -> Case:
+    validate_identifier(case_id, "case_id")
     case_dir = cases_root(repo_root) / case_id
     manifest_path = case_dir / "case.toml"
     if not manifest_path.is_file():

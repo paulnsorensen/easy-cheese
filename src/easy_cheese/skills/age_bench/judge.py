@@ -109,8 +109,7 @@ def judge_report(
     hits = buckets.count("Bug Hit")
     suggestions = buckets.count("Valid Suggestion")
     noise = buckets.count("Noise")
-    bugs = 1
-    recall = hits / bugs
+    recall = 1.0 if hits else 0.0
     precision = hits / len(findings) if findings else 0.0
     snr = hits / noise if noise else float(hits)
     return JudgeResult(

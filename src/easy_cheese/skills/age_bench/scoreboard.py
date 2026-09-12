@@ -17,12 +17,13 @@ from pathlib import Path
 
 from easy_cheese.shared import cli
 from easy_cheese.shared.paths import project_corpus_root
-from easy_cheese.skills.age_bench.cases import load_case
+from easy_cheese.skills.age_bench.cases import load_case, validate_identifier
 
 TOOLS: tuple[str, ...] = ("age", "code-review")
 
 
 def run_root(run_id: str) -> Path:
+    validate_identifier(run_id, "run_id")
     return project_corpus_root() / "benchmark" / "age" / run_id
 
 

@@ -99,6 +99,40 @@ def test_judge_buckets_findings_and_emits_recall_precision_snr(tmp_path):
     assert payload["snr"] == 1.0
 
 
+def test_judge_caps_recall_at_one_when_reviewer_reports_the_defect_multiple_times(tmp_path):
+    report_path = tmp_path / "report.md"
+    report_path.write_text(
+        "## Blocker\n"
+        "- **[off-by-one:blocker]** `module.py:5` "
+        "— Loop upper bound excludes the last element, dropping it from the sum.\n"
+        "## High\n"
+        "- **[off-by-one:high]** `module.py:5` "
+        "— Same defect flagged again from the range check angle.\n",
+        encoding="utf-8",
+    )
+    fixture_path = tmp_path / "transport.json"
+    fixture_path.write_text(json.dumps(["Bug Hit", "Bug Hit"]), encoding="utf-8")
+
+    result = _run_cli(
+        [
+            "judge",
+            "--tool",
+            "age",
+            "--case",
+            CASE_ID,
+            "--report",
+            str(report_path),
+            "--transport-fixture",
+            str(fixture_path),
+        ]
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["hits"] == 2
+    assert payload["recall"] == 1.0
+
+
 def test_scoreboard_writes_per_overlap_area_table_under_the_corpus_root(tmp_path):
     home = tmp_path / "cheese-home"
     env = {"EASY_CHEESE_HOME": str(home)}

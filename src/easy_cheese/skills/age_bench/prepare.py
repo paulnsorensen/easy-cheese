@@ -44,14 +44,27 @@ def prepare_worktree(case_id: str, *, repo_root: Path | str | None = None) -> Pr
     worktree_dir = scratch_dir / "worktree"
     branch = f"age-bench/{case_id}"
 
-    shutil.copytree(case.base_dir, repo_dir)
-    _run(["git", "init", "-q", "-b", "main"], cwd=repo_dir)
-    _run(["git", "config", "user.email", "age-bench@example.invalid"], cwd=repo_dir)
-    _run(["git", "config", "user.name", "age-bench"], cwd=repo_dir)
-    _run(["git", "add", "-A"], cwd=repo_dir)
-    _run(["git", "commit", "-q", "-m", "base"], cwd=repo_dir)
-    _run(["git", "worktree", "add", "-q", "-b", branch, str(worktree_dir)], cwd=repo_dir)
-    _run(["git", "apply", str(case.seed_patch.resolve())], cwd=worktree_dir)
+    worktree_registered = False
+    try:
+        shutil.copytree(case.base_dir, repo_dir)
+        _run(["git", "init", "-q", "-b", "main"], cwd=repo_dir)
+        _run(["git", "config", "user.email", "age-bench@example.invalid"], cwd=repo_dir)
+        _run(["git", "config", "user.name", "age-bench"], cwd=repo_dir)
+        _run(["git", "add", "-A"], cwd=repo_dir)
+        _run(["git", "commit", "-q", "-m", "base"], cwd=repo_dir)
+        _run(["git", "worktree", "add", "-q", "-b", branch, str(worktree_dir)], cwd=repo_dir)
+        worktree_registered = True
+        _run(["git", "apply", str(case.seed_patch.resolve())], cwd=worktree_dir)
+    except Exception:
+        if worktree_registered:
+            subprocess.run(
+                ["git", "worktree", "remove", "-f", str(worktree_dir)],
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+            )
+        shutil.rmtree(scratch_dir, ignore_errors=True)
+        raise
 
     return PreparedWorktree(
         case_id=case_id, worktree_dir=worktree_dir, branch=branch, scratch_dir=scratch_dir
