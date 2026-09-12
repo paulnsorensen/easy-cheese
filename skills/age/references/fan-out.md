@@ -103,7 +103,7 @@ Then continue at step 5 (write + print the report path) and `SKILL.md § Handoff
 **Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and the selected semantic caller search.
 Workers use that packet instead of rebuilding impact context independently.
 
-**Seam 6 — Verifier pass.** After Seam 4 reconciliation produces the candidate findings list, use a cheap `verifier` role.
+**Seam 6 — Verifier pass.** Once the candidate findings list exists — Seam 4 reconciliation at `n>1`, or the single reviewer's own findings at `n=1` — use a cheap `verifier` role.
 Run this pass at every width, including `n=1`, except when `/age` is itself a sub-agent (record `verifier: skipped (sub-agent)`).
 Use the small model tier and `effort: low` from the Roles x tiers table.
 Check each reconciled finding against the evidence slice cited in its `recommendation` and location fields.

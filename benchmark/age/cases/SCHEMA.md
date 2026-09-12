@@ -3,8 +3,9 @@
 Each case lives at `benchmark/age/cases/<case-id>/` and carries three files:
 
 - `case.toml` — the manifest described below, parsed with the stdlib `tomllib`.
-- `seed.patch` — a unified diff that applies cleanly to `base/` and touches the
-  file named by `defect.file`.
+- `seed.patch` — a unified diff with `a/…`/`b/…` prefixes, applied from the
+  case directory with `git apply` (default `-p1`); it applies cleanly to `base/`
+  and touches the file named by `defect.file`.
 - `base/` — the pre-defect source tree the patch applies to.
 
 ## Fields
