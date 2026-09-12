@@ -30,6 +30,7 @@ from easy_cheese_schemas.contracts import (
     ContractVersion,
     Criterion,
     CriterionResult,
+    CriterionResultWriterView,
     CurdPlan,
     CurdPlanWriterView,
     CurdResult,
@@ -736,7 +737,9 @@ def _forbidden_field(path: str, value: object) -> tuple[str, str] | None:
         mapping_value = cast("Mapping[str, object]", value)
         for key, item in mapping_value.items():
             child = f"{path}.{key}"
-            if key in _HOST_OWNED_FIELDS:
+            if key in _HOST_OWNED_FIELDS and not (
+                key == "criterion_id" and ".criterion_results[" in child
+            ):
                 return child, key
             found = _forbidden_field(child, item)
             if found is not None:
@@ -1093,29 +1096,48 @@ def _normalize_curd_result(
         raise ContractValidationError(
             "invocation.expected_criterion_ids must be an array"
         )
-    expected_raw = cast("list[object] | tuple[object, ...]", expected_raw)
-    expected = cast("tuple[str, ...]", tuple(expected_raw))
-    rows_by_id = {item.criterion_id: item for item in view.criterion_results}
-    if len(rows_by_id) != len(view.criterion_results):
+    expected_items = tuple(cast("list[object] | tuple[object, ...]", expected_raw))
+    if not all(isinstance(item, str) for item in expected_items):
         raise ContractValidationError(
-            "writer criterion results must contain one row per criterion_id"
+            "invocation.expected_criterion_ids must contain strings"
         )
-    if set(rows_by_id) != set(expected):
+    expected = cast("tuple[str, ...]", expected_items)
+    if len(expected) != len(set(expected)):
         raise ContractValidationError(
-            "writer criterion results must cover expected_criterion_ids exactly"
+            "invocation.expected_criterion_ids must contain unique IDs"
+        )
+    expected_set = set(expected)
+    writer_rows: dict[str, CriterionResultWriterView] = {}
+    for item in view.criterion_results:
+        criterion_id = item.criterion_id
+        if criterion_id not in expected_set:
+            raise ContractValidationError(
+                f"writer criterion result has unknown criterion_id {criterion_id!r}"
+            )
+        if criterion_id in writer_rows:
+            raise ContractValidationError(
+                f"writer criterion results contain duplicate criterion_id {criterion_id!r}"
+            )
+        writer_rows[criterion_id] = item
+    missing = tuple(
+        criterion_id for criterion_id in expected if criterion_id not in writer_rows
+    )
+    if missing:
+        raise ContractValidationError(
+            f"writer criterion results are missing criterion_ids: {list(missing)!r}"
         )
     evidence = _host_mapping(invocation, "evidence")
     rows = tuple(
         CriterionResult(
             criterion_id=criterion_id,
-            disposition=rows_by_id[criterion_id].disposition,
+            disposition=writer_rows[criterion_id].disposition,
             evidence=_host_refs(
-                rows_by_id[criterion_id].evidence_keys,
+                writer_rows[criterion_id].evidence_keys,
                 evidence,
                 EvidenceRef,
                 f"criterion result {criterion_id!r} evidence",
             ),
-            reason=rows_by_id[criterion_id].reason,
+            reason=writer_rows[criterion_id].reason,
         )
         for criterion_id in expected
     )

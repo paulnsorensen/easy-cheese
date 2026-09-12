@@ -483,9 +483,9 @@ def test_curd_result_normalization_associates_criteria_by_id() -> None:
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [
-        ("unknown", "cover expected_criterion_ids exactly"),
-        ("duplicate", "one row per criterion_id"),
-        ("missing", "cover expected_criterion_ids exactly"),
+        ("unknown", "unknown criterion_id"),
+        ("duplicate", "duplicate criterion_id"),
+        ("missing", "missing criterion_ids"),
     ],
 )
 def test_curd_result_normalization_rejects_invalid_criterion_ids(
@@ -504,3 +504,25 @@ def test_curd_result_normalization_rejects_invalid_criterion_ids(
 
     with pytest.raises(ContractValidationError, match=message):
         _ = normalize_agent_output(writer, case["host_invocation"])
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("non-string", "must contain strings"),
+        ("duplicate", "must contain unique IDs"),
+    ],
+)
+def test_curd_result_normalization_rejects_invalid_expected_criterion_ids(
+    mutation: str, message: str
+) -> None:
+    case = _curd_result_normalization_case()
+    invocation = cast("dict[str, object]", case["host_invocation"])
+    expected = cast("list[object]", invocation["expected_criterion_ids"])
+    if mutation == "non-string":
+        expected[0] = 1
+    else:
+        expected[1] = expected[0]
+
+    with pytest.raises(ContractValidationError, match=message):
+        _ = normalize_agent_output(case["writer_view"], invocation)
