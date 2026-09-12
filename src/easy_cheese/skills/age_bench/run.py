@@ -19,10 +19,17 @@ import subprocess
 from pathlib import Path
 
 from easy_cheese.shared import cli
-from easy_cheese.skills.age_bench.judge import JudgeResult, default_transport, judge_report
+from easy_cheese.skills.age_bench.judge import (
+    JudgeResult,
+    JudgeTransport,
+    default_transport,
+    judge_report,
+    recorded_transport,
+)
 from easy_cheese.skills.age_bench.prepare import prepare_worktree
 
 HEADLESS_EXECUTABLE = "claude"
+HEADLESS_TIMEOUT_SECONDS = 300
 
 
 class HeadlessUnavailableError(Exception):
@@ -45,12 +52,19 @@ def _probe_headless_executable() -> str:
 
 
 def _capture_report(executable: str, *, tool: str, cwd: Path) -> str:
-    result = subprocess.run(
-        [executable, "-p", _prompt_for(tool)],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [executable, "-p", _prompt_for(tool)],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=HEADLESS_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HeadlessUnavailableError(
+            f"headless review invocation timed out after {HEADLESS_TIMEOUT_SECONDS}s: "
+            f"{executable} -p did not return"
+        ) from exc
     if result.returncode != 0:
         raise HeadlessUnavailableError(
             f"headless review invocation failed: {executable} -p exited "
@@ -66,7 +80,11 @@ def _capture_report(executable: str, *, tool: str, cwd: Path) -> str:
 
 
 def run_case(
-    *, tool: str, case_id: str, repo_root: Path | str | None = None
+    *,
+    tool: str,
+    case_id: str,
+    repo_root: Path | str | None = None,
+    transport_fixture: Path | str | None = None,
 ) -> JudgeResult:
     executable = _probe_headless_executable()
     prepared = prepare_worktree(case_id, repo_root=repo_root)
@@ -80,20 +98,28 @@ def run_case(
             text=True,
         )
         shutil.rmtree(prepared.scratch_dir, ignore_errors=True)
+    transport: JudgeTransport = (
+        recorded_transport(Path(transport_fixture))
+        if transport_fixture is not None
+        else default_transport
+    )
     return judge_report(
         tool=tool,
         case_id=case_id,
         report_text=report_text,
-        transport=default_transport,
+        transport=transport,
         repo_root=repo_root,
     )
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
     try:
-        result = run_case(tool=args.tool, case_id=args.case_id, repo_root=args.repo_root)
-    except HeadlessUnavailableError as exc:
-        raise cli.CliError(str(exc)) from exc
+        result = run_case(
+            tool=args.tool,
+            case_id=args.case_id,
+            repo_root=args.repo_root,
+            transport_fixture=args.transport_fixture,
+        )
     except Exception as exc:  # noqa: BLE001 - surfaced as a CliError below
         raise cli.CliError(str(exc)) from exc
     print(json.dumps(result.to_dict()), file=args.stdout)
@@ -104,6 +130,7 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--tool", required=True, choices=("age", "code-review"))
     _ = parser.add_argument("--case", dest="case_id", required=True)
     _ = parser.add_argument("--repo-root", dest="repo_root", default=None)
+    _ = parser.add_argument("--transport-fixture", dest="transport_fixture", default=None)
     parser.set_defaults(func=_cmd_run)
 
 
