@@ -46,6 +46,11 @@ SKILLS = tuple(
         path.parent.name.replace("_", "-") for path in SKILLS_ROOT.glob("*/commands.py")
     )
 )
+# Bundles built and committed for local/CI use (test harnesses, check_bundles)
+# but NOT shipped in a release: internal dev tools with no user-facing SKILL.md
+# and no plugin.json entry. age-bench is the /age benchmark harness.
+INTERNAL_BUNDLES = frozenset({"age-bench"})
+SHIPPED_SKILLS = tuple(skill for skill in SKILLS if skill not in INTERNAL_BUNDLES)
 
 
 def _import_from(root: Path, name: str) -> ModuleType:
