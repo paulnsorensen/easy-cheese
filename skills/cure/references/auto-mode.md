@@ -9,6 +9,8 @@ It defines worker exceptions, the puncture clause, and the empty selection case.
 - Select every finding that meets the severity floor.
   Read `selection.md` § Auto-mode selection for floor definitions.
 - Apply one finding at a time.
+  Implement its `recommendation:` as the locked decision and keep its `invariants:` true.
+  A rebuttal goes under `### Deferred`; auto mode never substitutes a fix silently.
   Run the narrowest proving test after each fix.
   Revert a fix that breaks a passing test or project gate.
   Put it under `### Deferred` with the test name and failure summary.

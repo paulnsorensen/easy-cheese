@@ -1,4 +1,4 @@
-"""Tests for shared/findings.py's render-table + parse-selection CLI."""
+"""Tests for shared/findings.py's render-table, parse-selection, and render-brief CLI."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ class _FindingsModule(Protocol):
     def parse_findings_report(self, text: str) -> list[Finding]: ...
     def render_selection_table(self, findings: list[Finding]) -> str: ...
     def parse_selection(self, verb: str, findings: list[Finding]) -> list[int]: ...
+    def render_brief(self, findings: list[Finding], ids: list[int]) -> str: ...
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -37,6 +38,7 @@ next: cure
 - **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` across slice boundary.
   - location: contract · fix-cost-now: sprawling · fix-cost-later: structural · confidence: certain
   - recommendation: define `User` in the slice's public types, map at the boundary.
+  - invariants: must-hold: `User` stays the only exported user type; must-not: touch the ORM mapping under `infra/`.
 
 ## High
 
@@ -224,6 +226,88 @@ class TestConfidenceParsing:
         assert "encapsulation" in rendered
 
 
+class TestInvariantsParsing:
+    def test_invariants_line_is_exposed_and_optional(self, findings_lib: ModuleType) -> None:
+        findings = _typed(findings_lib).parse_findings_report(SAMPLE_REPORT)
+        by_id = {f.id: f for f in findings}
+        assert by_id[1].invariants == (
+            "must-hold: `User` stays the only exported user type; "
+            + "must-not: touch the ORM mapping under `infra/`"
+        )
+        assert by_id[2].invariants is None
+        assert by_id[1].recommendation == "define `User` in the slice's public types, map at the boundary."
+
+
+class TestRenderBrief:
+    def test_selected_findings_only_with_locked_recommendation(self, report_path: Path) -> None:
+        result = _run("render-brief", "--report", str(report_path), "--selection", "1,3")
+        assert result.returncode == 0, result.stderr
+        out = result.stdout
+        assert out.startswith("## Finding 1 — [encapsulation:blocker] `src/users/index.ts:42`\n")
+        assert "- claim: `index` re-exports `SqlPgUser` across slice boundary.\n" in out
+        assert (
+            "- recommendation (locked): define `User` in the slice's public types, "
+            + "map at the boundary.\n"
+        ) in out
+        assert (
+            "- invariants: must-hold: `User` stays the only exported user type; "
+            + "must-not: touch the ORM mapping under `infra/`"
+        ) in out
+        assert "## Finding 3 — [complexity:medium] `src/util.ts:200-240`" in out
+        assert "- recommendation (locked): extract helpers." in out
+        # Unselected findings never leak into the brief.
+        assert "Finding 2" not in out
+        assert "Finding 4" not in out
+        assert "src/handler.ts" not in out
+        # Finding 3 has no invariants line, so the brief carries none for it.
+        assert out.count("- invariants:") == 1
+
+    def test_matches_library_output_in_severity_order(
+        self, report_path: Path, findings_lib: ModuleType
+    ) -> None:
+        result = _run("render-brief", "--report", str(report_path), "--selection", "4,1")
+        assert result.returncode == 0, result.stderr
+        lib = _typed(findings_lib)
+        expected = lib.render_brief(lib.parse_findings_report(SAMPLE_REPORT), [1, 4])
+        assert result.stdout.rstrip("\n") == expected.rstrip("\n")
+        assert result.stdout.index("Finding 1") < result.stdout.index("Finding 4")
+
+    def test_json_mode_dumps_string(self, report_path: Path, findings_lib: ModuleType) -> None:
+        result = _run("render-brief", "--report", str(report_path), "--selection", "all-high", "--json")
+        assert result.returncode == 0, result.stderr
+        lib = _typed(findings_lib)
+        expected = lib.render_brief(lib.parse_findings_report(SAMPLE_REPORT), [1, 2])
+        assert json.loads(result.stdout) == expected
+
+    def test_empty_selection_exits_two(self, report_path: Path) -> None:
+        result = _run("render-brief", "--report", str(report_path), "--selection", "none")
+        assert result.returncode == 2
+        assert "selection resolved to no findings" in result.stderr
+
+    def test_unknown_verb_exits_two(self, report_path: Path) -> None:
+        result = _run("render-brief", "--report", str(report_path), "--selection", "nuke-it-all")
+        assert result.returncode == 2
+        assert "unrecognized selection verb" in result.stderr
+
+    def test_missing_file_exits_two(self, tmp_path: Path) -> None:
+        missing = tmp_path / "nope.md"
+        result = _run("render-brief", "--report", str(missing), "--selection", "all")
+        assert result.returncode == 2
+        assert "report not found" in result.stderr
+
+    def test_missing_recommendation_is_marked(self, findings_lib: ModuleType) -> None:
+        report = """\
+## High
+
+- **[correctness:high]** `src/x.ts:1` — no recommendation line.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
+"""
+        lib = _typed(findings_lib)
+        brief = lib.render_brief(lib.parse_findings_report(report), [1])
+        assert "- recommendation (locked): (none in report" in brief
+        assert "- invariants:" not in brief
+
+
 class TestArgparseFailures:
     def test_missing_report_arg_exits_two(self) -> None:
         result = _run("render-table")
@@ -250,3 +334,4 @@ class TestHelp:
         assert result.returncode == 0
         assert "render-table" in result.stdout
         assert "parse-selection" in result.stdout
+        assert "render-brief" in result.stdout

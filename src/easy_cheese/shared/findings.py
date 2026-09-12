@@ -7,6 +7,11 @@ skills/age/SKILL.md § Output). A finding bullet looks like:
     - **[encapsulation:blocker]** `src/users/index.ts:42` — what is wrong
       - location: contract · fix-cost-now: sprawling · fix-cost-later: structural · confidence: certain
       - recommendation: do X then Y
+      - invariants: must-hold: A; must-not: B
+
+The `invariants:` line is optional (blocker/high findings whose fix could
+break a neighbour). `/cure` treats `recommendation:` as the locked fix
+decision and renders both lines into the coder brief via `render-brief`.
 
 The script ships with the skill — there is no separate "legacy" format
 maintained here. If /age changes its emit format, this parser must change
@@ -39,6 +44,7 @@ class Finding:
     fix_cost_later: str | None = None  # contained | spreading | structural
     confidence: str | None = None  # certain | speculating ("don't know" findings are never emitted)
     recommendation: str | None = None  # noqa: V107
+    invariants: str | None = None  # "must-hold: X; must-not: Y" — optional, blocker/high  # noqa: V107
     extra: dict[str, str] = field(default_factory=dict)
 
 
@@ -60,9 +66,13 @@ _BULLET_RE = re.compile(
 # Sub-field lines, indented under the main bullet:
 #   - location: <tier> · fix-cost-now: <bucket> · fix-cost-later: <bucket>
 #   - recommendation: <text>
+#   - invariants: <text>            (optional)
 _LOCATION_SUBFIELD_RE = re.compile(r"^\s+-\s*location:\s*(?P<value>.+?)\s*$", re.IGNORECASE)
 _RECOMMENDATION_SUBFIELD_RE = re.compile(
     r"^\s+-\s*recommendation:\s*(?P<value>.+?)\s*$", re.IGNORECASE
+)
+_INVARIANTS_SUBFIELD_RE = re.compile(
+    r"^\s+-\s*invariants:\s*(?P<value>.+?)\s*$", re.IGNORECASE
 )
 
 # Middle-dot ( · ) or pipe (|) separator between key:value pairs on the
@@ -106,6 +116,7 @@ def parse_findings_report(text: str) -> list[Finding]:
                 fix_cost_later=pending.get("fix_cost_later"),
                 confidence=pending.get("confidence"),
                 recommendation=pending.get("recommendation"),
+                invariants=pending.get("invariants"),
             )
         )
         pending = None
@@ -156,6 +167,11 @@ def parse_findings_report(text: str) -> list[Finding]:
             pending["recommendation"] = rec_match.group("value").rstrip(". ") + "."
             continue
 
+        inv_match = _INVARIANTS_SUBFIELD_RE.match(raw)
+        if inv_match:
+            pending["invariants"] = inv_match.group("value").rstrip(". ")
+            continue
+
     flush()
     return findings
 
@@ -176,6 +192,30 @@ def render_selection_table(findings: list[Finding]) -> str:
         for f in group_by_severity(findings)
     ]
     return "\n".join([header, *rows])
+
+
+def render_brief(findings: list[Finding], ids: list[int]) -> str:
+    """Render the coder brief for the selected finding ids.
+
+    One block per selected finding, in severity order. The recommendation is
+    labelled `(locked)` because /cure implements it as the fix decision and
+    may only deviate with a `### Deferred` rebuttal (cure/SKILL.md § Flow
+    step 3). The `invariants` line appears only when the report carries it.
+    """
+    wanted = set(ids)
+    blocks: list[str] = []
+    for f in group_by_severity(findings):
+        if f.id not in wanted:
+            continue
+        lines = [
+            f"## Finding {f.id} — [{f.dimension}:{f.severity}] `{f.location}`",
+            f"- claim: {f.summary}",
+            f"- recommendation (locked): {f.recommendation or '(none in report — read the claim and location, then decide; record the choice under ### Applied)'}",
+        ]
+        if f.invariants:
+            lines.append(f"- invariants: {f.invariants}")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 # ----- selection-verb interpreter ------------------------------------------
@@ -299,7 +339,7 @@ def _split_composed_verb(verb: str) -> list[str]:
     return [piece.strip() for piece in verb.split(",") if piece.strip()]
 
 
-# ---- CLI: render-table, parse-selection ----
+# ---- CLI: render-table, parse-selection, render-brief ----
 def _load_findings(report_path: str) -> list[Finding]:
     path = Path(report_path)
     if not path.is_file():
@@ -332,6 +372,22 @@ def _cmd_parse_selection(args: argparse.Namespace) -> None:
     )
 
 
+def _cmd_render_brief(args: argparse.Namespace) -> None:
+    items = _load_findings(cast(str, args.report))
+    try:
+        ids = parse_selection(cast(str, args.selection), items)
+    except SelectionError as exc:
+        raise cli.CliError(str(exc)) from exc
+    if not ids:
+        raise cli.CliError("selection resolved to no findings; nothing to brief")
+    cli.emit(
+        render_brief(items, ids),
+        full=cast(bool, args.full),
+        json_mode=cast(bool, args.json_mode),
+        stdout=cast("TextIO", args.stdout),
+    )
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -343,6 +399,14 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     _ = select.add_argument("--report", required=True, help="path to /age findings report")
     _ = select.add_argument("--selection", required=True, help="selection verb (e.g. 'all-high', '1,3', 'skip 2')")
     select.set_defaults(func=_cmd_parse_selection)
+
+    brief = sub.add_parser(
+        "render-brief",
+        help="render the coder brief (claim, locked recommendation, invariants) for selected findings",
+    )
+    _ = brief.add_argument("--report", required=True, help="path to /age findings report")
+    _ = brief.add_argument("--selection", required=True, help="selection verb or ids (e.g. '1,3', 'all-high')")
+    brief.set_defaults(func=_cmd_render_brief)
 
 
 def main(argv: list[str]) -> int:

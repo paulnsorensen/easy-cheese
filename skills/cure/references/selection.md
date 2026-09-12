@@ -105,15 +105,34 @@ Do not infer cost from missing data.
 - Lock the selection after the user or source skill selects it.
   Report new findings and let the user start another `/cure` run.
 
+## Coder brief
+
+Render the brief from the locked ids before any dispatch:
+
+```text
+python3 skills/cure/scripts/cure.pyz findings render-brief --report <path> --selection "<ids>"
+```
+
+The brief carries each finding's location, claim, `recommendation (locked)`, and `invariants` line.
+Give it to the repair agent verbatim.
+The recommendation is the locked decision for that fix.
+Keep every `invariants:` clause true while you edit.
+Deviate only with a `### Deferred` entry that names why the recommendation is wrong or obsolete.
+Never substitute a different fix silently.
+The taste test takes the same recommendation and invariants as its locked decision.
+The Locked-decision lens halts on a silent substitution.
+
 ## After selection
 
 For each selected finding:
 
 1. Read the cited location again and confirm that the finding still applies.
-2. Apply a stale-safe edit that matches the read anchor.
-3. Follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
-4. Run the narrowest test that proves the fix.
-5. Continue to the next finding.
+2. Implement the `recommendation:` as written and keep every `invariants:` clause true.
+   Record a deviation under `### Deferred` with the rebuttal.
+3. Apply a stale-safe edit that matches the read anchor.
+4. Follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
+5. Run the narrowest test that proves the fix.
+6. Continue to the next finding.
 
 When a finding no longer applies, put it under `Skipped` with the reason.
 Do not remove it silently.
