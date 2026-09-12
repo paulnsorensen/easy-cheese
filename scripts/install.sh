@@ -31,6 +31,11 @@ EC_SKILL_REPO="paulnsorensen/easy-cheese"
 # loosely in sync with skills/ but not load-bearing for happy-path runs.
 EC_FALLBACK_SKILLS="age affinage briesearch cheese cook culture cure easy-cheese-setup hard-cheese melt mold pasteurize plate press ultracook wheypoint"
 
+# Internal (dev-only) bundles that live under skills/ but are NOT user-facing
+# skills: excluded from discovery and the fallback list, never installed. Kept
+# in sync with build_pyz.INTERNAL_BUNDLES (age-bench is the /age benchmark harness).
+EC_INTERNAL_SKILLS="age-bench"
+
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
 EC_DEFAULT_MCP="tilth context7 hallouminate"
@@ -487,6 +492,21 @@ ec_install_mcp_for_harnesses() {
 # API. Prints one skill name per line on success; on failure (network,
 # rate limit, private repo) returns non-zero with empty stdout and the
 # caller falls back to EC_FALLBACK_SKILLS.
+# Drop internal bundle names (whole-line, fixed-string) from a stream of
+# discovered skill names so a dev-only bundle under skills/ is never offered
+# for install, even against a source ref where its directory exists.
+ec_filter_internal_skills() {
+    local -a internal
+    read -r -a internal <<<"${EC_INTERNAL_SKILLS:-}"
+    if (( ${#internal[@]} == 0 )); then
+        cat
+        return
+    fi
+    local pattern
+    printf -v pattern '%s\n' "${internal[@]}"
+    grep -vxF -- "${pattern%$'\n'}"
+}
+
 ec_discover_skills() {
     local gh="$1"
     local path="repos/${EC_SKILL_REPO}/contents/skills"
@@ -495,7 +515,8 @@ ec_discover_skills() {
     # discovered and then fails to install at the pinned ref.
     [[ -n "${EC_SKILL_REF:-}" ]] && path+="?ref=${EC_SKILL_REF}"
     "$gh" api "$path" \
-        --jq '.[] | select(.type == "dir") | .name' 2>/dev/null
+        --jq '.[] | select(.type == "dir") | .name' 2>/dev/null \
+        | ec_filter_internal_skills
 }
 
 # Install the easy-cheese skill set into the picked harness via 'gh skill'.

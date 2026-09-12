@@ -1015,15 +1015,31 @@ STUB
 
 # -- EC_FALLBACK_SKILLS sync --------------------------------------------------
 
-@test "EC_FALLBACK_SKILLS matches the skills/ directories exactly" {
+@test "EC_FALLBACK_SKILLS plus EC_INTERNAL_SKILLS covers the skills/ directories exactly" {
     local expected actual d
     expected="$(for d in "$REPO_ROOT"/skills/*/; do basename "$d"; done | LC_ALL=C sort)"
-    actual="$(tr ' ' '\n' <<<"$EC_FALLBACK_SKILLS" | LC_ALL=C sort)"
+    actual="$(tr ' ' '\n' <<<"$EC_FALLBACK_SKILLS $EC_INTERNAL_SKILLS" | LC_ALL=C sort)"
     if [[ "$actual" != "$expected" ]]; then
         echo "expected: $expected"
         echo "actual:   $actual"
         return 1
     fi
+}
+
+@test "ec_discover_skills filters out internal bundles" {
+    cat > "$STUB_BIN/gh" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "api" ]]; then
+    printf 'age\nage-bench\npress\n'
+    exit 0
+fi
+exit 0
+STUB
+    chmod +x "$STUB_BIN/gh"
+    EC_INTERNAL_SKILLS="age-bench" run ec_discover_skills "$STUB_BIN/gh"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"press"* ]]
+    [[ "$output" != *"age-bench"* ]]
 }
 
 # -- test harness hermeticity -------------------------------------------------
