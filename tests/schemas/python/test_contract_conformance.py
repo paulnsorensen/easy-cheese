@@ -491,6 +491,7 @@ def test_curd_result_normalization_associates_criteria_by_id() -> None:
 def test_curd_result_normalization_rejects_invalid_criterion_ids(
     mutation: str, message: str
 ) -> None:
+    """Reject unknown, duplicate, or missing writer criterion identities."""
     case = _curd_result_normalization_case()
     writer = cast("dict[str, object]", case["writer_view"])
     payload = cast("dict[str, object]", writer["payload"])
@@ -516,6 +517,7 @@ def test_curd_result_normalization_rejects_invalid_criterion_ids(
 def test_curd_result_normalization_rejects_invalid_expected_criterion_ids(
     mutation: str, message: str
 ) -> None:
+    """Reject malformed or duplicate host criterion identities."""
     case = _curd_result_normalization_case()
     invocation = cast("dict[str, object]", case["host_invocation"])
     expected = cast("list[object]", invocation["expected_criterion_ids"])

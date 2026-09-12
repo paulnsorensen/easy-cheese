@@ -733,6 +733,7 @@ def validate_contract(
 
 
 def _forbidden_field(path: str, value: object) -> tuple[str, str] | None:
+    """Locate the first host-owned field improperly supplied by a writer."""
     if isinstance(value, Mapping):
         mapping_value = cast("Mapping[str, object]", value)
         for key, item in mapping_value.items():
@@ -1090,6 +1091,7 @@ def _normalize_diagnosis_result(
 def _normalize_curd_result(
     view: CurdResultWriterView, invocation: Mapping[str, object]
 ) -> CurdResult:
+    """Validate criterion identities and combine writer and host result data."""
     schema_uri = _CANONICAL_SCHEMA_BY_WRITER_KIND[WriterViewKind.CURD_RESULT]
     expected_raw = _invocation_value(invocation, "expected_criterion_ids")
     if not isinstance(expected_raw, list | tuple):
