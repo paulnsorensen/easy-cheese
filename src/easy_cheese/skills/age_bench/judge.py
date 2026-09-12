@@ -32,7 +32,7 @@ class JudgeTransportError(Exception):
     """Raised when a transport response can't be classified, or is exhausted."""
 
 
-def default_transport(prompt: str) -> str:
+def default_transport(_prompt: str) -> str:
     raise JudgeTransportUnavailableError(
         "no live LLM transport is wired in age-bench; pass --transport-fixture"
     )
@@ -42,7 +42,7 @@ def recorded_transport(fixture_path: Path) -> JudgeTransport:
     responses: list[str] = json.loads(Path(fixture_path).read_text(encoding="utf-8"))
     pending: Iterator[str] = iter(responses)
 
-    def _transport(prompt: str) -> str:
+    def _transport(_prompt: str) -> str:
         try:
             return next(pending)
         except StopIteration as exc:

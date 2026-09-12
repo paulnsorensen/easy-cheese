@@ -64,14 +64,3 @@ def load_case(case_id: str, *, repo_root: Path | str | None = None) -> Case:
         defect_line=defect["line"],
         dir=case_dir,
     )
-
-
-def list_case_ids(repo_root: Path | str | None = None) -> list[str]:
-    root = cases_root(repo_root)
-    if not root.is_dir():
-        return []
-    return sorted(
-        entry.name
-        for entry in root.iterdir()
-        if entry.is_dir() and (entry / "case.toml").is_file()
-    )
