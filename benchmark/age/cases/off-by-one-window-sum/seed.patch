@@ -1,0 +1,8 @@
+--- a/module.py
++++ b/module.py
+@@ -3,4 +3,4 @@
+     total = 0
+     start = len(values) - n
+-    for i in range(start, len(values)):
++    for i in range(start, len(values) - 1):
+         total += values[i]

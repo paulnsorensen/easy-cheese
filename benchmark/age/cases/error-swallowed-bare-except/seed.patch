@@ -1,0 +1,9 @@
+--- a/handler.py
++++ b/handler.py
+@@ -2,5 +2,5 @@
+     """Parse a currency string into a float, or None if invalid."""
+     try:
+         return float(raw)
+-    except ValueError:
++    except:
+         return None

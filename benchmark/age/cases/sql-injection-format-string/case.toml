@@ -1,0 +1,6 @@
+overlap_area = "injection"
+description = "Username is interpolated into the SQL string instead of bound as a parameter, enabling SQL injection."
+
+[defect]
+file = "query.py"
+line = 4

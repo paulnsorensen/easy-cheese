@@ -1,0 +1,10 @@
+--- a/resource.py
++++ b/resource.py
+@@ -1,6 +1,4 @@
+-def append_item(item, bucket=None):
++def append_item(item, bucket=[]):
+     """Append item to bucket, creating a new list if none given."""
+-    if bucket is None:
+-        bucket = []
+     bucket.append(item)
+     return bucket

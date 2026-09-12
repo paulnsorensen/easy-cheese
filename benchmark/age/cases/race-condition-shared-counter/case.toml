@@ -1,0 +1,6 @@
+overlap_area = "concurrency"
+description = "increment() mutates the shared counter without holding the lock, racing concurrent callers."
+
+[defect]
+file = "counter.py"
+line = 12
