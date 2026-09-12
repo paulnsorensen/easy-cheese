@@ -945,7 +945,7 @@ STUB
         run ec_main --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *"gh: already installed (gh on PATH)"* ]]
-    [[ "$output" == *"would run 'brew install ripgrep'"* ]]
+    [[ "$output" == *"would run 'brew install ast-grep'"* ]]
     # tilth is a default tool again; it has no brew formula, so it is never
     # installed via brew (here the stub is on PATH, so it reports as present).
     [[ "$output" != *"brew install tilth"* ]]
