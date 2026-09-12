@@ -4,9 +4,75 @@
 
 ## Current implementation state
 
-<certain> Canonical decorator-derived contracts and the compiled transition registry are implemented. The uniform pointer gateway, layout-derived skill bundles, and Mold → Cook producer/consumer enforcement remain approved work; legacy CurdBlock, Decomposition, and CurdRecord surfaces still exist during migration.[^current]
+
+### Verification boundary: 2026-09-06
+
+The approved flow below is a target, not proof of end-to-end adoption.
+This inspection uses Easy Cheese commit `4639f6f5b3dfaf68a195c6d247ef65af57b0debb` from draft PR 628.
+The package extraction preserves payload semantics and does not complete the contract redesign.[^extraction-scope]
+
+Current phase declarations send Mold's CurdPlan to Cook and Cook's CurdResult to Press or Age.
+Press declares CurdResult output to Age, while Age declares CurdPlan output to Cure.[^declared-routes]
+Age's instructions instead prohibit JSON sidecars and require Cure to read Markdown directly.[^age-prose]
+These declarations and instructions do not establish one enforced evidence-to-plan handoff.
+Do not infer execution support from a registered schema or route alone.
+
+The host knows requested review targets, but it does not know whether the agent reviewed them.
+ReviewResultWriterView has no per-target coverage field.
+The current workflow marks every target covered for clean or findings output.[^review-observations]
+The historical statement that coverage is host-computable does not justify this semantic inference.
+A redesign must distinguish host-known target identity from agent-reported coverage.
+
+The owner's clean-break decision supersedes compatibility-only projections and migration requirements in the historical sections.
+It does not authorize deletion of stored user work.[^clean-break-boundary]
+
+[^extraction-scope]: .cheese/specs/schema-package-boundary.md:5-39.
+[^declared-routes]: skills/mold/phase-contract.yaml:5-10; skills/cook/phase-contract.yaml:5-16; skills/press/phase-contract.yaml:5-10; skills/age/phase-contract.yaml:5-10.
+[^age-prose]: skills/age/SKILL.md:241-243.
+[^review-observations]: src/easy_cheese_schemas/contracts.py:1969-1976; src/easy_cheese/shared/workflow.py:528-580.
+[^clean-break-boundary]: src/easy_cheese_schemas/AGENTS.md:48-54.
+
+
+Canonical contracts, the compiled registry, and pointer-last publication have implementations.
+Mold exposes the publish command, while the broader skill handoffs remain split between typed and Markdown paths.[^implemented-pointer]
+CurdBlock, Decomposition, and CurdRecord still have active representations.[^current]
+
+[^implemented-pointer]: src/easy_cheese/shared/publication.py:619-691; src/easy_cheese/skills/mold/contract_handlers.py:65-98; skills/cure/SKILL.md:49-57.
 
 <certain> Milknado still owns a separate batch plan and has no easy-cheese-schemas dependency.[^milknado]
+
+
+
+### Current registered-root map
+
+The catalog contains 15 JSON roots, grouped below by their actual boundary.[^root-catalog]
+The map includes Python runtime uses and skill instructions; it does not claim every route has end-to-end enforcement.
+
+| Roots | Producer | Consumer and evidence |
+| --- | --- | --- |
+| PlannerRequest; PlannerResult; CurdPlan | Host request; planner writer; pure materializer | Workflow plan and Mold publication; Cook consumes CurdPlan.[^planning-seams] |
+| CurdResult | Cook or Cure writer; host normalizer | Workflow review loop; declared Press and Age inputs.[^execution-seams] |
+| ReviewRequest; ReviewResult | Execution host; review writer | Workflow review normalization; Age's direct report path remains Markdown.[^review-seams] |
+| DiagnosisRequest; DiagnosisResult | Failed-criterion host; diagnosis writer | Workflow diagnosis and confirmed-cause repair path.[^diagnosis-seams] |
+| AgentWriterView | Agent output or host wrapper | Normalization before canonical construction.[^writer-seam] |
+| HandoffPointer; NormalizationReceipt | Publication host | Pointer acceptance and reference validation.[^implemented-pointer] |
+| PhaseContract | Skill-owned YAML declarations | Build compiler and immutable transition registry.[^declared-routes] |
+| CheckpointIntent; WheypointRecord; WheypointRevision | Checkpoint author; Wheypoint commit host | Checkpoint validation, record persistence, and lineage checks.[^continuity-seams] |
+
+The inspected Milknado planning and MCP entrypoints accept PlanChangeManifest with the milknado.plan.v2 stamp.
+They decode file changes, solve batches, and apply graph nodes; they do not establish a CurdPlan consumer.[^milknado-entrypoints]
+Milknado's PlanResult is an operational summary, not Easy Cheese's semantic PlannerResult.[^milknado-result]
+A complete package-wide consumer absence proof and a field-by-field interoperability audit remain outside this pass.
+
+[^root-catalog]: src/easy_cheese_schemas/_schema_catalog.py:5-39.
+[^planning-seams]: src/easy_cheese_schemas/planner.py:44-113,144-182; src/easy_cheese/shared/workflow.py:223-243; skills/cook/references/fan-pathway.md:56-99.
+[^execution-seams]: src/easy_cheese/shared/workflow.py:748-794,999-1139; skills/cook/phase-contract.yaml:5-16.
+[^review-seams]: src/easy_cheese/shared/workflow.py:1043-1057,554-580; skills/age/SKILL.md:235-243.
+[^diagnosis-seams]: src/easy_cheese/shared/workflow.py:1079-1097,617-630,810-829.
+[^writer-seam]: src/easy_cheese/shared/workflow.py:445-476.
+[^continuity-seams]: src/easy_cheese/skills/wheypoint/checkpoint.py:56-64,234-304; src/easy_cheese/skills/wheypoint/commit.py:620-682,792-837; src/easy_cheese/skills/wheypoint/lineage.py:59-142.
+[^milknado-entrypoints]: /Users/paul/Dev/milknado/src/milknado/domains/planning/manifest.py:23-38; /Users/paul/Dev/milknado/src/milknado/domains/planning/planner.py:60-150; /Users/paul/Dev/milknado/src/milknado/mcp/server.py:76-101.
+[^milknado-result]: /Users/paul/Dev/milknado/src/milknado/domains/planning/planner.py:29-39; src/easy_cheese_schemas/contracts.py:1208-1237.
 
 ## Approved contract flow
 
