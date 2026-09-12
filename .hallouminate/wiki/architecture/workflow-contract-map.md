@@ -1,6 +1,6 @@
 # Workflow contract map
 
-<certain> The contract-map Mold is complete. CurdPlan is the canonical semantic work contract; agents author slim views; the planner owns decomposition; Cook, Cure, and Milknado are executors or adapters around the same semantic plan.[^spec]
+<certain> The contract-map Mold is complete. CurdPlan is the canonical semantic work contract; agents author slim views; the planner owns decomposition; Cook and Cure are executors, while Milknado is the target adapter around the same semantic plan.[^spec]
 
 ## Current implementation state
 
@@ -63,6 +63,7 @@ The inspected Milknado planning and MCP entrypoints accept PlanChangeManifest wi
 They decode file changes, solve batches, and apply graph nodes; they do not establish a CurdPlan consumer.[^milknado-entrypoints]
 Milknado's PlanResult is an operational summary, not Easy Cheese's semantic PlannerResult.[^milknado-result]
 A complete package-wide consumer absence proof and a field-by-field interoperability audit remain outside this pass.
+Accordingly, the Milknado importer, plan-v2 projection, and result-aggregation path below is target-only at this verification boundary.
 
 [^root-catalog]: src/easy_cheese_schemas/_schema_catalog.py:5-39.
 [^planning-seams]: src/easy_cheese_schemas/planner.py:44-113,144-182; src/easy_cheese/shared/workflow.py:223-243; skills/cook/references/fan-pathway.md:56-99.
@@ -84,10 +85,10 @@ flowchart LR
   P --> R[PlannerResult]
   R -->|complete or partial| C[CurdPlan]
   C --> K[Cook or Cure]
-  C --> I[Milknado importer]
+  C -. target only .-> I[Milknado importer]
   K --> O[CurdResult array]
-  I --> B[milknado.plan.v2]
-  B --> O
+  I -. target only .-> B[milknado.plan.v2]
+  B -. target only .-> O
 ```
 
 <certain> Mold proves the first producer path. Age and Pasteurize become evidence producers through F001 rather than creating curds themselves.
@@ -108,7 +109,7 @@ flowchart LR
 
 <certain> Root `$cheese` owns orchestration policy and intent; the selected executor owns runtime state. Human configuration outranks an agent request, which outranks executor defaults. Admission records the resolved execution choice and gates on projected cost across retries, reviews, remediation, checkpoints, and runtime capacity.[^checkpoint]
 
-<certain> Raw goals pass through semantic planning, physical planning, batching, and graph construction. An approved `CurdPlan` can enter Milknado directly, bypassing semantic decomposition and cross-curd batching.[^checkpoint]
+<certain> Target-only Milknado flow: raw goals pass through semantic planning, physical planning, batching, and graph construction. An approved `CurdPlan` is intended to enter Milknado directly, bypassing semantic decomposition and cross-curd batching.[^checkpoint]
 
 ## Planner semantics
 
@@ -142,7 +143,7 @@ flowchart LR
 
 <certain> Cook and Cure consume CurdPlan directly after transport resolution. CurdResult has exactly one row per criterion and one result per semantic curd.
 
-<certain> Milknado maps one semantic curd to one or more physical nodes, then aggregates every node outcome, including unstarted nodes, back into the source CurdResult.
+<certain> Target-only Milknado flow: Milknado maps one semantic curd to one or more physical nodes, then aggregates every node outcome, including unstarted nodes, back into the source CurdResult.
 
 ## Routing boundary
 
