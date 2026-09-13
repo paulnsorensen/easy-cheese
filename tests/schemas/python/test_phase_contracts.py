@@ -541,6 +541,30 @@ def test_validate_transition_returns_the_declared_route() -> None:
     assert route.payload_schema_uri == CURD_PLAN_SCHEMA_URI
 
 
+def test_age_to_cure_route_carries_review_result_not_curd_plan() -> None:
+    from easy_cheese_schemas._schema_catalog import REVIEW_RESULT_SCHEMA_URI
+
+    route = validate_transition(
+        COMPILED_TRANSITION_REGISTRY,
+        source="age",
+        destination="cure",
+        payload_schema_uri=REVIEW_RESULT_SCHEMA_URI,
+    )
+
+    assert route is not None
+    assert route.source == "age"
+    assert route.destination == "cure"
+    assert route.payload_schema_uri == REVIEW_RESULT_SCHEMA_URI
+
+    with pytest.raises(TransitionError, match="payload schema .* is not declared"):
+        _ = validate_transition(
+            COMPILED_TRANSITION_REGISTRY,
+            source="age",
+            destination="cure",
+            payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+        )
+
+
 @pytest.mark.parametrize(
     ("source", "destination", "payload_schema_uri", "message"),
     [

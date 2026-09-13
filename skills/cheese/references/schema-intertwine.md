@@ -6,12 +6,12 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 
 | Source phase | Contract version | Input schemas | Destination | Payload schema | Payload contract |
 | --- | --- | --- | --- | --- | --- |
-| age | 1.0 | curd-result | cure | curd-plan | CurdPlan |
+| age | 1.0 | curd-result | cure | review-result | ReviewResult |
 | cook | 1.0 | curd-plan | age | curd-result | CurdResult |
 | cook | 1.0 | curd-plan | cook | curd-plan | CurdPlan |
 | cook | 1.0 | curd-plan | mold | planner-request | PlannerRequest |
 | cook | 1.0 | curd-plan | press | curd-result | CurdResult |
-| cure | 1.0 | curd-plan | age | curd-result | CurdResult |
+| cure | 1.0 | curd-plan, review-result | age | curd-result | CurdResult |
 | mold | 1.0 | planner-request | cook | curd-plan | CurdPlan |
 | press | 1.0 | curd-result | age | curd-result | CurdResult |
 
@@ -21,7 +21,7 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | --- | --- | --- | --- |
 | agent-writer-view | AgentWriterView | — | — |
 | checkpoint-intent | CheckpointIntent | — | — |
-| curd-plan | CurdPlan | cook, cure | age, cook, mold |
+| curd-plan | CurdPlan | cook, cure | cook, mold |
 | curd-result | CurdResult | age, press | cook, cure, press |
 | diagnosis-request | DiagnosisRequest | — | — |
 | diagnosis-result | DiagnosisResult | — | — |
@@ -31,6 +31,6 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | planner-request | PlannerRequest | mold | cook |
 | planner-result | PlannerResult | — | — |
 | review-request | ReviewRequest | — | — |
-| review-result | ReviewResult | — | — |
+| review-result | ReviewResult | cure | age |
 | wheypoint-record | WheypointRecord | — | — |
 | wheypoint-revision | WheypointRevision | — | — |
