@@ -64,10 +64,12 @@ def _bucket_prompt(case: Case, finding: Finding) -> str:
 
 def _bucket_of(response: str) -> str:
     lowered = response.lower()
-    for bucket in BUCKETS:
-        if bucket.lower() in lowered:
-            return bucket
-    raise JudgeTransportError(f"transport response did not name a bucket: {response!r}")
+    matches = [bucket for bucket in BUCKETS if bucket.lower() in lowered]
+    if not matches:
+        raise JudgeTransportError(f"transport response did not name a bucket: {response!r}")
+    if len(matches) > 1:
+        raise JudgeTransportError(f"transport response named multiple buckets: {response!r}")
+    return matches[0]
 
 
 @dataclass(frozen=True)

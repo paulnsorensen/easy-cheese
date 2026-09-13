@@ -3,4 +3,4 @@ description = "The opened file handle is never closed, leaking a file descriptor
 
 [defect]
 file = "loader.py"
-line = 5
+line = 3

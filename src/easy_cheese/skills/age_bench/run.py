@@ -13,6 +13,7 @@ its own either way.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import shutil
 import subprocess
@@ -27,7 +28,7 @@ from easy_cheese.skills.age_bench.judge import (
     judge_report,
     recorded_transport,
 )
-from easy_cheese.skills.age_bench.prepare import prepare_worktree
+from easy_cheese.skills.age_bench.prepare import GIT_TIMEOUT_SECONDS, prepare_worktree
 
 HEADLESS_EXECUTABLE = "claude"
 HEADLESS_TIMEOUT_SECONDS = 300
@@ -92,12 +93,14 @@ def run_case(
     try:
         report_text = _capture_report(executable, tool=tool, cwd=prepared.worktree_dir)
     finally:
-        _ = subprocess.run(
-            ["git", "worktree", "remove", "-f", str(prepared.worktree_dir)],
-            cwd=prepared.scratch_dir / "repo",
-            capture_output=True,
-            text=True,
-        )
+        with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+            _ = subprocess.run(
+                ["git", "worktree", "remove", "-f", str(prepared.worktree_dir)],
+                cwd=prepared.scratch_dir / "repo",
+                capture_output=True,
+                text=True,
+                timeout=GIT_TIMEOUT_SECONDS,
+            )
         shutil.rmtree(prepared.scratch_dir, ignore_errors=True)
     transport: JudgeTransport = (
         recorded_transport(Path(transport_fixture))

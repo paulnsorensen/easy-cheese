@@ -9,6 +9,7 @@ an operator runs next.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import shutil
 import subprocess
 import tempfile
@@ -18,6 +19,8 @@ from typing import TextIO, cast
 
 from easy_cheese.shared import cli
 from easy_cheese.skills.age_bench.cases import load_case
+
+GIT_TIMEOUT_SECONDS = 30
 
 
 class PrepareError(Exception):
@@ -33,7 +36,18 @@ class PreparedWorktree:
 
 
 def _run(argv: list[str], *, cwd: Path) -> None:
-    result = subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            argv,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise PrepareError(
+            f"{' '.join(argv)} timed out after {GIT_TIMEOUT_SECONDS}s"
+        ) from exc
     if result.returncode != 0:
         raise PrepareError(f"{' '.join(argv)} failed: {result.stderr.strip()}")
 
@@ -58,12 +72,14 @@ def prepare_worktree(case_id: str, *, repo_root: Path | str | None = None) -> Pr
         _run(["git", "apply", str(case.seed_patch.resolve())], cwd=worktree_dir)
     except Exception:
         if worktree_registered:
-            _ = subprocess.run(
-                ["git", "worktree", "remove", "-f", str(worktree_dir)],
-                cwd=repo_dir,
-                capture_output=True,
-                text=True,
-            )
+            with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+                _ = subprocess.run(
+                    ["git", "worktree", "remove", "-f", str(worktree_dir)],
+                    cwd=repo_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=GIT_TIMEOUT_SECONDS,
+                )
         shutil.rmtree(scratch_dir, ignore_errors=True)
         raise
 

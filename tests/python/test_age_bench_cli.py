@@ -33,6 +33,7 @@ def _run_cli(args: list[str], *, env: dict[str, str] | None = None) -> subproces
         env=full_env,
         capture_output=True,
         text=True,
+        timeout=30,
     )
 
 
@@ -132,6 +133,34 @@ def test_judge_caps_recall_at_one_when_reviewer_reports_the_defect_multiple_time
     payload = cast("dict[str, object]", json.loads(result.stdout))
     assert payload["hits"] == 2
     assert payload["recall"] == 1.0
+
+
+def test_judge_rejects_a_transport_response_naming_multiple_buckets(tmp_path: Path) -> None:
+    report_path = tmp_path / "report.md"
+    _ = report_path.write_text(
+        "## High\n"
+        + "- **[correctness:high]** `module.py:5` — The loop drops the final element.\n",
+        encoding="utf-8",
+    )
+    fixture_path = tmp_path / "transport.json"
+    _ = fixture_path.write_text(json.dumps(["Noise, not Bug Hit"]), encoding="utf-8")
+
+    result = _run_cli(
+        [
+            "judge",
+            "--tool",
+            "age",
+            "--case",
+            CASE_ID,
+            "--report",
+            str(report_path),
+            "--transport-fixture",
+            str(fixture_path),
+        ]
+    )
+
+    assert result.returncode != 0
+    assert "named multiple buckets" in result.stderr
 
 
 def test_scoreboard_writes_per_overlap_area_table_under_the_corpus_root(tmp_path: Path) -> None:

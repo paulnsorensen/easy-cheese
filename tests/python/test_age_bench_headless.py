@@ -42,6 +42,7 @@ def _run_cli(args: list[str], *, env: dict[str, str]) -> subprocess.CompletedPro
         env=env,
         capture_output=True,
         text=True,
+        timeout=30,
     )
 
 
