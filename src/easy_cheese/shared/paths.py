@@ -62,12 +62,11 @@ REPO_LOCAL_ROOT = Path(".cheese")
 CHAIN_PHASES: tuple[str, ...] = ("cook", "press", "age", "cure")
 
 # Phase token -> on-disk directory name, when the two diverge. The phase TOKEN
-# stays stable for every caller (artifact_path, parse, resolver); only the
+# stays stable for every caller (artifact_path, resolver); only the
 # directory under the root differs. `hard` writes to `.cheese/hard-cheese/`,
 # matching src/hard-cheese/append-attempt.py. Phases not listed map to
 # themselves.
 PHASE_DIRS: dict[str, str] = {"hard": "hard-cheese"}
-_DIR_PHASES: dict[str, str] = {d: p for p, d in PHASE_DIRS.items()}
 
 # Aux registry: artifact owners that are NOT pipeline phases. `affinage` writes
 # `.cheese/affinage/pr-<n>.md` keyed by PR number (a valid kebab slug, but not a
@@ -283,32 +282,6 @@ def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> P
         raise ValueError(err)
     base = Path(root) if root is not None else default_root_for_phase(phase)
     return base / phase_dir(phase) / f"{slug}.md"
-
-
-
-
-def parse_artifact_path(path: Path | str) -> tuple[str, str]:
-    """Parse ``phase, slug`` from a canonical ``.cheese/<phase-dir>/<slug>.md`` path.
-
-    Only the canonical ``.cheese/`` root is parsed. The accepted on-disk directory
-    may differ from the returned phase token: ``.cheese/hard-cheese/<slug>.md``
-    parses to phase ``hard`` (see ``_DIR_PHASES``).
-    """
-    p = Path(path)
-    parts = p.parts
-    if len(parts) < 3 or parts[-3] != ".cheese":
-        raise ValueError(f"{path!r} is not under .cheese/<phase>/")
-    dir_name = parts[-2]
-    phase = _DIR_PHASES.get(dir_name, dir_name)
-    if phase not in PHASES:
-        raise ValueError(f"unknown phase {dir_name!r} in {path!r}")
-    if p.suffix != ".md":
-        raise ValueError(f"artifact must end in .md, got {p.suffix!r}")
-    slug = p.stem
-    err = validate_slug(slug)
-    if err is not None:
-        raise ValueError(err)
-    return phase, slug
 
 
 def existing_artifacts(
