@@ -10,7 +10,7 @@ that matter most if either side ever loosens.
 from __future__ import annotations
 
 import pytest
-from easy_cheese_schemas import PrPlan
+from easy_cheese_schemas import PrPlan, load
 from schema_conformance import (
     Case,
     Validator,
@@ -78,6 +78,89 @@ CASES: list[Case] = [
             ],
         ),
     ),
+    agreed_valid(
+        "stacked_linear with a real dependency",
+        plan(
+            shape="stacked_linear",
+            groups=[
+                pr_group("ultracook/feature/pr-1"),
+                {
+                    "branch": "ultracook/feature/pr-2",
+                    "title": "feat: pr-2",
+                    "base": "ultracook/feature/pr-1",
+                    "commits": ["abc1234"],
+                    "depends_on": ["ultracook/feature/pr-1"],
+                },
+            ],
+        ),
+    ),
+    agreed_invalid(
+        "depends_on names a branch outside the plan",
+        plan(
+            shape="stacked_linear",
+            groups=[
+                {
+                    "branch": "ultracook/feature/pr-1",
+                    "title": "feat: pr-1",
+                    "base": "main",
+                    "commits": ["abc1234"],
+                    "depends_on": ["ghost"],
+                }
+            ],
+        ),
+    ),
+    agreed_invalid(
+        "group depends on itself",
+        plan(
+            shape="stacked_linear",
+            groups=[
+                {
+                    "branch": "ultracook/feature/pr-1",
+                    "title": "feat: pr-1",
+                    "base": "main",
+                    "commits": ["abc1234"],
+                    "depends_on": ["ultracook/feature/pr-1"],
+                }
+            ],
+        ),
+    ),
+    agreed_invalid(
+        "two groups form a dependency cycle",
+        plan(
+            shape="stacked_linear",
+            groups=[
+                {
+                    "branch": "ultracook/feature/pr-1",
+                    "title": "feat: pr-1",
+                    "base": "main",
+                    "commits": ["abc1234"],
+                    "depends_on": ["ultracook/feature/pr-2"],
+                },
+                {
+                    "branch": "ultracook/feature/pr-2",
+                    "title": "feat: pr-2",
+                    "base": "main",
+                    "commits": ["abc1234"],
+                    "depends_on": ["ultracook/feature/pr-1"],
+                },
+            ],
+        ),
+    ),
+    agreed_invalid(
+        "base names neither target_branch nor a plan branch",
+        plan(
+            shape="stacked_linear",
+            groups=[
+                {
+                    "branch": "ultracook/feature/pr-1",
+                    "title": "feat: pr-1",
+                    "base": "ghost",
+                    "commits": ["abc1234"],
+                    "depends_on": [],
+                }
+            ],
+        ),
+    ),
 ]
 
 
@@ -88,6 +171,13 @@ def test_divergence_table_is_honest() -> None:
 @pytest.mark.parametrize("case", agreeing(CASES), ids=ids(agreeing(CASES)))
 def test_validator_and_type_agree(case: Case, pr_plan_validator: Validator) -> None:
     assert_conforms(case, pr_plan_validator, PrPlan)
+
+
+def test_target_branch_defaults_to_main() -> None:
+    """AC-3: a plan that omits target_branch defaults it to main."""
+    loaded = load(pr_plan(), PrPlan, strict=True)
+    assert loaded.value is not None
+    assert loaded.value.target_branch == "main"
 
 
 def test_no_known_divergence_remains() -> None:

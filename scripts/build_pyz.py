@@ -71,13 +71,13 @@ def _compiled_phase_registry_source() -> str:
 
 
 def _schema_catalog_compiler() -> tuple[
-    Callable[[ModuleType], tuple[tuple[str, str], ...]],
+    Callable[[Sequence[ModuleType]], tuple[tuple[str, str], ...]],
     Callable[[Sequence[tuple[str, str]]], str],
 ]:
     compiler = _compiler_module("_schema_catalog_compiler")
     return (
         cast(
-            Callable[[ModuleType], tuple[tuple[str, str], ...]],
+            Callable[[Sequence[ModuleType]], tuple[tuple[str, str], ...]],
             getattr(compiler, "collect"),
         ),
         cast(Callable[[Sequence[tuple[str, str]]], str], getattr(compiler, "render")),
@@ -95,7 +95,8 @@ def _schema_contract_module() -> ModuleType:
 
 def _compiled_schema_catalog_source() -> str:
     collect, render = _schema_catalog_compiler()
-    return render(collect(_schema_contract_module()))
+    pr_plan_module = _import_from(SRC_ROOT, "easy_cheese_schemas.pr_plan")
+    return render(collect((_schema_contract_module(), pr_plan_module)))
 
 
 def _document_rules_compiler() -> tuple[

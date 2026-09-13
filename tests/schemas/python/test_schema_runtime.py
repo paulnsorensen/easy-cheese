@@ -166,20 +166,28 @@ def test_marker_authority_rejects_invalid_registered_markers(slug: object) -> No
         setattr(contract_type, "__contract_slug__", original_slug)
 
 
-def test_runtime_and_compiler_project_one_marker_authority() -> None:
+def test_runtime_and_compiler_project_the_module_tuple_authority() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
+    pr_plan = importlib.import_module("easy_cheese_schemas.pr_plan")
     runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], runtime.registered_contracts
     )
     entries = registered()
     marked_contracts = cast(tuple[tuple[str, type], ...], runtime._MARKED_CONTRACTS)
+    projected = collect_schema_markers(
+        (
+            cast(_ContractModule, cast(object, contracts)),
+            cast(_ContractModule, cast(object, pr_plan)),
+        )
+    )
 
     assert entries == tuple(sorted(entries, key=lambda entry: entry[0]))
     assert marked_contracts == entries
-    assert collect_schema_markers(
-        cast(_ContractModule, cast(object, contracts))
-    ) == tuple((slug, contract_type.__name__) for slug, contract_type in entries)
+    assert ("pr-plan", "PrPlan") in projected
+    assert projected == tuple(
+        (slug, contract_type.__name__) for slug, contract_type in entries
+    )
 
 
 def test_compiler_retains_constant_name_collision_validation() -> None:
@@ -191,10 +199,16 @@ def test_compiler_retains_constant_name_collision_validation() -> None:
 
 def test_generated_catalog_bytes_match_compiler_projection() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
+    pr_plan = importlib.import_module("easy_cheese_schemas.pr_plan")
     generated = ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
 
     assert generated.read_bytes() == render_schema_catalog(
-        collect_schema_markers(cast(_ContractModule, cast(object, contracts)))
+        collect_schema_markers(
+            (
+                cast(_ContractModule, cast(object, contracts)),
+                cast(_ContractModule, cast(object, pr_plan)),
+            )
+        )
     ).encode("utf-8")
 
 
@@ -254,6 +268,7 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         f"{SCHEMA_ROOT}/phase-contract",
         f"{SCHEMA_ROOT}/planner-request",
         f"{SCHEMA_ROOT}/planner-result",
+        f"{SCHEMA_ROOT}/pr-plan",
         f"{SCHEMA_ROOT}/review-request",
         f"{SCHEMA_ROOT}/review-result",
         f"{SCHEMA_ROOT}/wheypoint-record",

@@ -172,6 +172,11 @@ RUN_MANIFEST: dict[str, object] = {
 }
 
 PR_PLAN: dict[str, object] = {
+    "contract_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/pr-plan",
+        "major": "1",
+        "minor": "0",
+    },
     "shape": "single",
     "groups": [
         {
@@ -484,7 +489,11 @@ class TestPrPlanInvariants:
         """Two pull requests pushing the same ref would race each other."""
         group = deepcopy(_as_dict(_as_list(PR_PLAN["groups"])[0]))
         result = load(
-            {"shape": "orthogonal_flat", "groups": [group, deepcopy(group)]},
+            {
+                "contract_version": PR_PLAN["contract_version"],
+                "shape": "orthogonal_flat",
+                "groups": [group, deepcopy(group)],
+            },
             PrPlan,
             strict=True,
         )
@@ -497,7 +506,11 @@ class TestPrPlanInvariants:
     def test_single_shape_with_two_groups_is_rejected(self) -> None:
         group = deepcopy(_as_dict(_as_list(PR_PLAN["groups"])[0]))
         result = load(
-            {"shape": "single", "groups": [group, dict(group, branch="claude/other")]},
+            {
+                "contract_version": PR_PLAN["contract_version"],
+                "shape": "single",
+                "groups": [group, dict(group, branch="claude/other")],
+            },
             PrPlan,
             strict=True,
         )
@@ -511,7 +524,13 @@ class TestPrPlanInvariants:
         from main; a group based elsewhere is a stack in disguise."""
         group = dict(deepcopy(_as_dict(_as_list(PR_PLAN["groups"])[0])), base="develop")
         result = load(
-            {"shape": "orthogonal_flat", "groups": [group]}, PrPlan, strict=True
+            {
+                "contract_version": PR_PLAN["contract_version"],
+                "shape": "orthogonal_flat",
+                "groups": [group],
+            },
+            PrPlan,
+            strict=True,
         )
         assert result.value is None
         assert result.problems == (
@@ -522,6 +541,7 @@ class TestPrPlanInvariants:
         group = deepcopy(_as_dict(_as_list(PR_PLAN["groups"])[0]))
         result = load(
             {
+                "contract_version": PR_PLAN["contract_version"],
                 "shape": "orthogonal_flat",
                 "groups": [group, dict(group, branch="claude/other")],
             },

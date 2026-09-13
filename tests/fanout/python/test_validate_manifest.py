@@ -126,6 +126,11 @@ def _manifest() -> dict[str, object]:
 
 def _pr_plan() -> dict[str, object]:
     return {
+        "contract_version": {
+            "schema_uri": "https://schemas.easy-cheese.dev/pr-plan",
+            "major": "1",
+            "minor": "0",
+        },
         "shape": "single",
         "groups": [
             {
@@ -423,7 +428,15 @@ class TestRunManifestValidator:
 
     def test_embedded_pr_plan_is_validated(self, validate_manifest: ModuleType) -> None:
         manifest = _manifest()
-        manifest["pr_plan"] = {"shape": "single", "groups": []}
+        manifest["pr_plan"] = {
+            "contract_version": {
+                "schema_uri": "https://schemas.easy-cheese.dev/pr-plan",
+                "major": "1",
+                "minor": "0",
+            },
+            "shape": "single",
+            "groups": [],
+        }
         errors = _validate_run_manifest(validate_manifest, manifest)
         assert any("manifest.pr_plan.groups must be a non-empty list" in error for error in errors)
 

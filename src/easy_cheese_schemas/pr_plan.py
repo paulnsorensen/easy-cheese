@@ -11,10 +11,13 @@ that validator now delegates here via `easy_cheese_schemas.compat.load`.
 from __future__ import annotations
 
 import re
+import sys
 from enum import Enum
 from typing import Protocol, cast
 
-from attrs import define, field
+from attrs import define, field, validators
+
+from easy_cheese_schemas.contracts import ContractVersion, contract, marked_contracts_in
 
 
 class _NamedAttribute(Protocol):
@@ -135,11 +138,80 @@ class PrGroup:
     )
 
 
+def _validate_topology(
+    instance: PrPlan, attribute: _NamedAttribute, groups: list[PrGroup]
+) -> None:
+    """Every dependency and base names a plan branch or the target branch, no
+    group depends on itself, and the dependency graph is acyclic."""
+    branches = {group.branch for group in groups}
+    valid_targets = branches | {instance.target_branch}
+    for group in groups:
+        if BRANCH_RE.match(group.base) is None:
+            # A charset-invalid base is a shell-injection seam that PrGroup's
+            # own git-ref validator reports; do not mask that error here.
+            continue
+        if group.base not in valid_targets:
+            raise ValueError(
+                f"{attribute.name}: group {group.branch!r} base {group.base!r} "
+                + "must name target_branch or a plan branch"
+            )
+        for dep in group.depends_on or []:
+            if dep == group.branch:
+                raise ValueError(
+                    f"{attribute.name}: group {group.branch!r} depends_on "
+                    + f"{dep!r} is a self-dependency"
+                )
+            if dep not in valid_targets:
+                raise ValueError(
+                    f"{attribute.name}: group {group.branch!r} depends_on "
+                    + f"{dep!r} does not name target_branch or a plan branch"
+                )
+    _reject_cycles(attribute.name, groups)
+
+
+def _reject_cycles(field_name: str, groups: list[PrGroup]) -> None:
+    edges = {
+        group.branch: [dep for dep in (group.depends_on or []) if dep != group.branch]
+        for group in groups
+    }
+    branches = set(edges)
+    state: dict[str, int] = {}
+
+    def visit(node: str) -> None:
+        state[node] = 1
+        for dep in edges[node]:
+            if dep not in branches:
+                continue
+            if state.get(dep) == 1:
+                raise ValueError(
+                    f"{field_name}: group {node!r} depends_on {dep!r} forms a cycle"
+                )
+            if state.get(dep) != 2:
+                visit(dep)
+        state[node] = 2
+
+    for branch in branches:
+        if state.get(branch) is None:
+            visit(branch)
+
+
+@contract("pr-plan")
 @define(frozen=True)
 class PrPlan:
     """The full publish plan: one shape, at least one group."""
 
-    shape: PrShape
-    groups: list[PrGroup] = field(
-        validator=[_non_empty_list, _distinct_branches, _matches_shape]
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
     )
+    shape: PrShape
+    target_branch: str = field(
+        default="main", kw_only=True, validator=[_non_empty_string, _git_ref]
+    )
+    groups: list[PrGroup] = field(
+        validator=[_non_empty_list, _distinct_branches, _matches_shape, _validate_topology]
+    )
+
+
+def registered_contracts() -> tuple[tuple[str, type], ...]:
+    """Return marked contract classes in ``pr_plan.py`` in slug order."""
+    return marked_contracts_in(sys.modules[__name__])

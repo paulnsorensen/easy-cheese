@@ -30,6 +30,7 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | phase-contract | PhaseContract | — | — |
 | planner-request | PlannerRequest | mold | cook |
 | planner-result | PlannerResult | — | — |
+| pr-plan | — | — | — |
 | review-request | ReviewRequest | — | — |
 | review-result | ReviewResult | — | — |
 | wheypoint-record | WheypointRecord | — | — |

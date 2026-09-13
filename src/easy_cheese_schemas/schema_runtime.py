@@ -65,8 +65,9 @@ from easy_cheese_schemas.contracts import (
     canonical_digest,
     curd_plan_digest,
     derive_curd_disposition,
-    registered_contracts,
 )
+import easy_cheese_schemas.contracts as contracts_module
+import easy_cheese_schemas.pr_plan as pr_plan_module
 
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
 
@@ -76,6 +77,24 @@ class _RegisteredContract:
     schema_uri: str
     contract: type
     supported_version: ContractVersion | None
+
+
+def _collect_registered_contracts(*modules: object) -> tuple[tuple[str, type], ...]:
+    pairs = [
+        pair
+        for module in modules
+        for pair in contracts_module.marked_contracts_in(module)
+    ]
+    pairs.sort(key=lambda pair: pair[0])
+    for previous, current in zip(pairs, pairs[1:]):
+        if previous[0] == current[0]:
+            raise ValueError(f"duplicate contract marker {current[0]!r}")
+    return tuple(pairs)
+
+
+def registered_contracts() -> tuple[tuple[str, type], ...]:
+    """Collect marked contracts across the explicit module tuple."""
+    return _collect_registered_contracts(contracts_module, pr_plan_module)
 
 
 _MARKED_CONTRACTS = registered_contracts()
