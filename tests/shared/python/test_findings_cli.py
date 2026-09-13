@@ -29,7 +29,7 @@ class _FindingsModule(Protocol):
     def render_selection_table(self, findings: list[Finding]) -> str:
         """Render the numbered selection table."""
 
-    def parse_selection(self, verb: str, findings: list[Finding]) -> list[int]:
+    def parse_selection(self, verb: str, findings: list[Finding]) -> list[str]:
         """Expand a selection verb to finding ids."""
 
     def render_brief(self, findings: list[Finding], ids: list[int], *, report_path: str) -> str:
@@ -220,11 +220,12 @@ class TestParseSelection:
         expected_ids = lib.parse_selection(
             "all-high", lib.findings_from_review_result(SAMPLE_REVIEW_RESULT)
         )
-        printed = [int(line) for line in result.stdout.splitlines() if line.strip()]
+        printed = [line for line in result.stdout.splitlines() if line.strip()]
         assert printed == expected_ids
 
     def test_all_high_ids_literal_pin(self, report_path: Path) -> None:
-        # SAMPLE_REVIEW_RESULT has critical id=1, high id=2; all-high must return exactly [1, 2].
+        # critical is position 1, high is position 2; all-high resolves to their
+        # canonical finding_id strings in position order.
         result = _run(
             "parse-selection",
             "--report",
@@ -234,7 +235,7 @@ class TestParseSelection:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout) == [1, 2]
+        assert json.loads(result.stdout) == ["demo/finding/1", "demo/finding/2"]
 
     def test_json_mode_dumps_list(self, report_path: Path, findings_lib: ModuleType) -> None:
         result = _run(
@@ -262,7 +263,7 @@ class TestParseSelection:
             "--json",
         )
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout) == [1, 3]
+        assert json.loads(result.stdout) == ["demo/finding/1", "demo/finding/3"]
 
     def test_cheap_has_no_data_and_resolves_empty(self, report_path: Path) -> None:
         # Older reports (and every canonical ReviewFinding) lack fix-cost-now data;
@@ -510,5 +511,4 @@ class TestHelp:
         )
         assert result.returncode == 0
         assert "render-table" in result.stdout
-        assert "parse-selection" in result.stdout
-        assert "render-brief" in result.stdout
+        assert "parse-selection" in result.stdout        assert "render-brief" in result.stdout

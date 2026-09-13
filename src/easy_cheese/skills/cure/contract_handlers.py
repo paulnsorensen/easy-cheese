@@ -148,7 +148,17 @@ def remediate_plan_main(argv: list[str]) -> int:
     review_artifact = pointer_doc.payload
 
     review_id = review.review_id
-    source_plan = _source_plan(review_id)
+    if not review_id or "/" in review_id or review_id.startswith(".") or ".." in review_id:
+        print(
+            f"ERROR: review id {review_id!r} is not a safe path segment",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        source_plan = _source_plan(review_id)
+    except (ContractValidationError, TransitionError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     source_curd_id = source_plan.curds[0].curd_id
 
     evidence_ref = EvidenceRef(

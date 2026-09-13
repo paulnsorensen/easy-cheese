@@ -33,7 +33,8 @@ def _warn(message: str) -> None:
 
 @dataclass(frozen=True)
 class Finding:
-    id: int
+    id: int  # 1-based position in the ReviewResult, the verb-selection handle
+    finding_id: str  # canonical ReviewResult finding_id, the /cure handoff currency
     severity: str  # critical | high | medium | low
     summary: str
     location: str  # "path:line" or "path:start-end"; "" when unknown
@@ -79,9 +80,11 @@ def findings_from_review_result(result: Mapping[str, object]) -> list[Finding]:
         summary = row.get("summary")
         recommendation = row.get("recommendation")
         invariants = row.get("invariants")
+        finding_id = row.get("finding_id")
         findings.append(
             Finding(
                 id=index,
+                finding_id=(finding_id if isinstance(finding_id, str) else f"finding/{index}"),
                 severity=(severity if isinstance(severity, str) else "low").lower(),
                 summary=(summary if isinstance(summary, str) else "").strip(),
                 location=_location_str(row.get("location")),
@@ -103,13 +106,17 @@ def _cell(text: str) -> str:
 
 
 def render_selection_table(findings: list[Finding]) -> str:
-    """Render the | # | severity | location | summary | table for /cure."""
+    """Render the | # | finding | severity | location | summary | table for /cure.
+
+    `#` is the 1-based position a selection verb references; `finding` is the
+    canonical ReviewResult finding_id that travels in the /cure handoff.
+    """
     header = (
-        "| # | severity | location                  | summary |\n"
-        "|---|----------|---------------------------|---------|"
+        "| # | finding | severity | location                  | summary |\n"
+        "|---|---------|----------|---------------------------|---------|"
     )
     rows = [
-        f"| {f.id} | {f.severity:8s} | {_cell(f.location):25s} | {_cell(f.summary)} |"
+        f"| {f.id} | {_cell(f.finding_id)} | {f.severity:8s} | {_cell(f.location):25s} | {_cell(f.summary)} |"
         for f in group_by_severity(findings)
     ]
     return "\n".join([header, *rows])
@@ -227,8 +234,13 @@ def _resolve_atom(atom: str, findings: list[Finding], ids: set[int]) -> tuple[se
     raise SelectionError(f"unrecognized selection verb: {atom!r}")
 
 
-def parse_selection(verb: str, findings: list[Finding]) -> list[int]:
-    """Expand a selection verb to a sorted list of finding ids.
+def parse_selection(verb: str, findings: list[Finding]) -> list[str]:
+    """Expand a selection verb to canonical ReviewResult finding_id strings.
+
+    Verbs reference the 1-based positions rendered in the selection table; the
+    result is the matching findings' canonical `finding_id` strings, in
+    position order -- the currency the /cure handoff and ``remediate-plan
+    --finding-ids`` consume.
 
     Recognized verbs (cure/references/selection.md § Recognized selection verbs):
 
@@ -247,11 +259,12 @@ def parse_selection(verb: str, findings: list[Finding]) -> list[int]:
     """
     verb = verb.strip().lower()
     ids = {f.id for f in findings}
+    by_id = {f.id: f.finding_id for f in findings}
 
     if verb in ("", "none"):
         return []
     if verb == "all":
-        return sorted(ids)
+        return [by_id[i] for i in sorted(ids)]
 
     # Comma-composed verb: split into atoms, but keep bare number lists intact
     # so "1,3,5" stays a single atom (handled by _NUM_LIST_RE).
@@ -276,7 +289,7 @@ def parse_selection(verb: str, findings: list[Finding]) -> list[int]:
     if not has_positive_atom and skip_targets:
         selected = set(ids)
 
-    return sorted(selected - skip_targets)
+    return [by_id[i] for i in sorted(selected - skip_targets)]
 
 
 def _split_composed_verb(verb: str) -> list[str]:

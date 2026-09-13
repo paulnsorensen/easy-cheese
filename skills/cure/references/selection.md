@@ -45,15 +45,16 @@ The selection moves through the handoff context.
 
 With a slug, read `.cheese/age/<slug>.md`.
 Render a numbered table by severity.
-Use blocker, high, medium, then low order.
+Use critical, high, medium, then low order.
+The `#` column is the 1-based position a selection verb references; `finding` is the canonical ReviewResult `finding_id` that travels in the handoff.
 
 ```text
-| # | severity | confidence  | dim           | location                  | summary |
-|---|----------|-------------|---------------|---------------------------|---------|
-| 1 | blocker  | certain     | encapsulation | src/users/index.ts:42     | `index` re-exports `SqlPgUser` across slice boundary. |
-| 2 | high     | certain     | security      | src/handler.ts:108        | Unvalidated path joined into fs.read. |
-| 3 | medium   | speculating | complexity    | src/util.ts:200-240       | Function is 41 lines and 4 levels nested. |
-| 4 | low      | certain     | deslop        | src/old.ts:55-60          | Unused export `_helper`. |
+| # | finding | severity | location                  | summary |
+|---|---------|----------|---------------------------|---------|
+| 1 | review-1/finding/1 | critical | src/users/index.ts:42     | `index` re-exports `SqlPgUser` across slice boundary. |
+| 2 | review-1/finding/2 | high     | src/handler.ts:108        | Unvalidated path joined into fs.read. |
+| 3 | review-1/finding/3 | medium   | src/util.ts:200-240       | Function is 41 lines and 4 levels nested. |
+| 4 | review-1/finding/4 | low      | src/old.ts:55-60          | Unused export `_helper`. |
 ```
 
 Without a slug, accept a findings list, Age path, CI summary, or scoped fix request.
