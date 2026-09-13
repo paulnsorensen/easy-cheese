@@ -14,6 +14,7 @@ import json
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli
 from easy_cheese.shared.findings import Finding, parse_findings_report
@@ -39,7 +40,7 @@ def default_transport(_prompt: str) -> str:
 
 
 def recorded_transport(fixture_path: Path) -> JudgeTransport:
-    responses: list[str] = json.loads(Path(fixture_path).read_text(encoding="utf-8"))
+    responses = cast("list[str]", json.loads(Path(fixture_path).read_text(encoding="utf-8")))
     pending: Iterator[str] = iter(responses)
 
     def _transport(_prompt: str) -> str:
@@ -126,23 +127,26 @@ def judge_report(
 
 
 def _cmd_judge(args: argparse.Namespace) -> int:
-    report_text = Path(args.report).read_text(encoding="utf-8")
+    tool = cast(str, args.tool)
+    case_id = cast(str, args.case_id)
+    transport_fixture = cast("str | None", args.transport_fixture)
+    repo_root = cast("str | None", args.repo_root)
+    stdout = cast("TextIO | None", args.stdout)
+    report_text = Path(cast(str, args.report)).read_text(encoding="utf-8")
     transport: JudgeTransport = (
-        recorded_transport(Path(args.transport_fixture))
-        if args.transport_fixture
-        else default_transport
+        recorded_transport(Path(transport_fixture)) if transport_fixture else default_transport
     )
     try:
         result = judge_report(
-            tool=args.tool,
-            case_id=args.case_id,
+            tool=tool,
+            case_id=case_id,
             report_text=report_text,
             transport=transport,
-            repo_root=args.repo_root,
+            repo_root=repo_root,
         )
     except Exception as exc:  # noqa: BLE001 - surfaced as a CliError below
         raise cli.CliError(str(exc)) from exc
-    print(json.dumps(result.to_dict()), file=args.stdout)
+    print(json.dumps(result.to_dict()), file=stdout)
     return 0
 
 

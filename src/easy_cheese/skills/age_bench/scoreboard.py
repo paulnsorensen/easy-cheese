@@ -14,6 +14,7 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli
 from easy_cheese.shared.paths import project_corpus_root
@@ -23,7 +24,7 @@ TOOLS: tuple[str, ...] = ("age", "code-review")
 
 
 def run_root(run_id: str) -> Path:
-    validate_identifier(run_id, "run_id")
+    _ = validate_identifier(run_id, "run_id")
     return project_corpus_root() / "benchmark" / "age" / run_id
 
 
@@ -42,7 +43,7 @@ def _load_metrics(run_id: str, tool: str, case_id: str) -> dict[str, float] | No
     path = results_dir(run_id, tool) / f"{case_id}.json"
     if not path.is_file():
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = cast("dict[str, float]", json.loads(path.read_text(encoding="utf-8")))
     return {"recall": data["recall"], "precision": data["precision"], "snr": data["snr"]}
 
 
@@ -72,9 +73,9 @@ def render_table(rows: list[ScoreboardRow]) -> str:
     separator = "| --- | --- | --- | --- |"
     lines = [header, separator]
     for row in rows:
-        lines.append(
-            f"| {row.overlap_area} | {row.case_id} "
-            f"| {_format_metrics(row.metrics['age'])} "
+        _ = lines.append(
+            f"| {row.overlap_area} | {row.case_id} " +
+            f"| {_format_metrics(row.metrics['age'])} " +
             f"| {_format_metrics(row.metrics['code-review'])} |"
         )
     return "\n".join(lines) + "\n"
@@ -84,16 +85,19 @@ def write_scoreboard(run_id: str, *, repo_root: Path | str | None = None) -> Pat
     rows = build_rows(run_id, repo_root=repo_root)
     out_path = run_root(run_id) / "scoreboard.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(render_table(rows), encoding="utf-8")
+    _ = out_path.write_text(render_table(rows), encoding="utf-8")
     return out_path
 
 
 def _cmd_scoreboard(args: argparse.Namespace) -> int:
+    run_id = cast(str, args.run_id)
+    repo_root = cast("str | None", args.repo_root)
+    stdout = cast("TextIO | None", args.stdout)
     try:
-        path = write_scoreboard(args.run_id, repo_root=args.repo_root)
+        path = write_scoreboard(run_id, repo_root=repo_root)
     except Exception as exc:  # noqa: BLE001 - surfaced as a CliError below
         raise cli.CliError(str(exc)) from exc
-    print(path, file=args.stdout)
+    print(path, file=stdout)
     return 0
 
 

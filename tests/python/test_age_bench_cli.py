@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC = REPO_ROOT / "src"
@@ -62,18 +63,18 @@ def test_prepare_seeds_an_isolated_worktree_and_prints_both_review_commands():
     assert module_text != base_text
 
 
-def test_judge_buckets_findings_and_emits_recall_precision_snr(tmp_path):
+def test_judge_buckets_findings_and_emits_recall_precision_snr(tmp_path: Path) -> None:
     report_path = tmp_path / "report.md"
-    report_path.write_text(
+    _ = report_path.write_text(
         "## Blocker\n"
-        "- **[off-by-one:blocker]** `module.py:5` "
-        "— Loop upper bound excludes the last element, dropping it from the sum.\n"
-        "## Low\n"
-        "- **[style:low]** `module.py:12` — Variable name could be clearer.\n",
+        + "- **[off-by-one:blocker]** `module.py:5` "
+        + "— Loop upper bound excludes the last element, dropping it from the sum.\n"
+        + "## Low\n"
+        + "- **[style:low]** `module.py:12` — Variable name could be clearer.\n",
         encoding="utf-8",
     )
     fixture_path = tmp_path / "transport.json"
-    fixture_path.write_text(json.dumps(["Bug Hit", "Noise"]), encoding="utf-8")
+    _ = fixture_path.write_text(json.dumps(["Bug Hit", "Noise"]), encoding="utf-8")
 
     result = _run_cli(
         [
@@ -90,7 +91,7 @@ def test_judge_buckets_findings_and_emits_recall_precision_snr(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
+    payload = cast("dict[str, object]", json.loads(result.stdout))
     assert payload["buckets"] == ["Bug Hit", "Noise"]
     assert payload["hits"] == 1
     assert payload["noise"] == 1
@@ -99,19 +100,19 @@ def test_judge_buckets_findings_and_emits_recall_precision_snr(tmp_path):
     assert payload["snr"] == 1.0
 
 
-def test_judge_caps_recall_at_one_when_reviewer_reports_the_defect_multiple_times(tmp_path):
+def test_judge_caps_recall_at_one_when_reviewer_reports_the_defect_multiple_times(tmp_path: Path) -> None:
     report_path = tmp_path / "report.md"
-    report_path.write_text(
+    _ = report_path.write_text(
         "## Blocker\n"
-        "- **[off-by-one:blocker]** `module.py:5` "
-        "— Loop upper bound excludes the last element, dropping it from the sum.\n"
-        "## High\n"
-        "- **[off-by-one:high]** `module.py:5` "
-        "— Same defect flagged again from the range check angle.\n",
+        + "- **[off-by-one:blocker]** `module.py:5` "
+        + "— Loop upper bound excludes the last element, dropping it from the sum.\n"
+        + "## High\n"
+        + "- **[off-by-one:high]** `module.py:5` "
+        + "— Same defect flagged again from the range check angle.\n",
         encoding="utf-8",
     )
     fixture_path = tmp_path / "transport.json"
-    fixture_path.write_text(json.dumps(["Bug Hit", "Bug Hit"]), encoding="utf-8")
+    _ = fixture_path.write_text(json.dumps(["Bug Hit", "Bug Hit"]), encoding="utf-8")
 
     result = _run_cli(
         [
@@ -128,12 +129,12 @@ def test_judge_caps_recall_at_one_when_reviewer_reports_the_defect_multiple_time
     )
 
     assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
+    payload = cast("dict[str, object]", json.loads(result.stdout))
     assert payload["hits"] == 2
     assert payload["recall"] == 1.0
 
 
-def test_scoreboard_writes_per_overlap_area_table_under_the_corpus_root(tmp_path):
+def test_scoreboard_writes_per_overlap_area_table_under_the_corpus_root(tmp_path: Path) -> None:
     home = tmp_path / "cheese-home"
     env = {"EASY_CHEESE_HOME": str(home)}
     run_id = "run-42"
@@ -148,7 +149,7 @@ def test_scoreboard_writes_per_overlap_area_table_under_the_corpus_root(tmp_path
 
     results_dir = corpus_root / "benchmark" / "age" / run_id / "results" / "age"
     results_dir.mkdir(parents=True)
-    (results_dir / f"{CASE_ID}.json").write_text(
+    _ = (results_dir / f"{CASE_ID}.json").write_text(
         json.dumps({"recall": 1.0, "precision": 0.5, "snr": 1.0}), encoding="utf-8"
     )
 

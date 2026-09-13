@@ -7,25 +7,26 @@ import shutil
 import subprocess
 import tempfile
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CASES_DIR = REPO_ROOT / "benchmark" / "age" / "cases"
 AGE_BENCH_SRC = REPO_ROOT / "src" / "easy_cheese" / "skills" / "age_bench"
 
 
-def _case_dirs():
+def _case_dirs() -> list[Path]:
     if not CASES_DIR.is_dir():
         return []
     return sorted(p for p in CASES_DIR.iterdir() if p.is_dir())
 
 
-def _load_manifest(case_dir):
+def _load_manifest(case_dir: Path) -> Mapping[str, object]:
     manifest_path = case_dir / "case.toml"
     with manifest_path.open("rb") as fh:
-        return tomllib.load(fh)
+        return cast(Mapping[str, object], tomllib.load(fh))
 
 
 def test_corpus_holds_five_to_fifteen_fully_described_cases():
@@ -44,14 +45,17 @@ def test_corpus_holds_five_to_fifteen_fully_described_cases():
 
         defect = manifest.get("defect")
         assert isinstance(defect, dict), f"{case_dir.name}: missing [defect] table"
-        assert isinstance(defect.get("file"), str) and defect["file"], (
+        defect = cast(Mapping[str, object], defect)
+        defect_file = defect.get("file")
+        assert isinstance(defect_file, str) and defect_file, (
             f"{case_dir.name}: defect.file must be a non-empty string"
         )
-        assert isinstance(defect.get("line"), int) and defect["line"] > 0, (
+        defect_line = defect.get("line")
+        assert isinstance(defect_line, int) and defect_line > 0, (
             f"{case_dir.name}: defect.line must be a positive int"
         )
-        assert (case_dir / "base" / defect["file"]).is_file(), (
-            f"{case_dir.name}: defect.file {defect['file']!r} not found under base/"
+        assert (case_dir / "base" / defect_file).is_file(), (
+            f"{case_dir.name}: defect.file {defect_file!r} not found under base/"
         )
 
         description = manifest.get("description")
@@ -67,7 +71,8 @@ def test_every_seed_patch_applies_to_its_base():
 
     for case_dir in case_dirs:
         manifest = _load_manifest(case_dir)
-        defect_file = manifest["defect"]["file"]
+        defect = cast(Mapping[str, object], manifest["defect"])
+        defect_file = defect["file"]
         patch_path = case_dir / "seed.patch"
         patch_text = patch_path.read_text()
 
@@ -83,7 +88,7 @@ def test_every_seed_patch_applies_to_its_base():
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            shutil.copytree(case_dir / "base", tmp_path, dirs_exist_ok=True)
+            _ = shutil.copytree(case_dir / "base", tmp_path, dirs_exist_ok=True)
             result = subprocess.run(
                 ["git", "apply", "--check", str(patch_path.resolve())],
                 cwd=tmp_path,

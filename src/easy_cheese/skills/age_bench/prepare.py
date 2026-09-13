@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli
 from easy_cheese.skills.age_bench.cases import load_case
@@ -46,7 +47,7 @@ def prepare_worktree(case_id: str, *, repo_root: Path | str | None = None) -> Pr
 
     worktree_registered = False
     try:
-        shutil.copytree(case.base_dir, repo_dir)
+        _ = shutil.copytree(case.base_dir, repo_dir)
         _run(["git", "init", "-q", "-b", "main"], cwd=repo_dir)
         _run(["git", "config", "user.email", "age-bench@example.invalid"], cwd=repo_dir)
         _run(["git", "config", "user.name", "age-bench"], cwd=repo_dir)
@@ -57,7 +58,7 @@ def prepare_worktree(case_id: str, *, repo_root: Path | str | None = None) -> Pr
         _run(["git", "apply", str(case.seed_patch.resolve())], cwd=worktree_dir)
     except Exception:
         if worktree_registered:
-            subprocess.run(
+            _ = subprocess.run(
                 ["git", "worktree", "remove", "-f", str(worktree_dir)],
                 cwd=repo_dir,
                 capture_output=True,
@@ -72,11 +73,13 @@ def prepare_worktree(case_id: str, *, repo_root: Path | str | None = None) -> Pr
 
 
 def _cmd_prepare(args: argparse.Namespace) -> int:
+    case_id = cast(str, args.case_id)
+    repo_root = cast("str | None", args.repo_root)
     try:
-        prepared = prepare_worktree(args.case_id, repo_root=args.repo_root)
+        prepared = prepare_worktree(case_id, repo_root=repo_root)
     except Exception as exc:  # noqa: BLE001 - surfaced as a CliError below
         raise cli.CliError(str(exc)) from exc
-    stdout = args.stdout
+    stdout = cast("TextIO | None", args.stdout)
     print(f"worktree: {prepared.worktree_dir}", file=stdout)
     print(f"branch: {prepared.branch}", file=stdout)
     print(f"cd {prepared.worktree_dir}", file=stdout)

@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC = REPO_ROOT / "src"
@@ -48,33 +49,33 @@ def _base_env(*, path: str) -> dict[str, str]:
     return {**os.environ, "PYTHONPATH": str(SRC), "PATH": path}
 
 
-def test_run_drives_the_review_and_hands_the_report_to_judge(tmp_path):
+def test_run_drives_the_review_and_hands_the_report_to_judge(tmp_path: Path) -> None:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     fake_claude = fake_bin / "claude"
-    fake_claude.write_text(_FAKE_CLAUDE, encoding="utf-8")
+    _ = fake_claude.write_text(_FAKE_CLAUDE, encoding="utf-8")
     fake_claude.chmod(fake_claude.stat().st_mode | stat.S_IEXEC)
 
     env = _base_env(path=f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
     result = _run_cli(["run", "--tool", "age", "--case", CASE_ID], env=env)
 
     assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
+    payload = cast("dict[str, object]", json.loads(result.stdout))
     assert payload["case_id"] == CASE_ID
     assert payload["tool"] == "age"
     assert payload["buckets"] == []
     assert payload["recall"] == 0.0
 
 
-def test_run_judges_a_findings_bearing_headless_report(tmp_path):
+def test_run_judges_a_findings_bearing_headless_report(tmp_path: Path) -> None:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     fake_claude = fake_bin / "claude"
-    fake_claude.write_text(_FAKE_CLAUDE_WITH_FINDING, encoding="utf-8")
+    _ = fake_claude.write_text(_FAKE_CLAUDE_WITH_FINDING, encoding="utf-8")
     fake_claude.chmod(fake_claude.stat().st_mode | stat.S_IEXEC)
 
     fixture_path = tmp_path / "transport-fixture.json"
-    fixture_path.write_text(json.dumps(["Bug Hit"]), encoding="utf-8")
+    _ = fixture_path.write_text(json.dumps(["Bug Hit"]), encoding="utf-8")
 
     env = _base_env(path=f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
     result = _run_cli(
@@ -91,7 +92,7 @@ def test_run_judges_a_findings_bearing_headless_report(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    payload = json.loads(result.stdout)
+    payload = cast("dict[str, object]", json.loads(result.stdout))
     assert payload["case_id"] == CASE_ID
     assert payload["tool"] == "age"
     assert payload["buckets"] == ["Bug Hit"]
@@ -99,7 +100,7 @@ def test_run_judges_a_findings_bearing_headless_report(tmp_path):
     assert payload["recall"] == 1.0
 
 
-def test_run_exits_non_zero_with_a_named_reason_when_headless_is_unavailable(tmp_path):
+def test_run_exits_non_zero_with_a_named_reason_when_headless_is_unavailable(tmp_path: Path) -> None:
     empty_bin = tmp_path / "empty-bin"
     empty_bin.mkdir()
 

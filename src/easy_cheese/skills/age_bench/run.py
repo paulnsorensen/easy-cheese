@@ -17,6 +17,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TextIO, cast
 
 from easy_cheese.shared import cli
 from easy_cheese.skills.age_bench.judge import (
@@ -45,7 +46,7 @@ def _probe_headless_executable() -> str:
     path = shutil.which(HEADLESS_EXECUTABLE)
     if path is None:
         raise HeadlessUnavailableError(
-            f"no headless review invocation is available: {HEADLESS_EXECUTABLE!r} "
+            f"no headless review invocation is available: {HEADLESS_EXECUTABLE!r} " +
             "executable not found on PATH"
         )
     return path
@@ -62,18 +63,18 @@ def _capture_report(executable: str, *, tool: str, cwd: Path) -> str:
         )
     except subprocess.TimeoutExpired as exc:
         raise HeadlessUnavailableError(
-            f"headless review invocation timed out after {HEADLESS_TIMEOUT_SECONDS}s: "
+            f"headless review invocation timed out after {HEADLESS_TIMEOUT_SECONDS}s: " +
             f"{executable} -p did not return"
         ) from exc
     if result.returncode != 0:
         raise HeadlessUnavailableError(
-            f"headless review invocation failed: {executable} -p exited "
+            f"headless review invocation failed: {executable} -p exited " +
             f"{result.returncode}: {result.stderr.strip()}"
         )
     report_text = result.stdout
     if not report_text.strip():
         raise HeadlessUnavailableError(
-            f"headless review invocation produced no capturable report: {executable} -p "
+            f"headless review invocation produced no capturable report: {executable} -p " +
             "emitted no output"
         )
     return report_text
@@ -91,7 +92,7 @@ def run_case(
     try:
         report_text = _capture_report(executable, tool=tool, cwd=prepared.worktree_dir)
     finally:
-        subprocess.run(
+        _ = subprocess.run(
             ["git", "worktree", "remove", "-f", str(prepared.worktree_dir)],
             cwd=prepared.scratch_dir / "repo",
             capture_output=True,
@@ -113,16 +114,17 @@ def run_case(
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
+    stdout = cast("TextIO | None", args.stdout)
     try:
         result = run_case(
-            tool=args.tool,
-            case_id=args.case_id,
-            repo_root=args.repo_root,
-            transport_fixture=args.transport_fixture,
+            tool=cast(str, args.tool),
+            case_id=cast(str, args.case_id),
+            repo_root=cast("str | None", args.repo_root),
+            transport_fixture=cast("str | None", args.transport_fixture),
         )
     except Exception as exc:  # noqa: BLE001 - surfaced as a CliError below
         raise cli.CliError(str(exc)) from exc
-    print(json.dumps(result.to_dict()), file=args.stdout)
+    print(json.dumps(result.to_dict()), file=stdout)
     return 0
 
 
