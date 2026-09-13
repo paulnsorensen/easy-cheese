@@ -408,11 +408,16 @@ def _check_import_closure(analysis: _ArchiveAnalysis) -> list[str]:
     return problems
 
 
-def check_import_closure(archive: zipfile.ZipFile) -> list[str]:
-    """Check first-party imports against one parsed archive analysis."""
-    return _check_import_closure(
-        _ArchiveAnalysis.from_archive(archive, parse_first_party=True)
+def inspect_archive(
+    archive: zipfile.ZipFile, *, validate_shiv: bool = False
+) -> tuple[list[str], tuple[str, ...]]:
+    """Inspect static bundle properties and return problems plus declared commands."""
+    analysis = _ArchiveAnalysis.from_archive(
+        archive, validate_shiv=validate_shiv, parse_first_party=True
     )
+    problems = [f"native member: {name}" for name in analysis.native_members]
+    problems += _check_import_closure(analysis)
+    return problems, analysis.command_names
 
 
 def _isolated_interpreter() -> str:
@@ -759,7 +764,7 @@ def check_pyz_references() -> list[str]:
 
     A skill's docs or source naming another skill's bundle is either a stale
     doc (the skill was renamed/merged) or a real cross-skill import that
-    check_import_closure cannot see (it only audits one archive at a time).
+    static archive inspection cannot see because it audits one archive at a time.
     """
     violations: list[str] = []
     for path in sorted(set(_pyz_reference_roots())):
@@ -937,12 +942,7 @@ def verify_archive(pyz: Path) -> list[str]:
     """
     try:
         with zipfile.ZipFile(pyz) as archive:
-            analysis = _ArchiveAnalysis.from_archive(
-                archive, validate_shiv=True, parse_first_party=True
-            )
-            problems = [f"native member: {name}" for name in analysis.native_members]
-            problems += _check_import_closure(analysis)
-            command_names = analysis.command_names
+            problems, command_names = inspect_archive(archive, validate_shiv=True)
     except (ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
         return [f"bundle metadata invalid: {exc}"]
     with tempfile.TemporaryDirectory(prefix="easy-cheese-shiv-root-") as scratch:
@@ -972,21 +972,11 @@ def _run_checks(against: str, bundle_root: Path) -> int:
         data = path.read_bytes()
         problems: list[str] = []
         try:
-            with zipfile.ZipFile(io.BytesIO(data)) as archive:
-                analysis = _ArchiveAnalysis.from_archive(archive, validate_shiv=True)
-                if analysis.manifest is None:
-                    raise ValueError("Shiv archive manifest was not computed")
-                rebuilt_manifest = analysis.manifest
+            rebuilt_manifest = bundle_manifest(data)
             if committed is None:
                 print(f"new Shiv bundle, nothing to compare: {relative}")
                 continue
-            with zipfile.ZipFile(io.BytesIO(committed)) as archive:
-                committed_analysis = _ArchiveAnalysis.from_archive(
-                    archive, validate_shiv=True
-                )
-                if committed_analysis.manifest is None:
-                    raise ValueError("Shiv archive manifest was not computed")
-                committed_manifest = committed_analysis.manifest
+            committed_manifest = bundle_manifest(committed)
             problems += _describe(rebuilt_manifest, committed_manifest)
         except (ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
             problems.append(f"    ! bundle metadata invalid: {exc}")

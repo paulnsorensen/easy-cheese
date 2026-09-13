@@ -19,8 +19,8 @@ from typing import cast
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
+MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
+COOK_PYZ = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 pytestmark = pytest.mark.skipif(  # noqa: V107
     importlib.util.find_spec("build") is None
@@ -131,7 +131,7 @@ def _publish(
     doc: object = DOC,
     raw_text: str | None = None,
 ) -> tuple[Path, dict[str, object]]:
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     document = tmp_path / f"{operation_id}-document.json"
     _ = document.write_text(
         raw_text if raw_text is not None else json.dumps(doc), encoding="utf-8"
@@ -157,7 +157,7 @@ def _publish(
 
 
 def _accept(pointer_path: Path, *extra_args: str) -> subprocess.CompletedProcess[str]:
-    cook_pyz = build_pyz.cached_bundle("cook")
+    cook_pyz = COOK_PYZ
     return _run(cook_pyz, "accept", str(pointer_path), *extra_args)
 
 
@@ -283,7 +283,7 @@ def test_cook_pyz_rejects_receipt_canonical_digest_mismatch(tmp_path: Path) -> N
 
 
 def test_cook_pyz_rejects_bare_payload(tmp_path: Path) -> None:
-    cook_pyz = build_pyz.cached_bundle("cook")
+    cook_pyz = COOK_PYZ
     bare_payload = tmp_path / "bare-payload.json"
     _ = bare_payload.write_text(json.dumps(DOC), encoding="utf-8")
     result = _run(cook_pyz, "accept", str(bare_payload))
@@ -328,7 +328,7 @@ def test_cook_pyz_accepts_bare_relative_pointer_from_pointers_dir(
     tmp_path: Path,
 ) -> None:
     pointer_path, pointer = _publish(tmp_path, "op-relative")
-    cook_pyz = build_pyz.cached_bundle("cook")
+    cook_pyz = COOK_PYZ
     env = dict(os.environ)
     _ = env.pop("PYTHONPATH", None)
     result = subprocess.run(

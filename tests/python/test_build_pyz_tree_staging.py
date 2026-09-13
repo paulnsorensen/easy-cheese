@@ -46,16 +46,20 @@ _needs_build_tooling = pytest.mark.skipif(  # noqa: V107
 CHAIN_PHASES = ("cook", "press", "age", "cure")
 
 
+def _build_bundle(skill: str, target: Path) -> Path:
+    return build_pyz.build_bundles({skill: target})[skill]
+
+
 @pytest.fixture(scope="module")
 def ultracook_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("tree-staging")
-    return build_pyz.build_bundle("cook", out / "cook.pyz")
+    return _build_bundle("cook", out / "cook.pyz")
 
 
 @pytest.fixture(scope="module")
 def press_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("tree-staging-press")
-    return build_pyz.build_bundle("press", out / "press.pyz")
+    return _build_bundle("press", out / "press.pyz")
 
 
 def _bundle_members(pyz: Path) -> set[str]:
@@ -94,8 +98,8 @@ def test_press_cli_runs_from_isolated_bundle(press_pyz: Path) -> None:
 
 @_needs_build_tooling
 def test_press_bundle_is_byte_deterministic(tmp_path: Path) -> None:
-    first = build_pyz.build_bundle("press", tmp_path / "a" / "press.pyz")
-    second = build_pyz.build_bundle("press", tmp_path / "b" / "press.pyz")
+    first = _build_bundle("press", tmp_path / "a" / "press.pyz")
+    second = _build_bundle("press", tmp_path / "b" / "press.pyz")
     assert first.read_bytes() == second.read_bytes()
 
 
@@ -196,7 +200,7 @@ def test_attrs_version_resolves_from_bundled_dist_info(ultracook_pyz: Path) -> N
 @pytest.fixture(scope="module")
 def wheypoint_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = tmp_path_factory.mktemp("tree-staging-wheypoint")
-    return build_pyz.build_bundle("wheypoint", out / "wheypoint.pyz")
+    return _build_bundle("wheypoint", out / "wheypoint.pyz")
 
 
 @_needs_build_tooling
@@ -247,8 +251,8 @@ def test_the_wheypoint_bundle_is_deterministic(tmp_path: Path) -> None:
     """Byte-equality against the committed artifact is CI's job (check_bundles.py
     compares canonical member content, because ZIP metadata differs). What is verifiable
     anywhere is that two builds of one source tree agree."""
-    first = build_pyz.build_bundle("wheypoint", tmp_path / "a.pyz")
-    second = build_pyz.build_bundle("wheypoint", tmp_path / "b.pyz")
+    first = _build_bundle("wheypoint", tmp_path / "a.pyz")
+    second = _build_bundle("wheypoint", tmp_path / "b.pyz")
     assert first.read_bytes() == second.read_bytes()
 
 
@@ -256,8 +260,8 @@ def test_the_wheypoint_bundle_is_deterministic(tmp_path: Path) -> None:
 def test_tree_staging_stays_byte_deterministic(tmp_path: Path) -> None:
     """CI rebuilds every committed bundle and byte-compares it, so walking a
     nested tree must not leak filesystem ordering or mtimes into the archive."""
-    first = build_pyz.build_bundle("cook", tmp_path / "a" / "cook.pyz")
-    second = build_pyz.build_bundle("cook", tmp_path / "b" / "cook.pyz")
+    first = _build_bundle("cook", tmp_path / "a" / "cook.pyz")
+    second = _build_bundle("cook", tmp_path / "b" / "cook.pyz")
     assert first.read_bytes() == second.read_bytes()
 
 
