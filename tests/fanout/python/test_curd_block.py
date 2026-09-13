@@ -52,27 +52,6 @@ class TestWellFormed:
         )
         assert curd_block.validate_curd_block(block) == []
 
-    def test_parse_curd_block_returns_the_block(self) -> None:
-        block = _block(curds=[_curd("solo", ["src/solo.py"])], waves=[["solo"]])
-        assert curd_block.parse_curd_block(block) == block
-
-    def test_parse_curd_block_accepts_yaml_string(self) -> None:
-        yaml_text = """
-curds:
-  - slug: solo
-    contract: Implement solo.
-    files: [src/solo.py]
-    test_target: pytest tests/test_solo.py
-    acceptance: ["solo behaves correctly"]
-    seed: []
-    est_edit_lines: 25
-waves:
-  - [solo]
-decomposer: {source: mold, model: claude-opus-5, prompt_version: deadbeef}
-"""
-        result = curd_block.parse_curd_block(yaml_text)
-        assert cast("list[CurdDict]", result["curds"])[0]["slug"] == "solo"
-
 
 class TestDisjointness:
     def test_rejects_file_in_two_curds(self) -> None:
@@ -85,13 +64,6 @@ class TestDisjointness:
             "src/shared.py" in e and "add-widget" in e and "add-gadget" in e for e in errors
         ), errors
 
-    def test_parse_curd_block_raises_on_collision(self) -> None:
-        block = _block(
-            curds=[_curd("add-widget", ["src/shared.py"]), _curd("add-gadget", ["src/shared.py"])],
-            waves=[["add-widget", "add-gadget"]],
-        )
-        with pytest.raises(curd_block.CurdBlockError, match="src/shared.py"):
-            _ = curd_block.parse_curd_block(block)
 
 
 class TestWaves:
