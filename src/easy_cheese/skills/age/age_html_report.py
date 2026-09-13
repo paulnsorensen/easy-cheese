@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Render an /age markdown report into one self-contained, offline HTML file.
+"""Render a canonical ReviewResult into one self-contained, offline HTML file.
 
-Findings are grouped by severity (blocker → high → medium → low); each finding's
-full text block is preserved verbatim and HTML-escaped inside a
-`whitespace-pre-wrap` container, so multi-line summaries and recommendations stay
-readable. A pure-CSS count bar summarises the distribution — no CDN, no
-JavaScript, no mermaid.
+Findings are grouped by severity (critical -> high -> medium -> low); each
+finding's summary is rendered verbatim and HTML-escaped inside a
+`whitespace-pre-wrap` container, prefixed by its location, so multi-line
+summaries stay readable. A pure-CSS count bar summarises the distribution --
+no CDN, no JavaScript, no mermaid.
 
-The document shell (head, base theme, offline/deterministic contract) comes from
-the shared `html_report.render_document`; this script owns only the age *body*
-template. It is the reference example of a skill supplying its own body to the
-shared renderer.
+The input is the ReviewResult JSON document /age publishes to /cure behind a
+HandoffPointer; this script never re-parses a Markdown report. The document
+shell (head, base theme, offline/deterministic contract) comes from the shared
+`html_report.render_document`; this script owns only the age *body* template.
 
-    html-report --report <md> --slug <slug> [--out-dir <dir>]
+    html-report --report <review-result.json> --slug <slug> [--out-dir <dir>]
 
 Writes `<out-dir>/age-<slug>.html` (out-dir defaults to the OS temp dir) and
 prints the path on stdout.
@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import html
-import re
 import tempfile
 from pathlib import Path
 from typing import TextIO, cast
@@ -29,17 +28,11 @@ from typing import TextIO, cast
 from easy_cheese.shared import cli, html_report
 from easy_cheese.shared import findings as findings_mod
 
-# Reuse /age's canonical severity-heading + bullet matchers so this consumer
-# stays in lockstep with the emit format findings.py already tracks.
-_SEVERITY_HEADING_RE = findings_mod._SEVERITY_HEADING_RE  # pyright: ignore[reportPrivateUsage]
-_BULLET_RE = findings_mod._BULLET_RE  # pyright: ignore[reportPrivateUsage]
-_ANY_HEADING_RE = re.compile(r"^#{1,6}\s")
-
 # Badge + distribution-bar styling for the age body. Selectors stay lowercase so
 # an empty report never leaks a capitalised severity word into the document.
 _EXTRA_CSS = """.dist { display: flex; gap: 2px; margin: 1.5em 0; border-radius: 6px; overflow: hidden; }
 .seg { padding: .4em .6em; font-size: .85em; font-weight: 600; color: #fff; white-space: nowrap; }
-.sev-blocker { background: #b91c1c; }
+.sev-critical { background: #b91c1c; }
 .sev-high { background: #c2410c; }
 .sev-medium { background: #a16207; }
 .sev-low { background: #4b5563; }
@@ -52,53 +45,19 @@ h2.sev { display: inline-block; padding: .15em .6em; border-radius: 5px;
 .empty { color: var(--muted); font-style: italic; }"""
 
 
-def _finding_blocks(text: str) -> list[tuple[str, str]]:
-    """Split a report into (severity, raw_block) pairs, one per finding bullet.
-
-    Severity comes from the enclosing `## <severity>` heading; an inline
-    `[dim:severity]` tag on the bullet overrides it. A block runs from its bullet
-    line through every following line until the next bullet or severity heading,
-    so multi-line summaries, sub-fields, and wrapped recommendations survive.
-    """
-    current: str | None = None
-    blocks: list[tuple[str, list[str]]] = []
-    pending: tuple[str, list[str]] | None = None  # (severity, lines)
-
-    def close() -> None:
-        nonlocal pending
-        if pending is not None:
-            blocks.append(pending)
-        pending = None
-
-    for raw in text.splitlines():
-        stripped = raw.strip()
-        if _ANY_HEADING_RE.match(stripped):
-            # Any heading closes the open block; only a severity heading opens a
-            # new scope. Trailing sections (## Confidence, ## Next step) thus end
-            # the last finding instead of being swallowed into its body.
-            close()
-            severity_heading = _SEVERITY_HEADING_RE.match(stripped)
-            current = severity_heading.group("severity").lower() if severity_heading else None
-            continue
-        bullet = _BULLET_RE.match(raw)
-        if bullet:
-            close()
-            severity = bullet.group("sev").lower() if bullet.group("sev") else current
-            if severity is not None:  # a bullet before any heading/tag is unscoped — skip
-                pending = (severity, [raw])
-            continue
-        if pending is not None:
-            pending[1].append(raw)
-    close()
-    return [(sev, "\n".join(lines).rstrip()) for sev, lines in blocks]
+def _finding_text(finding: findings_mod.Finding) -> str:
+    """The verbatim block rendered for one finding: location line then summary."""
+    if finding.location:
+        return f"{finding.location}\n{finding.summary}"
+    return finding.summary
 
 
-def _build_body(slug: str, blocks: list[tuple[str, str]]) -> str:
+def _build_body(slug: str, findings: list[findings_mod.Finding]) -> str:
     title = f"Age report — {html.escape(slug)}"
-    by_sev: dict[str, list[str]] = {sev: [] for sev in findings_mod.SEVERITIES}
-    for severity, block in blocks:
-        if severity in by_sev:
-            by_sev[severity].append(block)
+    by_sev: dict[str, list[findings_mod.Finding]] = {sev: [] for sev in findings_mod.SEVERITIES}
+    for finding in findings_mod.group_by_severity(findings):
+        if finding.severity in by_sev:
+            by_sev[finding.severity].append(finding)
 
     present = [sev for sev in findings_mod.SEVERITIES if by_sev[sev]]
     if not present:
@@ -113,8 +72,8 @@ def _build_body(slug: str, blocks: list[tuple[str, str]]) -> str:
     for sev in present:
         items = "".join(
             '<div class="finding"><pre class="body whitespace-pre-wrap">'
-            + f"{html.escape(block)}</pre></div>"
-            for block in by_sev[sev]
+            + f"{html.escape(_finding_text(finding))}</pre></div>"
+            for finding in by_sev[sev]
         )
         sections.append(
             f'<section class="sev-section"><h2 class="sev sev-{sev}">'
@@ -129,16 +88,14 @@ def _cmd_html_report(args: argparse.Namespace) -> None:
     out_dir_arg = cast(str, args.out_dir)
     stdout = cast("TextIO | None", args.stdout)
 
-    report = Path(report_arg)
-    if not report.is_file():
-        raise cli.CliError(f"--report not found: {report_arg}")
     cli.reject_path_segment("--slug", slug)
     out_dir = Path(out_dir_arg) if out_dir_arg else Path(tempfile.gettempdir())
     if not out_dir.is_dir():
         raise cli.CliError(f"--out-dir is not a directory: {out_dir}")
 
-    blocks = _finding_blocks(report.read_text(encoding="utf-8"))
-    body = _build_body(slug, blocks)
+    result = findings_mod.load_review_result(report_arg)
+    findings = findings_mod.findings_from_review_result(result)
+    body = _build_body(slug, findings)
     document = html_report.render_document(
         body, title=f"Age report — {slug}", extra_css=_EXTRA_CSS
     )
@@ -148,8 +105,8 @@ def _cmd_html_report(args: argparse.Namespace) -> None:
 
 
 def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Render an /age markdown report into a self-contained HTML file."
-    _ = parser.add_argument("--report", required=True, help="source /age markdown report")
+    parser.description = "Render a canonical ReviewResult JSON into a self-contained HTML file."
+    _ = parser.add_argument("--report", required=True, help="path to a canonical ReviewResult JSON document")
     _ = parser.add_argument("--slug", required=True, help="slug for the output filename and title")
     _ = parser.add_argument(
         "--out-dir", default="", help="output directory (defaults to the OS temp dir)"

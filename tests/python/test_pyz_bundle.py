@@ -1331,11 +1331,23 @@ def test_age_bundle_html_report_runs_from_inside_bundle(
     age_pyz = bundles / "age.pyz"
     assert age_pyz.exists(), f"age bundle missing: {age_pyz}"
 
-    report = tmp_path / "rep.md"
+    report = tmp_path / "rep.json"
     _ = report.write_text(
-        "# Age report — demo\n\n## Blocker\n"
-        + "- **[security:blocker]** `a.py:1` — token parsed without validation.\n\n"
-        + "## Confidence\ncertain\n",
+        json.dumps(
+            {
+                "review_id": "demo",
+                "disposition": "findings",
+                "findings": [
+                    {
+                        "finding_id": "demo/finding/1",
+                        "severity": "critical",
+                        "summary": "token parsed without validation.",
+                        "location": {"path": "a.py", "start_line": 1, "end_line": 1},
+                    }
+                ],
+                "coverage": [{"target": "security", "disposition": "covered"}],
+            }
+        ),
         encoding="utf-8",
     )
     result = _run(
@@ -1353,7 +1365,7 @@ def test_age_bundle_html_report_runs_from_inside_bundle(
     assert out_html.is_file(), f"expected {out_html}; stdout={result.stdout!r}"
     html = out_html.read_text(encoding="utf-8")
     assert "token parsed without validation" in html
-    assert "Blocker" in html
+    assert "Critical" in html
 
 
 def test_age_bundle_carries_html_report_and_findings_imports(bundles: Path) -> None:

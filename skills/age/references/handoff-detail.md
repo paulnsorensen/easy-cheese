@@ -11,7 +11,7 @@ The tail (**Plate it**, **Checkpoint & stop**, **Stop**) follows.
 1. Render the numbered selection table:
 
    ```
-   python3 skills/age/scripts/age.pyz findings render-table --report .cheese/age/<slug>.md
+   python3 skills/age/scripts/age.pyz findings render-table --report <published ReviewResult JSON>
    ```
 
    Mark any sprawling/structural-fix row as *heavy*.
@@ -42,7 +42,7 @@ Offer the non-floor and standard-tail options last.
   Expand the verb to finding ids.
 
   ```
-  python3 skills/age/scripts/age.pyz findings parse-selection --report .cheese/age/<slug>.md --selection "<verb>"
+  python3 skills/age/scripts/age.pyz findings parse-selection --report <published ReviewResult JSON> --selection "<verb>"
   ```
 
 - **Plate it** — apply the recommended composite via `/cure <slug> --auto --open-pr --stake medium+`.
@@ -57,7 +57,7 @@ Treat a floor that resolves to an empty set as a valid, predictable no-op.
 Do not drop or reorder options based on the populated bands.
 If the selected floor or recommended composite resolves to an empty set, treat it as `none`.
 Report that no findings match.
-Do not dispatch `/cure` with empty `resolved_ids`.
+Do not dispatch `/cure` with an empty `finding_ids` selection.
 The non-empty-selection contract in **Dispatch** still holds.
 
 ## Dispatch
@@ -73,18 +73,18 @@ The step 1 review lock rejects a report written after an inline edit.
 handoff_context:
   source_skill: /age
   source_report: .cheese/age/<slug>.md
+  pointer: <path to the published ReviewResult HandoffPointer>
   selection: "<recognized verb or explicit ids>"
-  resolved_ids: [<expanded ids>]
+  finding_ids: [<selected ReviewResult finding_id strings>]
 ```
 
 `/cure` skips its own selection prompt when this context is present.
-`/cure` re-confirms that the cited ids still exist.
+`/cure` re-confirms that the cited finding ids still exist in the published `ReviewResult`.
 `/cure` owns the apply / validate / push loop.
-Always emit `resolved_ids` alongside `selection`.
+Always emit `finding_ids` alongside `selection`, plus the `pointer` to the published `ReviewResult`.
 Expand the verb yourself instead of leaving the field empty.
-`/cure` re-confirms the ids against the report regardless.
-The report carries each finding's `recommendation:` and optional `invariants:` line.
-`/cure` renders them into the coder brief with `findings render-brief` and implements the recommendation as the locked decision.
+`/cure` re-confirms the ids against the `ReviewResult` regardless.
+`/cure` renders the selected findings into the coder brief with `findings render-brief`, which quotes each finding's optional `recommendation` and `invariants` as the locked fix decision.
 Do not restate them in `handoff_context`.
 Propagate `--safe`, `--open-pr`, and `--hard` to `/cure` when they are in scope.
 
