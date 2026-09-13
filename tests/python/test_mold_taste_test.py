@@ -47,14 +47,6 @@ class _MoldTasteTestModule(Protocol):
         *,
         correction_round: int = ...,
     ) -> "_ForkTasteVerdict": ...
-    def validate_fork_taste(
-        self,
-        draft: object,
-        decision_ledger: object,
-        reviewer_verdict: "Mapping[str, object] | _ForkTasteVerdict",
-        *,
-        correction_round: int = ...,
-    ) -> "_ForkTasteVerdict": ...
     def decomposition_gate(
         self, verdict: "_ForkTasteVerdict", *, correction_round: int = ...
     ) -> "_TasteGateResult": ...
@@ -355,8 +347,6 @@ def test_missing_reviewer_fork_reopens_the_named_ledger_fork(
 def test_fresh_context_verdict_is_required(taste: _MoldTasteTestModule) -> None:
     with pytest.raises(TypeError):
         taste.taste_test(DRAFT, LEDGER)  # pyright: ignore[reportCallIssue]
-    with pytest.raises(TypeError):
-        taste.validate_fork_taste(DRAFT, LEDGER)  # pyright: ignore[reportCallIssue]
     with pytest.raises(taste.TasteTestError):
         _ = taste.taste_test(DRAFT, LEDGER, None)  # pyright: ignore[reportArgumentType]
 
