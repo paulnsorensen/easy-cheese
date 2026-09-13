@@ -76,7 +76,6 @@ from easy_cheese_schemas.contracts import (
     SourceLocation,
     SourcePlanRef,
     UncertaintyScope,
-    UnsupportedProjection,
     WriterViewKind,
     canonical_digest,
     contract,
@@ -931,22 +930,9 @@ def test_phase_contract_rejects_duplicate_routes() -> None:
         )
 
 
-def test_contract_version_source_references_and_projection_are_typed() -> None:
-    projection = UnsupportedProjection(
-        target="CurdBlock",
-        curd_id="curd-1",
-        field="dependencies",
-        reason="CurdBlock cannot express semantic dependencies",
-    )
-
+def test_contract_version_source_references_are_typed() -> None:
     assert source_plan_ref() == SourcePlanRef("plan-1", 1, DIGEST)
     assert source_curd_ref() == SourceCurdRef("curd-1", DIGEST)
-    assert projection == UnsupportedProjection(
-        "CurdBlock",
-        "curd-1",
-        "dependencies",
-        "CurdBlock cannot express semantic dependencies",
-    )
 
 
 def test_agent_writer_view_cannot_supply_host_owned_plan_fields() -> None:

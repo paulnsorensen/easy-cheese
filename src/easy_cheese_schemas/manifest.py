@@ -8,9 +8,7 @@ with each field's rule attached to the field rather than restated at every
 reader.
 
 The curd record here is the *run-manifest* entity: the decomposed curd plus
-its dispatch lifecycle (id / status / retry_count). It is a different concept
-from the spec-level curd block in `curd.py`, and the two deliberately do not
-share field names or types.
+its dispatch lifecycle (id / status / retry_count).
 """
 
 from __future__ import annotations
@@ -48,8 +46,8 @@ class _NamedAttribute(Protocol):
 
 
 # Exactly one number governs the linear/parallel split (src/fanout/mode.py).
-# It lives here rather than in decomposition.py because the run manifest owns
-# the same curd collection and enforces the same rule over it.
+# It lives here because the run manifest owns the curd collection and
+# enforces the same rule over it.
 PARALLEL_THRESHOLD = 2
 
 __all__ = [

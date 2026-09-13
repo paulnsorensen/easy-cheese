@@ -109,13 +109,6 @@ def _pr_plan_to_branches(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("curd-block")
-def _curd_block(argv: list[str]) -> int:
-    from easy_cheese.shared.fanout.curd_block import main
-
-    return main(argv)
-
-
 @bundle_command("normalize")
 def _normalize(argv: list[str]) -> int:
     from easy_cheese.skills.cook.contract_handlers import normalize_main
@@ -233,10 +226,6 @@ COMMANDS = (
     derive_command(
         _pr_plan_to_branches,
         "Convert a fan-out PR plan into branch, cherry-pick, and PR commands",
-    ),
-    derive_command(
-        _curd_block,
-        "Validate a curd block against the spec-locked decomposition schema",
     ),
     derive_command(_normalize, "Normalize a typed contract payload on the host"),
     derive_command(

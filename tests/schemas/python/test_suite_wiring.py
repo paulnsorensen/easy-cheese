@@ -22,7 +22,6 @@ def test_validators_come_from_canonical_packages() -> None:
         "validate_manifest",
         "validate_decomposition",
         "validate_pr_plan",
-        "curd_block",
     ):
         module = importlib.import_module(f"easy_cheese.shared.fanout.{name}")
         assert module.__file__ is not None

@@ -8,7 +8,6 @@
 | `age-route` | Size an /age review into single-pass or fan-out lanes (JSON in, JSON out) |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
 | `baseline` | Classify a current test-failure list against a stored baseline |
-| `curd-block` | Validate a curd block against the spec-locked decomposition schema |
 | `findings` | Render an /age report's selection table or coder brief and resolve selection verbs |
 | `gates` | Map a quality-gate scoreboard's booleans to a readiness verdict |
 | `handoff` | Render, parse, and dispatch-split handoff preambles |

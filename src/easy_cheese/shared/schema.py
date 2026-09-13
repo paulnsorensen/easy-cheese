@@ -48,8 +48,8 @@ def disjoint_errors(
 ) -> list[str]:
     """Cross-curd file collision, generalized over curd.py's run-manifest
     contract (strict=True: flags non-dict curds, missing/empty files, and
-    non-string file entries) and curd_block.py's decomposition-artifact
-    contract (strict=False: caller has already dict-filtered; silently skips
+    non-string file entries) and the lenient contract (strict=False: caller
+    has already dict-filtered; silently skips
     non-list files / non-string entries)."""
     errors: list[str] = []
     file_to_id: dict[str, object] = {}
