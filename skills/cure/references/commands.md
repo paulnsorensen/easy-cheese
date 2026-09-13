@@ -9,6 +9,7 @@
 | `handoff` | Render, parse, and dispatch-split handoff preambles |
 | `paths` | Slugify, validate, resolve, and list .cheese artifact paths |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
+| `remediate-plan` | Build and persist a remediate child CurdPlan from an age ReviewResult pointer |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text |
 | `wheypoint-resolve` | Resolve a phase slug through the shared Wheypoint kernel (JSON out) |

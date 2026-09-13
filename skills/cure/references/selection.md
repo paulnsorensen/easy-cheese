@@ -27,15 +27,16 @@ It passes this block with the invocation:
 handoff_context:
   source_skill: /age
   source_report: .cheese/age/<slug>.md
+  pointer: <path to the published ReviewResult HandoffPointer>
   selection: "1,3,5 | all-blocker | all-high | all-medium | cheap | all | skip N"
-  resolved_ids: [1, 3, 5]
+  finding_ids: ["<slug>/finding/1", "<slug>/finding/3", "<slug>/finding/5"]
 ```
 
-Both `selection` and `resolved_ids` are required.
+Both `selection` and `finding_ids` are required.
 `selection` stores the verb.
-`resolved_ids` stores the expanded identifiers.
+`finding_ids` stores the selected ReviewResult `finding_id` strings.
 The source skill expands the verb before dispatch.
-Cure checks the identifiers against the report and applies them.
+Cure checks the finding ids against the ReviewResult behind `pointer` and applies them.
 
 Do not use a `--select` CLI flag.
 The selection moves through the handoff context.

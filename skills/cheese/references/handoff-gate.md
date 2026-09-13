@@ -127,8 +127,9 @@ Use context payloads when command-line flags would create an unstable mini-langu
 handoff_context:
   source_skill: /age
   source_report: .cheese/age/<slug>.md
+  pointer: <path to the published ReviewResult HandoffPointer>
   selection: "1,3,5"
-  resolved_ids: [1, 3, 5]
+  finding_ids: ["<slug>/finding/1", "<slug>/finding/3", "<slug>/finding/5"]
   wiki_hits:
     - {page: .hallouminate/wiki/adr/foo-001.md, line: 12, why: "prior decision on X"}
   leverage: [auth, cross-slice-dep]

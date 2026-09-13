@@ -14,6 +14,13 @@ def _wheypoint_resolve(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("remediate-plan")
+def _remediate_plan(argv: list[str]) -> int:
+    from easy_cheese.skills.cure.contract_handlers import remediate_plan_main
+
+    return remediate_plan_main(argv)
+
+
 @bundle_command("slugify")
 def _slugify(argv: list[str]) -> int:
     from easy_cheese.shared.slugify import main
@@ -74,6 +81,10 @@ COMMANDS = (
     derive_command(
         _wheypoint_resolve,
         "Resolve a phase slug through the shared Wheypoint kernel (JSON out)",
+    ),
+    derive_command(
+        _remediate_plan,
+        "Build and persist a remediate child CurdPlan from an age ReviewResult pointer",
     ),
     derive_command(
         _slugify, "Derive a kebab-case slug and durable spec path from task text"
