@@ -190,6 +190,23 @@ def plate_layout_for(shape: LandingShape) -> PlateLayout:
     return PlateLayout.SINGLE if shape is LandingShape.SINGLE else PlateLayout.STACKED
 
 
+def _reject_layout_mismatch(
+    instance: RunManifest, _attribute: object, value: PrPlan | None
+) -> None:
+    """A stored plate_layout must equal the layout the plan's shape projects to.
+
+    ``PrShape`` mirrors ``LandingShape`` by value, so the plan shape is converted
+    by value before it reaches ``plate_layout_for``."""
+    if value is None or instance.plate_layout is None:
+        return
+    projected = plate_layout_for(LandingShape(value.shape.value))
+    if projected != instance.plate_layout:
+        raise ValueError(
+            f"pr_plan: plate_layout_for(shape {value.shape.value!r}) is "
+            + f"{projected.value!r} but plate_layout is {instance.plate_layout.value!r}"
+        )
+
+
 def _non_empty_string(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{attribute.name} must be a non-empty string")
@@ -496,6 +513,6 @@ class RunManifest:
     current_review: ReviewContext | None = None
     post_review: PostReview | None = None
     baseline: Baseline | None = None
-    pr_plan: PrPlan | None = None
+    pr_plan: PrPlan | None = field(default=None, validator=_reject_layout_mismatch)
     phase_summary: str | None = None
     carry_forward: list[str] = field(factory=list, validator=_string_list)

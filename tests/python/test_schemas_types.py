@@ -552,6 +552,24 @@ class TestPrPlanInvariants:
         assert result.value is not None
 
 
+class TestRunManifestPrPlanLayout:
+    """AC-6: a stored plate_layout must equal the layout the plan shape projects to."""
+
+    def test_layout_that_disagrees_with_plan_shape_is_rejected(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        payload["plate_layout"] = "single"
+        payload["pr_plan"] = dict(deepcopy(PR_PLAN), shape="stacked_linear")
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert any("plate_layout" in problem for problem in result.problems)
+
+    def test_layout_matching_plan_shape_is_accepted(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        payload["plate_layout"] = "single"
+        payload["pr_plan"] = deepcopy(PR_PLAN)
+        assert load(payload, RunManifest, strict=True).problems == ()
+
+
 class TestGateReceiptShapes:
     def test_red_receipt_preserves_per_contract_modes_and_plain_dict_output(self) -> None:
         payload = deepcopy(GATE_RED)
