@@ -29,7 +29,6 @@ from typing import cast
 
 from easy_cheese.shared.manifest_io import (
     ManifestLoadError,
-    parse_mapping,
     read_mapping_arg_or_stdin,
 )
 from easy_cheese.shared.schema import (
@@ -43,10 +42,6 @@ MAX_WAVE_SIZE = 4
 MIN_CURD_SURFACE = 25
 _CURD_REQUIRED_KEYS = ("slug", "contract", "files", "test_target", "acceptance", "seed", "est_edit_lines")
 _DECOMPOSER_SOURCES = ("mold", "cook")
-
-
-class CurdBlockError(ValueError):
-    """Raised when a curd block violates the locked schema."""
 
 
 def _curd_errors(curd: object, where: str) -> list[str]:
@@ -166,19 +161,6 @@ def validate_curd_block(block: object) -> list[str]:
         errors.extend(_decomposer_errors(block["decomposer"]))
 
     return errors
-
-
-def parse_curd_block(source: dict[str, object] | str) -> dict[str, object]:
-    """Parse (if a YAML/JSON string) and validate a curd block.
-
-    Raises CurdBlockError with every violation joined into one message; never
-    returns a falsy value in place of raising.
-    """
-    block = parse_mapping(source) if isinstance(source, str) else source
-    errors = validate_curd_block(block)
-    if errors:
-        raise CurdBlockError("; ".join(errors))
-    return block
 
 
 def main(argv: list[str]) -> int:
