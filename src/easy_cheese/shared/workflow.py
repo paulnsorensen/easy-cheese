@@ -530,34 +530,9 @@ def _review(
     output: object,
     evidence: Mapping[str, EvidenceRef],
 ) -> ReviewResult:
-    def coverage(
-        disposition: ReviewDisposition, reason: str | None
-    ) -> tuple[ReviewCoverage, ...]:
-        if disposition in {
-            ReviewDisposition.BLOCKED,
-            ReviewDisposition.INVALID,
-            ReviewDisposition.EXECUTOR_FAILURE,
-        }:
-            return tuple(
-                ReviewCoverage(
-                    target,
-                    CoverageDisposition.NOT_COVERED,
-                    reason or "Review did not cover the target",
-                )
-                for target in request.coverage_targets
-            )
-        return tuple(
-            ReviewCoverage(target, CoverageDisposition.COVERED)
-            for target in request.coverage_targets
-        )
-
-    initial_coverage = tuple(
-        ReviewCoverage(target, CoverageDisposition.COVERED)
-        for target in request.coverage_targets
-    )
     invocation = {
         "review_id": request.review_id,
-        "coverage": initial_coverage,
+        "coverage_targets": request.coverage_targets,
         "evidence": evidence,
         "contract_version": _version(ReviewResult),
     }
@@ -566,16 +541,6 @@ def _review(
         WriterViewKind.REVIEW_RESULT,
         invocation,
     )
-    assert isinstance(provisional.value, ReviewResult)
-    review = provisional.value
-    normalized_coverage = coverage(review.disposition, review.reason)
-    if review.coverage != normalized_coverage:
-        invocation["coverage"] = normalized_coverage
-        provisional = _normalize(
-            output,
-            WriterViewKind.REVIEW_RESULT,
-            invocation,
-        )
     assert isinstance(provisional.value, ReviewResult)
     return provisional.value
 
@@ -806,9 +771,13 @@ def _review_failure(
     disposition: ReviewDisposition,
     evidence: Mapping[str, EvidenceRef],
 ) -> ReviewResult:
+    coverage = tuple(
+        ReviewCoverage(target, CoverageDisposition.NOT_COVERED, reason)
+        for target in request.coverage_targets
+    )
     return _review(
         request,
-        ReviewResultWriterView(disposition, [], reason),
+        ReviewResultWriterView(disposition, [], reason, coverage=coverage),
         evidence,
     )
 

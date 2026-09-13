@@ -1979,7 +1979,14 @@ class ReviewFindingWriterView:
     _if_equals(
         "disposition",
         "clean",
-        {"properties": {"findings": {"maxItems": 0}}},
+        {
+            "properties": {
+                "findings": {"maxItems": 0},
+                "coverage": {
+                    "items": {"properties": {"disposition": {"const": "covered"}}}
+                },
+            }
+        },
     ),
     _if_equals(
         "disposition",
@@ -1997,6 +2004,21 @@ class ReviewResultWriterView:
         converter=_tuple_sequence, validator=_list_of(ReviewFindingWriterView)
     )
     reason: str | None = field(default=None, validator=_optional_string)
+    coverage: tuple[ReviewCoverage, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_list_of(ReviewCoverage)
+    )
+
+    @coverage.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_coverage(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
+        if self.disposition is ReviewDisposition.CLEAN and any(
+            row.disposition is CoverageDisposition.NOT_COVERED
+            for row in self.coverage
+        ):
+            raise ValueError(
+                "clean review writer view must not include a not_covered coverage row"
+            )
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_disposition(

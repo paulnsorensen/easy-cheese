@@ -143,6 +143,16 @@
                 "end_line": 42
               }
             }
+          ],
+          "coverage": [
+            {
+              "target": "correctness",
+              "disposition": "covered"
+            },
+            {
+              "target": "security",
+              "disposition": "covered"
+            }
           ]
         }
       },
@@ -168,15 +178,9 @@
             "summary": "The failing review trace"
           }
         },
-        "coverage": [
-          {
-            "target": "correctness",
-            "disposition": "covered"
-          },
-          {
-            "target": "security",
-            "disposition": "covered"
-          }
+        "coverage_targets": [
+          "correctness",
+          "security"
         ]
       },
       "expected_canonical_output": {

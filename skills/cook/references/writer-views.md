@@ -108,6 +108,12 @@ type ReproductionWriterView {
   evidence_keys? tuple[str, ...] = ()
 }
 
+type ReviewCoverage {
+  target str
+  disposition CoverageDisposition
+  reason? str | None = None
+}
+
 type ReviewFindingWriterView {
   severity ReviewSeverity
   summary str
@@ -119,6 +125,7 @@ type ReviewResultWriterView {
   disposition ReviewDisposition
   findings tuple[ReviewFindingWriterView, ...]
   reason? str | None = None
+  coverage? tuple[ReviewCoverage, ...] = ()
 }
 
 type SemanticCurdWriterView {
@@ -138,6 +145,8 @@ type SourceLocationWriterView {
   start_column? int | None = None
   end_column? int | None = None
 }
+
+enum CoverageDisposition = "covered" | "not_covered"
 
 enum CriterionDisposition = "passed" | "failed" | "blocked" | "skipped"
 
