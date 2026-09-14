@@ -18,6 +18,10 @@ The lock resolves the top-level repository root before it digests or writes, so 
 
 A gate that compares only a recorded `HEAD` SHA accepts a changed-but-uncommitted tree. The same rule applies to the hard-cheese freshness check; see [hard-cheese-gate-contract](../architecture/hard-cheese-gate-contract.md). Compare one digest over `HEAD`, the working diff, the optional specification, and prior evidence.
 
+## Orchestrator scratch under `.cheese/age` breaks the lock
+
+The digest hashes every untracked file under `.cheese` except this slug's own `<slug>-body.md`, `<slug>.md`, HTML copy, and lock (`review_lock.py:98-119`). A fan-out orchestrator that writes reconciliation scratch there (`<slug>-candidates.md`, verifier verdicts) after `review-lock` gets `the production tree changed after '<slug>'s review lock` from `write-handoff-artifact` even though `git status` is clean. Keep post-lock scratch outside `.cheese` (for example `.context/`), or write it before the lock like the packet. Observed on the PR #667/#669 review, 2026-09-13.
+
 ## Age has no pass counter
 
 Age starts a fresh context on every pass and cannot observe earlier passes. The two-pass cure cap is owned by the Cook phase table (`skills/cook/references/auto-mode.md:59-81`), not by Age or Cure; see [skill-review-round-r014](../decisions/skill-review-round-r014.md).
