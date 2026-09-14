@@ -1,0 +1,6 @@
+overlap_area = "error-handling"
+description = "A bare except swallows every exception, not just the expected ValueError, hiding real bugs."
+
+[defect]
+file = "handler.py"
+line = 5

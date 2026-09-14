@@ -110,6 +110,7 @@ Follow the no-chain isolation directive:
   Dispatch each parallel work unit as a top-level fresh-context reviewer.
   Dispatch the post-merge review the same way.
   Never dispatch either one as a nested inline self-review.
+  Record `verifier: skipped (sub-agent)` in `## Agent resolution` when `/age` runs as a sub-agent.
 
 ## Auto mode
 

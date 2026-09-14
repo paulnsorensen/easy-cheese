@@ -1,0 +1,12 @@
+--- a/counter.py
++++ b/counter.py
+@@ -9,8 +9,7 @@
+         self._lock = threading.Lock()
+ 
+     def increment(self):
+-        with self._lock:
+-            self._value += 1
++        self._value += 1
+ 
+     @property
+     def value(self):

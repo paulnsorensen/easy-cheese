@@ -71,6 +71,7 @@ Each worker reads that packet.
 `packet.md` documents its eight components and the review-context digester that supplies the orientation block.
 
 **Seam 3 — Worker contract.** Use one worker per lens.
+Dispatch all `len(lenses)` Agent calls in one message, never sequentially. Use `run_in_background` per call where the harness allows it.
 Resolve the `reviewer` role through `../../cheese/references/agent-resolution.md` at the router's `effort` dial.
 Require read-only permissions and fresh context.
 Allow a prompt-constrained general fallback only with `degraded: true`.
@@ -102,7 +103,8 @@ Then continue at step 5 (write + print the report path) and `SKILL.md § Handoff
 **Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and the selected semantic caller search.
 Workers use that packet instead of rebuilding impact context independently.
 
-**Seam 6 — Verifier pass.** After Seam 4 reconciliation produces the candidate findings list, use a cheap `verifier` role.
+**Seam 6 — Verifier pass.** Once the candidate findings list exists — Seam 4 reconciliation at `n>1`, or the single reviewer's own findings at `n=1` — use a cheap `verifier` role.
+Run this pass at every width, including `n=1`, except when `/age` is itself a sub-agent (record `verifier: skipped (sub-agent)`).
 Use the small model tier and `effort: low` from the Roles x tiers table.
 Check each reconciled finding against the evidence slice cited in its `recommendation` and location fields.
 Send the findings in batches of up to ten to one verifier call.
@@ -113,11 +115,6 @@ Each claim gets one of three verdicts:
 - **Confirm** — The cited evidence supports the claimed severity. Ship the finding unchanged.
 - **Downgrade or drop** — The evidence does not support the claimed severity or the claim itself. The verifier lowers the severity tier or drops the finding. The orchestrator records the original claim and the verifier's reasoning in the report's confidence trail.
 - **Escalate** — The cited evidence cannot settle the claim. Do not put an escalated claim in a findings section. `SKILL.md § Output` forbids a `don't know` finding row. List each escalated claim under `## Confidence` with the missing evidence. Promote it to a finding only after new evidence confirms it.
-
-The verifier runs the "cheap severity-filter leg" from the Roles x tiers table whenever `n>1`.
-It does not run at `n=1`.
-The single-parent path has no reconciliation step to filter.
-The reviewer's own severity computation is the only grading pass.
 
 **Output shape invariant.** The findings report (`.cheese/age/<slug>.md`) uses the same dedup, severity grouping, and finding format in the single-parent path and every lens fan-out width.
 Resolution provenance may expose the selected role and topology.

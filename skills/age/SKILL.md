@@ -88,7 +88,7 @@ This workflow omits the git-history/precedent dimension.
 1. Identify the diff, scope, and relevant specification or issue.
    Compute the review range's `review_surface` score and risk flags.
    Call `age_route.route(score=..., risk_flags=..., entry="age")` from `src/easy_cheese/shared/fanout/age_route.py`.
-   For `n=1`, continue with steps 2 through 4.
+   For `n=1`, continue with steps 2 through 4; run `references/fan-out.md` § Seam 6's verifier before step 5; skip it and record `verifier: skipped (sub-agent)` when `/age` runs as a sub-agent.
    For `n>1`, read `references/fan-out.md` first.
    Use its `lenses` list to set the worker count.
    Do not use fan-out when `/age` runs as a sub-agent.
@@ -115,7 +115,7 @@ If `.cheese/glossary/<slug>.md` exists, read it to flag naming drift as a deslop
    Omit dimensions with no findings.
    Report every defect, however minor.
    Do not filter findings by perceived significance.
-   The verifier pass (`n>1`) or severity computation (single-parent) filters findings later.
+   The verifier pass (Seam 6) filters findings later.
    Do not report a gate failure that matches the diff's recorded `baseline:` block.
    Read [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) for the baseline rules.
    Report only new or changed failures.

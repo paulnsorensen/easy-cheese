@@ -1,0 +1,6 @@
+overlap_area = "api-misuse"
+description = "bucket defaults to a mutable list literal, so the same list is shared and accumulates across calls."
+
+[defect]
+file = "resource.py"
+line = 1

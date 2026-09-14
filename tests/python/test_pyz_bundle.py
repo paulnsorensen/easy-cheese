@@ -86,7 +86,7 @@ def bundles(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def test_default_batch_builds_every_registered_skill(tmp_path: Path) -> None:
     assert build_pyz.main(["build_pyz.py", "--out-dir", str(tmp_path)]) == 0
     expected = set(build_pyz.SKILLS)
-    assert len(expected) == 13
+    assert len(expected) == 14
     assert {path.stem for path in tmp_path.glob("*.pyz")} == expected
     assert {path.name for path in tmp_path.glob("*.pyz")} == {
         f"{skill}.pyz" for skill in expected

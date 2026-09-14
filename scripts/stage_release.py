@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -37,9 +38,14 @@ SHIP = [
 ]
 
 
-def _copy(src: Path, dst: Path) -> None:
+def _copy(
+    src: Path,
+    dst: Path,
+    *,
+    ignore: Callable[[str, list[str]], set[str]] | None = None,
+) -> None:
     if src.is_dir():
-        _ = shutil.copytree(src, dst)
+        _ = shutil.copytree(src, dst, ignore=ignore)
     else:
         dst.parent.mkdir(parents=True, exist_ok=True)
         _ = shutil.copy2(src, dst)
@@ -65,12 +71,26 @@ def stage(out: Path) -> Path:
     for rel in SHIP:
         src = REPO_ROOT / rel
         if src.exists():
-            _copy(src, out / rel)
+            # Skip .pyz and internal-bundle dirs on the initial copytree of
+            # skills/ (~25 MB) instead of copying then deleting them.
+            ignore = (
+                shutil.ignore_patterns("*.pyz", *build_pyz.INTERNAL_BUNDLES)
+                if rel == "skills"
+                else None
+            )
+            _copy(src, out / rel, ignore=ignore)
+
+    # Internal bundles (dev-only harnesses) are copied wholesale with skills/ but
+    # never shipped: drop them from the staged tree before the bundle build.
+    for internal in build_pyz.INTERNAL_BUNDLES:
+        internal_dir = out / "skills" / internal
+        if internal_dir.exists():
+            shutil.rmtree(internal_dir)
 
     _ = build_pyz.build_bundles(
         {
             skill: out / "skills" / skill / "scripts" / f"{skill}.pyz"
-            for skill in build_pyz.SKILLS
+            for skill in build_pyz.SHIPPED_SKILLS
         }
     )
 
@@ -85,10 +105,16 @@ def _verify(out: Path) -> None:
     if not any(skills.glob("*/SKILL.md")):
         raise SystemExit(f"stage_release: no skills found under {skills}")
 
-    for skill in build_pyz.SKILLS:
+    for skill in build_pyz.SHIPPED_SKILLS:
         pyz = skills / skill / "scripts" / f"{skill}.pyz"
         if not pyz.is_file():
             raise SystemExit(f"stage_release: missing bundle {pyz}")
+
+    for internal in build_pyz.INTERNAL_BUNDLES:
+        if (skills / internal).exists():
+            raise SystemExit(
+                f"stage_release: internal bundle {internal} must not ship"
+            )
 
     stray = sorted(str(p.relative_to(out)) for p in skills.rglob("*.py"))
     if stray:

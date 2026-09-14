@@ -1,0 +1,6 @@
+def get_length(registry, key):
+    """Return the length of the value stored at key, or 0 if absent."""
+    value = registry.get(key)
+    if value is None:
+        return 0
+    return len(value)

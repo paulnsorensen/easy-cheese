@@ -16,7 +16,7 @@ A rebuild keeps the evidence current, so no worker reads stale context.
 5. **Per-lens rubric slice and shared formula sections** — Give the assigned lens its rubric slice. Include the union of the dimension rubrics for every dimension in `lenses[i]` from `dimensions.md`. Extract each dimension from its `### <dimension>` heading to the next `###` or `##` heading. Concatenate the extracted sections. Then add `dimensions.md § Location sensitivity`, `§ Fix-cost-now`, and `§ Fix-cost-later`. Each worker computes severity from these sections alone.
 6. **The severity machinery** — Include the full `§ Severity computation` section.
 7. **Output contract** — Include the per-finding fields table and the exact finding format from `SKILL.md § Output`. Also include the `also-relevant-to: [<dim>, ...]` field from Seam 3. This field carries the cross-dimension signal that Seam 4 consumes. `§ Output` omits the field, so a worker that reads only `§ Output` drops it. Each worker emits full per-finding rows plus `also-relevant-to`.
-8. **Dedup-ownership statement** — State that workers do not deduplicate findings or apply boundary tiebreakers.
+8. **Dedup-ownership statement** — State that workers do not deduplicate findings or apply boundary tiebreakers. Pass every candidate with a nameable failure scenario through; the verifier filters.
    State that workers do not reconcile severity or write the report.
    The orchestrator owns those steps (Seam 4).
    It reconciles findings across lenses and dimensions.

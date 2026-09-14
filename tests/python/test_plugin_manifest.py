@@ -3,11 +3,15 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 from typing import cast
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+import build_pyz  # noqa: E402
 
 
 def test_claude_plugin_manifest_matches_top_level_skills() -> None:
@@ -37,6 +41,24 @@ def test_install_sh_fallback_matches_top_level_skills() -> None:
     fallback = sorted(f"./skills/{name}" for name in match.group(1).split())
 
     assert fallback == expected
+
+
+def test_install_sh_internal_skills_matches_build_pyz_and_is_disjoint_from_fallback() -> None:
+    install_sh = (REPO_ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+
+    internal_match = re.search(
+        r'^EC_INTERNAL_SKILLS="\$\{EC_INTERNAL_SKILLS-([^}]+)\}"', install_sh, re.MULTILINE
+    )
+    assert internal_match, "EC_INTERNAL_SKILLS assignment not found in scripts/install.sh"
+    internal = set(internal_match.group(1).split())
+
+    assert internal == set(build_pyz.INTERNAL_BUNDLES)
+
+    fallback_match = re.search(r'^EC_FALLBACK_SKILLS="([^"]+)"', install_sh, re.MULTILINE)
+    assert fallback_match, "EC_FALLBACK_SKILLS assignment not found in scripts/install.sh"
+    fallback = set(fallback_match.group(1).split())
+
+    assert internal.isdisjoint(fallback)
 
 
 def test_cut_is_not_listed_in_plugin_manifest() -> None:
