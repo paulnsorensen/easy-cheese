@@ -161,7 +161,36 @@ CASES: list[Case] = [
             ],
         ),
     ),
+    agreed_invalid(
+        "three groups form a dependency cycle",
+        plan(
+            shape="stacked_linear",
+            groups=[
+                {"branch": "a", "title": "feat: a", "base": "main", "commits": ["abc1234"], "depends_on": ["b"]},
+                {"branch": "b", "title": "feat: b", "base": "main", "commits": ["abc1234"], "depends_on": ["c"]},
+                {"branch": "c", "title": "feat: c", "base": "main", "commits": ["abc1234"], "depends_on": ["a"]},
+            ],
+        ),
+    ),
+    agreed_valid(
+        "non-main target_branch names a valid base",
+        plan(
+            shape="stacked_linear",
+            target_branch="develop",
+            groups=[
+                {"branch": "a", "title": "feat: a", "base": "develop", "commits": ["abc1234"], "depends_on": []},
+            ],
+        ),
+    ),
 ]
+
+
+def test_charset_invalid_base_surfaces_the_git_ref_error() -> None:
+    """The topology validator skips a charset-invalid base so PrGroup's own
+    git-ref rejection -- the shell-injection guard -- is what surfaces."""
+    problems = list(load(group(base="main\nrm -rf /"), PrPlan, strict=True).problems)
+    assert any("base contains characters unsafe for a git ref" in problem for problem in problems)
+    assert not any("must name target_branch" in problem for problem in problems)
 
 
 def test_divergence_table_is_honest() -> None:

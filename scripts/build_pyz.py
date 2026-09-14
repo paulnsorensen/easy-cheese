@@ -29,6 +29,7 @@ RUNTIME_LOCK = REPO_ROOT / "requirements" / "runtime.txt"
 SCHEMA_ROOT = SRC_ROOT / "easy_cheese_schemas"
 BUILD_SCRIPTS_ROOT = REPO_ROOT / "scripts"
 SCHEMA_CONTRACT_SOURCE = SCHEMA_ROOT / "contracts.py"
+SCHEMA_PR_PLAN_SOURCE = SCHEMA_ROOT / "pr_plan.py"
 SCHEMA_CATALOG_SOURCE = SCHEMA_ROOT / "_schema_catalog.py"
 PHASE_REGISTRY_SOURCE = SCHEMA_ROOT / "_compiled_phase_registry.py"
 DOCUMENT_RULES_SOURCE = PACKAGE_ROOT / "shared" / "document_rules.py"
@@ -94,9 +95,42 @@ def _schema_contract_module() -> ModuleType:
 
 
 def _compiled_schema_catalog_source() -> str:
+    """Compile the catalog from standalone execs of the schema-bearing modules.
+
+    ``contracts.py`` and ``pr_plan.py`` are exec'd in isolation rather than
+    imported, so compilation never runs the package ``__init__`` -- whose
+    runtime staleness check would otherwise wedge ``--write-generated`` on the
+    very stale catalog it exists to repair. ``pr_plan.py`` imports the contract
+    marker from ``easy_cheese_schemas.contracts``, so the standalone contracts
+    module is registered under that name while its source is exec'd.
+    """
     collect, render = _schema_catalog_compiler()
-    pr_plan_module = _import_from(SRC_ROOT, "easy_cheese_schemas.pr_plan")
-    return render(collect((_schema_contract_module(), pr_plan_module)))
+    contracts_module = _schema_contract_module()
+    package = ModuleType("easy_cheese_schemas")
+    package.__dict__["__path__"] = []
+    pr_plan_module = ModuleType("easy_cheese_schemas.pr_plan")
+    pr_plan_module.__file__ = str(SCHEMA_PR_PLAN_SOURCE)
+    saved = {
+        name: sys.modules.get(name)
+        for name in (
+            "easy_cheese_schemas",
+            "easy_cheese_schemas.contracts",
+            "easy_cheese_schemas.pr_plan",
+        )
+    }
+    sys.modules["easy_cheese_schemas"] = package
+    sys.modules["easy_cheese_schemas.contracts"] = contracts_module
+    sys.modules["easy_cheese_schemas.pr_plan"] = pr_plan_module
+    try:
+        source = SCHEMA_PR_PLAN_SOURCE.read_bytes()
+        exec(compile(source, str(SCHEMA_PR_PLAN_SOURCE), "exec"), pr_plan_module.__dict__)
+        return render(collect((contracts_module, pr_plan_module)))
+    finally:
+        for name, saved_module in saved.items():
+            if saved_module is None:
+                _ = sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = saved_module
 
 
 def _document_rules_compiler() -> tuple[
