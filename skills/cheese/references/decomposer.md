@@ -38,8 +38,7 @@ Field names are locked and must not drift per caller.
 
 ## Validator
 
-`src/easy_cheese/shared/fanout/curd_block.py` is the single source of truth for parsing and
-validating a curd block:
+`src/easy_cheese/shared/fanout/curd_block.py` is the single source of truth for validating a curd block:
 
 - `validate_curd_block(block) -> list[str]` returns every schema violation.
   An empty list means valid.
@@ -48,10 +47,6 @@ validating a curd block:
   Each `waves` entry has at most four known slugs.
   Each `est_edit_lines` value is an integer at or above `MIN_CURD_SURFACE` (25).
   A smaller curd fails because dispatch setup costs more than the edit.
-- `parse_curd_block(source: dict | str) -> dict` — parses a YAML/JSON string
-  (or accepts an already-parsed dict), validates it, and raises
-  `CurdBlockError` with every violation joined into one message on any
-  failure. Never returns a falsy value in place of raising.
 
 This schema differs from `src/easy_cheese/shared/fanout/curd.py`.
 That module validates an `/ultracook` run manifest after a run starts.

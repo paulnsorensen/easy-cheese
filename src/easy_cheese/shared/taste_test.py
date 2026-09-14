@@ -1219,18 +1219,6 @@ def taste_test(
     return candidate
 
 
-def validate_fork_taste(
-    draft: object,
-    decision_ledger: object,
-    reviewer_verdict: Mapping[str, object] | ForkTasteVerdict,
-    *,
-    correction_round: int = 0,
-) -> ForkTasteVerdict:
-    return taste_test(
-        draft, decision_ledger, reviewer_verdict, correction_round=correction_round
-    )
-
-
 def reopen_named_forks(verdict: ForkTasteVerdict) -> tuple[str, ...]:
     return verdict.reopened_forks
 

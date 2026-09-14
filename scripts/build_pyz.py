@@ -19,10 +19,7 @@ from collections.abc import Callable, Iterable, Sequence
 from email.parser import Parser
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, cast
-
-if TYPE_CHECKING:
-    from easy_cheese.shared.bundle_commands import Command
+from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
@@ -273,7 +270,6 @@ def _normalize_internal_wheel(wheel: Path) -> Path:
                 source.infolist(), key=lambda item: item.filename
             ):
                 info = zipfile.ZipInfo(source_info.filename, (1980, 1, 1, 0, 0, 0))
-                info.compress_type = zipfile.ZIP_STORED
                 info.create_system = 3  # noqa: V101
                 info.external_attr = source_info.external_attr
                 info.internal_attr = source_info.internal_attr
@@ -407,13 +403,17 @@ def validate_command_surfaces(skills: Iterable[str]) -> None:
             f"easy_cheese resolved from {origin}, not {SRC_ROOT}; "
             + "the surface gate must inspect the sources that get packaged"
         )
-    from easy_cheese.shared.bundle_commands import command_map, validate_command_surface
+    from easy_cheese.shared.bundle_commands import (
+        Command,
+        command_map,
+        validate_command_surface,
+    )
 
     for skill in skills:
         module_name = f"easy_cheese.skills.{skill.replace('-', '_')}.commands"
         try:
             module = importlib.import_module(module_name)
-            commands = cast("Sequence[Command]", getattr(module, "COMMANDS"))
+            commands = cast(Sequence[Command], getattr(module, "COMMANDS"))
             validate_command_surface(module, commands)
             _ = command_map(commands)
         except (ImportError, SyntaxError, AttributeError, TypeError, ValueError) as exc:
@@ -603,21 +603,6 @@ def build_bundles(
             _ = shutil.move(staged, target)
             built[skill] = target
         return built
-
-
-def build_bundle(skill: str, target: Path) -> Path:
-    return build_bundles({skill: target})[skill]
-
-
-def cached_bundle(skill: str) -> Path:
-    if skill not in SKILLS:
-        raise ValueError(f"unknown skill: {skill}")
-    bundle = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
-    if not bundle.is_file():
-        raise RuntimeError(
-            f"checked-in bundle is missing: {bundle.relative_to(REPO_ROOT)}"
-        )
-    return bundle
 
 
 def main(argv: list[str]) -> int:

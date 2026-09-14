@@ -28,6 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 COOK_SKILL = REPO_ROOT / "skills" / "cook" / "SKILL.md"
 QUALITY_GATES = REPO_ROOT / "skills" / "cook" / "references" / "quality-gates.md"
 MANIFEST_SCHEMA = REPO_ROOT / "skills" / "ultracook" / "references" / "manifest-schema.json"
+COOK_PYZ = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 def read(path: Path) -> str:
@@ -121,10 +122,8 @@ class TestBaselineCaptureExampleDispatches:
         # unregisters baseline.py from the bundle (as it was before the
         # wiring commit landed), this fails instead of the doc silently
         # documenting a dead command.
-        sys.path.insert(0, str(REPO_ROOT / "scripts"))
-        import build_pyz
 
-        bundle = build_pyz.cached_bundle("cook")
+        bundle = COOK_PYZ
         payload = {
             "baseline": [{"suite": "unit", "test_id": "test_a", "signature": "boom"}],
             "current": [{"suite": "unit", "test_id": "test_a", "signature": "boom"}],
@@ -211,10 +210,8 @@ class TestCookWorktreeSubcommandDispatches:
         # invoke `worktree create` exactly as the doc's example prescribes.
         # If cook's SKILLS registry doesn't wire the shared worktree.py module
         # in, this fails instead of the doc silently documenting a dead command.
-        sys.path.insert(0, str(REPO_ROOT / "scripts"))
         import subprocess as sp
 
-        import build_pyz
 
         repo = tmp_path / "repo"
         repo.mkdir()
@@ -225,7 +222,7 @@ class TestCookWorktreeSubcommandDispatches:
         _ = sp.run(["git", "-C", str(repo), "add", "-A"], check=True)
         _ = sp.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
 
-        bundle = build_pyz.cached_bundle("cook")
+        bundle = COOK_PYZ
         result = sp.run(
             [sys.executable, str(bundle), "worktree", "create", "--slug", "repair-x", "--base", "main", "--repo", str(repo)],
             capture_output=True,

@@ -20,8 +20,7 @@ from easy_cheese_schemas import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
+MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
 
 pytestmark = pytest.mark.skipif(  # noqa: V107
     importlib.util.find_spec("build") is None
@@ -74,7 +73,7 @@ def _write_document(tmp_path: Path, doc: object = LEGACY_DOC) -> Path:
 
 
 def test_mold_pyz_dispatches_migrate_end_to_end(tmp_path: Path) -> None:
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     document = _write_document(tmp_path)
     artifact_root = tmp_path / "artifacts"
     result = _run(
@@ -118,7 +117,7 @@ def test_mold_pyz_dispatches_migrate_end_to_end(tmp_path: Path) -> None:
 def test_mold_pyz_migrate_rejects_unsupported_version(
     tmp_path: Path, source_major: str, source_minor: str
 ) -> None:
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     document = _write_document(tmp_path)
     artifact_root = tmp_path / "artifacts"
     result = _run(
@@ -152,7 +151,7 @@ def test_mold_pyz_migrate_refuses_a_caller_selected_phase(
     rather than merely rejected. The bundle must refuse the option itself and
     write no pointer.
     """
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     document = _write_document(tmp_path)
     artifact_root = tmp_path / "artifacts"
     result = _run(
