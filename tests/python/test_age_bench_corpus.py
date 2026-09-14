@@ -18,8 +18,7 @@ AGE_BENCH_SRC = REPO_ROOT / "src" / "easy_cheese" / "skills" / "age_bench"
 
 
 def _case_dirs() -> list[Path]:
-    if not CASES_DIR.is_dir():
-        return []
+    assert CASES_DIR.is_dir(), CASES_DIR
     return sorted(p for p in CASES_DIR.iterdir() if p.is_dir())
 
 
@@ -114,17 +113,18 @@ def test_every_manifest_parses_with_tomllib():
     assert case_dirs, "no cases found under benchmark/age/cases"
 
     for case_dir in case_dirs:
-        manifest = _load_manifest(case_dir)
-        assert isinstance(manifest, dict)
+        _ = _load_manifest(case_dir)
 
-    if AGE_BENCH_SRC.is_dir():
-        offenders = [
-            path
-            for path in AGE_BENCH_SRC.rglob("*.py")
-            if any(
-                line.strip().startswith("import yaml")
-                or line.strip().startswith("from yaml")
-                for line in path.read_text().splitlines()
-            )
-        ]
-        assert not offenders, f"yaml import found under age_bench: {offenders}"
+
+def test_age_bench_imports_no_yaml():
+    assert AGE_BENCH_SRC.is_dir()
+    offenders = [
+        path
+        for path in AGE_BENCH_SRC.rglob("*.py")
+        if any(
+            line.strip().startswith("import yaml")
+            or line.strip().startswith("from yaml")
+            for line in path.read_text().splitlines()
+        )
+    ]
+    assert not offenders, f"yaml import found under age_bench: {offenders}"

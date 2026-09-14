@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -37,9 +38,14 @@ SHIP = [
 ]
 
 
-def _copy(src: Path, dst: Path) -> None:
+def _copy(
+    src: Path,
+    dst: Path,
+    *,
+    ignore: Callable[[str, list[str]], set[str]] | None = None,
+) -> None:
     if src.is_dir():
-        _ = shutil.copytree(src, dst)
+        _ = shutil.copytree(src, dst, ignore=ignore)
     else:
         dst.parent.mkdir(parents=True, exist_ok=True)
         _ = shutil.copy2(src, dst)
@@ -65,7 +71,14 @@ def stage(out: Path) -> Path:
     for rel in SHIP:
         src = REPO_ROOT / rel
         if src.exists():
-            _copy(src, out / rel)
+            # Skip .pyz and internal-bundle dirs on the initial copytree of
+            # skills/ (~25 MB) instead of copying then deleting them.
+            ignore = (
+                shutil.ignore_patterns("*.pyz", *build_pyz.INTERNAL_BUNDLES)
+                if rel == "skills"
+                else None
+            )
+            _copy(src, out / rel, ignore=ignore)
 
     # Internal bundles (dev-only harnesses) are copied wholesale with skills/ but
     # never shipped: drop them from the staged tree before the bundle build.

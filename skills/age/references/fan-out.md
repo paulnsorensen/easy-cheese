@@ -116,8 +116,5 @@ Each claim gets one of three verdicts:
 - **Downgrade or drop** — The evidence does not support the claimed severity or the claim itself. The verifier lowers the severity tier or drops the finding. The orchestrator records the original claim and the verifier's reasoning in the report's confidence trail.
 - **Escalate** — The cited evidence cannot settle the claim. Do not put an escalated claim in a findings section. `SKILL.md § Output` forbids a `don't know` finding row. List each escalated claim under `## Confidence` with the missing evidence. Promote it to a finding only after new evidence confirms it.
 
-The verifier runs the "cheap severity-filter leg" from the Roles x tiers table at every width, in batches of up to ten.
-Skip it only when `/age` is itself a sub-agent.
-
 **Output shape invariant.** The findings report (`.cheese/age/<slug>.md`) uses the same dedup, severity grouping, and finding format in the single-parent path and every lens fan-out width.
 Resolution provenance may expose the selected role and topology.

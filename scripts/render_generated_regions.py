@@ -26,13 +26,14 @@ from typing import TYPE_CHECKING, ClassVar, Protocol, TypedDict, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-for _extra in (REPO_ROOT / "vendor", REPO_ROOT / "src"):
+for _extra in (REPO_ROOT / "vendor", REPO_ROOT / "src", REPO_ROOT / "scripts"):
     _path = str(_extra)
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
 import attrs  # noqa: E402
 
+import build_pyz  # noqa: E402  (sibling module in scripts/)
 from easy_cheese.shared.bundle_commands import Command, command_map  # noqa: E402
 from easy_cheese_schemas import contracts  # noqa: E402
 from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
@@ -316,6 +317,12 @@ def skill_commands(slug: str) -> tuple[Command, ...]:
 def render_skill_commands(slug: str) -> str:
     """Render one skill's canonical command inventory from its static manifest."""
     package = slug.replace("-", "_")
+    trailer = (
+        " This is an internal dev-only bundle; it ships no `SKILL.md`, so worked"
+        + " examples live in this file instead."
+        if slug in build_pyz.INTERNAL_BUNDLES
+        else " Keep worked examples in the skill instructions."
+    )
     lines = [
         f"# `/{slug}` bundle commands",
         "",
@@ -326,7 +333,7 @@ def render_skill_commands(slug: str) -> str:
             f" Run each command as `python3 skills/{slug}/scripts/{slug}.pyz <command>"
             " [args...]`. Each command returns an integer exit status."
             " Pass `--help` to a command for its arguments and output format."
-            " Keep worked examples in the skill instructions."
+            f"{trailer}"
         ),
         "",
         "| Command | Purpose |",

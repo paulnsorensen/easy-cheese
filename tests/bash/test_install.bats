@@ -1038,8 +1038,15 @@ STUB
     chmod +x "$STUB_BIN/gh"
     EC_INTERNAL_SKILLS="age-bench" run ec_discover_skills "$STUB_BIN/gh"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"press"* ]]
-    [[ "$output" != *"age-bench"* ]]
+    [ "$output" = $'age\npress' ]
+}
+
+@test "EC_INTERNAL_SKILLS pre-set before sourcing is not clobbered" {
+    # A prefix assignment (`VAR=x source file`) only lasts for that command in
+    # bash and reverts after — export it first so the override actually persists.
+    export EC_INTERNAL_SKILLS="custom-bundle"
+    source "$INSTALL_SH"
+    [ "$EC_INTERNAL_SKILLS" = "custom-bundle" ]
 }
 
 # -- test harness hermeticity -------------------------------------------------

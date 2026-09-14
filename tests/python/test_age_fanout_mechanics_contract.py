@@ -36,7 +36,12 @@ def _seam(text: str, n: int) -> str:
 
 def test_seam_3_requires_one_message_dispatch() -> None:
     seam_3 = _seam(FAN_OUT, 3)
-    assert "one message" in seam_3
+    assert (
+        "Dispatch all `len(lenses)` Agent calls in one message, never sequentially."
+        in seam_3
+    )
+    assert "never sequentially" in seam_3
+    assert "one worker per lens" in seam_3
     assert "run_in_background" in seam_3
 
 
@@ -45,6 +50,7 @@ def test_report_records_dispatched_worker_count() -> None:
         "\n## Confidence", 1
     )[0]
     assert "dispatched:" in agent_resolution
+    assert "one message:" in agent_resolution
 
     findings = parse_findings_report(REPORT_EXAMPLE)
     bands = [f.severity for f in findings]
@@ -68,6 +74,8 @@ def test_verifier_skipped_as_sub_agent() -> None:
 
     n1_paragraph = SKILL.split("For `n=1`", 1)[1].split("\n\n", 1)[0]
     assert "Seam 6" in n1_paragraph
+    assert "sub-agent" in n1_paragraph
+    assert "sub-agent" in _seam(FAN_OUT, 6)
 
 
 def test_packet_carries_the_finder_recall_rule() -> None:

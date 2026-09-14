@@ -29,5 +29,5 @@ line = 5
 ```
 
 No other top-level or `[defect]` keys are required; loaders should not assume
-the absence of additional keys, but curd/3's harness reads only the four
+the absence of additional keys, but age-bench's harness reads only the four
 fields above.
