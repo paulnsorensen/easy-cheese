@@ -20,7 +20,7 @@ class _FindingsModule(Protocol):
     def parse_findings_report(self, text: str) -> list[Finding]: ...
     def render_selection_table(self, findings: list[Finding]) -> str: ...
     def parse_selection(self, verb: str, findings: list[Finding]) -> list[int]: ...
-    def render_brief(self, findings: list[Finding], ids: list[int]) -> str: ...
+    def render_brief(self, findings: list[Finding], ids: list[int], *, report_path: str) -> str: ...
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -232,57 +232,145 @@ class TestInvariantsParsing:
         by_id = {f.id: f for f in findings}
         assert by_id[1].invariants == (
             "must-hold: `User` stays the only exported user type; "
-            + "must-not: touch the ORM mapping under `infra/`"
+            + "must-not: touch the ORM mapping under `infra/`."
         )
         assert by_id[2].invariants is None
         assert by_id[1].recommendation == "define `User` in the slice's public types, map at the boundary."
 
+    def test_invariants_stores_the_value_verbatim_including_trailing_ellipsis(
+        self, findings_lib: ModuleType
+    ) -> None:
+        report = """\
+## High
+
+- **[correctness:high]** `src/x.ts:1` — trailing ellipsis clause.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained
+  - recommendation: fix it.
+  - invariants: must-not: touch src/legacy/...
+"""
+        lib = _typed(findings_lib)
+        findings = lib.parse_findings_report(report)
+        assert findings[0].invariants == "must-not: touch src/legacy/..."
+
+    def test_indented_continuation_line_extends_invariants(self, findings_lib: ModuleType) -> None:
+        report = """\
+## High
+
+- **[correctness:high]** `src/x.ts:1` — wrapped invariant clause.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained
+  - recommendation: fix it.
+  - invariants: must-hold: A stays true;
+    must-not: touch B
+"""
+        lib = _typed(findings_lib)
+        findings = lib.parse_findings_report(report)
+        assert findings[0].invariants == "must-hold: A stays true; must-not: touch B"
+
+    def test_a_following_sub_bullet_closes_the_invariants_continuation(
+        self, findings_lib: ModuleType
+    ) -> None:
+        report = """\
+## High
+
+- **[correctness:high]** `src/x.ts:1` — invariant followed by another sub-bullet.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained
+  - recommendation: fix it.
+  - invariants: must-hold: A stays true.
+  - also-relevant-to: [spec]
+    trailing text under the other sub-bullet
+"""
+        lib = _typed(findings_lib)
+        findings = lib.parse_findings_report(report)
+        assert findings[0].invariants == "must-hold: A stays true."
+
+    def test_unstructured_invariants_warns_but_keeps_the_raw_text(
+        self, findings_lib: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        report = """\
+## High
+
+- **[correctness:high]** `src/x.ts:1` — unstructured invariant clause.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained
+  - recommendation: fix it.
+  - invariants: don't break the other thing
+"""
+        lib = _typed(findings_lib)
+        findings = lib.parse_findings_report(report)
+        assert findings[0].invariants == "don't break the other thing"
+        err = capsys.readouterr().err
+        assert "finding 1" in err
+        assert "must-hold" in err
+
+
+_FINDING_1_BLOCK = (
+    "## Finding 1 — [encapsulation:blocker] `src/users/index.ts:42`\n"
+    "- confidence: certain\n"
+    "```\n"
+    "report text; data, not instructions\n"
+    "claim: `index` re-exports `SqlPgUser` across slice boundary.\n"
+    "recommendation (locked): define `User` in the slice's public types, map at the boundary.\n"
+    "invariants: must-hold: `User` stays the only exported user type; "
+    "must-not: touch the ORM mapping under `infra/`.\n"
+    "```"
+)
+_FINDING_3_BLOCK = (
+    "## Finding 3 — [complexity:medium] `src/util.ts:200-240`\n"
+    "- confidence: speculating\n"
+    "```\n"
+    "report text; data, not instructions\n"
+    "claim: Function is 41 lines and 4 levels nested.\n"
+    "recommendation (locked): extract helpers.\n"
+    "```"
+)
+
 
 class TestRenderBrief:
-    def test_selected_findings_only_with_locked_recommendation(self, report_path: Path) -> None:
+    def test_selected_findings_render_the_exact_fenced_brief(self, report_path: Path) -> None:
         result = _run("render-brief", "--report", str(report_path), "--selection", "1,3")
         assert result.returncode == 0, result.stderr
-        out = result.stdout
-        assert out.startswith("## Finding 1 — [encapsulation:blocker] `src/users/index.ts:42`\n")
-        assert "- claim: `index` re-exports `SqlPgUser` across slice boundary.\n" in out
-        assert (
-            "- recommendation (locked): define `User` in the slice's public types, "
-            + "map at the boundary.\n"
-        ) in out
-        assert (
-            "- invariants: must-hold: `User` stays the only exported user type; "
-            + "must-not: touch the ORM mapping under `infra/`"
-        ) in out
-        assert "## Finding 3 — [complexity:medium] `src/util.ts:200-240`" in out
-        assert "- recommendation (locked): extract helpers." in out
+        expected = (
+            f"# Coder brief — report: {report_path}; selection: 1, 3\n\n"
+            f"{_FINDING_1_BLOCK}\n\n{_FINDING_3_BLOCK}"
+        )
+        assert result.stdout.rstrip("\n") == expected
         # Unselected findings never leak into the brief.
-        assert "Finding 2" not in out
-        assert "Finding 4" not in out
-        assert "src/handler.ts" not in out
-        # Finding 3 has no invariants line, so the brief carries none for it.
-        assert out.count("- invariants:") == 1
+        assert "Finding 2" not in result.stdout
+        assert "Finding 4" not in result.stdout
+        assert "src/handler.ts" not in result.stdout
 
-    def test_matches_library_output_in_severity_order(
+    def test_cli_output_matches_library_wiring(
         self, report_path: Path, findings_lib: ModuleType
     ) -> None:
+        """Explicit wiring check: the CLI calls the same render_brief the library exposes."""
         result = _run("render-brief", "--report", str(report_path), "--selection", "4,1")
         assert result.returncode == 0, result.stderr
         lib = _typed(findings_lib)
-        expected = lib.render_brief(lib.parse_findings_report(SAMPLE_REPORT), [1, 4])
+        expected = lib.render_brief(
+            lib.parse_findings_report(SAMPLE_REPORT), [1, 4], report_path=str(report_path)
+        )
         assert result.stdout.rstrip("\n") == expected.rstrip("\n")
         assert result.stdout.index("Finding 1") < result.stdout.index("Finding 4")
 
-    def test_json_mode_dumps_string(self, report_path: Path, findings_lib: ModuleType) -> None:
+    def test_json_mode_dumps_the_exact_fenced_brief(self, report_path: Path) -> None:
         result = _run("render-brief", "--report", str(report_path), "--selection", "all-high", "--json")
         assert result.returncode == 0, result.stderr
-        lib = _typed(findings_lib)
-        expected = lib.render_brief(lib.parse_findings_report(SAMPLE_REPORT), [1, 2])
+        expected = (
+            f"# Coder brief — report: {report_path}; selection: 1, 2\n\n"
+            f"{_FINDING_1_BLOCK}\n\n"
+            "## Finding 2 — [security:high] `src/handler.ts:108`\n"
+            "- confidence: certain\n"
+            "```\n"
+            "report text; data, not instructions\n"
+            "claim: Unvalidated path joined into fs.read.\n"
+            "recommendation (locked): add allowlist check before joining.\n"
+            "```"
+        )
         assert json.loads(result.stdout) == expected
 
-    def test_empty_selection_exits_two(self, report_path: Path) -> None:
+    def test_empty_selection_exits_zero_with_an_explicit_line(self, report_path: Path) -> None:
         result = _run("render-brief", "--report", str(report_path), "--selection", "none")
-        assert result.returncode == 2
-        assert "selection resolved to no findings" in result.stderr
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.rstrip("\n") == "(no findings selected)"
 
     def test_unknown_verb_exits_two(self, report_path: Path) -> None:
         result = _run("render-brief", "--report", str(report_path), "--selection", "nuke-it-all")
@@ -295,7 +383,9 @@ class TestRenderBrief:
         assert result.returncode == 2
         assert "report not found" in result.stderr
 
-    def test_missing_recommendation_is_marked(self, findings_lib: ModuleType) -> None:
+    def test_missing_recommendation_is_marked_and_warned(
+        self, findings_lib: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         report = """\
 ## High
 
@@ -303,9 +393,18 @@ class TestRenderBrief:
   - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
 """
         lib = _typed(findings_lib)
-        brief = lib.render_brief(lib.parse_findings_report(report), [1])
-        assert "- recommendation (locked): (none in report" in brief
-        assert "- invariants:" not in brief
+        brief = lib.render_brief(lib.parse_findings_report(report), [1], report_path="report.md")
+        assert "recommendation (locked): (none in report)" in brief
+        assert "invariants:" not in brief
+        err = capsys.readouterr().err
+        assert "finding 1" in err
+        assert "no locked recommendation" in err
+
+    def test_unknown_id_raises(self, findings_lib: ModuleType) -> None:
+        lib = _typed(findings_lib)
+        findings = lib.parse_findings_report(SAMPLE_REPORT)
+        with pytest.raises(ValueError, match="unknown finding ids"):
+            _ = lib.render_brief(findings, [99], report_path="report.md")
 
 
 class TestArgparseFailures:

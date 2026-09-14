@@ -114,11 +114,11 @@ python3 skills/cure/scripts/cure.pyz findings render-brief --report <path> --sel
 ```
 
 The brief carries each finding's location, claim, `recommendation (locked)`, and `invariants` line.
+The brief also carries each finding's `confidence:` tier; treat a `speculating` locked decision as provisional.
 Give it to the repair agent verbatim.
 The recommendation is the locked decision for that fix.
 Keep every `invariants:` clause true while you edit.
 Deviate only with a `### Deferred` entry that names why the recommendation is wrong or obsolete.
-Never substitute a different fix silently.
 The taste test takes the same recommendation and invariants as its locked decision.
 The Locked-decision lens halts on a silent substitution.
 
@@ -127,8 +127,7 @@ The Locked-decision lens halts on a silent substitution.
 For each selected finding:
 
 1. Read the cited location again and confirm that the finding still applies.
-2. Implement the `recommendation:` as written and keep every `invariants:` clause true.
-   Record a deviation under `### Deferred` with the rebuttal.
+2. Implement the locked recommendation per § Coder brief.
 3. Apply a stale-safe edit that matches the read anchor.
 4. Follow the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
 5. Run the narrowest test that proves the fix.
@@ -183,3 +182,4 @@ When `fix-cost-now` is absent, resolve `cheap` to the empty set.
 Record each inference under `### Notes` in the Cure report.
 Treat missing `confidence:` as unspecified.
 Do not infer confidence or reject the report.
+When `recommendation:` is absent, the brief shows `(none in report)`. Read the claim and location, choose the fix yourself, and record that choice under `### Applied`.

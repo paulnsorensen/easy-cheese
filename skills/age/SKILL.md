@@ -233,8 +233,7 @@ Treat an empty dimension as a valid outcome, not a gap to fill.
 Keep confidence qualitative (`certain | speculating | don't know`) in the report and each finding.
 Never use a numeric score.
 Give each finding a location and recommendation.
-`/cure` implements the recommendation as the locked fix decision, so write one concrete action.
-Add `invariants:` (`must-hold: <X>; must-not: <Y>`) on a blocker or high finding when the fix could break a neighbour.
+Write `recommendation:` and optional `invariants:` per `references/report-example.md`.
 Do not add JSON sidecars or tag-anchored fix payloads.
 `/cure` reads the markdown directly.
 Apply `references/voice.md` (output discipline, reasoning posture, confidence vocabulary).

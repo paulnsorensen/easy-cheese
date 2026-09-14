@@ -94,7 +94,7 @@ Slash commands are host renderings, not the control model.
    Resolve the read-only `reviewer (taste-test)` phase agent through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
    Request `default` minimum power and `medium` effort.
    Use the Cook review lenses over the cure diff.
-   Pass each finding's recommendation and invariants as the locked decision.
+   Reuse the step-2 rendered brief verbatim as the taste test's locked-decision block.
    Halt when fresh-context isolation is unavailable.
    Use an inline self-check only under the small-diff cost gate in [`tdd-loop.md`](../cook/references/tdd-loop.md).
    Skip this step for formatting, comments, imports, and logic-free renames.
