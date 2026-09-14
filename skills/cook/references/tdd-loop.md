@@ -111,6 +111,7 @@ The last three lenses are fresh-context additions. They identify failures that t
 - A silently substituted design decision.
 
 A `halt` from the Locked-decision lens stops the chain for a human decision. It is not a corrective Cook finding.
+On a `/cure` run, each selected finding's `recommendation:` and `invariants:` lines are the locked decision for that fix.
 
 **Escalate-unverifiable.**
 

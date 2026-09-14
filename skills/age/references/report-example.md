@@ -18,7 +18,13 @@ A finding that drops the list marker or the location backticks is invisible to `
 - **[<dim>:<sev>]** `path:line` — <claim>
   - location: <tier> · fix-cost-now: <tier> · fix-cost-later: <tier> · confidence: <tier>
   - recommendation: <action>
+  - invariants: must-hold: <X>; must-not: <Y>
 ```
+
+The `invariants:` line is optional.
+Add it to a `blocker` or `high` finding when the fix could break a neighbour.
+`/cure` implements `recommendation:` as the locked fix decision and keeps every `invariants:` clause true.
+Write both as concrete, checkable statements.
 
 End with `## Confidence` and `## Next step`.
 The worked instantiation and the full skeleton follow below.
@@ -36,6 +42,7 @@ When ten or more `low` findings exist, collapse the `## Low` section to one line
 - **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` (infra ORM type) across slice boundary. 3 consumer slices already import it.
   - location: contract · fix-cost-now: sprawling · fix-cost-later: structural · confidence: certain
   - recommendation: define `User` in the slice's public types, map at the boundary, deprecate the leaked export.
+  - invariants: must-hold: `User` stays the only exported user type; must-not: touch the ORM mapping under `infra/`
 
 ## High
 - **[security:high]** `src/api/admin/users.ts:55` — admin route accepts user-supplied filter without validation.

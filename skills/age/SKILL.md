@@ -233,6 +233,7 @@ Treat an empty dimension as a valid outcome, not a gap to fill.
 Keep confidence qualitative (`certain | speculating | don't know`) in the report and each finding.
 Never use a numeric score.
 Give each finding a location and recommendation.
+Write `recommendation:` and optional `invariants:` per `references/report-example.md`.
 Do not add JSON sidecars or tag-anchored fix payloads.
 `/cure` reads the markdown directly.
 Apply `references/voice.md` (output discipline, reasoning posture, confidence vocabulary).

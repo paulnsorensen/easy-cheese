@@ -53,7 +53,8 @@ Every finding carries these fields:
 | `fix-cost-now` | `contained / moderate / sprawling` | bucketed from blast-radius count |
 | `fix-cost-later` | `contained / spreading / structural` | reviewer-classified |
 | `confidence` | `certain / speculating` | reviewer-assigned per the voice-kernel scale (`voice.md`); `don't know` findings are never emitted |
-| `recommendation` | one-line action | reviewer |
+| `recommendation` | one-line action; `/cure` implements it as the locked fix decision | reviewer |
+| `invariants` | optional `must-hold: <X>; must-not: <Y>`; add on `blocker` / `high` when the fix could break a neighbour | reviewer |
 
 ## Location classification
 

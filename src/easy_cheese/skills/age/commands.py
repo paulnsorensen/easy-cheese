@@ -150,7 +150,7 @@ COMMANDS = (
     ),
     derive_command(
         _findings,
-        "Render an /age report's selection table and resolve selection verbs",
+        "Render an /age report's selection table or coder brief and resolve selection verbs",
     ),
     derive_command(
         _gates, "Map each quality-gate result to a readiness verdict"
