@@ -16,7 +16,7 @@ A durable fix would add `node_modules` to `_EXCLUDED_SNAPSHOT_DIRS` in `src/cut/
 Everything outside `production_paths` is frozen as an oracle dependency; `validate --state green` flags any drift. Two classes of paths are easy to under-declare:
 
 - **`.gitignore`** — any restructure that moves gitignored generated outputs (e.g. Astro `src/` → `website/`) must rename ignore rules, so declare `.gitignore` whenever a spec moves directories.
-- **Every test suite whose conftest imports `build_pyz` or loads modules from a bundle** — pruning a registry entry ripples into `tests/schemas/python` (bundle-provenance assertions, validator fixtures), not just the suites that obviously test the pruned thing. Grep `import build_pyz` and `cached_bundle(` across `tests/**` before fixing the path list.
+- **Every test suite that imports `build_pyz`, calls `build_bundles`, or opens a checked-in skill archive** — pruning a registry entry affects bundle and schema tests. Search for `import build_pyz`, `build_bundles(`, and `skills/<skill>/scripts/<skill>.pyz` across `tests/**` before fixing the path list.
 
 The pyz-pipeline-contracts receipt carries exactly four green-validation variances from this (`.gitignore` + three `tests/schemas/python` files), each documented in `.cheese/cook/pyz-pipeline-contracts.md`.
 

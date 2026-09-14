@@ -25,7 +25,6 @@ class _PathsModule(Protocol):
     def xdg_data_home(self) -> Path: ...
     def project_key(self) -> str: ...
     def _slug_from_remote(self, url: str) -> str: ...
-    def parse_artifact_path(self, path: Path | str) -> tuple[str, str]: ...
     def existing_artifacts(
         self,
         slug: str,
@@ -236,11 +235,6 @@ class TestHardDirReconciliation:
 
     def test_artifact_path_uses_hard_cheese_dir(self, paths: _PathsModule) -> None:
         assert paths.artifact_path("hard", "demo") == Path(".cheese/hard-cheese/demo.md")
-
-    def test_roundtrip_parse(self, paths: _PathsModule) -> None:
-        path = paths.artifact_path("hard", "demo")
-        assert path == Path(".cheese/hard-cheese/demo.md")
-        assert paths.parse_artifact_path(path) == ("hard", "demo")
 
     def test_existing_artifacts_finds_hard(
         self, paths: _PathsModule, tmp_path: Path

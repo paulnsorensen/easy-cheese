@@ -8,5 +8,7 @@ when its evidence should ground repository decisions across sessions.
 
 <!-- HALLOUMINATE:INDEX-START -->
 - [language-reviewability-evidence](./language-reviewability-evidence.md) — Language readability and reviewability evidence (AI-review era)
+- [review-dimensions-prompt-comparison](./review-dimensions-prompt-comparison.md) — Review dimensions side by side: default angles versus /age rubrics
+- [review-fanout-policy-comparison](./review-fanout-policy-comparison.md) — Review fan-out policy: default /simplify and /code-review versus /age
 - [subagent-model-selection-portability](./subagent-model-selection-portability.md) — Sub-agent model selection across harnesses
 <!-- HALLOUMINATE:INDEX-END -->

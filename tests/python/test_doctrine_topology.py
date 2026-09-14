@@ -67,8 +67,8 @@ def test_check_pyz_references_flags_cross_skill_source_copying(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A skill's own source naming a sibling skill's .pyz signals its code
-    (or docs) leaked in from another skill's tree, which check_import_closure
-    cannot see since it only audits one archive at a time.
+    or docs leaked in from another skill's tree. Static archive inspection cannot
+    see this violation because it audits one archive at a time.
     """
     demo_scripts = tmp_path / "skills" / "demo" / "scripts"
     demo_scripts.mkdir(parents=True)

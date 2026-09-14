@@ -98,7 +98,7 @@ class _BuildPyzModule(Protocol):
 
     def _compiled_schema_catalog_source(self) -> str: ...
 
-    def build_bundle(self, skill: str, target: Path) -> Path: ...
+    def build_bundles(self, destinations: dict[str, Path]) -> dict[str, Path]: ...
 
 
 @pytest.fixture(scope="module")
@@ -437,7 +437,7 @@ def test_bundle_build_rejects_stale_checked_in_catalog(
     target = tmp_path / "cook.pyz"
 
     with pytest.raises(RuntimeError, match="checked-in schema catalog is stale"):
-        _ = build_pyz.build_bundle("cook", target)
+        _ = build_pyz.build_bundles({"cook": target})
 
     assert not target.exists()
 

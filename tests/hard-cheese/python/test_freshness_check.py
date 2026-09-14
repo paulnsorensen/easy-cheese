@@ -39,7 +39,7 @@ class _FreshnessCheckModule(Protocol):
     cli: _CliNamespace
 
     def _setup(self, parser: argparse.ArgumentParser) -> None: ...
-    def last_pass_sha(self, log_path: Path) -> str | None: ...
+    def last_pass_attempt(self, log_path: Path) -> dict[str, object] | None: ...
     def decide(
         self,
         slug: str,
@@ -223,8 +223,8 @@ class TestAppendAttemptIntegration:
             encoding="utf-8",
         )
 
-        # last_pass_sha returns the canonical-column head sha verbatim.
-        assert freshness_check.last_pass_sha(path) == short_head
+        # last_pass_attempt returns the canonical-column head sha and score.
+        assert freshness_check.last_pass_attempt(path) == {"sha": short_head, "score": 4}
 
         # decide() treats the short sha as a prefix of the full HEAD sha so
         # the writer/reader pair round-trips end-to-end.
@@ -241,7 +241,7 @@ class TestAppendAttemptIntegration:
         # report `new`.
         path = tmp_path / "legacy.md"
         _ = path.write_text(_legacy_table_log("x", "feedface" * 5), encoding="utf-8")
-        assert freshness_check.last_pass_sha(path) == "feedface" * 5
+        assert freshness_check.last_pass_attempt(path) == {"sha": "feedface" * 5, "score": 4}
 
     def test_sha_matches_handles_short_and_full(
         self, freshness_check: _FreshnessCheckModule
@@ -310,14 +310,3 @@ class TestPureHelpers:
         assert freshness_check._is_pass_status("FAIL") is False  # pyright: ignore[reportPrivateUsage]
         assert freshness_check._is_pass_status("error") is False  # pyright: ignore[reportPrivateUsage]
 
-    def test_last_pass_sha_returns_none_when_missing(
-        self, freshness_check: _FreshnessCheckModule, tmp_path: Path
-    ) -> None:
-        assert freshness_check.last_pass_sha(tmp_path / "missing.md") is None
-
-    def test_last_pass_sha_from_table(
-        self, freshness_check: _FreshnessCheckModule, tmp_path: Path
-    ) -> None:
-        path = tmp_path / "log.md"
-        _ = path.write_text(_table_log("x", "feedface" * 5), encoding="utf-8")
-        assert freshness_check.last_pass_sha(path) == "feedface" * 5

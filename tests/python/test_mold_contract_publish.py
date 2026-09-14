@@ -13,8 +13,7 @@ from typing import cast
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
+MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
 
 pytestmark = pytest.mark.skipif(  # noqa: V107
     importlib.util.find_spec("build") is None
@@ -83,7 +82,7 @@ def _write_fixtures(
 
 
 def test_mold_pyz_dispatches_publish_end_to_end(tmp_path: Path) -> None:
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     document, invocation = _write_fixtures(tmp_path)
     artifact_root = tmp_path / "artifacts"
     result = _run(
@@ -106,7 +105,7 @@ def test_mold_pyz_dispatches_publish_end_to_end(tmp_path: Path) -> None:
 
 
 def test_mold_pyz_publish_recovers_syntax_error(tmp_path: Path) -> None:
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     # NBSP (U+00A0): json.loads rejects it as whitespace, str.strip removes it
     raw_text = chr(0xA0) + json.dumps(DOC) + chr(0xA0)
     document, invocation = _write_fixtures(tmp_path, raw_text=raw_text)
@@ -130,7 +129,7 @@ def test_mold_pyz_publish_recovers_syntax_error(tmp_path: Path) -> None:
 
 
 def test_mold_pyz_publish_rejects_bad_payload(tmp_path: Path) -> None:
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     bad_doc = {**DOC, "kind": "CURD_PLAN"}
     document, invocation = _write_fixtures(tmp_path, doc=bad_doc)
     artifact_root = tmp_path / "artifacts"
@@ -153,7 +152,7 @@ def test_mold_pyz_publish_rejects_bad_payload(tmp_path: Path) -> None:
 
 def test_mold_pyz_publish_pointer_names_the_mold_to_cook_route(tmp_path: Path) -> None:
     """The published pointer binds route identity, not just an operation id."""
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     document, invocation = _write_fixtures(tmp_path)
     artifact_root = tmp_path / "artifacts"
     result = _run(
