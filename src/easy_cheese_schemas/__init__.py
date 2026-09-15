@@ -3,7 +3,7 @@
 `load` structures a raw mapping into one of the artifact types here and reports
 what it could not read; `Provenance` says how the payload's stamp relates to
 the version this package understands. The artifact types -- run manifest,
-decomposition, curd block, PR plan -- carry their own field rules, so a reader
+curd plan, PR plan -- carry their own field rules, so a reader
 never has to remember which checks to run before trusting a document.
 """
 
@@ -27,19 +27,6 @@ from easy_cheese_schemas.compat import (
     registered_adapters,
     unregister_adapter,
 )
-from easy_cheese_schemas.curd import (
-    MAX_WAVE_SIZE,
-    MIN_CURD_SURFACE,
-    CurdBlock,
-    Decomposer,
-    DecomposerSource,
-    PlannedCurd,
-)
-from easy_cheese_schemas.decomposition import (
-    PARALLEL_THRESHOLD,
-    DecomposedCurd,
-    Decomposition,
-)
 from easy_cheese_schemas.gates import (
     BaselineCheck,
     EvidenceOrigin,
@@ -56,6 +43,7 @@ from easy_cheese_schemas.gates import (
 )
 from easy_cheese_schemas.io import ManifestLoadError, parse_mapping
 from easy_cheese_schemas.manifest import (
+    PARALLEL_THRESHOLD,
     AgentAttempt,
     AgentRequest,
     AgentResolution,
@@ -63,6 +51,7 @@ from easy_cheese_schemas.manifest import (
     Baseline,
     BaselineGate,
     CurdRecord,
+    DecomposedCurd,
     Effort,
     GateFailure,
     Isolation,
@@ -175,7 +164,6 @@ from easy_cheese_schemas.contracts import (  # wheypoint continuity types
     SourcePlanRef,
     TransitionAction,
     UncertaintyScope,
-    UnsupportedProjection,
     WheypointDelta,
     WheypointProjection,
     WheypointRecord,
@@ -225,10 +213,6 @@ from easy_cheese_schemas.phase_contracts import (
 from easy_cheese_schemas.planner import (
     PlannerMaterializationError,
     materialize_planner_result,
-)
-from easy_cheese_schemas.projections import (
-    project_curd_block,
-    project_decomposition,
 )
 from easy_cheese_schemas.schema_runtime import (
     DRAFT_2020_12,
@@ -283,7 +267,6 @@ __all__ = [
     "CriterionResult",
     "CriterionResultWriterView",
     "CriterionWriterView",
-    "CurdBlock",
     "CurdDisposition",
     "CurdPlan",
     "CurdPlanWriterView",
@@ -294,9 +277,6 @@ __all__ = [
     "DRAFT_2020_12",
     "DecisionFork",
     "DecomposedCurd",
-    "Decomposer",
-    "DecomposerSource",
-    "Decomposition",
     "DeliverableWriterView",
     "DiagnosisCause",
     "DiagnosisCauseWriterView",
@@ -341,8 +321,6 @@ __all__ = [
     "MAX_CONTRACT_BYTES",
     "MAX_CONTRACT_DEPTH",
     "MAX_REASON_LENGTH",
-    "MAX_WAVE_SIZE",
-    "MIN_CURD_SURFACE",
     "MIN_READABLE",
     "ManifestLoadError",
     "NORMALIZATION_RECEIPT_SCHEMA_URI",
@@ -361,7 +339,6 @@ __all__ = [
     "Phase",
     "PhaseContract",
     "PhaseDestination",
-    "PlannedCurd",
     "PlannerDisposition",
     "PlannerMaterializationError",
     "PlannerRequest",
@@ -427,7 +404,6 @@ __all__ = [
     "TransitionError",
     "TransitionRegistry",
     "UncertaintyScope",
-    "UnsupportedProjection",
     "WheypointDelta",
     "WheypointProjection",
     "WheypointRecord",
@@ -456,8 +432,6 @@ __all__ = [
     "normalize_agent_value",
     "parse_mapping",
     "parse_status_field",
-    "project_curd_block",
-    "project_decomposition",
     "read_conformance_fixture",
     "register_adapter",
     "registered_adapters",

@@ -29,18 +29,7 @@ def run_manifest_validator() -> Validator:
 
 
 @pytest.fixture(scope="session")
-def decomposition_validator() -> Validator:
-    module = importlib.import_module("easy_cheese.shared.fanout.validate_decomposition")
-    return cast(Validator, module.validate_manifest)
-
-
-@pytest.fixture(scope="session")
 def pr_plan_validator() -> Validator:
     module = importlib.import_module("easy_cheese.shared.fanout.validate_pr_plan")
     return cast(Validator, module.validate_pr_plan)
 
-
-@pytest.fixture(scope="session")
-def curd_block_validator() -> Validator:
-    module = importlib.import_module("easy_cheese.shared.fanout.curd_block")
-    return cast(Validator, module.validate_curd_block)

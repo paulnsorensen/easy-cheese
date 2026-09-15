@@ -17,7 +17,6 @@ SKILLS_DIR = ROOT / "skills"
 
 COOK_SKILL = SKILLS_DIR / "cook" / "SKILL.md"
 ROUTING_POLICY = SKILLS_DIR / "cheese" / "references" / "routing-policy.md"
-DECOMPOSER_DOC = SKILLS_DIR / "cheese" / "references" / "decomposer.md"
 MOLD_SKILL = SKILLS_DIR / "mold" / "SKILL.md"
 
 
@@ -69,30 +68,6 @@ def test_routing_policy_cook_gate_row_drops_cheese_factory_recommendation() -> N
     match = re.search(r"\| cook gate \|.*\|\n", body)
     assert match, "cook gate row not found in routing-policy.md"
     assert "cheese-factory" not in match.group(0)
-
-
-def test_decomposer_producers_both_dispatch_fresh_context() -> None:
-    """Both /mold and /cook producers must describe dispatching a fresh-context
-    decomposer sub-agent -- 'inline' must no longer describe cook's producer."""
-    body = _text(DECOMPOSER_DOC)
-    start = body.index("## Producers")
-    end = body.index("## Validator", start)
-    section = body[start:end]
-
-    assert "inline" not in section, (
-        "decomposer.md still describes a producer as running the decomposer inline"
-    )
-
-    mold_bullet_start = section.index("`/mold`")
-    cook_bullet_start = section.index("`/cook`")
-    mold_bullet = section[mold_bullet_start:cook_bullet_start]
-    cook_bullet = section[cook_bullet_start:]
-
-    for bullet in (mold_bullet, cook_bullet):
-        assert "dispatch" in bullet, f"producer bullet missing 'dispatch': {bullet!r}"
-    assert "fresh-context" in cook_bullet, (
-        f"cook's producer bullet missing 'fresh-context': {cook_bullet!r}"
-    )
 
 
 def _agent_resolution_row(body: str, work_label: str) -> str:

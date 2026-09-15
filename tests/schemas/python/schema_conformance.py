@@ -9,8 +9,7 @@ truth have drifted: any case whose two verdicts differ must name the divergence
 it pins, and any case that names one must actually diverge.
 
 The payload builders are lifted from tests/fanout/python/test_validate_manifest.py
-and test_curd_block.py rather than invented here, so both suites argue about the
-same documents.
+rather than invented here, so both suites argue about the same documents.
 """
 
 from __future__ import annotations
@@ -240,28 +239,4 @@ def pr_group(branch: str, base: str = "main") -> dict[str, object]:
         "base": base,
         "commits": ["abc1234"],
         "depends_on": [],
-    }
-
-
-def planned_curd(slug: str, files: object, est_edit_lines: int = 25) -> dict[str, object]:
-    return {
-        "slug": slug,
-        "contract": f"Implement {slug}.",
-        "files": files,
-        "test_target": f"pytest tests/test_{slug}.py",
-        "acceptance": [f"{slug} behaves correctly"],
-        "seed": [],
-        "est_edit_lines": est_edit_lines,
-    }
-
-
-def curd_block(curds: object, waves: object) -> dict[str, object]:
-    return {
-        "curds": curds,
-        "waves": waves,
-        "decomposer": {
-            "source": "cook",
-            "model": "claude-sonnet-5",
-            "prompt_version": "abc123",
-        },
     }

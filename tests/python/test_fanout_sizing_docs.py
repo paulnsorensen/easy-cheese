@@ -21,10 +21,8 @@ AFFINAGE_SKILL = ROOT / "skills" / "affinage" / "SKILL.md"
 COOK_SKILL = ROOT / "skills" / "cook" / "SKILL.md"
 PASTEURIZE_SKILL = ROOT / "skills" / "pasteurize" / "SKILL.md"
 ROUTING_POLICY = ROOT / "skills" / "cheese" / "references" / "routing-policy.md"
-DECOMPOSER_DOC = ROOT / "skills" / "cheese" / "references" / "decomposer.md"
 PACKET_DOC = ROOT / "skills" / "age" / "references" / "packet.md"
 MODE_PY = ROOT / "src" / "easy_cheese" / "shared" / "fanout" / "mode.py"
-CURD_BLOCK_PY = ROOT / "src" / "easy_cheese" / "shared" / "fanout" / "curd_block.py"
 AFFINAGE_FLOW_DETAILS_DOC = ROOT / "skills" / "affinage" / "references" / "flow-details.md"
 AGE_FAN_OUT_DOC = ROOT / "skills" / "age" / "references" / "fan-out.md"
 COOK_FAN_PATHWAY_DOC = ROOT / "skills" / "cook" / "references" / "fan-pathway.md"
@@ -287,18 +285,6 @@ class TestThresholdCodeDocsAgreement:
             f"{cold_bug_nondeterministic_n} for the non-deterministic "
             f"cold-bug row"
         )
-
-    def test_min_curd_surface_matches_docs(self) -> None:
-        curd_block_text = read(CURD_BLOCK_PY)
-        match = re.search(r"MIN_CURD_SURFACE\s*=\s*(\d+)", curd_block_text)
-        assert match, "src/fanout/curd_block.py no longer defines MIN_CURD_SURFACE"
-        floor = match.group(1)
-
-        for path in (DECOMPOSER_DOC, WIKI_ENTITIES):
-            text = read(path)
-            assert re.search(r"MIN_CURD_SURFACE\W{0,4}" + floor + r"\b", text), (
-                f"{path} does not quote the live MIN_CURD_SURFACE ({floor})"
-            )
 
 
 class TestPacketSpeaksLens:

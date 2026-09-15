@@ -22,8 +22,6 @@ from typing import Protocol, cast, final
 import pytest
 
 from easy_cheese_schemas import gates, io, load
-from easy_cheese_schemas.curd import MAX_WAVE_SIZE, MIN_CURD_SURFACE, CurdBlock
-from easy_cheese_schemas.decomposition import Decomposition
 from easy_cheese_schemas.manifest import Phase, RunManifest
 from easy_cheese_schemas.pr_plan import PrPlan
 from easy_cheese_schemas.gates import (
@@ -173,24 +171,6 @@ RUN_MANIFEST: dict[str, object] = {
     "wiring": [WIRING_ROW],
 }
 
-DECOMPOSITION: dict[str, object] = {"curds": [CURD_RECORD], "wiring": [WIRING_ROW]}
-
-CURD_BLOCK: dict[str, object] = {
-    "curds": [
-        {
-            "slug": "schema-types",
-            "contract": "Add the attrs types for the v0.1 public surface.",
-            "files": ["src/easy_cheese_schemas/manifest.py"],
-            "test_target": "pytest tests/python/test_schemas_types.py",
-            "acceptance": ["every gate is green"],
-            "seed": ["easy_cheese_schemas.compat.load"],
-            "est_edit_lines": 600,
-        }
-    ],
-    "waves": [["schema-types"]],
-    "decomposer": {"source": "cook", "model": "claude-opus-5", "prompt_version": "v1"},
-}
-
 PR_PLAN: dict[str, object] = {
     "shape": "single",
     "groups": [
@@ -282,13 +262,6 @@ def _without(payload: dict[str, object], key: str) -> dict[str, object]:
     return stripped
 
 
-def _curd(slug: str, path: str) -> dict[str, object]:
-    entry = _as_dict(deepcopy(_as_list(CURD_BLOCK["curds"])[0]))
-    entry["slug"] = slug
-    entry["files"] = [path]
-    return entry
-
-
 ARTIFACTS = [
     pytest.param(RUN_MANIFEST, RunManifest, "phase", id="run-manifest"),
     pytest.param(
@@ -297,8 +270,6 @@ ARTIFACTS = [
         "agent_resolution.resolved",
         id="run-manifest-nested",
     ),
-    pytest.param(DECOMPOSITION, Decomposition, "curds", id="decomposition"),
-    pytest.param(CURD_BLOCK, CurdBlock, "decomposer", id="curd-block"),
     pytest.param(PR_PLAN, PrPlan, "groups", id="pr-plan"),
 ]
 
@@ -487,113 +458,6 @@ class TestPrimitivesAreCheckedNotCoerced:
         assert result.problems == (
             "RunManifest.curds[1].behavior must be a non-empty string",
         )
-
-
-class TestCurdBlockInvariants:
-    def test_wave_over_the_cap_is_rejected(self) -> None:
-        payload = deepcopy(CURD_BLOCK)
-        slugs = [f"curd-{index}" for index in range(MAX_WAVE_SIZE + 1)]
-        payload["curds"] = [_curd(slug, f"src/{slug}.py") for slug in slugs]
-        payload["waves"] = [slugs]
-        result = load(payload, CurdBlock, strict=True)
-        assert result.value is None
-        assert result.problems == (
-            f"CurdBlock.waves[1] must be at most {MAX_WAVE_SIZE} slugs wide, not "
-            + f"{MAX_WAVE_SIZE + 1}",
-        )
-
-    def test_wave_at_the_cap_is_accepted(self) -> None:
-        payload = deepcopy(CURD_BLOCK)
-        slugs = [f"curd-{index}" for index in range(MAX_WAVE_SIZE)]
-        payload["curds"] = [_curd(slug, f"src/{slug}.py") for slug in slugs]
-        payload["waves"] = [slugs]
-        assert load(payload, CurdBlock, strict=True).problems == ()
-
-    def test_wave_referencing_an_unknown_slug_is_rejected(self) -> None:
-        payload = deepcopy(CURD_BLOCK)
-        payload["waves"] = [["schema-types", "no-such-curd"]]
-        result = load(payload, CurdBlock, strict=True)
-        assert result.value is None
-        assert result.problems == (
-            "CurdBlock.waves[1] must reference a declared curd slug, not "
-            + "'no-such-curd'",
-        )
-
-    def test_curd_below_the_surface_floor_is_a_merge_candidate(self) -> None:
-        payload = deepcopy(CURD_BLOCK)
-        _as_dict(_as_list(payload["curds"])[0])["est_edit_lines"] = MIN_CURD_SURFACE - 1
-        result = load(payload, CurdBlock, strict=True)
-        assert result.value is None
-        assert result.problems == (
-            "CurdBlock.curds[1].est_edit_lines must be at least the surface floor "
-            + f"of {MIN_CURD_SURFACE}, not {MIN_CURD_SURFACE - 1} -- this curd is a "
-            + "MERGE CANDIDATE: merge it into a sibling curd rather than dispatch a "
-            + "fresh coder for it",
-        )
-
-    def test_curd_at_the_surface_floor_is_accepted(self) -> None:
-        payload = deepcopy(CURD_BLOCK)
-        _as_dict(_as_list(payload["curds"])[0])["est_edit_lines"] = MIN_CURD_SURFACE
-        assert load(payload, CurdBlock, strict=True).problems == ()
-
-    def test_curds_sharing_a_file_are_rejected(self) -> None:
-        payload = deepcopy(CURD_BLOCK)
-        shared = "src/easy_cheese_schemas/manifest.py"
-        payload["curds"] = [_curd("first", shared), _curd("second", shared)]
-        payload["waves"] = [["first", "second"]]
-        result = load(payload, CurdBlock, strict=True)
-        assert result.value is None
-        assert result.problems == (
-            f"CurdBlock.curds must be pairwise file-disjoint: file {shared!r} "
-            + "appears in curd 'first' and curd 'second'",
-        )
-
-    def test_unknown_decomposer_source_is_rejected(self) -> None:
-        payload = deepcopy(CURD_BLOCK)
-        _as_dict(payload["decomposer"])["source"] = "vibes"
-        result = load(payload, CurdBlock, strict=True)
-        assert result.value is None
-        assert result.problems == (
-            "CurdBlock.decomposer.source must be valid: unknown value "
-            + "'vibes' (allowed: mold, cook)",
-        )
-
-
-class TestDecompositionInvariants:
-    def test_curds_need_no_run_lifecycle_fields(self) -> None:
-        """A decomposition is written before any run exists, so it has no id,
-        status, or retry_count to give -- demanding them would make the type
-        unable to read the artifact
-        src/easy_cheese/shared/fanout/validate_decomposition.py
-        accepts."""
-        pre_run = {
-            key: value
-            for key, value in deepcopy(CURD_RECORD).items()
-            if key not in ("id", "status", "retry_count")
-        }
-        result = load({"curds": [pre_run], "wiring": []}, Decomposition, strict=True)
-        assert result.problems == ()
-        assert result.value is not None
-        assert result.value.curds[0].behavior == CURD_RECORD["behavior"]
-
-    def test_parallel_decomposition_rejects_overlapping_curd_files(self) -> None:
-        shared = dict(CURD_RECORD, id=2, files=CURD_RECORD["files"])
-        result = load(
-            {"curds": [deepcopy(CURD_RECORD), shared], "wiring": []},
-            Decomposition,
-            strict=True,
-        )
-        assert result.value is None
-        assert result.problems == (
-            "Decomposition.curds must be file-disjoint: file "
-            + "'src/easy_cheese_schemas/manifest.py' appears in curd 1 and curd 2 "
-            + "(move shared content to seed or wiring)",
-        )
-
-    def test_empty_curds_is_rejected(self) -> None:
-        result = load({"curds": [], "wiring": []}, Decomposition, strict=True)
-        assert result.value is None
-        assert result.problems == ("Decomposition.curds must be a non-empty list",)
 
 
 class TestPrPlanInvariants:
@@ -964,10 +828,8 @@ class TestPublicSurface:
             "RedCase",
             "RedKind",
             "TestContract",
-            "CurdBlock",
             "CurdRecord",
             "DecomposedCurd",
-            "Decomposition",
             "ManifestLoadError",
             "PrPlan",
             "Readiness",

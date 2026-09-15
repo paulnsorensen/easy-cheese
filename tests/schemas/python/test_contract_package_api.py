@@ -95,7 +95,6 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
         "normalize_agent_value",
         "validate_curd_plan",
         "normalize_agent_output",
-        "project_curd_block",
         "read_conformance_fixture",
         "schema_bytes",
         "supported_version_for",

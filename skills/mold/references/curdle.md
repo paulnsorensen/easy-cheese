@@ -419,8 +419,6 @@ Before this procedure, run the digest-bound fresh-context fork taste test on the
 4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` with the final approval request. The typed plan is part of what both handshake keys approve. When candidate curds are two or more, ask the landing shape once in that same approval request, alongside the curd-independence confirmation.
 5. **During Curdle phase one**, persist the approved spec, typed `PlannerResult`, and typed `CurdPlan`. Put them after `## Quality gates` or the natural equivalent section for this spec's shape. Do not regenerate or mutate them after approval.
 
-The legacy `CurdBlock`/`Decomposition` projection is not the normal path. Use it only when an explicit migration consumer requests it; the projection must be lossless or return `UnsupportedProjection`. Never invoke the legacy curd-block decomposer or persist its block as the selected production artifact.
-
 ## Publication
 
 Publish the approved plan before the hand-off. Run this command after reconciliation:
