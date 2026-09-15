@@ -1335,6 +1335,11 @@ def test_age_bundle_html_report_runs_from_inside_bundle(
     _ = report.write_text(
         json.dumps(
             {
+                "contract_version": {
+                    "schema_uri": "https://schemas.easy-cheese.dev/review-result",
+                    "major": "1",
+                    "minor": "0",
+                },
                 "review_id": "demo",
                 "disposition": "findings",
                 "findings": [
@@ -1342,7 +1347,26 @@ def test_age_bundle_html_report_runs_from_inside_bundle(
                         "finding_id": "demo/finding/1",
                         "severity": "critical",
                         "summary": "token parsed without validation.",
-                        "location": {"path": "a.py", "start_line": 1, "end_line": 1},
+                        "evidence": [
+                            {
+                                "evidence_id": "demo/evidence/1",
+                                "kind": "review",
+                                "artifact": {
+                                    "artifact_id": "demo/artifact/1",
+                                    "role": "review",
+                                    "uri": "repo://demo/evidence/1.json",
+                                    "digest": "sha256:" + "0" * 64,
+                                    "size_bytes": 64,
+                                    "media_type": "application/json",
+                                },
+                            }
+                        ],
+                        "location": {
+                            "artifact_id": "demo/artifact/1",
+                            "path": "a.py",
+                            "start_line": 1,
+                            "end_line": 1,
+                        },
                     }
                 ],
                 "coverage": [{"target": "security", "disposition": "covered"}],
