@@ -80,6 +80,8 @@ DIMENSIONS: frozenset[str] = frozenset(
         "nih",
         "efficiency",
         "telemetry",
+        "conventions",
+        "altitude",
     }
 )
 

@@ -36,6 +36,20 @@ def _age_route(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("review-instructions")
+def _review_instructions(argv: list[str]) -> int:
+    from easy_cheese.skills.age.review_instructions import main
+
+    return main(argv)
+
+
+@bundle_command("review-plan-check")
+def _review_plan_check(argv: list[str]) -> int:
+    from easy_cheese.skills.age.review_plan_check import main
+
+    return main(argv)
+
+
 @bundle_command("review-surface")
 def _review_surface(argv: list[str]) -> int:
     from easy_cheese.shared.fanout.review_surface_cli import main
@@ -127,7 +141,15 @@ COMMANDS = (
     ),
     derive_command(
         _age_route,
-        "Size an /age review into single-pass or fan-out lanes (JSON in, JSON out)",
+        "Plan scoped review subjects from evidence-bearing context (JSON in, JSON out)",
+    ),
+    derive_command(
+        _review_instructions,
+        "Collect scoped repository and explicit external instruction sources",
+    ),
+    derive_command(
+        _review_plan_check,
+        "Check a review plan against supplied dispatch observations (JSON in, JSON out)",
     ),
     derive_command(
         _review_surface,

@@ -1,6 +1,0 @@
-overlap_area = "resource-leak"
-description = "The opened file handle is never closed, leaking a file descriptor on every call."
-
-[defect]
-file = "loader.py"
-line = 5

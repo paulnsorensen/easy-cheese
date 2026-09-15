@@ -50,11 +50,19 @@ next: cure
   - location: module · fix-cost-now: contained · fix-cost-later: spreading · confidence: speculating
   - recommendation: extract helpers.
 
+- **[conventions:medium]** `src/config.py:12` — Project rule requires explicit environment parsing.
+  - location: module · fix-cost-now: contained · fix-cost-later: spreading · confidence: certain
+  - recommendation: apply the documented configuration rule.
+
 ## Low
 
 - **[deslop:low]** `src/old.ts:55-60` — Unused export `_helper`.
   - location: class · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
   - recommendation: remove the export.
+
+- **[altitude:low]** `src/old.ts:70` — The helper sits one layer below its only consumer.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
+  - recommendation: move the helper beside its sole consumer.
 """
 
 
@@ -95,14 +103,18 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 class TestRenderTable:
-    def test_matches_library_output(self, report_path: Path, findings_lib: ModuleType) -> None:
+    def test_matches_library_output(
+        self, report_path: Path, findings_lib: ModuleType
+    ) -> None:
         result = _run("render-table", "--report", str(report_path))
         assert result.returncode == 0, result.stderr
         lib = _typed(findings_lib)
         expected = lib.render_selection_table(lib.parse_findings_report(SAMPLE_REPORT))
         assert result.stdout.rstrip("\n") == expected.rstrip("\n")
 
-    def test_json_mode_dumps_string(self, report_path: Path, findings_lib: ModuleType) -> None:
+    def test_json_mode_dumps_string(
+        self, report_path: Path, findings_lib: ModuleType
+    ) -> None:
         result = _run("render-table", "--report", str(report_path), "--json")
         assert result.returncode == 0, result.stderr
         decoded = cast(str, json.loads(result.stdout))
@@ -117,6 +129,18 @@ class TestRenderTable:
         assert "certain" in result.stdout
         assert "speculating" in result.stdout
 
+    def test_conventions_and_altitude_tags_parse_and_render(
+        self, findings_lib: ModuleType
+    ) -> None:
+        findings = _typed(findings_lib).parse_findings_report(SAMPLE_REPORT)
+        by_dimension = {finding.dimension: finding for finding in findings}
+
+        assert by_dimension["conventions"].severity == "medium"
+        assert by_dimension["altitude"].severity == "low"
+        rendered = _typed(findings_lib).render_selection_table(findings)
+        assert "conventions" in rendered
+        assert "altitude" in rendered
+
 
 class TestParseSelection:
     def test_all_high_ids(self, report_path: Path, findings_lib: ModuleType) -> None:
@@ -129,7 +153,9 @@ class TestParseSelection:
         )
         assert result.returncode == 0, result.stderr
         lib = _typed(findings_lib)
-        expected_ids = lib.parse_selection("all-high", lib.parse_findings_report(SAMPLE_REPORT))
+        expected_ids = lib.parse_selection(
+            "all-high", lib.parse_findings_report(SAMPLE_REPORT)
+        )
         printed = [int(line) for line in result.stdout.splitlines() if line.strip()]
         assert printed == expected_ids
 
@@ -146,7 +172,23 @@ class TestParseSelection:
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == [1, 2]
 
-    def test_json_mode_dumps_list(self, report_path: Path, findings_lib: ModuleType) -> None:
+    def test_new_dimension_findings_follow_severity_selection(
+        self, report_path: Path
+    ) -> None:
+        result = _run(
+            "parse-selection",
+            "--report",
+            str(report_path),
+            "--selection",
+            "all-medium",
+            "--json",
+        )
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == [1, 2, 3, 4]
+
+    def test_json_mode_dumps_list(
+        self, report_path: Path, findings_lib: ModuleType
+    ) -> None:
         result = _run(
             "parse-selection",
             "--report",
@@ -157,7 +199,9 @@ class TestParseSelection:
         )
         assert result.returncode == 0, result.stderr
         lib = _typed(findings_lib)
-        expected_ids = lib.parse_selection("all-high", lib.parse_findings_report(SAMPLE_REPORT))
+        expected_ids = lib.parse_selection(
+            "all-high", lib.parse_findings_report(SAMPLE_REPORT)
+        )
         assert json.loads(result.stdout) == expected_ids
 
     def test_specific_ids(self, report_path: Path) -> None:
@@ -194,9 +238,7 @@ class TestMissingFile:
 
     def test_parse_selection_missing_file_exits_two(self, tmp_path: Path) -> None:
         missing = tmp_path / "nope.md"
-        result = _run(
-            "parse-selection", "--report", str(missing), "--selection", "all"
-        )
+        result = _run("parse-selection", "--report", str(missing), "--selection", "all")
         assert result.returncode == 2
         assert "report not found" in result.stderr
 

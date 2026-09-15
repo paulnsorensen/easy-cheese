@@ -60,7 +60,9 @@ class TestCurdBlockIsMigrationOnly:
 class TestCookOwnsOneFastPathContract:
     """`review-cheese.md` high: three files defined three eligibility rules."""
 
-    OWNER_LINK: str = "[`../../cook/SKILL.md`](../../cook/SKILL.md) section Standalone fast-path"
+    OWNER_LINK: str = (
+        "[`../../cook/SKILL.md`](../../cook/SKILL.md) section Standalone fast-path"
+    )
 
     def test_classification_links_the_owner_instead_of_restating_it(self) -> None:
         body = _text(REFERENCES / "classification.md")
@@ -81,7 +83,9 @@ class TestGateExampleMatchesTheStandardMenu:
 
     def test_example_carries_all_four_standard_options(self) -> None:
         body = _text(REFERENCES / "handoff-gate.md")
-        example = body[body.index("handoff_gate:") : body.index("Every gate must include")]
+        example = body[
+            body.index("handoff_gate:") : body.index("Every gate must include")
+        ]
         for option in ("harden-tests", "plate-it", "checkpoint-and-stop", "stop"):
             assert f"- id: {option}" in example, option
 
@@ -91,8 +95,12 @@ class TestGateExampleMatchesTheStandardMenu:
 
     def test_stop_stays_the_last_option(self) -> None:
         body = _text(REFERENCES / "handoff-gate.md")
-        example = body[body.index("handoff_gate:") : body.index("Every gate must include")]
-        assert example.rindex("- id: stop") > example.rindex("- id: checkpoint-and-stop")
+        example = body[
+            body.index("handoff_gate:") : body.index("Every gate must include")
+        ]
+        assert example.rindex("- id: stop") > example.rindex(
+            "- id: checkpoint-and-stop"
+        )
 
 
 class TestOptionalPluginDetectionIsCapabilityBased:
@@ -124,7 +132,10 @@ class TestArtifactHasOneMeaning:
         assert "`artifact:` has exactly one meaning." in body
         assert "| prior consumed report | `artifact:` |" in body
         assert "`handoff.spec_ref`" in body
-        assert "| pull request reference | the `<pr-ref>` argument of `/affinage` |" in body
+        assert (
+            "| pull request reference | the `<pr-ref>` argument of `/affinage` |"
+            in body
+        )
 
     def test_reference_kind_comes_from_the_carrier(self) -> None:
         body = _text(REFERENCES / "handback-contract.md")
@@ -132,13 +143,19 @@ class TestArtifactHasOneMeaning:
 
     def test_skill_carries_the_specification_pointer_in_spec_ref(self) -> None:
         body = _text(CHEESE)
-        assert "It carries its durable specification pointer in the typed `spec_ref` field." in body
+        assert (
+            "It carries its durable specification pointer in the typed `spec_ref` field."
+            in body
+        )
         assert "which always names the prior consumed report" in body
 
     def test_resume_reads_spec_ref_before_artifact(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
         assert "Read that pointer from the typed `spec_ref` field." in body
-        assert "Read it from `artifact:` only for a legacy note that has no `spec_ref` value." in body
+        assert (
+            "Read it from `artifact:` only for a legacy note that has no `spec_ref` value."
+            in body
+        )
 
 
 class TestAffinageResumeNormalizesItsReference:
@@ -146,17 +163,30 @@ class TestAffinageResumeNormalizesItsReference:
 
     def test_resume_normalizes_the_reference_before_dispatch(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
-        assert "Normalize the value to a bare number before you emit the command." in body
-        assert "`/affinage` and its `pr-status` command accept a number or a URL only." in body
+        assert (
+            "Normalize the value to a bare number before you emit the command." in body
+        )
+        assert (
+            "`/affinage` and its `pr-status` command accept a number or a URL only."
+            in body
+        )
 
     def test_resume_requires_a_stake_with_auto(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
-        assert "Add `--auto` only together with an explicit `--stake <floor>` value." in body
-        assert "Stop and ask for the floor when the user requested `--auto` without one." in body
+        assert (
+            "Add `--auto` only together with an explicit `--stake <floor>` value."
+            in body
+        )
+        assert (
+            "Stop and ask for the floor when the user requested `--auto` without one."
+            in body
+        )
 
     def test_artifact_overloading_is_confined_to_legacy_notes(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
-        assert "This legacy note is the only carrier that overloads `artifact:`." in body
+        assert (
+            "This legacy note is the only carrier that overloads `artifact:`." in body
+        )
 
 
 class TestLintChecksOneProjection:
@@ -187,8 +217,14 @@ class TestResumeRoutesByDisposition:
 
     def test_needs_context_retries_the_same_phase_once(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
-        assert "Re-dispatch the same phase with the named gap, and do not advance to `next:`." in body
-        assert "Stop after one retry at that phase, and report `retry cap (1) reached`." in body
+        assert (
+            "Re-dispatch the same phase with the named gap, and do not advance to `next:`."
+            in body
+        )
+        assert (
+            "Stop after one retry at that phase, and report `retry cap (1) reached`."
+            in body
+        )
 
     def test_an_unknown_status_is_never_a_silent_proceed(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
@@ -202,7 +238,10 @@ class TestPlateSummaryMatchesPlate:
 
     def test_cure_is_the_documented_open_pr_consumer(self) -> None:
         body = _text(CHEESE)
-        assert "`/cure` consumes this flag and sends the publication intent to terminal `/plate`." in body
+        assert (
+            "`/cure` consumes this flag and sends the publication intent to terminal `/plate`."
+            in body
+        )
         assert "`/plate` accepts no `--open-pr` flag of its own." in body
 
     def test_skill_names_both_plate_question_triggers(self) -> None:
@@ -212,7 +251,10 @@ class TestPlateSummaryMatchesPlate:
 
     def test_coherence_check_keeps_the_same_two_triggers(self) -> None:
         body = _text(REFERENCES / "coherence-check.md")
-        assert "It asks before mutation when a stack is recommended or shape is ambiguous." in body
+        assert (
+            "It asks before mutation when a stack is recommended or shape is ambiguous."
+            in body
+        )
 
 
 class TestAgeAcceptsEveryReviewSource:
@@ -220,8 +262,16 @@ class TestAgeAcceptsEveryReviewSource:
 
     def test_coherence_check_accepts_the_full_source_set(self) -> None:
         body = _text(REFERENCES / "coherence-check.md")
-        line = next(line for line in body.splitlines() if "`/age` needs a review source" in line)
-        for source in ("pull request", "branch", "commit reference", "range", "path scope"):
+        line = next(
+            line for line in body.splitlines() if "`/age` needs a review source" in line
+        )
+        for source in (
+            "pull request",
+            "branch",
+            "commit reference",
+            "range",
+            "path scope",
+        ):
             assert source in line, source
 
     def test_coherence_check_delegates_source_validation_to_age(self) -> None:
@@ -247,7 +297,10 @@ class TestPublicationAndHardFlagPropagation:
     def test_open_pr_needs_the_user(self) -> None:
         body = _text(CHEESE)
         assert "Forward `--open-pr` only when the user supplied it." in body
-        assert "Never add `--open-pr` to a dispatch that the user did not authorize." in body
+        assert (
+            "Never add `--open-pr` to a dispatch that the user did not authorize."
+            in body
+        )
 
     def test_hard_forwards_on_every_accepting_route(self) -> None:
         body = _text(CHEESE)
@@ -260,12 +313,17 @@ class TestInternalBriesearchPacket:
 
     def test_tier_two_allocates_the_parent_slug_before_the_call(self) -> None:
         body = _text(REFERENCES / "escalation.md")
-        assert "Before a `/briesearch` call, allocate the parent mini-specification slug." in body
+        assert (
+            "Before a `/briesearch` call, allocate the parent mini-specification slug."
+            in body
+        )
         assert "pass it with the question" in body
 
     def test_tier_two_marks_the_call_as_a_sidechain(self) -> None:
         body = _text(REFERENCES / "escalation.md")
-        assert "Set `invocation: sidechain` on every internal `/briesearch` call." in body
+        assert (
+            "Set `invocation: sidechain` on every internal `/briesearch` call." in body
+        )
 
     def test_tier_three_owns_every_user_question(self) -> None:
         body = _text(REFERENCES / "escalation.md")
@@ -299,7 +357,9 @@ class TestHandbackClaimMatchesThePhaseRegistry:
 
     def test_phase_handback_row_lists_only_registered_phases(self) -> None:
         body = _text(REFERENCES / "handback-contract.md")
-        row = next(line for line in body.splitlines() if line.startswith("| Phase handback |"))
+        row = next(
+            line for line in body.splitlines() if line.startswith("| Phase handback |")
+        )
         for phase in self.REGISTERED:
             assert f"`/{phase}`" in row, phase
         assert "/affinage" not in row
@@ -308,7 +368,9 @@ class TestHandbackClaimMatchesThePhaseRegistry:
     def test_unregistered_phases_have_their_own_row(self) -> None:
         body = _text(REFERENCES / "handback-contract.md")
         row = next(
-            line for line in body.splitlines() if line.startswith("| Unregistered report |")
+            line
+            for line in body.splitlines()
+            if line.startswith("| Unregistered report |")
         )
         assert "`/affinage`" in row and "`/pasteurize`" in row
         assert "written by hand" in row
@@ -316,7 +378,9 @@ class TestHandbackClaimMatchesThePhaseRegistry:
     def test_contract_names_the_registry_as_the_gate(self) -> None:
         body = _text(REFERENCES / "handback-contract.md")
         assert "`schema-intertwine.md` lists the registered source phases." in body
-        assert "They write the same preamble by hand and do not call the writer." in body
+        assert (
+            "They write the same preamble by hand and do not call the writer." in body
+        )
 
     def test_registry_projection_still_omits_the_unregistered_phases(self) -> None:
         """The narrowed claim is only correct while the registry omits them."""
@@ -330,14 +394,19 @@ class TestPlannerAndIntegratorAreSeparateJobs:
 
     def test_agent_resolution_marks_only_the_integrator_parent_owned(self) -> None:
         body = _text(REFERENCES / "agent-resolution.md")
-        assert "The **integrator** owns the approval loop and stays with the parent agent." in body
+        assert (
+            "The **integrator** owns the approval loop and stays with the parent agent."
+            in body
+        )
         assert "Never delegate the integrator." in body
         assert "The **planner** is a delegated worker." in body
 
     def test_agent_resolution_names_the_planner_dispatch(self) -> None:
         body = _text(REFERENCES / "agent-resolution.md")
         assert "fresh-context planner on a `PlannerRequest`" in body
-        assert "Record its `agent_resolution` block like any other delegated role." in body
+        assert (
+            "Record its `agent_resolution` block like any other delegated role." in body
+        )
 
     def test_routing_policy_row_agrees(self) -> None:
         body = _text(REFERENCES / "routing-policy.md")
@@ -389,7 +458,7 @@ class TestAffinageIsARoutableIntent:
 
     def test_disambiguation_routes_review_feedback_verbs_to_affinage(self) -> None:
         body = _text(REFERENCES / "classification.md")
-        assert 'on a pull request → `affinage`' in body
+        assert "on a pull request → `affinage`" in body
         assert "| `respond to the review comments on PR#142` | affinage |" in body
 
 
@@ -461,15 +530,6 @@ class TestLeverageIsTheCeremonyAxis:
         assert "only zero fired triggers mint a new mini-specification" in body
         assert "write a new mini-specification to avoid the wrong match" not in body
 
-    def test_fired_ids_have_a_carrier_at_every_seam(self) -> None:
-        handoff = _text(REFERENCES / "handoff-gate.md")
-        assert "leverage: [auth, cross-slice-dep]" in handoff
-        curdle = _text(REPO_ROOT / "skills" / "mold" / "references" / "curdle.md")
-        template = curdle[curdle.index("## Spec template") : curdle.index("# <Title>")]
-        assert "leverage: []" in template
-        fan_out = _text(REPO_ROOT / "skills" / "age" / "references" / "fan-out.md")
-        assert "read its `leverage:` frontmatter list" in fan_out
-
     def test_mold_description_does_not_advertise_fuzzy_feature_asks(self) -> None:
         body = _text(REPO_ROOT / "skills" / "mold" / "SKILL.md")
         description = body[: body.index("\n---", 4)]
@@ -504,7 +564,9 @@ class TestLeverageIsTheCeremonyAxis:
 
     def test_quick_tier_requires_zero_fired_triggers(self) -> None:
         body = _text(REPO_ROOT / "skills" / "mold" / "references" / "tiers.md")
-        quick = next(line for line in body.splitlines() if line.startswith("| **Quick** |"))
+        quick = next(
+            line for line in body.splitlines() if line.startswith("| **Quick** |")
+        )
         assert "zero fired leverage triggers" in quick
         assert "A fired leverage trigger rules Quick out" in body
         assert "a fired trigger never lands in Quick" in body

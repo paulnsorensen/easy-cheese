@@ -19,6 +19,7 @@ A finding that drops the list marker or the location backticks is invisible to `
   - location: <tier> · fix-cost-now: <tier> · fix-cost-later: <tier> · confidence: <tier>
   - recommendation: <action>
 ```
+For a `conventions` finding, state the exact rule, source, offending code, and correction. For an `altitude` finding, state the symptom, owner, better placement, and concrete cost; architecture preference alone is not a finding.
 
 End with `## Confidence` and `## Next step`.
 The worked instantiation and the full skeleton follow below.
@@ -47,10 +48,18 @@ When ten or more `low` findings exist, collapse the `## Low` section to one line
   - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
   - recommendation: extract `formatHeader` / `formatBody`.
 
+- **[conventions:medium]** `src/config.py:12` — `os.environ["PORT"]` bypasses the repository rule: “Parse environment values with `ConfigValue` before use.”
+  - location: module · fix-cost-now: contained · fix-cost-later: spreading · confidence: certain
+  - recommendation: parse the value with `ConfigValue` before use, as `docs/configuration.md:18` requires.
+
 ## Low
 - **[deslop:low]** `src/utils/format.ts:18` — variable `data` shadows outer `data`.
   - location: class · fix-cost-now: contained · fix-cost-later: contained · confidence: certain
   - recommendation: rename to `lineItems`.
+
+- **[altitude:low]** `src/utils/format.ts:24` — Symptom: `formatBody` repeats `formatHeader`'s argument list; owner: `formatHeader`; better placement: its sole caller; concrete cost: parameter changes require edits to both signatures.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
+  - recommendation: move the wrapper beside its sole caller after confirming the intended placement.
 
 ## Confidence
 <`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
@@ -107,7 +116,14 @@ Collapse this section to one line when ten or more low findings exist.>
 
 ## Agent resolution
 <one bullet per resolved worker: role, selected type, effort, and `degraded: true` when a fallback ran.>
-<a `dispatched: <n> workers, one message: <true|false>` line for a fan-out run (`n>1`), or `verifier: skipped (sub-agent)` when `/age` ran as a sub-agent.>
+Record the plan path, `policy_version`, `input_digest`, planned assignment IDs, and `review-plan-check` status.
+Include exactly one `dispatched: <n> workers, one message: <true|false>` line from actual execution observations.
+Never replace observed counts with planned counts.
+Use zero and false when no workers were dispatched.
+Mark unavailable observations as `unobserved`, including unknown values on the dispatch line.
+Self-reported observations remain unverified; a consistency check does not authenticate execution.
+Record capability limits and skipped verification separately.
+A sub-agent adds `verifier: skipped (sub-agent)` on its own line.
 
 ## Confidence
 <`certain` | `speculating` | `don't know`> — <one line on the evidence, including each unavailable source>

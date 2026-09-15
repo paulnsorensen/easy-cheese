@@ -63,6 +63,7 @@ from easy_cheese_schemas.contracts import (
     ReproductionWriterView,
     ReviewCoverage,
     ReviewDisposition,
+    ReviewDimension,
     ReviewFinding,
     ReviewFindingWriterView,
     ReviewKind,
@@ -690,6 +691,7 @@ def test_review_findings_disposition_requires_a_finding() -> None:
 def test_blocked_review_rejects_findings_at_both_contract_boundaries() -> None:
     finding = ReviewFinding(
         finding_id="finding-1",
+        dimension=ReviewDimension.CORRECTNESS,
         severity=ReviewSeverity.HIGH,
         summary="The failure path loses data",
         evidence=[evidence()],
@@ -719,6 +721,7 @@ def test_review_request_and_result_accept_typed_evidence() -> None:
     assert request.review_kind is None
     finding = ReviewFinding(
         finding_id="finding-1",
+        dimension=ReviewDimension.CORRECTNESS,
         severity=ReviewSeverity.HIGH,
         summary="The failure path loses data",
         location=SourceLocation(
@@ -1044,6 +1047,7 @@ def test_writer_views_expose_only_agent_authored_fields() -> None:
     }
     assert set(attrs.fields_dict(ReviewFindingWriterView)) == {
         "severity",
+        "dimension",
         "summary",
         "evidence_keys",
         "location",
@@ -1122,6 +1126,7 @@ def test_planner_writer_view_rejects_no_work_with_unresolved_work() -> None:
 def test_review_writer_view_enforces_disposition() -> None:
     finding_fields = attrs.fields_dict(ReviewFindingWriterView)
     finding_kwargs: dict[str, object] = {
+        "dimension": ReviewDimension.CORRECTNESS,
         "severity": ReviewSeverity.HIGH,
         "summary": "The implementation violates the contract",
         "evidence_keys": ["evidence-1"],

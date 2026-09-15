@@ -11,8 +11,8 @@ The sub-agent returns 2 KB or less of UTF-8 text.
 It returns a structured summary, citations, and gaps.
 It returns no raw bodies, no full file dumps, and no copied source text.
 Each skill names the digest contents, such as a claim table, an orientation paragraph, or a root-cause summary.
-One exception exists. An Age lens worker returns full per-finding rows without a size ceiling.
-`fan-out.md` Seam 3 defines that worker.
+One exception exists. An Age subject worker returns full per-finding rows without a size ceiling.
+`fan-out.md` § Dispatch and shared evidence defines that worker.
 The ceiling applies to every other sub-agent.
 
 ## Harness-agnostic sub-agent selection
@@ -51,7 +51,7 @@ Do not send one sub-agent to do five sequential tasks; that shape is wrong.
 ## Age router as fan-out predicate
 
 `/age` sizes its fan-out with the age router, not with a size-only threshold.
-`skills/age/SKILL.md § Sub-agent fan-out` calls `route(score=...)` in `src/easy_cheese/shared/fanout/age_route.py`.
-The router returns a base tier of 1 / 2 / 5 and can promote above it.
-`fan-out.md § Router call` owns the full router topology. This file does not repeat it.
+`skills/age/SKILL.md § Sub-agent fan-out` uses `route(context=...)` in `src/easy_cheese/shared/fanout/age_route.py`.
+The router assigns subjects from evidence, effort, workload, and execution capabilities.
+`fan-out.md` owns the context and assignment contract. This file does not repeat it.
 This file's digest contract, selection rules, and delegation boundaries apply to every worker that the router starts.

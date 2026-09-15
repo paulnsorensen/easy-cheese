@@ -53,11 +53,11 @@ def test_release_builds_all_skills_in_one_batch(
 
     _ = stage_release.stage(tmp_path / "release")
 
-    assert batch_sizes == [len(build_pyz.SHIPPED_SKILLS)]
+    assert batch_sizes == [len(build_pyz.SKILLS)]
 
 
 def test_every_skill_ships_its_bundle(staged: Path) -> None:
-    for skill in build_pyz.SHIPPED_SKILLS:
+    for skill in build_pyz.SKILLS:
         pyz = staged / "skills" / skill / "scripts" / f"{skill}.pyz"
         assert pyz.is_file(), f"missing bundle for {skill}"
         # A real zipapp, not an empty placeholder: it carries the dispatcher.
@@ -66,20 +66,10 @@ def test_every_skill_ships_its_bundle(staged: Path) -> None:
 
 
 def test_skill_metadata_ships(staged: Path) -> None:
-    for skill in build_pyz.SHIPPED_SKILLS:
+    for skill in build_pyz.SKILLS:
         assert (staged / "skills" / skill / "SKILL.md").is_file()
 
 
-def test_internal_bundles_built_but_not_shipped(staged: Path) -> None:
-    # Internal bundles are built and committed (so check_bundles/test harnesses
-    # see them) but must never leak into the shipped release tree.
-    assert build_pyz.INTERNAL_BUNDLES, "expected at least one internal bundle"
-    for internal in build_pyz.INTERNAL_BUNDLES:
-        assert internal in build_pyz.SKILLS
-        assert internal not in build_pyz.SHIPPED_SKILLS
-        assert not (staged / "skills" / internal).exists(), (
-            f"internal bundle {internal} must not ship in a release"
-        )
 
 
 def test_no_raw_python_under_skills(staged: Path) -> None:

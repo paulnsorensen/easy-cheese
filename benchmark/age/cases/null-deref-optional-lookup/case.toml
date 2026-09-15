@@ -1,6 +1,0 @@
-overlap_area = "null-deref"
-description = "The None guard is removed, so an absent key raises TypeError from len(None) instead of returning 0."
-
-[defect]
-file = "lookup.py"
-line = 4

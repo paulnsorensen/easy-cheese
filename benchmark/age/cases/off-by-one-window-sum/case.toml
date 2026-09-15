@@ -1,6 +1,0 @@
-overlap_area = "off-by-one"
-description = "Loop upper bound excludes the last element, dropping it from the sum."
-
-[defect]
-file = "module.py"
-line = 5

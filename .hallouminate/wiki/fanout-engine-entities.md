@@ -1,12 +1,12 @@
 # Fan-out engine entities
 
-The fan-out engine (`src/fanout/`, formerly `/cheese-factory`, now driven by
-`/cook`'s fan pathway — `/ultracook` is retired to a redirect stub) has three
-domain entities the validators check: the **Curd**, the **Wiring node**, and
-the **Curd block**. Curd and Wiring node are each *one* entity that appears at
-two pipeline stages with a growing field set; each entity has a single
-validation home under `src/fanout/` rather than splitting its rules across
-files.
+The fan-out engine (`src/easy_cheese/shared/fanout/`, formerly
+`/cheese-factory`, now driven by `/cook`'s fan pathway — `/ultracook` is
+retired to a redirect stub) has three domain entities the validators check:
+the **Curd**, the **Wiring node**, and the **Curd block**. Curd and Wiring node
+are each *one* entity that appears at two pipeline stages with a growing field
+set; each entity has a single validation home under
+`src/easy_cheese/shared/fanout/` rather than splitting its rules across files.
 
 ## The Curd
 
@@ -106,6 +106,7 @@ four-way validator merge.
 
 - [architecture](./architecture.md) — the skills-only collection and the cheese pipeline.
 - [workflow-invariants](./workflow-invariants.md) — pipeline ordering and the curdle gate.
-- [age-fanout-router](./architecture/age-fanout-router.md) — deterministic review fan-out sizing (same PR).
+- [age-fanout-router](./architecture/age-fanout-router.md) — contextual
+  review subject planning and workload allowances.
 
 _Source: subagent-routing-overhaul PR1 stack (PR #315 entity/validation foundation; PR #317 `/mold` integration and `/ultracook` retirement) cure/plate write-back · Updated: 2026-07-24 · Supersedes: /ultracook-owned framing (retired in PR #317)_

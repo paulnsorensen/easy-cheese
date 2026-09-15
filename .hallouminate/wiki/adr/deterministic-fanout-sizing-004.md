@@ -1,6 +1,12 @@
 # ADR-004 — Curd blocks declare a size estimate; the validator gates it
 
 **Status:** accepted · **Spec:** `deterministic-fanout-sizing`
+**Current qualification (2026-09):** Superseded for the Age subject-routing
+policy. The workload reasoning in this ADR remains valid for curd
+decomposition: a declared edit estimate is needed when a diff does not yet
+exist, and validation gates it. It does not define current Age assignments,
+which use the actual review-surface score and contextual subject policy. See
+[age-fanout-router](../architecture/age-fanout-router.md).
 
 ## Context
 

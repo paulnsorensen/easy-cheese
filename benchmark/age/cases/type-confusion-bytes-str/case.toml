@@ -1,6 +1,0 @@
-overlap_area = "type-confusion"
-description = "The bytes-to-str normalization is removed, so a bytes value raises TypeError when concatenated with str."
-
-[defect]
-file = "codec.py"
-line = 3

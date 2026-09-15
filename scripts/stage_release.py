@@ -67,17 +67,11 @@ def stage(out: Path) -> Path:
         if src.exists():
             _copy(src, out / rel)
 
-    # Internal bundles (dev-only harnesses) are copied wholesale with skills/ but
-    # never shipped: drop them from the staged tree before the bundle build.
-    for internal in build_pyz.INTERNAL_BUNDLES:
-        internal_dir = out / "skills" / internal
-        if internal_dir.exists():
-            shutil.rmtree(internal_dir)
 
     _ = build_pyz.build_bundles(
         {
             skill: out / "skills" / skill / "scripts" / f"{skill}.pyz"
-            for skill in build_pyz.SHIPPED_SKILLS
+            for skill in build_pyz.SKILLS
         }
     )
 
@@ -92,16 +86,11 @@ def _verify(out: Path) -> None:
     if not any(skills.glob("*/SKILL.md")):
         raise SystemExit(f"stage_release: no skills found under {skills}")
 
-    for skill in build_pyz.SHIPPED_SKILLS:
+    for skill in build_pyz.SKILLS:
         pyz = skills / skill / "scripts" / f"{skill}.pyz"
         if not pyz.is_file():
             raise SystemExit(f"stage_release: missing bundle {pyz}")
 
-    for internal in build_pyz.INTERNAL_BUNDLES:
-        if (skills / internal).exists():
-            raise SystemExit(
-                f"stage_release: internal bundle {internal} must not ship"
-            )
 
     stray = sorted(str(p.relative_to(out)) for p in skills.rglob("*.py"))
     if stray:
