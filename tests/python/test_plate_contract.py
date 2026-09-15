@@ -438,10 +438,16 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     assert '"plate_layout"' in schema
     assert '"single", "stacked"' in schema
     assert "explicit choice, cohesive-single inference, or user confirmation" in schema
-    assert '"plate_layout"' in plan_schema
-    assert '"required": ["plate_layout", "shape", "groups"]' in plan_schema
-    assert "cannot override an explicit" in plan_schema
-    assert "copy it exactly into the plan" in planner.lower()
+    # The pr-plan reference JSON is generated from the registered v1 contract:
+    # the v1 root, never `plate_layout`.
+    assert '"plate_layout"' not in plan_schema
+    assert '"target_branch"' in plan_schema
+    assert '"$id":"https://schemas.easy-cheese.dev/pr-plan"' in plan_schema
+    # AC-9: the planner prompt describes the v1 root and never instructs the
+    # agent to emit `plate_layout` in the document.
+    assert "contract_version" in planner
+    assert "target_branch: main" in planner
+    assert "plate_layout: single | stacked" not in planner
     assert "owns the size gate" in planner
     assert "skills/plate/references/topology.md" in planner
     assert "~400" not in planner

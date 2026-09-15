@@ -4,6 +4,7 @@ import importlib
 import json
 import subprocess
 import sys
+import types
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -26,8 +27,10 @@ from easy_cheese_schemas.contracts import (
     CurdPlan,
     contract,
 )
+from easy_cheese_schemas import contracts as contracts_module
 from easy_cheese_schemas.schema_runtime import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
+    _collect_registered_contracts,  # pyright: ignore[reportPrivateUsage]
     ContractValidationError,
     canonical_digest,
     normalize_agent_output,
@@ -142,6 +145,37 @@ def test_marker_authority_rejects_duplicate_slugs() -> None:
         setattr(contract_type, "__contract_slug__", original_slug)
 
 
+def _stub_contract_module(name: str, slug: str) -> _ContractModule:
+    """Build a module exporting exactly one contract class marked with ``slug``."""
+    module = types.ModuleType(name)
+
+    @contract(slug)
+    class Marked:
+        pass
+
+    setattr(module, "Marked", Marked)
+    setattr(
+        module,
+        "registered_contracts",
+        lambda: contracts_module.marked_contracts_in(module),
+    )
+    return cast(_ContractModule, cast(object, module))
+
+
+def test_duplicate_slugs_across_modules_are_rejected_by_runtime_and_compiler() -> None:
+    """Marker authority spans modules: the same slug exported by two modules is
+    an error for the runtime collector and for the catalog compiler alike."""
+    left = _stub_contract_module("stub_contracts_left", "twin")
+    right = _stub_contract_module("stub_contracts_right", "twin")
+
+    with pytest.raises(ValueError, match=r"duplicate contract marker 'twin'"):
+        _ = _collect_registered_contracts(left, right)
+
+    with pytest.raises(
+        ValueError, match=r"duplicate contract marker\(s\) across modules"
+    ):
+        _ = collect_schema_markers((left, right))
+
 @pytest.mark.parametrize("slug", ["", "  ", 7])
 def test_contract_rejects_invalid_markers(slug: object) -> None:
     with pytest.raises(ValueError, match="contract slug must be a non-empty string"):
@@ -166,20 +200,28 @@ def test_marker_authority_rejects_invalid_registered_markers(slug: object) -> No
         setattr(contract_type, "__contract_slug__", original_slug)
 
 
-def test_runtime_and_compiler_project_one_marker_authority() -> None:
+def test_runtime_and_compiler_project_the_module_tuple_authority() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
+    pr_plan = importlib.import_module("easy_cheese_schemas.pr_plan")
     runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], runtime.registered_contracts
     )
     entries = registered()
     marked_contracts = cast(tuple[tuple[str, type], ...], runtime._MARKED_CONTRACTS)
+    projected = collect_schema_markers(
+        (
+            cast(_ContractModule, cast(object, contracts)),
+            cast(_ContractModule, cast(object, pr_plan)),
+        )
+    )
 
     assert entries == tuple(sorted(entries, key=lambda entry: entry[0]))
     assert marked_contracts == entries
-    assert collect_schema_markers(
-        cast(_ContractModule, cast(object, contracts))
-    ) == tuple((slug, contract_type.__name__) for slug, contract_type in entries)
+    assert ("pr-plan", "PrPlan") in projected
+    assert projected == tuple(
+        (slug, contract_type.__name__) for slug, contract_type in entries
+    )
 
 
 def test_compiler_retains_constant_name_collision_validation() -> None:
@@ -191,10 +233,16 @@ def test_compiler_retains_constant_name_collision_validation() -> None:
 
 def test_generated_catalog_bytes_match_compiler_projection() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
+    pr_plan = importlib.import_module("easy_cheese_schemas.pr_plan")
     generated = ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
 
     assert generated.read_bytes() == render_schema_catalog(
-        collect_schema_markers(cast(_ContractModule, cast(object, contracts)))
+        collect_schema_markers(
+            (
+                cast(_ContractModule, cast(object, contracts)),
+                cast(_ContractModule, cast(object, pr_plan)),
+            )
+        )
     ).encode("utf-8")
 
 
@@ -254,6 +302,7 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         f"{SCHEMA_ROOT}/phase-contract",
         f"{SCHEMA_ROOT}/planner-request",
         f"{SCHEMA_ROOT}/planner-result",
+        f"{SCHEMA_ROOT}/pr-plan",
         f"{SCHEMA_ROOT}/review-request",
         f"{SCHEMA_ROOT}/review-result",
         f"{SCHEMA_ROOT}/wheypoint-record",

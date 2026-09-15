@@ -219,6 +219,11 @@ def run_manifest() -> dict[str, object]:
 
 def pr_plan() -> dict[str, object]:
     return {
+        "contract_version": {
+            "schema_uri": "https://schemas.easy-cheese.dev/pr-plan",
+            "major": "1",
+            "minor": "0",
+        },
         "shape": "single",
         "groups": [
             {

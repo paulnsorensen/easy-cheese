@@ -173,7 +173,6 @@ from easy_cheese_schemas.contracts import (  # wheypoint continuity types
     WriterPayload,
     WriterViewKind,
     derive_curd_disposition,
-    registered_contracts,
 )
 
 from easy_cheese_schemas.conformance_resources import (
@@ -226,8 +225,10 @@ from easy_cheese_schemas.schema_runtime import (
     canonical_digest,
     curd_plan_digest,
     load_curd_plan,
+    load_pr_plan,
     normalize_agent_output,
     normalize_agent_value,
+    registered_contracts,
     schema_bytes,
     supported_version_for,
     validate_contract,
@@ -429,6 +430,7 @@ __all__ = [
     "load",
     "load_conformance_fixture",
     "load_curd_plan",
+    "load_pr_plan",
     "materialize_planner_result",
     "normalize_agent_output",
     "normalize_agent_value",

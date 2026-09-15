@@ -198,7 +198,7 @@ class TestSchemaShape:
         assert _at(schema, "properties", "pr_plan") == {"$ref": "pr-plan-schema.json"}
 
     def test_pr_plan_shape_enum_covers_four(self, pr_plan_schema: JSONDict) -> None:
-        shapes = _l(_at(pr_plan_schema, "properties", "shape", "enum"))
+        shapes = _l(_at(pr_plan_schema, "$defs", "PrPlan", "properties", "shape", "enum"))
         assert set(shapes) == {
             "single",
             "orthogonal_flat",
@@ -274,5 +274,5 @@ class TestExampleManifestMatchesSchema:
         assert example_manifest["phase"] in phases
 
     def test_pr_plan_shape_value_in_enum(self, pr_plan_schema: JSONDict, example_manifest: JSONDict) -> None:
-        shapes = _l(_at(pr_plan_schema, "properties", "shape", "enum"))
+        shapes = _l(_at(pr_plan_schema, "$defs", "PrPlan", "properties", "shape", "enum"))
         assert _d(example_manifest["pr_plan"])["shape"] in shapes

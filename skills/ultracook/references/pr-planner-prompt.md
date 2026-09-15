@@ -10,7 +10,7 @@ You are the PR planner sub-agent for /ultracook spec: {slug}
 Read the manifest at {manifest_path}, the merged diff at {merged_diff_path}, and the
 spec summary below. Emit a PR layout plan to
 `.cheese/ultracook/{slug}/pr-plan.yaml`.
-`/plate` resolved topology before parallel-mode commits. The persisted, authoritative resolution is `{plate_layout}`. Copy it exactly into the plan. The plan may explain why the decomposition supports a stack, but it must not change or re-ask an explicit or previously verified choice.
+`/plate` resolved topology before parallel-mode commits. The persisted, authoritative resolution is `{plate_layout}`. Use it to choose `shape`: a `single` resolution maps to the `single` shape, and a `stacked` resolution maps to a multi-PR shape. The plan may explain why the decomposition supports a stack, but it must not change or re-ask an explicit or previously verified choice.
 
 ## Layout shapes
 
@@ -39,8 +39,12 @@ Review-shape criteria, in priority order:
 ## Output: pr-plan.yaml
 
 ```yaml
-plate_layout: single | stacked
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
 shape: single | orthogonal_flat | stacked_linear | diamond_stack
+target_branch: main
 groups:
   - branch: ultracook/{slug}/pr-1-seed
     title: "feat(orders): shared types"
@@ -60,7 +64,8 @@ groups:
       - ultracook/{slug}/pr-1-seed
 ```
 
-`plate_layout` must equal `{plate_layout}` from the manifest. For `single`, emit
+The v1 document root is `contract_version`, `shape`, `groups`, and `target_branch`
+(default `main`); it never carries `plate_layout`. For `single`, emit
 exactly one `single` group. For `stacked`, emit an ordered multi-PR shape and
 explicit commit/file boundaries; place shared durable writes in the
 bottom/common group or an explicit wiring group.

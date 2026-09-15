@@ -12,8 +12,9 @@ from typing import cast
 from urllib.parse import urlparse
 
 from easy_cheese.shared.publication import BoundedReadOverflow, read_bounded
+from easy_cheese_schemas import load_pr_plan
 from easy_cheese_schemas.contracts import LandingShape, parse_landing_mapping
-from easy_cheese_schemas.manifest import plate_layout_for
+from easy_cheese_schemas.manifest import plate_layout_for, plate_layout_for_plan
 
 _MODES = {"commit-only", "topology-preflight", "new-pr", "existing-pr", "stack-maintenance"}
 _TOPOLOGIES = {"single", "stacked", "n/a"}
@@ -171,9 +172,15 @@ def validate_publication(data: object) -> dict[str, object]:
     if pr_plan is not None:
         plan = _object(pr_plan, "pr_plan", errors)
         if plan is not None:
-            _exact_fields(plan, {"plate_layout"}, "pr_plan", errors)
-            if plan.get("plate_layout") != topology:
-                errors.append("pr_plan.plate_layout must match topology")
+            loaded = load_pr_plan(plan)
+            errors.extend(f"pr_plan {problem}" for problem in loaded.problems)
+            if loaded.value is not None:
+                projected = plate_layout_for_plan(loaded.value).value
+                if projected != topology:
+                    errors.append(
+                        f"pr_plan projects to {projected} layout but topology is "
+                        + f"{topology}"
+                    )
 
     if "landing" in state:
         _validate_landing(state["landing"], topology, mode, errors)

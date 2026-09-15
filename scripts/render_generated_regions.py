@@ -37,6 +37,9 @@ from easy_cheese.shared.bundle_commands import Command, command_map  # noqa: E40
 from easy_cheese_schemas import contracts  # noqa: E402
 from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
 from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS  # noqa: E402
+from easy_cheese_schemas import PrPlan  # noqa: E402
+from easy_cheese_schemas import registered_contracts  # noqa: E402
+from easy_cheese_schemas import schema_bytes  # noqa: E402
 
 
 class _DocumentContract(Protocol):
@@ -66,6 +69,7 @@ class _Phase(TypedDict):
 CURDLE_PATH = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
 WRITER_VIEWS_PATH = REPO_ROOT / "skills" / "cook" / "references" / "writer-views.md"
 INTERTWINE_PATH = REPO_ROOT / "skills" / "cheese" / "references" / "schema-intertwine.md"
+PR_PLAN_SCHEMA_PATH = REPO_ROOT / "skills" / "ultracook" / "references" / "pr-plan-schema.json"
 
 # Same discovery rule as ``scripts/build_pyz.SKILLS``: a skill ships a bundle
 # exactly when it declares a static command manifest. Kept local so the doc
@@ -244,7 +248,9 @@ def _slug_from_uri(uri: str) -> str:
 
 
 def render_schema_intertwine() -> str:
-    contract_slugs = {slug: cls.__name__ for slug, cls in contracts.registered_contracts()}
+    # The package-level collector spans every contract-bearing module, not just
+    # contracts.py, so a model registered elsewhere (PrPlan) still renders.
+    contract_slugs = {slug: cls.__name__ for slug, cls in registered_contracts()}
     phases = cast(list[_Phase], COMPILED_TRANSITION_REGISTRY.to_data())
     catalog_slugs = sorted(
         _slug_from_uri(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS
@@ -356,6 +362,7 @@ def refresh(check: bool) -> bool:
             WRITER_VIEWS_PATH, WRITER_VIEWS_TAG, render_writer_views_region()
         ),
         INTERTWINE_PATH: render_schema_intertwine(),
+        PR_PLAN_SCHEMA_PATH: schema_bytes(PrPlan).decode(),
         **{commands_doc_path(slug): render_skill_commands(slug) for slug in SKILL_SLUGS},
     }
 

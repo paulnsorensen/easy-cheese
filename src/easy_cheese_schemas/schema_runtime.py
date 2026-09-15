@@ -17,10 +17,14 @@ from typing import (
 import attrs
 from attrs import Attribute
 
+import easy_cheese_schemas.contracts as contracts_module
+import easy_cheese_schemas.pr_plan as pr_plan_module
 from easy_cheese_schemas._schema_catalog import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     SCHEMA_ROOT,
 )
+from easy_cheese_schemas.compat import Loaded
+from easy_cheese_schemas.compat import load as _load
 from easy_cheese_schemas.contracts import (
     MAX_CONTRACT_BYTES,
     MAX_CONTRACT_DEPTH,
@@ -65,7 +69,6 @@ from easy_cheese_schemas.contracts import (
     canonical_digest,
     curd_plan_digest,
     derive_curd_disposition,
-    registered_contracts,
 )
 
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
@@ -76,6 +79,24 @@ class _RegisteredContract:
     schema_uri: str
     contract: type
     supported_version: ContractVersion | None
+
+
+def _collect_registered_contracts(*modules: object) -> tuple[tuple[str, type], ...]:
+    pairs = [
+        pair
+        for module in modules
+        for pair in contracts_module.marked_contracts_in(module)
+    ]
+    pairs.sort(key=lambda pair: pair[0])
+    for previous, current in zip(pairs, pairs[1:]):
+        if previous[0] == current[0]:
+            raise ValueError(f"duplicate contract marker {current[0]!r}")
+    return tuple(pairs)
+
+
+def registered_contracts() -> tuple[tuple[str, type], ...]:
+    """Collect marked contracts across the explicit module tuple."""
+    return _collect_registered_contracts(contracts_module, pr_plan_module)
 
 
 _MARKED_CONTRACTS = registered_contracts()
@@ -406,6 +427,38 @@ def _registered(schema: str | type) -> _RegisteredContract:
 
 def supported_version_for(schema: str | type) -> ContractVersion | None:
     return _registered(schema).supported_version
+
+
+def load_pr_plan(raw: object) -> Loaded[pr_plan_module.PrPlan]:
+    """Load a pr-plan document the way every consuming seam must load it.
+
+    Three rules the plain ``load`` call does not carry, held in one place so no
+    seam can drift from another: unknown keys are refused (a pre-v1 document's
+    ``plate_layout`` must not slip through as an ignored additive field), the
+    document must carry the contract version this host supports, and problems
+    are reported without a usable value.
+
+    It lives here rather than in ``pr_plan.py`` because ``compat.load`` would
+    close an import cycle back through the contract module.
+    """
+    loaded = _load(raw, pr_plan_module.PrPlan, strict=True, forbid_unknown=True)
+    if loaded.value is None:
+        return loaded
+    supported = supported_version_for(pr_plan_module.PrPlan)
+    actual = loaded.value.contract_version
+    if actual != supported:
+        assert supported is not None
+        return Loaded(
+            None,
+            loaded.provenance,
+            (
+                *loaded.problems,
+                f"PrPlan.contract_version {actual.major}.{actual.minor} for "
+                + f"{actual.schema_uri} is unsupported; expected "
+                + f"{supported.major}.{supported.minor} for {supported.schema_uri}",
+            ),
+        )
+    return loaded
 
 
 def schema_bytes(schema: str | type) -> bytes:
