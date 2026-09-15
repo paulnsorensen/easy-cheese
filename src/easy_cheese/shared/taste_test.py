@@ -131,7 +131,17 @@ NOT_APPLICABLE_REFLECTIONS = tuple(
 # whitespace-insensitively (goal-drift gate).
 GOAL_SECTION = "problem"
 _GOAL_HEADINGS = frozenset({"problem statement", "problem", "goal"})
+# Goal-coverage gate: the ledger's `goal_clauses` (`G-n`) must each land in
+# Acceptance (covered) or carry an explicit disposition in Non-goals, Deferred
+# follow-ups, or Open questions. At least half the clauses must be covered.
+GOAL_CLAUSE_ID = re.compile(r"^G-\d+$")
+COVERAGE_SECTIONS = ("non-goals", "follow-ups", "open-questions")
 _REFLECTION_ALIASES = {
+    "non-goals": "non-goals",
+    "non goals": "non-goals",
+    "deferred follow-ups": "follow-ups",
+    "follow-ups": "follow-ups",
+    "open questions": "open-questions",
     "approach": "approach",
     "interface": "interface",
     "interfaces": "interface",
@@ -334,6 +344,12 @@ class ForkCoverage:
             "decision": copy.deepcopy(self.decision),
             "reflected_in": list(self.reflected_in),
         }
+
+
+@dataclass(frozen=True)
+class GoalClause:
+    id: str
+    text: str
 
 
 @dataclass(frozen=True)
@@ -948,20 +964,55 @@ def parse_gate_applicability(
     )
 
 
+_LEDGER_RESERVED_KEYS = frozenset({"goal", "goal_clauses"})
+
+
+def _goal_clauses(value: object) -> tuple[GoalClause, ...]:
+    """Parse the ledger's `goal_clauses`: a list of `{id: G-n, text}` records.
+    A malformed list raises `ledger-goal-clauses-invalid`; a duplicate id
+    raises `ledger-duplicate-goal-clause`."""
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise TasteTestError("ledger-goal-clauses-invalid")
+    clauses: list[GoalClause] = []
+    for item in cast("list[object] | tuple[object, ...]", value):
+        if not isinstance(item, Mapping):
+            raise TasteTestError("ledger-goal-clauses-invalid")
+        item_map = cast(Mapping[str, object], item)
+        clause_id = item_map.get("id")
+        text = item_map.get("text", item_map.get("clause"))
+        if (
+            not isinstance(clause_id, str)
+            or not GOAL_CLAUSE_ID.match(clause_id.strip())
+            or not isinstance(text, str)
+            or not text.strip()
+        ):
+            raise TasteTestError("ledger-goal-clauses-invalid")
+        clauses.append(GoalClause(clause_id.strip(), text.strip()))
+    if len({clause.id for clause in clauses}) != len(clauses):
+        raise TasteTestError("ledger-duplicate-goal-clause")
+    return tuple(clauses)
+
+
 def _normalize_ledger(
     value: object,
-) -> tuple[tuple[ForkDecision, ...], tuple[str, ...], str | None]:
-    """Normalize a ledger into (entries, problems, goal).
+) -> tuple[
+    tuple[ForkDecision, ...], tuple[str, ...], str | None, tuple[GoalClause, ...]
+]:
+    """Normalize a ledger into (entries, problems, goal, goal_clauses).
 
     Accepts either the `{"goal": ..., "forks": [...]}` shape or an id-keyed
-    mapping shape (each top-level key other than `goal` is a fork id). `goal`
-    is a reserved top-level key on both shapes and never becomes a fork. A
-    blank or non-string `goal` raises `TasteTestError("ledger-goal-empty")`.
-    The forks may also arrive as a bare list, or under `decisions`, `ledger`,
-    or `settled_decisions` instead of `forks`.
+    mapping shape (each top-level key other than the reserved `goal` and
+    `goal_clauses` is a fork id). A blank or non-string `goal` raises
+    `TasteTestError("ledger-goal-empty")`. `goal_clauses` is an optional list of
+    `{id: G-n, text}` records that the goal-coverage gate consumes. The forks
+    may also arrive as a bare list, or under `decisions`, `ledger`, or
+    `settled_decisions` instead of `forks`.
     """
     raw: object
     goal: str | None = None
+    clauses: tuple[GoalClause, ...] = ()
     if isinstance(value, Mapping):
         mapping_value = cast(Mapping[object, object], value)
         goal_value = mapping_value.get("goal")
@@ -969,6 +1020,7 @@ def _normalize_ledger(
             if not isinstance(goal_value, str) or not goal_value.strip():
                 raise TasteTestError("ledger-goal-empty")
             goal = goal_value.strip()
+        clauses = _goal_clauses(mapping_value.get("goal_clauses"))
         raw = mapping_value.get(
             "forks",
             mapping_value.get(
@@ -978,7 +1030,7 @@ def _normalize_ledger(
         if raw is None:
             raw_list: list[object] = []
             for key, item in mapping_value.items():
-                if not isinstance(key, str) or key == "goal":
+                if not isinstance(key, str) or key in _LEDGER_RESERVED_KEYS:
                     continue
                 if isinstance(item, Mapping):
                     raw_list.append({"id": key, **cast(Mapping[str, object], item)})
@@ -1020,7 +1072,7 @@ def _normalize_ledger(
     ids = [entry.id for entry in entries]
     if len(set(ids)) != len(ids):
         problems.append("ledger-duplicate-fork-id")
-    return tuple(entries), tuple(problems), goal
+    return tuple(entries), tuple(problems), goal, clauses
 
 
 def _goal_gaps(sections: Mapping[str, str], goal: str | None) -> list[str]:
@@ -1035,6 +1087,60 @@ def _goal_gaps(sections: Mapping[str, str], goal: str | None) -> list[str]:
     if normalized_goal not in " ".join(section.split()).casefold():
         return ["goal-drift"]
     return []
+
+
+def _clause_tagged(section: str, clause_id: str) -> bool:
+    return re.search(rf"(?<![A-Za-z0-9-]){re.escape(clause_id)}(?![0-9])", section) is not None
+
+
+def _coverage_dispositions(
+    sections: Mapping[str, str], clauses: Sequence[GoalClause]
+) -> dict[str, str]:
+    """Classify each `G-n` clause from the draft alone: `covered` when an
+    Acceptance line carries its tag, else `non-goal` / `follow-up` / `tbd` when
+    the matching section carries it, else `uncovered`. Acceptance wins ties."""
+    dispositions: dict[str, str] = {}
+    labels = {"non-goals": "non-goal", "follow-ups": "follow-up", "open-questions": "tbd"}
+    for clause in clauses:
+        if _clause_tagged(sections.get("acceptance", ""), clause.id):
+            dispositions[clause.id] = "covered"
+            continue
+        dispositions[clause.id] = next(
+            (
+                labels[name]
+                for name in COVERAGE_SECTIONS
+                if _clause_tagged(sections.get(name, ""), clause.id)
+            ),
+            "uncovered",
+        )
+    return dispositions
+
+
+def goal_coverage(draft: object, decision_ledger: object) -> dict[str, str]:
+    """Per-clause disposition map (`G-n` -> covered | non-goal | follow-up |
+    tbd | uncovered) for the handshake's narrowing-delta line. Empty when the
+    ledger carries no `goal_clauses`."""
+    _, _, _, clauses = _normalize_ledger(decision_ledger)
+    return _coverage_dispositions(_draft_sections(draft), clauses)
+
+
+def _coverage_gaps(
+    sections: Mapping[str, str], clauses: Sequence[GoalClause]
+) -> list[str]:
+    """The goal-coverage gate. Every clause needs a disposition, and fewer than
+    half covered means the spec is a slice of the goal: re-pin or widen."""
+    if not clauses:
+        return []
+    dispositions = _coverage_dispositions(sections, clauses)
+    gaps = [
+        f"goal-coverage:{clause_id}"
+        for clause_id, disposition in dispositions.items()
+        if disposition == "uncovered"
+    ]
+    covered = sum(1 for disposition in dispositions.values() if disposition == "covered")
+    if covered * 2 < len(clauses):
+        gaps.append(f"goal-coverage-cap:{covered}/{len(clauses)}")
+    return gaps
 
 
 def _heading_title(raw: object) -> str:
@@ -1125,14 +1231,15 @@ def _applicability_gaps(draft: object) -> list[str]:
 
 def lexical_precheck(draft: object, decision_ledger: object) -> tuple[str, ...]:
     """Mechanical gaps a fresh-context reviewer cannot fix: ledger problems,
-    applicability, goal drift, and every settled consequential fork's
+    applicability, goal drift, goal coverage, and every settled consequential fork's
     presence in each required reflection section. Consumes no correction round."""
-    ledger, ledger_problems, goal = _normalize_ledger(decision_ledger)
+    ledger, ledger_problems, goal, clauses = _normalize_ledger(decision_ledger)
     sections = _draft_sections(draft)
     gaps: list[str] = [
         *ledger_problems,
         *_applicability_gaps(draft),
         *_goal_gaps(sections, goal),
+        *_coverage_gaps(sections, clauses),
     ]
     required = required_reflections(draft)
     for entry in ledger:
@@ -1160,7 +1267,7 @@ def taste_test(
         if isinstance(reviewer_verdict, ForkTasteVerdict)
         else ForkTasteVerdict.from_mapping(reviewer_verdict)
     )
-    ledger, ledger_problems, goal = _normalize_ledger(decision_ledger)
+    ledger, ledger_problems, goal, clauses = _normalize_ledger(decision_ledger)
     expected = {entry.id: entry for entry in ledger}
     sections = _draft_sections(draft)
     additions: dict[str, list[str]] = {
@@ -1171,6 +1278,7 @@ def taste_test(
             *ledger_problems,
             *_applicability_gaps(draft),
             *_goal_gaps(sections, goal),
+            *_coverage_gaps(sections, clauses),
         ],
     }
 
@@ -1316,6 +1424,11 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="run the lexical pre-check on the draft alone; no verdict, no round",
     )
+    _ = mode.add_argument(
+        "--coverage",
+        action="store_true",
+        help="print each G-n goal clause's disposition for the narrowing-delta line",
+    )
     args = parser.parse_args(argv)
     try:
         draft_path = cast(Path, args.draft)
@@ -1326,6 +1439,20 @@ def main(argv: list[str]) -> int:
             gaps = lexical_precheck(draft, ledger)
             print(json.dumps({"gaps": list(gaps)}, sort_keys=True))
             return 0 if not gaps else 1
+        if cast(bool, args.coverage):
+            dispositions = goal_coverage(draft, ledger)
+            covered = sum(1 for value in dispositions.values() if value == "covered")
+            print(
+                json.dumps(
+                    {
+                        "clauses": dispositions,
+                        "covered": covered,
+                        "total": len(dispositions),
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
         verdict_path = cast(Path, args.verdict)
         correction_round = cast(int, args.correction_round)
         verdict = _load_json(verdict_path)

@@ -57,6 +57,9 @@ class _MoldTasteTestModule(Protocol):
     def lexical_precheck(
         self, draft: object, decision_ledger: object
     ) -> tuple[str, ...]: ...
+    def goal_coverage(
+        self, draft: object, decision_ledger: object
+    ) -> dict[str, str]: ...
     def auto_handoff(
         self,
         spec_ref: str | Path,
@@ -889,3 +892,122 @@ def test_cli_precheck_and_verdict_are_mutually_exclusive(
             "--precheck"
         ])
     assert exc_info.value.code == 2
+
+
+COVERAGE_CLAUSES: list[dict[str, str]] = [
+    {"id": "G-1", "text": "resume an interrupted session"},
+    {"id": "G-2", "text": "without re-authenticating"},
+    {"id": "G-3", "text": "across devices"},
+    {"id": "G-4", "text": "with an audit log entry"},
+]
+COVERAGE_LEDGER: dict[str, object] = {
+    "goal": GOAL,
+    "goal_clauses": COVERAGE_CLAUSES,
+    "forks": LEDGER,
+}
+COVERAGE_DRAFT = GOAL_DRAFT.replace(
+    "## Acceptance\nF-1 outer tracer; F-2 browser seam",
+    """## Non-goals
+- cross-device resume (G-3) [AGENT-INTRODUCED]
+
+## Acceptance
+- AC-1: WHEN x THE SYSTEM SHALL y (F-1, G-1)
+- AC-2: WHEN x THE SYSTEM SHALL z (F-2, G-2, G-4)""",
+    1,
+)
+
+
+def test_goal_coverage_passes_when_every_clause_has_a_disposition(
+    taste: _MoldTasteTestModule,
+) -> None:
+    assert taste.lexical_precheck(COVERAGE_DRAFT, COVERAGE_LEDGER) == ()
+    result = taste.taste_test(
+        COVERAGE_DRAFT, COVERAGE_LEDGER, verdict(taste, COVERAGE_DRAFT)
+    )
+    assert result.passed, result.acceptance_gaps
+
+
+def test_goal_coverage_names_each_uncovered_clause(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = COVERAGE_DRAFT.replace(", G-4)", ")")
+    assert taste.lexical_precheck(draft, COVERAGE_LEDGER) == ("goal-coverage:G-4",)
+    result = taste.taste_test(draft, COVERAGE_LEDGER, verdict(taste, draft))
+    assert not result.passed
+    assert result.acceptance_gaps == ("goal-coverage:G-4",)
+    assert not taste.decomposition_gate(result).allowed
+
+
+def test_goal_coverage_cap_fails_when_fewer_than_half_ship(
+    taste: _MoldTasteTestModule,
+) -> None:
+    # G-2 and G-4 move to follow-ups: dispositions are explicit, but only 1/4 ships.
+    draft = COVERAGE_DRAFT.replace(", G-2, G-4)", ")").replace(
+        "## Acceptance\n",
+        "## Deferred follow-ups\n- **FU-1** — later (G-2, G-4)\n\n## Acceptance\n",
+        1,
+    )
+    assert taste.lexical_precheck(draft, COVERAGE_LEDGER) == ("goal-coverage-cap:1/4",)
+
+
+def test_goal_coverage_accepts_exactly_half_shipped_and_reports_dispositions(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = COVERAGE_DRAFT.replace(", G-4)", ")").replace(
+        "## Acceptance\n",
+        "## Open questions\n- [TBD] audit log shape (G-4)\n\n## Acceptance\n",
+        1,
+    )
+    assert taste.lexical_precheck(draft, COVERAGE_LEDGER) == ()
+    assert taste.goal_coverage(draft, COVERAGE_LEDGER) == {
+        "G-1": "covered",
+        "G-2": "covered",
+        "G-3": "non-goal",
+        "G-4": "tbd",
+    }
+
+
+def test_goal_coverage_tag_does_not_match_a_longer_id(
+    taste: _MoldTasteTestModule,
+) -> None:
+    ledger = {"goal_clauses": [{"id": "G-1", "text": "a"}], "forks": LEDGER}
+    draft = DRAFT.replace("## Acceptance\n", "## Acceptance\n- AC-1: x (G-12)\n", 1)
+    assert taste.lexical_precheck(draft, ledger) == (
+        "goal-coverage:G-1",
+        "goal-coverage-cap:0/1",
+    )
+
+
+def test_goal_coverage_skips_when_ledger_has_no_clauses(
+    taste: _MoldTasteTestModule,
+) -> None:
+    assert taste.lexical_precheck(GOAL_DRAFT, GOAL_LEDGER) == ()
+    assert taste.goal_coverage(GOAL_DRAFT, GOAL_LEDGER) == {}
+
+
+@pytest.mark.parametrize(
+    ("clauses", "problem"),
+    [
+        ("G-1", "ledger-goal-clauses-invalid"),
+        ([{"id": "F-1", "text": "wrong prefix"}], "ledger-goal-clauses-invalid"),
+        ([{"id": "G-1", "text": " "}], "ledger-goal-clauses-invalid"),
+        (
+            [{"id": "G-1", "text": "a"}, {"id": "G-1", "text": "b"}],
+            "ledger-duplicate-goal-clause",
+        ),
+    ],
+)
+def test_malformed_goal_clauses_are_ledger_errors(
+    taste: _MoldTasteTestModule, clauses: object, problem: str
+) -> None:
+    with pytest.raises(taste.TasteTestError, match=problem):
+        _ = taste.lexical_precheck(DRAFT, {"goal_clauses": clauses, "forks": LEDGER})
+
+
+def test_id_keyed_ledger_ignores_goal_clauses_key(taste: _MoldTasteTestModule) -> None:
+    ledger: dict[str, object] = {
+        "goal_clauses": [{"id": "G-1", "text": "a"}],
+        "F-1": {"decision": "outer tracer", "status": "settled", "consequential": True},
+    }
+    draft = DRAFT.replace("## Acceptance\n", "## Acceptance\n- AC-1: x (G-1)\n", 1)
+    assert taste.lexical_precheck(draft, ledger) == ()
