@@ -26,7 +26,12 @@ from typing import TYPE_CHECKING, ClassVar, Protocol, TypedDict, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-for _extra in (REPO_ROOT, REPO_ROOT / "scripts", REPO_ROOT / "vendor", REPO_ROOT / "src"):
+for _extra in (
+    REPO_ROOT,
+    REPO_ROOT / "scripts",
+    REPO_ROOT / "vendor",
+    REPO_ROOT / "src",
+):
     _path = str(_extra)
     if _path not in sys.path:
         sys.path.insert(0, _path)

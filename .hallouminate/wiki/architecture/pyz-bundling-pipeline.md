@@ -55,6 +55,12 @@ Three further gates make the build itself the rejection point for AC-7's "built"
 
 `check_bundles.py` no longer repeats the per-archive rejections: the paths that reach it in `just check`, `just ci`, and the bundle workflow all rebuild through `build_pyz.py` first, so the checker owns currency and the cross-skill reference scan only. A bare `python3 scripts/check_bundles.py` against an unrebuilt working tree checks currency alone. The "or executed" half of AC-7 (a runtime provenance signal at user-execution time) is still open in issue #596.
 
+
+
+Test code uses production seams instead of test-only helpers in build scripts. Single-skill builds call `build_bundles({skill: target})`. Static archive tests call `inspect_archive`. Tests open checked-in archives through their canonical paths. `_run_checks` uses `bundle_manifest` for both sides of each comparison.[^13]
+
+[^13]: scripts/build_pyz.py:`build_bundles`; scripts/check_bundles.py:`inspect_archive`, `bundle_manifest`; tests/python/test_bundle_closure.py; tests/python/test_build_pyz_tree_staging.py
+
 ## CI and release
 
 `.github/workflows/build-pyz.yml` runs the bundle build, freshness comparison, and isolation tests under both Python 3.12 and 3.14. This keeps 3.12 as the runtime baseline while proving that newer build interpreters produce the same canonical bundle content from the committed external lock. Regular validation installs no Shiv.[^8]

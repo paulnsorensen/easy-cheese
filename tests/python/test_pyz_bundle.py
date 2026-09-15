@@ -21,6 +21,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILD = REPO_ROOT / "scripts" / "build_pyz.py"
 SPEC_FORMAT_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
 COOK_PAYLOAD_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "cook_payloads"
+MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
+COOK_PYZ = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import build_pyz  # noqa: E402
 import check_bundles  # noqa: E402
@@ -1382,7 +1384,7 @@ def test_skill_archives_own_shared_commands_and_no_common_archive(
 
 
 def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     result = _run(
         mold_pyz, "validate-spec", str(SPEC_FORMAT_FIXTURES / "valid_spec.md")
     )
@@ -1391,7 +1393,7 @@ def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:
 
 
 def test_cook_pyz_dispatches_normalize_end_to_end() -> None:
-    cook_pyz = build_pyz.cached_bundle("cook")
+    cook_pyz = COOK_PYZ
     rejected = _run(
         cook_pyz,
         "normalize",
@@ -1419,7 +1421,7 @@ def test_cook_pyz_dispatches_normalize_end_to_end() -> None:
 
 
 def test_cook_pyz_dispatches_validate_end_to_end() -> None:
-    cook_pyz = build_pyz.cached_bundle("cook")
+    cook_pyz = COOK_PYZ
     rejected = _run(
         cook_pyz,
         "validate",

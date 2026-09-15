@@ -27,9 +27,7 @@ MINI_SPEC = (SPEC_FIXTURES / "valid_mini_spec.md").read_text(encoding="utf-8")
 RED_MINI_SPEC = (SPEC_FIXTURES / "valid_red_required_mini_spec.md").read_text(
     encoding="utf-8"
 )
-
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
+MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
 
 
 class _RunFn(Protocol):
@@ -46,7 +44,7 @@ def _run_direct(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
 
 
 def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
-    mold_pyz = build_pyz.cached_bundle("mold")
+    mold_pyz = MOLD_PYZ
     return subprocess.run(
         [sys.executable, str(mold_pyz), "validate-spec", *flags, str(path)],
         capture_output=True,

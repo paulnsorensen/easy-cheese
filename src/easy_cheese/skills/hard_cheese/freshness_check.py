@@ -134,25 +134,6 @@ def _last_pass_attempt_from_table(body: str) -> PassAttempt | None:
     return last_attempt
 
 
-def _last_pass_sha_from_table(body: str) -> str | None:
-    """Walk attempt-log table rows; return last PASS row's recorded head sha."""
-    attempt = _last_pass_attempt_from_table(body)
-    return attempt["sha"] if attempt else None
-
-
-def last_pass_sha(log_path: Path) -> str | None:
-    """Return the SHA recorded against the most recent passing attempt, or None.
-
-    Parses the markdown-table attempt log. Returns None when the log is
-    missing, unreadable, or has no pass row.
-    """
-    try:
-        body = log_path.read_text(encoding="utf-8")
-    except (FileNotFoundError, IsADirectoryError, PermissionError, UnicodeDecodeError, OSError):
-        return None
-    return _last_pass_sha_from_table(body)
-
-
 def last_pass_attempt(log_path: Path) -> PassAttempt | None:
     """Return the most recent passing attempt, or None when no parseable pass exists."""
     try:

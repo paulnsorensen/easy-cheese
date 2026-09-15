@@ -3,11 +3,13 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 from typing import cast
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 
 def test_claude_plugin_manifest_matches_top_level_skills() -> None:

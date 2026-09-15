@@ -32,6 +32,7 @@ EC_SKILL_REPO="paulnsorensen/easy-cheese"
 EC_FALLBACK_SKILLS="age affinage briesearch cheese cook culture cure easy-cheese-setup hard-cheese melt mold pasteurize plate press ultracook wheypoint"
 
 
+
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
 EC_DEFAULT_MCP="tilth context7 hallouminate"
@@ -488,7 +489,6 @@ ec_install_mcp_for_harnesses() {
 # API. Prints one skill name per line on success; on failure (network,
 # rate limit, private repo) returns non-zero with empty stdout and the
 # caller falls back to EC_FALLBACK_SKILLS.
-
 ec_discover_skills() {
     local gh="$1"
     local path="repos/${EC_SKILL_REPO}/contents/skills"

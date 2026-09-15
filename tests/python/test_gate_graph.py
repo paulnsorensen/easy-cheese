@@ -698,9 +698,9 @@ class TestSpecFormatValidGatePresence:
 
 
 class TestCommittedPyzFreshness:
-    """The `gate_graph` fixture imports a FRESH rebuild of src/mold/ (via
-    build_pyz.cached_bundle), and TestDotSnapshot compares mold.dot to that fresh
-    to_dot(). Neither exercises the COMMITTED skills/mold/scripts/mold.pyz — the
+    """The `gate_graph` fixture imports the source module, and TestDotSnapshot
+    compares mold.dot to that source model's fresh to_dot(). Neither exercises
+    the COMMITTED skills/mold/scripts/mold.pyz — the
     artifact the SKILL actually invokes (`mold.pyz gate-graph --render dot`). A src
     edit that regenerates mold.dot but leaves the committed .pyz stale would pass
     every other test. This closes the fourth-artifact freshness loop: the committed
