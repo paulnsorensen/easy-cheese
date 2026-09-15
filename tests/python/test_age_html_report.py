@@ -18,8 +18,34 @@ from typing import override
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HTML_REPORT = REPO_ROOT / "src" / "easy_cheese" / "skills" / "age" / "age_html_report.py"
 
+CONTRACT_VERSION: dict[str, object] = {
+    "schema_uri": "https://schemas.easy-cheese.dev/review-result",
+    "major": "1",
+    "minor": "0",
+}
+
+
+def _evidence(slot: str) -> list[dict[str, object]]:
+    """One canonical EvidenceRef; every ReviewFinding needs a non-empty list."""
+    return [
+        {
+            "evidence_id": f"demo/evidence/{slot}",
+            "kind": "review",
+            "artifact": {
+                "artifact_id": f"demo/artifact/{slot}",
+                "role": "review",
+                "uri": f"repo://demo/evidence/{slot}.json",
+                "digest": "sha256:" + "0" * 64,
+                "size_bytes": 64,
+                "media_type": "application/json",
+            },
+        }
+    ]
+
+
 REVIEW_RESULT_WITH_FINDINGS = json.dumps(
     {
+        "contract_version": CONTRACT_VERSION,
         "review_id": "demo",
         "disposition": "findings",
         "findings": [
@@ -27,25 +53,49 @@ REVIEW_RESULT_WITH_FINDINGS = json.dumps(
                 "finding_id": "demo/finding/1",
                 "severity": "medium",
                 "summary": "Medium summary with <em>markup</em> & ampersand.\nsecond line stays visible.",
-                "location": {"path": "src/medium.ts", "start_line": 3, "end_line": 3},
+                "evidence": _evidence("1"),
+                "location": {
+                    "artifact_id": "demo/artifact/1",
+                    "path": "src/medium.ts",
+                    "start_line": 3,
+                    "end_line": 3,
+                },
             },
             {
                 "finding_id": "demo/finding/2",
                 "severity": "low",
                 "summary": "Low summary.",
-                "location": {"path": "src/low.ts", "start_line": 4, "end_line": 4},
+                "evidence": _evidence("2"),
+                "location": {
+                    "artifact_id": "demo/artifact/2",
+                    "path": "src/low.ts",
+                    "start_line": 4,
+                    "end_line": 4,
+                },
             },
             {
                 "finding_id": "demo/finding/3",
                 "severity": "high",
                 "summary": "High summary with <strong>unsafe</strong> HTML.",
-                "location": {"path": "src/high.ts", "start_line": 2, "end_line": 2},
+                "evidence": _evidence("3"),
+                "location": {
+                    "artifact_id": "demo/artifact/3",
+                    "path": "src/high.ts",
+                    "start_line": 2,
+                    "end_line": 2,
+                },
             },
             {
                 "finding_id": "demo/finding/4",
                 "severity": "critical",
                 "summary": "Critical summary with <script>alert(1)</script> and <angle>.",
-                "location": {"path": "src/crit.ts", "start_line": 1, "end_line": 1},
+                "evidence": _evidence("4"),
+                "location": {
+                    "artifact_id": "demo/artifact/4",
+                    "path": "src/crit.ts",
+                    "start_line": 1,
+                    "end_line": 1,
+                },
             },
         ],
         "coverage": [{"target": "security", "disposition": "covered"}],
@@ -53,7 +103,13 @@ REVIEW_RESULT_WITH_FINDINGS = json.dumps(
 )
 
 REVIEW_RESULT_WITHOUT_FINDINGS = json.dumps(
-    {"review_id": "empty", "disposition": "clean", "findings": [], "coverage": []}
+    {
+        "contract_version": CONTRACT_VERSION,
+        "review_id": "empty",
+        "disposition": "clean",
+        "findings": [],
+        "coverage": [{"target": "security", "disposition": "covered"}],
+    }
 )
 
 

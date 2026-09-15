@@ -134,7 +134,7 @@ COMMANDS = (
         "Publish a host-authored review result envelope on the age -> cure route",
     ),
     derive_command(
-        _html_report, "Render an /age markdown report into one offline HTML file"
+        _html_report, "Render a canonical ReviewResult JSON document into one offline HTML file"
     ),
     derive_command(
         _age_route,

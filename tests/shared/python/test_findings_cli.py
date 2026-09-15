@@ -203,7 +203,7 @@ class TestRenderTable:
         )
         row = next(line for line in table.splitlines() if "a " in line and "b" in line)
         assert "a \\| b" in row
-        assert row.replace("\\|", "").count("|") == 5
+        assert row.replace("\\|", "").count("|") == 6
 
 
 class TestParseSelection:
@@ -511,4 +511,5 @@ class TestHelp:
         )
         assert result.returncode == 0
         assert "render-table" in result.stdout
-        assert "parse-selection" in result.stdout        assert "render-brief" in result.stdout
+        assert "parse-selection" in result.stdout
+        assert "render-brief" in result.stdout

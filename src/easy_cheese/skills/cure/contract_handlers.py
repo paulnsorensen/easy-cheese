@@ -189,32 +189,32 @@ def remediate_plan_main(argv: list[str]) -> int:
             paths.append(location.path)
     if not paths:
         paths = [f"reviews/{review_id}"]
-    remediate_curd = SemanticCurdWriterView(
-        key="remediate",
-        outcome=f"Resolve {len(selection)} selected findings from review {review_id}",
-        scope=BoundedScope(paths=paths),
-        outputs=[f"Finding {fid} is resolved" for fid in selection],
-        criteria=[
-            CriterionWriterView(
-                description=f"Finding {fid} is resolved",
-                check=f"review finding {fid} is addressed",
-            )
-            for fid in selection
-        ],
-    )
-    remediate_view = PlannerResultWriterView(
-        disposition=PlannerDisposition.COMPLETE,
-        plan=CurdPlanWriterView(
-            objective=remediate_objective,
-            curds=[remediate_curd],
-        ),
-    )
     lineages = {
         "remediate": IdentityLineage(
             IdentityAction.DERIVE, source_curd_ids=(source_curd_id,)
         )
     }
     try:
+        remediate_curd = SemanticCurdWriterView(
+            key="remediate",
+            outcome=f"Resolve {len(selection)} selected findings from review {review_id}",
+            scope=BoundedScope(paths=paths),
+            outputs=[f"Finding {fid} is resolved" for fid in selection],
+            criteria=[
+                CriterionWriterView(
+                    description=f"Finding {fid} is resolved",
+                    check=f"review finding {fid} is addressed",
+                )
+                for fid in selection
+            ],
+        )
+        remediate_view = PlannerResultWriterView(
+            disposition=PlannerDisposition.COMPLETE,
+            plan=CurdPlanWriterView(
+                objective=remediate_objective,
+                curds=[remediate_curd],
+            ),
+        )
         result = workflow.plan(
             remediate_request,
             lambda _request: remediate_view,

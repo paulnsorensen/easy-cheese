@@ -345,7 +345,7 @@ def _cmd_render_table(args: argparse.Namespace) -> None:
     )
 
 
-def _resolve_ids(args: argparse.Namespace) -> tuple[list[Finding], list[int]]:
+def _resolve_ids(args: argparse.Namespace) -> tuple[list[Finding], list[str]]:
     items = _load_findings(cast(str, args.report))
     try:
         ids = parse_selection(cast(str, args.selection), items)
@@ -365,7 +365,11 @@ def _cmd_parse_selection(args: argparse.Namespace) -> None:
 
 
 def _cmd_render_brief(args: argparse.Namespace) -> None:
-    items, ids = _resolve_ids(args)
+    items, finding_ids = _resolve_ids(args)
+    # `_resolve_ids` speaks canonical finding_id strings; the brief is keyed by
+    # the 1-based table position, so map back before rendering.
+    selected = set(finding_ids)
+    ids = [f.id for f in items if f.finding_id in selected]
     if not ids:
         cli.emit(
             "(no findings selected)",

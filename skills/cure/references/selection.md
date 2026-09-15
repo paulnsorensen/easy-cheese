@@ -109,14 +109,14 @@ Do not infer cost from missing data.
 
 ## Coder brief
 
-Render the brief from the locked ids before any dispatch:
+Render the brief from the locked ids before any dispatch.
+`--report` takes the canonical `ReviewResult` JSON document /age published, not a Markdown report:
 
 ```text
 python3 skills/cure/scripts/cure.pyz findings render-brief --report <path> --selection "<ids>"
 ```
 
 The brief carries each finding's location, claim, `recommendation (locked)`, and `invariants` line.
-The brief also carries each finding's `confidence:` tier; treat a `speculating` locked decision as provisional.
 Give it to the repair agent verbatim.
 The recommendation is the locked decision for that fix.
 Keep every `invariants:` clause true while you edit.
