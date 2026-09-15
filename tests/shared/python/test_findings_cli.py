@@ -25,15 +25,19 @@ if TYPE_CHECKING:
 class _FindingsModule(Protocol):
     def findings_from_review_result(self, result: dict[str, object]) -> list[Finding]:
         """Build the ordered finding list from a canonical ReviewResult mapping."""
+        raise NotImplementedError
 
     def render_selection_table(self, findings: list[Finding]) -> str:
         """Render the numbered selection table."""
+        raise NotImplementedError
 
     def parse_selection(self, verb: str, findings: list[Finding]) -> list[str]:
         """Expand a selection verb to finding ids."""
+        raise NotImplementedError
 
     def render_brief(self, findings: list[Finding], ids: list[int], *, report_path: str) -> str:
         """Render the coder brief for the selected finding ids."""
+        raise NotImplementedError
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -195,11 +199,11 @@ class TestRenderTable:
     def test_a_pipe_in_a_summary_cannot_open_a_new_cell(self, findings_lib: ModuleType) -> None:
         """An unescaped `|` from the report would split the row into bogus columns."""
         lib = _typed(findings_lib)
-        document = json.loads(json.dumps(SAMPLE_REVIEW_RESULT))
-        rows = cast("list[dict[str, object]]", cast("dict[str, object]", document)["findings"])
+        document = cast("dict[str, object]", json.loads(json.dumps(SAMPLE_REVIEW_RESULT)))
+        rows = cast("list[dict[str, object]]", document["findings"])
         rows[0]["summary"] = "a | b"
         table = lib.render_selection_table(
-            lib.findings_from_review_result(cast("dict[str, object]", document))
+            lib.findings_from_review_result(document)
         )
         row = next(line for line in table.splitlines() if "a " in line and "b" in line)
         assert "a \\| b" in row
@@ -463,13 +467,13 @@ class TestRenderBrief:
     def test_missing_recommendation_is_marked_and_warned(
         self, findings_lib: ModuleType, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        document = json.loads(json.dumps(SAMPLE_REVIEW_RESULT))
-        rows = cast("list[dict[str, object]]", cast("dict[str, object]", document)["findings"])
+        document = cast("dict[str, object]", json.loads(json.dumps(SAMPLE_REVIEW_RESULT)))
+        rows = cast("list[dict[str, object]]", document["findings"])
         _ = rows[0].pop("recommendation")
         _ = rows[0].pop("invariants")
         lib = _typed(findings_lib)
         brief = lib.render_brief(
-            lib.findings_from_review_result(cast("dict[str, object]", document)),
+            lib.findings_from_review_result(document),
             [1],
             report_path="review-result.json",
         )

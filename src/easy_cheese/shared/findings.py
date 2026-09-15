@@ -322,12 +322,13 @@ def load_review_result(report_path: str) -> Mapping[str, object]:
         raise cli.CliError(f"invalid ReviewResult JSON: {exc}") from exc
     if not isinstance(data, Mapping):
         raise cli.CliError("ReviewResult must be a JSON object")
-    loaded = load(data, ReviewResult, strict=True)
+    document = cast("Mapping[str, object]", data)
+    loaded = load(document, ReviewResult, strict=True)
     if loaded.value is None:
         raise cli.CliError(
             "invalid ReviewResult document: " + "; ".join(loaded.problems)
         )
-    return cast("Mapping[str, object]", data)
+    return document
 
 
 def _load_findings(report_path: str) -> list[Finding]:
