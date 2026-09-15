@@ -12,14 +12,13 @@ source of truth for plan shape, before any command is emitted.
 from __future__ import annotations
 
 import sys
-from typing import cast
 
 from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
     read_mapping_arg_or_stdin,
 )
 
-from easy_cheese_schemas import PrPlan, load  # noqa: E402
+from easy_cheese_schemas import PrPlan, load_pr_plan  # noqa: E402
 
 PROG = "pr_plan_to_branches.py"
 
@@ -55,8 +54,8 @@ def emit_commands(plan: PrPlan) -> None:
     print(f"# pr-plan shape: {plan.shape.value} ({len(plan.groups)} groups)")
     print("set -euo pipefail")
     for index, group in enumerate(plan.groups, start=1):
-        # A validated PrPlan normalizes an absent or null body to an empty
-        # string, so `gh pr create --body ''` is what the emitter renders.
+        # `body` is optional and may be absent, null, or empty; all three mean
+        # the same thing here, so `gh pr create --body ''` is what is rendered.
         body = group.body or ""
         print()
         print(f"# Group {index}: {group.branch} (base: {group.base})")
@@ -82,13 +81,13 @@ def main(argv: list[str]) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2 if str(exc).startswith("usage:") else 1
 
-    loaded = load(plan, PrPlan, strict=True)
-    if loaded.problems:
-        for error in loaded.problems:
-            print(f"ERROR: {error}", file=sys.stderr)
+    loaded = load_pr_plan(plan)
+    for error in loaded.problems:
+        print(f"ERROR: {error}", file=sys.stderr)
+    if loaded.value is None:
         return 1
 
-    emit_commands(cast(PrPlan, loaded.value))
+    emit_commands(loaded.value)
     return 0
 
 

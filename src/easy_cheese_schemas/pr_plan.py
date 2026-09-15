@@ -24,7 +24,9 @@ class _NamedAttribute(Protocol):
     name: str
 
 
-BRANCH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
+# A leading `-` makes the ref option-shaped: `git checkout -b '-x' main` still
+# reaches git as a flag, since shell quoting does not stop option parsing.
+BRANCH_RE = re.compile(r"^(?!-)[A-Za-z0-9._/-]+$")
 # 7 is git's default short-SHA floor (`core.abbrev`); shorter values risk
 # colliding with a branch or tag of the same name, since git resolves refs
 # before SHA prefixes. Full SHA-1 is 40 hex chars.
@@ -107,9 +109,10 @@ def _matches_shape(
         )
     if instance.shape is PrShape.ORTHOGONAL_FLAT:
         for index, group in enumerate(groups, start=1):
-            if group.base != "main":
+            if group.base != instance.target_branch:
                 raise ValueError(
-                    f"{attribute.name}[{index}].base must be main for " + "orthogonal_flat"
+                    f"{attribute.name}[{index}].base must be "
+                    + f"{instance.target_branch} for orthogonal_flat"
                 )
 
 
@@ -146,11 +149,11 @@ def _validate_topology(
     branches = {group.branch for group in groups}
     valid_targets = branches | {instance.target_branch}
     for group in groups:
-        if BRANCH_RE.match(group.base) is None:
-            # A charset-invalid base is a shell-injection seam that PrGroup's
-            # own git-ref validator reports; do not mask that error here.
-            continue
-        if group.base not in valid_targets:
+        # A charset-invalid base is a shell-injection seam that PrGroup's own
+        # git-ref validator reports; skip only the membership check for it, so
+        # the group's `depends_on` entries are still checked.
+        base_is_safe = BRANCH_RE.match(group.base) is not None
+        if base_is_safe and group.base not in valid_targets:
             raise ValueError(
                 f"{attribute.name}: group {group.branch!r} base {group.base!r} "
                 + "must name target_branch or a plan branch"

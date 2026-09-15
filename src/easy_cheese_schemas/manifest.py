@@ -69,6 +69,7 @@ __all__ = [
     "PlateLayout",
     "PostReview",
     "plate_layout_for",
+    "plate_layout_for_plan",
     "Power",
     "RepairDispatch",
     "ResolvedAgent",
@@ -190,16 +191,23 @@ def plate_layout_for(shape: LandingShape) -> PlateLayout:
     return PlateLayout.SINGLE if shape is LandingShape.SINGLE else PlateLayout.STACKED
 
 
+def plate_layout_for_plan(plan: PrPlan) -> PlateLayout:
+    """Project a PR plan's shape onto the plate layout.
+
+    ``PrShape`` mirrors ``LandingShape`` by value, so the plan shape is
+    converted by value before it reaches ``plate_layout_for``. The bridge lives
+    here so the manifest invariant and the plate publication check cannot drift.
+    """
+    return plate_layout_for(LandingShape(plan.shape.value))
+
+
 def _reject_layout_mismatch(
     instance: RunManifest, _attribute: object, value: PrPlan | None
 ) -> None:
-    """A stored plate_layout must equal the layout the plan's shape projects to.
-
-    ``PrShape`` mirrors ``LandingShape`` by value, so the plan shape is converted
-    by value before it reaches ``plate_layout_for``."""
+    """A stored plate_layout must equal the layout the plan's shape projects to."""
     if value is None or instance.plate_layout is None:
         return
-    projected = plate_layout_for(LandingShape(value.shape.value))
+    projected = plate_layout_for_plan(value)
     if projected != instance.plate_layout:
         raise ValueError(
             f"pr_plan: plate_layout_for(shape {value.shape.value!r}) is "

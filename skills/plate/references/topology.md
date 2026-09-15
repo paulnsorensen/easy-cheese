@@ -74,7 +74,7 @@ Do not invent the boundaries.
 
 A prior `/plate` **topology preflight** for the same run is the resolution.
 The resolution can be explicit, inferred as cohesive, or confirmed after a question.
-Persist it as `plate_layout: single | stacked` in workflow state. Copy it into any later `pr_plan`.
+Persist it as `plate_layout: single | stacked` in workflow state. Use it to choose the `pr_plan` `shape`; the v1 plan never carries `plate_layout`.
 At terminal publication, verify that both values agree. Reuse the resolution. Do not ask twice.
 Apply this policy again when the record is missing, conflicting, or unverified. Do not ask automatically.
 

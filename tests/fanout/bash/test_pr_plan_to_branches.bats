@@ -309,6 +309,47 @@ YAML
     [[ "$output" != *"git cherry-pick"* ]]
 }
 
+@test "script rejects option-shaped branch and base at integration layer" {
+    # A leading `-` makes the token look like a flag to git even after single
+    # quoting, so `-f` as a base would reach `git checkout -b <branch> -f`.
+    # The validator must reject it before any command is emitted.
+    cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
+shape: single
+groups:
+  - branch: ultracook/foo/pr-1
+    title: t
+    body: ""
+    base: -f
+    commits: [abc1234]
+YAML
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"base contains characters unsafe for a git ref"* ]]
+    [[ "$output" != *"git checkout -b"* ]]
+
+    cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
+shape: single
+groups:
+  - branch: -delete-everything
+    title: t
+    body: ""
+    base: main
+    commits: [abc1234]
+YAML
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"branch contains characters unsafe for a git ref"* ]]
+    [[ "$output" != *"git checkout -b"* ]]
+}
+
 @test "script reads from stdin when no argument given" {
     write_single_plan
     run bash -c "'$SCRIPT' < '$PLAN_FILE'"

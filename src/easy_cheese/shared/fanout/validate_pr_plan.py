@@ -20,11 +20,11 @@ from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
     read_mapping_arg_or_stdin,
 )
-from easy_cheese_schemas import PrPlan, load  # noqa: E402
+from easy_cheese_schemas import load_pr_plan  # noqa: E402
 
 
 def validate_pr_plan(plan: dict[str, object]) -> list[str]:
-    return list(load(plan, PrPlan, strict=True).problems)
+    return list(load_pr_plan(plan).problems)
 
 
 def main(argv: list[str]) -> int:

@@ -38,6 +38,7 @@ from easy_cheese_schemas import contracts  # noqa: E402
 from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
 from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS  # noqa: E402
 from easy_cheese_schemas import PrPlan  # noqa: E402
+from easy_cheese_schemas import registered_contracts  # noqa: E402
 from easy_cheese_schemas import schema_bytes  # noqa: E402
 
 
@@ -247,7 +248,9 @@ def _slug_from_uri(uri: str) -> str:
 
 
 def render_schema_intertwine() -> str:
-    contract_slugs = {slug: cls.__name__ for slug, cls in contracts.registered_contracts()}
+    # The package-level collector spans every contract-bearing module, not just
+    # contracts.py, so a model registered elsewhere (PrPlan) still renders.
+    contract_slugs = {slug: cls.__name__ for slug, cls in registered_contracts()}
     phases = cast(list[_Phase], COMPILED_TRANSITION_REGISTRY.to_data())
     catalog_slugs = sorted(
         _slug_from_uri(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS

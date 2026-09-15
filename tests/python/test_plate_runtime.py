@@ -99,13 +99,20 @@ def test_validate_publication_rejects_unverified_artifacts_and_pr_plan_drift() -
 
 
 def test_validate_publication_rejects_plate_layout_only_pr_plan() -> None:
+    """A pre-v1 plan carrying only plate_layout is refused at the plate boundary:
+    plate_layout is not a PrPlan field and the v1 envelope is missing."""
     state = valid_publication()
     state["pr_plan"] = {"plate_layout": "single"}
 
     with pytest.raises(publication.PublicationValidationError) as error:
         _ = publication.validate_publication(state)
 
-    assert any(message.startswith("pr_plan ") for message in error.value.errors)
+    assert error.value.errors == (
+        "pr_plan PrPlan.contract_version is required",
+        "pr_plan PrPlan.shape is required",
+        "pr_plan PrPlan.groups is required",
+        "pr_plan PrPlan.plate_layout: unknown field",
+    )
 
 
 def test_validate_publication_accepts_a_matching_v1_pr_plan() -> None:

@@ -4,6 +4,7 @@ import importlib
 import json
 import subprocess
 import sys
+import types
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -26,8 +27,10 @@ from easy_cheese_schemas.contracts import (
     CurdPlan,
     contract,
 )
+from easy_cheese_schemas import contracts as contracts_module
 from easy_cheese_schemas.schema_runtime import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
+    _collect_registered_contracts,  # pyright: ignore[reportPrivateUsage]
     ContractValidationError,
     canonical_digest,
     normalize_agent_output,
@@ -141,6 +144,37 @@ def test_marker_authority_rejects_duplicate_slugs() -> None:
     finally:
         setattr(contract_type, "__contract_slug__", original_slug)
 
+
+def _stub_contract_module(name: str, slug: str) -> _ContractModule:
+    """Build a module exporting exactly one contract class marked with ``slug``."""
+    module = types.ModuleType(name)
+
+    @contract(slug)
+    class Marked:
+        pass
+
+    setattr(module, "Marked", Marked)
+    setattr(
+        module,
+        "registered_contracts",
+        lambda: contracts_module.marked_contracts_in(module),
+    )
+    return cast(_ContractModule, cast(object, module))
+
+
+def test_duplicate_slugs_across_modules_are_rejected_by_runtime_and_compiler() -> None:
+    """Marker authority spans modules: the same slug exported by two modules is
+    an error for the runtime collector and for the catalog compiler alike."""
+    left = _stub_contract_module("stub_contracts_left", "twin")
+    right = _stub_contract_module("stub_contracts_right", "twin")
+
+    with pytest.raises(ValueError, match=r"duplicate contract marker 'twin'"):
+        _ = _collect_registered_contracts(left, right)
+
+    with pytest.raises(
+        ValueError, match=r"duplicate contract marker\(s\) across modules"
+    ):
+        _ = collect_schema_markers((left, right))
 
 @pytest.mark.parametrize("slug", ["", "  ", 7])
 def test_contract_rejects_invalid_markers(slug: object) -> None:

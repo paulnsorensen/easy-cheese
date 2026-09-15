@@ -172,6 +172,30 @@ CASES: list[Case] = [
             ],
         ),
     ),
+    agreed_invalid("branch starting with a dash", group(branch="-delete-everything")),
+    agreed_invalid("base starting with a dash", group(base="-f")),
+    agreed_valid(
+        "orthogonal_flat groups branch off a non-main target_branch",
+        plan(
+            shape="orthogonal_flat",
+            target_branch="develop",
+            groups=[
+                {"branch": "a", "title": "feat: a", "base": "develop", "commits": ["abc1234"], "depends_on": []},
+                {"branch": "b", "title": "feat: b", "base": "develop", "commits": ["abc1234"], "depends_on": []},
+            ],
+        ),
+    ),
+    agreed_invalid(
+        "orthogonal_flat group off main when target_branch is develop",
+        plan(
+            shape="orthogonal_flat",
+            target_branch="develop",
+            groups=[
+                {"branch": "a", "title": "feat: a", "base": "develop", "commits": ["abc1234"], "depends_on": []},
+                {"branch": "b", "title": "feat: b", "base": "main", "commits": ["abc1234"], "depends_on": []},
+            ],
+        ),
+    ),
     agreed_valid(
         "non-main target_branch names a valid base",
         plan(

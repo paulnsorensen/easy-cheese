@@ -561,7 +561,10 @@ class TestRunManifestPrPlanLayout:
         payload["pr_plan"] = dict(deepcopy(PR_PLAN), shape="stacked_linear")
         result = load(payload, RunManifest, strict=True)
         assert result.value is None
-        assert any("plate_layout" in problem for problem in result.problems)
+        assert result.problems == (
+            "RunManifest.pr_plan must be valid: pr_plan: plate_layout_for(shape "
+            + "'stacked_linear') is 'stacked' but plate_layout is 'single'",
+        )
 
     def test_layout_matching_plan_shape_is_accepted(self) -> None:
         payload = deepcopy(RUN_MANIFEST)

@@ -8,17 +8,18 @@ generated, drift-gated reference JSON.
 
 from __future__ import annotations
 
-import subprocess
-import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import cast
 
 import pytest
+import render_generated_regions
 
 from easy_cheese_schemas import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     ContractValidationError,
     PrPlan,
+    load_pr_plan,
     schema_bytes,
     supported_version_for,
     validate_contract,
@@ -68,23 +69,40 @@ def test_pr_plan_rejects_a_document_without_contract_version() -> None:
         _ = validate_contract(raw, PrPlan, supported_version_for(PrPlan))
 
 
-def test_reference_json_is_generated_byte_for_byte_and_drift_gated() -> None:
-    """AC-5: the reference JSON is schema_bytes output; --check fails on drift."""
+def test_pr_plan_refuses_a_document_from_an_unsupported_minor() -> None:
+    """AC-2: load_pr_plan gates on the registered version, not just the shape."""
+    raw = pr_plan()
+    cast(dict[str, object], raw["contract_version"])["minor"] = "1"
+
+    loaded = load_pr_plan(raw)
+
+    assert loaded.value is None
+    assert loaded.problems == (
+        "PrPlan.contract_version 1.1 for https://schemas.easy-cheese.dev/pr-plan "
+        + "is unsupported; expected 1.0 for "
+        + "https://schemas.easy-cheese.dev/pr-plan",
+    )
+
+
+@pytest.fixture
+def pr_plan_reference() -> Iterator[Path]:
+    """Yield the generated reference JSON, restoring its bytes afterwards."""
     ref = ROOT / "skills" / "ultracook" / "references" / "pr-plan-schema.json"
-    assert ref.read_bytes() == schema_bytes(PrPlan)
     original = ref.read_bytes()
     try:
-        _ = ref.write_bytes(original.rstrip(b"\n") + b" \n")
-        result = subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "scripts" / "render_generated_regions.py"),
-                "--check",
-            ],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 1, result.stdout + result.stderr
+        yield ref
     finally:
         _ = ref.write_bytes(original)
+
+
+def test_reference_json_is_generated_byte_for_byte_and_drift_gated(
+    pr_plan_reference: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC-5: the reference JSON is schema_bytes output; --check fails on drift."""
+    assert pr_plan_reference.read_bytes() == schema_bytes(PrPlan)
+    assert render_generated_regions.main(["--check"]) == 0
+
+    _ = pr_plan_reference.write_bytes(schema_bytes(PrPlan).rstrip(b"\n") + b" \n")
+
+    assert render_generated_regions.main(["--check"]) == 1
+    assert "pr-plan-schema.json" in capsys.readouterr().err
