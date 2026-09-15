@@ -17,6 +17,8 @@ from typing import (
 import attrs
 from attrs import Attribute
 
+from easy_cheese_schemas import contracts as contracts_module
+from easy_cheese_schemas import pr_plan as pr_plan_module
 from easy_cheese_schemas._schema_catalog import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     SCHEMA_ROOT,
@@ -66,8 +68,6 @@ from easy_cheese_schemas.contracts import (
     curd_plan_digest,
     derive_curd_disposition,
 )
-import easy_cheese_schemas.contracts as contracts_module
-import easy_cheese_schemas.pr_plan as pr_plan_module
 
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
 

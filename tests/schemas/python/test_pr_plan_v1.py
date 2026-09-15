@@ -15,8 +15,14 @@ from typing import cast
 
 import pytest
 
-import easy_cheese_schemas as schemas
-from easy_cheese_schemas import PrPlan, schema_bytes, supported_version_for
+from easy_cheese_schemas import (
+    REGISTERED_CONTRACT_SCHEMA_URIS,
+    ContractValidationError,
+    PrPlan,
+    schema_bytes,
+    supported_version_for,
+    validate_contract,
+)
 from schema_conformance import pr_plan
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -25,7 +31,7 @@ PR_PLAN_SCHEMA_URI = "https://schemas.easy-cheese.dev/pr-plan"
 
 def test_pr_plan_is_registered_v1_contract() -> None:
     """AC-1: the catalog registers pr-plan at version 1.0 and serves its schema."""
-    assert PR_PLAN_SCHEMA_URI in schemas.REGISTERED_CONTRACT_SCHEMA_URIS
+    assert PR_PLAN_SCHEMA_URI in REGISTERED_CONTRACT_SCHEMA_URIS
     version = supported_version_for(PrPlan)
     assert version is not None
     assert (version.schema_uri, version.major, version.minor) == (
@@ -40,9 +46,7 @@ def test_pr_plan_is_registered_v1_contract() -> None:
 
 def test_pr_plan_accepts_a_valid_v1_document_and_defaults_target_branch() -> None:
     """AC-3: a document without target_branch structures and defaults to main."""
-    artifact = schemas.validate_contract(
-        pr_plan(), PrPlan, supported_version_for(PrPlan)
-    )
+    artifact = validate_contract(pr_plan(), PrPlan, supported_version_for(PrPlan))
     plan = cast(PrPlan, artifact.value)
     assert plan.target_branch == "main"
 
@@ -52,16 +56,16 @@ def test_pr_plan_rejects_forbidden_and_unknown_keys(field: str) -> None:
     """AC-2: the strict cut rejects plate_layout, pr_number, pr_url, unknown keys."""
     raw = pr_plan()
     raw[field] = "x"
-    with pytest.raises(schemas.ContractValidationError, match=field):
-        _ = schemas.validate_contract(raw, PrPlan, supported_version_for(PrPlan))
+    with pytest.raises(ContractValidationError, match=field):
+        _ = validate_contract(raw, PrPlan, supported_version_for(PrPlan))
 
 
 def test_pr_plan_rejects_a_document_without_contract_version() -> None:
     """AC-2: an unversioned document is rejected, naming the missing field."""
     raw = pr_plan()
     del raw["contract_version"]
-    with pytest.raises(schemas.ContractValidationError, match="contract_version"):
-        _ = schemas.validate_contract(raw, PrPlan, supported_version_for(PrPlan))
+    with pytest.raises(ContractValidationError, match="contract_version"):
+        _ = validate_contract(raw, PrPlan, supported_version_for(PrPlan))
 
 
 def test_reference_json_is_generated_byte_for_byte_and_drift_gated() -> None:
