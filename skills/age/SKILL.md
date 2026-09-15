@@ -63,12 +63,9 @@ Render the reused hits in `## Wiki context`.
 Age never fires the gate.
 `/plate` gives `/hard-cheese` the final verified artifact state before publication.
 
-`--html` emits a static HTML copy alongside `.cheese/age/<slug>.md`.
-Write the markdown first.
-Then run `python3 skills/age/scripts/age.pyz html-report --report .cheese/age/<slug>.md --slug <slug>`.
-Print the returned path.
-The HTML groups findings by severity into the shared HTML shell.
-The output is offline and uses no CDN or JS.
+`--html` emits a static HTML copy of the published `ReviewResult`.
+Run `python3 skills/age/scripts/age.pyz html-report --report <ReviewResult JSON> --slug <slug>` and print the returned path.
+The HTML groups findings by severity into the shared offline HTML shell (no CDN or JS).
 
 Read [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions.
 Prefer the bundled or repo-local helper.
@@ -233,9 +230,7 @@ Treat an empty dimension as a valid outcome, not a gap to fill.
 Keep confidence qualitative (`certain | speculating | don't know`) in the report and each finding.
 Never use a numeric score.
 Give each finding a location and recommendation.
-Write `recommendation:` and optional `invariants:` per `references/report-example.md`.
-Do not add JSON sidecars or tag-anchored fix payloads.
-`/cure` reads the markdown directly.
+Publish the review as a typed `ReviewResult` via `age.pyz publish-review` (a `{view, evidence}` envelope, one coverage row per reviewed dimension: `covered`, or `not_covered` with a reason), never a Markdown sidecar; the Markdown and HTML render from it and `/cure` reads its `finding_ids`, not the Markdown.
 Apply `references/voice.md` (output discipline, reasoning posture, confidence vocabulary).
 
 ## References

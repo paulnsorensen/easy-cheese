@@ -9,8 +9,9 @@
 | `findings` | Render an /age report's selection table or coder brief and resolve selection verbs |
 | `gates` | Map each quality-gate result to a readiness verdict |
 | `handoff` | Render, parse, and dispatch-split handoff preambles |
-| `html-report` | Render an /age markdown report into one offline HTML file |
+| `html-report` | Render a canonical ReviewResult JSON document into one offline HTML file |
 | `paths` | Slugify, validate, resolve, and list .cheese artifact paths |
+| `publish-review` | Publish a host-authored review result envelope on the age -> cure route |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
 | `review-lock` | Record the production tree digest that keeps /age review-only |

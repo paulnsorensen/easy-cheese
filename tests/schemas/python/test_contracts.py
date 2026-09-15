@@ -1038,6 +1038,7 @@ def test_writer_views_expose_only_agent_authored_fields() -> None:
         "disposition",
         "findings",
         "reason",
+        "coverage",
     }
     assert set(attrs.fields_dict(DiagnosisHypothesisWriterView)) == {
         "statement",
@@ -1130,6 +1131,21 @@ def test_review_writer_view_enforces_disposition() -> None:
     ):
         _ = ReviewResultWriterView(**result_kwargs)  # pyright: ignore[reportArgumentType]
 
+
+def test_review_writer_view_rejects_clean_disposition_with_not_covered_row() -> None:
+    with pytest.raises(
+        ValueError,
+        match="clean review writer view must not include a not_covered coverage row",
+    ):
+        _ = ReviewResultWriterView(
+            disposition=ReviewDisposition.CLEAN,
+            findings=[],
+            coverage=[
+                ReviewCoverage(
+                    "contract", CoverageDisposition.NOT_COVERED, "a gap remains"
+                )
+            ],
+        )
 
 def test_diagnosis_writer_view_enforces_confirmed_disposition() -> None:
     kwargs: dict[str, object] = {

@@ -55,9 +55,11 @@ from easy_cheese_schemas.contracts import (
     ReproductionWriterView,
     ReviewCoverage,
     ReviewDisposition,
+    ReviewFindingWriterView,
     ReviewRequest,
     ReviewResult,
     ReviewResultWriterView,
+    ReviewSeverity,
     SemanticCurdWriterView,
     SourceLocationWriterView,
     UncertaintyScope,
@@ -154,67 +156,104 @@ def complete_planner() -> PlannerResultWriterView:
     )
 
 
-def clean_review(_request: ReviewRequest) -> ReviewResultWriterView:
-    return ReviewResultWriterView(ReviewDisposition.CLEAN, [])
+def _covered(request: ReviewRequest) -> list[ReviewCoverage]:
+    return [ReviewCoverage(t, CoverageDisposition.COVERED) for t in request.coverage_targets]
 
 
-@pytest.mark.parametrize(
-    ("representation", "disposition"),
-    [
-        (representation, disposition)
-        for representation in ("direct", "agent", "mapping")
-        for disposition in (
-            ReviewDisposition.CLEAN,
-            ReviewDisposition.BLOCKED,
-            ReviewDisposition.INVALID,
-            ReviewDisposition.EXECUTOR_FAILURE,
-        )
-    ],
-)
-def test_review_coverage_ledger_is_representation_independent(
-    tmp_path: Path,
-    representation: str,
-    disposition: ReviewDisposition,
-) -> None:
+def clean_review(request: ReviewRequest) -> ReviewResultWriterView:
+    return ReviewResultWriterView(ReviewDisposition.CLEAN, [], coverage=_covered(request))
+
+
+def test_review_coverage_rejects_missing_target(tmp_path: Path) -> None:
     request = ReviewRequest(
         contract_version=version(ReviewRequest),
         review_id="review-coverage",
         subject=source_artifact(tmp_path),
-        coverage_targets=("target",),
+        coverage_targets=("target-a", "target-b"),
     )
-    reason = f"{disposition.value} review reason"
     view = ReviewResultWriterView(
-        disposition=disposition,
-        findings=[],
-        reason=None if disposition is ReviewDisposition.CLEAN else reason,
+        ReviewDisposition.CLEAN,
+        [],
+        coverage=[ReviewCoverage("target-a", CoverageDisposition.COVERED)],
     )
-    output: object
-    if representation == "direct":
-        output = view
-    elif representation == "agent":
-        output = AgentWriterView(WriterViewKind.REVIEW_RESULT, view)
-    else:
-        output = {
-            "kind": "review_result",
-            "payload": {
-                "disposition": disposition.value,
-                "findings": [],
-                "reason": None if disposition is ReviewDisposition.CLEAN else reason,
-            },
-        }
+    with pytest.raises(ContractValidationError, match="target-b"):
+        _ = workflow_module._review(request, view, {})  # pyright: ignore[reportPrivateUsage]
 
-    result = workflow_module._review(request, output, {})  # pyright: ignore[reportPrivateUsage] -- whitebox test of the module-private review path
 
-    expected_disposition = (
-        CoverageDisposition.COVERED
-        if disposition is ReviewDisposition.CLEAN
-        else CoverageDisposition.NOT_COVERED
+def test_review_coverage_rejects_unknown_target(tmp_path: Path) -> None:
+    request = ReviewRequest(
+        contract_version=version(ReviewRequest),
+        review_id="review-coverage",
+        subject=source_artifact(tmp_path),
+        coverage_targets=("target-a",),
     )
-    expected_reason = (
-        None if expected_disposition is CoverageDisposition.COVERED else reason
+    view = ReviewResultWriterView(
+        ReviewDisposition.CLEAN,
+        [],
+        coverage=[
+            ReviewCoverage("target-a", CoverageDisposition.COVERED),
+            ReviewCoverage("target-z", CoverageDisposition.COVERED),
+        ],
+    )
+    with pytest.raises(ContractValidationError, match="target-z"):
+        _ = workflow_module._review(request, view, {})  # pyright: ignore[reportPrivateUsage]
+
+
+def test_review_coverage_rejects_duplicate_target(tmp_path: Path) -> None:
+    request = ReviewRequest(
+        contract_version=version(ReviewRequest),
+        review_id="review-coverage",
+        subject=source_artifact(tmp_path),
+        coverage_targets=("target-a",),
+    )
+    view = ReviewResultWriterView(
+        ReviewDisposition.CLEAN,
+        [],
+        coverage=[
+            ReviewCoverage("target-a", CoverageDisposition.COVERED),
+            ReviewCoverage("target-a", CoverageDisposition.COVERED),
+        ],
+    )
+    with pytest.raises(ContractValidationError, match="target-a"):
+        _ = workflow_module._review(request, view, {})  # pyright: ignore[reportPrivateUsage]
+
+
+def test_review_coverage_preserves_agent_authored_not_covered_row(
+    tmp_path: Path,
+) -> None:
+    source = source_artifact(tmp_path)
+    request = ReviewRequest(
+        contract_version=version(ReviewRequest),
+        review_id="review-coverage",
+        subject=source,
+        coverage_targets=("target-a", "target-b"),
+    )
+    evidence_ref = EvidenceRef(
+        evidence_id="review-log",
+        kind=EvidenceKind.SOURCE,
+        artifact=source,
+        summary="Review evidence",
+    )
+    finding = ReviewFindingWriterView(
+        severity=ReviewSeverity.HIGH,
+        summary="Target b was not exercised",
+        evidence_keys=["review-log"],
+    )
+    view = ReviewResultWriterView(
+        ReviewDisposition.FINDINGS,
+        [finding],
+        reason=None,
+        coverage=[
+            ReviewCoverage("target-a", CoverageDisposition.COVERED),
+            ReviewCoverage("target-b", CoverageDisposition.NOT_COVERED, "gap"),
+        ],
+    )
+    result = workflow_module._review(  # pyright: ignore[reportPrivateUsage]
+        request, view, {"review-log": evidence_ref}
     )
     assert result.coverage == (
-        ReviewCoverage("target", expected_disposition, expected_reason),
+        ReviewCoverage("target-a", CoverageDisposition.COVERED),
+        ReviewCoverage("target-b", CoverageDisposition.NOT_COVERED, "gap"),
     )
 
 
@@ -527,7 +566,7 @@ def test_multi_curd_branches_keep_subjects_and_evidence_isolated(
     def dispatch_review(request: ReviewRequest) -> ReviewResultWriterView:
         events.append("review")
         review_requests.append(request)
-        return ReviewResultWriterView(ReviewDisposition.CLEAN, [])
+        return ReviewResultWriterView(ReviewDisposition.CLEAN, [], coverage=_covered(request))
 
     planner, branches, results = run_workflow(
         planner_request(),

@@ -7,6 +7,7 @@ green while `/cure` step 2 fails at runtime.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -22,18 +23,44 @@ DRIVER = (
     "sys.exit(main(sys.argv[1:]))\n"
 )
 
-SAMPLE_REPORT = """\
-status: ok
-next: cure
-
-## Findings
-
-## Blocker
-
-- **[encapsulation:blocker]** `src/users/index.ts:42` — `index` re-exports `SqlPgUser` across slice boundary.
-  - location: contract · fix-cost-now: sprawling · fix-cost-later: structural · confidence: certain
-  - recommendation: define `User` in the slice's public types, map at the boundary.
-"""
+SAMPLE_REVIEW_RESULT: dict[str, object] = {
+    "contract_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/review-result",
+        "major": "1",
+        "minor": "0",
+    },
+    "review_id": "prose-contract",
+    "disposition": "findings",
+    "findings": [
+        {
+            "finding_id": "prose/finding/1",
+            "severity": "critical",
+            "summary": "`index` re-exports `SqlPgUser` across slice boundary.",
+            "recommendation": "define `User` in the slice's public types, map at the boundary.",
+            "evidence": [
+                {
+                    "evidence_id": "prose/evidence/1",
+                    "kind": "review",
+                    "artifact": {
+                        "artifact_id": "prose/artifact/1",
+                        "role": "review",
+                        "uri": "repo://prose/evidence/1.json",
+                        "digest": "sha256:" + "0" * 64,
+                        "size_bytes": 64,
+                        "media_type": "application/json",
+                    },
+                }
+            ],
+            "location": {
+                "artifact_id": "prose/artifact/1",
+                "path": "src/users/index.ts",
+                "start_line": 42,
+                "end_line": 42,
+            },
+        }
+    ],
+    "coverage": [{"target": "encapsulation", "disposition": "covered"}],
+}
 
 
 def _read(path: Path) -> str:
@@ -60,8 +87,8 @@ def test_documented_render_brief_invocation_runs_against_the_real_cli(tmp_path: 
     tokens = command.split()
     assert tokens[:3] == ["python3", "skills/cure/scripts/cure.pyz", "findings"]
     subcommand = tokens[3]
-    report_path = tmp_path / "report.md"
-    _ = report_path.write_text(SAMPLE_REPORT, encoding="utf-8")
+    report_path = tmp_path / "review-result.json"
+    _ = report_path.write_text(json.dumps(SAMPLE_REVIEW_RESULT), encoding="utf-8")
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(REPO_ROOT / "src")

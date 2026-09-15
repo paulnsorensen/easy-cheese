@@ -22,6 +22,13 @@ def _artifact_path(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("publish-review")
+def _publish_review(argv: list[str]) -> int:
+    from easy_cheese.skills.age.contract_handlers import publish_review_main
+
+    return publish_review_main(argv)
+
+
 @bundle_command("html-report")
 def _html_report(argv: list[str]) -> int:
     from easy_cheese.skills.age.age_html_report import main
@@ -123,7 +130,11 @@ COMMANDS = (
         "Resolve the durable or transient artifact path for a phase and slug",
     ),
     derive_command(
-        _html_report, "Render an /age markdown report into one offline HTML file"
+        _publish_review,
+        "Publish a host-authored review result envelope on the age -> cure route",
+    ),
+    derive_command(
+        _html_report, "Render a canonical ReviewResult JSON document into one offline HTML file"
     ),
     derive_command(
         _age_route,

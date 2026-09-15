@@ -138,7 +138,7 @@ def _review_input(
                 "minor": "0",
             }
         },
-        "coverage": [{"target": "changed-files", "disposition": "covered"}],
+        "coverage_targets": ["changed-files"],
     }
     return ContractBenchmarkInput(
         name="review-result",
@@ -162,7 +162,11 @@ def _invalid_review_view() -> dict[str, object]:
 def _valid_review_view() -> dict[str, object]:
     return {
         "kind": "review_result",
-        "payload": {"disposition": "clean", "findings": []},
+        "payload": {
+            "disposition": "clean",
+            "findings": [],
+            "coverage": [{"target": "changed-files", "disposition": "covered"}],
+        },
     }
 
 

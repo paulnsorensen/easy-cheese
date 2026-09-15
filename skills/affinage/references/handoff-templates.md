@@ -54,8 +54,9 @@ Include this locked context:
 handoff_context:
   source_skill: /affinage
   source_report: .cheese/affinage/pr-<n>.md
+  pointer: <path to the published ReviewResult HandoffPointer>
   selection: "<verb or explicit ids>"
-  resolved_ids: [<expanded ids>]
+  finding_ids: [<selected ReviewResult finding_id strings>]
 ```
 
 `/cure` confirms each selected identifier and applies the fixes.

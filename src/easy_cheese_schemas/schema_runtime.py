@@ -106,7 +106,6 @@ _CANONICAL_SCHEMA_BY_WRITER_KIND = {
 _HOST_OWNED_FIELDS = {
     "artifact_id",
     "contract_version",
-    "coverage",
     "curd_id",
     "digest",
     "diagnosis_id",
@@ -1003,20 +1002,35 @@ def _normalize_finding(
     )
 
 
+def _validate_review_coverage(
+    coverage: tuple[ReviewCoverage, ...], coverage_targets: tuple[str, ...]
+) -> None:
+    seen: set[str] = set()
+    for row in coverage:
+        if row.target in seen:
+            raise ContractValidationError(
+                f"review coverage target {row.target!r} is duplicated"
+            )
+        seen.add(row.target)
+    for target in coverage_targets:
+        if target not in seen:
+            raise ContractValidationError(
+                f"review coverage is missing target {target!r}"
+            )
+    for target in sorted(seen - set(coverage_targets)):
+        raise ContractValidationError(f"review coverage names unknown target {target!r}")
+
+
 def _normalize_review_result(
     view: ReviewResultWriterView, invocation: Mapping[str, object]
 ) -> ReviewResult:
     schema_uri = _CANONICAL_SCHEMA_BY_WRITER_KIND[WriterViewKind.REVIEW_RESULT]
     review_id = cast(str, _invocation_value(invocation, "review_id"))
     evidence = _host_mapping(invocation, "evidence")
-    coverage_raw = _invocation_value(invocation, "coverage")
-    if not isinstance(coverage_raw, list | tuple):
-        raise ContractValidationError("invocation.coverage must be an array")
-    coverage_raw = cast("list[object] | tuple[object, ...]", coverage_raw)
-    coverage = tuple(
-        _typed_host(item, ReviewCoverage, f"invocation.coverage[{index}]")
-        for index, item in enumerate(coverage_raw)
+    coverage_targets = tuple(
+        cast("tuple[str, ...]", _invocation_value(invocation, "coverage_targets"))
     )
+    _validate_review_coverage(view.coverage, coverage_targets)
     return ReviewResult(
         contract_version=_version_for(invocation, schema_uri),
         review_id=review_id,
@@ -1025,7 +1039,7 @@ def _normalize_review_result(
             _normalize_finding(item, index, review_id, evidence)
             for index, item in enumerate(view.findings, start=1)
         ),
-        coverage=coverage,
+        coverage=view.coverage,
         reason=view.reason,
     )
 

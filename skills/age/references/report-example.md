@@ -11,8 +11,7 @@ Add `## Press findings` only when a press report exists.
 Add `## Wiki context` only when hallouminate grounding returns a hit.
 Add `## Agent resolution` after the severity sections.
 Use the exact three-line form below for each finding.
-`/cure` parses this form with `src/easy_cheese/shared/findings.py`.
-A finding that drops the list marker or the location backticks is invisible to `/cure`.
+This Markdown is a human-readable rendering of the published `ReviewResult`; `/cure` consumes the canonical payload and its `finding_ids`, not this prose.
 
 ```markdown
 - **[<dim>:<sev>]** `path:line` — <claim>

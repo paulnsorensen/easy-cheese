@@ -7,25 +7,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from easy_cheese.shared.findings import Finding, parse_findings_report
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AFFINAGE = REPO_ROOT / "skills" / "affinage"
 SKILL = AFFINAGE / "SKILL.md"
 REFERENCES = AFFINAGE / "references"
 
-VALID_LOCATION_TIERS = {"class", "module", "cross-module", "contract"}
-
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
-
-
-def _template_report() -> str:
-    text = _read(REFERENCES / "report-template.md")
-    return text.split("```markdown", 1)[1].split("```", 1)[0]
 
 
 # --- blocker: a resolved merge conflict must reach publication ---------------
@@ -105,28 +94,6 @@ def test_halt_line_carries_the_status_key() -> None:
     skill = _read(SKILL)
     assert "Use `status: halt: <reason>` when `gh` or `pr-status` fails." in skill
     assert "Use `halt: <reason>` when" not in skill
-
-
-# --- high: the report template must use valid location tiers ----------------
-
-
-@pytest.mark.parametrize("finding", parse_findings_report(_template_report()))
-def test_template_findings_use_a_valid_location_tier(finding: Finding) -> None:
-    assert finding.location_tier in VALID_LOCATION_TIERS, (
-        f"invalid location tier: {finding.location_tier!r}"
-    )
-
-
-# --- high: cure must be able to parse the affinage report -------------------
-
-
-def test_cure_parser_reads_every_template_severity_finding() -> None:
-    findings = parse_findings_report(_template_report())
-    assert len(findings) == 5, "the shared parser must read every severity bullet"
-    dimensions = {f.dimension for f in findings}
-    assert {"security", "correctness", "efficiency", "deslop"} <= dimensions
-    assert all(f.location for f in findings)
-    assert all(f.recommendation for f in findings)
 
 
 def test_provenance_moves_to_a_source_sub_field() -> None:

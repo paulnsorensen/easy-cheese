@@ -27,15 +27,16 @@ It passes this block with the invocation:
 handoff_context:
   source_skill: /age
   source_report: .cheese/age/<slug>.md
+  pointer: <path to the published ReviewResult HandoffPointer>
   selection: "1,3,5 | all-blocker | all-high | all-medium | cheap | all | skip N"
-  resolved_ids: [1, 3, 5]
+  finding_ids: ["<slug>/finding/1", "<slug>/finding/3", "<slug>/finding/5"]
 ```
 
-Both `selection` and `resolved_ids` are required.
+Both `selection` and `finding_ids` are required.
 `selection` stores the verb.
-`resolved_ids` stores the expanded identifiers.
+`finding_ids` stores the selected ReviewResult `finding_id` strings.
 The source skill expands the verb before dispatch.
-Cure checks the identifiers against the report and applies them.
+Cure checks the finding ids against the ReviewResult behind `pointer` and applies them.
 
 Do not use a `--select` CLI flag.
 The selection moves through the handoff context.
@@ -44,15 +45,16 @@ The selection moves through the handoff context.
 
 With a slug, read `.cheese/age/<slug>.md`.
 Render a numbered table by severity.
-Use blocker, high, medium, then low order.
+Use critical, high, medium, then low order.
+The `#` column is the 1-based position a selection verb references; `finding` is the canonical ReviewResult `finding_id` that travels in the handoff.
 
 ```text
-| # | severity | confidence  | dim           | location                  | summary |
-|---|----------|-------------|---------------|---------------------------|---------|
-| 1 | blocker  | certain     | encapsulation | src/users/index.ts:42     | `index` re-exports `SqlPgUser` across slice boundary. |
-| 2 | high     | certain     | security      | src/handler.ts:108        | Unvalidated path joined into fs.read. |
-| 3 | medium   | speculating | complexity    | src/util.ts:200-240       | Function is 41 lines and 4 levels nested. |
-| 4 | low      | certain     | deslop        | src/old.ts:55-60          | Unused export `_helper`. |
+| # | finding | severity | location                  | summary |
+|---|---------|----------|---------------------------|---------|
+| 1 | review-1/finding/1 | critical | src/users/index.ts:42     | `index` re-exports `SqlPgUser` across slice boundary. |
+| 2 | review-1/finding/2 | high     | src/handler.ts:108        | Unvalidated path joined into fs.read. |
+| 3 | review-1/finding/3 | medium   | src/util.ts:200-240       | Function is 41 lines and 4 levels nested. |
+| 4 | review-1/finding/4 | low      | src/old.ts:55-60          | Unused export `_helper`. |
 ```
 
 Without a slug, accept a findings list, Age path, CI summary, or scoped fix request.
@@ -107,14 +109,14 @@ Do not infer cost from missing data.
 
 ## Coder brief
 
-Render the brief from the locked ids before any dispatch:
+Render the brief from the locked ids before any dispatch.
+`--report` takes the canonical `ReviewResult` JSON document /age published, not a Markdown report:
 
 ```text
 python3 skills/cure/scripts/cure.pyz findings render-brief --report <path> --selection "<ids>"
 ```
 
 The brief carries each finding's location, claim, `recommendation (locked)`, and `invariants` line.
-The brief also carries each finding's `confidence:` tier; treat a `speculating` locked decision as provisional.
 Give it to the repair agent verbatim.
 The recommendation is the locked decision for that fix.
 Keep every `invariants:` clause true while you edit.
