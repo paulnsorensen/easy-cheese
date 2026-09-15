@@ -675,6 +675,28 @@ def validate_curd_plan(plan: object) -> CurdPlan:
     return _validate_curd_plan_against(plan, supported)
 
 
+def load_curd_plan(raw: object) -> CurdPlan:
+    """Load a canonical JSON curd-plan artifact into a validated ``CurdPlan``.
+
+    ``raw`` is a decoded JSON mapping or the raw JSON text/bytes of a
+    ``.curd-plan.json`` artifact. Curd plans are canonical JSON, so YAML or
+    Markdown frontmatter is a different artifact format and is rejected here
+    rather than parsed. The structured plan runs through ``validate_curd_plan``
+    before it is returned.
+    """
+    if isinstance(raw, (str, bytes, bytearray)):
+        text = raw if isinstance(raw, str) else raw.decode("utf-8", "replace")
+        if text.lstrip().startswith("---"):
+            raise ContractValidationError(
+                "curd plans are canonical JSON; YAML or Markdown frontmatter "
+                + "is not a curd-plan artifact"
+            )
+    data = _raw_mapping(raw)
+    value = _structure(data, CurdPlan)
+    assert isinstance(value, CurdPlan)
+    return validate_curd_plan(value)
+
+
 def validate_contract(
     raw: object,
     schema: str | type,
@@ -1237,6 +1259,7 @@ __all__ = [
     "canonical_bytes",
     "canonical_digest",
     "curd_plan_digest",
+    "load_curd_plan",
     "normalize_agent_output",
     "normalize_agent_value",
     "schema_bytes",
