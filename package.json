@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@astrojs/starlight": "^0.41.3",
-    "@playwright/test": "1.55.0",
+    "@playwright/test": "1.63.0",
     "@vitejs/plugin-react": "5.0.2",
     "vite": "7.1.5",
     "@cheeselord/design": "^0.4.0",
