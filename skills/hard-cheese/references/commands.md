@@ -6,3 +6,4 @@
 | --- | --- |
 | `append-attempt` | Atomically append an attempt row to the audit trail |
 | `freshness-check` | Decide whether a prior attempt is fresh, stale, or new |
+| `rank-hunks` | Score git diff hunks by risk and emit the top N as JSON |

@@ -26,4 +26,8 @@ The diff and the author's explanation reach the judge model as data. The prompt 
 
 A freshness check that compares only a recorded `HEAD` SHA and score accepts a changed working tree. Compute one digest over `HEAD`, the working diff, the optional specification, and prior evidence, as [age-review-lock-invariants](../gotchas/age-review-lock-invariants.md) does.
 
+## Question targeting is absent in the source
+
+Neither the paper nor vibecheck selects which part of a change to ask about. Vibecheck passes one whole `codeSnippet` to the judge (`src/judge/JudgeService.ts`, `src/gate/ExplanationGate.ts`); the paper tested no question types or targets. Hard-cheese inherits this: one fixed prompt, up to 80 unranked diff lines, Socratic questions only after a FAIL. The paper's own data says 62% of rejected attempts are tautological loops and the Relational breakthrough follows the first Socratic round, so the open design lever is *which* hunks and *which* framing the first prompt targets. Evidence for hunk targeting (JIT defect features: churn, diffusion, history, author inexperience; AI-code gaps at error paths and cross-module invariants) and purpose-first EiPE framing is in the durable research artifact `research/hard-cheese-question-selection-leverage/hard-cheese-question-selection-leverage.md` (cheese-durable corpus, 2026-09-14). That artifact also records judge-hardening evidence: quote-grounding and rubric specificity beat "be strict" instructions.
+
 _Source: r014 skill-review round notes (ingest hash 499c49c7b67d5eb6), verified against `skills/hard-cheese/` on 2026-09-04 · Updated: 2026-09-04_

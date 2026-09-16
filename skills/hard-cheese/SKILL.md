@@ -55,9 +55,18 @@ The handoff blocks define the portable contract because slash commands are host 
    A stale result has exit status `2`. A new result has exit status `3`.
    A result is stale when `HEAD` changes or the last PASS score is too low.
 
-3. **Compose the vibecheck prompt.** Keep it faithful to Sankaranarayanan 2026. Use "share for review" to keep the gate implementation independent.
+3. **Rank the hunks, then compose the vibecheck prompt.** Keep it faithful to Sankaranarayanan 2026. Use "share for review" to keep the gate implementation independent.
 
-   > Before this is shared for review, explain its causal logic in your own words. How does *<feature or fix>* work? Why does it produce the desired behavior? What state, control flow, or invariants does it rely on?
+   Run `rank-hunks` before you compose the prompt:
+
+   ```
+   python3 skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks \
+     --base origin/main --head HEAD
+   ```
+
+   Show the ranked regions next to the diff summary, one line per hunk, as `path:start-end — reasons`. Make no judge call before the first attempt.
+
+   > Before this is shared for review, explain in your own words what this change is for. How does *<feature or fix>* work? Why does it produce the desired behavior? What state, control flow, or invariants does it rely on? Start with the highlighted regions.
 
    Show a diff summary with the prompt. For `/plate`, also show the complete final evidence:
 
@@ -72,8 +81,8 @@ The handoff blocks define the portable contract because slash commands are host 
 
 5. **Start the judge sub-agent** in a fresh context. Use the same pattern as the `/cook` fan pathway.
    - Use `references/judge-prompt.md` as the system prompt.
-   - Provide the passing score, diff summary, optional spec excerpt, and user's explanation.
-   - Require this JSON object: `{score, level, pass, feedback, socratic_qs}`.
+   - Provide the passing score, diff summary, optional spec excerpt, the `targets` JSON from `rank-hunks`, and user's explanation.
+   - Require this JSON object: `{score, level, pass, feedback, socratic_qs, targets_addressed}`.
 
    See `references/judge-prompt.md` for the full system prompt and output shape.
 
@@ -81,7 +90,7 @@ The handoff blocks define the portable contract because slash commands are host 
 
 6. **Process the judge result.**
    - Mark the attempt PASS when `score >= <passing-score>`.
-   - Mark the attempt FAIL when `score < <passing-score>`. Show the Socratic questions. Return to step 4 while retries remain.
+   - Mark the attempt FAIL when `score < <passing-score>`. Show the Socratic questions; each one anchors to a ranked hunk from `targets_addressed`. When `targets` is empty or absent, skip the anchoring requirement and expect an empty `targets_addressed`. Return to step 4 while retries remain.
    - Mark the attempt ERROR when the judge fails. Print a warning and return `0`. See `## Divergence from the paper`.
 
    Append the attempt row:
@@ -132,7 +141,7 @@ Each invocation appends attempts and does not overwrite rows. If `HEAD` changes,
 - The shared resolver pins each reviewer to `powerful`. Do not lower this value for the judge.
 - Use a general worker only with no-write enforcement. Set `degraded: true`.
 - Use `references/judge-prompt.md` as the system prompt.
-- Give the judge the diff summary, the optional spec excerpt, and the explanation. Require a JSON reply. Prohibit repository writes.
+- Give the judge the diff summary, the optional spec excerpt, the `targets` JSON, and the explanation. Require a JSON reply. Prohibit repository writes.
 - **Parse the JSON output.** On a parse error, log an `ERROR` attempt and fail open.
 
 The gate requires a host sub-agent feature. Without this feature, recommend `/hard-cheese --no-judge` to record the explanation without a grade.
@@ -162,6 +171,10 @@ This policy prevents API failures from blocking pull request work.
 Hard-cheese records the complete text of every explanation in the local artifact. The `.gitignore` file excludes `.cheese/`, so this text remains on the author's machine.
 
 Tell the user about this retention before `--no-judge` records the first explanation.
+
+**3. Prompt wording.** Vibecheck's prompt states its three questions without a lead sentence.
+
+Hard-cheese adds a purpose-first lead sentence and a pointer to the ranked regions. The paper's three questions stay verbatim.
 
 Add each new difference to this section.
 
@@ -197,6 +210,7 @@ Then print one applicable message:
 | Need | Prefer | Fallback |
 | --- | --- | --- |
 | Diff inspection for the user-facing summary | `delta` | `git diff --unified=3` |
+| Ranking the hunks for the prompt | `rank-hunks` bundle command | none — skip the ranked regions and note the gap |
 | Reading the spec (when present) | bounded file read per [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) | host file read |
 | Spawning the judge | host sub-agent primitive (`Agent()` or harness equivalent) | none — without sub-agent spawn, run `--no-judge` mode and tell the user the judge is unavailable |
 | GitHub / PR context (out of scope here) | n/a | n/a |
@@ -206,6 +220,7 @@ Then print one applicable message:
 - Run the judge sub-agent in fresh context. Do not use the code-writing context to grade the author's understanding.
 - Do not coach the user before the answer. The explanation is the artifact under test.
 - Show only the judge's Socratic questions after a FAIL. Do not add hints.
+- Show the ranked regions; add no question or hint before the first attempt.
 - Pass the user's explanation to the judge unchanged.
 - Always run the freshness check. A changed `HEAD` requires a new attempt sequence.
 - Record every ERROR attempt. Show a warning for each judge failure.
