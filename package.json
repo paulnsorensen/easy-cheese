@@ -22,8 +22,8 @@
   "devDependencies": {
     "@astrojs/starlight": "^0.41.3",
     "@playwright/test": "1.63.0",
-    "@vitejs/plugin-react": "5.0.2",
-    "vite": "7.1.5",
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.3.0",
     "@cheeselord/design": "^0.4.0",
     "astro": "^7.2.8",
     "sharp": "^0.35.4",
