@@ -25,13 +25,6 @@ def _artifact_path(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("age-route")
-def _age_route(argv: list[str]) -> int:
-    from easy_cheese.shared.fanout.age_route_cli import main
-
-    return main(argv)
-
-
 @bundle_command("baseline")
 def _baseline(argv: list[str]) -> int:
     from easy_cheese.shared.fanout.baseline import main
@@ -105,13 +98,6 @@ def _wiring_topo_sort(argv: list[str]) -> int:
 @bundle_command("pr-plan-to-branches")
 def _pr_plan_to_branches(argv: list[str]) -> int:
     from easy_cheese.shared.fanout.pr_plan_to_branches import main
-
-    return main(argv)
-
-
-@bundle_command("curd-block")
-def _curd_block(argv: list[str]) -> int:
-    from easy_cheese.shared.fanout.curd_block import main
 
     return main(argv)
 
@@ -203,10 +189,6 @@ COMMANDS = (
         "Resolve the durable or transient artifact path for a phase and slug",
     ),
     derive_command(
-        _age_route,
-        "Size an /age review into single-pass or fan-out lanes (JSON in, JSON out)",
-    ),
-    derive_command(
         _baseline, "Classify a current test-failure list against a stored baseline"
     ),
     derive_command(
@@ -234,10 +216,6 @@ COMMANDS = (
         _pr_plan_to_branches,
         "Convert a fan-out PR plan into branch, cherry-pick, and PR commands",
     ),
-    derive_command(
-        _curd_block,
-        "Validate a curd block against the spec-locked decomposition schema",
-    ),
     derive_command(_normalize, "Normalize a typed contract payload on the host"),
     derive_command(
         _validate, "Validate a typed contract payload against its registered schema"
@@ -255,7 +233,7 @@ COMMANDS = (
     ),
     derive_command(
         _findings,
-        "Render an /age report's selection table and resolve selection verbs",
+        "Render an /age report's selection table or coder brief and resolve selection verbs",
     ),
     derive_command(
         _gates, "Map a quality-gate scoreboard's booleans to a readiness verdict"

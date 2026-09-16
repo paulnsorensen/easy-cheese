@@ -21,6 +21,7 @@ Stop when you notice one of these thoughts:
 - "The finding gives enough context, so I can skip a fresh read."
 - "The Age report is wrong, but I can apply its fix anyway."
 - "One edit fixes all findings, so I can skip separate checks."
+- "I know a better fix than the recommendation, so I'll do that instead."
 - "I can mark this finding Applied while a gate remains red."
 
 Each thought is a rationalization.
@@ -39,6 +40,7 @@ Name it and stop.
 | "One root cause means one check is enough." | One edit can affect findings in different ways. | Apply once and validate. Then check every related finding again. |
 | "The gate is flaky, so I can mark Applied." | A red gate cannot prove the fix. | Record the failure in Checks. Keep the finding out of Applied. |
 | "A low severity lets me skip validation." | Severity measures impact, not validation need. | Validate every applied fix. |
+| "The recommendation is only a hint, so I can pick my own fix." | A silent substitution hides a design change from the reviewer and the Locked-decision lens. | Implement the recommendation, or rebut it under Deferred and stop. |
 
 ---
 

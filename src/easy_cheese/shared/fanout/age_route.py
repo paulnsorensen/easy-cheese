@@ -23,8 +23,6 @@ from easy_cheese_schemas.validate import (
 )
 
 __all__ = [
-    "DIMENSIONS",
-    "OVERRIDE_FLAGS",
     "POLICY_VERSION",
     "RISK_MAPPINGS",
     "SUBJECTS",
@@ -33,23 +31,6 @@ __all__ = [
 ]
 
 POLICY_VERSION = "age-review-plan.v1"
-
-# These are the report dimensions.  The first ten retain their established
-# names; conventions and altitude are intentionally first-class dimensions.
-DIMENSIONS: tuple[str, ...] = (
-    "correctness",
-    "security",
-    "encapsulation",
-    "spec",
-    "complexity",
-    "deslop",
-    "assertions",
-    "nih",
-    "efficiency",
-    "telemetry",
-    "conventions",
-    "altitude",
-)
 
 # Review subjects are the independent procedures the coordinator can assign.
 # Keep this order stable for canonical plan output.
@@ -109,7 +90,6 @@ RISK_MAPPINGS: dict[str, str] = {
     "removed-protection": "removed-behavior",
     "hot-path": "efficiency",
 }
-OVERRIDE_FLAGS: frozenset[str] = frozenset(RISK_MAPPINGS)
 
 _CONTEXT_KEYS = (
     "scope",
@@ -132,6 +112,7 @@ _ASSIGNMENT_KEYS = ("id", "subjects", "targets", "effort", "reasons")
 
 _AFFINAGE_COMMENT_BUMP = 10
 _AFFINAGE_CI_BUMP_CLASSES = frozenset({"failing", "red", "flaky"})
+_AFFINAGE_CI_CLASSES = _AFFINAGE_CI_BUMP_CLASSES | {"passing"}
 
 
 def _mapping(value: object, field: str) -> dict[str, object]:
@@ -465,7 +446,7 @@ def route(
     if comments is not None:
         comments = _nonnegative_int(comments, "comments")
     if ci_class is not None:
-        ci_class = require_str(ci_class, "ci_class")
+        ci_class = _choice(ci_class, "ci_class", _AFFINAGE_CI_CLASSES)
 
     normalized = _normalize_context(context)
     effective_effort, escalation_reasons = _effective_effort(
@@ -642,9 +623,7 @@ def route(
         actual_ids, cast(int | None, normalized["concurrency_limit"])
     )
     verifier_available = not degraded_reasons
-    candidate_batches = (
-        [list(batch) for batch in dispatch_batches] if verifier_available else []
-    )
+    candidate_batches: list[list[str]] = []
     verification_status = (
         "planned"
         if verifier_available and actual
@@ -886,7 +865,7 @@ def _validate_plan(plan: object) -> list[str]:
     degraded = degraded_value is not None
     if degraded:
         _ = require_str(degraded_value, "plan.degraded_reason")
-        if ids != ["combined"]:
+        if ids and ids != ["combined"]:
             raise ValueError("degraded plans must dispatch one combined assignment")
         desired_ids, desired_assignments, desired_owner = _validate_assignment_rows(
             mapping.get("desired_assignments"), "plan.desired_assignments"

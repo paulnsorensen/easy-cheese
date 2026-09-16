@@ -24,8 +24,8 @@ This context kernel governs only digest boundaries.
 ## What the parent never delegates
 
 By default, the parent never delegates severity grading, final verdicts, or approval gates.
-A skill may delegate single-dimension grading to a per-dimension worker only when the parent retains final cross-dimension reconciliation and the verdict.
-The verdict and cross-cutting grade stay central.
+Age may delegate candidate grading to subject workers across every dimension their assigned investigation exposes.
+The parent retains cross-subject reconciliation, verification, final verdicts, and canonical report writing.
 This exception does not loosen the default for other cases.
 
 Do not delegate dialogue, contradictions, handshakes, or user-facing decisions.

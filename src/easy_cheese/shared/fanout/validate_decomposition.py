@@ -5,11 +5,14 @@ from __future__ import annotations
 import sys
 from typing import cast
 
+from attrs import validators
+
 from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
     read_mapping_arg_or_stdin,
 )
-from easy_cheese_schemas import Decomposition, DecomposedCurd, load  # noqa: E402
+from easy_cheese_schemas import DecomposedCurd, load  # noqa: E402
+from easy_cheese_schemas.manifest import reject_shared_curd_files  # noqa: E402
 
 from . import wiring  # noqa: E402
 
@@ -17,6 +20,32 @@ from . import wiring  # noqa: E402
 # ---------------------------------------------------------------------------
 # Well-formedness (not an entity invariant)
 # ---------------------------------------------------------------------------
+
+
+class _CurdsField:
+    """`reject_shared_curd_files` names the offending field from the attrs
+    attribute it validates; called directly it needs the same name the schema
+    gives it."""
+
+    name: str = "curds"
+
+
+_CURDS_FIELD = _CurdsField()
+
+
+def _files_only(curd: dict[str, object]) -> DecomposedCurd | None:
+    """The curd's `files` alone, for the cross-curd disjointness check on a curd
+    the strict read rejected. Content rules have already reported against it, so
+    they are disabled here; a `files` value the check cannot compare yields no
+    curd at all."""
+    files = curd.get("files")
+    if not isinstance(files, list):
+        return None
+    paths = [path for path in cast("list[object]", files) if isinstance(path, str)]
+    with validators.disabled():
+        return DecomposedCurd(
+            behavior="", acceptance_criterion="", files=paths, test_target=""
+        )
 
 
 def check_minimum_curd_count(curds: list[object]) -> str | None:
@@ -49,16 +78,20 @@ def validate_manifest(manifest: dict[str, object]) -> list[str]:
     # Content rules (behavior/acceptance_criterion/test_target/files shape)
     # live once in easy_cheese_schemas.DecomposedCurd, checked per curd so one
     # curd's failure never short-circuits another's. The cross-curd `files`
-    # disjointness invariant lives on Decomposition.curds instead -- a
-    # collection-level rule -- so it is checked separately over the same
-    # dicts; when it fails, only its own message is kept, since a raised
-    # collection validator would otherwise mask per-curd errors already
-    # collected above.
+    # disjointness invariant is a collection-level rule, so it runs over every
+    # curd: one that failed its own content rules still owns files that must
+    # not collide with a sibling's.
+    loaded: list[DecomposedCurd] = []
     for c in dict_curds:
-        errors.extend(load(c, DecomposedCurd, strict=True).problems)
-    if dict_curds:
-        collection = load({"curds": dict_curds, "wiring": []}, Decomposition, strict=True)
-        errors.extend(problem for problem in collection.problems if "curds[" not in problem)
+        result = load(c, DecomposedCurd, strict=True)
+        errors.extend(result.problems)
+        curd = result.value if result.value is not None else _files_only(c)
+        if curd is not None:
+            loaded.append(curd)
+    try:
+        reject_shared_curd_files(None, _CURDS_FIELD, loaded)
+    except ValueError as exc:
+        errors.append(str(exc))
 
     wiring_field = manifest.get("wiring", [])
     if not isinstance(wiring_field, list):

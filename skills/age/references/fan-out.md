@@ -118,6 +118,8 @@ Keep cross-references when separate findings remain justified.
 
 Once actual candidates exist, run a cheap verifier in batches of up to ten claims.
 Do not spawn an empty batch.
+The initial plan leaves `verification.candidate_batches` empty because no findings exist yet.
+After reconciliation, form nonempty batches from actual candidate findings, never from first-pass assignment IDs.
 Use the plan's explicit sub-agent or capability skip reason when verification cannot run independently.
 For each claim, return one result:
 

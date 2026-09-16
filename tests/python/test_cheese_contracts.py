@@ -37,26 +37,6 @@ class TestMoldSkipsTheCookFastPath:
             assert "`mold` intent skips" in body, name
 
 
-class TestCurdBlockIsMigrationOnly:
-    """`review-cheese.md` blocker: the curd block is not production state."""
-
-    def test_decomposer_declares_the_migration_scope(self) -> None:
-        body = _text(REFERENCES / "decomposer.md")
-        assert "**Scope: explicit migration only.**" in body
-        assert "The curd block is not production state." in body
-        assert "Never persist a curd block as the selected production artifact." in body
-
-    def test_decomposer_points_at_the_typed_planner_chain(self) -> None:
-        body = _text(REFERENCES / "decomposer.md")
-        for contract in ("PlannerRequest", "PlannerResult", "CurdPlan", "CurdResult"):
-            assert f"`{contract}`" in body, contract
-        assert "schema-intertwine.md" in body
-
-    def test_every_producer_needs_an_explicit_migration_request(self) -> None:
-        body = _text(REFERENCES / "decomposer.md")
-        assert "Each producer acts only on an explicit migration request." in body
-
-
 class TestCookOwnsOneFastPathContract:
     """`review-cheese.md` high: three files defined three eligibility rules."""
 

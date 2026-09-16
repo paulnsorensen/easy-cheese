@@ -83,6 +83,9 @@ handoff_context:
 Always emit `resolved_ids` alongside `selection`.
 Expand the verb yourself instead of leaving the field empty.
 `/cure` re-confirms the ids against the report regardless.
+The report carries each finding's `recommendation:` and optional `invariants:` line.
+`/cure` renders them into the coder brief with `findings render-brief` and implements the recommendation as the locked decision.
+Do not restate them in `handoff_context`.
 Propagate `--safe`, `--open-pr`, and `--hard` to `/cure` when they are in scope.
 
 On `none` or Stop (only reachable via the gate), exit cleanly with the report path.

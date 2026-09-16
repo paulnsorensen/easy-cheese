@@ -16,14 +16,12 @@ from easy_cheese_schemas.contracts import (
     CurdResult,
     PlannerResult,
     ReviewResult,
-    UnsupportedProjection,
 )
 from easy_cheese_schemas.phase_contracts import (
     COMPILED_TRANSITION_REGISTRY,
     TransitionError,
     validate_transition,
 )
-from easy_cheese_schemas.projections import project_curd_block
 from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
     normalize_agent_output,
@@ -110,7 +108,6 @@ def test_contract_fixture_case_schema_is_closed() -> None:
         "normalize_agent_output": set(),
         "resolve_artifact": set(),
         "validate_transition": set(),
-        "project_legacy": {"schema_uri", "supported_version", "target"},
     }
     for case in CONTRACT_CASES:
         operation = case["operation"]
@@ -291,25 +288,6 @@ def _transition_observation(case: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _projection_observation(case: dict[str, object]) -> dict[str, object]:
-    schema_uri = case["schema_uri"]
-    assert isinstance(schema_uri, str)
-    value = validate_contract(
-        case["input"], schema_uri, supported_version=_version(case)
-    ).value
-    assert isinstance(value, CurdPlan)
-    assert case["target"] == "curd_block"
-    projected = project_curd_block(value)
-    assert isinstance(projected, UnsupportedProjection)
-    return {
-        "type": type(projected).__name__,
-        "target": projected.target,
-        "curd_id": projected.curd_id,
-        "field": projected.field,
-        "reason": projected.reason,
-    }
-
-
 def _dispatch_contract_case(
     case: dict[str, object], tmp_path: Path
 ) -> dict[str, object]:
@@ -322,8 +300,6 @@ def _dispatch_contract_case(
         return _resolved_artifact_observation(case, tmp_path)
     if operation == "validate_transition":
         return _transition_observation(case)
-    if operation == "project_legacy":
-        return _projection_observation(case)
     raise AssertionError(f"unhandled fixture operation: {operation}")
 
 

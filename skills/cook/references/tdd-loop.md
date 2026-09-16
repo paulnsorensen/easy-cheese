@@ -63,7 +63,7 @@ If all four conditions are true, run the coder self-check. If one condition is f
 
 ### Risk flag
 
-A risk flag is one of these override categories from the bundled age router:
+A risk flag identifies one of these categories:
 
 - auth/secrets/crypto/tenant isolation
 - payments/ledgers/irreversible effects
@@ -71,10 +71,6 @@ A risk flag is one of these override categories from the bundled age router:
 - schema/migration/protocol/public-API change
 - production-destructive ops
 - weak integration coverage around a global invariant
-
-`python3 skills/cook/scripts/cook.pyz age-route` consumes the flags.
-See [`../../age/references/fan-out.md`](../../age/references/fan-out.md#router-call) for the exact tokens and the JSON shape.
-The router ignores an unknown flag, so a spelling error removes a risk promotion.
 
 **Who runs it.**
 
@@ -111,6 +107,7 @@ The last three lenses are fresh-context additions. They identify failures that t
 - A silently substituted design decision.
 
 A `halt` from the Locked-decision lens stops the chain for a human decision. It is not a corrective Cook finding.
+On a `/cure` run, each selected finding's `recommendation:` and `invariants:` lines are the locked decision for that fix.
 
 **Escalate-unverifiable.**
 

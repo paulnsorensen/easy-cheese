@@ -107,9 +107,6 @@ The fan-pathway reference defines its arguments and lifecycle.
 **Un-curded.** Keep small work in the single-coder path.
 For big work, ask "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
 Keep waves at a maximum of four.
-Legacy decomposition is only a lossless projection.
-It is never live workflow state.
-Follow [`decomposer.md`](../cheese/references/decomposer.md) for sizing and decomposition.
 
 Before orchestration, read [`references/fan-pathway.md`](references/fan-pathway.md).
 It defines sizing, topology, phase execution, recovery, resume, Milknado integration, worktree teardown, and resolution provenance.

@@ -53,7 +53,8 @@ Every finding carries these fields:
 | `fix-cost-now` | `contained / moderate / sprawling` | bucketed from blast-radius count |
 | `fix-cost-later` | `contained / spreading / structural` | reviewer-classified |
 | `confidence` | `certain / speculating` | reviewer-assigned per the voice-kernel scale (`voice.md`); `don't know` findings are never emitted |
-| `recommendation` | one-line action | reviewer |
+| `recommendation` | one-line action; `/cure` implements it as the locked fix decision | reviewer |
+| `invariants` | optional `must-hold: <X>; must-not: <Y>`; add on `blocker` / `high` when the fix could break a neighbour | reviewer |
 
 ## Location classification
 
@@ -82,7 +83,6 @@ Apply the `contract` bump only to dimensions where boundary position changes fin
 | nih | yes | Reinvented primitives that cross the boundary cause more harm than internal helpers |
 | efficiency | yes | A public handler on a hot path shows the typical blocker shape |
 | telemetry | yes | A boundary outbound call with silent failure forms the canonical blocker |
-
 | conventions | no | An explicit rule remains independently evidenced wherever it occurs; boundary position does not change the convention claim |
 | altitude | no | Placement quality is graded from its symptom and concrete cost, not from API location alone |
 
@@ -454,10 +454,10 @@ Boundaries: § Dimension boundaries owns every ownership rule. Read that table b
 Recommendation shape: "Move `<behavior>` to `<owner>` after confirming the approved placement" / "Inline `<wrapper>` beside `<caller>` and record the placement decision" / "Keep `<boundary>` and record why its concrete cost is accepted".
 
 This table is the single ownership rule for the whole file.
-It decides the primary dimension when two dimensions tag the same `path:line`.
+It decides the primary dimension when dimensions identify the same underlying defect.
 Each per-dimension `Boundaries:` line points here and states no rule of its own.
-The grader deduplicates by `file:line` in the report.
-The grader keeps the higher-base finding and names the secondary dimension.
+The grader reconciles by the underlying defect or design problem, not by location alone.
+Keep distinct problems at the same location separate, and name secondary dimensions for one overlapping problem.
 
 Look for one primary dimension per finding. Use this table to choose the primary when dimensions overlap.
 
@@ -480,7 +480,6 @@ Look for one primary dimension per finding. Use this table to choose the primary
 | spec / correctness | Emit both with a cross-reference. Spec records the broken contract commitment. Correctness records the runtime risk. The dimensions remain orthogonal. |
 | assertions / telemetry | Tests that assert on log strings belong to telemetry. |
 | complexity / efficiency | Complexity owns the structural cache decision. Efficiency owns the runtime cost of redundant work. |
-
 | conventions / spec | Use `conventions` when an explicit rule/source is violated. Use `spec` when a requested behavior or acceptance commitment is missing or contradicted. Emit both only when both claims have independent evidence. |
 | conventions / deslop | Use `conventions` for an exact documented rule with source and correction. Use `deslop` for generic AI residue, duplication, or dead code without a governing rule. |
 | conventions / assertions | Use `assertions` for a weak test contract. Use `conventions` only when an explicit test convention is the independently evidenced violation. |

@@ -28,9 +28,7 @@ The canonical format is in `references/selection.md#handoff-from-age`.
 Otherwise, apply the recommended composite from `references/selection.md`.
 That file also defines the selection gate conditions.
 
-Older Age reports can omit finding fields or `confidence`.
-Read `references/selection.md` § Older report shape before you select from these reports.
-Do not reject a report because it lacks these fields.
+For an older report that omits finding fields, read `references/selection.md` § Older report shape.
 
 Optional flags:
 
@@ -39,15 +37,12 @@ Optional flags:
 - `--auto` — Use automatic mode from `/cook --auto`.
   Skip user selection.
   Require `--stake <floor>`.
-  `/cook --auto` always passes `medium+`.
 - `--stake <floor>` — Set the severity floor for `--auto`.
   Accept `blocker`, `high`, `medium+`, or `all`.
   Ignore this flag without `--auto`.
 - `--hard` — Pass the metacognitive gate flag to `/plate`.
 
 Read `references/selection.md` for selection rules.
-Read `## Auto mode` for the pass cap and revert behavior.
-Read `## --hard mode` for the metacognitive gate.
 
 Read [`harness-portability.md`](../cheese/references/harness-portability.md) for portability rules.
 Slash commands are host renderings, not the control model.
@@ -73,7 +68,9 @@ Slash commands are host renderings, not the control model.
    ```
 
    Use the same bundle command when the host only ships the bundle.
+   Render the coder brief per `references/selection.md` § Coder brief.
 3. **Apply.** Fix one logical group at a time.
+   Implement each `recommendation:` as the locked decision; rebut only under `### Deferred`.
    Confirm each anchor with a fresh bounded read.
    The report path stops here and continues at step 4.
    The typed path also invokes `easy_cheese.shared.workflow.cure` with the validated plan.
@@ -97,6 +94,7 @@ Slash commands are host renderings, not the control model.
    Resolve the read-only `reviewer (taste-test)` phase agent through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
    Request `default` minimum power and `medium` effort.
    Use the Cook review lenses over the cure diff.
+   Reuse the step-2 rendered brief verbatim as the taste test's locked-decision block.
    Halt when fresh-context isolation is unavailable.
    Use an inline self-check only under the small-diff cost gate in [`tdd-loop.md`](../cook/references/tdd-loop.md).
    Skip this step for formatting, comments, imports, and logic-free renames.

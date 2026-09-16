@@ -45,7 +45,7 @@ Scoper: deleted everywhere.
 
 Leverage is the routing axis for design ceremony. Ambiguity and scope size pick the artifact; leverage picks whether the user steers. Any fired trigger routes the ask to `/mold`'s full ceremony, requires strong review, and lowers mold's specification threshold. Zero fired triggers keep the ask on the cook fast-path or the tier-1 mini-spec. Evaluate the table at classification time from the ask and the code it names, before any diff exists. Record fired ids in the spec's `leverage:` frontmatter list.
 
-| id | Fires when | `/age` promotes |
+| id | Fires when | `/age` finding focus |
 | --- | --- | --- |
 | `auth` | auth, secrets, crypto, or tenant isolation changes | security |
 | `irreversible` | payments, ledgers, or any effect that cannot be rolled back | correctness |
@@ -56,7 +56,12 @@ Leverage is the routing axis for design ceremony. Ambiguity and scope size pick 
 | `cross-slice-dep` | a new import between slices, or a slice reaching into another's internals | encapsulation |
 | `invariant-gap` | the change touches a named global invariant (uniqueness, balance, ordering, tenancy) that no integration test exercises | assertions |
 
-The list is closed. A routine internal choice that fires no trigger is the agent's to make and log as `[AGENT-DECIDED]`. The `/age` column is the crosswalk to `age_route.OVERRIDE_FLAGS`: the first five ids are the flag families the diff grep already emits; the last three reach the router only through the spec's `leverage:` list, per `../../age/references/fan-out.md`.
+The list is closed. The agent makes and records routine internal choices that fire no trigger as `[AGENT-DECIDED]`.
+The table names finding dimensions, not worker assignments.
+Preserve every fired trigger in the review context.
+Map supported triggers to evidence-bearing risks through `age_route.RISK_MAPPINGS`, which selects investigation subjects.
+Keep triggers without a direct mapping as evidence, as `../../age/references/fan-out.md` requires.
+The coordinator interprets scoped evidence; the planner does not inspect diffs or infer risks from tokens.
 
 ## Cross-cutting contracts
 

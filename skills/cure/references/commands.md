@@ -4,7 +4,7 @@
 
 | Command | Purpose |
 | --- | --- |
-| `findings` | Render an /age report's selection table and resolve selection verbs |
+| `findings` | Render an /age report's selection table or coder brief and resolve selection verbs |
 | `gates` | Map a quality-gate scoreboard's booleans to a readiness verdict |
 | `handoff` | Render, parse, and dispatch-split handoff preambles |
 | `paths` | Slugify, validate, resolve, and list .cheese artifact paths |

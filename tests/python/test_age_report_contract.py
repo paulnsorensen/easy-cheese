@@ -44,6 +44,7 @@ def test_the_published_finding_template_parses_into_one_finding() -> None:
     assert finding.fix_cost_later == "spreading"
     assert finding.confidence == "certain"
     assert finding.recommendation == "reset `delay` at the top of the loop."
+    assert finding.invariants == "must-hold: <X>; must-not: <Y>"
 
 
 def test_the_worked_report_preserves_finding_identity() -> None:
@@ -59,3 +60,9 @@ def test_the_worked_report_preserves_finding_identity() -> None:
         ("deslop", "low", "src/utils/format.ts:18"),
         ("altitude", "low", "src/utils/format.ts:24"),
     ]
+
+    blocker = next(f for f in findings if f.severity == "blocker")
+    assert blocker.invariants == (
+        "must-hold: `User` stays the only exported user type; "
+        "must-not: touch the ORM mapping under `infra/`"
+    )

@@ -92,21 +92,7 @@ def _assignment(plan: dict[str, object], assignment_id: str) -> dict[str, object
 
 
 class TestPublicContract:
-    def test_dimensions_and_subjects_are_complete_and_ordered(self) -> None:
-        assert age_route.DIMENSIONS == (
-            "correctness",
-            "security",
-            "encapsulation",
-            "spec",
-            "complexity",
-            "deslop",
-            "assertions",
-            "nih",
-            "efficiency",
-            "telemetry",
-            "conventions",
-            "altitude",
-        )
+    def test_subjects_are_complete_and_ordered(self) -> None:
         assert age_route.SUBJECTS == (
             "changed-behavior",
             "removed-behavior",
@@ -313,6 +299,28 @@ class TestRiskAndAffinagePolicy:
 
 
 class TestCapabilitiesAndVerification:
+    def test_empty_degraded_plan_is_checkable_without_losing_desired_work(self) -> None:
+        plan = _route(
+            effort="quick",
+            is_subagent=True,
+            applicability={subject: "no" for subject in age_route.SUBJECTS},
+        )
+        result = age_route.check_execution(plan=plan, observations=None)
+        assert result["status"] == "unobserved"
+        assert result["planned_assignment_ids"] == []
+
+        missing_work = _route(is_subagent=True)
+        missing_work["assignments"] = []
+        missing_work["n"] = 0
+        missing_work["dispatch_batches"] = []
+        with pytest.raises(ValueError, match="preserve every desired subject"):
+            _ = age_route.check_execution(plan=missing_work, observations=None)
+
+    def test_initial_plan_does_not_invent_candidate_findings(self) -> None:
+        plan = _route()
+        verification = cast(dict[str, object], plan["verification"])
+        assert verification["candidate_batches"] == []
+
     def test_unavailable_fanout_reports_desired_and_combined_plans(self) -> None:
         plan = _route(can_fan_out=False, effort="normal")
         assert plan["degraded_reason"] == "agent fan-out unavailable"
@@ -439,6 +447,12 @@ class TestInputValidation:
 
 
 class TestContractBoundaries:
+    def test_unknown_ci_class_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="ci_class"):
+            _ = age_route.route(
+                context=_context(), entry="affinage", ci_class="fialing"
+            )
+
     def test_active_subject_requires_nonempty_targets(self) -> None:
         context = _context()
         subjects = cast(list[dict[str, object]], context["subjects"])

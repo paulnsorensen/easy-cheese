@@ -26,8 +26,8 @@ Show advisory `stale-commit` and `grounded-path-missing` findings.
 ## Inputs
 
 ```text
-/age [<ref-or-range>] [--scope <path>]... [--slug <slug>] [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
-/age <slug> [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
+/age [<ref-or-range>] [--scope <path>]... [--slug <slug>] [--effort quick|normal|deep] [--overall] [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
+/age <slug> [--effort quick|normal|deep] [--overall] [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
 ```
 
 Repeat `--scope <path>` for each reviewed path.
@@ -235,6 +235,7 @@ Treat an empty dimension as a valid outcome, not a gap to fill.
 Keep confidence qualitative (`certain | speculating | don't know`) in the report and each finding.
 Never use a numeric score.
 Give each finding a location and recommendation.
+Write `recommendation:` and optional `invariants:` per `references/report-example.md`.
 Do not add JSON sidecars or tag-anchored fix payloads.
 `/cure` reads the markdown directly.
 Apply `references/voice.md` (output discipline, reasoning posture, confidence vocabulary).
@@ -243,7 +244,7 @@ Apply `references/voice.md` (output discipline, reasoning posture, confidence vo
 
 - Read the generated command inventory in [`references/commands.md`](references/commands.md).
 - Read `references/dimensions.md` before grading a finding.
-- Read `references/fan-out.md` before an `n>1` dispatch.
+- Read `references/fan-out.md` before every review.
 - Read `references/packet.md` before assembling a fan-out context packet.
 - Read `references/sub-agent-gate.md` before a sub-agent dispatch.
 - Read `references/handoff-detail.md` before the selection gate or a `/cure` dispatch.

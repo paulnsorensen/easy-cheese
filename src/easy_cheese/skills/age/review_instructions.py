@@ -30,6 +30,7 @@ from pathlib import Path, PurePosixPath
 from typing import Literal, NoReturn, cast
 
 from easy_cheese.shared.manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
+from easy_cheese_schemas.validate import require_exact_keys
 
 RULE_FILENAMES: tuple[str, ...] = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md")
 
@@ -375,7 +376,6 @@ def _record(
         "kind": kind,
         "scope": scope,
         "scope_kind": scope_kind,
-        "applies_to": scope,
         "authority": "candidate",
         "provenance": provenance,
         "content_hash": digest,
@@ -616,12 +616,7 @@ def render_text(result: Mapping[str, object]) -> str:
 
 def _request(payload: Mapping[str, object]) -> dict[str, object]:
     required = {"repo_root", "scope", "changed_paths", "external_sources"}
-    missing = sorted(required.difference(payload))
-    if missing:
-        _fail(f"request missing required keys: {', '.join(missing)}")
-    unknown = sorted(set(payload).difference(required))
-    if unknown:
-        _fail(f"request has unknown keys: {', '.join(unknown)}")
+    require_exact_keys(payload, required, "request", error=InstructionCollectionError)
     return collect_instructions(
         cast(str | os.PathLike[str], payload["repo_root"]),
         scope=cast(Scope, payload["scope"]),

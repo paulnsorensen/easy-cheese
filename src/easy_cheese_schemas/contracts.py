@@ -313,14 +313,6 @@ def _identifier(_instance: object, attribute: _NamedAttribute, value: object) ->
         )
 
 
-@schema_constraints(_constraints_of(_identifier))
-def _optional_identifier(
-    instance: object, attribute: _NamedAttribute, value: object
-) -> None:
-    if value is not None:
-        _identifier(instance, attribute, value)
-
-
 @schema_constraints(pattern=_DIGEST_RE.pattern)
 def _digest(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _DIGEST_RE.fullmatch(value) is None:
@@ -1854,14 +1846,6 @@ class PhaseContract:
         }
         if len(routes) != len(self.outputs):
             raise ValueError("outputs must not contain duplicate routes")
-
-
-@define(frozen=True)
-class UnsupportedProjection:
-    target: str = field(validator=_identifier)
-    curd_id: str | None = field(validator=_optional_identifier)
-    field: str = field(validator=_identifier)
-    reason: str = _attrs_field(validator=_bounded_string)
 
 
 @define(frozen=True)
@@ -3873,7 +3857,6 @@ __all__ = [
     "TestContractRow",
     "UiSurface",
     "UncertaintyScope",
-    "UnsupportedProjection",
     "WorkClass",
     "WriterPayload",
     "WriterViewKind",

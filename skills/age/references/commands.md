@@ -6,7 +6,7 @@
 | --- | --- |
 | `age-route` | Plan scoped review subjects from evidence-bearing context (JSON in, JSON out) |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
-| `findings` | Render an /age report's selection table and resolve selection verbs |
+| `findings` | Render an /age report's selection table or coder brief and resolve selection verbs |
 | `gates` | Map each quality-gate result to a readiness verdict |
 | `handoff` | Render, parse, and dispatch-split handoff preambles |
 | `html-report` | Render an /age markdown report into one offline HTML file |

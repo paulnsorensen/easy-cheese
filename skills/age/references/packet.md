@@ -15,7 +15,7 @@ Every review rebuilds its packet; there is no persistent cross-run cache.
 5. **Instruction sources** — Include review-instructions output with source identities, scope, hashes, and line citations. Distinguish collected candidates from host-supplied active instructions. Report unresolved authority or unavailable sources explicitly.
 6. **Context and plan** — Include subject applicability, risk evidence, policy version, input digest, assignments, capability restrictions, and dispatch batches. A zero workload weight never removes a path from relevance analysis.
 7. **Rubrics and severity** — Give workers their subject procedures and primary dimension rubrics, plus location sensitivity, fix-cost-now, fix-cost-later, and severity computation. Link the other rubrics for findings outside the primary set.
-8. **Output and ownership** — Include the exact per-finding format, `also-relevant-to`, and the reconciliation contract below.
+8. **Output and ownership** — Include the exact per-finding format, `also-relevant-to`, applicable `invariants` from `report-example.md`, and the reconciliation contract below.
 
 ## Primary rubric map
 

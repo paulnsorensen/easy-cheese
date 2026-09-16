@@ -2,7 +2,7 @@
 
 This retained legacy-manifest template is consumed by `/cook`'s fan-path internals when they need the run-manifest decomposition. It is not a live `/ultracook` phase. Substitute `{spec_text}`, `{slug}`, and `{quality_gate}` before dispatch.
 
-> **Scope note:** this template produces the legacy manifest schema (`seed[]`/`curds[]` with `id`/`behavior`/`retry_count`, `wiring[]`), validated by `validate_manifest` — NOT the curd-block schema (`curds[]`/`waves[]`/`decomposer{}`) validated by `validate_curd_block`. Curd-block producers must use [`../../cheese/references/decomposer.md`](../../cheese/references/decomposer.md).
+> **Scope note:** this template produces the legacy manifest schema (`seed.items[]`/`curds[]` with `id`/`behavior`/`retry_count`, `wiring[]`), validated by `validate_manifest`.
 
 ````text
 You are the legacy-manifest decomposer sub-agent for /cook's fan-path run: {slug}

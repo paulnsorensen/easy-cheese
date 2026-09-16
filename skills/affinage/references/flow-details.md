@@ -30,7 +30,7 @@ Do not use the bare `HEAD` default because it scores only uncommitted changes.
 
 Build the evidence-bearing review context described in `../../age/references/fan-out.md`.
 Include all changed paths, even when their workload weight is zero.
-Use `entry="affinage"`, `comments=<unresolved-thread-count>`, and `ci_class=<"failing"|"red"|"flaky"|null>` alongside `context`.
+Use `entry="affinage"`, `comments=<unresolved-thread-count>`, and `ci_class=<"passing"|"failing"|"red"|"flaky"|null>` alongside `context`.
 The router preserves comment-count and CI workload escalation.
 Use normal review effort unless the user explicitly selects quick or deep.
 
