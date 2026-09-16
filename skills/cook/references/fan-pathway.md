@@ -77,7 +77,7 @@ Do not create a preflight helper.
    Validation is the preflight.
    Complete validation before the first Cook writer, reviewer, or diagnosis dispatch.
 
-   Read a `.curd-plan.json` artifact through `easy_cheese_schemas.load_curd_plan`.
+   Read a `.curd-plan.json` artifact through `easy_cheese_schemas.schema_runtime.load_curd_plan`.
    `load_curd_plan` accepts a decoded JSON mapping or raw JSON, structures it into a typed `CurdPlan`, and runs `validate_curd_plan` on that value.
    `load_curd_plan` rejects YAML or Markdown frontmatter as the wrong artifact format.
    Never pass a decoded JSON mapping straight to `validate_curd_plan`.
