@@ -6,6 +6,9 @@ Record one named probe outcome in the ledger for every probe. The outcome is `hi
 
 The `grounding-recorded` coherence gate blocks the first structured question until the ledger carries a probe outcome. The outcome carries citations, or it names the reason for the absence. Keep the degrade path cheap and visible.
 
+Do not map the topic outcomes to `domain-model-target` arguments.
+Use the domain-model probe transport in [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
+
 ## Probe shape
 
 The probe mirrors the wiki probe pattern in the detect-and-degrade contract. See [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
@@ -32,7 +35,8 @@ ground_wiki(topic, repo_name, session_corpus):
   return results
 ```
 
-- Derive `repo_name` from the current checkout. Use the repository directory name that the host reports.
+- Derive `repo_name` from the configured origin remote.
+  Use the host-reported repository root name only when no origin exists.
 - Match the corpus name exactly. Never select the first `repo:*:wiki` entry. A different repository's wiki carries another project's private rationale.
 - Record `unavailable` when zero corpora match. Record `unavailable` when more than one corpus matches. Never guess between two candidates.
 - Never block the dialogue on the probe. An `unavailable` outcome satisfies the gate.

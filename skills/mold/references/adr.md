@@ -36,7 +36,7 @@ never hardcoded — there is no `easy-cheese:wiki` baked into a runtime path.
 adr_target():
   # 1. Probe for a hallouminate wiki at the CONSUMER's root repo.
   #    Shape-match the corpus, never exact-match a placeholder — the repo name is
-  #    dynamic (matches grounding.md and paths.py's domain_model_target()).
+  #    dynamic (the bundle command uses the same shape-match).
   corpus = first(c for c in hallouminate.list_corpora()
                  if c.startswith("repo:") and c.endswith(":wiki"))   # dynamic; their repo, not ours
   if corpus:

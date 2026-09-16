@@ -6,6 +6,7 @@
 | --- | --- |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
 | `curd-count` | Count candidate curds in a spec and recommend the next skill |
+| `domain-model-target` | Resolve the domain-model store from explicit Hallouminate probe results |
 | `gate-graph` | Render the gate state machine as dot, svg, png, or mermaid |
 | `migrate` | Migrate a legacy artifact and emit its handoff pointer as canonical JSON |
 | `publish` | Publish a curd plan and emit its handoff pointer as canonical JSON |
