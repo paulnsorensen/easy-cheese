@@ -31,6 +31,13 @@
 - [mold-follow-up-routing-002](./mold-follow-up-routing-002.md) — ADR: route follow-ups per deliverable unit instead of choosing one backlog
 - [mold-follow-up-routing-003](./mold-follow-up-routing-003.md) — ADR: publish follow-ups after the local Curdle write
 - [mold-follow-up-routing-004](./mold-follow-up-routing-004.md) — ADR: external follow-up publication uses deterministic identity
+- [mold-review-canvas-001](./mold-review-canvas-001.md) — ADR: Browser choices preserve Mold authority
+- [mold-review-canvas-002](./mold-review-canvas-002.md) — ADR: Bundle the review server and assets in mold.pyz
+- [mold-review-canvas-003](./mold-review-canvas-003.md) — ADR: Embed upstream Excalidraw and retain Mermaid source
+- [mold-review-canvas-004](./mold-review-canvas-004.md) — ADR: Use browser layouts for frontend TUI and backend reviews
+- [mold-review-canvas-005](./mold-review-canvas-005.md) — ADR: Submit snapshots and preserve revision-bound working feedback
+- [mold-review-canvas-006](./mold-review-canvas-006.md) — ADR: Review artifacts without executing supplied programs
+- [mold-review-canvas-007](./mold-review-canvas-007.md) — ADR: Keep the local review transport bounded
 - [outer-tdd-gates-001](./outer-tdd-gates-001.md) — ADR: Hybrid outside-in RED evidence uses a phase-neutral receipt
 - [outer-tdd-gates-002](./outer-tdd-gates-002.md) — ADR: Cut owns pre-implementation RED establishment
 - [outer-tdd-gates-003](./outer-tdd-gates-003.md) — ADR: Press retains ownership of bounded corrective Cook continuations

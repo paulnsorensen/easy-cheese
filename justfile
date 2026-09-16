@@ -28,10 +28,16 @@ test:
     {{python}} -m pytest tests/pasteurize/python -q -p xdist -n auto
     {{python}} -m pytest tests/wheypoint/python -q -p xdist -n auto
     node --test 'tests/js/**/*.test.mjs'
+    just test-mold-review
     bats tests/bash/test_install.bats
     uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
     just test-skill-overlap
 
+
+# Build and exercise the development-only Mold review browser harness
+test-mold-review:
+    corepack pnpm run mold-review:build
+    corepack pnpm run mold-review:test
 # Run model-free overlap analyzer tests (never fetches model artifacts)
 test-skill-overlap:
     cargo test --manifest-path tools/skill-overlap/Cargo.toml

@@ -37,7 +37,7 @@ Every non-goal and explicit dialogue deferral becomes a `[FOLLOW-UP?]` follow-up
 | Grill | A favoured approach needs stress-testing | Steelman each item, then put every design-changing call to the user as a fork |
 | Diagnose | A symptom, failure, or trace is supplied | Build a Loop → reproduce → hypothesize → confirm root cause |
 
-Mode definitions, exit criteria, and user knobs: `references/modes.md`. Trigger and trace evals, including Grill user-fork checks: `references/evals.md`.
+Modes: references/modes.md. Evals: references/evals.md. Canvas: [review-canvas.md](references/review-canvas.md).
 
 ## Agent-invoked mini-spec mode
 
