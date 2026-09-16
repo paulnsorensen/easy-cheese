@@ -1,6 +1,12 @@
 # ADR-004 — Curd blocks declare a size estimate; the validator gates it
 
 **Status:** accepted · **Spec:** `deterministic-fanout-sizing`
+**Current qualification (2026-09):** Historical, not the current validation contract.
+PR #672 removes the Curd-block parser and its `MIN_CURD_SURFACE` gate.
+The rationale below records that former design; it does not require an active edit-estimate gate.
+See [fanout-engine-entities](../fanout-engine-entities.md) for current schema-backed decomposition ownership.
+Age assignments use the actual review-surface score and contextual subject policy.
+See [age-fanout-router](../architecture/age-fanout-router.md).
 
 ## Context
 

@@ -113,6 +113,10 @@ Follow the no-chain isolation directive:
   Dispatch each parallel work unit as a top-level fresh-context reviewer.
   Dispatch the post-merge review the same way.
   Never dispatch either one as a nested inline self-review.
+  Record the plan identity and observed `dispatched: <n> workers, one message: <true|false>` under `## Agent resolution`.
+  Use zero and false for inline or sub-agent execution; never substitute the planned worker count.
+  Missing host observations remain unobserved; self-reported observations remain unverified.
+  A sub-agent records `verifier: skipped (sub-agent)` separately.
 
 ## Auto mode
 

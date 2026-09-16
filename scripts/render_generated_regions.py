@@ -5,8 +5,8 @@ shapes (both declared on the attrs models in
 ``src/easy_cheese_schemas/contracts.py``) into compact, BAML-inspired type
 blocks (Python type syntax), joins the phase registry with the schema catalog and the
 registered contract models into ``skills/cheese/references/schema-intertwine.md``,
-and projects each Python-backed skill's static ``COMMANDS`` manifest into
-``skills/<skill>/references/commands.md``.
+and projects each Python-backed bundle's static `COMMANDS` manifest into
+``skills/<bundle>/references/commands.md``.
 
 Running with no arguments refreshes every generated region in place. Pass
 ``--check`` to fail (exit 1) instead of writing, for CI drift detection.
@@ -26,13 +26,19 @@ from typing import TYPE_CHECKING, ClassVar, Protocol, TypedDict, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-for _extra in (REPO_ROOT / "vendor", REPO_ROOT / "src"):
+for _extra in (
+    REPO_ROOT,
+    REPO_ROOT / "scripts",
+    REPO_ROOT / "vendor",
+    REPO_ROOT / "src",
+):
     _path = str(_extra)
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
 import attrs  # noqa: E402
 
+import build_pyz  # noqa: E402
 from easy_cheese.shared.bundle_commands import Command, command_map  # noqa: E402
 from easy_cheese_schemas import contracts  # noqa: E402
 from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
@@ -65,15 +71,12 @@ class _Phase(TypedDict):
 
 CURDLE_PATH = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
 WRITER_VIEWS_PATH = REPO_ROOT / "skills" / "cook" / "references" / "writer-views.md"
-INTERTWINE_PATH = REPO_ROOT / "skills" / "cheese" / "references" / "schema-intertwine.md"
-
-# Same discovery rule as ``scripts/build_pyz.SKILLS``: a skill ships a bundle
-# exactly when it declares a static command manifest. Kept local so the doc
-# projection does not import the bundle builder; a test pins the two equal.
-MANIFEST_ROOT = REPO_ROOT / "src" / "easy_cheese" / "skills"
-SKILL_SLUGS = tuple(
-    sorted(path.parent.name.replace("_", "-") for path in MANIFEST_ROOT.glob("*/commands.py"))
+INTERTWINE_PATH = (
+    REPO_ROOT / "skills" / "cheese" / "references" / "schema-intertwine.md"
 )
+
+# Keep the command inventory aligned with the bundle builder instead of maintaining a second discovery rule here.
+SKILL_SLUGS = build_pyz.SKILLS
 
 MOLD_SPEC_TAG = "mold-spec-schema"
 WRITER_VIEWS_TAG = "cook-writer-views"
@@ -96,7 +99,9 @@ def replace_region(text: str, tag: str, body: str) -> str:
     replacement = f"{BEGIN_PREFIX}{tag} -->\n{body}{END_MARKER}"
     new_text, count = _region_pattern(tag).subn(lambda _m: replacement, text)
     if count != 1:
-        raise ValueError(f"expected exactly one {tag!r} generated region, found {count}")
+        raise ValueError(
+            f"expected exactly one {tag!r} generated region, found {count}"
+        )
     return new_text
 
 
@@ -244,7 +249,9 @@ def _slug_from_uri(uri: str) -> str:
 
 
 def render_schema_intertwine() -> str:
-    contract_slugs = {slug: cls.__name__ for slug, cls in contracts.registered_contracts()}
+    contract_slugs = {
+        slug: cls.__name__ for slug, cls in contracts.registered_contracts()
+    }
     phases = cast(list[_Phase], COMPILED_TRANSITION_REGISTRY.to_data())
     catalog_slugs = sorted(
         _slug_from_uri(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS
@@ -268,14 +275,20 @@ def render_schema_intertwine() -> str:
     ]
     for phase in phases:
         source = phase["source"]
-        version = f'{phase["contract_version"]["major"]}.{phase["contract_version"]["minor"]}'
-        inputs = ", ".join(sorted(_slug_from_uri(uri) for uri in phase["input_schema_uris"]))
-        outputs = sorted(phase["outputs"], key=lambda o: (o["destination"], o["payload_schema_uri"]))
+        version = (
+            f"{phase['contract_version']['major']}.{phase['contract_version']['minor']}"
+        )
+        inputs = ", ".join(
+            sorted(_slug_from_uri(uri) for uri in phase["input_schema_uris"])
+        )
+        outputs = sorted(
+            phase["outputs"], key=lambda o: (o["destination"], o["payload_schema_uri"])
+        )
         for output in outputs:
             slug = _slug_from_uri(output["payload_schema_uri"])
             contract_cls = contract_slugs.get(slug, "—")
             lines.append(
-                f'| {source} | {version} | {inputs} | {output["destination"]} | {slug} | {contract_cls} |'
+                f"| {source} | {version} | {inputs} | {output['destination']} | {slug} | {contract_cls} |"
             )
     lines.append("")
     lines.append("## Registered schema catalog")
@@ -291,12 +304,13 @@ def render_schema_intertwine() -> str:
         output_phases = sorted(
             phase["source"]
             for phase in phases
-            if slug in (_slug_from_uri(o["payload_schema_uri"]) for o in phase["outputs"])
+            if slug
+            in (_slug_from_uri(o["payload_schema_uri"]) for o in phase["outputs"])
         )
         contract_cls = contract_slugs.get(slug, "—")
         lines.append(
-            f'| {slug} | {contract_cls} | {", ".join(input_phases) or "—"} |'
-            + f' {", ".join(output_phases) or "—"} |'
+            f"| {slug} | {contract_cls} | {', '.join(input_phases) or '—'} |"
+            + f" {', '.join(output_phases) or '—'} |"
         )
     lines.append("")
     return "\n".join(lines)
@@ -307,26 +321,30 @@ def commands_doc_path(slug: str) -> Path:
 
 
 def skill_commands(slug: str) -> tuple[Command, ...]:
-    """Import one skill's static manifest without resolving its command targets."""
+    """Import one bundle's static manifest without resolving its command targets."""
     package = slug.replace("-", "_")
     module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
     return cast("tuple[Command, ...]", module.COMMANDS)
 
 
 def render_skill_commands(slug: str) -> str:
-    """Render one skill's canonical command inventory from its static manifest."""
+    """Render one bundle's canonical command inventory from its static manifest."""
     package = slug.replace("-", "_")
+    title = f"# `/{slug}` bundle commands"
+    context = ""
+    examples = " Keep worked examples in the skill instructions."
     lines = [
-        f"# `/{slug}` bundle commands",
+        title,
         "",
         (
             "`scripts/render_generated_regions.py` generates this file from the static"
-            f" `COMMANDS` manifest in `src/easy_cheese/skills/{package}/commands.py`."
-            " Do not edit this file."
-            f" Run each command as `python3 skills/{slug}/scripts/{slug}.pyz <command>"
-            " [args...]`. Each command returns an integer exit status."
-            " Pass `--help` to a command for its arguments and output format."
-            " Keep worked examples in the skill instructions."
+            + f" `COMMANDS` manifest in `src/easy_cheese/skills/{package}/commands.py`."
+            + context
+            + " Do not edit this file."
+            + f" Run each command as `python3 skills/{slug}/scripts/{slug}.pyz <command>"
+            + " [args...]`. Each command returns an integer exit status."
+            + " Pass `--help` to a command for its arguments and output format."
+            + examples
         ),
         "",
         "| Command | Purpose |",
@@ -351,12 +369,16 @@ def refresh(check: bool) -> bool:
     Returns True when every surface is already up to date.
     """
     updates = {
-        CURDLE_PATH: _refreshed_region_file(CURDLE_PATH, MOLD_SPEC_TAG, render_mold_spec_region()),
+        CURDLE_PATH: _refreshed_region_file(
+            CURDLE_PATH, MOLD_SPEC_TAG, render_mold_spec_region()
+        ),
         WRITER_VIEWS_PATH: _refreshed_region_file(
             WRITER_VIEWS_PATH, WRITER_VIEWS_TAG, render_writer_views_region()
         ),
         INTERTWINE_PATH: render_schema_intertwine(),
-        **{commands_doc_path(slug): render_skill_commands(slug) for slug in SKILL_SLUGS},
+        **{
+            commands_doc_path(slug): render_skill_commands(slug) for slug in SKILL_SLUGS
+        },
     }
 
     clean = True

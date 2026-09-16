@@ -1,123 +1,149 @@
-# Router call and lens fan-out mechanics
+# Contextual review planning and subject fan-out
 
-Read this before any `n>1` dispatch from `SKILL.md § Flow` step 1 / `§ Sub-agent fan-out`.
+Read this before every review, including a single-worker or sub-agent review.
+Subjects define investigations; dimensions classify findings.
+The coordinator interprets evidence; the versioned router determines assignments.
 
-## Router call
+## Context input
 
-Compute the review range's `review_surface` score with `python3 skills/age/scripts/age.pyz review-surface --repo . <base>...HEAD`.
-The range must be the diff under review.
-Use `<base>...HEAD` for an already-committed branch.
-Use the bare working diff otherwise.
-Never rely on the CLI's bare default.
-It scores the working tree against `HEAD` and silently zeroes an already-committed branch.
-Grep added lines outside `skills/**` and `.hallouminate/**` for the bundled age router's risk flags to populate `risk_flags`.
-Scope this search so a diff that only documents the override vocabulary does not trip its own tokens.
-A missed token means no promoted lens, not a missing security lens.
-Treat each hit as a hint, not a guarantee.
-When the review has a spec, also read its `leverage:` frontmatter list and add the flag each fired id promotes, per the `/age` column in `../../cheese/references/routing-policy.md` § Leverage triggers (`new-slice` and `cross-slice-dep` add `public-api-change`; `invariant-gap` adds `weak-integration-coverage`).
-Then call:
+Score the actual review range with `python3 skills/age/scripts/age.pyz review-surface --repo . <base>...HEAD`.
+Use the explicit committed range, or the working diff when that is the review target.
+The bare default scores the working tree against HEAD; it does not measure a committed branch.
+Keep every changed path in context, including paths with zero workload weight.
+A score measures workload, not security relevance.
+When a specification exists, read its `leverage:` frontmatter list.
+Preserve every fired trigger in subject evidence.
+Map applicable triggers to supported risk flags; retain triggers without a direct flag mapping as evidence.
 
-```python
-from easy_cheese.shared.fanout.age_route import route
+Collect instruction sources with `python3 skills/age/scripts/age.pyz review-instructions <request.json>`.
+Its request contains `repo_root`, `scope`, `changed_paths`, and `external_sources`.
+Each explicit external source contains `path` and repository-relative `applies_to` scopes.
+Use `--text` for readable output; JSON is the default.
+JSON preserves exact source content; `--text` adds line numbers without repeating that content.
+Do not search home directories for presumed global instructions.
+Collected sources are candidate evidence, not authority to override the active host's instructions.
+Record unresolved applicability or precedence in the packet.
 
-route(score=<float>, risk_flags=[...], entry="age")
-```
+Build a request with `context` and `entry: "age"`.
+The context contains these fields:
 
-Put the repository `src` directory on `PYTHONPATH` before this import.
+| Field | Required meaning |
+| --- | --- |
+| `scope` | `diff` or `overall`; an explicit overall or system-wide review uses `overall` |
+| `effort` | `quick`, `normal`, or `deep`; default to `normal`, not an inferred size-based effort |
+| `snapshot` | Identity of the actual source and diff evidence, including uncommitted changes |
+| `changed_paths` | Repository-relative changed paths; never discard test, configuration, or lockfile paths through weighting |
+| `surface_score` | The finite, nonnegative score from review-surface |
+| `components` | Rows with `id`, `role`, and `paths`; roles are library, application, test, build, documentation, or other |
+| `subjects` | One row per subject with `subject`, `applicability`, `targets`, and `evidence` |
+| `risks` | Observed risk rows with `flag`, `state`, and `evidence`; an absent row is not proof of safety |
+| `is_subagent` | Whether this invocation runs inside another agent |
+| `can_fan_out` | Whether the active host can dispatch independent workers |
+| `concurrency_limit` | Known positive host limit, or null when the host exposes no limit |
 
-If the host only ships the bundle, `echo '{"score": <float>, "risk_flags": [...], "entry": "age"}' | python3 skills/age/scripts/age.pyz age-route` is the fallback (JSON on stdin, route JSON on stdout).
+Subject applicability and risk state use `yes`, `no`, or `unknown`.
+Every exclusion needs evidence; uncertainty remains assigned.
+Use actual component responsibilities, changed contracts, and caller relationships, not filename tokens alone.
+Documenting a security term is not evidence that a security boundary changed.
+Conversely, test or CI changes can affect credentials, authorization, or privileged execution.
+Do not launch a separate classifier agent to fill this record.
 
-## Lens fan-out mode (n>1)
+## Subject procedures
 
-The router activates this mode when `n>1` and `/age` is not itself a sub-agent.
-Dispatch one worker per **lens** in the router's returned `lenses` list, not per dimension.
-Dispatch exactly `len(lenses)` workers.
-The base tier is one value in `{1, 2, 5}`.
-The returned `n` equals the final lens count.
-An override promotion raises `n` above the base tier.
-A promoted `n=5` review can return `6` or `9`.
-Always use the returned `lenses` list, never the base tier.
-The base ladder uses these score bands before any override promotion:
+| Subject | Investigation |
+| --- | --- |
+| `changed-behavior` | Read hunks and enclosing functions; check inputs, state, timing, errors, language pitfalls, wrappers, and silent failure paths |
+| `removed-behavior` | Name what each removed protection enforced and locate its replacement; include guards, validation, error paths, tests, and invariants |
+| `caller-impact` | Trace changed preconditions, return shapes, exceptions, ordering, callers, and callees |
+| `security` | Inspect the relevant trust boundaries, permissions, secrets, hostile inputs, and dangerous operations |
+| `spec-tests` | Compare behavior with requirements and check whether tests defend that behavior |
+| `reuse` | Find existing mechanisms that new code duplicates |
+| `simplification` | Find unnecessary structure, special cases, indirection, and generated-code residue |
+| `efficiency` | Inspect costly paths, avoidable work, copying, allocation, I/O, and scaling |
+| `conventions` | Cite the applicable written rule, its source, violating code, and required correction |
+| `altitude` | Name the local symptom, responsible component, better placement, and concrete cost |
 
-- A score `<60` returns `n=1`.
-- A score from `60–250` returns `n=2`.
-- A score `>250` returns `n=5`.
-- A score `>900` selects high effort.
+A worker may emit several finding dimensions.
+Different subjects may expose the same problem.
+A convention or altitude finding needs concrete evidence, not a style preference.
+An altitude recommendation that contradicts an approved design identifies that decision; it is not permission for an automatic redesign.
 
-**Comprehension ceiling.** The score is a weighted review surface, not a line count: `sum(weight × lines) + 8 × sum(weight)` (`src/easy_cheese/shared/fanout/review_surface.py`). 400 code lines across ten files score 480; 400 prose lines score about 100.
-The router raises `n` above the ceiling, but it does not shrink what each worker reads.
-`SKILL.md § Output` owns the `coverage-degraded` flag that a score above 400 sets, in every width including forced single-parent runs.
+## Plan and effort
 
-The base ladder partitions lenses at `n>1`, before any override promotion:
+Run `python3 skills/age/scripts/age.pyz age-route <request.json>` and save its complete JSON as `.cheese/age/<slug>-plan.json`.
+The same canonical context and policy version produce the same plan.
+Semantic context can differ between independent runs; do not call that fully deterministic.
 
-- `n=2` — `[correctness, spec, assertions, security, telemetry]` / `[encapsulation, complexity, deslop, nih, efficiency]`.
-- `n=5` — the five cohesion-grouped lenses: `[correctness, spec, assertions]`; `[security, telemetry]`; `[encapsulation, complexity]`; `[deslop, nih]`; `[efficiency]`.
+Quick mode combines ordinary work and the two protected subjects.
+A mandatory risk adds its required specialist without upgrading unrelated assignments.
+Normal and deep modes reserve separate conventions and altitude reviewers.
+The remaining ordinary isolation allowances use the current weighted score bands:
 
-An override promotion (mechanics above) pulls its mapped dimension from the group that the base tier selected.
-It gives that dimension a solo lens.
-The group's remaining members stay together in one lens.
-Each grouping above serves thematic cohesion.
-At `n=5`, `encapsulation` never shares a lens with `efficiency` or `telemetry`.
+| Effort | Below 60 | 60 through 250 | Above 250 |
+| --- | --- | --- | --- |
+| Normal | 1 | Up to 2 | Up to 5 |
+| Deep | Up to 3 | Up to 5 | Full relevant subject separation |
 
-The seam sequence below stays identical for every `n>1`.
-Only worker count and each worker's assigned dimension set vary with `n`.
+These are allowances, not quotas.
+Mandatory specialists can exceed them; the plan records the reason.
+Overall review separates every subject rather than pruning from a diff.
+Sub-agent and unavailable-agent restrictions require explicit degraded output, never a claim of independent protected review.
+Use the returned assignments and dispatch batches; do not recreate a dimension ladder or infer effort from `n`.
+If new evidence changes the scope, rebuild context and obtain a new plan before additional dispatch.
+Do not refresh a production lock to hide changed source; restart the review when source evidence changes.
 
-**Seam 1 — Predicate.** Use the predicate defined at the section opener above.
+## Dispatch and shared evidence
 
-**Seam 2 — Shared context packet.** The orchestrator assembles the packet once and writes it to `.cheese/age/<slug>-packet.md`.
-Write the packet before the `review-lock` capture in `SKILL.md § Flow` step 1.
-The lock covers the packet, because the packet is review evidence.
-Each worker reads that packet.
-`packet.md` documents its eight components and the review-context digester that supplies the orientation block.
+Assemble `packet.md` once before the review lock.
+Give each worker its assignment and the packet's relevant evidence sections.
+Conventions and altitude retain the whole-change context; other workers receive scoped targets.
+Do not give a security specialist every test file merely because the review includes tests.
+Reuse the shared caller and dependency evidence instead of discovering it independently for every subject.
 
-**Seam 3 — Worker contract.** Use one worker per lens.
-Resolve the `reviewer` role through `../../cheese/references/agent-resolution.md` at the router's `effort` dial.
-Require read-only permissions and fresh context.
-Allow a prompt-constrained general fallback only with `degraded: true`.
-Each worker:
-- Reviews every dimension in its assigned lens. A solo-lens worker reviews one dimension. A multi-dimension lens worker reviews every dimension in its group. For example, the `[correctness, spec, assertions]` worker reviews all three.
-- Computes **full per-finding severity** for every dimension in its lens (base + location bump + compounding bump).
-- Tags each finding with its dimension. Adds an `also-relevant-to: [<dim>, ...]` field when a second dimension can own the same line. Includes a dimension that another lens owns.
-- Reports every defect it notices, however minor. It does not perform severity-conservative self-filtering. The verifier pass (Seam 6) and orchestrator reconciliation (Seam 4) filter findings.
-- Returns full per-finding rows in the exact `SKILL.md § Output` finding format. Each row keeps the list marker and the location backticks. This is not an orientation digest. An Age lens worker is the one exception that `sub-agent-gate.md § Digest contract` names, so the 2 KB ceiling does not apply to it.
-- Does **not** dedup, apply boundary tiebreakers, reconcile severity across dimensions or lenses, or write the report.
+Resolve read-only, fresh-context reviewers through `../../cheese/references/agent-resolution.md`.
+Pass each assignment's `effort`, not the requested review-mode name, to the host.
+Issue independent calls in the same message where the host permits it.
+Use background execution where available and respect the returned batches and actual host limits.
+Never serialize independent work merely by waiting for each result before issuing the next call.
+Workers do not spawn reviewers, reconcile results, apply fixes, or write the canonical report.
+They emit full finding rows and `also-relevant-to: [<dimension>, ...]` when another rubric may apply.
+Pass every candidate with a nameable failure scenario or concrete design cost through; the verifier filters.
 
-After all workers return, continue at Seam 4 (reconciliation) below.
+## Reconciliation and verification
 
-**Seam 4 — Orchestrator reconciliation.** After all workers return, apply the `## Dimension boundaries` table (`dimensions.md` § Dimension boundaries) verbatim.
-Apply it to a line that meets either condition:
-1. Two or more workers flag the same `file:line`.
-2. Any worker tags the line `also-relevant-to: [d]`.
-Re-evaluate dimension `d` against that line.
-Apply the tiebreaker.
-Keep the higher-base finding, suppress it, or emit both with a cross-reference, as the 15 rules require.
-This consumes the `also-relevant-to` signal.
-It provides the cross-dimension coverage that single-parent gets for free.
-Do not reconcile a line unless two or more workers flag it or a worker tags it `also-relevant-to`.
-Group findings by severity.
-The parent owns the canonical artifact.
-After reconciliation, continue at Seam 6 (verifier pass).
-Then continue at step 5 (write + print the report path) and `SKILL.md § Handoff` exactly as the single-parent path does.
+The coordinator reconciles by the underlying defect or design problem, not file-and-line equality alone.
+Use `dimensions.md`'s boundary rules for overlapping dimensions.
+A shared location can contain distinct problems; one problem can span several locations.
+Keep cross-references when separate findings remain justified.
 
-**Seam 5 — Shared impact evidence.** The packet carries the caller/dependency notes assembled through `tilth_deps` and the selected semantic caller search.
-Workers use that packet instead of rebuilding impact context independently.
+Once actual candidates exist, run a cheap verifier in batches of up to ten claims.
+Do not spawn an empty batch.
+The initial plan leaves `verification.candidate_batches` empty because no findings exist yet.
+After reconciliation, form nonempty batches from actual candidate findings, never from first-pass assignment IDs.
+Use the plan's explicit sub-agent or capability skip reason when verification cannot run independently.
+For each claim, return one result:
 
-**Seam 6 — Verifier pass.** After Seam 4 reconciliation produces the candidate findings list, use a cheap `verifier` role.
-Use the small model tier and `effort: low` from the Roles x tiers table.
-Check each reconciled finding against the evidence slice cited in its `recommendation` and location fields.
-Send the findings in batches of up to ten to one verifier call.
-Require one result object for each claim in the batch.
-Each result object carries the finding identifier, the verdict, and the reasoning.
-A verifier never merges two claims into one verdict.
-Each claim gets one of three verdicts:
-- **Confirm** — The cited evidence supports the claimed severity. Ship the finding unchanged.
-- **Downgrade or drop** — The evidence does not support the claimed severity or the claim itself. The verifier lowers the severity tier or drops the finding. The orchestrator records the original claim and the verifier's reasoning in the report's confidence trail.
-- **Escalate** — The cited evidence cannot settle the claim. Do not put an escalated claim in a findings section. `SKILL.md § Output` forbids a `don't know` finding row. List each escalated claim under `## Confidence` with the missing evidence. Promote it to a finding only after new evidence confirms it.
+- **Confirm**: the evidence supports the claim at its current severity.
+- **Downgrade-or-drop**: correct the severity or remove an unsupported claim; retain the reason in the confidence trail.
+- **Escalate**: identify missing evidence under `## Confidence`; do not emit an unsettled finding row.
 
-The verifier runs the "cheap severity-filter leg" from the Roles x tiers table whenever `n>1`.
-It does not run at `n=1`.
-The single-parent path has no reconciliation step to filter.
-The reviewer's own severity computation is the only grading pass.
+Normal and quick reviews have no gap sweep.
+Deep review runs a fresh sweep after verification, using the verified list to avoid rediscovery.
+The sweep looks for omissions, including dropped invariants, language pitfalls, wrapper errors, and setup/teardown asymmetry.
+Verify its new candidates before adding them to the report.
 
-**Output shape invariant.** The findings report (`.cheese/age/<slug>.md`) uses the same dedup, severity grouping, and finding format in the single-parent path and every lens fan-out width.
-Resolution provenance may expose the selected role and topology.
+## Output and dispatch observations
+
+Preserve the same finding format and severity grouping at every width.
+Record the plan path, policy version, input digest, planned assignments, and observed dispatch in `## Agent resolution`.
+Keep `dispatched: <n> workers, one message: <true|false>` for the observed first pass, not the planned count.
+Use zero and false when no workers were dispatched.
+Record `verifier: skipped (sub-agent)` separately when applicable.
+
+Run `python3 skills/age/scripts/age.pyz review-plan-check <request.json>` before writing the report.
+The request contains the full `plan` and `observations`.
+Observations contain `assignment_ids`, `one_message`, and `source` (`host` or `reported`).
+Use null observations when the host provides none; do not fabricate receipts.
+A consistency check cannot authenticate host events.
+Reported observations remain unverified, and unavailable observations remain explicitly unobserved.
+A mismatched assignment set requires reconciliation or a clearly incomplete review, not a success claim.

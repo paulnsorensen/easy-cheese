@@ -204,12 +204,26 @@ class ReviewDisposition(str, Enum):
     EXECUTOR_FAILURE = "executor_failure"
 
 
+class ReviewDimension(str, Enum):
+    CORRECTNESS = "correctness"
+    SECURITY = "security"
+    ENCAPSULATION = "encapsulation"
+    SPEC = "spec"
+    COMPLEXITY = "complexity"
+    DESLOP = "deslop"
+    ASSERTIONS = "assertions"
+    NIH = "nih"
+    EFFICIENCY = "efficiency"
+    TELEMETRY = "telemetry"
+    CONVENTIONS = "conventions"
+    ALTITUDE = "altitude"
+
+
 class ReviewSeverity(str, Enum):
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
-
 
 class CoverageDisposition(str, Enum):
     COVERED = "covered"
@@ -1307,6 +1321,9 @@ class ReviewCoverage:
 @define(frozen=True)
 class ReviewFinding:
     finding_id: str = field(validator=_identifier)
+    dimension: ReviewDimension = field(
+        validator=validators.instance_of(ReviewDimension)
+    )
     severity: ReviewSeverity = field(validator=validators.instance_of(ReviewSeverity))
     summary: str = field(validator=_bounded_string)
     evidence: tuple[EvidenceRef, ...] = field(
@@ -1965,6 +1982,9 @@ class PlannerResultWriterView:
 @define(frozen=True)
 class ReviewFindingWriterView:
     severity: ReviewSeverity = field(validator=validators.instance_of(ReviewSeverity))
+    dimension: ReviewDimension = field(
+        validator=validators.instance_of(ReviewDimension)
+    )
     summary: str = field(validator=_bounded_string)
     evidence_keys: tuple[str, ...] = field(
         converter=_tuple_sequence, validator=_identifier_list(non_empty=True)
@@ -3817,6 +3837,7 @@ __all__ = [
     "ReproductionWriterView",
     "ReviewCoverage",
     "ReviewDisposition",
+    "ReviewDimension",
     "ReviewFinding",
     "ReviewFindingWriterView",
     "ReviewRequest",

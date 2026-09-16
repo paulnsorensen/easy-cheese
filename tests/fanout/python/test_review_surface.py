@@ -5,27 +5,19 @@ Spec: deterministic-fanout-sizing.md ` ### 1. review_surface` and
 `## Validation evidence`. score = sum(weight * lines) + FILE_COST * sum(weight),
 first-match-wins glob weighting, default weight 1.0 for anything unmatched.
 """
+
 from __future__ import annotations
 
 import ast
-import json
 import sys
 from pathlib import Path
-from typing import TypedDict, cast
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 
-from easy_cheese.shared.fanout import age_route, review_surface  # noqa: E402
-
-FIXTURE_PATH = REPO_ROOT / "tests" / "fanout" / "python" / "fixtures" / "numstat_30_commits.json"
-
-
-class _CommitFixture(TypedDict):
-    sha: str
-    rows: list[tuple[str, int, int]]
+from easy_cheese.shared.fanout import review_surface  # noqa: E402
 
 
 class TestWeigh:
@@ -63,12 +55,8 @@ class TestScore:
         weighted_files = 0.0 + 0.25 + 1.0
         expected = weighted_lines + review_surface.FILE_COST * weighted_files
         assert result["score"] == pytest.approx(expected)
-        assert result["weighted_lines"] == pytest.approx(
-            weighted_lines
-        )
-        assert result["weighted_files"] == pytest.approx(
-            weighted_files
-        )
+        assert result["weighted_lines"] == pytest.approx(weighted_lines)
+        assert result["weighted_files"] == pytest.approx(weighted_files)
 
     def test_zeroed_contains_exactly_zero_weight_paths(self) -> None:
         rows = [
@@ -112,51 +100,15 @@ class TestScore:
         assert result["rows"] == 3
 
 
-class TestFrozenFixturePyramid:
-    """SPEC ACCEPTANCE 1: the frozen 30-commit numstat fixture reproduces the
-    measured 6 top / 4 mid / 8 low / 12 single pyramid at cut points
-    60/250/900.
-    """
-
-    def test_pyramid_matches_measured_distribution(self) -> None:
-        commits = cast(
-            list[_CommitFixture], json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
-        )
-        assert len(commits) == 30
-
-        n2_floor = age_route._SCORE_N2_FLOOR  # pyright: ignore[reportPrivateUsage]
-        n5_floor = age_route._SCORE_N5_FLOOR  # pyright: ignore[reportPrivateUsage]
-        high_effort = age_route._HIGH_EFFORT_SCORE  # pyright: ignore[reportPrivateUsage]
-
-        tiers = {"top": 0, "mid": 0, "low": 0, "single": 0}
-        for commit in commits:
-            result = review_surface.score(commit["rows"])
-            s = result["score"]
-            # age_route._tier_for_score routes `score < n2_floor` to n=1 and
-            # everything else to n=2+, so the "single" bucket boundary must
-            # be an exclusive `<` (equivalently the low-tier floor is `>=`)
-            # to match the router exactly -- a plain `> n2_floor` literal
-            # would misfile score == n2_floor into "single" while the real
-            # router sends it to n=2.
-            if s > high_effort:
-                tiers["top"] += 1
-            elif s > n5_floor:
-                tiers["mid"] += 1
-            elif s >= n2_floor:
-                tiers["low"] += 1
-            else:
-                tiers["single"] += 1
-
-        assert tiers == {"top": 6, "mid": 4, "low": 8, "single": 12}
-
-
 class TestPurity:
     """Mirrors test_age_route.py::TestPurity -- review_surface.py inherits
     age_route.py's AST-derived I/O import ban.
     """
 
     def test_module_has_no_io_imports(self) -> None:
-        src = (REPO_ROOT / "src/easy_cheese/shared/fanout/review_surface.py").read_text(encoding="utf-8")
+        src = (REPO_ROOT / "src/easy_cheese/shared/fanout/review_surface.py").read_text(
+            encoding="utf-8"
+        )
         tree = ast.parse(src)
         banned = {
             "os",
@@ -179,10 +131,14 @@ class TestPurity:
                 imported.update(alias.name.split(".")[0] for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
                 imported.add(node.module.split(".")[0])
-        assert not (imported & banned), f"unexpected I/O-shaped imports: {imported & banned}"
+        assert not (imported & banned), (
+            f"unexpected I/O-shaped imports: {imported & banned}"
+        )
 
     def test_module_parses_as_valid_python(self) -> None:
-        src = (REPO_ROOT / "src/easy_cheese/shared/fanout/review_surface.py").read_text(encoding="utf-8")
+        src = (REPO_ROOT / "src/easy_cheese/shared/fanout/review_surface.py").read_text(
+            encoding="utf-8"
+        )
         _ = ast.parse(src)  # raises SyntaxError if invalid
 
 
@@ -201,15 +157,21 @@ class TestDualGlobFirstMatchWinsRealTable:
             ".hallouminate/scripts/age.pyz",  # matches *.pyz (0.0) and .hallouminate/** (0.25)
         ],
     )
-    def test_zero_weight_glob_wins_over_later_quarter_weight_glob(self, path: str) -> None:
+    def test_zero_weight_glob_wins_over_later_quarter_weight_glob(
+        self, path: str
+    ) -> None:
         assert review_surface.weigh(path) == 0.0
 
     def test_zero_weight_entries_precede_quarter_weight_entries(self) -> None:
         # Structural invariant that makes first-match-wins produce the
         # zero-weight result above: every 0.0 entry must sit at a lower
         # index than every 0.25 entry.
-        zero_indices = [i for i, (_, w) in enumerate(review_surface.DEFAULT_WEIGHTS) if w == 0.0]
-        quarter_indices = [i for i, (_, w) in enumerate(review_surface.DEFAULT_WEIGHTS) if w == 0.25]
+        zero_indices = [
+            i for i, (_, w) in enumerate(review_surface.DEFAULT_WEIGHTS) if w == 0.0
+        ]
+        quarter_indices = [
+            i for i, (_, w) in enumerate(review_surface.DEFAULT_WEIGHTS) if w == 0.25
+        ]
         assert zero_indices
         assert quarter_indices
         assert max(zero_indices) < min(quarter_indices)

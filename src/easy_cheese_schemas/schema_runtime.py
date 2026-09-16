@@ -997,6 +997,7 @@ def _normalize_finding(
     return ReviewFinding(
         finding_id=f"{review_id}/finding/{index}",
         severity=item.severity,
+        dimension=item.dimension,
         summary=item.summary,
         evidence=refs,
         location=_source_location(item.location, first.artifact.artifact_id),

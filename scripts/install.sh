@@ -31,6 +31,8 @@ EC_SKILL_REPO="paulnsorensen/easy-cheese"
 # loosely in sync with skills/ but not load-bearing for happy-path runs.
 EC_FALLBACK_SKILLS="age affinage briesearch cheese cook culture cure easy-cheese-setup hard-cheese melt mold pasteurize plate press ultracook wheypoint"
 
+
+
 # Default selections.
 EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
 EC_DEFAULT_MCP="tilth context7 hallouminate"

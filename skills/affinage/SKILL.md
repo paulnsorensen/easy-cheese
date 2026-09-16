@@ -90,9 +90,9 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
    Any other nonzero exit stops with `status: halt: pr-status-unavailable`.
    Route a conflicting or dirty merge state to `## Merge-conflict resolution`.
 3. **Run fresh review.** Run this step only in standalone mode without `--no-age`.
-   Score the PR diff and call `age_route.route(...)`.
+   Build contextual review input and call the bundled `age-route` command.
    Include the comment count and CI failure class.
-   Run `/age` with the returned `n`, `lenses`, and `effort` values.
+   Run `/age` with the complete subject plan and its evidence.
    Tag each new finding with `[from-age:<dimension>]`.
 4. **Fetch comments.** Fetch inline threads from `pulls/<pr>/comments`.
    Skip comments with `position: null` unless the user passes `--include-outdated`.

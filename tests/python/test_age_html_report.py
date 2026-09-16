@@ -30,10 +30,18 @@ HTML report smoke test
   - recommendation: First line with <script>alert(1)</script>
     second line with & and <angle>.
 
+- **[conventions:medium]** `src/config.py:12` — Explicit configuration rule is not applied.
+  - location: module · fix-cost-now: contained · fix-cost-later: spreading · confidence: certain
+  - recommendation: apply the documented configuration rule.
+
 ## Low
 - **[deslop:low]** `src/low.ts:4` — Low summary.
   - location: class · fix-cost-now: contained · fix-cost-later: contained
   - recommendation: Remove the helper.
+
+- **[altitude:low]** `src/format.py:22` — The wrapper sits below its only consumer.
+  - location: module · fix-cost-now: contained · fix-cost-later: contained · confidence: speculating
+  - recommendation: move the wrapper beside its sole caller.
 
 ## High
 - **[security:high]** `src/high.ts:2` — High summary with <strong>unsafe</strong> HTML.
@@ -172,6 +180,8 @@ class TestAgeHtmlReport:
         assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
         assert "confidence: speculating" in html
         assert "&lt;angle&gt;" in html
+        assert "[conventions:medium]" in html
+        assert "[altitude:low]" in html
         assert "<script>" not in html
         assert "<strong>unsafe</strong>" not in html
         assert html_path.name == "age-demo.html"

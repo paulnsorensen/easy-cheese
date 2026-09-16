@@ -23,7 +23,7 @@ Workers use frozen contracts at worker tier.
 |---|---|---|---|
 | mold gate | the design dialogue | full spec vs small behavior; tier check | spec-sized: warn to upgrade. Use the harness-detected phrasing: claude `/model opus` plus `/effort`, the codex/OMP named equivalent, or the generic fallback. Then dispatch the fresh-context decomposer on draft spec text. Curds land in the approved artifact. small: use the mini-spec fast path at the current tier |
 | cook gate | the spec (curd block, else AC count and edit-site estimate) | single vs fan vs decompose-first; wave plan; transport | curds present: fan in waves of four or fewer. un-curded small: use one coder. un-curded big: dispatch the same decomposer. Then gate with "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" |
-| age router | review-surface score + risk-flag grep (affinage: comment count + CI failure class) | N and effort | N in {1 all-dims, 2 grouped, 5 lenses}. Add the effort dial: a fast pass runs low or medium per Opus 5. An override promotes one dimension to a solo lens. An override never raises N |
+| age router | Scoped semantic evidence, effort, workload, and host capabilities; Affinage also supplies comments and CI status | Subject assignments and per-worker effort | Normal/deep protect conventions and altitude. Mandatory risks add specialists. Overall separates all subjects. The versioned planner records coverage and dispatch batches. |
 | pasteurize gate | symptom shape + review-surface score over the suspect range | shallow vs deep; fan width | fan width 1/2 for a regression over a tight or wide range. Width 3 for a heisenbug, race, or perf-regression. Width 3-5 for a cold bug with no diff to anchor to. `src/easy_cheese/shared/fanout/pasteurize_route.py` computes the width. Clean stack trace plus deterministic repro: stay at the current tier. Heisenbug, race, cross-module, or perf regression: warn-upgrade before hypothesis formation |
 
 ## Roles x tiers (all three harnesses)
@@ -45,7 +45,7 @@ Scoper: deleted everywhere.
 
 Leverage is the routing axis for design ceremony. Ambiguity and scope size pick the artifact; leverage picks whether the user steers. Any fired trigger routes the ask to `/mold`'s full ceremony, requires strong review, and lowers mold's specification threshold. Zero fired triggers keep the ask on the cook fast-path or the tier-1 mini-spec. Evaluate the table at classification time from the ask and the code it names, before any diff exists. Record fired ids in the spec's `leverage:` frontmatter list.
 
-| id | Fires when | `/age` promotes |
+| id | Fires when | `/age` finding focus |
 | --- | --- | --- |
 | `auth` | auth, secrets, crypto, or tenant isolation changes | security |
 | `irreversible` | payments, ledgers, or any effect that cannot be rolled back | correctness |
@@ -56,7 +56,12 @@ Leverage is the routing axis for design ceremony. Ambiguity and scope size pick 
 | `cross-slice-dep` | a new import between slices, or a slice reaching into another's internals | encapsulation |
 | `invariant-gap` | the change touches a named global invariant (uniqueness, balance, ordering, tenancy) that no integration test exercises | assertions |
 
-The list is closed. A routine internal choice that fires no trigger is the agent's to make and log as `[AGENT-DECIDED]`. The `/age` column is the crosswalk to `age_route.OVERRIDE_FLAGS`: the first five ids are the flag families the diff grep already emits; the last three reach the router only through the spec's `leverage:` list, per `../../age/references/fan-out.md`.
+The list is closed. The agent makes and records routine internal choices that fire no trigger as `[AGENT-DECIDED]`.
+The table names finding dimensions, not worker assignments.
+Preserve every fired trigger in the review context.
+Map supported triggers to evidence-bearing risks through `age_route.RISK_MAPPINGS`, which selects investigation subjects.
+Keep triggers without a direct mapping as evidence, as `../../age/references/fan-out.md` requires.
+The coordinator interprets scoped evidence; the planner does not inspect diffs or infer risks from tokens.
 
 ## Cross-cutting contracts
 

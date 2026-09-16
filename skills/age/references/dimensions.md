@@ -47,7 +47,7 @@ Every finding carries these fields:
 
 | Field | Values | Source |
 | --- | --- | --- |
-| `dimension` | correctness, security, encapsulation, spec, complexity, deslop, assertions, nih, efficiency, telemetry | reviewer-tagged |
+| `dimension` | correctness, security, encapsulation, spec, complexity, deslop, assertions, nih, efficiency, telemetry, conventions, altitude | reviewer-tagged |
 | `severity` | `blocker / high / medium / low` | computed (formula above) |
 | `location` | `class / module / cross-module / contract` | reviewer-classified |
 | `fix-cost-now` | `contained / moderate / sprawling` | bucketed from blast-radius count |
@@ -83,6 +83,8 @@ Apply the `contract` bump only to dimensions where boundary position changes fin
 | nih | yes | Reinvented primitives that cross the boundary cause more harm than internal helpers |
 | efficiency | yes | A public handler on a hot path shows the typical blocker shape |
 | telemetry | yes | A boundary outbound call with silent failure forms the canonical blocker |
+| conventions | no | An explicit rule remains independently evidenced wherever it occurs; boundary position does not change the convention claim |
+| altitude | no | Placement quality is graded from its symptom and concrete cost, not from API location alone |
 
 ## Fix-cost-now
 
@@ -135,6 +137,20 @@ The `structural` tag adds the compounding `+1` bump in the formula.
 Use the tag to record that the repair cost grows over time.
 Do not restate that cost as severity.
 
+## Review procedures
+
+### Changed behavior
+
+For every changed behavior, inspect the enclosing function or method and one caller and callee before grading it clean. Check the language/runtime pitfalls that apply to the file, including evaluation order, nullability, ownership or borrowing, async cancellation, exception propagation, and coercion. Follow wrapper, proxy, adapter, and generated-code paths to the real boundary; a wrapper that drops a guard, changes a return shape, or swallows an exception is part of the changed behavior. Preserve telemetry review: a caught failure still needs the project's structured log, metric, or trace unless the path is intentionally interactive.
+
+### Removed behavior and dropped invariants
+
+For every line the diff deletes or replaces, name the behavior or invariant it enforced, then search the replacement code and its callers for where that invariant is re-established. Treat removed guards, validations, error paths, cleanup, tests covering a real case, and telemetry as candidates until the replacement provides equivalent protection. A missing re-establishment is a correctness finding; a named requirement that is no longer met also receives a `spec` finding.
+
+### Caller impact
+
+For each changed function, method, exported type, or wrapper, find its callers and callees. Check every affected consumer for new preconditions, changed return shapes, new exceptions, ordering or timing dependencies, and unsafe parallel changes in the same diff. Include non-test callers and indirect callers through proxies or adapters; an empty caller search is evidence to record, not permission to assume the change is unconnected.
+
 ## Per-dimension rubrics
 
 Each dimension uses a base-severity table for each violation shape before modifiers. Apply location and compounding modifiers after the base tier.
@@ -152,6 +168,7 @@ Look for off-by-one errors, ordering errors, null/empty edge cases, silent failu
 
 The diff's new path can exercise an existing race, lost write, or contradictory branch in the caller graph. Expand callers one level before grading clean.
 
+Name correctness evidence as concrete input/state → wrong output, exception, lost write, or unsafe side effect. Do not promote a style preference or an architecture concern into correctness; use `conventions` or `altitude` only when its own evidence contract is met.
 Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
 
 Recommendation shape: "Add a guard for X" / "Return early when Y" / "Replace `catch (_)` with explicit handling".
@@ -402,12 +419,45 @@ Use one of these recommendation shapes:
 - "Assert on behavior, not on log text"
 
 ## Dimension boundaries
+### conventions
+
+Review explicit repository, language, and wrapper conventions rather than personal taste. A `conventions` finding is valid only when it names the exact applicable rule, its source, the offending code, and a concrete correction. Use this evidence contract in the finding claim: `rule: <exact rule or identifier>; source: <path:line>; code: <path:line>; correction: <action>`. If any part is missing, record the uncertainty instead of emitting a finding.
+
+| Base | Trigger |
+| --- | --- |
+| `blocker` | Assign `blocker` only when an explicit convention violation leaves a security, data, or release-control exposure open |
+| `high` | Assign `high` when an explicit safety, compatibility, or published wrapper convention is violated at a boundary and the correction prevents incident or rework |
+| `medium` | Assign `medium` when an explicit project or language convention is violated and the correction is required for maintainability or predictable tooling |
+| `low` | Assign `low` when a documented non-safety convention is missed and the concrete correction is local |
+
+Do not infer a convention from aesthetics, an unapproved preference, or an architecture concern. Keep architecture placement in `altitude` and runtime risk in `correctness`, `security`, or `telemetry`. Read the applicable instruction source and the enclosing code before grading clean.
+
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
+
+Recommendation shape: "Apply `<exact-rule>` from `<source>` to `<code>`" / "Use `<project-convention>` at `<boundary>`" / "Confirm the documented exception for `<code>`".
+
+### altitude
+
+Review whether behavior sits at the right abstraction level and has the right owner. A valid `altitude` finding must name all four: `symptom`, `owner`, `better placement`, and `concrete cost`. Examples include a policy-free wrapper that adds a layer, a decision owned by every caller instead of its producer, or a module boundary that leaves callers responsible for internals. Architecture preference alone is not a finding.
+
+| Base | Trigger |
+| --- | --- |
+| `blocker` | Assign `blocker` only when the misplaced boundary creates an open security, data, or irreversible side-effect exposure; emit the underlying `security` or `correctness` finding too |
+| `high` | Assign `high` when a misplaced owner or abstraction boundary forces multiple consumers to duplicate policy or depend on internals, creating material rework |
+| `medium` | Assign `medium` when a wrapper, split, or owner mismatch adds a measurable layer or repeats a decision across callers |
+| `low` | Assign `low` when a local placement mismatch has a named owner, better placement, and one concrete contained cost |
+
+When an approved design intentionally chooses the current placement, treat a contrary observation as an explicit decision for the user to confirm or reject. Do not turn an altitude preference into an automatic `/cure` rewrite; the recommendation must preserve the approved decision or explicitly request that it be changed.
+
+Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
+
+Recommendation shape: "Move `<behavior>` to `<owner>` after confirming the approved placement" / "Inline `<wrapper>` beside `<caller>` and record the placement decision" / "Keep `<boundary>` and record why its concrete cost is accepted".
 
 This table is the single ownership rule for the whole file.
-It decides the primary dimension when two dimensions tag the same `path:line`.
+It decides the primary dimension when dimensions identify the same underlying defect.
 Each per-dimension `Boundaries:` line points here and states no rule of its own.
-The grader deduplicates by `file:line` in the report.
-The grader keeps the higher-base finding and names the secondary dimension.
+The grader reconciles by the underlying defect or design problem, not by location alone.
+Keep distinct problems at the same location separate, and name secondary dimensions for one overlapping problem.
 
 Look for one primary dimension per finding. Use this table to choose the primary when dimensions overlap.
 
@@ -430,3 +480,13 @@ Look for one primary dimension per finding. Use this table to choose the primary
 | spec / correctness | Emit both with a cross-reference. Spec records the broken contract commitment. Correctness records the runtime risk. The dimensions remain orthogonal. |
 | assertions / telemetry | Tests that assert on log strings belong to telemetry. |
 | complexity / efficiency | Complexity owns the structural cache decision. Efficiency owns the runtime cost of redundant work. |
+| conventions / spec | Use `conventions` when an explicit rule/source is violated. Use `spec` when a requested behavior or acceptance commitment is missing or contradicted. Emit both only when both claims have independent evidence. |
+| conventions / deslop | Use `conventions` for an exact documented rule with source and correction. Use `deslop` for generic AI residue, duplication, or dead code without a governing rule. |
+| conventions / assertions | Use `assertions` for a weak test contract. Use `conventions` only when an explicit test convention is the independently evidenced violation. |
+| conventions / telemetry | Use `telemetry` for missing or malformed observability. Use `conventions` for a documented logging/metric rule whose violation is the claim. |
+| altitude / complexity | Use `altitude` for a concrete owner or abstraction-placement symptom with a better placement and cost. Use `complexity` for size, parameter, pass-through, or cache shape without a placement decision. |
+| altitude / encapsulation | Use `encapsulation` when the defect leaks a boundary or lifts an invariant into callers. Use `altitude` when the boundary's level or owner is the defect and the public surface remains intact. |
+| altitude / spec | Use `spec` for a named approved placement that the diff contradicts. Use `altitude` for a placement concern not already fixed by the approved design. A contrary altitude observation is an explicit decision, not an automatic `/cure` rewrite. |
+| altitude / conventions | Use `conventions` for a documented placement rule with exact source/code evidence. Use `altitude` for a concrete placement symptom and cost when no such rule exists. |
+
+Architecture preference alone is not a finding. Every `altitude` row must carry its symptom, owner, better placement, and concrete cost. A violation of an approved design remains an explicit decision to confirm or reject; it does not authorize `/cure` to rewrite the design automatically.
