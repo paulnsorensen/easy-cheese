@@ -36,6 +36,10 @@ __pycache__/
 .venv-typing/
 node_modules/
 
+# Browser test artifacts
+/test-results/
+/playwright-report/
+
 # OS / editor
 .DS_Store
 *.swp

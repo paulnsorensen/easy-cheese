@@ -8,10 +8,22 @@
     "docs:generate": "python3 scripts/gen_docs.py",
     "docs:dev": "python3 scripts/gen_docs.py && astro dev",
     "docs:build": "python3 scripts/gen_docs.py && astro build",
-    "docs:preview": "astro preview"
+    "docs:preview": "astro preview",
+    "mold-review:build": "vite build --config frontend/mold-review/vite.config.js",
+    "mold-review:test": "playwright test --config frontend/mold-review/playwright.config.js"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.18.0",
+    "mermaid": "11.12.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "@fontsource/inter": "5.2.5"
   },
   "devDependencies": {
     "@astrojs/starlight": "^0.41.3",
+    "@playwright/test": "1.55.0",
+    "@vitejs/plugin-react": "5.0.2",
+    "vite": "7.1.5",
     "@cheeselord/design": "^0.4.0",
     "astro": "^7.2.8",
     "sharp": "^0.35.4",
