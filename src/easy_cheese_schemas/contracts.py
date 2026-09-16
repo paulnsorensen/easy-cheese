@@ -3238,9 +3238,9 @@ class ProtectedEntry:
     rather than a note."""
 
     entry_id: str = field(validator=_lower_identifier)
-    kind: EntryKind
+    kind: EntryKind = field(validator=validators.instance_of(EntryKind))
     summary: str = field(validator=_bounded_text)
-    state: EntryState
+    state: EntryState = field(validator=validators.instance_of(EntryState))
     blocks_continuation: bool = field(validator=_gating_kind_rule)
     rationale: str | None = field(default=None, validator=_rationale_rule)
     superseded_by: str | None = field(default=None, validator=_successor_rule)
@@ -3257,7 +3257,7 @@ class ProposedEntry:
     `entry_id`: the runtime assigns one, so a delta cannot address -- and so
     cannot overwrite -- an entry that already exists."""
 
-    kind: EntryKind
+    kind: EntryKind = field(validator=validators.instance_of(EntryKind))
     summary: str = field(validator=_bounded_text)
     blocks_continuation: bool = field(default=False, validator=_gating_kind_rule)
     rationale: str | None = field(
