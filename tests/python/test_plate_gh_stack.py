@@ -284,3 +284,111 @@ def test_verify_publication_rejects_wrong_pr_base(
 
     with pytest.raises(gh_stack.GhStackValidationError, match="base 'origin/main'"):
         _ = gh_stack.verify_publication(tmp_path, "main", "origin")
+
+
+@pytest.mark.parametrize(
+    ("boolean_source", "message"),
+    (("pr", "wrong number"), ("stack", "mapping differs")),
+)
+def test_verify_publication_rejects_boolean_pr_number(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    boolean_source: str,
+    message: str,
+) -> None:
+    stack_view: dict[str, object] = {
+        "trunk": "main",
+        "currentBranch": "feature-two",
+        "branches": [
+            {
+                "name": "feature-one",
+                "isMerged": False,
+                "isQueued": False,
+                "needsRebase": False,
+                "pr": {"number": 1, "state": "OPEN"},
+            },
+            {
+                "name": "feature-two",
+                "isMerged": False,
+                "isQueued": False,
+                "needsRebase": False,
+                "pr": {"number": 2, "state": "OPEN"},
+            },
+        ],
+    }
+    remote_stack = [
+        {
+            "id": 99,
+            "number": 7,
+            "open": True,
+            "base": {"ref": "main"},
+            "pull_requests": [
+                {
+                    "number": True if boolean_source == "stack" else 1,
+                    "state": "open",
+                    "merged_at": None,
+                    "head": {"ref": "feature-one", "sha": "sha-one"},
+                },
+                {
+                    "number": 2,
+                    "state": "open",
+                    "merged_at": None,
+                    "head": {"ref": "feature-two", "sha": "sha-two"},
+                },
+            ],
+        }
+    ]
+
+    def run(
+        args: list[str], _cwd: Path, _timeout: float = 10
+    ) -> subprocess.CompletedProcess[str]:
+        key = tuple(args)
+        if key == ("git", "check-ref-format", "--branch", "main"):
+            return completed(args)
+        if key == ("git", "remote", "get-url", "origin"):
+            return completed(args, stdout="git@github.com:example/repo.git\n")
+        if key == (
+            "git",
+            "ls-remote",
+            "--exit-code",
+            "--heads",
+            "origin",
+            "refs/heads/main",
+        ):
+            return completed(args, stdout="trunk-sha\trefs/heads/main\n")
+        if key == ("gh", "stack", "view", "--json"):
+            return completed(args, stdout=json.dumps(stack_view))
+        if key[:3] == ("git", "rev-parse", "--verify"):
+            branch = key[3].removeprefix("refs/heads/")
+            return completed(args, stdout=f"sha-{branch.removeprefix('feature-')}\n")
+        if key[:5] == ("git", "ls-remote", "--exit-code", "--heads", "origin"):
+            branch = key[5].removeprefix("refs/heads/")
+            sha = f"sha-{branch.removeprefix('feature-')}"
+            return completed(args, stdout=f"{sha}\trefs/heads/{branch}\n")
+        if key[:3] == ("gh", "pr", "view"):
+            number = int(key[3])
+            branch = "feature-one" if number == 1 else "feature-two"
+            base = "main" if number == 1 else "feature-one"
+            returned_number = True if boolean_source == "pr" and number == 1 else number
+            return completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "number": returned_number,
+                        "url": f"https://example.test/pull/{number}",
+                        "baseRefName": base,
+                        "headRefName": branch,
+                        "headRefOid": f"sha-{branch.removeprefix('feature-')}",
+                        "state": "OPEN",
+                        "autoMergeRequest": None,
+                    }
+                ),
+            )
+        if key[:2] == ("gh", "api"):
+            return completed(args, stdout=json.dumps(remote_stack))
+        raise AssertionError(args)
+
+    monkeypatch.setattr(gh_stack, "_run", run)
+
+    with pytest.raises(gh_stack.GhStackValidationError, match=message):
+        _ = gh_stack.verify_publication(tmp_path, "main", "origin")

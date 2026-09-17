@@ -260,7 +260,12 @@ def _validated_branches(
             cwd,
         )
         pr = _json_object(pr_result, f"PR #{number} lookup")
-        if pr.get("number") != number:
+        returned_number = pr.get("number")
+        if (
+            not isinstance(returned_number, int)
+            or isinstance(returned_number, bool)
+            or returned_number != number
+        ):
             raise GhStackValidationError(
                 f"PR lookup returned the wrong number for #{number}"
             )
@@ -358,8 +363,11 @@ def _stack_identity_and_mapping(
                     f"GitHub stack mapping has no head for PR #{expected_numbers[index]}"
                 )
             head = cast("dict[str, object]", raw_head)
+            remote_number = remote_pr.get("number")
             if (
-                remote_pr.get("number") != expected_numbers[index]
+                not isinstance(remote_number, int)
+                or isinstance(remote_number, bool)
+                or remote_number != expected_numbers[index]
                 or remote_pr.get("state") != "open"
                 or remote_pr.get("merged_at") is not None
                 or head.get("ref") != expected_heads[index]
