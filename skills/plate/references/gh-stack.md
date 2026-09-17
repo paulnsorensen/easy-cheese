@@ -1,153 +1,248 @@
 # `gh stack` publication
 
-Use this provider when the `github/gh-stack` extension is installed. Also require the enablement preflight below to report the repository as enabled.
-Exit code 4 remains the fallback for races and later remote failures.
-It means that the GitHub API or preview is unavailable. Halt at `publish`. Then report the enablement requirement.
+Use this provider only when `github/gh-stack` is installed and the enablement
+preflight reports `available`. Run every command from the repository root.
+
+## Contents
+
+- [Inspect the installed command](#inspect-the-installed-command)
+- [Validate the trunk before mutation](#validate-the-trunk-before-mutation)
+- [Initialize and inspect](#initialize-and-inspect)
+- [Guard every mutation](#guard-every-mutation)
+- [Publish and verify](#publish-and-verify)
+- [Install, authenticate, and detect](#install-authenticate-and-detect)
+- [Enablement preflight](#enablement-preflight)
+- [Command map](#command-map)
+- [Exit handling](#exit-handling)
+- [Conflict recovery](#conflict-recovery)
+- [Wrong-trunk recovery](#wrong-trunk-recovery)
+- [Plate recipes](#plate-recipes)
+
+## Inspect the installed command
+
+Run `gh stack --version` and `gh stack <command> --help` before the first
+mutation. The verified command surface adopts existing branches through
+positional arguments. Do not use the deprecated hidden `init --adopt` flag.
+The installed `init` command has no `--prefix` or `--numbered` flags.
+
+## Validate the trunk before mutation
+
+Resolve the intended GitHub branch name. The default branch query
+`gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'` returns a
+name such as `main`. Do not pass a remote-tracking value such as `origin/main`
+or `refs/remotes/origin/main` to `--base`.
+
+Run the executable preflight before `init`, `link`, or any recovery mutation:
+
+```bash
+python3 skills/plate/scripts/plate.pyz gh-stack-preflight \
+  --trunk <github-branch-name> --remote origin
+```
+
+The preflight canonicalizes `refs/heads/<name>` to `<name>`, validates the Git
+branch name, requires the `origin` remote, and confirms the exact
+`refs/heads/<name>` branch on that remote. Halt at `publish` when it fails.
 
 ## Initialize and inspect
 
-Initialize or adopt with:
+Initialize one or more new or existing branches in bottom-to-top order:
 
 ```bash
-gh stack init --base <trunk>
-gh stack init --adopt --base <trunk>
-gh stack init --prefix <prefix> --numbered --base <trunk>
+gh stack init --base <trunk> <bottom> [<next> ...]
 ```
 
-`--numbered` requires `--prefix`. Add branches with `gh stack add <branch>`.
-Do not use combined staging or commit flags. Stage named paths. Create normal new commits.
-Inspect with `gh stack view --short` or `gh stack view --json`.
+Existing branches are adopted automatically. Add a new top branch with
+`gh stack add <branch>`. Do not use combined staging or commit flags. Stage
+named paths and create normal commits before branch operations.
 
+Inspect with `gh stack view --short` or `gh stack view --json`.
 Resolve local tracking paths from `GIT_DIR="$(git rev-parse --git-dir)"`.
 Tracking lives at `$GIT_DIR/gh-stack`. Rebase recovery state lives at
 `$GIT_DIR/gh-stack-rebase-state`. Git does not track either path.
 
-## Remote selection and publication
+## Guard every mutation
 
-Select the intended remote explicitly when it is not unambiguously `origin`.
-Use the same `--remote <name>` on push, submit, sync, and link operations.
+The extension can print `⚠` warnings for failed PR or stack API calls and still
+exit zero. A zero exit is therefore provisional. Run mutations through Plate's
+guard so a warning, HTTP failure, or non-zero exit fails publication:
 
-Resolve the stacked topology first. Know every title and body.
-Then publish all branches and pull requests with `gh stack submit --auto --open --remote <name>`.
-Here `--auto` skips only provider metadata prompts. It never overrides Plate's explicit-choice policy.
-It never overrides Plate's review-shape policy. Omit `--open` for drafts.
+```bash
+python3 skills/plate/scripts/plate.pyz gh-stack-run -- \
+  gh stack <operation> <arguments>
+```
 
-Use `gh stack push --remote <name>` only to update an existing stack without changing pull request metadata.
-Both operations are stack-aware and lease-safe. Never use a bare single-branch push.
+The guard requires explicit `--remote origin` for `submit`, `push`, `sync`,
+`rebase`, and `link`. The installed `init`, `add`, `modify`, and `unstack`
+commands do not support `--remote`; do not add it to those commands.
+
+## Publish and verify
+
+Resolve every title and body before publication. Submit the complete chain:
+
+```bash
+python3 skills/plate/scripts/plate.pyz gh-stack-run -- \
+  gh stack submit --auto --open --remote origin
+```
+
+Here `--auto` skips only the provider editor. It does not override Plate's
+explicit topology or review-shape policy. Omit `--open` when the requested PRs
+must remain drafts.
+
+Use guarded `gh stack push --remote origin` only to update existing branches
+without PR metadata changes. Never use a bare single-branch push.
+
+After `submit`, `push`, or `link`, run terminal validation:
+
+```bash
+python3 skills/plate/scripts/plate.pyz gh-stack-verify \
+  --trunk <github-branch-name> --remote origin
+```
+
+The verifier fails unless all of these facts match exactly:
+
+- The local stack trunk equals the canonical GitHub branch name.
+- Every branch exists at the same local, remote, and PR head SHA.
+- Every PR is open, has auto-merge disabled, and has the expected base and head.
+- Every PR maps to the same open GitHub stack.
+- The remote stack base, ordered PR numbers, head refs, states, and SHAs match.
+
+Treat any failed check as a failed publication even when `gh stack` exited zero.
 
 ## Install, authenticate, and detect
 
-- Install with `gh extension install github/gh-stack`. Upgrade with
-  `gh extension upgrade gh-stack`.
+- Install with `gh extension install github/gh-stack`.
+- Upgrade with `gh extension upgrade gh-stack`.
 - Use full `gh stack` commands. Do not assume the optional `gs` alias.
-- Authenticate through `gh auth login`. The extension uses OAuth, not personal
-  access tokens.
+- Authenticate through `gh auth login`. The extension uses OAuth.
 - Detect installation via `gh extension list`.
 - Resolve all local metadata with `git rev-parse --git-dir`.
 
 ## Enablement preflight
 
-`GET /repos/{owner}/{repo}/stacks` is a read-only preflight: run it before the
+`GET /repos/{owner}/{repo}/stacks` is a read-only preflight; run it before the
 first stack mutation instead of discovering enablement from a failed write.
 
 ```bash
 gh api --include "repos/{owner}/{repo}/stacks"
 ```
 
-`--include` prints the status line for success and failure. Classify the response by status, not by exit code:
+Classify the response by HTTP status, not by process exit:
 
 | Status | Meaning | Response |
 | --- | --- | --- |
 | `2xx` | Stacked PRs enabled | Proceed with the provider |
-| `404` | Repository enablement requirement | Halt; report that Stacked PRs must be enabled |
-| `401`, `403` | Authentication or authorization failure | Halt; report auth, not enablement |
-| other | Service failure | Halt. Preserve the status and stderr |
-| none | Indeterminate — no resolvable repository, network failure, or timeout | Proceed. Here exit code 4 stays the fallback |
+| `404` | Repository enablement requirement | Halt and report that Stacked PRs must be enabled |
+| `401`, `403` | Authentication or authorization failure | Halt and report authentication or authorization |
+| other | Service failure | Halt and preserve the status and stderr |
+| none | Indeterminate repository or network failure | Halt and report the unresolved remote check |
 
-`python3 skills/plate/scripts/plate.pyz stack-tools` runs this preflight.
-It reports one `gh-stack` status. The status is `available`, `not-enabled`, `auth-required`, `service-error`, `remote-check-required`, or `not-installed`.
-`repository_signal` is `true` only for a 2xx response. It is `false` only for a 404 response.
-It is `null` when the probe cannot decide. The report never recommends a `not-enabled` repository.
-
-The report also preserves the service-failure evidence that this table requires:
-
-| Field | Value |
-| --- | --- |
-| `http_status` | The final HTTP status code, or `null` when the probe reports none |
-| `exit_status` | The `gh` exit status, or `null` when the probe did not complete |
-| `stderr` | The trailing 2000 characters of `gh` stderr, or `null` when it is empty |
-
-Report `http_status`, `exit_status`, and `stderr` for a `service-error` status. Do not discard them.
+`python3 skills/plate/scripts/plate.pyz stack-tools` runs this preflight. It
+reports `available`, `not-enabled`, `auth-required`, `service-error`,
+`remote-check-required`, or `not-installed`. Proceed only with `available`.
+The report preserves `http_status`, `exit_status`, and `stderr`.
 
 ## Command map
 
-| Need | Command |
+| Need | Installed command |
 | --- | --- |
-| Initialize/adopt | `gh stack init [--adopt] [--base <branch>] [--prefix <text> --numbered]` |
+| Initialize or adopt | `gh stack init --base <branch> <branches...>` |
 | Add top branch | `gh stack add <branch>` |
 | Inspect | `gh stack view --short` or `gh stack view --json` |
 | Pull collaborator stack | `gh stack checkout <PR-or-branch>` |
-| Push branches only | `gh stack push --remote <name>` |
-| Create/update PRs | `gh stack submit [--auto] [--open] --remote <name>` |
-| Sync remote/local state | `gh stack sync --remote <name>` |
-| Cascade local rebase | `gh stack rebase` |
-| Reorder/drop/rename/fold | `gh stack modify` |
-| Link existing branches/PRs | `gh stack link --base <base> --remote <name> <items...>` |
-| Remove stack tracking | `gh stack unstack` |
-| Navigate | `gh stack up`, `down`, `top`, `bottom`, or `switch` |
+| Push branches only | `gh stack push --remote origin` |
+| Create or update PRs | `gh stack submit [--auto] [--open] --remote origin` |
+| Sync remote and local state | `gh stack sync --remote origin` |
+| Cascade local rebase | `gh stack rebase --remote origin` |
+| Reorder, drop, rename, or fold | `gh stack modify` |
+| Link existing branches or PRs | `gh stack link --base <base> --remote origin <items...>` |
+| Remove stack tracking | `gh stack unstack [<stack-number>] [--local]` |
+| Navigate | `gh stack up`, `down`, `top`, `bottom`, `trunk`, or `switch` |
 
-`submit` defaults new PRs to draft; `--open` marks them ready for review.
-`push` updates branches without PR metadata. `link` creates the server
-relationship without adopting local tracking.
+`submit --auto` defaults new PRs to draft. `--open` marks new and existing PRs
+ready for review. `push` changes branches without PR metadata. `link` creates
+the server relationship without adopting local tracking.
 
 ## Exit handling
 
+The installed extension defines these codes. Warning-free exit zero still
+requires terminal validation.
+
 | Code | Meaning | Response |
 | --- | --- | --- |
-| 0 | Success | Verify stack and PRs |
-| 1 | Generic error | Preserve stderr. Halt. Do not reinterpret |
-| 2 | Not in a stack | Re-detect or adopt; do not emulate |
+| 0 | Command returned without a typed error | Reject warnings, then verify exact state |
+| 1 | Generic or already-reported error | Preserve stderr and halt |
+| 2 | Branch or stack not found | Re-detect or adopt; do not emulate |
 | 3 | Rebase conflict | Use provider recovery |
-| 4 | API/preview unavailable | Report enablement or auth |
-| 5 | Invalid arguments or flags | Read installed-command help, correct input, retry once |
-| 6 | Ambiguous membership | Ask which stack |
-| 7 | Rebase active | Resume or abort provider operation |
-| 8 | Stack locked | Wait; do not mutate concurrently |
+| 4 | GitHub API failure | Preserve the API error and halt |
+| 5 | Invalid arguments or flags | Read installed help, correct input, and retry once |
+| 6 | Disambiguation required | Select the intended stack or remote |
+| 7 | Rebase already active | Continue or abort the provider operation |
+| 8 | Stack lock acquisition failed | Wait; do not mutate concurrently |
+| 9 | Stacked PRs unavailable | Halt and report repository enablement |
+| 10 | Interrupted modify requires recovery | Continue or abort `gh stack modify` |
 
-Unknown non-zero exits are failures. Preserve the command, code, and stderr. Then halt.
+Unknown non-zero exits fail publication. Preserve the command, code, stdout,
+and stderr. Then halt.
 
 ## Conflict recovery
 
 Resolve each named path after a rebase conflict. Stage each resolved path.
-Then run `gh stack rebase --continue` or `gh stack rebase --abort`.
-Do not run `git rebase --continue`. The `gh stack` command must update its rebase state.
-For modify conflicts, run `gh stack modify --continue` or `gh stack modify --abort`.
+Run `gh stack rebase --continue` or `gh stack rebase --abort`.
+Do not run `git rebase --continue`. The provider must update its recovery state.
+For modify conflicts, run `gh stack modify --continue` or
+`gh stack modify --abort`.
+
+## Wrong-trunk recovery
+
+Use this transaction when local tracking or published PRs use the wrong trunk.
+Preserve PR identity when the stack is safe to rebuild.
+
+1. Stop publication. Save `gh stack view --json`, the remote stack response,
+   every branch SHA, and every PR's number, base, head, state, draft state,
+   `autoMergeRequest`, and merge-queue state.
+2. Halt for a user decision when any PR is merged, queued, has auto-merge
+   enabled, or is not open. Do not unstack or rewrite those PRs.
+3. Run `gh-stack-preflight` with the corrected trunk. Halt if it fails.
+4. Run guarded `gh stack unstack <stack-number>`. Verify each PR remains open
+   with the same number and head. Verify each PR-to-stack query returns empty.
+5. Run guarded `gh stack unstack --local` only if local tracking remains.
+6. Re-adopt the same branches, bottom to top, with guarded
+   `gh stack init --base <correct-trunk> <branches...>`. Do not recreate or
+   rename an existing PR.
+7. Submit with guarded `gh stack submit --auto --remote origin`. Preserve draft
+   state; add `--open` only when every recovered PR was ready before recovery.
+8. Run `gh-stack-verify`. Compare every PR number with the saved snapshot.
+
+If unstacking, re-adoption, PR identity, or final mapping differs from the
+snapshot, halt at `publish`. Do not create replacement PRs automatically.
 
 ## Plate recipes
 
 ### Create a two-layer stack
 
-1. Initialize the bottom with `gh stack init --base <trunk>`.
-2. Write the common artifacts. Validate the work. Stage named paths. Commit the changes.
-3. Add the top branch. Repeat the transaction for top-specific work.
-4. Inspect with `gh stack view --json`.
-5. Submit with an explicit remote. Verify the stack map and every PR/base pair.
+1. Run the trunk and enablement preflights.
+2. Run guarded `gh stack init --base <trunk> <bottom>`.
+3. Write, validate, stage, and commit the bottom layer.
+4. Run guarded `gh stack add <top>`. Repeat the transaction for the top layer.
+5. Inspect with `gh stack view --json`.
+6. Submit through the guard with `--remote origin`.
+7. Run `gh-stack-verify` and record every verified PR/base/head pair.
 
 ### Update a lower layer
 
-Navigate to the lower layer. Create a new commit. Run `gh stack rebase`. Inspect the stack.
-Use `push` or `submit` according to the PR metadata change.
+Navigate to the lower layer and create a new commit. Run guarded
+`gh stack rebase --remote origin`. Inspect the stack. Use guarded `push` or
+`submit` according to whether PR metadata changes. Then verify publication.
 
 ### Link externally managed branches
 
-Run `gh stack link --base <base> --remote <name> <branches-or-PRs>`.
-This command does not adopt local tracking.
+Run guarded
+`gh stack link --base <base> --remote origin <branches-or-PRs>`.
+This command does not adopt local tracking. Verify the remote stack mapping.
 
 ### After a bottom PR merges
 
-Run `gh stack sync --remote <name>`. Inspect the stack.
-Submit again only when local commits remain unpublished. GitHub enforces bottom-up merges.
-GitHub also updates the remaining branches on the server.
-
-Put shared durable writes on the bottom branch, common branch, or explicit wiring branch before submission.
-Confirm uncertain syntax with `gh stack <command> --help`.
+Run guarded `gh stack sync --remote origin`. Inspect the stack. Submit again
+only when local commits remain unpublished. Do not run `gh-stack-verify` until
+the remaining stack is fully open and publishable; merged or queued branches
+require lifecycle inspection instead.

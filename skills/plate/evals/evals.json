@@ -126,6 +126,20 @@
       "prompt": "Plate this branch and tell me whether the diff is safe to merge.",
       "expected_output": "Halts at classify and names the failure plate-owned: the review judgment is /age's, not /plate's, so it never computes a review surface for its own sake. Reports the routing and either proceeds with the publication half alone or stops for the user to route the review, never blending a quality verdict into the completion record.",
       "files": []
+    },
+    {
+      "id": 18,
+      "name": "gh-stack-warning-only-failure",
+      "prompt": "gh stack submit exited zero but warned that it failed to update the stack on GitHub. Is publication complete?",
+      "expected_output": "Treats the warning as publication failure, preserves the command output, and does not report completion until gh-stack-verify confirms every PR base, head, state, SHA, and remote stack mapping.",
+      "files": []
+    },
+    {
+      "id": 19,
+      "name": "gh-stack-wrong-trunk-recovery",
+      "prompt": "This published gh stack was initialized with origin/main as its trunk. Repair it without replacing the PRs.",
+      "expected_output": "Rejects origin/main as a remote-tracking trunk, snapshots PR identities and stack state, halts for merged, queued, auto-merge-enabled, or non-open PRs, and otherwise un-stacks and re-adopts the same branches on main before verifying the same PR numbers and exact remote mapping.",
+      "files": []
     }
   ]
 }

@@ -22,6 +22,27 @@ def _stack_tools(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("gh-stack-preflight")
+def _gh_stack_preflight(argv: list[str]) -> int:
+    from easy_cheese.skills.plate.gh_stack import preflight_main
+
+    return preflight_main(argv)
+
+
+@bundle_command("gh-stack-run")
+def _gh_stack_run(argv: list[str]) -> int:
+    from easy_cheese.skills.plate.gh_stack import run_main
+
+    return run_main(argv)
+
+
+@bundle_command("gh-stack-verify")
+def _gh_stack_verify(argv: list[str]) -> int:
+    from easy_cheese.skills.plate.gh_stack import verify_main
+
+    return verify_main(argv)
+
+
 @bundle_command("validate-publication")
 def _validate_publication(argv: list[str]) -> int:
     from easy_cheese.skills.plate.publication import main
@@ -37,6 +58,18 @@ COMMANDS = (
     derive_command(
         _stack_tools,
         "Detect supported stacked-PR providers without mutating the repository",
+    ),
+    derive_command(
+        _gh_stack_preflight,
+        "Validate the gh-stack trunk and origin branch before mutation",
+    ),
+    derive_command(
+        _gh_stack_run,
+        "Run one gh-stack mutation and reject warning-only success",
+    ),
+    derive_command(
+        _gh_stack_verify,
+        "Verify exact gh-stack PR and remote stack publication state",
     ),
     derive_command(_validate_publication, "Validate terminal publication evidence"),
 )
