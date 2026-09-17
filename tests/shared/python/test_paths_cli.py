@@ -1,4 +1,5 @@
-"""Tests for shared/paths.py's slugify / validate / existing / resolve / list CLI."""
+"""Tests for shared/paths.py's slugify, validate, existing, resolve, list,
+and domain-model-target CLI."""
 
 from __future__ import annotations
 

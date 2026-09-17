@@ -7,6 +7,13 @@ import sys
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
 
+@bundle_command("domain-model-target")
+def _domain_model_target(argv: list[str]) -> int:
+    from easy_cheese.shared.paths import main
+
+    return main(["domain-model-target", *argv])
+
+
 @bundle_command("artifact-path")
 def _artifact_path(argv: list[str]) -> int:
     from easy_cheese.shared.artifact_path import main
@@ -70,6 +77,10 @@ COMMANDS = (
     ),
     derive_command(
         _curd_count, "Count candidate curds in a spec and recommend the next skill"
+    ),
+    derive_command(
+        _domain_model_target,
+        "Resolve the domain-model store from explicit Hallouminate probe results",
     ),
     derive_command(
         _gate_graph, "Render the gate state machine as dot, svg, png, or mermaid"

@@ -348,7 +348,17 @@ The `Avoid` column records losing synonyms that the Ground phase rejected in fav
 
 ## Domain model (cumulative by-product)
 
-During the same atomic step as the spec, ADRs, and per-slug glossary, merge the session's resolved terms with their **Avoid synonyms**. Merge them into the project-level domain model. Resolve it with `domain_model_target()` (`src/easy_cheese/shared/paths.py`). The per-slug glossary is a branch-local handoff. The domain model is cumulative cross-session memory. It builds the project's ubiquitous language across every session. Add only context-specific terms. Never add general programming concepts.
+During the same atomic step as the spec, ADRs, and per-slug glossary, merge the session's resolved terms with their **Avoid synonyms**. Merge them into the project-level domain model. After the Hallouminate probe, resolve the target through the Mold bundle command:
+
+```text
+python3 skills/mold/scripts/mold.pyz domain-model-target \
+  --probe <unavailable|no-match|match> \
+  [--corpus repo:<repo>:wiki --model <present|absent|unknown>]
+```
+
+Pass `unavailable` when Hallouminate is not loaded or the probe failed. Pass `no-match` when the listing completed but contained no `repo:*:wiki` corpus. Pass `match` with the exact corpus name and its model status when the listing found one. The command accepts only these explicit probe results; it does not import or invoke MCP machinery. It emits canonical JSON with `backend`, string `location`, and `wiki_reachable`. Preserve the resolver's wiki, tracked `docs/`, then XDG read precedence and report a `wiki_reachable: false` fallback before writing a file target.
+
+The per-slug glossary is a branch-local handoff. The domain model is cumulative cross-session memory. It builds the project's ubiquitous language across every session. Add only context-specific terms. Never add general programming concepts.
 
 Merge, don't overwrite:
 - **New term** — append an entry.
@@ -366,7 +376,7 @@ Omit the `_Avoid_` line when no synonyms were rejected.
 - `domain-model/index.md` — the context map: the bounded contexts and their relationships (Pocock CONTEXT-MAP shape).
 - `domain-model/<context>.md` — one page per bounded context, each holding that context's entries.
 
-Do not pre-split for a single context. This layout is identical across all three stores `domain_model_target()` may resolve to (wiki, `docs/`, XDG corpus).
+Do not pre-split for a single context. This layout is identical across all three stores selected by the bundle command (wiki, `docs/`, XDG corpus).
 
 ## Rejected-directions store (by-product)
 
@@ -402,7 +412,7 @@ Stage to a temp directory under `${TMPDIR}` first, then move into place. Never l
 
 This is the runtime home of the **Durable writes** coherence gate (`handshake.md` § Agent key). The gate locks the commitment before the handshake; this step honours it. For each durable write — every ADR and the domain-model merge — run:
 
-1. **Resolve** the target dynamically. For the ADR, use the resolution procedure in [`adr.md`](adr.md) § Resolution. For the model, use `domain_model_target()` in `src/easy_cheese/shared/paths.py`. Both return `(backend, location)`. `domain_model_target()` also returns `wiki_reachable` as a third element. `False` means that the wiki probe was not consulted because no hook existed or the hook raised. Thus, its `file` backend is a degraded fallback, not a confirmed absence. This condition triggers the loud fallback below.
+1. **Resolve** the target dynamically. For the ADR, use the resolution procedure in [`adr.md`](adr.md) § Resolution. For the model, run the `domain-model-target` bundle command shown above with the Hallouminate probe result. It emits `backend`, string `location`, and `wiki_reachable`; `False` means that the wiki probe was not consulted because it was unavailable. Thus, its `file` backend is a degraded fallback, not a confirmed absence. This condition triggers the loud fallback below.
 2. **Write** to that target: `add_markdown` when the backend is `hallouminate`, a staged file write when it is `file`.
 3. **Read back** the entry and confirm that it exists. For the wiki backend, use `ground` or `read_markdown`. For the file backend, read the file again. Treat a write that you cannot read back as a failure. Fail loudly, and do not claim the write.
 4. **Record** it in the curdle completion record printed to the user: one line per durable write naming `<artifact> → <location> (<backend>)`.

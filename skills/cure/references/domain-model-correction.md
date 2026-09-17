@@ -5,13 +5,17 @@ Read this file before Flow step 6.
 After Cook fixes land, correct domain terms that the Cook diff touches.
 Do not rewrite terms outside that diff.
 
-Resolve the store with `domain_model_target()` from `src/easy_cheese/shared/paths.py`.
-The probe order is wiki, docs, then XDG.
-An existing model always wins.
-The function returns `(backend, location, wiki_reachable)`.
-When `wiki_reachable` is false, the probe did not consult the wiki.
-Report this fact before you correct a file-based model.
-The wiki can contain the authoritative model.
+After the Hallouminate probe, resolve the store with the Cure bundle command:
+
+```text
+python3 skills/cure/scripts/cure.pyz domain-model-target \
+  --probe <unavailable|no-match|match> \
+  [--corpus repo:<repo>:wiki --model <present|absent|unknown>]
+```
+
+Use the domain-model probe transport in [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
+
+Pass `unavailable` when Hallouminate is not loaded or the probe failed. Pass `no-match` when the listing completed but contained no `repo:*:wiki` corpus. Pass `match` with the exact corpus name and its model status when the listing found one. The command accepts only these explicit probe results; it does not import or invoke MCP machinery. It emits canonical JSON with `backend`, string `location`, and `wiki_reachable`. Preserve the resolver's wiki, docs, then XDG precedence. When `wiki_reachable` is false, report the degraded file fallback before correcting it; the wiki can contain the authoritative model.
 
 Read and write each backend with these steps:
 

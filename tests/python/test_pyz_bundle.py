@@ -1383,6 +1383,36 @@ def test_skill_archives_own_shared_commands_and_no_common_archive(
     assert not any(REPO_ROOT.glob("skills/*/scripts/common.pyz"))
 
 
+@pytest.mark.parametrize("skill", ["mold", "cure"])
+def test_built_bundles_dispatch_domain_model_target(
+    bundles: Path, tmp_path: Path, skill: str
+) -> None:
+    result = _run(
+        bundles / f"{skill}.pyz",
+        "domain-model-target",
+        "--probe",
+        "match",
+        "--corpus",
+        "repo:consumer:wiki",
+        "--model",
+        "present",
+        "--repo-root",
+        str(tmp_path),
+        extra_env={
+            "EASY_CHEESE_HOME": str(tmp_path / "corpus-home"),
+            "EASY_CHEESE_PROJECT": "consumer",
+        },
+        cwd=tmp_path,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout) == {
+        "backend": "hallouminate",
+        "location": "repo:consumer:wiki",
+        "wiki_reachable": True,
+    }
+
+
 def test_mold_pyz_dispatches_validate_spec_end_to_end() -> None:
     mold_pyz = MOLD_PYZ
     result = _run(

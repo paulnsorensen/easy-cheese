@@ -7,6 +7,13 @@ import sys
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
 
+@bundle_command("domain-model-target")
+def _domain_model_target(argv: list[str]) -> int:
+    from easy_cheese.shared.paths import main
+
+    return main(["domain-model-target", *argv])
+
+
 @bundle_command("wheypoint-resolve")
 def _wheypoint_resolve(argv: list[str]) -> int:
     from easy_cheese.shared.wheypoint.resolve_cli import main
@@ -71,6 +78,10 @@ def _render_html(argv: list[str]) -> int:
 
 
 COMMANDS = (
+    derive_command(
+        _domain_model_target,
+        "Resolve the domain-model store from explicit Hallouminate probe results",
+    ),
     derive_command(
         _wheypoint_resolve,
         "Resolve a phase slug through the shared Wheypoint kernel (JSON out)",
