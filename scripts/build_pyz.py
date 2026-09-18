@@ -15,7 +15,8 @@ import sys
 import tempfile
 import tomllib
 import zipfile
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Sequence
+from contextlib import contextmanager
 from email.parser import Parser
 from pathlib import Path
 from types import ModuleType
@@ -28,8 +29,7 @@ SKILLS_ROOT = PACKAGE_ROOT / "skills"
 RUNTIME_LOCK = REPO_ROOT / "requirements" / "runtime.txt"
 SCHEMA_ROOT = SRC_ROOT / "easy_cheese_schemas"
 BUILD_SCRIPTS_ROOT = REPO_ROOT / "scripts"
-SCHEMA_CONTRACT_SOURCE = SCHEMA_ROOT / "contracts.py"
-SCHEMA_PR_PLAN_SOURCE = SCHEMA_ROOT / "pr_plan.py"
+SCHEMA_MODULE_INVENTORY_SOURCE = SCHEMA_ROOT / "_contract_modules.py"
 SCHEMA_CATALOG_SOURCE = SCHEMA_ROOT / "_schema_catalog.py"
 PHASE_REGISTRY_SOURCE = SCHEMA_ROOT / "_compiled_phase_registry.py"
 DOCUMENT_RULES_SOURCE = PACKAGE_ROOT / "shared" / "document_rules.py"
@@ -85,52 +85,80 @@ def _schema_catalog_compiler() -> tuple[
     )
 
 
-def _schema_contract_module() -> ModuleType:
-    module = ModuleType("_build_schema_contracts")
-    module.__file__ = str(SCHEMA_CONTRACT_SOURCE)
-    sys.modules[module.__name__] = module
-    source = SCHEMA_CONTRACT_SOURCE.read_bytes()
-    exec(compile(source, str(SCHEMA_CONTRACT_SOURCE), "exec"), module.__dict__)
+def _schema_module_source(module_name: str) -> Path:
+    leaf = module_name.rsplit(".", 1)[-1]
+    return SCHEMA_ROOT / f"{leaf}.py"
+
+
+def _schema_inventory_module() -> ModuleType:
+    module = ModuleType("_build_schema_module_inventory")
+    source = SCHEMA_MODULE_INVENTORY_SOURCE.read_bytes()
+    exec(compile(source, str(SCHEMA_MODULE_INVENTORY_SOURCE), "exec"), module.__dict__)
     return module
 
 
-def _compiled_schema_catalog_source() -> str:
-    """Compile the catalog from standalone execs of the schema-bearing modules.
+def _schema_module_inventory() -> tuple[str, ...]:
+    return cast(tuple[str, ...], getattr(_schema_inventory_module(), "CONTRACT_MODULES"))
 
-    ``contracts.py`` and ``pr_plan.py`` are exec'd in isolation rather than
-    imported, so compilation never runs the package ``__init__`` -- whose
-    runtime staleness check would otherwise wedge ``--write-generated`` on the
-    very stale catalog it exists to repair. ``pr_plan.py`` imports the contract
-    marker from ``easy_cheese_schemas.contracts``, so the standalone contracts
-    module is registered under that name while its source is exec'd.
-    """
-    collect, render = _schema_catalog_compiler()
-    contracts_module = _schema_contract_module()
-    package = ModuleType("easy_cheese_schemas")
-    package.__dict__["__path__"] = []
-    pr_plan_module = ModuleType("easy_cheese_schemas.pr_plan")
-    pr_plan_module.__file__ = str(SCHEMA_PR_PLAN_SOURCE)
+
+def _schema_generated_target(name: str) -> tuple[str, str]:
+    return cast(tuple[str, str], getattr(_schema_inventory_module(), name))
+
+
+@contextmanager
+def _isolated_schema_modules() -> Generator[tuple[ModuleType, ...], None, None]:
+    module_names = _schema_module_inventory()
+    package_name = module_names[0].rpartition(".")[0]
+    package = ModuleType(package_name)
+    package.__dict__["__path__"] = [str(SCHEMA_ROOT)]
+    namespace_prefix = f"{package_name}."
     saved = {
-        name: sys.modules.get(name)
-        for name in (
-            "easy_cheese_schemas",
-            "easy_cheese_schemas.contracts",
-            "easy_cheese_schemas.pr_plan",
-        )
+        name: module
+        for name, module in sys.modules.items()
+        if name == package_name or name.startswith(namespace_prefix)
     }
-    sys.modules["easy_cheese_schemas"] = package
-    sys.modules["easy_cheese_schemas.contracts"] = contracts_module
-    sys.modules["easy_cheese_schemas.pr_plan"] = pr_plan_module
+    for name in saved:
+        _ = sys.modules.pop(name, None)
+    sys.modules[package_name] = package
+    loaded: list[ModuleType] = []
     try:
-        source = SCHEMA_PR_PLAN_SOURCE.read_bytes()
-        exec(compile(source, str(SCHEMA_PR_PLAN_SOURCE), "exec"), pr_plan_module.__dict__)
-        return render(collect((contracts_module, pr_plan_module)))
+        for module_name in module_names:
+            source_path = _schema_module_source(module_name)
+            module = ModuleType(module_name)
+            module.__file__ = str(source_path)
+            module.__dict__["__package__"] = module_name.rpartition(".")[0]
+            sys.modules[module_name] = module
+            source = source_path.read_bytes()
+            exec(compile(source, str(source_path), "exec"), module.__dict__)
+            loaded.append(module)
+        yield tuple(loaded)
     finally:
-        for name, saved_module in saved.items():
-            if saved_module is None:
+        for name in tuple(sys.modules):
+            if name == package_name or name.startswith(namespace_prefix):
                 _ = sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = saved_module
+        sys.modules.update(saved)
+
+
+def _schema_target_attribute(target_name: str) -> object:
+    module_name, attribute_name = _schema_generated_target(target_name)
+    with _isolated_schema_modules() as modules:
+        by_name = {module.__name__: module for module in modules}
+        module = by_name.get(module_name)
+        if module is None:
+            raise RuntimeError(f"schema target module is not in the inventory: {module_name}")
+        try:
+            return cast(object, getattr(module, attribute_name))
+        except AttributeError as exc:
+            raise RuntimeError(
+                f"schema target attribute is missing: {module_name}.{attribute_name}"
+            ) from exc
+
+
+def _compiled_schema_catalog_source() -> str:
+    """Compile the catalog from isolated executions of the inventory modules."""
+    collect, render = _schema_catalog_compiler()
+    with _isolated_schema_modules() as modules:
+        return render(collect(modules))
 
 
 def _document_rules_compiler() -> tuple[
@@ -146,8 +174,8 @@ def _document_rules_compiler() -> tuple[
 
 def compiled_document_rules_source() -> str:
     collect, render = _document_rules_compiler()
-    contract = cast(type, getattr(_schema_contract_module(), "MoldSpecDocument"))
-    return render(collect(contract))
+    target = cast(type, _schema_target_attribute("DOCUMENT_RULES_TARGET"))
+    return render(collect(target))
 
 
 def _checked_in_generated_file_bytes(

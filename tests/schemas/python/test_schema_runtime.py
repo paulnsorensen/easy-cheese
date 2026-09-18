@@ -200,21 +200,20 @@ def test_marker_authority_rejects_invalid_registered_markers(slug: object) -> No
         setattr(contract_type, "__contract_slug__", original_slug)
 
 
-def test_runtime_and_compiler_project_the_module_tuple_authority() -> None:
-    contracts = importlib.import_module("easy_cheese_schemas.contracts")
-    pr_plan = importlib.import_module("easy_cheese_schemas.pr_plan")
+def test_runtime_and_compiler_project_the_module_inventory() -> None:
+    inventory = importlib.import_module("easy_cheese_schemas._contract_modules")
+    module_names = cast(tuple[str, ...], getattr(inventory, "CONTRACT_MODULES"))
     runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
     registered = cast(
         Callable[[], tuple[tuple[str, type], ...]], runtime.registered_contracts
     )
     entries = registered()
     marked_contracts = cast(tuple[tuple[str, type], ...], runtime._MARKED_CONTRACTS)
-    projected = collect_schema_markers(
-        (
-            cast(_ContractModule, cast(object, contracts)),
-            cast(_ContractModule, cast(object, pr_plan)),
-        )
+    modules = tuple(
+        cast(_ContractModule, cast(object, importlib.import_module(name)))
+        for name in module_names
     )
+    projected = collect_schema_markers(modules)
 
     assert entries == tuple(sorted(entries, key=lambda entry: entry[0]))
     assert marked_contracts == entries

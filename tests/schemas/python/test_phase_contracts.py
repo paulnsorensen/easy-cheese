@@ -88,7 +88,7 @@ class _WriterModule(Protocol):
 
 class _BuildPyzModule(Protocol):
     REPO_ROOT: Path
-    SCHEMA_CONTRACT_SOURCE: Path
+    SCHEMA_ROOT: Path
 
     def _compiled_phase_registry_source(self) -> str: ...
 
@@ -396,10 +396,14 @@ def test_schema_catalog_compilation_is_fresh_per_call(
         _BuildPyzModule,
         cast(object, _load("schema_catalog_build_fresh", scripts / "build_pyz.py")),
     )
-    source = REPO_ROOT / "src" / "easy_cheese_schemas" / "contracts.py"
-    staged = tmp_path / "contracts.py"
-    _ = staged.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-    monkeypatch.setattr(build_pyz, "SCHEMA_CONTRACT_SOURCE", staged)
+    source_root = REPO_ROOT / "src" / "easy_cheese_schemas"
+    staged_root = tmp_path / "easy_cheese_schemas"
+    _ = staged_root.mkdir()
+    for name in ("_contract_modules.py", "pr_plan.py"):
+        _ = (staged_root / name).write_bytes((source_root / name).read_bytes())
+    staged = staged_root / "contracts.py"
+    _ = staged.write_text((source_root / "contracts.py").read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(build_pyz, "SCHEMA_ROOT", staged_root)
 
     first = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
     _ = staged.write_text(
@@ -425,15 +429,19 @@ def test_bundle_build_rejects_stale_checked_in_catalog(
         _BuildPyzModule,
         cast(object, _load("schema_catalog_build_stale", scripts / "build_pyz.py")),
     )
-    source = REPO_ROOT / "src" / "easy_cheese_schemas" / "contracts.py"
-    staged = tmp_path / "contracts.py"
+    source_root = REPO_ROOT / "src" / "easy_cheese_schemas"
+    staged_root = tmp_path / "easy_cheese_schemas"
+    _ = staged_root.mkdir()
+    for name in ("_contract_modules.py", "pr_plan.py"):
+        _ = (staged_root / name).write_bytes((source_root / name).read_bytes())
+    staged = staged_root / "contracts.py"
     _ = staged.write_text(
-        source.read_text(encoding="utf-8").replace(
+        (source_root / "contracts.py").read_text(encoding="utf-8").replace(
             '@contract("curd-plan")', '@contract("fresh-plan")', 1
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(build_pyz, "SCHEMA_CONTRACT_SOURCE", staged)
+    monkeypatch.setattr(build_pyz, "SCHEMA_ROOT", staged_root)
     target = tmp_path / "cook.pyz"
 
     with pytest.raises(RuntimeError, match="checked-in schema catalog is stale"):

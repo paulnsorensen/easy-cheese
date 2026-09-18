@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import importlib
 import json
 import types
 from collections.abc import Mapping
 from enum import Enum
 from functools import cache
+from types import ModuleType
 from typing import (
     Any,
     TypeVar,
@@ -19,6 +21,7 @@ from attrs import Attribute
 
 import easy_cheese_schemas.contracts as contracts_module
 import easy_cheese_schemas.pr_plan as pr_plan_module
+from easy_cheese_schemas._contract_modules import CONTRACT_MODULES
 from easy_cheese_schemas._schema_catalog import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     SCHEMA_ROOT,
@@ -81,6 +84,10 @@ class _RegisteredContract:
     supported_version: ContractVersion | None
 
 
+def _contract_modules() -> tuple[ModuleType, ...]:
+    return tuple(importlib.import_module(name) for name in CONTRACT_MODULES)
+
+
 def _collect_registered_contracts(*modules: object) -> tuple[tuple[str, type], ...]:
     pairs = [
         pair
@@ -96,7 +103,7 @@ def _collect_registered_contracts(*modules: object) -> tuple[tuple[str, type], .
 
 def registered_contracts() -> tuple[tuple[str, type], ...]:
     """Collect marked contracts across the explicit module tuple."""
-    return _collect_registered_contracts(contracts_module, pr_plan_module)
+    return _collect_registered_contracts(*_contract_modules())
 
 
 _MARKED_CONTRACTS = registered_contracts()
