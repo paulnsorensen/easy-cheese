@@ -81,6 +81,15 @@ class TestResolveFile:
         assert result["supported"] is False
         assert "unsupported" in result["message"]
 
+    def test_generated_pyz_recommends_source_rebuild(
+        self, batch_resolve: _BatchResolveModule
+    ) -> None:
+        result = batch_resolve.resolve_file("bundle.pyz")
+        assert result["resolved"] is False
+        assert result["supported"] is False
+        assert "source conflicts" in result["message"]
+        assert "rebuild" in result["message"]
+
     def test_missing_stages(self, batch_resolve: _BatchResolveModule) -> None:
         with patch.object(batch_resolve, "extract_stages", return_value=(None, None, None)):
             result = batch_resolve.resolve_file("foo.py")
@@ -194,6 +203,15 @@ class TestDebugFile:
         assert result["supported"] is False
         assert result["tempdir"] is None
         assert "unsupported" in result["message"]
+
+    def test_generated_pyz_returns_rebuild_guidance(
+        self, batch_resolve: _BatchResolveModule
+    ) -> None:
+        result = batch_resolve.debug_file("bundle.pyz")
+        assert result["supported"] is False
+        assert result["tempdir"] is None
+        assert "source conflicts" in result["message"]
+        assert "rebuild" in result["message"]
 
     def test_missing_stages_returns_message(self, batch_resolve: _BatchResolveModule) -> None:
         with patch.object(batch_resolve, "extract_stages", return_value=(None, None, None)):
@@ -370,3 +388,32 @@ class TestFormatters:
         assert "✗" not in out
         assert "  ok a.py" in out
         assert "  -- b.py" in out
+
+
+class TestBinaryFiles:
+    """A binary file with a mergiraf extension must never reach the text merge path."""
+
+    def test_resolve_file_refuses_binary_content_before_stage_extraction(
+        self, batch_resolve: _BatchResolveModule, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "blob.py"
+        _ = path.write_bytes(b"\x89PNG\x00\xff\xfe")
+        with patch.object(batch_resolve, "extract_stages") as stages:
+            result = batch_resolve.resolve_file(str(path), dry_run=False)
+        stages.assert_not_called()
+        assert result["resolved"] is False
+        assert result["supported"] is False
+        assert "binary file" in result["message"]
+        assert path.read_bytes() == b"\x89PNG\x00\xff\xfe"
+
+    def test_debug_file_refuses_binary_content(
+        self, batch_resolve: _BatchResolveModule, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "blob.py"
+        _ = path.write_bytes(b"\x00\x01\x02")
+        with patch.object(batch_resolve, "extract_stages") as stages:
+            result = batch_resolve.debug_file(str(path))
+        stages.assert_not_called()
+        assert result["supported"] is False
+        assert result["tempdir"] is None
+        assert "binary file" in result["message"]

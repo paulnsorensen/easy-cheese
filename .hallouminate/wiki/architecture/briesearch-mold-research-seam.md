@@ -4,7 +4,10 @@ The Briesearch and Mold research seam is the path from a research slug to a publ
 
 ## Research slugs and paths
 
-`ResearchLayout` (`src/easy_cheese/skills/briesearch/research_layout.py:27-65`) enforces four to six kebab-case words and returns absolute `corpus_root`, `dir`, `report`, `raw_dir`, `manifest`, and `slug`. Reports live at `research/<slug>/<slug>.md`, with the slug derived from the parent mini-spec slug. Mold's `## Provenance` bullet expects a corpus-relative path (`skills/mold/references/mini-spec-mode.md:48-62`), so the caller converts before it writes. Before the r014 cure the CLI checked only kebab-case; the word count is now enforced.
+`ResearchLayout` enforces four to six kebab-case words. It returns absolute operational paths and a corpus-relative `artifact` storage identity.[^1] Reports live at `research/<slug>/<slug>.md`, with the slug derived from the parent mini-spec slug. A durable document that links the separately stored report records the full absolute `report` path. It does not copy the report or record the corpus-relative storage identity.[^2]
+
+[^1]: src/easy_cheese/skills/briesearch/research_layout.py:32-78
+[^2]: skills/mold/references/mini-spec-mode.md:71-98; skills/briesearch/references/synthesis.md:112-116
 
 ## Internal callers set `invocation: sidechain`
 

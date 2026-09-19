@@ -51,6 +51,10 @@ class _GitUtilsModule(Protocol):
 
     def extract_stages(self, path: str) -> tuple[str | None, str | None, str | None]: ...
 
+    def is_binary_file(self, path: str | Path) -> bool: ...
+
+    def binary_conflict_guidance(self, path: str) -> str | None: ...
+
 
 class TestGetFileExtension:
     def test_returns_extension_without_dot(self, git_utils: _GitUtilsModule) -> None:
@@ -212,3 +216,43 @@ class TestExtractStages:
         assert theirs == "THEIRS"
 
 
+class TestBinaryConflictGuidance:
+    def test_nul_byte_marks_a_file_binary(self, git_utils: _GitUtilsModule, tmp_path: Path) -> None:
+        path = tmp_path / "blob"
+        _ = path.write_bytes(b"text\x00more")
+        assert git_utils.is_binary_file(path) is True
+
+    def test_utf8_text_is_not_binary(self, git_utils: _GitUtilsModule, tmp_path: Path) -> None:
+        path = tmp_path / "notes.md"
+        _ = path.write_text("café — <<<<<<< HEAD\n", encoding="utf-8")
+        assert git_utils.is_binary_file(path) is False
+        assert git_utils.binary_conflict_guidance(str(path)) is None
+
+    def test_a_nul_byte_after_the_sniff_window_is_ignored_like_git(
+        self, git_utils: _GitUtilsModule, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "big.txt"
+        _ = path.write_bytes(b"a" * 8000 + b"\x00")
+        assert git_utils.is_binary_file(path) is False
+
+    def test_missing_path_is_not_binary(self, git_utils: _GitUtilsModule, tmp_path: Path) -> None:
+        assert git_utils.is_binary_file(tmp_path / "absent") is False
+        assert git_utils.binary_conflict_guidance(str(tmp_path / "absent.py")) is None
+
+    def test_binary_file_gets_side_selection_guidance(
+        self, git_utils: _GitUtilsModule, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "logo.png"
+        _ = path.write_bytes(b"\x89PNG\x00")
+        guidance = git_utils.binary_conflict_guidance(str(path))
+        assert guidance is not None
+        assert "binary file" in guidance
+
+    @pytest.mark.parametrize("name", ["bundle.pyz", "BUNDLE.PYZ"])
+    def test_generated_archive_gets_rebuild_guidance_even_when_absent(
+        self, git_utils: _GitUtilsModule, tmp_path: Path, name: str
+    ) -> None:
+        guidance = git_utils.binary_conflict_guidance(str(tmp_path / name))
+        assert guidance is not None
+        assert "rebuild" in guidance
+        assert "binary file" not in guidance

@@ -4,8 +4,8 @@
 slug at four to six kebab-case words. The shared `validate_slug` helper only
 enforces generic kebab-case, so a one-word slug produced a directory the prose
 forbids (`review-briesearch.md`, `hub-shared.md`). `edge-briesearch-mold.md`
-also needs the corpus-relative artifact path that a Mold `## Provenance` bullet
-records, because a Mold document cannot carry an absolute private path.
+also needs the absolute report path that a Mold `## Provenance` bullet
+records, while the layout keeps its corpus-relative storage artifact.
 """
 
 from __future__ import annotations
@@ -54,10 +54,13 @@ def test_research_layout_rejects_a_slug_outside_the_word_range() -> None:
         _ = research_layout("fix-auth", root=Path("/tmp"))
 
 
-def test_the_artifact_field_is_corpus_relative(tmp_path: Path) -> None:
+def test_the_artifact_field_keeps_storage_layout_and_report_is_absolute(tmp_path: Path) -> None:
     layout = research_layout("hybrid-retrieval-fusion-study", root=tmp_path)
     assert layout["artifact"] == (
         "research/hybrid-retrieval-fusion-study/hybrid-retrieval-fusion-study.md"
     )
     assert not Path(layout["artifact"]).is_absolute()
+    assert layout["report"] == str(
+        tmp_path / "research/hybrid-retrieval-fusion-study/hybrid-retrieval-fusion-study.md"
+    )
     assert layout["report"] == str(Path(layout["corpus_root"]) / layout["artifact"])

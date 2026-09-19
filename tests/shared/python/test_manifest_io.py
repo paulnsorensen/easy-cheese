@@ -168,3 +168,21 @@ class TestJsonCommandKeys:
         main = manifest_io.json_command(echo, "usage: prog [<req>]", keys=("a", "b"))
         assert main([]) == 0
         assert capsys.readouterr().out == '{\n  "b": 2,\n  "a": 1\n}\n'
+
+
+class TestJsonCommandHelp:
+    @pytest.mark.parametrize("flag", ["-h", "--help"])
+    def test_help_prints_usage_without_reading_manifest(
+        self,
+        manifest_io: _ManifestIoModule,
+        flag: str,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def succeed(**_: object) -> dict[str, bool]:
+            return {"ok": True}
+
+        main = manifest_io.json_command(succeed, "usage: prog [<req>]")
+        assert main([flag]) == 0
+        captured = capsys.readouterr()
+        assert captured.out == "usage: prog [<req>]\n"
+        assert captured.err == ""

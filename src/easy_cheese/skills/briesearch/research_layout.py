@@ -32,9 +32,8 @@ MAX_SLUG_WORDS = 6
 class ResearchLayout(TypedDict):
     """One `/briesearch` research artifact.
 
-    Every path field is absolute, so a caller writes files without rebuilding
-    them. `artifact` is the corpus-relative form that a Mold `## Provenance`
-    bullet records.
+    Every operational path is absolute, so a caller writes files without
+    rebuilding them. `artifact` preserves the corpus-relative storage path.
     """
 
     slug: str

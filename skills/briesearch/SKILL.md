@@ -10,7 +10,7 @@ metadata: {dispatches-agents: true}
 `/briesearch` has two contexts:
 
 - **User-invoked context.** The user requests research. Produce the report that `## Output` defines.
-- **Internal tier-2 context.** `/cheese` starts `/briesearch` silently when its clarity check needs external context. Return one line for the mini-spec `## Provenance` section. Write the full cited research to `research/<slug>/<slug>.md` in the durable corpus. Derive the slug from the parent mini-spec slug. Link the artifact path from the mini-spec. This link preserves citations and prevents repeated research. Skip the durable write only when you fetch no source.
+- **Internal tier-2 context.** `/cheese` starts `/briesearch` silently when its clarity check needs external context. Return one line for the mini-spec `## Provenance` section. Write the full cited research to `research/<slug>/<slug>.md` in the durable corpus. Derive the slug from the parent mini-spec slug. Link the absolute `report` path from the mini-spec. This link preserves citations and prevents repeated research. Skip the durable write only when you fetch no source.
 
 Do not use this skill for one clear file lookup. Do not use it when the user already has sufficient evidence.
 
@@ -59,7 +59,7 @@ Do not lower confidence only because you substitute a provider. Lower confidence
 
 ## Output
 
-Use the style and citation format in [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Follow the output contract in `references/synthesis.md`. Return one synthesis paragraph, a claim evidence table, open questions, confidence, and the recommended next step. Give a one-line reason for the confidence value. For deep research, write the long report to `research/<slug>/<slug>.md` in the durable corpus. Resolve each path with `research-layout <slug>`. See `references/synthesis.md`. Return the corpus-relative `artifact` path.
+Use the style and citation format in [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Follow the output contract in `references/synthesis.md`. Return one synthesis paragraph, a claim evidence table, open questions, confidence, and the recommended next step. Give a one-line reason for the confidence value. For deep research, write the long report to `research/<slug>/<slug>.md` in the durable corpus. Resolve each path with `research-layout <slug>`. See `references/synthesis.md`. Return the absolute `report` path returned by `research-layout` as the artifact reference.
 
 ## Rules
 
