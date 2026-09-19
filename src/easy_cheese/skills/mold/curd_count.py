@@ -10,12 +10,11 @@ but do NOT drive the count: they are facets of one coherent change, not
 independent file-disjoint curds, so counting them inflates the recommendation
 toward fan-out for specs that are emphatically not decomposable (issue #111).
 
-Decision rule: goal count and blast radius still select the eventual Cook wave
-mode. Gate applicability selects the immediate skill: `red-required` routes to
-`/cut`, whose receipt then unlocks Cook; closed `not-applicable` and legacy
-specs route directly to `/cook`. Mold provenance markers require the explicit
-`gate_applicability.ui_surface` classification; unmarked legacy specs remain
-compatible with Cut. `--auto` remains a user-selected menu choice.
+Decision rule: goal count and blast radius provide an advisory Cook wave-mode
+hint. Curd-count is sizing-only: it names the recommended skill, reports
+landing and signals, and never authorizes execution or constructs a handoff.
+Finalization is the sole authority publisher; it decides whether a canonical
+Cook handoff is ready.
 
 `/ultracook` is retired. The count is a signal, not a verdict: the decomposer
 confirms file-disjointness before parallel fan-out runs.
@@ -32,8 +31,7 @@ from typing import cast
 from easy_cheese.shared.fanout.mode import PARALLEL_THRESHOLD
 from easy_cheese.shared.taste_test import (
     ApplicabilityError,
-    RedRequired,
-    auto_handoff,
+    TasteTestError,
     is_new_mold_spec,
     parse_gate_applicability,
     parse_landing,
@@ -113,25 +111,25 @@ def _read_spec(spec_path: Path) -> str:
         raise SpecReadError(f"could not read spec: {exc.strerror or exc}") from exc
 
 
-def _gate_handoff(
-    spec_path: Path, body: str, landing: dict[str, object]
-) -> dict[str, object] | None:
-    """Return the red-required handoff for ``body``, or ``None`` when the spec doesn't gate."""
-    if (
-        not re.search(r"(?m)^gate_applicability:\s*(?:\{|$)", body)
-        and not is_new_mold_spec(body)
-    ):
-        return None
+
+def _gate_applicability_warnings(body: str) -> list[str]:
+    """Report a malformed ``gate_applicability`` block as a sizing warning.
+
+    Curd-count sizes work and never gates it, so a bad declaration changes no
+    recommendation here.  Reporting it names the problem the finalize gate
+    raises later, while the spec is still open.
+    """
     try:
-        applicability = parse_gate_applicability(
-            body,
-            require_ui_surface=is_new_mold_spec(body),
-        )
+        _ = parse_gate_applicability(body, require_ui_surface=True)
     except ApplicabilityError as exc:
-        raise SpecReadError(f"invalid gate applicability: {exc}") from exc
-    if isinstance(applicability, RedRequired):
-        return auto_handoff(spec_path, applicability, metadata={"landing": landing})
-    return None
+        if exc.problems == (
+            "gate-applicability-declaration-required",
+        ) and not is_new_mold_spec(body):
+            return []
+        return [f"gate-applicability:{problem}" for problem in exc.problems]
+    except TasteTestError as exc:
+        return [f"gate-applicability:{exc}"]
+    return []
 
 
 def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
@@ -147,11 +145,6 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
     except ApplicabilityError as exc:
         raise SpecReadError(f"invalid landing: {exc}") from exc
     landing = landing_mapping(declared_landing)
-    handoff = _gate_handoff(spec_path, body, landing)
-    if handoff is not None:
-        command = cast(list[str], handoff["command"])
-        recommended = command[0]
-        rationale = f"red-required handoff to /cook precedes {rationale}"
 
     return {
         "spec_path": str(spec_path),
@@ -166,8 +159,8 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
         "threshold": PARALLEL_THRESHOLD,
         "decomposable": candidate_curds >= PARALLEL_THRESHOLD,
         "recommended_skill": recommended,
-        "handoff": handoff,
         "landing": landing,
+        "warnings": _gate_applicability_warnings(body),
         "mode": mode,
         "rationale": rationale,
         "notes": [

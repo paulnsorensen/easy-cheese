@@ -15,9 +15,20 @@ from pathlib import Path
 
 import pytest
 from easy_cheese_schemas import (
+    ArtifactRef,
     CanonicalArtifact,
+    ContractVersion,
+    CriterionDisposition,
+    CriterionResult,
+    CurdDisposition,
+    CurdResult,
+    EvidenceKind,
+    EvidenceRef,
     NormalizationReceipt,
     PublishedArtifact,
+    SourceCurdRef,
+    SourcePlanRef,
+    canonical_bytes,
     canonical_digest,
     supported_version_for,
     validate_contract,
@@ -25,45 +36,50 @@ from easy_cheese_schemas import (
 
 from easy_cheese.shared import publication
 
-CURD_PLAN_SCHEMA_URI = "https://schemas.easy-cheese.dev/curd-plan"
+CURD_RESULT_SCHEMA_URI = "https://schemas.easy-cheese.dev/curd-result"
+DIGEST = "sha256:" + ("0" * 64)
 
-_UNSIGNED_DOC: dict[str, object] = {
-    "contract_version": {
-        "schema_uri": CURD_PLAN_SCHEMA_URI,
-        "major": "1",
-        "minor": "0",
-    },
-    "plan_id": "curdplan-recovery-1",
-    "revision": 1,
-    "objective": "Ship the approved behavior",
-    "curds": [
-        {
-            "curd_id": "runtime",
-            "outcome": "Implement strict validation",
-            "scope": {"paths": ["src/runtime.py"], "excluded_paths": []},
-            "inputs": [],
-            "outputs": ["Validated contract"],
-            "dependencies": [],
-            "criteria": [
-                {
-                    "criterion_id": "recovery-1",
-                    "description": "Unknown fields reject",
-                    "check": "uv run pytest tests/test_runtime.py",
-                }
+
+RESULT = CurdResult(
+    contract_version=ContractVersion(
+        schema_uri=CURD_RESULT_SCHEMA_URI,
+        major="1",
+        minor="0",
+    ),
+    result_id="recovery-result",
+    source_plan_ref=SourcePlanRef(plan_id="recovery-plan", revision=1, digest=DIGEST),
+    source_curd_ref=SourceCurdRef(curd_id="runtime", digest=DIGEST),
+    disposition=CurdDisposition.PASSED,
+    expected_criterion_ids=["recovery"],
+    criterion_results=[
+        CriterionResult(
+            criterion_id="recovery",
+            disposition=CriterionDisposition.PASSED,
+            evidence=[
+                EvidenceRef(
+                    evidence_id="recovery-evidence",
+                    kind=EvidenceKind.SOURCE,
+                    artifact=ArtifactRef(
+                        artifact_id="source",
+                        role="source",
+                        uri="repo://source.txt",
+                        digest=DIGEST,
+                        size_bytes=1,
+                        media_type="text/plain",
+                    ),
+                    summary="Recovery evidence",
+                )
             ],
-            "lineage": {"identity_action": "new", "source_curd_ids": []},
-        }
+        )
     ],
-    "context": None,
-    "parent_plan_ref": None,
-}
-
-DOC: dict[str, object] = {**_UNSIGNED_DOC, "digest": canonical_digest(_UNSIGNED_DOC)}
+)
 
 
 def _prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
     validated = validate_contract(
-        DOC, CURD_PLAN_SCHEMA_URI, supported_version_for(CURD_PLAN_SCHEMA_URI)
+        canonical_bytes(RESULT),
+        CURD_RESULT_SCHEMA_URI,
+        supported_version_for(CURD_RESULT_SCHEMA_URI),
     )
     return validated, None
 
@@ -78,13 +94,13 @@ def _publish_canonical(
         request_digest=publication.request_digest(
             "raw",
             {"operation_id": operation_id},
-            source_phase="mold",
-            destination_phase="cook",
-            payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+            source_phase="cook",
+            destination_phase="press",
+            payload_schema_uri=CURD_RESULT_SCHEMA_URI,
         ),
-        source_phase="mold",
-        destination_phase="cook",
-        payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+        source_phase="cook",
+        destination_phase="press",
+        payload_schema_uri=CURD_RESULT_SCHEMA_URI,
         operation_id=operation_id,
         artifact_root=tmp_path,
         prepare=_prepare,
@@ -150,9 +166,7 @@ def test_corrupt_repair_keeps_a_concurrent_valid_replacement(
         content = original_read_bytes(path)
         if path == payload_path and not replaced:
             replaced = True
-            publication._atomic_write(  # pyright: ignore[reportPrivateUsage]
-                path, validated.canonical_bytes
-            )
+            publication.atomic_write(path, validated.canonical_bytes)
         return content
 
     monkeypatch.setattr(Path, "read_bytes", _read_bytes)
@@ -178,9 +192,7 @@ def test_corrupt_repair_restores_a_valid_post_read_replacement(
         nonlocal replaced
         if source == payload_path and not replaced:
             replaced = True
-            publication._atomic_write(  # pyright: ignore[reportPrivateUsage]
-                payload_path, validated.canonical_bytes
-            )
+            publication.atomic_write(payload_path, validated.canonical_bytes)
         original_replace(source, destination)
 
     monkeypatch.setattr(os, "replace", _replace)

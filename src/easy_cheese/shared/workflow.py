@@ -5,7 +5,7 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from enum import Enum
 from pathlib import Path
 from typing import Literal, cast
@@ -1191,6 +1191,7 @@ def _require_confirmed_bindings(
 def _validate_cure_bindings(
     curd_plan: CurdPlan,
     bindings: CureDiagnosisBindings,
+    selected_curd_ids: Sequence[str] | None = None,
 ) -> dict[str, CureDiagnosisBinding]:
     if curd_plan.digest != curd_plan_digest(curd_plan):
         raise ValueError("curd plan digest does not match its canonical content")
@@ -1200,7 +1201,14 @@ def _validate_cure_bindings(
         curd_plan.revision,
         curd_plan.digest,
     )
-    expected_curds = {curd.curd_id: curd for curd in curd_plan.curds}
+    # A partial cure binds one diagnosis per selected curd, so the expected
+    # set is the dependency-closed selection, not the whole plan.
+    selected = None if selected_curd_ids is None else set(selected_curd_ids)
+    expected_curds = {
+        curd.curd_id: curd
+        for curd in curd_plan.curds
+        if selected is None or curd.curd_id in selected
+    }
     missing = sorted(set(expected_curds) - set(normalized))
     extra = sorted(set(normalized) - set(expected_curds))
     if missing or extra:
@@ -1222,9 +1230,61 @@ def _validate_cure_bindings(
     return normalized
 
 
+def _selected_curds(
+    curd_plan: CurdPlan,
+    curd_ids: Sequence[str] | None,
+) -> tuple[tuple[int, SemanticCurd], ...]:
+    indexed = tuple(enumerate(curd_plan.curds, start=1))
+    declared = {curd.curd_id: curd for _, curd in indexed}
+    if curd_ids is None:
+        selected_ids = set(declared)
+    else:
+        requested = tuple(curd_ids)
+        if not requested:
+            raise ContractValidationError("partial execution requires at least one curd ID")
+        if len(set(requested)) != len(requested):
+            raise ContractValidationError("partial execution must not repeat curd IDs")
+        selected_ids = set(requested)
+        unknown = selected_ids - declared.keys()
+        if unknown:
+            raise ContractValidationError(
+                "partial execution names unknown curd IDs: " + ", ".join(sorted(unknown))
+            )
+    selected = tuple(
+        (index, curd) for index, curd in indexed if curd.curd_id in selected_ids
+    )
+    for _, curd in selected:
+        missing = set(curd.dependencies) - selected_ids
+        if missing:
+            raise ContractValidationError(
+                f"partial execution for {curd.curd_id!r} omits dependencies: "
+                + ", ".join(sorted(missing))
+            )
+    ordered: list[tuple[int, SemanticCurd]] = []
+    remaining = {curd.curd_id: (index, curd) for index, curd in selected}
+    completed: set[str] = set()
+    while remaining:
+        ready = sorted(
+            (
+                item
+                for item in remaining.values()
+                if set(item[1].dependencies) <= completed
+            ),
+            key=lambda item: item[0],
+        )
+        if not ready:
+            raise ContractValidationError("curd plan dependencies contain a cycle")
+        ordered.extend(ready)
+        for _, curd in ready:
+            completed.add(curd.curd_id)
+            del remaining[curd.curd_id]
+    return tuple(ordered)
+
+
 def _execute_plan(
     curd_plan: CurdPlan,
     *,
+    curd_ids: Sequence[str] | None,
     repository_root: str | Path,
     artifact_directory: str | Path,
     evidence: Mapping[str, EvidenceRef],
@@ -1239,7 +1299,8 @@ def _execute_plan(
     results: list[CurdResult] = []
     root = Path(repository_root)
     artifacts = Path(artifact_directory)
-    if not curd_plan.curds:
+    selected = _selected_curds(curd_plan, curd_ids)
+    if not selected:
         return (), ()
     try:
         shared_inputs, resolved_evidence, durable_evidence = _resolve_plan_context(
@@ -1258,9 +1319,9 @@ def _execute_plan(
                 reason,
                 provenance_refs=provenance_refs,
             )
-            for index, curd in enumerate(curd_plan.curds, start=1)
+            for index, curd in selected
         )
-    for index, curd in enumerate(curd_plan.curds, start=1):
+    for index, curd in selected:
         curd_provenance = provenance_refs
         if diagnosis_bindings is not None:
             curd_provenance = (
@@ -1297,10 +1358,12 @@ def cook(
     dispatch_review: ReviewDispatch,
     dispatch_diagnosis: DiagnosisDispatch,
     evidence: Mapping[str, EvidenceRef] | None = None,
+    curd_ids: Sequence[str] | None = None,
 ) -> ExecutionResults:
     validated_plan = validate_curd_plan(curd_plan)
     return _execute_plan(
         validated_plan,
+        curd_ids=curd_ids,
         repository_root=repository_root,
         artifact_directory=artifact_directory,
         evidence={} if evidence is None else evidence,
@@ -1323,11 +1386,20 @@ def cure(
     dispatch_review: ReviewDispatch,
     dispatch_diagnosis: DiagnosisDispatch,
     evidence: Mapping[str, EvidenceRef] | None = None,
+    curd_ids: Sequence[str] | None = None,
 ) -> ExecutionResults:
     validated_plan = validate_curd_plan(curd_plan)
-    normalized = _validate_cure_bindings(validated_plan, diagnosis_bindings)
+    # Resolve the dependency-closed selection first so a partial cure is
+    # validated against the curds it will actually execute.
+    selected = _selected_curds(validated_plan, curd_ids)
+    normalized = _validate_cure_bindings(
+        validated_plan,
+        diagnosis_bindings,
+        tuple(curd.curd_id for _, curd in selected),
+    )
     return _execute_plan(
         validated_plan,
+        curd_ids=curd_ids,
         repository_root=repository_root,
         artifact_directory=artifact_directory,
         evidence={} if evidence is None else evidence,
@@ -1355,6 +1427,7 @@ def run_workflow(
     source_plan: CurdPlan | None = None,
     phase: Literal["cook", "cure"] = "cook",
     diagnosis_bindings: CureDiagnosisBindings | None = None,
+    curd_ids: Sequence[str] | None = None,
 ) -> WorkflowResults:
     if phase == "cure":
         if diagnosis_bindings is None:
@@ -1381,11 +1454,17 @@ def run_workflow(
             raise TypeError(
                 "cure requires a mapping or tuple of per-curd diagnosis bindings"
             )
-        normalized = _validate_cure_bindings(validated_plan, prevalidated)
+        selected_for_cure = _selected_curds(validated_plan, curd_ids)
+        normalized = _validate_cure_bindings(
+            validated_plan,
+            prevalidated,
+            tuple(curd.curd_id for _, curd in selected_for_cure),
+        )
     else:
         normalized = None
     branches, results = _execute_plan(
         validated_plan,
+        curd_ids=curd_ids,
         repository_root=repository_root,
         artifact_directory=artifact_directory,
         evidence={} if evidence is None else evidence,

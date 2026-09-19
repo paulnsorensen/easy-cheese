@@ -1,0 +1,11 @@
+{
+  "scenario": "light-ready",
+  "events": [
+    {"type": "input_classified", "input_kind": "slug"},
+    {"type": "prepare", "mode": "light", "outcome": "needs-approval"},
+    {"type": "approval_requested", "kind": "scope"},
+    {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+    {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/light.json"},
+    {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/light.json"}
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "contract_version": {
+    "schema_uri": "https://schemas.easy-cheese.dev/handoff-pointer",
+    "major": "1",
+    "minor": "0"
+  },
+  "operation_id": "historical-operation-with-receipt",
+  "request_digest": "sha256:0676cd8fdb8265f86b69d008d9a84f1febd49ab80eabb2b0d250ec124d711d18",
+  "source_phase": "mold",
+  "destination_phase": "cook",
+  "payload": {
+    "artifact_id": "historical-plan",
+    "role": "curd_plan",
+    "uri": "repo://historical-plan.json",
+    "digest": "sha256:0676cd8fdb8265f86b69d008d9a84f1febd49ab80eabb2b0d250ec124d711d18",
+    "size_bytes": 1019,
+    "media_type": "application/json",
+    "schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+  },
+  "normalization_receipt": {
+    "artifact_id": "historical-receipt",
+    "role": "normalization_receipt",
+    "uri": "repo://historical-receipt.json",
+    "digest": "sha256:63c4466067bc8618bd65e24ed9f86d2e7325164cbc8a25ffe5e5217e052433c6",
+    "size_bytes": 627,
+    "media_type": "application/json",
+    "schema_uri": "https://schemas.easy-cheese.dev/normalization-receipt"
+  }
+}

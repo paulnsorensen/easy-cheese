@@ -116,6 +116,20 @@ def _validate(argv: list[str]) -> int:
     return validate_main(argv)
 
 
+@bundle_command("prepare")
+def _prepare(argv: list[str]) -> int:
+    from easy_cheese.skills.cook.contract_handlers import prepare_main
+
+    return prepare_main(argv)
+
+
+@bundle_command("resubmit")
+def _resubmit(argv: list[str]) -> int:
+    from easy_cheese.skills.cook.contract_handlers import resubmit_main
+
+    return resubmit_main(argv)
+
+
 @bundle_command("accept")
 def _accept(argv: list[str]) -> int:
     from easy_cheese.skills.cook.contract_handlers import accept_main
@@ -221,6 +235,14 @@ COMMANDS = (
         _validate, "Validate a typed contract payload against its registered schema"
     ),
     derive_command(_accept, "Validate and accept a canonical Mold handoff pointer"),
+    derive_command(
+        _prepare,
+        "Classify a Cook input and return a closed preparation outcome",
+    ),
+    derive_command(
+        _resubmit,
+        "Recompute a Cook preparation outcome with new evidence",
+    ),
     derive_command(
         _slugify, "Derive a kebab-case slug and durable spec path from task text"
     ),

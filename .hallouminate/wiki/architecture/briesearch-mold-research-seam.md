@@ -1,6 +1,6 @@
 # Briesearch and Mold research seam
 
-The Briesearch and Mold research seam is the path from a research slug to a published spec: Briesearch writes research, Mold consumes it and writes the spec, and Cook accepts Mold's output through a pointer. The r014 edge reviews (`edge-briesearch-mold.md`, `edge-mold-briesearch.md`, `edge-cheese-mold.md`, `edge-mold-cook.md`, `edge-schemas-mold.md`) recorded the seam rules below. Spec discovery fallbacks are in [cheese-corpus-setup-002](../adr/cheese-corpus-setup-002.md).
+The Briesearch and Mold research seam is the path from a research slug to a finalized Mold spec and its consumer-valid Cook handoff: Briesearch writes research, Mold consumes it, and Mold's finalizer publishes the canonical pointer for Cook. The r014 edge reviews (`edge-briesearch-mold.md`, `edge-mold-briesearch.md`, `edge-cheese-mold.md`, `edge-mold-cook.md`, `edge-schemas-mold.md`) recorded the seam rules below. Spec discovery fallbacks are in [cheese-corpus-setup-002](../adr/cheese-corpus-setup-002.md).
 
 ## Research slugs and paths
 
@@ -14,13 +14,13 @@ The ledger parser (`src/easy_cheese/skills/briesearch/ledger.py:329-337`) defaul
 
 Never persist a credential-bearing URL. Canonical identity comes from hostname and port only; diagnostics go through `render_url`; a non-root trailing slash is significant (`/a` differs from `/a/`); citation parsing balances parentheses.
 
-## Spec paths come from the resolver
+## Spec inputs and finalizer output
 
-Mold specs are not written to a literal `.cheese/specs/<slug>.md`. `artifact-path specs <slug>` and `validate-spec --strict <path>` resolve into the XDG durable corpus (`src/easy_cheese/shared/paths.py:252-284`). Callers use the returned path. The same bare slug resolves to different files by resolver: `artifact-path specs` gives `~/.local/share/cheese/<org-repo>/specs/<slug>.md`, while phase reports live under `.cheese/<skill>/`. Cook once resolved a Pasteurize slug as a spec and missed the `.cheese/pasteurize/` report; pick the resolver for the artifact kind. Validate every user-supplied slug with `validate_slug` before it enters a path (Curdle writes are the known case).
+`artifact-path specs <slug>` resolves the durable Mold spec input under the XDG corpus (`src/easy_cheese/shared/paths.py:252-284`). The resolved path is supplied to Mold's finalizer; it is not a direct Cook handoff. Validate every user-supplied slug with `validate_slug` before it enters a path.
 
-## Mold's normal path skips `publish`
+## The finalizer is the Mold-to-Cook boundary
 
-The canonical Mold to Cook contract is `mold.pyz publish` writing a `HandoffPointer` under `pointers/<operation-id>.json`, then Cook `accept` validating route, receipt, and digest. Mold's taste-test flow emits `/cook --auto <spec_ref>` instead (`src/easy_cheese/shared/taste_test.py:1142-1186`, `skills/mold/SKILL.md:21-24,109,127-133`), so `accept` and its checks are skipped on the common path. A producer must invoke its publish step, not only validate.
+`python3 skills/mold/scripts/mold.pyz finalize` is the single Mold publication path. It validates the bounded spec and readiness evidence, publishes the referenced artifacts, and reveals the canonical `HandoffPointer` under `pointers/<operation-id>.json`. Cook consumes that pointer through the shared handoff validator, which resolves and digest-checks the references, approval, and landing before readiness. Cook no longer performs the removed optional-spec landing lookup or emits its legacy stderr note.
 
 ## Grounding rows must be real
 
@@ -34,4 +34,4 @@ Mold invariants existed three times: `contracts.py`, `validate_spec.py`, and `ta
 
 A grounding tool with several global corpora must match the corpus to the current repository or use the workspace default. A first-match fallback copies private rationale across repositories; record ambiguity as `unavailable`.
 
-_Source: r014 skill-review round notes (ingest hash 499c49c7b67d5eb6), verified against `research_layout.py` on 2026-09-04 · Updated: 2026-09-04 · Supersedes: the review-time claim that slug word count was unenforced_
+_Source: r014 skill-review round notes (ingest hash 499c49c7b67d5eb6), verified against `research_layout.py` on 2026-09-04 · Updated: 2026-09-18 · Supersedes: the former publish/direct-spec handoff route and the review-time claim that slug word count was unenforced_
