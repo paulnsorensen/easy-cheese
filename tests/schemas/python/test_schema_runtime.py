@@ -20,6 +20,7 @@ from _schema_catalog_compiler import (
 from _schema_catalog_compiler import (
     render as render_schema_catalog,
 )
+from build_pyz import _compiled_schema_catalog_source  # pyright: ignore[reportPrivateUsage]
 
 from easy_cheese_schemas.contracts import (
     MAX_CONTRACT_BYTES,
@@ -180,6 +181,7 @@ def test_duplicate_slugs_across_modules_are_rejected_by_runtime_and_compiler() -
     ):
         _ = collect_schema_markers((left, right))
 
+
 @pytest.mark.parametrize("slug", ["", "  ", 7])
 def test_contract_rejects_invalid_markers(slug: object) -> None:
     with pytest.raises(ValueError, match="contract slug must be a non-empty string"):
@@ -235,18 +237,10 @@ def test_compiler_retains_constant_name_collision_validation() -> None:
 
 
 def test_generated_catalog_bytes_match_compiler_projection() -> None:
-    contracts = importlib.import_module("easy_cheese_schemas.contracts")
-    pr_plan = importlib.import_module("easy_cheese_schemas.pr_plan")
+
     generated = ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
 
-    assert generated.read_bytes() == render_schema_catalog(
-        collect_schema_markers(
-            (
-                cast(_ContractModule, cast(object, contracts)),
-                cast(_ContractModule, cast(object, pr_plan)),
-            )
-        )
-    ).encode("utf-8")
+    assert generated.read_text(encoding="utf-8") == _compiled_schema_catalog_source()
 
 
 def test_runtime_schema_resolution_rejects_unmarked_contract_in_clean_import() -> None:
@@ -296,11 +290,14 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
     assert set(REGISTERED_CONTRACT_SCHEMA_URIS) == {
         f"{SCHEMA_ROOT}/agent-writer-view",
         f"{SCHEMA_ROOT}/checkpoint-intent",
+        f"{SCHEMA_ROOT}/cook-preparation-result",
         f"{SCHEMA_ROOT}/curd-plan",
         f"{SCHEMA_ROOT}/curd-result",
         f"{SCHEMA_ROOT}/diagnosis-request",
         f"{SCHEMA_ROOT}/diagnosis-result",
         f"{SCHEMA_ROOT}/handoff-pointer",
+        f"{SCHEMA_ROOT}/mold-cook-approval",
+        f"{SCHEMA_ROOT}/mold-cook-handoff",
         f"{SCHEMA_ROOT}/normalization-receipt",
         f"{SCHEMA_ROOT}/phase-contract",
         f"{SCHEMA_ROOT}/planner-request",
@@ -385,7 +382,9 @@ def test_field_metadata_min_items_reaches_an_optional_array() -> None:
     _ = _definition(_Optional, definitions)
     properties = as_dict(as_dict(definitions["_Optional"])["properties"])
     members = cast("list[object]", as_dict(properties["items"])["anyOf"])
-    array_member = next(as_dict(m) for m in members if as_dict(m).get("type") == "array")
+    array_member = next(
+        as_dict(m) for m in members if as_dict(m).get("type") == "array"
+    )
     assert array_member["minItems"] == 1
 
 

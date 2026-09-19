@@ -1,0 +1,21 @@
+{
+  "contract_version": {
+    "schema_uri": "https://schemas.easy-cheese.dev/handoff-pointer",
+    "major": "1",
+    "minor": "0"
+  },
+  "operation_id": "historical-operation",
+  "request_digest": "sha256:0676cd8fdb8265f86b69d008d9a84f1febd49ab80eabb2b0d250ec124d711d18",
+  "source_phase": "mold",
+  "destination_phase": "cook",
+  "payload": {
+    "artifact_id": "historical-plan",
+    "role": "curd_plan",
+    "uri": "repo://historical-plan.json",
+    "digest": "sha256:0676cd8fdb8265f86b69d008d9a84f1febd49ab80eabb2b0d250ec124d711d18",
+    "size_bytes": 1019,
+    "media_type": "application/json",
+    "schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+  },
+  "normalization_receipt": null
+}

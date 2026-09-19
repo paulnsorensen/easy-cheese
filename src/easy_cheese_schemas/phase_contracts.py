@@ -23,6 +23,7 @@ from ._schema_catalog import (
     PLANNER_REQUEST_SCHEMA_URI,
     REGISTERED_CONTRACT_SCHEMA_URIS,
 )
+from .mold_cook import MOLD_COOK_HANDOFF_SCHEMA_URI
 from .handback_status import (
     DISPOSITIONS,
     HANDBACK_STATUSES,
@@ -185,7 +186,6 @@ def _resolve_transition(
         if payload_schema_uri is not None:
             raise TransitionError("terminal transition cannot carry a payload schema")
         return None
-
     phase = COMPILED_TRANSITION_REGISTRY.phase(source)
     if phase is None:
         raise TransitionError(f"unknown source phase {source!r}")
@@ -262,6 +262,7 @@ __all__ = [
     "HANDBACK_STATUSES",
     "MAX_REASON_LENGTH",
     "NORMALIZATION_RECEIPT_SCHEMA_URI",
+    "MOLD_COOK_HANDOFF_SCHEMA_URI",
     "PHASE_CONTRACT_SCHEMA_URI",
     "PLANNER_REQUEST_SCHEMA_URI",
     "PROCEED",

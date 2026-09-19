@@ -96,9 +96,7 @@ def _exact(
             try:
                 return _type(value)
             except ValueError:
-                allowed = ", ".join(
-                    str(cast(object, member.value)) for member in _type
-                )
+                allowed = ", ".join(str(cast(object, member.value)) for member in _type)
                 raise ValueError(
                     f"unknown value {value!r} (allowed: {allowed})"
                 ) from None
@@ -176,9 +174,7 @@ _ = _converter.register_structure_hook_factory(_is_list_annotation, _guarded_lis
 # A copy keeps every primitive rule the read path uses; only the attrs-class
 # factory is swapped, so read and write can never disagree on what a primitive is.
 _strict_converter = _converter.copy()
-_ = _strict_converter.register_structure_hook_factory(
-    attrs.has, _guarded_class_strict
-)
+_ = _strict_converter.register_structure_hook_factory(attrs.has, _guarded_class_strict)
 
 
 class Provenance(Enum):
@@ -452,9 +448,9 @@ def _house(path: str, name: str | None, message: str) -> str:
     attrs' own quoted form (``'retry_count' must be <= 1: 5``)."""
     if name is not None:
         if message.startswith((f"{name} ", f"{name}[")):
-            return f"{path}{message[len(name):]}"
+            return f"{path}{message[len(name) :]}"
         if message.startswith(f"'{name}' "):
-            return f"{path}{message[len(name) + 2:]}"
+            return f"{path}{message[len(name) + 2 :]}"
     if message.startswith("must be"):
         return f"{path} {message}"
     return f"{path} must be valid: {message}"
@@ -510,9 +506,7 @@ def _mapping(where: str, item: object) -> Mapping[str, object]:
     return cast("Mapping[str, object]", item)
 
 
-def _required(
-    where: str, item: Mapping[str, object], key: str, kind: type
-) -> object:
+def _required(where: str, item: Mapping[str, object], key: str, kind: type) -> object:
     if key not in item:
         raise LegacyConversionError(f"{where}.{key} must be present")
     value = item[key]
@@ -615,7 +609,9 @@ def register_adapter(adapter: LegacyAdapter) -> None:
     _ADAPTERS[key] = adapter
 
 
-def unregister_adapter(source_schema_uri: str, source_major: str, source_minor: str) -> None:
+def unregister_adapter(
+    source_schema_uri: str, source_major: str, source_minor: str
+) -> None:
     _ = _ADAPTERS.pop((source_schema_uri, source_major, source_minor), None)
 
 
@@ -655,6 +651,6 @@ def check_adapter_sunsets(reference_date: date) -> None:
         raise AdapterSunsetError(f"expired legacy adapters still registered: {names}")
 
 
-# Register schema-owned adapters when the schema package loads.  Migration
-# consumers can therefore resolve built-ins without importing shared.migrate.
+# Register schema-owned adapters when the schema package loads so consumers do
+# not need a workflow-layer migration module.
 register_adapter(_BUILTIN_CURD_PLAN_ADAPTER)

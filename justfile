@@ -20,7 +20,7 @@ test:
     {{python}} .github/scripts/validate_skills.py
     {{python}} .github/scripts/validate_wiki.py
     {{python}} scripts/render_generated_regions.py --check
-    {{python}} -m pytest tests/python -q -p xdist -n auto
+    {{python}} -m pytest tests/python -q -p xdist -n auto --ignore=tests/python/test_mold_cook_browser_workflow.py
     {{python}} -m pytest tests/shared/python -q -p xdist -n auto
     {{python}} -m pytest tests/fanout/python -q -p xdist -n auto
     {{python}} -m pytest tests/schemas/python -q -p xdist -n auto
@@ -31,6 +31,13 @@ test:
     bats tests/bash/test_install.bats
     uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
     just test-skill-overlap
+
+# Run the real Mold-to-Cook browser workflow in its isolated fixture package.
+# Dependency and Chromium provisioning intentionally stay outside `test`.
+test-workflow-browser:
+    corepack pnpm --dir tests/fixtures/mold_cook_browser install --frozen-lockfile
+    corepack pnpm --dir tests/fixtures/mold_cook_browser exec playwright install chromium
+    {{python}} -m pytest tests/python/test_mold_cook_browser_workflow.py -q
 
 # Run model-free overlap analyzer tests (never fetches model artifacts)
 test-skill-overlap:

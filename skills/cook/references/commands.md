@@ -17,8 +17,10 @@
 | `paths` | Slugify, validate, resolve, and list .cheese artifact paths |
 | `phase-decision` | Decide what the fan-out pathway does after a phase sub-agent returns |
 | `pr-plan-to-branches` | Convert a fan-out PR plan into branch, cherry-pick, and PR commands |
+| `prepare` | Classify a Cook input and return a closed preparation outcome |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
+| `resubmit` | Recompute a Cook preparation outcome with new evidence |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text |
 | `validate` | Validate a typed contract payload against its registered schema |
 | `validate-decomposition` | Validate a fan-out decomposition manifest |

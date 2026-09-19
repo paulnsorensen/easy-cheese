@@ -1,8 +1,15 @@
 # Handoff branch menus
 
-Read this when rendering `/mold`'s post-Curdle handoff. The `curd-count` digest selects the entry skill before these blast-radius branches:
+Read this when rendering `/mold`'s post-Curdle handoff. The `curd-count` digest
+is advisory sizing; finalization owns readiness and execution authority.
 
-- A non-null `handoff` means `red-required`; a null `handoff` means closed `not-applicable` or legacy input. Both route to Cook: auto choices use `/cook --auto <spec-path>` and manual choices use `/cook <spec-path>`.
+- A `ready` finalization result carries a consumer-valid pointer. A
+  `saved-not-ready` result carries only durable preparation requirements and
+  holds, so render no Cook dispatch or automatic command.
+- For a ready result, a non-null `handoff` means `red-required`; a null
+  `handoff` means closed `not-applicable` or legacy input. Both route to Cook
+  with the canonical pointer from finalization: auto choices use
+  `/cook --auto <pointer-path>` and manual choices use `/cook <pointer-path>`.
 
 Then render the branch selected by `mode`:
 

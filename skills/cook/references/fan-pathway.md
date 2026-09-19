@@ -425,3 +425,57 @@ Publish a terminal age only when it writes `next: done`.
 Do not publish a terminal age that writes `next: cure`.
 
 Do not publish a terminal age that omits `next`.
+
+## Classified Mold-to-Cook ingress
+
+The fan pathway starts only after Cook has classified the input.  Explicit
+mode wins over inference in this order:
+
+1. `--continue` enters the existing Wheypoint resolver.
+2. A canonical pointer enters strict handoff acceptance.
+3. `--spec` enters bounded spec ingestion.
+4. A bare slug resolves through the spec store.
+5. `--task` enters the focused-task path.
+
+When no flag is supplied, inspect declared artifact structure before using a
+filename suffix.  A malformed pointer or projection remains that artifact and
+returns a typed invalid outcome; it is never treated as task text.  A direct
+spec independently checks matching continuity.  A missing continuation is a
+cold start, while a hold, blocker, ambiguity, scope conflict, or integrity
+failure remains a hold even when a direct spec is also supplied.
+
+## Preparation transitions
+
+Preparation is a pure orchestration boundary around host evidence.  It may
+call `workflow.plan` with an orchestrator-provided planner result and must
+reuse `materialize_planner_result`; it does not dispatch an agent or create a
+human response.  The transition sequence is:
+
+```
+scope -> planner result -> unchanged Full/partial plan approval
+      -> optional bounded runner setup -> accepted handoff -> execute
+```
+
+Each transition recomputes its outcome and revalidates every reference and
+hold.  Only `ready` may enter `workflow.cook`.  Light work has one explicitly
+authorized curd and no planner ceremony.  Partial work passes exactly the
+dependency-closed approved IDs to `workflow.cook`, while the canonical
+`PlannerResult.unresolved_work` remains durable for resumption.  A changed
+subset or remainder invalidates the old approval and returns to
+`needs-approval`.
+
+Setup authorization names one prerequisite, a finite path set, and a finite
+command set.  Evidence must include that prerequisite, exact command and
+fixture, environment identity, successful exit result, and captured-output
+digest.  Setup authority cannot clear a feature hold or authorize feature
+writes.  Historical pointers pass their original route, schema, payload, and
+receipt checks before Cook asks for missing spec or approval bindings.
+
+The host integration calls the public
+`easy_cheese.skills.cook.execute_accepted_handoff` API for the final Full
+handoff seam. It accepts the pointer through the shared gateway, resolves the
+approved plan, checks dependency closure, and forwards only
+`handoff.coverage.curd_ids` to `workflow.cook`. It returns the workflow
+`ExecutionResults` without rewriting the referenced `PlannerResult` or its
+unresolved remainder. This callback-bearing library API is the production
+entrypoint; the `accept` CLI only validates and normalizes a pointer.

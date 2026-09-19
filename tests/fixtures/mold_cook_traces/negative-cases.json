@@ -1,0 +1,87 @@
+[
+  {
+    "name": "wrong-route",
+    "trace": {
+      "scenario": "wrong-route",
+      "events": [
+        {"type": "input_classified", "input_kind": "unsupported"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-planning"},
+        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expected": "wrong ingress"
+  },
+  {
+    "name": "premature-write",
+    "trace": {
+      "scenario": "premature-write",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "feature_write", "path": "src/feature.py"},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expected": "feature write"
+  },
+  {
+    "name": "fabricated-approval",
+    "trace": {
+      "scenario": "fabricated-approval",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "approval_recorded", "kind": "plan", "source": "agent", "decision": "approved"},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expected": "harness"
+  },
+  {
+    "name": "stale-setup",
+    "trace": {
+      "scenario": "stale-setup",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-preparation"},
+        {"type": "setup_authorized", "curd_id": "setup"},
+        {"type": "setup_evidence", "status": "stale", "exit_code": 0},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expected": "stale"
+  },
+  {
+    "name": "lost-remainder",
+    "trace": {
+      "scenario": "lost-remainder",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "plan_materialized", "outcome": "partial"},
+        {"type": "approval_recorded", "kind": "partial_plan", "source": "harness", "decision": "approved"},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expected": "remainder"
+  },
+  {
+    "name": "false-readiness",
+    "trace": {
+      "scenario": "false-readiness",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "handoff_published", "ready": false},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expected": "not ready"
+  }
+]

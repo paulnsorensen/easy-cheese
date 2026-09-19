@@ -1,0 +1,14 @@
+{
+  "scenario": "full-ready",
+  "events": [
+    {"type": "input_classified", "input_kind": "direct_spec", "message": "free prose is ignored"},
+    {"type": "prepare", "mode": "full", "outcome": "needs-planning"},
+    {"type": "approval_requested", "kind": "scope"},
+    {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+    {"type": "plan_materialized", "outcome": "complete"},
+    {"type": "approval_requested", "kind": "plan"},
+    {"type": "approval_recorded", "kind": "plan", "source": "harness", "decision": "approved"},
+    {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/full.json"},
+    {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/full.json"}
+  ]
+}

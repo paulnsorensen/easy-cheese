@@ -1,22 +1,20 @@
 # Curd count — recommendation driver
 
-Runs after Curdle writes the spec, before the Handoff menu renders. Pushes the
-parse-and-count work into a Python script so the recommendation is deterministic
-and stays out of the conversation's token budget.
+Runs after Curdle writes the spec, before finalization. Pushes the parse-and-count
+work into a Python script so the sizing signal is deterministic and stays out
+of the conversation's token budget.
 
 ## What it answers
 
-Gate applicability shapes the immediate handoff. Every disposition recommends
-`/cook`: a `red-required` spec carries a non-null `handoff` with the
-executable auto route, while a closed `not-applicable` spec and a legacy spec
-without a declaration carry `handoff: null`. Mold-produced specs are marked with `source: mold-handshake` or
-`source: agent-mini-spec`; their `gate_applicability.ui_surface` is mandatory.
-The digest also records the eventual Cook wave-plan mode: parallel curd
-fan-out, a linear chain, or no mode hint.
+Curd-count reports candidate sizing and the recommended downstream skill. The
+digest includes goal, quality-gate, and decision signals; landing metadata; and
+an advisory Cook wave-plan mode. It has no handoff field and does not construct
+an execution command. Finalization alone evaluates all required evidence and
+publishes a canonical Cook handoff when the result is ready.
 
-The recommendation names the skill only. `--auto` remains a user-selected
-menu choice, while the digest's `handoff.command` preserves the executable
-automatic route when the user selects it.
+The recommendation names the skill only. The count is advisory sizing: it never
+authorizes Cook, bypasses finalization, or turns a saved non-ready result into a
+runnable handoff.
 
 A decomposition of `PARALLEL_THRESHOLD` (2) or more curds signals a parallel
 Cook wave-plan; below that, high blast radius signals a linear chain. The
@@ -57,18 +55,9 @@ thoroughly a spec was written, the more likely it mis-recommended fan-out.
 
 ## Decision rule
 
-| Gate applicability | `recommended_skill` | `handoff` |
-| --- | --- | --- |
-| `red-required` | `/cook` | `command: ["/cook", "--auto", "<spec-path>"]` |
-| closed `not-applicable` | `/cook` | `null` |
-| no declaration (legacy) | `/cook` | `null` |
-
-For a Mold provenance marker, the parser also requires
-`ui_surface: browser | non-browser | not-applicable`. `browser` validates
-both the interface and outer seam in every Test Contract; `non-browser` is
-explicit and does not infer applicability from prose. The unmarked approved v1
-spec and other legacy specs remain consumable without this field.
-The independent Cook mode signal follows the curd count and blast radius:
+`recommended_skill` is always `/cook`; it is an advisory destination, not an
+execution decision. Curd-count emits no handoff or command. The independent Cook
+mode signal follows the curd count and blast radius:
 
 | `candidate_curds` | `blast_radius` | `mode` |
 | --- | --- | --- |
@@ -88,14 +77,8 @@ The independent Cook mode signal follows the curd count and blast radius:
   "threshold": 2,
   "decomposable": true,
   "recommended_skill": "/cook",
-  "handoff": {
-    "next": "cook",
-    "command": ["/cook", "--auto", "<spec-path>"],
-    "spec_ref": "<spec-path>",
-    "metadata": {"gate_applicability": {"disposition": "red-required", "work_class": "behavior", "ui_surface": "non-browser"}}
-  },
   "mode": "parallel",
-  "rationale": "red-required handoff to /cook precedes 7 candidate curds >= 2 threshold; parallel fan-out"
+  "rationale": "7 candidate curds >= 2 threshold; parallel fan-out (advisory)"
 }
 ```
 
@@ -113,8 +96,6 @@ curds back into the linear chain; the dispatched skill is `/cook` either way.
 ## When tilth / Python is unavailable
 
 The script depends only on the Python 3 stdlib. If the host has no `python3`,
-Mold must still read the spec's `gate_applicability` declaration and render
-the same immediate route: `/cook` for every disposition. Blast radius may
-supply the Cook mode hint. The
-`--auto` form remains an explicit user menu choice. Say the degraded
-substitution out loud.
+Mold may report the sizing signal manually: count the behavioural goals and
+apply the blast-radius mode table. Finalization still owns readiness and
+publishes any Cook handoff; do not substitute an execution command.

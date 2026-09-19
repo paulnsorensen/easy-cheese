@@ -283,3 +283,12 @@ Publish a terminal Age only when it contains `next: done`.
 Stop when it contains `next: cure` or does not contain `next`.
 
 Generated bundle command inventory: [`references/commands.md`](references/commands.md).
+
+## Mold-to-Cook ingress and preparation
+
+Classify and prepare every input before execution.
+Only a freshly accepted `ready` Full handoff may reach `workflow.cook`.
+Follow the closed outcomes, resubmission rules, setup evidence, legacy handling,
+and typed execution seam in [`references/fan-pathway.md`](references/fan-pathway.md)
+§ Classified Mold-to-Cook ingress.
+Run the fresh-agent regression scenarios in [`references/evals.md`](references/evals.md) when this boundary changes.

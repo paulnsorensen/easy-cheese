@@ -38,7 +38,6 @@ from easy_cheese_schemas.contracts import (
 )
 
 
-
 class _GroundingRowFactory(Protocol):
     def __call__(
         self, *, probe: GroundingProbe, outcome: GroundingOutcome, evidence: str
@@ -111,9 +110,7 @@ WORK_CLASSES = frozenset(
 NON_BEHAVIOR_CLASSES = frozenset(WORK_CLASSES - {"behavior"})
 CONTRACT_MODES = frozenset({"tracer", "contract-matrix", "guard"})
 EXECUTABLE_CONTRACT_MODES = frozenset({"tracer", "contract-matrix"})
-RED_REQUIRED_EXECUTABLE_PROBLEM = (
-    "red-required-needs-executable-test-contracts"
-)
+RED_REQUIRED_EXECUTABLE_PROBLEM = "red-required-needs-executable-test-contracts"
 NEW_MOLD_SOURCES = frozenset({"agent-mini-spec", "mold-handshake"})
 BROWSER_MARKER = re.compile(
     r"\b(?:browser|e2e|end[- ]to[- ]end|playwright|cypress|selenium|webdriver|puppeteer)\b",
@@ -130,6 +127,42 @@ NOT_APPLICABLE_REFLECTIONS = tuple(
 # but the ledger's `goal` must survive into it unchanged, compared case- and
 # whitespace-insensitively (goal-drift gate).
 GOAL_SECTION = "problem"
+__all__ = [
+    "ACCEPTANCE_ID",
+    "ApplicabilityError",
+    "BROWSER_MARKER",
+    "CONTRACT_MODES",
+    "DIGEST",
+    "EXECUTABLE_CONTRACT_MODES",
+    "ForkCoverage",
+    "ForkDecision",
+    "ForkTasteVerdict",
+    "GOAL_SECTION",
+    "NEW_MOLD_SOURCES",
+    "NON_BEHAVIOR_CLASSES",
+    "NOT_APPLICABLE_REFLECTIONS",
+    "NotApplicable",
+    "RED_REQUIRED_EXECUTABLE_PROBLEM",
+    "REFLECTIONS",
+    "RedRequired",
+    "TasteGateResult",
+    "TasteTestError",
+    "TestContract",
+    "WORK_CLASSES",
+    "decomposition_gate",
+    "draft_sha256",
+    "is_new_mold_spec",
+    "lexical_precheck",
+    "main",
+    "parse_gate_applicability",
+    "parse_landing",
+    "read_spec_text",
+    "reopen_named_forks",
+    "required_reflections",
+    "require_decomposition",
+    "taste_test",
+    "validate_taste_result",
+]
 _GOAL_HEADINGS = frozenset({"problem statement", "problem", "goal"})
 _REFLECTION_ALIASES = {
     "approach": "approach",
@@ -412,9 +445,7 @@ class ForkTasteVerdict:
             if not isinstance(raw, list):
                 raise TasteTestError(f"verdict-{name}-must-be-list-of-strings")
             raw_items = cast(list[object], raw)
-            if any(
-                not isinstance(item, str) or not item.strip() for item in raw_items
-            ):
+            if any(not isinstance(item, str) or not item.strip() for item in raw_items):
                 raise TasteTestError(f"verdict-{name}-must-be-list-of-strings")
             raw_strs = cast(list[str], raw_items)
             lists[name] = tuple(item.strip() for item in raw_strs)
@@ -529,10 +560,10 @@ def _spec_text(spec: object) -> tuple[str, Mapping[str, object]]:
 
 
 def _merged_frontmatter(text: str, raw_spec: Mapping[str, object]) -> dict[str, object]:
-    return {**_frontmatter(text), **raw_spec}
+    return {**parse_spec_frontmatter(text), **raw_spec}
 
 
-def _frontmatter(text: str) -> dict[str, object]:
+def parse_spec_frontmatter(text: str) -> dict[str, object]:
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}
@@ -563,7 +594,7 @@ def _frontmatter(text: str) -> dict[str, object]:
 def is_new_mold_spec(spec: object) -> bool:
     """Return whether ``spec`` came through Mold's marked production path."""
     text, raw_spec = _spec_text(spec)
-    front = _frontmatter(text)
+    front = parse_spec_frontmatter(text)
     source = raw_spec.get("source", front.get("source"))
     return source in NEW_MOLD_SOURCES
 
@@ -687,7 +718,9 @@ def _grounding_rows(text: str, spec: Mapping[str, object]) -> tuple[GroundingRow
         for line in _section(text, "Grounding").splitlines():
             if not line.strip().startswith("|") or re.match(r"^\s*\|\s*:?-+", line):
                 continue
-            cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
+            cells = [
+                cell.strip().strip("`") for cell in line.strip().strip("|").split("|")
+            ]
             if len(cells) >= 3 and cells[0].lower() != "probe":
                 items.append(
                     {"probe": cells[0], "outcome": cells[1], "evidence": cells[2]}
@@ -739,9 +772,8 @@ def _typed_mold_document(
             if gate.get("disposition") == "not-applicable"
             else "non-browser"
         )
-    if (
-        gate.get("disposition") == "not-applicable"
-        and _has_test_contract_section(text, merged)
+    if gate.get("disposition") == "not-applicable" and _has_test_contract_section(
+        text, merged
     ):
         raise ApplicabilityError("not-applicable-cannot-carry-test-contracts")
     try:
@@ -751,7 +783,9 @@ def _typed_mold_document(
             ),
             work_class=WorkClass(_clean_cell(gate.get("work_class"))),
             ui_surface=UiSurface(_clean_cell(ui_surface)),
-            reason=cast(str | None, gate.get("reason") or merged.get("not_applicable_reason")),
+            reason=cast(
+                str | None, gate.get("reason") or merged.get("not_applicable_reason")
+            ),
         )
         rows: list[TestContractRow] = []
         for item in _contract_items(text, merged):
@@ -776,9 +810,9 @@ def _typed_mold_document(
                         ),
                         expected_failure=_clean_cell(item.get("expected_failure")),
                         mode=TestContractMode(
-                            _clean_cell(item.get("mode")).lower().replace(
-                                "testcontractmode.", ""
-                            )
+                            _clean_cell(item.get("mode"))
+                            .lower()
+                            .replace("testcontractmode.", "")
                         ),
                         interface_version=(
                             _clean_cell(item.get("interface_version"))
@@ -802,7 +836,9 @@ def _typed_mold_document(
                     cast(str, merged.get("confidence", "medium"))
                 ),
                 gate_applicability=gate_model,
-                gates_overridden=cast(tuple[str, ...], merged.get("gates_overridden", ())),
+                gates_overridden=cast(
+                    tuple[str, ...], merged.get("gates_overridden", ())
+                ),
                 agent_introduced_scope=cast(
                     tuple[str, ...], merged.get("agent_introduced_scope", ())
                 ),
@@ -841,8 +877,6 @@ def _contracts_from_document(document: MoldSpecDocument) -> tuple[TestContract, 
         )
         for row in document.test_contract_rows
     )
-
-
 
 
 def _clean_cell(value: object) -> str:
@@ -892,7 +926,9 @@ def read_spec_text(spec_path: Path) -> str:
     try:
         mode = os.fstat(fd).st_mode
         if stat.S_ISDIR(mode):
-            raise IsADirectoryError(errno.EISDIR, os.strerror(errno.EISDIR), str(spec_path))
+            raise IsADirectoryError(
+                errno.EISDIR, os.strerror(errno.EISDIR), str(spec_path)
+            )
         if not stat.S_ISREG(mode):
             raise OSError(f"not a regular file: {str(spec_path)!r}")
     except BaseException:
@@ -972,7 +1008,8 @@ def _normalize_ledger(
         raw = mapping_value.get(
             "forks",
             mapping_value.get(
-                "decisions", mapping_value.get("ledger", mapping_value.get("settled_decisions"))
+                "decisions",
+                mapping_value.get("ledger", mapping_value.get("settled_decisions")),
             ),
         )
         if raw is None:
@@ -1062,9 +1099,7 @@ def _draft_sections(draft: object) -> dict[str, str]:
     result = {}
     for index, heading in enumerate(headings):
         title = _heading_title(heading.group(1))
-        end = (
-            headings[index + 1].start() if index + 1 < len(headings) else len(text)
-        )
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
         if title in _GOAL_HEADINGS:
             if GOAL_SECTION not in result:
                 result[GOAL_SECTION] = text[heading.end() : end]
@@ -1143,6 +1178,47 @@ def lexical_precheck(draft: object, decision_ledger: object) -> tuple[str, ...]:
             elif not _mentions(section, entry.id, entry.decision):
                 gaps.append(f"unreflected-decision:{entry.id}:{location}")
     return tuple(dict.fromkeys(gaps))
+
+
+def validate_taste_result(
+    value: object,
+    *,
+    draft: object | None = None,
+    decision_ledger: object | None = None,
+) -> ForkTasteVerdict:
+    """Structure a taste verdict and optionally bind it to its draft.
+
+    A verdict is evidence about coherence, never an approval record.  When a
+    ledger is supplied, reuse :func:`taste_test` so the fresh-context verdict
+    is checked against every reflection and the exact draft bytes.  Without a
+    ledger, the draft digest is still checked; callers must decide separately
+    whether a passed verdict is sufficient for their phase.
+    """
+    if isinstance(value, Path):
+        try:
+            decoded = cast(object, json.loads(value.read_text(encoding="utf-8")))
+            value = decoded
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TasteTestError(f"invalid taste result: {exc}") from exc
+    try:
+        candidate = (
+            value
+            if isinstance(value, ForkTasteVerdict)
+            else ForkTasteVerdict.from_mapping(value)
+        )
+    except (TypeError, ValueError) as exc:
+        raise TasteTestError(f"invalid taste result: {exc}") from exc
+    if draft is None:
+        return candidate
+    if decision_ledger is None:
+        if candidate.draft_sha256 != draft_sha256(draft):
+            raise TasteTestError("stale-draft-digest")
+        return candidate
+    return taste_test(
+        draft,
+        decision_ledger,
+        candidate,
+    )
 
 
 def taste_test(
@@ -1248,54 +1324,6 @@ def require_decomposition(  # noqa: V103
     if not result.allowed:
         suffix = ",".join(result.reopened_forks) or "none"
         raise TasteTestError(f"{result.reason}:reopen={suffix}")
-
-
-@dataclass(frozen=True)
-class MoldHandoff:
-    spec_ref: str
-    command: tuple[str, ...]
-    metadata: Mapping[str, object]
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "next": "cook",
-            "command": list(self.command),
-            "spec_ref": self.spec_ref,
-            "metadata": copy.deepcopy(dict(self.metadata)),
-        }
-
-
-def red_required_handoff(
-    spec_ref: str | Path,
-    applicability: GateApplicability,
-    metadata: Mapping[str, object] | None = None,
-) -> MoldHandoff:
-    if not isinstance(applicability, RedRequired):
-        raise ApplicabilityError("handoff-requires-red-required")
-    pointer = str(spec_ref)
-    if not pointer.strip():
-        raise TasteTestError("durable-spec-pointer-required")
-    preserved = copy.deepcopy(dict(metadata or {}))
-    gate_metadata_raw = preserved.get("gate_applicability")
-    gate_metadata: dict[str, object]
-    if isinstance(gate_metadata_raw, Mapping):
-        gate_metadata = dict(cast(Mapping[str, object], gate_metadata_raw))
-    else:
-        gate_metadata = {}
-    _ = gate_metadata.setdefault("disposition", "red-required")
-    _ = gate_metadata.setdefault("work_class", applicability.work_class)
-    if applicability.ui_surface is not None:
-        _ = gate_metadata.setdefault("ui_surface", applicability.ui_surface)
-    preserved["gate_applicability"] = gate_metadata
-    return MoldHandoff(pointer, ("/cook", "--auto", pointer), preserved)
-
-
-def auto_handoff(
-    spec_ref: str | Path,
-    applicability: GateApplicability,
-    metadata: Mapping[str, object] | None = None,
-) -> dict[str, object]:
-    return red_required_handoff(spec_ref, applicability, metadata).to_dict()
 
 
 def _load_json(path: Path) -> object:

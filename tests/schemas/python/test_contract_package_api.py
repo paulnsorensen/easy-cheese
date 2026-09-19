@@ -18,6 +18,7 @@ import easy_cheese_schemas as schemas
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_NAMES = ("contract-cases.json", "normalization-cases.json")
 
+
 def _plan() -> CurdPlan:
     version = schemas.supported_version_for(CurdPlan)
     assert version is not None
@@ -42,8 +43,7 @@ def _plan() -> CurdPlan:
                         "criterion_id": "plan/curd/1/criterion/1",
                         "description": "The installed wheel exposes the contract API",
                         "check": (
-                            "pytest "
-                            "tests/schemas/python/test_contract_package_api.py"
+                            "pytest tests/schemas/python/test_contract_package_api.py"
                         ),
                     }
                 ],
@@ -70,11 +70,31 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
         "AgentWriterView",
         "ArtifactRef",
         "AcceptedArtifact",
+        "COOK_PREPARATION_RESULT_SCHEMA_URI",
         "CurdPlan",
         "CurdResult",
+        "CookExecutionHold",
+        "CookHoldKind",
+        "CookPreparationOutcome",
+        "CookPreparationResult",
+        "CookRequirementKind",
+        "CookSetupAuthorization",
+        "CookUnmetRequirement",
+        "CookValidationFinding",
         "DiagnosisResult",
         "HandoffPointer",
         "IngressKind",
+        "MOLD_COOK_APPROVAL_SCHEMA_URI",
+        "MOLD_COOK_CONTRACTS",
+        "MOLD_COOK_HANDOFF_SCHEMA_URI",
+        "MoldCookApproval",
+        "MoldCookApprovalDecision",
+        "MoldCookApprovalKind",
+        "MoldCookApprovalSource",
+        "MoldCookCoverage",
+        "MoldCookHandoff",
+        "MoldCookInputKind",
+        "MoldCookMode",
         "NormalizationAction",
         "NormalizationActionKind",
         "NormalizationReceipt",
@@ -126,7 +146,9 @@ def test_canonical_plan_digest_is_verified_by_strict_runtime() -> None:
 
     tampered = cast("dict[str, object]", json.loads(raw))
     tampered["objective"] = "Tampered objective"
-    with pytest.raises(schemas.ContractValidationError, match="CurdPlan digest mismatch"):
+    with pytest.raises(
+        schemas.ContractValidationError, match="CurdPlan digest mismatch"
+    ):
         _ = schemas.validate_contract(
             tampered,
             schemas.CurdPlan,
@@ -138,15 +160,22 @@ def test_conformance_resource_api_is_bounded_and_returns_fresh_values() -> None:
     assert schemas.list_conformance_fixtures() == FIXTURE_NAMES
     for name in FIXTURE_NAMES:
         raw = schemas.read_conformance_fixture(name)
-        assert raw == (
-            REPO_ROOT / "src/easy_cheese_schemas/conformance/v1" / name
-        ).read_bytes()
+        assert (
+            raw
+            == (
+                REPO_ROOT / "src/easy_cheese_schemas/conformance/v1" / name
+            ).read_bytes()
+        )
         first = schemas.load_conformance_fixture(name)
         second = schemas.load_conformance_fixture(name)
         assert first == second
         assert first is not second
 
-    for invalid in ("../contract-cases.json", "/tmp/contract-cases.json", "unknown.json"):
+    for invalid in (
+        "../contract-cases.json",
+        "/tmp/contract-cases.json",
+        "unknown.json",
+    ):
         with pytest.raises(ValueError, match="unknown conformance fixture"):
             _ = schemas.read_conformance_fixture(invalid)
 

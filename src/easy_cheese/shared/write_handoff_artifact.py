@@ -288,13 +288,13 @@ def write_artifact(
     _reject_traversal("--slug", slug)
     _reject_traversal("--phase", phase)
     slug_problem = paths.validate_slug(slug)
+    # Every phase, chain or not: the readers that later resolve this
+    # artifact all route through `paths`, which admits only kebab-case.
     if slug_problem is not None:
-        # Every phase, chain or not: the readers that later resolve this
-        # artifact all route through `paths`, which admits only kebab-case.
         raise cli.CliError(f"--slug: {slug_problem}")
-    _validate_transition(phase, next_skill, payload_schema_uri, slug=slug)
     if phase not in paths.CHAIN_PHASES and grounded:
         raise cli.CliError(f"--grounded is only valid for chain phases, not {phase!r}")
+    _validate_transition(phase, next_skill, payload_schema_uri, slug=slug)
     preamble = _render_preamble(
         status=status,
         next_skill=next_skill,

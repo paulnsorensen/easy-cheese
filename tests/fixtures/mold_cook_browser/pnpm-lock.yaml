@@ -1,0 +1,43 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.55.0
+        version: 1.55.0
+
+packages:
+
+  '@playwright/test@1.55.0':
+    resolution: {}
+    dependencies:
+      playwright: 1.55.0
+    engines: {node: '>=18'}
+
+  playwright-core@1.55.0:
+    resolution: {}
+    engines: {node: '>=18'}
+
+  playwright@1.55.0:
+    resolution: {}
+    dependencies:
+      playwright-core: 1.55.0
+    engines: {node: '>=18'}
+
+snapshots:
+
+  '@playwright/test@1.55.0':
+    dependencies:
+      playwright: 1.55.0
+
+  playwright-core@1.55.0: {}
+
+  playwright@1.55.0:
+    dependencies:
+      playwright-core: 1.55.0

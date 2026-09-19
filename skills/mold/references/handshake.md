@@ -162,7 +162,16 @@ This gate is the referent-level sibling of Agent-introduced scope. That gate ask
 
 ## Override semantics
 
-`curdle anyway` overrides the agent key for one extraction. It does not disable future gates. Record the override and unchecked items in the spec frontmatter. This record lets the human reviewer see them. `curdle anyway` does **not** waive the scope audit table's leverage rows or its unresolved bindings. It accepts every other default. The gate prevents silent inclusion, and downstream skills do not re-check. Under `curdle anyway`, an unbound or aliased identity noun still blocks extraction. Downstream skills trust the frontmatter bindings and do not re-derive them.
+`curdle anyway` permits one durable save when the agent coherence key is
+unchecked. It does not grant execution authority and does not disable later
+gates. Record the override and every unchecked item in the spec frontmatter.
+It accepts every other default.
+Finalization returns `saved-not-ready` with a preparation hold; it must not
+publish a pointer or an automatic Cook command until the requirements are
+cleared through fresh approval. The override does not waive the scope-audit
+leverage rows, unresolved identity bindings, failed taste, stale references,
+invalid landing IDs, or a user do-not-implement hold. Downstream skills trust
+the saved preparation result and never reinterpret the override as approval.
 
 ## Why both keys
 

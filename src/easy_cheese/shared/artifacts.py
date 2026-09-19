@@ -97,7 +97,11 @@ def resolve_artifact(
         path = _resolve_file_path(parsed.netloc, parsed.path)
         if allowed_local_root is not None:
             path = _restrict_local_path(path, allowed_local_root)
-        content, detected_type = _read_local(path, artifact.size_bytes)
+        content, detected_type = _read_local(
+            path,
+            artifact.size_bytes,
+            artifact.media_type.split(";", 1)[0],
+        )
     elif parsed.scheme == "https":
         content, detected_type = _read_https(artifact, parsed)
     else:
@@ -243,7 +247,11 @@ def _restrict_local_path(path: Path, allowed_root: str | Path) -> Path:
     return resolved_path
 
 
-def _read_local(path: Path, expected_size: int) -> tuple[bytes, str]:
+def _read_local(
+    path: Path,
+    expected_size: int,
+    declared_type: str,
+) -> tuple[bytes, str]:
     flags = (
         os.O_RDONLY
         | getattr(os, "O_BINARY", 0)
@@ -264,11 +272,7 @@ def _read_local(path: Path, expected_size: int) -> tuple[bytes, str]:
                 os.close(fd)
 
     detected_type, _encoding = mimetypes.guess_type(path.name)
-    if detected_type is None:
-        raise ArtifactResolutionError(
-            f"artifact media type cannot be determined from path: {path}"
-        )
-    return content, detected_type
+    return content, detected_type or declared_type
 
 
 def _read_descriptor(

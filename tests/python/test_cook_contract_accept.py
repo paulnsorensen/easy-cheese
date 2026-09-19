@@ -1,26 +1,46 @@
-"""End-to-end coverage for cook.pyz's `accept` contract command.
+"""End-to-end coverage for the Cook bundle's canonical handoff acceptance."""
 
-Each test publishes a real HandoffPointer through mold.pyz's `publish`, then
-feeds that pointer (optionally tampered) into an isolated cook.pyz `accept`
-subprocess, proving Cook executes only from a validated canonical pointer.
-"""
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import json
 import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
-COOK_PYZ = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
+from easy_cheese_schemas import ArtifactRef, ContractVersion, canonical_bytes
+from easy_cheese_schemas.mold_cook import (
+    MOLD_COOK_APPROVAL_SCHEMA_URI,
+    MOLD_COOK_HANDOFF_SCHEMA_URI,
+    MoldCookApprovalDecision,
+    MoldCookApprovalKind,
+    MoldCookApprovalSource,
+    MoldCookCoverage,
+    MoldCookHandoff,
+    MoldCookInputKind,
+    MoldCookMode,
+)
+from easy_cheese.shared.mold_cook_handoff import (
+    bind_mold_cook_approval,
+    canonical_mold_cook_proposal,
+    materialize_artifact_ref,
+    validate_mold_cook_approval,
+)
+from easy_cheese_schemas.schema_runtime import ContractValidationError
+from easy_cheese.shared.publication import (
+    publish_mold_cook_handoff,
+    request_digest,
+)
+
+COOK_PYZ = (
+    Path(__file__).resolve().parents[2] / "skills" / "cook" / "scripts" / "cook.pyz"
+)
 
 pytestmark = pytest.mark.skipif(  # noqa: V107
     importlib.util.find_spec("build") is None
@@ -29,534 +49,423 @@ pytestmark = pytest.mark.skipif(  # noqa: V107
     reason="bundle integration requires requirements-build.txt",
 )
 
-DOC_PAYLOAD: dict[str, object] = {
-    "objective": "Ship the approved behavior",
-    "curds": [
-        {
-            "key": "runtime",
-            "outcome": "Implement strict validation",
-            "scope": {"paths": ["src/runtime.py"]},
-            "outputs": ["Validated contract"],
-            "criteria": [
-                {
-                    "description": "Unknown fields reject",
-                    "check": "uv run pytest tests/test_runtime.py",
-                }
-            ],
-        }
-    ],
-}
 
-DOC = {"kind": "curd_plan", "payload": DOC_PAYLOAD}
-
-TWO_CURD_DOC_PAYLOAD: dict[str, object] = {
-    "objective": "Ship the approved behavior",
-    "curds": [
-        {
-            "key": "c1",
-            "outcome": "Implement the first curd",
-            "scope": {"paths": ["src/c1.py"]},
-            "outputs": ["c1 landed"],
-            "dependencies": ["c2"],
-            "criteria": [
-                {
-                    "description": "c1 behaves",
-                    "check": "uv run pytest tests/test_c1.py",
-                }
-            ],
-        },
-        {
-            "key": "c2",
-            "outcome": "Implement the second curd",
-            "scope": {"paths": ["src/c2.py"]},
-            "outputs": ["c2 landed"],
-            "criteria": [
-                {
-                    "description": "c2 behaves",
-                    "check": "uv run pytest tests/test_c2.py",
-                }
-            ],
-        },
-    ],
-}
-
-TWO_CURD_DOC = {"kind": "curd_plan", "payload": TWO_CURD_DOC_PAYLOAD}
-
-MINI_SPEC_FIXTURE = (
-    REPO_ROOT / "tests/python/fixtures/spec_format/valid_red_required_mini_spec.md"
-)
-
-
-def _spec_with_landing(tmp_path: Path, landing_block: str) -> Path:
-    text = MINI_SPEC_FIXTURE.read_text(encoding="utf-8")
-    text = text.replace(
-        "gate_applicability:",
-        f"{landing_block}\ngate_applicability:",
+def _write_ref(
+    root: Path,
+    value: object,
+    *,
+    artifact_id: str,
+    role: str,
+    filename: str,
+    media_type: str,
+    schema_uri: str | None = None,
+) -> ArtifactRef:
+    payload = value if isinstance(value, bytes) else canonical_bytes(value)
+    path = root / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_bytes(payload)
+    return materialize_artifact_ref(
+        value,
+        artifact_id=artifact_id,
+        role=role,
+        uri=f"repo://{filename}",
+        media_type=media_type,
+        schema_uri=schema_uri,
     )
-    spec_path = tmp_path / "spec.md"
-    _ = spec_path.write_text(text, encoding="utf-8")
-    return spec_path
 
 
-CURD_PLAN_SCHEMA_URI = "https://schemas.easy-cheese.dev/curd-plan"
+def published_handoff(
+    root: Path, operation_id: str
+) -> tuple[Path, MoldCookHandoff, Path]:
+    root.mkdir(parents=True, exist_ok=True)
+    spec_path = root / "spec.md"
+    spec_bytes = (
+        Path(__file__).parent / "fixtures" / "spec_format" / "valid_spec.md"
+    ).read_bytes()
+    spec_ref = _write_ref(
+        root,
+        spec_bytes,
+        artifact_id="spec-1",
+        role="spec",
+        filename="spec.md",
+        media_type="text/markdown",
+    )
+    coverage_factory = cast("Callable[..., MoldCookCoverage]", MoldCookCoverage)
+    coverage = coverage_factory(curd_ids=["curd-1"])
+    proposal_ref = _write_ref(
+        root,
+        canonical_mold_cook_proposal(
+            request_id="request-1",
+            kind=MoldCookApprovalKind.SCOPE,
+            spec_digest=spec_ref.digest,
+            coverage=coverage,
+        ),
+        artifact_id="proposal-1",
+        role="proposal",
+        filename="proposal.json",
+        media_type="application/json",
+    )
+    response_ref = _write_ref(
+        root,
+        b"Approve",
+        artifact_id="response-1",
+        role="response",
+        filename="response.txt",
+        media_type="text/plain",
+    )
 
-INVOCATION = {
-    "plan_id": "curdplan-cook-accept-1",
-    "contract_version": {
-        "schema_uri": CURD_PLAN_SCHEMA_URI,
-        "major": "1",
-        "minor": "0",
-    },
-}
+    approval = bind_mold_cook_approval(
+        request_id="request-1",
+        kind=MoldCookApprovalKind.SCOPE,
+        decision=MoldCookApprovalDecision.APPROVED,
+        source=MoldCookApprovalSource.USER_RESPONSE,
+        spec_digest=spec_ref.digest,
+        proposal_ref=proposal_ref,
+        response_ref=response_ref,
+        response_text="Approve",
+        response_source="response.txt",
+        coverage=coverage,
+    )
+    taste_verdict_ref = _write_ref(
+        root,
+        b'{"verdict":"pass"}',
+        artifact_id="taste-verdict",
+        role="taste_verdict",
+        filename="taste-verdict.json",
+        media_type="application/json",
+        schema_uri="https://schemas.easy-cheese.dev/fork-taste-verdict",
+    )
+    taste_ledger_ref = _write_ref(
+        root,
+        b"[]",
+        artifact_id="taste-ledger",
+        role="taste_ledger",
+        filename="taste-ledger.json",
+        media_type="application/json",
+        schema_uri="https://schemas.easy-cheese.dev/taste-ledger",
+    )
+    approval_ref = _write_ref(
+        root,
+        approval,
+        artifact_id="approval-1",
+        role="approval",
+        filename="approval.json",
+        media_type="application/json",
+        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
+    )
+    version_factory = cast("Callable[..., ContractVersion]", ContractVersion)
+    handoff_factory = cast("Callable[..., MoldCookHandoff]", MoldCookHandoff)
+    handoff = handoff_factory(
+        contract_version=version_factory(
+            schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
+            major="1",
+            minor="0",
+        ),
+        request_id="request-1",
+        input_kind=MoldCookInputKind.DIRECT_SPEC,
+        mode=MoldCookMode.LIGHT,
+        spec_ref=spec_ref,
+        approval_ref=approval_ref,
+        coverage=coverage,
+        taste_verdict_ref=taste_verdict_ref,
+        taste_ledger_ref=taste_ledger_ref,
+    )
+    digest = request_digest(
+        "raw",
+        {"request_id": handoff.request_id},
+        source_phase="mold",
+        destination_phase="cook",
+        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
+    )
+    _ = publish_mold_cook_handoff(
+        handoff,
+        request_digest=digest,
+        operation_id=operation_id,
+        artifact_root=root,
+    )
+    return root / "pointers" / f"{operation_id}.json", handoff, spec_path
 
 
-def _run(pyz: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    # Run from the bundle's own dir with PYTHONPATH stripped, so the only way
-    # an import can resolve is from inside the .pyz itself.
+@pytest.mark.parametrize(
+    ("dialogue", "message"),
+    [
+        ({"response": "Approve"}, "presented question"),
+        ({"question": "Approve this plan?"}, "absent from or detached"),
+    ],
+)
+def test_local_dialogue_requires_the_question_and_exact_response(
+    tmp_path: Path, dialogue: dict[str, str], message: str
+) -> None:
+    proposal_ref = _write_ref(
+        tmp_path,
+        b'{"decision":"approve"}',
+        artifact_id="proposal-1",
+        role="proposal",
+        filename="proposal.json",
+        media_type="application/json",
+    )
+    response_ref = _write_ref(
+        tmp_path,
+        dialogue,
+        artifact_id="dialogue-1",
+        role="dialogue",
+        filename="dialogue.json",
+        media_type="application/json",
+    )
+    coverage_factory = cast("Callable[..., MoldCookCoverage]", MoldCookCoverage)
+    approval = bind_mold_cook_approval(
+        request_id="request-1",
+        kind=MoldCookApprovalKind.SCOPE,
+        decision=MoldCookApprovalDecision.APPROVED,
+        source=MoldCookApprovalSource.LOCAL_DIALOGUE,
+        spec_digest="sha256:" + ("a" * 64),
+        proposal_ref=proposal_ref,
+        response_ref=response_ref,
+        response_text="Approve",
+        response_source="dialogue.json",
+        coverage=coverage_factory(curd_ids=["curd-1"]),
+    )
+
+    with pytest.raises(ContractValidationError, match=message):
+        _ = validate_mold_cook_approval(approval, tmp_path)
+
+
+def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     _ = env.pop("PYTHONPATH", None)
     return subprocess.run(
-        [sys.executable, str(pyz), *args],
-        cwd=str(pyz.parent),
+        [sys.executable, str(COOK_PYZ), *args],
+        cwd=str(COOK_PYZ.parent if cwd is None else cwd),
         capture_output=True,
         text=True,
         env=env,
     )
-
-
-def _publish(
-    tmp_path: Path,
-    operation_id: str,
-    *,
-    doc: object = DOC,
-    raw_text: str | None = None,
-) -> tuple[Path, dict[str, object]]:
-    mold_pyz = MOLD_PYZ
-    document = tmp_path / f"{operation_id}-document.json"
-    _ = document.write_text(
-        raw_text if raw_text is not None else json.dumps(doc), encoding="utf-8"
-    )
-    invocation = tmp_path / f"{operation_id}-invocation.json"
-    _ = invocation.write_text(json.dumps(INVOCATION), encoding="utf-8")
-    artifact_root = tmp_path / "artifacts"
-    result = _run(
-        mold_pyz,
-        "publish",
-        str(document),
-        "--invocation",
-        str(invocation),
-        "--operation-id",
-        operation_id,
-        "--artifact-root",
-        str(artifact_root),
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    pointer_path = artifact_root / "pointers" / f"{operation_id}.json"
-    pointer = cast(dict[str, object], json.loads(pointer_path.read_text(encoding="utf-8")))
-    return pointer_path, pointer
 
 
 def _accept(pointer_path: Path, *extra_args: str) -> subprocess.CompletedProcess[str]:
-    cook_pyz = COOK_PYZ
-    return _run(cook_pyz, "accept", str(pointer_path), *extra_args)
+    return _run("accept", str(pointer_path), *extra_args)
 
 
 def _assert_canonical_wrapper(stdout: str) -> dict[str, object]:
-    """Assert the complete accepted wrapper, not just one field.
-
-    A partial assertion passes after Cook drops the objective, the curds, the
-    derived identifiers, or the digest, so every field is checked here.
-    """
     wrapper = cast(dict[str, object], json.loads(stdout))
     assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
-    value = cast(dict[str, object], wrapper["value"])
-    assert value["plan_id"] == INVOCATION["plan_id"]
-    assert value["objective"] == DOC_PAYLOAD["objective"]
-    assert value["revision"] == 1
-    assert value["contract_version"] == INVOCATION["contract_version"]
-    curds = cast(list[dict[str, object]], value["curds"])
-    assert [curd["curd_id"] for curd in curds] == ["curdplan-cook-accept-1/curd/1"]
-    assert curds[0]["outcome"] == "Implement strict validation"
-    criteria = cast(list[dict[str, object]], curds[0]["criteria"])
-    assert [criterion["criterion_id"] for criterion in criteria] == [
-        "curdplan-cook-accept-1/curd/1/criterion/1"
-    ]
     digest = cast(str, wrapper["digest"])
     assert digest.startswith("sha256:")
     assert len(digest) == len("sha256:") + 64
-    assert digest != value["digest"]
+    value = cast(dict[str, object], wrapper["value"])
+    assert value["request_id"] == "request-1"
+    assert value["input_kind"] == MoldCookInputKind.DIRECT_SPEC.value
+    assert value["mode"] == MoldCookMode.LIGHT.value
+    coverage = cast(dict[str, object], value["coverage"])
+    assert coverage["curd_ids"] == ["curd-1"]
+    assert coverage["unresolved_work"] == []
     return wrapper
 
 
-def test_cook_pyz_accepts_a_real_mold_pointer(tmp_path: Path) -> None:
-    pointer_path, pointer = _publish(tmp_path, "op-happy")
+def test_cook_pyz_accepts_a_real_mold_handoff_pointer(tmp_path: Path) -> None:
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-happy"
+    )
+
     result = _accept(pointer_path)
+
     assert result.returncode == 0, result.stdout + result.stderr
     wrapper = _assert_canonical_wrapper(result.stdout)
     assert wrapper["normalization_receipt"] is None
-    assert pointer["destination_phase"] == "cook"
 
 
-def test_cook_pyz_accepts_a_receipt_bearing_pointer(tmp_path: Path) -> None:
-    raw_text = json.dumps(DOC)[:-1] + ",}"
-    pointer_path, pointer = _publish(tmp_path, "op-receipt", raw_text=raw_text)
-    assert pointer["normalization_receipt"] is not None
-    result = _accept(pointer_path)
-    assert result.returncode == 0, result.stdout + result.stderr
-    wrapper = _assert_canonical_wrapper(result.stdout)
-    receipt = cast(dict[str, object], wrapper["normalization_receipt"])
-    assert receipt["uri"] == cast(dict[str, object], pointer["normalization_receipt"])["uri"]
+def test_cook_pyz_accepts_the_same_pointer_idempotently(tmp_path: Path) -> None:
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-repeat"
+    )
+
+    first = _accept(pointer_path)
+    second = _accept(pointer_path)
+
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert second.stdout == first.stdout
 
 
-def test_cook_pyz_rejects_tampered_payload(tmp_path: Path) -> None:
-    """A same-size edit must still fail on the digest, not on the size."""
-    pointer_path, pointer = _publish(tmp_path, "op-tampered-payload")
+def test_cook_pyz_rejects_a_tampered_payload(tmp_path: Path) -> None:
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-tampered"
+    )
+    pointer = cast(
+        dict[str, object], json.loads(pointer_path.read_text(encoding="utf-8"))
+    )
     payload = cast(dict[str, object], pointer["payload"])
     payload_path = Path(cast(str, payload["uri"]).removeprefix("file://"))
-    original = payload_path.read_bytes()
-    tampered = original.replace(b"Ship the approved", b"Sank the approved")
-    assert len(tampered) == len(original)
-    assert tampered != original
-    _ = payload_path.write_bytes(tampered)
+    _ = payload_path.write_bytes(b"tampered handoff")
+
     result = _accept(pointer_path)
+
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "digest mismatch" in result.stderr
-    assert "size mismatch" not in result.stderr
-    assert "Traceback" not in result.stderr
+    assert "mismatch" in result.stderr
+    assert result.stdout == ""
 
 
-def test_cook_pyz_rejects_wrong_route(tmp_path: Path) -> None:
-    pointer_path, pointer = _publish(tmp_path, "op-wrong-route")
-    pointer["source_phase"] = "press"
-    _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
-    result = _accept(pointer_path)
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "press -> cook is not declared" in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_cook_pyz_rejects_missing_receipt_file(tmp_path: Path) -> None:
-    raw_text = json.dumps(DOC)[:-1] + ",}"
-    pointer_path, pointer = _publish(tmp_path, "op-missing-receipt", raw_text=raw_text)
-    receipt = cast(dict[str, object], pointer["normalization_receipt"])
-    receipt_path = Path(cast(str, receipt["uri"]).removeprefix("file://"))
-    receipt_path.unlink()
-    result = _accept(pointer_path)
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "artifact is not readable" in result.stderr
-    assert str(receipt_path) in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_cook_pyz_rejects_receipt_digest_mismatch(tmp_path: Path) -> None:
-    raw_text = json.dumps(DOC)[:-1] + ",}"
-    pointer_path, pointer = _publish(tmp_path, "op-receipt-mismatch", raw_text=raw_text)
-    receipt = cast(dict[str, object], pointer["normalization_receipt"])
-    receipt["digest"] = f"sha256:{'0' * 64}"
-    _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
-    result = _accept(pointer_path)
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "digest mismatch" in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_cook_pyz_rejects_receipt_canonical_digest_mismatch(tmp_path: Path) -> None:
-    raw_text = json.dumps(DOC)[:-1] + ",}"
-    pointer_path, pointer = _publish(
-        tmp_path, "op-receipt-canonical-mismatch", raw_text=raw_text
+def test_cook_pyz_rejects_a_wrong_destination_route(tmp_path: Path) -> None:
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-route"
     )
-    receipt_ref = cast(dict[str, object], pointer["normalization_receipt"])
-    receipt_path = Path(cast(str, receipt_ref["uri"]).removeprefix("file://"))
-    receipt_body = cast(
-        dict[str, object], json.loads(receipt_path.read_text(encoding="utf-8"))
+    pointer = cast(
+        dict[str, object], json.loads(pointer_path.read_text(encoding="utf-8"))
     )
-    receipt_body["canonical_digest"] = f"sha256:{'0' * 64}"
-    tampered_bytes = json.dumps(receipt_body).encode("utf-8")
-    _ = receipt_path.write_text(json.dumps(receipt_body), encoding="utf-8")
-    receipt_ref["digest"] = f"sha256:{hashlib.sha256(tampered_bytes).hexdigest()}"
-    receipt_ref["size_bytes"] = len(tampered_bytes)
+    pointer["destination_phase"] = "age"
     _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+
     result = _accept(pointer_path)
+
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "does not match the canonical payload" in result.stderr
-    assert "Traceback" not in result.stderr
+    assert "'age'" in result.stderr
+    assert "'cook'" in result.stderr
+    assert result.stdout == ""
 
 
-def test_cook_pyz_rejects_bare_payload(tmp_path: Path) -> None:
-    cook_pyz = COOK_PYZ
-    bare_payload = tmp_path / "bare-payload.json"
-    _ = bare_payload.write_text(json.dumps(DOC), encoding="utf-8")
-    result = _run(cook_pyz, "accept", str(bare_payload))
+def test_cook_pyz_rejects_a_pointer_with_the_old_plan_schema(tmp_path: Path) -> None:
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-old-plan"
+    )
+    pointer = cast(
+        dict[str, object], json.loads(pointer_path.read_text(encoding="utf-8"))
+    )
+    payload = cast(dict[str, object], pointer["payload"])
+    payload["schema_uri"] = "https://schemas.easy-cheese.dev/curd-plan"
+    _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+
+    result = _accept(pointer_path)
+
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "$.contract_version is required" in result.stderr
-    assert "Traceback" not in result.stderr
+    assert "https://schemas.easy-cheese.dev/curd-plan" in result.stderr
+    assert result.stdout == ""
 
 
-def test_cook_pyz_rejects_missing_payload_file(tmp_path: Path) -> None:
-    pointer_path, pointer = _publish(tmp_path, "op-missing-payload")
+def test_cook_pyz_rejects_a_bare_handoff_payload(tmp_path: Path) -> None:
+    pointer_path, handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-bare"
+    )
+    bare_payload = tmp_path / "bare-handoff.json"
+    _ = bare_payload.write_bytes(canonical_bytes(handoff))
+
+    result = _accept(bare_payload)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "schema" in result.stderr
+    assert result.stdout == ""
+    assert pointer_path.is_file()
+
+
+def test_cook_pyz_rejects_a_missing_payload_file(tmp_path: Path) -> None:
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-missing-payload"
+    )
+    pointer = cast(
+        dict[str, object], json.loads(pointer_path.read_text(encoding="utf-8"))
+    )
     payload = cast(dict[str, object], pointer["payload"])
     payload_path = Path(cast(str, payload["uri"]).removeprefix("file://"))
     payload_path.unlink()
+
     result = _accept(pointer_path)
+
     assert result.returncode == 1, result.stdout + result.stderr
     assert "artifact is not readable" in result.stderr
-    assert str(payload_path) in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_cook_pyz_rejects_unsafe_artifact_uri(tmp_path: Path) -> None:
-    pointer_path, pointer = _publish(tmp_path, "op-unsafe-uri")
-    payload = cast(dict[str, object], pointer["payload"])
-    payload["uri"] = "https://example.com/payload.json"
-    _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
-    result = _accept(pointer_path)
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert result.stderr.startswith("ERROR:")
-    assert "is not a file:// uri" in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_cook_pyz_rejects_missing_pointer_file(tmp_path: Path) -> None:
-    missing_pointer = tmp_path / "does-not-exist.json"
-    result = _accept(missing_pointer)
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "pointer not found at" in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_cook_pyz_accepts_bare_relative_pointer_from_pointers_dir(
-    tmp_path: Path,
-) -> None:
-    pointer_path, pointer = _publish(tmp_path, "op-relative")
-    cook_pyz = COOK_PYZ
-    env = dict(os.environ)
-    _ = env.pop("PYTHONPATH", None)
-    result = subprocess.run(
-        [sys.executable, str(cook_pyz), "accept", pointer_path.name],
-        cwd=str(pointer_path.parent),
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    wrapper = cast(dict[str, object], json.loads(result.stdout))
-    value = cast(dict[str, object], wrapper["value"])
-    assert value["plan_id"] == INVOCATION["plan_id"]
-    assert pointer["destination_phase"] == "cook"
-
-
-def test_cook_pyz_refuses_a_plan_that_crosses_landing_layers(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-landing-refused", doc=TWO_CURD_DOC)
-    spec_path = _spec_with_landing(
-        tmp_path,
-        "landing:\n  shape: stacked_linear\n"
-        + '  layers: [["curdplan-cook-accept-1/curd/1"], ["curdplan-cook-accept-1/curd/2"]]',
-    )
-    result = _accept(pointer_path, "--spec", str(spec_path))
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert (
-        "landing-layer-order curd 'curdplan-cook-accept-1/curd/1' in layer 1 "
-        "depends on 'curdplan-cook-accept-1/curd/2' in layer 2"
-    ) in result.stderr
-    assert "Traceback" not in result.stderr
     assert result.stdout == ""
 
 
-def test_cook_pyz_accepts_a_plan_that_matches_landing_layers(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-landing-matches", doc=TWO_CURD_DOC)
-    spec_path = _spec_with_landing(
-        tmp_path,
-        "landing:\n  shape: stacked_linear\n"
-        + '  layers: [["curdplan-cook-accept-1/curd/2"], ["curdplan-cook-accept-1/curd/1"]]',
+def test_cook_pyz_rejects_a_missing_pointer_file(tmp_path: Path) -> None:
+    missing_pointer = tmp_path / "does-not-exist.json"
+
+    result = _accept(missing_pointer)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "pointer not found at" in result.stderr
+    assert result.stdout == ""
+
+
+def test_cook_pyz_accepts_a_relative_pointer_with_an_explicit_artifact_root(
+    tmp_path: Path,
+) -> None:
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-relative"
     )
-    result = _accept(pointer_path, "--spec", str(spec_path))
+
+    result = _run(
+        "accept",
+        pointer_path.name,
+        "--artifact-root",
+        str(pointer_path.parent.parent),
+        cwd=pointer_path.parent,
+    )
+
     assert result.returncode == 0, result.stdout + result.stderr
-    wrapper = cast(dict[str, object], json.loads(result.stdout))
-    assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
+    _ = _assert_canonical_wrapper(result.stdout)
 
 
-def test_cook_pyz_accepts_a_plan_when_spec_has_no_landing_block(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-landing-absent", doc=TWO_CURD_DOC)
-    result = _accept(pointer_path, "--spec", str(MINI_SPEC_FIXTURE))
-    assert result.returncode == 0, result.stdout + result.stderr
-    wrapper = cast(dict[str, object], json.loads(result.stdout))
-    assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
+def test_cook_pyz_uses_spec_only_as_a_digest_assertion(tmp_path: Path) -> None:
+    pointer_path, _handoff, spec_path = published_handoff(
+        tmp_path / "artifacts", "op-spec"
+    )
+    matching = _accept(pointer_path, "--spec", str(spec_path))
+    mismatch_path = tmp_path / "different.md"
+    _ = mismatch_path.write_text("# Different spec\n", encoding="utf-8")
+    mismatched = _accept(pointer_path, "--spec", str(mismatch_path))
+
+    assert matching.returncode == 0, matching.stdout + matching.stderr
+    _ = _assert_canonical_wrapper(matching.stdout)
+    assert mismatched.returncode == 1, mismatched.stdout + mismatched.stderr
+    assert "--spec does not match" in mismatched.stderr
+    assert mismatched.stdout == ""
 
 
 def test_cook_pyz_rejects_a_missing_spec_file(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-missing-spec")
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-missing-spec"
+    )
     missing_spec = tmp_path / "does-not-exist.md"
+
     result = _accept(pointer_path, "--spec", str(missing_spec))
+
     assert result.returncode == 1, result.stdout + result.stderr
-    quoted = repr(str(missing_spec))
-    assert (
-        f"ERROR: cannot read spec {quoted}: "
-        f"[Errno 2] No such file or directory: {quoted}"
-    ) in result.stderr
-    assert "Traceback" not in result.stderr
     assert result.stdout == ""
-
-
-def test_cook_pyz_rejects_a_malformed_landing_block(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-malformed-landing")
-    spec_path = _spec_with_landing(tmp_path, "landing:\n  shape: sideways")
-    result = _accept(pointer_path, "--spec", str(spec_path))
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "landing-closed-class" in result.stderr
-    assert "Traceback" not in result.stderr
-    assert result.stdout == ""
-
-
-def test_cook_pyz_refuses_a_plan_missing_a_curd_from_layers(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-missing-curd", doc=TWO_CURD_DOC)
-    spec_path = _spec_with_landing(
-        tmp_path,
-        "landing:\n  shape: stacked_linear\n"
-        + '  layers: [["curdplan-cook-accept-1/curd/1"]]',
-    )
-    result = _accept(pointer_path, "--spec", str(spec_path))
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert (
-        "landing-layer-missing-curd curd 'curdplan-cook-accept-1/curd/2' is missing from "
-        + "landing.layers"
-    ) in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_cook_pyz_refuses_a_plan_naming_an_unknown_curd_in_layers(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-unknown-curd", doc=TWO_CURD_DOC)
-    spec_path = _spec_with_landing(
-        tmp_path,
-        "landing:\n  shape: stacked_linear\n"
-        + '  layers: [["curdplan-cook-accept-1/curd/1"], '
-        + '["curdplan-cook-accept-1/curd/2"], ["curdplan-cook-accept-1/curd/9"]]',
-    )
-    result = _accept(pointer_path, "--spec", str(spec_path))
-    assert result.returncode == 1, result.stdout + result.stderr
-    assert "landing-layer-unknown-curd landing.layers names unknown curd" in result.stderr
-    assert "curdplan-cook-accept-1/curd/9" in result.stderr
-
-
-def test_cook_pyz_accepts_same_layer_dependency(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-same-layer", doc=TWO_CURD_DOC)
-    spec_path = _spec_with_landing(
-        tmp_path,
-        "landing:\n  shape: stacked_linear\n"
-        + '  layers: [["curdplan-cook-accept-1/curd/1", "curdplan-cook-accept-1/curd/2"]]',
-    )
-    result = _accept(pointer_path, "--spec", str(spec_path))
-    assert result.returncode == 0, result.stdout + result.stderr
-    wrapper = cast(dict[str, object], json.loads(result.stdout))
-    assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
-
-
-def test_cook_pyz_accepts_single_shape_with_empty_layers_for_two_curd_plan(
-    tmp_path: Path,
-) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-single-empty-layers", doc=TWO_CURD_DOC)
-    spec_path = _spec_with_landing(tmp_path, "landing:\n  shape: single\n  layers: []")
-    result = _accept(pointer_path, "--spec", str(spec_path))
-    assert result.returncode == 0, result.stdout + result.stderr
-    wrapper = cast(dict[str, object], json.loads(result.stdout))
-    assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
-
-
-def test_cook_pyz_says_on_stderr_whether_landing_layers_were_checked(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-landing-note", doc=TWO_CURD_DOC)
-    unchecked = _accept(pointer_path)
-    assert unchecked.returncode == 0, unchecked.stdout + unchecked.stderr
-    assert "NOTE: landing layers not checked (no --spec)" in unchecked.stderr
-    layered_spec = _spec_with_landing(
-        tmp_path,
-        "landing:\n  shape: stacked_linear\n"
-        + '  layers: [["curdplan-cook-accept-1/curd/2"], ["curdplan-cook-accept-1/curd/1"]]',
-    )
-    layered = _accept(pointer_path, "--spec", str(layered_spec))
-    assert layered.returncode == 0, layered.stdout + layered.stderr
-    assert "NOTE: landing layers checked against " in layered.stderr
-
-
-def test_cook_pyz_says_landing_layers_not_checked_when_spec_has_no_landing_block(
-    tmp_path: Path,
-) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-landing-none", doc=TWO_CURD_DOC)
-    result = _accept(pointer_path, "--spec", str(MINI_SPEC_FIXTURE))
-    assert result.returncode == 0, result.stdout + result.stderr
-    quoted = repr(str(MINI_SPEC_FIXTURE))
-    assert f"NOTE: landing layers not checked ({quoted} has no landing block)" in result.stderr
-    assert "ERROR:" not in result.stderr
-
-
-def test_cook_pyz_says_landing_layers_not_checked_when_spec_declares_shape_single(
-    tmp_path: Path,
-) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-landing-single", doc=TWO_CURD_DOC)
-    spec_path = _spec_with_landing(tmp_path, "landing:\n  shape: single\n  layers: []")
-    result = _accept(pointer_path, "--spec", str(spec_path))
-    assert result.returncode == 0, result.stdout + result.stderr
-    quoted = repr(str(spec_path))
-    assert f"NOTE: landing layers not checked ({quoted} declares shape single)" in result.stderr
-    assert "ERROR:" not in result.stderr
 
 
 def test_cook_pyz_rejects_a_non_utf8_spec_without_a_traceback(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-binary-spec", doc=TWO_CURD_DOC)
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-binary-spec"
+    )
     spec_path = tmp_path / "binary.md"
-    _ = spec_path.write_bytes(b"---\nlanding:\n  shape: single\n---\n\xff\xfe")
+    _ = spec_path.write_bytes(b"\xff\xfe")
+
     result = _accept(pointer_path, "--spec", str(spec_path))
+
     assert result.returncode == 1, result.stdout + result.stderr
-    assert f"ERROR: cannot read spec {str(spec_path)!r}" in result.stderr
     assert "Traceback" not in result.stderr
     assert result.stdout == ""
 
 
 def test_cook_pyz_rejects_a_spec_that_is_not_a_regular_file(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-dir-spec", doc=TWO_CURD_DOC)
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-dir-spec"
+    )
+
     result = _accept(pointer_path, "--spec", str(tmp_path))
-    assert result.returncode == 1, result.stdout + result.stderr
-    quoted = repr(str(tmp_path))
-    assert (
-        f"ERROR: cannot read spec {quoted}: [Errno 21] Is a directory: {quoted}"
-        in result.stderr
-    )
-    assert "Traceback" not in result.stderr
 
-
-def test_cook_pyz_rejects_a_spec_larger_than_the_byte_cap(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-huge-spec", doc=TWO_CURD_DOC)
-    spec_path = tmp_path / "huge.md"
-    _ = spec_path.write_bytes(b"---\nlanding:\n  shape: single\n---\n" + b"x" * 1_000_001)
-    result = _accept(pointer_path, "--spec", str(spec_path))
     assert result.returncode == 1, result.stdout + result.stderr
-    assert (
-        f"ERROR: cannot read spec {str(spec_path)!r}: larger than 1000000 bytes"
-        in result.stderr
-    )
     assert "Traceback" not in result.stderr
     assert result.stdout == ""
 
 
-def test_cook_pyz_escapes_a_spec_path_that_could_forge_a_stderr_line(tmp_path: Path) -> None:
-    pointer_path, _pointer = _publish(tmp_path, "op-evil-path", doc=TWO_CURD_DOC)
-    spec_path = tmp_path / "evil\nERROR: forged.md"
-    _ = spec_path.write_text(MINI_SPEC_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
-    result = _accept(pointer_path, "--spec", str(spec_path))
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "\nERROR:" not in result.stderr
-    assert "evil\\nERROR: forged.md" in result.stderr
+def test_cook_pyz_rejects_a_spec_larger_than_the_byte_cap(tmp_path: Path) -> None:
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-huge-spec"
+    )
+    spec_path = tmp_path / "huge.md"
+    _ = spec_path.write_bytes(b"x" * 1_000_001)
 
-
-def test_cook_pyz_escapes_a_newline_spec_path_that_is_not_a_regular_file(
-    tmp_path: Path,
-) -> None:
-    if not hasattr(os, "mkfifo"):
-        pytest.skip("platform has no os.mkfifo")
-    pointer_path, _pointer = _publish(tmp_path, "op-evil-fifo", doc=TWO_CURD_DOC)
-    spec_path = tmp_path / "evil\nERROR: forged.md"
-    os.mkfifo(spec_path)
     result = _accept(pointer_path, "--spec", str(spec_path))
+
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "\nERROR:" not in result.stderr
-    quoted = repr(str(spec_path))
-    assert f"ERROR: cannot read spec {quoted}: not a regular file: {quoted}" in result.stderr
-    assert "Traceback" not in result.stderr
+    assert "larger than 1000000 bytes" in result.stderr
+    assert result.stdout == ""

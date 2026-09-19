@@ -22,7 +22,7 @@ from attrs import Attribute
 import easy_cheese_schemas.pr_plan as pr_plan_module
 from easy_cheese_schemas._contract_modules import CONTRACT_MODULES
 from easy_cheese_schemas._schema_catalog import (
-    REGISTERED_CONTRACT_SCHEMA_URIS,
+    REGISTERED_CONTRACT_SCHEMA_URIS as _GENERATED_CONTRACT_SCHEMA_URIS,
     SCHEMA_ROOT,
 )
 from easy_cheese_schemas.compat import Loaded
@@ -89,11 +89,7 @@ def _contract_modules() -> tuple[ModuleType, ...]:
 
 
 def _collect_registered_contracts(*modules: object) -> tuple[tuple[str, type], ...]:
-    pairs = [
-        pair
-        for module in modules
-        for pair in marked_contracts_in(module)
-    ]
+    pairs = [pair for module in modules for pair in marked_contracts_in(module)]
     pairs.sort(key=lambda pair: pair[0])
     for previous, current in zip(pairs, pairs[1:]):
         if previous[0] == current[0]:
@@ -106,31 +102,40 @@ def registered_contracts() -> tuple[tuple[str, type], ...]:
     return _collect_registered_contracts(*_contract_modules())
 
 
-_MARKED_CONTRACTS = registered_contracts()
-_REGISTERED_CONTRACTS = tuple(
-    _RegisteredContract(
-        schema_uri := f"{SCHEMA_ROOT}/{slug}",
-        contract,
-        (
+_PACKAGE_CONTRACTS = registered_contracts()
+
+
+def contract_registry() -> tuple[tuple[str, type], ...]:
+    """Return every package contract in one deterministic registry."""
+
+    return _PACKAGE_CONTRACTS
+
+
+def _registered_entry(slug: str, contract: type) -> _RegisteredContract:
+    schema_uri = f"{SCHEMA_ROOT}/{slug}"
+    return _RegisteredContract(
+        schema_uri=schema_uri,
+        contract=contract,
+        supported_version=(
             ContractVersion(schema_uri=schema_uri, major="1", minor="0")
             if "contract_version" in attrs.fields_dict(contract)
             else None
         ),
     )
-    for slug, contract in _MARKED_CONTRACTS
+
+
+_REGISTERED_CONTRACTS = tuple(
+    _registered_entry(slug, contract) for slug, contract in _PACKAGE_CONTRACTS
+)
+REGISTERED_CONTRACT_SCHEMA_URIS = frozenset(
+    entry.schema_uri for entry in _REGISTERED_CONTRACTS
 )
 
 
 @cache
 def _checked_registered_contracts() -> tuple[_RegisteredContract, ...]:
-    """Return the registered contracts, checked lazily against the catalog.
-
-    Import must succeed on a stale checked-in catalog; only the first catalog
-    use raises. This lets ``--write-generated`` import the package it repairs.
-    """
-    if frozenset(entry.schema_uri for entry in _REGISTERED_CONTRACTS) != (
-        REGISTERED_CONTRACT_SCHEMA_URIS
-    ):
+    """Return registered contracts after lazily checking the generated catalog."""
+    if REGISTERED_CONTRACT_SCHEMA_URIS != _GENERATED_CONTRACT_SCHEMA_URIS:
         raise RuntimeError("generated schema catalog is stale")
     return _REGISTERED_CONTRACTS
 
@@ -778,6 +783,13 @@ def load_curd_plan(raw: object) -> CurdPlan:
     return validate_curd_plan(value)
 
 
+def load_agent_writer_view(raw: object) -> AgentWriterView:
+    """Structure an agent-owned writer envelope without granting host authority."""
+    value = _structure(_raw_mapping(raw), AgentWriterView)
+    assert isinstance(value, AgentWriterView)
+    return value
+
+
 def validate_contract(
     raw: object,
     schema: str | type,
@@ -1339,9 +1351,11 @@ __all__ = [
     "REGISTERED_CONTRACT_SCHEMA_URIS",
     "SCHEMA_ROOT",
     "canonical_bytes",
+    "contract_registry",
     "canonical_digest",
     "curd_plan_digest",
     "load_curd_plan",
+    "load_agent_writer_view",
     "normalize_agent_output",
     "normalize_agent_value",
     "schema_bytes",

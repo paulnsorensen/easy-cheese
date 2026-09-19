@@ -49,6 +49,11 @@ from easy_cheese_schemas import (
     validate_contract,
     validate_transition,
 )
+from easy_cheese_schemas.mold_cook import (
+    MOLD_COOK_HANDOFF_SCHEMA_URI,
+    MoldCookHandoff,
+)
+from easy_cheese.shared.mold_cook_handoff import validate_mold_cook_handoff
 from easy_cheese.shared.artifacts import (
     ArtifactDigestMismatchError,
     ArtifactResolutionError,
@@ -66,8 +71,10 @@ __all__ = [
     "PublicationError",
     "UnrecoverableSyntaxError",
     "accept",
+    "accept_mold_cook_handoff",
     "publish",
     "publish_canonical",
+    "publish_mold_cook_handoff",
     "read_bounded",
     "request_digest",
     "syntax_normalize",
@@ -561,6 +568,8 @@ def _resolve_pointer(
         request.payload_schema_uri,
         supported_version_for(request.payload_schema_uri),
     )
+    if isinstance(canonical.value, MoldCookHandoff):
+        _ = validate_mold_cook_handoff(canonical.value, artifact_root)
 
     receipt_ref = pointer.normalization_receipt
     if receipt_ref is not None:
@@ -636,6 +645,46 @@ def publish_canonical(
     )
     return _publish_canonical(
         request=request,
+        artifact_root=artifact_root,
+        prepare=prepare,
+        _before_reveal=_before_reveal,
+    )
+
+
+def publish_mold_cook_handoff(
+    handoff: MoldCookHandoff,
+    *,
+    request_digest: str,
+    operation_id: str,
+    artifact_root: str | Path,
+    source_phase: str = "mold",
+    destination_phase: str = "cook",
+    _before_reveal: Callable[[], None] | None = None,
+) -> PublishedArtifact:
+    """Publish an already materialized, strictly validated Mold handoff."""
+
+    version = supported_version_for(MoldCookHandoff)
+    if version is None:
+        raise ContractValidationError(
+            "MoldCookHandoff has no host-supported contract version"
+        )
+
+    def prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
+        return (
+            validate_contract(
+                canonical_bytes(handoff),
+                MoldCookHandoff,
+                version,
+            ),
+            None,
+        )
+
+    return publish_canonical(
+        request_digest=request_digest,
+        source_phase=source_phase,
+        destination_phase=destination_phase,
+        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
+        operation_id=operation_id,
         artifact_root=artifact_root,
         prepare=prepare,
         _before_reveal=_before_reveal,
@@ -822,3 +871,18 @@ def accept(
     )
     canonical, receipt_ref = _resolve_pointer(pointer, request, root)
     return AcceptedArtifact(canonical=canonical, normalization_receipt=receipt_ref)
+
+
+def accept_mold_cook_handoff(
+    pointer_path: str | Path,
+    *,
+    artifact_root: str | Path | None = None,
+) -> AcceptedArtifact:
+    """Accept a Mold-to-Cook pointer through the shared strict validator."""
+
+    return accept(
+        pointer_path,
+        destination_phase="cook",
+        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
+        artifact_root=artifact_root,
+    )

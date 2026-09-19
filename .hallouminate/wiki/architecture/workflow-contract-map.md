@@ -11,7 +11,7 @@ The approved flow below is a target, not proof of end-to-end adoption.
 This inspection uses Easy Cheese commit `4639f6f5b3dfaf68a195c6d247ef65af57b0debb` from draft PR 628.
 The package extraction preserves payload semantics and does not complete the contract redesign.[^extraction-scope]
 
-Current phase declarations send Mold's CurdPlan to Cook and Cook's CurdResult to Press or Age.
+Current phase declarations send Mold's `MoldCookHandoff` to Cook; the handoff references approved plan and approval evidence, while Cook still emits `CurdResult` to Press or Age.
 Press declares CurdResult output to Age, while Age declares CurdPlan output to Cure.[^declared-routes]
 Age's instructions instead prohibit JSON sidecars and require Cure to read Markdown directly.[^age-prose]
 These declarations and instructions do not establish one enforced evidence-to-plan handoff.
@@ -169,6 +169,33 @@ flowchart LR
 <certain> F002, execution continuity protocol, is prepared at `.cheese/issues/workflow-contract-milknado-seam-F002.md`. It covers OperationInvocation, checkpoints, recovery, WorkAttempt, and WorkTask.
 
 <certain> Wiki-roadmap publication was attempted and rolled back. Milknado's importable roadmap format requires YAML frontmatter, while the current repository wiki validator rejects any page whose first non-blank line is not an H1.[^roadmap-format]
+
+## Mold-to-Cook boundary (2026-09-17)
+
+<certain> Mold finalization and Cook preparation now meet at the versioned
+`MoldCookHandoff` (`src/easy_cheese_schemas/mold_cook.py`). A Full handoff binds
+the canonical planner result and plan; a Light handoff authorizes exactly one
+curd and has no planner artifacts. Both producer publication and Cook
+acceptance resolve and digest-check their references before readiness.
+
+<certain> Cook's `CookPreparationResult` is deliberately non-executing until
+the `ready` outcome. Scope, plan, partial-plan, and runner approvals are
+separate evidence kinds. Setup authorization names only its prerequisite curd,
+paths, and commands; setup evidence cannot clear unrelated holds.
+
+<certain> Partial planner output carries an exact approved subset plus the
+acknowledged remainder through `MoldCookCoverage`. A changed remainder requires
+renewed approval, and incomplete work never becomes terminal whole-task
+success. Historical pointer input is accepted only through its bounded reader
+after original integrity verification.
+
+The hermetic cross-boundary checks live in
+`tests/python/test_mold_cook_boundary_integration.py` and
+`tests/python/test_mold_cook_publication.py`; opt-in browser and live-agent
+evidence is covered separately by
+`tests/python/test_mold_cook_browser_workflow.py` and
+`tests/python/test_mold_cook_agent_driver.py`. Frozen transcripts test
+ordering without claiming a live model run.
 
 ## Related
 

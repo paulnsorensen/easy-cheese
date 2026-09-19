@@ -659,7 +659,7 @@
       "input": {
         "source": "mold",
         "destination": "cook",
-        "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+        "payload_schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff"
       },
       "expected": {
         "status": "accept",
@@ -667,7 +667,7 @@
           "type": "CompiledTransition",
           "source": "mold",
           "destination": "cook",
-          "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+          "payload_schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff"
         }
       }
     },
