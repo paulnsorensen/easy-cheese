@@ -35,6 +35,13 @@ def _gate_graph(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("approve")
+def _approve(argv: list[str]) -> int:
+    from easy_cheese.shared.mold_cook_approve import main
+
+    return main(argv)
+
+
 @bundle_command("finalize")
 def _finalize(argv: list[str]) -> int:
     from easy_cheese.skills.mold.contract_handlers import main
@@ -74,6 +81,10 @@ COMMANDS = (
     derive_command(
         _artifact_path,
         "Resolve the durable or transient artifact path for a phase and slug",
+    ),
+    derive_command(
+        _approve,
+        "Record the user's literal approval response as a retained MoldCookApproval",
     ),
     derive_command(
         _finalize,
