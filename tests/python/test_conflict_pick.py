@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Protocol
+
+import pytest
 
 
 class _ConflictPickModule(Protocol):
     def resolve_hunks(self, content: str, strategy: str, grep_pattern: str | None = None) -> str: ...
+    def main(self, argv: list[str] | None = ...) -> int: ...
 
 
 def _conflict(ours: list[str], theirs: list[str], base: list[str] | None = None) -> str:
@@ -79,3 +83,46 @@ class TestResolveHunks:
         assert conflict_pick.resolve_hunks(content, strategy="ours").rstrip("\n") == content.rstrip(
             "\n"
         )
+
+
+class TestMain:
+    def test_rejects_generated_pyz_without_decoding_or_mutating(
+        self,
+        conflict_pick: _ConflictPickModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        path = tmp_path / "bundle.pyz"
+        original = b"\x00\xffbinary archive"
+        _ = path.write_bytes(original)
+        assert conflict_pick.main([str(path), "--ours"]) == 1
+        assert path.read_bytes() == original
+        error = capsys.readouterr().err
+        assert "source conflicts" in error
+        assert "rebuild" in error
+
+    def test_rejects_binary_content_without_mutating(
+        self,
+        conflict_pick: _ConflictPickModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        path = tmp_path / "logo.png"
+        original = b"<<<<<<< HEAD\n\x00\xff\n=======\n\x01\n>>>>>>> b\n"
+        _ = path.write_bytes(original)
+        assert conflict_pick.main([str(path), "--theirs"]) == 1
+        assert path.read_bytes() == original
+        assert "binary file" in capsys.readouterr().err
+
+    def test_rejects_non_utf8_text_without_a_traceback_or_mutation(
+        self,
+        conflict_pick: _ConflictPickModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        path = tmp_path / "notes.txt"
+        original = "<<<<<<< HEAD\ncafé\n=======\nthé\n>>>>>>> b\n".encode("latin-1")
+        _ = path.write_bytes(original)
+        assert conflict_pick.main([str(path), "--ours"]) == 1
+        assert path.read_bytes() == original
+        assert "not UTF-8 text" in capsys.readouterr().err

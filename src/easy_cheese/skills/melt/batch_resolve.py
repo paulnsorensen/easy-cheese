@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Protocol, TypedDict, cast
 
 from easy_cheese.shared.git_utils import (
+    binary_conflict_guidance,
     extract_stages,
     get_conflicted_files,
     is_mergiraf_supported,
@@ -49,6 +50,12 @@ def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> _Res
         "resolved": False,
         "message": "",
     }
+
+    guidance = binary_conflict_guidance(path)
+    if guidance is not None:
+        result["supported"] = False
+        result["message"] = guidance
+        return result
 
     if not result["supported"]:
         result["message"] = "unsupported file type"
@@ -130,6 +137,12 @@ def debug_file(path: str, keep_dir: str | None = None) -> _DebugResult:
         "exit_code": None,
         "message": "",
     }
+
+    guidance = binary_conflict_guidance(path)
+    if guidance is not None:
+        result["supported"] = False
+        result["message"] = guidance
+        return result
 
     if not result["supported"]:
         result["message"] = "unsupported file type"
