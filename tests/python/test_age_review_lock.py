@@ -404,3 +404,21 @@ def test_a_symlinked_lock_directory_is_refused(repo: Path, tmp_path: Path) -> No
         _ = review_lock.lock_path(root=repo, slug="demo")
     assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 2
     assert not (outside / f"demo{review_lock.LOCK_SUFFIX}").exists()
+
+
+def test_a_slug_inside_quoted_free_text_never_reaches_the_writer(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The gate and the writer read one argv. Free text is never split, so a slug
+    # inside `--orientation` cannot name a report that the gate did not check.
+    args = [
+        token
+        for token in _write_args(repo, "demo")
+        if token not in ("--slug", "demo", "reviewed the diff")
+    ]
+    args.insert(args.index("--orientation") + 1, "done --slug demo")
+    with pytest.raises(SystemExit) as raised:
+        _ = review_lock.gated_write_handoff_artifact(args)
+    assert raised.value.code == 2
+    assert "--slug" in capsys.readouterr().err
+    assert not _report(repo, "demo").exists()

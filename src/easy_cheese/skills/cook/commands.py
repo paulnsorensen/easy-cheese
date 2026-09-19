@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import sys
 
+from easy_cheese.shared import findings, gates, handoff, paths, slugify, worktree
 from easy_cheese.shared.bundle_commands import (
     bundle_command,
     derive_command,
     dispatch,
 )
+from easy_cheese.shared.fanout import manifest_update
 
 
 @bundle_command("wheypoint-resolve")
@@ -212,7 +214,9 @@ COMMANDS = (
     derive_command(_milknado, "Probe the milknado engine seam used by parallel mode"),
     derive_command(_mode, "Select the fan-out mode from the canonical size thresholds"),
     derive_command(
-        _worktree, "Create, harvest, and tear down isolated sub-agent worktrees"
+        _worktree,
+        "Create, harvest, and tear down isolated sub-agent worktrees",
+        leaves=worktree.LEAVES,
     ),
     derive_command(
         _validate_decomposition, "Validate a fan-out decomposition manifest"
@@ -222,6 +226,7 @@ COMMANDS = (
     derive_command(
         _manifest_update,
         "Apply an atomic, schema-validated update to a fan-out run manifest",
+        leaves=manifest_update.LEAVES,
     ),
     derive_command(
         _wiring_topo_sort, "Topologically sort a manifest's wiring into ordered waves"
@@ -244,7 +249,9 @@ COMMANDS = (
         "Recompute a Cook preparation outcome with new evidence",
     ),
     derive_command(
-        _slugify, "Derive a kebab-case slug and durable spec path from task text"
+        _slugify,
+        "Derive a kebab-case slug and durable spec path from task text",
+        leaves=slugify.LEAVES,
     ),
     derive_command(
         _write_handoff_artifact,
@@ -256,14 +263,23 @@ COMMANDS = (
     derive_command(
         _findings,
         "Render an /age report's selection table or coder brief and resolve selection verbs",
+        leaves=findings.LEAVES,
     ),
     derive_command(
-        _gates, "Map a quality-gate scoreboard's booleans to a readiness verdict"
+        _gates,
+        "Map a quality-gate scoreboard's booleans to a readiness verdict",
+        leaves=gates.LEAVES,
     ),
     derive_command(
-        _paths, "Slugify, validate, resolve, and list .cheese artifact paths"
+        _paths,
+        "Slugify, validate, resolve, and list .cheese artifact paths",
+        leaves=paths.LEAVES,
     ),
-    derive_command(_handoff, "Render, parse, and dispatch-split handoff preambles"),
+    derive_command(
+        _handoff,
+        "Render, parse, and dispatch-split handoff preambles",
+        leaves=handoff.LEAVES,
+    ),
     derive_command(
         _render_html,
         "Render a markdown report into one self-contained offline HTML file",

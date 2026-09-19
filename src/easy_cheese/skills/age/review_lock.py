@@ -378,6 +378,8 @@ def _peek(argv: list[str]) -> tuple[str | None, str | None, Path]:
 
 def gated_write_handoff_artifact(argv: list[str]) -> int:
     """`write-handoff-artifact`, refusing an age report written over inline fixes."""
+    # The gate and the writer must read one argv, so repair it before the gate.
+    argv = cli.repair_argv(write_handoff_artifact.setup_parser, argv)
     slug, phase, root = _peek(argv)
     if phase == PHASE and slug:
         try:

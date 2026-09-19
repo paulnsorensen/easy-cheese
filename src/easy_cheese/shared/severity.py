@@ -157,6 +157,9 @@ def _cmd_bucket(args: argparse.Namespace) -> None:
     cli.emit(result, stdout=cast("TextIO", args.stdout))
 
 
+LEAVES = ("compute", "bucket")
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Compute /age rubric severity and fix-cost buckets."
     sub = parser.add_subparsers(dest="cmd", required=True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 
+from easy_cheese.shared import handoff
 from easy_cheese.shared.bundle_commands import (
     bundle_command,
     derive_command,
@@ -92,7 +93,11 @@ COMMANDS = (
     derive_command(_list, "List every work item under the corpus root"),
     derive_command(_log, "Walk the revisions of one work id, oldest first"),
     derive_command(_turns, "Print the user's own turns from a session transcript"),
-    derive_command(_handoff, "Render, parse, and dispatch-split handoff preambles"),
+    derive_command(
+        _handoff,
+        "Render, parse, and dispatch-split handoff preambles",
+        leaves=handoff.LEAVES,
+    ),
 )
 
 

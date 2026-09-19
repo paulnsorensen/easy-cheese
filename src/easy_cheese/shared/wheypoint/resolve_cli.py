@@ -21,9 +21,10 @@ import json
 import sys
 import traceback
 from collections.abc import Mapping, Sequence
-from typing import NoReturn, TextIO, cast, override
+from typing import NoReturn, TextIO, cast
 
 from attrs import AttrsInstance
+from typing_extensions import override
 from easy_cheese.shared import handoff
 from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import records
