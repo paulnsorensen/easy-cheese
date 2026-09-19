@@ -23,6 +23,7 @@ Coherence self-check before curdle:
 - [ ] Cross-module calls go through public interfaces, not internals
 - [ ] Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)
 - [ ] Non-goals audit: every bullet traces to a user-stated out-of-scope item or is marked [AGENT-INTRODUCED]
+- [ ] Goal coverage: every G-n clause is covered by an AC or carries an explicit disposition, at least half ship, and the narrowing delta is printed
 - [ ] Validate cycles: all launched cycles judged
 - [ ] Chosen option Grilled (≥1 stress-test entry per major branch)
 - [ ] Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)
@@ -51,7 +52,8 @@ These are not soft suggestions — Curdle hard-blocks until they are addressed:
 - **Agent-introduced scope:** every distinguishing noun in the spec must trace to a user-typed mention or carry an approved scope-audit row. See the full procedure in § Agent-introduced scope below. Curdle is the single chokepoint because downstream skills trust the resulting frontmatter and do not re-block.
 - **Entity-referent binding:** bind every identity noun to a code referent or mark it NEW ENTITY. Resolve each ALIAS; do not only note it. See the full procedure in § Entity-referent binding below.
 - **Non-goals audit:** every `Non-goals` bullet traces to a user-stated out-of-scope item or is marked `[AGENT-INTRODUCED]`. Full procedure in § Non-goals audit below.
-- **Fork taste test:** Require a fresh-context verdict before decomposition. Dispatch the verdict to a read-only `reviewer (taste-test)` at `default` / `medium`, resolved through `../../cheese/references/agent-resolution.md`. The verdict must match the draft SHA256. It must cover each settled consequential decision exactly once. It cannot contain contradictions, orphaned decisions, unsupported assumptions, or acceptance gaps. When the ledger pins a `goal`, the draft's Problem statement must contain it unchanged, compared case- and whitespace-insensitively, or the verdict fails as `goal-drift`. Mold permits the initial verdict and two corrective rounds. A third failure stops the process. Before the reviewer dispatch, run `taste-test --precheck` on the draft and ledger. Fix every mechanical gap it reports; the pre-check consumes no correction round.
+- **Goal coverage:** every `G-n` goal clause from the bounds pass is covered by an Acceptance criterion or carries an explicit disposition. At least half the clauses ship. The handshake prints the narrowing delta. `curdle anyway` does not waive this gate. Full procedure in § Goal coverage below.
+- **Fork taste test:** Require a fresh-context verdict before decomposition. Dispatch the verdict to a read-only `reviewer (taste-test)` at `default` / `medium`, resolved through `../../cheese/references/agent-resolution.md`. The verdict must match the draft SHA256. It must cover each settled consequential decision exactly once. It cannot contain contradictions, orphaned decisions, unsupported assumptions, or acceptance gaps. When the ledger pins a `goal`, the draft's Problem statement must contain it unchanged, compared case- and whitespace-insensitively, or the verdict fails as `goal-drift`. Hand the reviewer the ledger's `goal` and `goal_clauses` with the draft, so its Drift lens judges the spec against the original ask and not against the already-narrowed draft. Mold permits the initial verdict and two corrective rounds. A third failure stops the process. Before the reviewer dispatch, run `taste-test --precheck` on the draft and ledger. Fix every mechanical gap it reports; the pre-check consumes no correction round.
 - **Spec format gate:** Run `validate-spec --strict` on the draft before Curdle extracts it. The command must exit with status 0. Curdle writes only the current hardened format. It does not use the legacy read grace period.
 - **UI surface classification:** every Mold-produced spec carries a provenance
   marker and an explicit `ui_surface` value under `gate_applicability`.
@@ -110,6 +112,23 @@ Procedure:
 4. Add every audited non-goal to the follow-up candidate set, including approved `[AGENT-INTRODUCED]` bullets. Candidate status preserves the scope boundary without accepting future work.
 
 This audit is the `Non-goals audit` coherence gate. It is the `non_goals_audit` node in the gate model (`gate-graph.md`). Populate its rows as non-goals are proposed; present them once, in the scope audit table. Curdle reruns it as the terminal backstop and hard-blocks extraction until every bullet traces to the user or has an approved `[AGENT-INTRODUCED]` row.
+
+## Goal coverage
+
+The noun-level gates catch additions. This gate catches subtractions. A spec can keep the goal sentence verbatim, pass every noun audit, and still ship one quarter of the ask. The remaining three quarters vanish through a narrow Acceptance section, never through a `Non-goals` bullet. The goal-coverage gate makes every cut visible and puts a floor under it.
+
+Procedure:
+
+1. **Decompose in the bounds pass.** Split the pinned goal into 2–6 outcome clauses, `G-1` … `G-n`. Each clause names one observable outcome the user asked for. Print the clauses under the `Goal:` ledger line in round one, and repeat them each round. Only an explicit user fork adds, removes, or rewords a clause. Record them in the ledger JSON as `goal_clauses: [{id: G-n, text: ...}, ...]`.
+2. **Tag the draft.** Every Acceptance line that delivers a clause carries its tag, for example `- AC-2: WHEN ... THE SYSTEM SHALL ... (F-1, G-2)`. A clause the spec does not deliver carries its tag on exactly one disposition line instead: a `Non-goals` bullet, a `Deferred follow-ups` entry, or an `Open questions` item marked `[TBD]`. Acceptance wins when a tag appears in more than one place.
+3. **Run the check.** `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` fails `goal-coverage:G-n` for each clause with no tag in any of those four sections. It fails `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses are covered by Acceptance. Both codes also fail the digest-bound verdict.
+4. **Print the narrowing delta.** Before the handshake, run `python3 skills/mold/scripts/mold.pyz taste-test --coverage --draft <draft> --ledger <ledger>` and print one line: `Original ask: G-1..G-n. This spec ships: <covered>. Deferred: <G-n (follow-up)>, <G-n (non-goal)>, <G-n (tbd)>.` The delta is the visible cut list. A spec with no deferred clause prints `Deferred: none`.
+5. **Respect the cap.** When `goal-coverage-cap` fires, the spec is a slice of the goal. Do not proceed. Put one fork to the user: **re-pin** the goal to the slice (the ledger `Goal:` line and clauses change through an explicit user fork), or **widen** the spec until at least half the clauses are covered. Never rename a slice as the whole.
+6. **No override.** `curdle anyway` accepts unchecked coherence items. It does not waive an uncovered clause or the cap, for the same reason it does not waive a leverage row: downstream skills trust the spec and never re-check.
+
+The disposition the spec records on each deferred clause feeds the scope audit table. A `non-goal` disposition enters as a `non-goal` row; a `follow-up` disposition enters as a `follow-up` row. Record the final disposition map in spec frontmatter as `goal_coverage: {G-1: covered, G-2: follow-up, ...}` so the paper trail survives downstream.
+
+This gate exists because the agent-introduced-scope and non-goals audits ask *did the user type this*. Neither asks *did the spec keep everything the user typed*. Agents narrow an ask by building the first tractable quarter and describing it as the whole. The goal sentence survives, the nouns all trace, and the Acceptance section is one quarter the size it should be. The coverage matrix reads the cut from the Acceptance section and the cap refuses a spec that is mostly cut.
 
 ## Follow-up disposition (inside the non-goals audit)
 
@@ -170,8 +189,9 @@ Finalization returns `saved-not-ready` with a preparation hold; it must not
 publish a pointer or an automatic Cook command until the requirements are
 cleared through fresh approval. The override does not waive the scope-audit
 leverage rows, unresolved identity bindings, failed taste, stale references,
-invalid landing IDs, or a user do-not-implement hold. Downstream skills trust
-the saved preparation result and never reinterpret the override as approval.
+invalid landing IDs, an uncovered `G-n` clause, the goal-coverage cap, or a
+user do-not-implement hold. Downstream skills trust the saved preparation
+result and never reinterpret the override as approval.
 
 ## Why both keys
 

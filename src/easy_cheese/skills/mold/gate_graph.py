@@ -86,6 +86,7 @@ COHERENCE_GATES: tuple[str, ...] = (
     "Cross-module calls go through public interfaces, not internals",
     "Identity nouns: each bound to a code referent or marked NEW ENTITY (an ALIAS must be resolved, not just noted)",
     "Non-goals audit: every bullet traces to a user-stated out-of-scope item or is marked [AGENT-INTRODUCED]",
+    "Goal coverage: every G-n clause is covered by an AC or carries an explicit disposition, at least half ship, and the narrowing delta is printed",
     "Validate cycles: all launched cycles judged",
     "Chosen option Grilled (≥1 stress-test entry per major branch)",
     "Open questions all marked [TBD] / [BLOCKED] / [?] (none silent)",
