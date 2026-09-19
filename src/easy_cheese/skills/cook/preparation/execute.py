@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
-from easy_cheese_schemas import ArtifactRef, CurdPlan, EvidenceRef
+from easy_cheese_schemas import ArtifactRef, CurdPlan, EvidenceRef, RemediationState
 from easy_cheese_schemas.mold_cook import (
     CookPreparationOutcome,
     CookPreparationResult,
@@ -17,6 +18,9 @@ from easy_cheese_schemas.mold_cook import (
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 from easy_cheese.shared import workflow
 from easy_cheese.shared.mold_cook_handoff import accept_mold_cook_handoff
+from easy_cheese.shared.fanout.remediation_store import scope_state_path
+
+from .fan_execute import execute_fan
 
 from ._types import (
     ClassifiedCookInput,
@@ -38,6 +42,7 @@ def execute_accepted_handoff(
     dispatch_writer: workflow.WriterDispatch,
     dispatch_review: workflow.ReviewDispatch,
     dispatch_diagnosis: workflow.DiagnosisDispatch,
+    dispatch_press: workflow.PressDispatch | None = None,
     evidence: Mapping[str, EvidenceRef] | None = None,
 ) -> CookExecutionOutcome:
     """Accept one canonical pointer and execute its exact approved coverage."""
@@ -105,24 +110,46 @@ def execute_accepted_handoff(
     # `accept_mold_cook_handoff` already proved the planner result and the plan
     # are attached and that the coverage is a dependency-closed plan subset.
     selected = tuple(handoff.coverage.curd_ids)
-    execution_results = workflow.cook(
-        plan,
-        repository_root=repository_root,
-        artifact_directory=resolved_artifact_root,
-        dispatch_writer=dispatch_writer,
-        dispatch_review=dispatch_review,
-        dispatch_diagnosis=dispatch_diagnosis,
-        curd_ids=selected,
-        evidence=evidence,
-    )
+    fan_outcome = None
+    remediation_state_refs: tuple[ArtifactRef, ...] = ()
+    fan_topology = len(plan.curds) > 1 or any(curd.dependencies for curd in plan.curds)
+    if fan_topology:
+        fan_outcome = execute_fan(
+            plan,
+            repository_root=repository_root,
+            artifact_directory=resolved_artifact_root,
+            dispatch_writer=dispatch_writer,
+            dispatch_review=dispatch_review,
+            dispatch_diagnosis=dispatch_diagnosis,
+            evidence=evidence,
+            selected=selected,
+            execution_id=f"{plan.plan_id}-{handoff.request_id}",
+            dispatch_press=dispatch_press,
+        )
+        execution_results = ((), fan_outcome.results)
+        remediation_state_refs = tuple(
+            _state_ref(resolved_artifact_root, state)
+            for state in fan_outcome.scope_states.values()
+        )
+    else:
+        execution_results = workflow.cook(
+            plan,
+            repository_root=repository_root,
+            artifact_directory=resolved_artifact_root,
+            dispatch_writer=dispatch_writer,
+            dispatch_review=dispatch_review,
+            dispatch_diagnosis=dispatch_diagnosis,
+            curd_ids=selected,
+            evidence=evidence,
+        )
     completed = tuple(
         result.source_curd_ref.curd_id
         for result in execution_results[1]
         if getattr(result.disposition, "value", result.disposition) == "passed"
     )
-    whole_task_complete = not handoff.coverage.unresolved_work and set(
-        completed
-    ) == set(selected)
+    whole_task_complete = (
+        fan_outcome is None or fan_outcome.next_step == "done"
+    ) and not handoff.coverage.unresolved_work and set(completed) == set(selected)
     resumable_ref = handoff_ref or build_pointer_ref(
         pointer_path,
         request_id=handoff.request_id,
@@ -137,6 +164,8 @@ def execute_accepted_handoff(
         "remainder": handoff.coverage.unresolved_work,
         "whole_task_complete": whole_task_complete,
         "resumable_ref": resumable_ref,
+        "fan_next_step": fan_outcome.next_step if fan_outcome else None,
+        "remediation_state_refs": remediation_state_refs,
     }
     outcome_ref = persist_value(
         resolved_artifact_root,
@@ -157,4 +186,21 @@ def execute_accepted_handoff(
         resumable_ref=resumable_ref,
         execution_results=execution_results,
         outcome_ref=outcome_ref,
+        fan_next_step=fan_outcome.next_step if fan_outcome else None,
+        remediation_state_refs=remediation_state_refs,
+    )
+
+
+
+def _state_ref(root: Path, state: RemediationState) -> ArtifactRef:
+    scope = state.scope
+    path = scope_state_path(root, scope)
+    raw = path.read_bytes()
+    return ArtifactRef(
+        artifact_id=f"{scope.run_id}/{scope.scope_id}/state",
+        role="remediation_state",
+        uri=path.resolve().as_uri(),
+        digest=f"sha256:{hashlib.sha256(raw).hexdigest()}",
+        size_bytes=len(raw),
+        media_type="application/json",
     )

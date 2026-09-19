@@ -179,6 +179,8 @@ class CookExecutionOutcome:
     resumable_ref: ArtifactRef
     execution_results: workflow.ExecutionResults = attrs.field(repr=False)
     outcome_ref: ArtifactRef | None = None
+    fan_next_step: str | None = None
+    remediation_state_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
 
 
 @attrs.define(frozen=True)

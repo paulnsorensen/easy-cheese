@@ -75,6 +75,7 @@ PlannerDispatch = Callable[[PlannerRequest], object]
 WriterDispatch = Callable[[Mapping[str, object]], object]
 ReviewDispatch = Callable[[ReviewRequest], object]
 DiagnosisDispatch = Callable[[DiagnosisRequest], object]
+PressDispatch = Callable[[object, int], Sequence[EvidenceRef]]
 BranchResult = ReviewResult | DiagnosisResult
 ExecutionResults = tuple[tuple[BranchResult, ...], tuple[CurdResult, ...]]
 WorkflowResults = tuple[PlannerResult, tuple[BranchResult, ...], tuple[CurdResult, ...]]
@@ -944,6 +945,109 @@ def _execute_overrun(
     return provisional.value
 
 
+@attrs.define(frozen=True)
+class CurdWriterExecution:
+    """Result of one Cook or Cure writer call before review or diagnosis."""
+
+    plan: CurdPlan
+    writer_view: CurdResultWriterView
+    host_evidence: dict[str, EvidenceRef]
+    deliverables: Mapping[str, ArtifactRef]
+    subject: ArtifactRef
+    result: CurdResult
+
+
+def execute_curd_writer(
+    plan: CurdPlan,
+    curd: SemanticCurd,
+    index: int,
+    *,
+    repository_root: Path,
+    artifact_directory: Path,
+    resolved_evidence: Mapping[str, object],
+    durable_evidence: Mapping[str, EvidenceRef],
+    shared_inputs: tuple[object, ...],
+    phase: Literal["cook", "cure"],
+    provenance_refs: tuple[str, ...],
+    dispatch_writer: WriterDispatch,
+    extra_context: Mapping[str, object] | None = None,
+    result_id: str | None = None,
+) -> CurdWriterExecution:
+    """Run one writer and normalize its result without dispatching review."""
+
+    context, host_evidence = _writer_context(
+        curd,
+        plan,
+        repository_root=repository_root,
+        artifact_directory=artifact_directory,
+        resolved_evidence=resolved_evidence,
+        durable_evidence=durable_evidence,
+        shared_inputs=shared_inputs,
+        phase=phase,
+    )
+    writer_context = context if extra_context is None else {**context, **extra_context}
+    writer_result_id = result_id or f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
+    try:
+        output = dispatch_writer(writer_context)
+    except WriterBudgetExceeded as overrun:
+        result_id = writer_result_id
+        checkpoint_view = _checkpoint_writer_view(
+            curd, _failure_reason("writer stopped at its budget", overrun), overrun.checkpoint
+        )
+        provisional, deliverables = _finalize_view(
+            plan,
+            curd,
+            index,
+            checkpoint_view,
+            result_id=result_id,
+            repository_root=repository_root,
+            artifact_directory=artifact_directory,
+            host_evidence=host_evidence,
+            provenance_refs=provenance_refs,
+        )
+        assert isinstance(provisional.value, CurdResult)
+        return CurdWriterExecution(
+            plan=plan,
+            writer_view=checkpoint_view,
+            host_evidence=host_evidence,
+            deliverables=deliverables,
+            subject=_subject_artifact(result_id, provisional, artifact_directory),
+            result=provisional.value,
+        )
+    writer_view = _writer_view(output)
+    result_id = writer_result_id
+    provisional, deliverables = _finalize_view(
+        plan,
+        curd,
+        index,
+        writer_view,
+        result_id=result_id,
+        repository_root=repository_root,
+        artifact_directory=artifact_directory,
+        host_evidence=host_evidence,
+        provenance_refs=provenance_refs,
+    )
+    subject = _subject_artifact(result_id, provisional, artifact_directory)
+    invocation = _result_invocation(
+        plan,
+        curd,
+        index,
+        evidence=host_evidence,
+        deliverables=deliverables,
+        provenance_refs=provenance_refs,
+    )
+    final = _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation)
+    assert isinstance(final.value, CurdResult)
+    return CurdWriterExecution(
+        plan=plan,
+        writer_view=writer_view,
+        host_evidence=host_evidence,
+        deliverables=deliverables,
+        subject=subject,
+        result=final.value,
+    )
+
+
 def _execute_curd(
     plan: CurdPlan,
     curd: SemanticCurd,
@@ -1481,11 +1585,13 @@ def run_workflow(
 __all__ = [
     "CureDiagnosisBinding",
     "CureDiagnosisBindings",
+    "CurdWriterExecution",
     "WriterBudgetExceeded",
     "WriterCheckpoint",
     "bind_diagnosis",
     "cook",
     "cure",
+    "execute_curd_writer",
     "plan",
     "run_workflow",
 ]

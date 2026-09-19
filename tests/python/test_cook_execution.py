@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Never, TypedDict, cast
 from urllib.parse import urlsplit
@@ -21,6 +21,7 @@ from easy_cheese.shared.mold_cook_handoff import (
 )
 from easy_cheese.shared.publication import (
     PayloadDigestMismatchError,
+    PublicationError,
     request_digest,
 )
 from easy_cheese.skills.cook import execute_accepted_handoff
@@ -46,7 +47,12 @@ from easy_cheese_schemas.contracts import (
     Criterion,
     CriterionDisposition,
     CriterionResultWriterView,
+    CurdDisposition,
     CurdResultWriterView,
+    DiagnosisCauseWriterView,
+    DiagnosisRequest,
+    DiagnosisDisposition,
+    DiagnosisResultWriterView,
     CurdPlan,
     IdentityAction,
     EvidenceKind,
@@ -55,6 +61,14 @@ from easy_cheese_schemas.contracts import (
     PlannerDisposition,
     PlannerResult,
     PlannerUncertainty,
+    FixCostNow,
+    ReproductionDisposition,
+    ReproductionWriterView,
+    ReviewDimension,
+    ReviewFindingWriterView,
+    ReviewRequest,
+    ReviewSeverity,
+    SourceLocationWriterView,
     ReviewDisposition,
     ReviewResultWriterView,
     SemanticCurd,
@@ -598,7 +612,8 @@ def test_execute_full_handoff_forwards_exact_coverage_and_keeps_remainder(
 
     assert result.completed_curds == ("root",)
     branches, curd_results = result.execution_results
-    assert len(branches) == 1
+    # Fan execution records phase artifacts in durable scope state.
+    assert branches == ()
     assert len(curd_results) == 1
     assert curd_results[0].source_curd_ref.curd_id == "root"
     planner = fixture["planner"]
@@ -1238,3 +1253,235 @@ def test_hold_clearance_rejects_a_blank_cleared_hold_id(tmp_path: Path) -> None:
                 ),
             ),
         )
+
+
+
+def test_execute_full_fan_handoff_routes_through_run_fan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result_artifact = _write_ref(
+        tmp_path,
+        b"verified\n",
+        artifact_id="result",
+        role="evidence",
+        filename="result.txt",
+        media_type="text/plain",
+    )
+    evidence = EvidenceRef(
+        evidence_id="result.txt",
+        kind=EvidenceKind.SOURCE,
+        artifact=result_artifact,
+        summary="Verified Cook execution result",
+    )
+    fixture = _full_fixture(tmp_path / "fan", coverage_ids=("root", "leaf"), partial=False)
+    calls: list[str] = []
+    review_subjects: list[ArtifactRef] = []
+    review_evidence: list[tuple[str, ...]] = []
+    press_evidence = attrs.evolve(evidence, evidence_id="press-gate")
+
+    def traced_review(request: object) -> ReviewResultWriterView:
+        review_request = cast("ReviewRequest", request)
+        review_subjects.append(review_request.subject)
+        review_evidence.append(tuple(item.evidence_id for item in review_request.evidence))
+        return _review(request)
+
+    def traced_run_fan(*args: object, **kwargs: object) -> object:
+        calls.append("run_fan")
+        from easy_cheese.shared.fanout.run_fan import FanContext, run_fan as real_run_fan
+
+        return real_run_fan(
+            cast(CurdPlan, args[0]),
+            cast(FanContext, args[1]),
+            selected=cast(Sequence[str], kwargs["selected"]),
+        )
+
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+
+    monkeypatch.setattr(fan_execute, "run_fan", traced_run_fan)
+    result = execute_accepted_handoff(
+        fixture["pointer"],
+        artifact_root=tmp_path / "fan",
+        repository_root=tmp_path,
+        dispatch_writer=_writer,
+        dispatch_review=traced_review,
+        dispatch_diagnosis=_diagnosis,
+        dispatch_press=lambda _scope, _round: (press_evidence,),
+        evidence={"result.txt": evidence},
+    )
+
+    assert calls == ["run_fan"]
+    assert result.completed_curds == ("root", "leaf")
+    assert len(review_subjects) == 3
+    assert review_subjects[-1].artifact_id == "cook-plan/postmerge-subject"
+    assert "press-gate" in review_evidence[-1]
+
+
+
+def test_execute_fan_stops_closed_when_state_publication_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result_artifact = _write_ref(
+        tmp_path,
+        b"verified\n",
+        artifact_id="result",
+        role="evidence",
+        filename="result.txt",
+        media_type="text/plain",
+    )
+    evidence = EvidenceRef(
+        evidence_id="result.txt",
+        kind=EvidenceKind.SOURCE,
+        artifact=result_artifact,
+        summary="Verified Cook execution result",
+    )
+    fixture = _full_fixture(tmp_path / "fan-failure", coverage_ids=("root", "leaf"), partial=False)
+    calls: list[str] = []
+
+    def fail_review(_request: object) -> ReviewResultWriterView:
+        calls.append("review")
+        return _review(_request)
+
+    def fail_diagnosis(_request: object) -> object:
+        calls.append("diagnosis")
+        return _diagnosis(_request)
+
+    import easy_cheese.shared.fanout.remediation_store as remediation_store
+
+    def fail_publish(*_args: object, **_kwargs: object) -> object:
+        raise PublicationError("state publication failed")
+
+    monkeypatch.setattr(remediation_store, "atomic_write", fail_publish)
+    with pytest.raises(remediation_store.StateStoreError, match="state publication failed"):
+        _ = execute_accepted_handoff(
+            fixture["pointer"],
+            artifact_root=tmp_path / "fan-failure",
+            repository_root=tmp_path,
+            dispatch_writer=_writer,
+            dispatch_review=fail_review,
+            dispatch_diagnosis=fail_diagnosis,
+            evidence={"result.txt": evidence},
+        )
+
+    assert calls == []
+
+
+
+def test_execute_full_fan_handoff_runs_postmerge_cure_writer(tmp_path: Path) -> None:
+    result_artifact = _write_ref(tmp_path, b"verified\\n", artifact_id="result", role="evidence", filename="result.txt", media_type="text/plain")
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    fixture = _full_fixture(tmp_path / "postmerge-cure", coverage_ids=("root", "leaf"), partial=False)
+    writer_calls: list[Mapping[str, object]] = []
+    review_calls = 0
+    review_subjects: list[ArtifactRef] = []
+    diagnosis_calls = 0
+
+    def writer(context: Mapping[str, object]) -> CurdResultWriterView:
+        writer_calls.append(context)
+        criteria = cast("tuple[Criterion, ...]", context["criteria"])
+        return CurdResultWriterView(criterion_results=[
+            CriterionResultWriterView(item.criterion_id, CriterionDisposition.PASSED, ("result.txt",))
+            for item in criteria
+        ])
+
+    def review(request: object) -> ReviewResultWriterView:
+        nonlocal review_calls
+        review_calls += 1
+        review_subjects.append(cast("ReviewRequest", request).subject)
+        if review_calls != 3:
+            return _review(request)
+        return ReviewResultWriterView(ReviewDisposition.FINDINGS, [ReviewFindingWriterView(
+            ReviewSeverity.MEDIUM, ReviewDimension.CORRECTNESS, "Aggregate defect", ("cook-plan/postmerge-subject/evidence",), FixCostNow.CONTAINED,
+        )]) if review_calls == 3 else _review(request)
+
+    def diagnosis(request: object) -> DiagnosisResultWriterView:
+        nonlocal diagnosis_calls
+        diagnosis_calls += 1
+        diagnosis_request = cast(DiagnosisRequest, request)
+        subject_key = next(
+            item.evidence_id
+            for item in diagnosis_request.evidence
+            if item.artifact.artifact_id == diagnosis_request.subject.artifact_id
+        )
+        return DiagnosisResultWriterView(
+            DiagnosisDisposition.CONFIRMED,
+            ReproductionWriterView(ReproductionDisposition.REPRODUCED, ("Run aggregate verification",), "Aggregate defect", (subject_key,)),
+            (), DiagnosisCauseWriterView("Aggregate defect cause", (subject_key,)),
+            SourceLocationWriterView("src/postmerge.py", 1, 1),
+        )
+
+    result = execute_accepted_handoff(fixture["pointer"], artifact_root=tmp_path / "postmerge-cure", repository_root=tmp_path, dispatch_writer=writer, dispatch_review=review, dispatch_diagnosis=diagnosis, dispatch_press=lambda _scope, _round: (evidence,), evidence={"result.txt": evidence})
+    assert result.fan_next_step == "done"
+    assert result.whole_task_complete
+    assert diagnosis_calls == 1
+    assert len(writer_calls) == 3
+    assert len(review_subjects) == 4
+    assert review_subjects[2].artifact_id == "cook-plan/postmerge-subject"
+    assert review_subjects[3].artifact_id == "cook-plan/revision/1/postmerge-result/subject"
+    assert review_subjects[3] != review_subjects[2]
+    assert "confirmed_diagnosis" in writer_calls[-1]
+
+
+def test_postmerge_writer_budget_checkpoint_preserves_blocked_result(
+    tmp_path: Path,
+) -> None:
+    fixture = _full_fixture(tmp_path / "postmerge-budget", coverage_ids=("root", "leaf"), partial=False)
+    curd = attrs.evolve(
+        fixture["plan"].curds[0],
+        curd_id="postmerge",
+        outcome="Apply aggregate remediation",
+    )
+    checkpoint = workflow.WriterCheckpoint(
+        reason="writer budget reached",
+        remaining=("finish aggregate validation",),
+    )
+
+    def writer(_context: Mapping[str, object]) -> CurdResultWriterView:
+        raise workflow.WriterBudgetExceeded(checkpoint)
+
+    execution = workflow.execute_curd_writer(
+        fixture["plan"],
+        curd,
+        1,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "postmerge-budget",
+        resolved_evidence={},
+        durable_evidence={},
+        shared_inputs=(),
+        phase="cure",
+        provenance_refs=("diagnosis-1",),
+        dispatch_writer=writer,
+        extra_context={"aggregate_subject": "postmerge-subject"},
+        result_id="cook-plan/revision/1/postmerge-result",
+    )
+
+    assert execution.result.disposition is CurdDisposition.BLOCKED
+    assert execution.result.result_id == "cook-plan/revision/1/result/1"
+    assert execution.result.unresolved_work == (
+        "writer stopped at its budget: WriterBudgetExceeded: writer budget reached",
+        "finish aggregate validation",
+    )
+
+
+def test_execute_fan_writer_failure_blocks_without_review_or_diagnosis(tmp_path: Path) -> None:
+    result_artifact = _write_ref(tmp_path, b"verified\\n", artifact_id="result", role="evidence", filename="result.txt", media_type="text/plain")
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    fixture = _full_fixture(tmp_path / "writer-failure", coverage_ids=("root", "leaf"), partial=False)
+    events: list[str] = []
+
+    def fail_writer(_context: Mapping[str, object]) -> CurdResultWriterView:
+        raise RuntimeError("writer unavailable")
+
+    def review(_request: object) -> ReviewResultWriterView:
+        events.append("review")
+        return _review(_request)
+
+    def diagnosis(_request: object) -> object:
+        events.append("diagnosis")
+        raise AssertionError("diagnosis must not run")
+
+    result = execute_accepted_handoff(fixture["pointer"], artifact_root=tmp_path / "writer-failure", repository_root=tmp_path, dispatch_writer=fail_writer, dispatch_review=review, dispatch_diagnosis=diagnosis, evidence={"result.txt": evidence})
+    assert result.fan_next_step == "mold"
+    assert not result.whole_task_complete
+    assert events == []
+    assert result.execution_results[1]
+    assert all(item.disposition is CurdDisposition.BLOCKED for item in result.execution_results[1])
