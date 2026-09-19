@@ -1191,6 +1191,7 @@ def _require_confirmed_bindings(
 def _validate_cure_bindings(
     curd_plan: CurdPlan,
     bindings: CureDiagnosisBindings,
+    selected_curd_ids: Sequence[str] | None = None,
 ) -> dict[str, CureDiagnosisBinding]:
     if curd_plan.digest != curd_plan_digest(curd_plan):
         raise ValueError("curd plan digest does not match its canonical content")
@@ -1200,7 +1201,14 @@ def _validate_cure_bindings(
         curd_plan.revision,
         curd_plan.digest,
     )
-    expected_curds = {curd.curd_id: curd for curd in curd_plan.curds}
+    # A partial cure binds one diagnosis per selected curd, so the expected
+    # set is the dependency-closed selection, not the whole plan.
+    selected = None if selected_curd_ids is None else set(selected_curd_ids)
+    expected_curds = {
+        curd.curd_id: curd
+        for curd in curd_plan.curds
+        if selected is None or curd.curd_id in selected
+    }
     missing = sorted(set(expected_curds) - set(normalized))
     extra = sorted(set(normalized) - set(expected_curds))
     if missing or extra:
@@ -1348,6 +1356,7 @@ def cook(
         dispatch_diagnosis=dispatch_diagnosis,
     )
 
+
 def cure(
     curd_plan: CurdPlan,
     diagnosis_bindings: CureDiagnosisBindings,
@@ -1361,7 +1370,14 @@ def cure(
     curd_ids: Sequence[str] | None = None,
 ) -> ExecutionResults:
     validated_plan = validate_curd_plan(curd_plan)
-    normalized = _validate_cure_bindings(validated_plan, diagnosis_bindings)
+    # Resolve the dependency-closed selection first so a partial cure is
+    # validated against the curds it will actually execute.
+    selected = _selected_curds(validated_plan, curd_ids)
+    normalized = _validate_cure_bindings(
+        validated_plan,
+        diagnosis_bindings,
+        tuple(curd.curd_id for _, curd in selected),
+    )
     return _execute_plan(
         validated_plan,
         curd_ids=curd_ids,

@@ -37,7 +37,7 @@ Canonical contracts, the compiled registry, and pointer-last publication have im
 Mold exposes the publish command, while the broader skill handoffs remain split between typed and Markdown paths.[^implemented-pointer]
 CurdBlock, Decomposition, and CurdRecord still have active representations.[^current]
 
-[^implemented-pointer]: src/easy_cheese/shared/publication.py:619-691; src/easy_cheese/skills/mold/contract_handlers.py:65-98; skills/cure/SKILL.md:49-57.
+[^implemented-pointer]: src/easy_cheese/shared/publication.py:654-694; src/easy_cheese/skills/mold/producer.py:1231; skills/cure/SKILL.md:49-57.
 
 <certain> Milknado still owns a separate batch plan and has no easy-cheese-schemas dependency.[^milknado]
 
@@ -50,7 +50,7 @@ The map includes Python runtime uses and skill instructions; it does not claim e
 
 | Roots | Producer | Consumer and evidence |
 | --- | --- | --- |
-| PlannerRequest; PlannerResult; CurdPlan | Host request; planner writer; pure materializer | Workflow plan and Mold publication; Cook consumes CurdPlan.[^planning-seams] |
+| PlannerRequest; PlannerResult; CurdPlan | Host request; planner writer; pure materializer | Workflow plan and Mold publication; Cook consumes a MoldCookHandoff that references the CurdPlan.[^planning-seams] |
 | CurdResult | Cook or Cure writer; host normalizer | Workflow review loop; declared Press and Age inputs.[^execution-seams] |
 | ReviewRequest; ReviewResult | Execution host; review writer | Workflow review normalization; Age's direct report path remains Markdown.[^review-seams] |
 | DiagnosisRequest; DiagnosisResult | Failed-criterion host; diagnosis writer | Workflow diagnosis and confirmed-cause repair path.[^diagnosis-seams] |
@@ -84,9 +84,12 @@ flowchart LR
   D[Pasteurize DiagnosisResult] -. F001 .-> P
   P --> R[PlannerResult]
   R -->|complete or partial| C[CurdPlan]
-  C --> K[Cook or Cure]
+  C --> H[MoldCookHandoff]
+  H --> K[Cook]
+  C --> U[Cure]
   C -. target only .-> I[Milknado importer]
   K --> O[CurdResult array]
+  U --> O
   I -. target only .-> B[milknado.plan.v2]
   B -. target only .-> O
 ```
@@ -141,7 +144,7 @@ flowchart LR
 
 <certain> DiagnosisResult has symptom, reproduction, hypotheses, optional confirmed cause, regression seam, and unresolved evidence. A diagnosis without a confirmed cause does not dispatch Cure work.
 
-<certain> Cook and Cure consume CurdPlan directly after transport resolution. CurdResult has exactly one row per criterion and one result per semantic curd.
+<certain> Cook consumes a MoldCookHandoff that references the approved CurdPlan; only a freshly accepted ready handoff reaches execution. Cure consumes CurdPlan directly after transport resolution. CurdResult has exactly one row per criterion and one result per semantic curd.
 
 <certain> Target-only Milknado flow: Milknado maps one semantic curd to one or more physical nodes, then aggregates every node outcome, including unstarted nodes, back into the source CurdResult.
 

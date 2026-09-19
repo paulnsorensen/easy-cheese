@@ -30,6 +30,7 @@
 - [mold-cook-boundary-001](./mold-cook-boundary-001.md) — ADR: Cook prepares missing plans but preserves plan approval
 - [mold-cook-boundary-002](./mold-cook-boundary-002.md) — ADR: Curdle overrides save work without granting execution
 - [mold-cook-boundary-003](./mold-cook-boundary-003.md) — ADR: Partial plans need explicit subset approval and preserved remainder
+- [mold-cook-boundary-004](./mold-cook-boundary-004.md) — ADR: Handoff validation binds to an explicit artifact root and affirmative consent
 - [mold-follow-up-routing-001](./mold-follow-up-routing-001.md) — ADR: every non-goal enters a disposition batch before Curdle
 - [mold-follow-up-routing-002](./mold-follow-up-routing-002.md) — ADR: route follow-ups per deliverable unit instead of choosing one backlog
 - [mold-follow-up-routing-003](./mold-follow-up-routing-003.md) — ADR: publish follow-ups after the local Curdle write

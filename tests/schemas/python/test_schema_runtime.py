@@ -31,9 +31,13 @@ from easy_cheese_schemas.contracts import (
 )
 from easy_cheese_schemas import contracts as contracts_module
 from easy_cheese_schemas.pr_plan import PrPlan
+from easy_cheese_schemas._schema_catalog import (
+    REGISTERED_CONTRACT_SCHEMA_URIS as GENERATED_CONTRACT_SCHEMA_URIS,
+)
 from easy_cheese_schemas.schema_runtime import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     _collect_registered_contracts,  # pyright: ignore[reportPrivateUsage]
+    _DERIVED_CONTRACT_SCHEMA_URIS,  # pyright: ignore[reportPrivateUsage]
     _definition,  # pyright: ignore[reportPrivateUsage]
     ContractValidationError,
     canonical_digest,
@@ -56,6 +60,12 @@ def as_dict(value: object) -> dict[str, object]:
 
 def as_list(value: object) -> list[object]:
     return cast(list[object], value)
+
+
+def test_registered_contract_schema_uris_publishes_the_generated_catalog() -> None:
+    """The exported name keeps meaning "what the committed catalog declares"."""
+    assert REGISTERED_CONTRACT_SCHEMA_URIS is GENERATED_CONTRACT_SCHEMA_URIS
+    assert _DERIVED_CONTRACT_SCHEMA_URIS == GENERATED_CONTRACT_SCHEMA_URIS
 
 
 def version(

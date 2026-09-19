@@ -292,9 +292,11 @@ def write_artifact(
     # artifact all route through `paths`, which admits only kebab-case.
     if slug_problem is not None:
         raise cli.CliError(f"--slug: {slug_problem}")
+    # Transition validation runs first: an argv that trips both this and the
+    # `--grounded` rule must report the contract error, not the CLI error.
+    _validate_transition(phase, next_skill, payload_schema_uri, slug=slug)
     if phase not in paths.CHAIN_PHASES and grounded:
         raise cli.CliError(f"--grounded is only valid for chain phases, not {phase!r}")
-    _validate_transition(phase, next_skill, payload_schema_uri, slug=slug)
     preamble = _render_preamble(
         status=status,
         next_skill=next_skill,

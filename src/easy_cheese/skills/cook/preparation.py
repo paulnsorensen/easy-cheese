@@ -15,9 +15,10 @@ import os
 import re
 import stat
 from collections.abc import Callable, Mapping, Sequence
+from datetime import date
 from pathlib import Path
 from typing import cast
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlsplit
 
 import attrs
 
@@ -37,9 +38,11 @@ from easy_cheese_schemas import (
     PlannerResultWriterView,
     PlannerUncertainty,
     canonical_bytes,
+    canonical_digest,
     supported_version_for,
     validate_contract,
 )
+from easy_cheese_schemas.compat import check_adapter_sunsets
 from easy_cheese_schemas.mold_cook import (
     MOLD_COOK_APPROVAL_SCHEMA_URI,
     CookExecutionHold,
@@ -70,11 +73,14 @@ from easy_cheese.shared.artifacts import (
     ArtifactDigestMismatchError,
     ArtifactResolutionError,
     resolve_artifact,
+    resolve_file_path,
     resolve_verified_bytes,
+    restrict_local_path,
 )
 from easy_cheese.shared.mold_cook_handoff import (
     MoldCookSpecReadiness,
     canonical_mold_cook_proposal,
+    dialogue_authorizes_execution,
     evaluate_mold_cook_spec,
     validate_mold_cook_approval,
     validate_mold_cook_handoff,
@@ -83,6 +89,7 @@ from easy_cheese.shared.publication import (
     accept_mold_cook_handoff,
     publish_mold_cook_handoff,
 )
+from easy_cheese.shared.wheypoint.canonical import digest_bytes
 from easy_cheese.shared.wheypoint.resolve import (
     Resolution,
     ResolutionOutcome,
@@ -272,8 +279,18 @@ def _version(contract: type) -> ContractVersion:
     return version
 
 
-def _digest(content: bytes) -> str:
-    return f"sha256:{hashlib.sha256(content).hexdigest()}"
+def _local_path_for(uri: str, allowed_root: str | Path | None = None) -> Path:
+    """Resolve one `file:` artifact URI through the shared artifact seam.
+
+    A caller that already knows its trusted root passes it: the URI then names
+    a path inside that root instead of widening it.
+    """
+
+    parsed = urlsplit(uri)
+    path = resolve_file_path(parsed.netloc, parsed.path)
+    if allowed_root is None:
+        return path
+    return restrict_local_path(path, allowed_root)
 
 
 def _as_path(source: str | Path) -> Path | None:
@@ -431,8 +448,17 @@ def classify_input(
 def _request_id(source: ClassifiedCookInput, explicit: str | None) -> str:
     if explicit:
         return explicit
-    token = (
-        source.source if source.kind is MoldCookInputKind.SLUG else source.kind.value
+    # The parts are JSON-encoded, never newline-joined: free text in the
+    # objective would otherwise reproduce another input's token.
+    token = json.dumps(
+        [
+            source.kind.value,
+            source.source,
+            "" if source.path is None else str(source.path.resolve()),
+            "" if source.snapshot is None else digest_bytes(source.snapshot),
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
     return f"cook-{hashlib.sha256(token.encode()).hexdigest()[:20]}"
 
@@ -446,7 +472,7 @@ def _persist_bytes(
     media_type: str,
     schema_uri: str | None = None,
 ) -> ArtifactRef:
-    digest = _digest(content)
+    digest = digest_bytes(content)
     reference = ArtifactRef(
         artifact_id=artifact_id,
         role=role,
@@ -533,14 +559,9 @@ def validate_preparation_result(value: object) -> CookPreparationResult:
     return validated
 
 
-def load_preparation_result(
-    path: str | Path,
-    *,
-    artifact_root: str | Path | None = None,
-) -> CookPreparationResult:
+def load_preparation_result(path: str | Path) -> CookPreparationResult:
     """Load a standalone result or a Mold saved-not-ready envelope."""
 
-    del artifact_root
     raw = _read_path(Path(path))
     try:
         decoded = cast(object, json.loads(raw))
@@ -559,7 +580,7 @@ def _request_payload(request: CookPreparationRequest) -> dict[str, object]:
     if not isinstance(source, ClassifiedCookInput):
         raise CookEvidenceError("preparation request source was not classified")
     path = None if source.path is None else str(source.path.resolve())
-    source_digest = None if source.snapshot is None else _digest(source.snapshot)
+    source_digest = None if source.snapshot is None else digest_bytes(source.snapshot)
     return {
         "request_id": request.request_id,
         "kind": source.kind.value,
@@ -720,7 +741,7 @@ def _bound_spec_ref(
     else:
         path = Path(value).expanduser().resolve()
         raw = _read_path(path)
-        digest = _digest(raw)
+        digest = digest_bytes(raw)
         expected = request.artifact_root.resolve() / (
             f"sha256-{digest.removeprefix('sha256:')}"
         )
@@ -888,7 +909,7 @@ def _approval_value(
         )
     path = Path(value).expanduser().resolve()
     raw = _read_path(path)
-    digest = _digest(raw)
+    digest = digest_bytes(raw)
     expected = (
         request.artifact_root.resolve() / f"sha256-{digest.removeprefix('sha256:')}"
     )
@@ -944,7 +965,7 @@ def _check_approval(
     source = require_relative_path(approval.response_source, "approval response_source")
     response_path = request.artifact_root.resolve() / source
     if _is_regular_path(response_path):
-        if _digest(_read_path(response_path)) != approval.response_ref.digest:
+        if digest_bytes(_read_path(response_path)) != approval.response_ref.digest:
             raise CookEvidenceError(
                 "approval response_source is detached from response_ref"
             )
@@ -1026,10 +1047,6 @@ def _coverage_for_plan(
     )
 
 
-def _authorization_digest(authorization: CookSetupAuthorization) -> str:
-    return _digest(canonical_bytes(authorization))
-
-
 def _validate_setup(
     evidence: SetupEvidence | Mapping[str, object] | ArtifactRef | str | Path,
     *,
@@ -1045,7 +1062,7 @@ def _validate_setup(
     elif isinstance(evidence, (str, Path)):
         path = Path(evidence).expanduser().resolve()
         raw = _read_path(path)
-        digest = _digest(raw)
+        digest = digest_bytes(raw)
         expected = (
             request.artifact_root.resolve() / f"sha256-{digest.removeprefix('sha256:')}"
         )
@@ -1072,9 +1089,9 @@ def _validate_setup(
         raise CookEvidenceError("setup evidence environment_id must not be empty")
     if parsed.prerequisite_curd_id != authorization.prerequisite_curd_id:
         raise CookEvidenceError("setup evidence names a different prerequisite curd")
-    if parsed.plan_digest != _digest(canonical_bytes(plan)):
+    if parsed.plan_digest != plan.digest:
         raise CookEvidenceError("setup evidence is stale for this plan")
-    if parsed.authorization_digest != _authorization_digest(authorization):
+    if parsed.authorization_digest != canonical_digest(authorization):
         raise CookEvidenceError("setup evidence is stale for this authorization")
     if parsed.runner_command not in authorization.allowed_commands:
         raise CookEvidenceError("setup command is outside approved commands")
@@ -1095,7 +1112,7 @@ def _validate_setup(
     )
     if not _is_regular_path(output_path):
         raise CookEvidenceError("setup output was not retained by the host runner")
-    if _digest(_read_path(output_path)) != parsed.captured_output_digest:
+    if digest_bytes(_read_path(output_path)) != parsed.captured_output_digest:
         raise CookEvidenceError("setup output digest does not match retained bytes")
     if parsed.exit_code != 0:
         raise _SetupExecutionFailed("setup runner did not pass")
@@ -1156,7 +1173,7 @@ def _pointer_ref(path: Path, *, request_id: str) -> ArtifactRef:
         artifact_id=f"{request_id}/handoff-pointer",
         role="handoff",
         uri=path.resolve().as_uri(),
-        digest=_digest(raw),
+        digest=digest_bytes(raw),
         size_bytes=len(raw),
         media_type="application/json",
         schema_uri=f"{SCHEMA_ROOT}/handoff-pointer",
@@ -1196,7 +1213,7 @@ def _publish_handoff(
         _validate_handoff_authority(handoff, request=request)
         validated = validate_mold_cook_handoff(handoff, request.artifact_root)
         canonical = canonical_bytes(validated)
-        request_digest = _digest(canonical)
+        request_digest = digest_bytes(canonical)
         operation_id = (
             "cook-"
             + hashlib.sha256(
@@ -1314,6 +1331,122 @@ def _legacy_plan(
     )
 
 
+@attrs.define(frozen=True)
+class _RunnerSetup:
+    runner_approval_ref: ArtifactRef | None
+    setup_evidence_refs: tuple[ArtifactRef, ...]
+
+
+def _apply_runner_setup(
+    request: CookPreparationRequest,
+    source: ClassifiedCookInput,
+    refs: list[ArtifactRef],
+    *,
+    authority_request: CookPreparationRequest,
+    runner_approval: MoldCookApproval
+    | ArtifactRef
+    | str
+    | Path
+    | Mapping[str, object]
+    | None,
+    setup_evidence: SetupEvidence
+    | Mapping[str, object]
+    | ArtifactRef
+    | str
+    | Path
+    | None,
+    spec_ref: ArtifactRef,
+    coverage: MoldCookCoverage,
+    plan: CurdPlan,
+    plan_ref: ArtifactRef,
+) -> _RunnerSetup | CookPreparationResult:
+    """Check runner approval and setup evidence, appending accepted refs.
+
+    ``request`` names the result's identity; ``authority_request`` names the
+    identity the approval evidence must bind to.  The two differ when Cook
+    extends an accepted handoff.  A returned ``CookPreparationResult`` is a
+    closed outcome the caller returns unchanged.
+    """
+
+    runner_handoff_ref: ArtifactRef | None = None
+    authorization: CookSetupAuthorization | None = None
+    setup_refs: list[ArtifactRef] = []
+    if runner_approval is not None:
+        runner, runner_ref = _approval_value(
+            runner_approval,
+            request=authority_request,
+        )
+        authorization = runner.setup_authorization
+        if authorization is None:
+            raise CookEvidenceError("runner approval lacks setup authorization")
+        runner_proposal = canonical_mold_cook_proposal(
+            request_id=authority_request.request_id,
+            kind=MoldCookApprovalKind.RUNNER,
+            spec_digest=spec_ref.digest,
+            coverage=coverage,
+            setup_authorization=authorization,
+        )
+        _check_approval(
+            runner,
+            approval_ref=runner_ref,
+            request=authority_request,
+            spec_ref=spec_ref,
+            expected=MoldCookApprovalKind.RUNNER,
+            expected_proposal=runner_proposal,
+        )
+        refs.append(runner_ref)
+        runner_handoff_ref = attrs.evolve(runner_ref, role="runner_approval")
+    if authorization is None:
+        if setup_evidence is not None:
+            raise CookEvidenceError(
+                "setup evidence cannot be accepted without runner approval"
+            )
+    elif setup_evidence is None:
+        return validate_preparation_result(
+            CookPreparationResult(
+                contract_version=_version(CookPreparationResult),
+                request_id=request.request_id,
+                input_kind=source.kind,
+                outcome=CookPreparationOutcome.NEEDS_PREPARATION,
+                references=tuple(refs),
+                approved_plan_ref=plan_ref,
+                coverage=coverage,
+                setup_authorization=authorization,
+            )
+        )
+    else:
+        try:
+            setup_ref = _validate_setup(
+                setup_evidence,
+                authorization=authorization,
+                plan=plan,
+                request=authority_request,
+            )
+        except _SetupExecutionFailed as exc:
+            if isinstance(setup_evidence, ArtifactRef):
+                refs.append(setup_evidence)
+            return validate_preparation_result(
+                _hold_result(
+                    request,
+                    source,
+                    refs,
+                    (
+                        CookExecutionHold(
+                            hold_id=f"setup-failed-{request.request_id}",
+                            kind=CookHoldKind.BLOCKED,
+                            reason=str(exc),
+                        ),
+                    ),
+                )
+            )
+        setup_refs.append(setup_ref)
+        refs.append(setup_ref)
+    return _RunnerSetup(
+        runner_approval_ref=runner_handoff_ref,
+        setup_evidence_refs=tuple(setup_refs),
+    )
+
+
 def _canonical_pointer(
     source: ClassifiedCookInput,
     request: CookPreparationRequest,
@@ -1345,7 +1478,13 @@ def _canonical_pointer(
             path=str(source.path),
         )
     assert source.path is not None
-    pointer_root = _pointer_artifact_root(source.path)
+    pointer_root = request.artifact_root.resolve()
+    if not source.path.resolve().is_relative_to(pointer_root):
+        raise _PreparationFailure(
+            "pointer-outside-artifact-root",
+            f"canonical pointer is outside artifact root {str(pointer_root)!r}",
+            path=str(source.path),
+        )
     accepted = accept_mold_cook_handoff(
         source.path,
         artifact_root=pointer_root,
@@ -1401,65 +1540,20 @@ def _canonical_pointer(
     plan = _load_contract(handoff.plan_ref, CurdPlan, pointer_root)
     assert isinstance(plan, CurdPlan)
     authority_request = attrs.evolve(request, request_id=handoff.request_id)
-    runner, runner_ref = _approval_value(
-        runner_approval,
-        request=authority_request,
-    )
-    authorization = runner.setup_authorization
-    if authorization is None:
-        raise CookEvidenceError("runner approval lacks setup authorization")
-    runner_proposal = canonical_mold_cook_proposal(
-        request_id=handoff.request_id,
-        kind=MoldCookApprovalKind.RUNNER,
-        spec_digest=handoff.spec_ref.digest,
-        coverage=handoff.coverage,
-        setup_authorization=authorization,
-    )
-    _check_approval(
-        runner,
-        approval_ref=runner_ref,
-        request=authority_request,
+    applied = _apply_runner_setup(
+        request,
+        source,
+        refs,
+        authority_request=authority_request,
+        runner_approval=runner_approval,
+        setup_evidence=setup_evidence,
         spec_ref=handoff.spec_ref,
-        expected=MoldCookApprovalKind.RUNNER,
-        expected_proposal=runner_proposal,
+        coverage=handoff.coverage,
+        plan=plan,
+        plan_ref=handoff.plan_ref,
     )
-    refs.append(runner_ref)
-    if setup_evidence is None:
-        return validate_preparation_result(
-            CookPreparationResult(
-                contract_version=_version(CookPreparationResult),
-                request_id=request.request_id,
-                input_kind=source.kind,
-                outcome=CookPreparationOutcome.NEEDS_PREPARATION,
-                references=tuple(refs),
-                approved_plan_ref=handoff.plan_ref,
-                coverage=handoff.coverage,
-                setup_authorization=authorization,
-            )
-        )
-    try:
-        setup_ref = _validate_setup(
-            setup_evidence,
-            authorization=authorization,
-            plan=plan,
-            request=authority_request,
-        )
-    except _SetupExecutionFailed as exc:
-        return validate_preparation_result(
-            _hold_result(
-                request,
-                source,
-                refs,
-                (
-                    CookExecutionHold(
-                        hold_id=f"setup-failed-{request.request_id}",
-                        kind=CookHoldKind.BLOCKED,
-                        reason=str(exc),
-                    ),
-                ),
-            )
-        )
-    refs.append(setup_ref)
+    if isinstance(applied, CookPreparationResult):
+        return applied
     handoff_ref = _publish_handoff(
         authority_request,
         source=source,
@@ -1470,8 +1564,8 @@ def _canonical_pointer(
         plan_ref=handoff.plan_ref,
         taste_verdict_ref=handoff.taste_verdict_ref,
         taste_ledger_ref=handoff.taste_ledger_ref,
-        runner_approval_ref=attrs.evolve(runner_ref, role="runner_approval"),
-        setup_evidence_refs=(setup_ref,),
+        runner_approval_ref=applied.runner_approval_ref,
+        setup_evidence_refs=applied.setup_evidence_refs,
     )
     return validate_preparation_result(
         _ready_result(request, source, refs, handoff_ref, handoff.coverage)
@@ -1488,6 +1582,82 @@ class _ResolvedPreparationSource:
     readiness: MoldCookSpecReadiness | None
     objective: str
     legacy_mode: bool
+
+
+def _adopt_legacy_plan(
+    legacy: _LegacyPlanMigration,
+    *,
+    classified: ClassifiedCookInput,
+    request: CookPreparationRequest,
+    artifacts: Path,
+    refs: list[ArtifactRef],
+    spec_binding: ArtifactRef | str | Path | None,
+    previous_result: CookPreparationResult | None,
+    objective: str,
+    requirement_id: str,
+    requirement_description: str,
+) -> _ResolvedPreparationSource | CookPreparationResult:
+    """Bind a historical plan to a canonical spec, or report what it still needs.
+
+    This is the only surviving ingress that reads a legacy artifact, so the
+    adapter sunset check runs here: an expired adapter must fail the run rather
+    than migrate on a rule nobody maintains.
+    """
+
+    check_adapter_sunsets(date.today())
+    if spec_binding is None and previous_result is not None:
+        spec_binding = next(
+            (item for item in previous_result.references if item.role == "spec"),
+            None,
+        )
+    if spec_binding is None:
+        return validate_preparation_result(
+            _hold_result(
+                request,
+                classified,
+                refs,
+                requirements=(
+                    CookUnmetRequirement(
+                        requirement_id=requirement_id,
+                        kind=CookRequirementKind.SCOPE,
+                        description=requirement_description,
+                    ),
+                ),
+            )
+        )
+    spec_ref, bound_objective = _bound_spec_ref(spec_binding, request=request)
+    processing_source = ClassifiedCookInput(
+        MoldCookInputKind.TASK,
+        bound_objective,
+    )
+    readiness = evaluate_mold_cook_spec(
+        _resolve_ref(spec_ref, artifacts),
+        spec_ref=spec_ref,
+    )
+    planner_value = PlannerResult(
+        contract_version=_version(PlannerResult),
+        request_id=request.request_id,
+        disposition=PlannerDisposition.COMPLETE,
+        plan=legacy.plan,
+    )
+    planner_ref = _persist_value(
+        artifacts,
+        planner_value,
+        artifact_id=f"{request.request_id}/planner-result",
+        role="planner_result",
+        schema_uri=_version(PlannerResult).schema_uri,
+    )
+    refs.append(planner_ref)
+    return _ResolvedPreparationSource(
+        processing_source=processing_source,
+        planner_value=planner_value,
+        planner_ref=planner_ref,
+        plan_ref=legacy.plan_ref,
+        spec_ref=spec_ref,
+        readiness=readiness,
+        objective=objective,
+        legacy_mode=True,
+    )
 
 
 def _resolve_preparation_source(
@@ -1544,6 +1714,17 @@ def _resolve_preparation_source(
             spec_ref=spec_ref,
         )
 
+    elif classified.kind is MoldCookInputKind.SLUG:
+        spec_ref, objective = _spec_ref(
+            classified,
+            artifacts,
+            request.request_id,
+        )
+        readiness = _spec_readiness(
+            classified,
+            spec_ref=spec_ref,
+            raw=_resolve_ref(spec_ref, artifacts),
+        )
     elif classified.kind is MoldCookInputKind.CANONICAL_POINTER:
         if classified.path is None:
             raise _PreparationFailure(
@@ -1576,65 +1757,23 @@ def _resolve_preparation_source(
                 ),
             )
         )
-        if spec_binding is None and previous_result is not None:
-            spec_binding = next(
-                (item for item in previous_result.references if item.role == "spec"),
-                None,
-            )
-        if spec_binding is None:
-            return validate_preparation_result(
-                _hold_result(
-                    request,
-                    classified,
-                    refs,
-                    requirements=(
-                        CookUnmetRequirement(
-                            requirement_id="legacy-spec-binding",
-                            kind=CookRequirementKind.SCOPE,
-                            description=(
-                                "an intact historical CurdPlan requires a canonical "
-                                "host-bound Mold spec before migration"
-                            ),
-                        ),
-                    ),
-                )
-            )
-        spec_ref, bound_objective = _bound_spec_ref(
-            spec_binding,
+        return _adopt_legacy_plan(
+            legacy,
+            classified=classified,
             request=request,
+            artifacts=artifacts,
+            refs=refs,
+            spec_binding=spec_binding,
+            previous_result=previous_result,
+            objective=(
+                "migrate the historical CurdPlan into a canonical Mold-to-Cook handoff"
+            ),
+            requirement_id="legacy-spec-binding",
+            requirement_description=(
+                "an intact historical CurdPlan requires a canonical "
+                "host-bound Mold spec before migration"
+            ),
         )
-        processing_source = ClassifiedCookInput(
-            MoldCookInputKind.TASK,
-            bound_objective,
-        )
-        readiness = evaluate_mold_cook_spec(
-            _resolve_ref(spec_ref, artifacts),
-            spec_ref=spec_ref,
-        )
-        planner_value = PlannerResult(
-            contract_version=_version(PlannerResult),
-            request_id=request.request_id,
-            disposition=PlannerDisposition.COMPLETE,
-            plan=legacy.plan,
-        )
-        planner_ref = _persist_value(
-            artifacts,
-            planner_value,
-            artifact_id=f"{request.request_id}/planner-result",
-            role="planner_result",
-            schema_uri=_version(PlannerResult).schema_uri,
-        )
-        refs.append(planner_ref)
-        plan_ref = legacy.plan_ref
-        objective = (
-            "migrate the historical CurdPlan into a canonical Mold-to-Cook handoff"
-        )
-        readiness = _spec_readiness(
-            processing_source,
-            spec_ref=spec_ref,
-            raw=_resolve_ref(spec_ref, artifacts),
-        )
-        legacy_mode = True
     elif classified.kind is MoldCookInputKind.CONTINUATION:
         continuation_ref = _source_ref(classified, artifacts, request.request_id)
         refs.append(continuation_ref)
@@ -1660,66 +1799,20 @@ def _resolve_preparation_source(
                     resolution.detail or "legacy continuation could not be adapted",
                 )
             refs.append(legacy.plan_ref)
-            if spec_binding is None and previous_result is not None:
-                spec_binding = next(
-                    (
-                        item
-                        for item in previous_result.references
-                        if item.role == "spec"
-                    ),
-                    None,
-                )
-            if spec_binding is None:
-                return validate_preparation_result(
-                    _hold_result(
-                        request,
-                        classified,
-                        refs,
-                        requirements=(
-                            CookUnmetRequirement(
-                                requirement_id="legacy-spec-binding",
-                                kind=CookRequirementKind.SCOPE,
-                                description="legacy continuation requires a bound spec",
-                            ),
-                        ),
-                    )
-                )
-            spec_ref, bound_objective = _bound_spec_ref(
-                spec_binding,
+            return _adopt_legacy_plan(
+                legacy,
+                classified=classified,
                 request=request,
+                artifacts=artifacts,
+                refs=refs,
+                spec_binding=spec_binding,
+                previous_result=previous_result,
+                objective=(
+                    "migrate the historical continuation into a canonical Cook handoff"
+                ),
+                requirement_id="legacy-spec-binding",
+                requirement_description="legacy continuation requires a bound spec",
             )
-            processing_source = ClassifiedCookInput(
-                MoldCookInputKind.TASK,
-                bound_objective,
-            )
-            readiness = evaluate_mold_cook_spec(
-                _resolve_ref(spec_ref, artifacts),
-                spec_ref=spec_ref,
-            )
-            planner_value = PlannerResult(
-                contract_version=_version(PlannerResult),
-                request_id=request.request_id,
-                disposition=PlannerDisposition.COMPLETE,
-                plan=legacy.plan,
-            )
-            planner_ref = _persist_value(
-                artifacts,
-                planner_value,
-                artifact_id=f"{request.request_id}/planner-result",
-                role="planner_result",
-                schema_uri=_version(PlannerResult).schema_uri,
-            )
-            refs.append(planner_ref)
-            plan_ref = legacy.plan_ref
-            objective = (
-                "migrate the historical continuation into a canonical Cook handoff"
-            )
-            readiness = _spec_readiness(
-                processing_source,
-                spec_ref=spec_ref,
-                raw=_resolve_ref(spec_ref, artifacts),
-            )
-            legacy_mode = True
         else:
             hold_kind = (
                 CookHoldKind.INTEGRITY
@@ -1796,12 +1889,10 @@ def prepare(
     | None = None,
     spec_binding: ArtifactRef | str | Path | None = None,
     holds: Sequence[CookExecutionHold] = (),
-    clearances: Sequence[CookHoldClearance] = (),
     previous: CookPreparationResult | None = None,
 ) -> CookPreparationResult:
     """Recompute one preparation outcome from host-owned evidence."""
 
-    del clearances
     mode = MoldCookMode(mode)
     root = Path(repository_root).resolve()
     artifacts = Path(artifact_root).resolve()
@@ -2233,78 +2324,20 @@ def prepare(
                 )
             )
         refs.append(approval_ref)
-        runner_handoff_ref: ArtifactRef | None = None
-        authorization: CookSetupAuthorization | None = None
-        setup_refs: list[ArtifactRef] = []
-        if runner_approval is not None:
-            runner, runner_ref = _approval_value(
-                runner_approval,
-                request=request,
-            )
-            authorization = runner.setup_authorization
-            if authorization is None:
-                raise CookEvidenceError("runner approval lacks setup authorization")
-            runner_proposal = canonical_mold_cook_proposal(
-                request_id=request.request_id,
-                kind=MoldCookApprovalKind.RUNNER,
-                spec_digest=spec_ref.digest,
-                coverage=coverage,
-                setup_authorization=authorization,
-            )
-            _check_approval(
-                runner,
-                approval_ref=runner_ref,
-                request=request,
-                spec_ref=spec_ref,
-                expected=MoldCookApprovalKind.RUNNER,
-                expected_proposal=runner_proposal,
-            )
-            refs.append(runner_ref)
-            runner_handoff_ref = attrs.evolve(runner_ref, role="runner_approval")
-        if authorization is not None:
-            if setup_evidence is None:
-                return validate_preparation_result(
-                    CookPreparationResult(
-                        contract_version=_version(CookPreparationResult),
-                        request_id=request.request_id,
-                        input_kind=classified.kind,
-                        outcome=CookPreparationOutcome.NEEDS_PREPARATION,
-                        references=tuple(refs),
-                        approved_plan_ref=plan_ref,
-                        coverage=coverage,
-                        setup_authorization=authorization,
-                    )
-                )
-            try:
-                setup_ref = _validate_setup(
-                    setup_evidence,
-                    authorization=authorization,
-                    plan=plan,
-                    request=request,
-                )
-            except _SetupExecutionFailed as exc:
-                if isinstance(setup_evidence, ArtifactRef):
-                    refs.append(setup_evidence)
-                return validate_preparation_result(
-                    _hold_result(
-                        request,
-                        classified,
-                        refs,
-                        (
-                            CookExecutionHold(
-                                hold_id=f"setup-failed-{request.request_id}",
-                                kind=CookHoldKind.BLOCKED,
-                                reason=str(exc),
-                            ),
-                        ),
-                    )
-                )
-            setup_refs.append(setup_ref)
-            refs.append(setup_ref)
-        elif setup_evidence is not None:
-            raise CookEvidenceError(
-                "setup evidence cannot be accepted without runner approval"
-            )
+        applied = _apply_runner_setup(
+            request,
+            classified,
+            refs,
+            authority_request=request,
+            runner_approval=runner_approval,
+            setup_evidence=setup_evidence,
+            spec_ref=spec_ref,
+            coverage=coverage,
+            plan=plan,
+            plan_ref=plan_ref,
+        )
+        if isinstance(applied, CookPreparationResult):
+            return applied
         handoff_ref = _publish_handoff(
             request,
             source=classified,
@@ -2319,8 +2352,8 @@ def prepare(
             taste_ledger_ref=(
                 None if readiness is None else readiness.taste_ledger_ref
             ),
-            runner_approval_ref=runner_handoff_ref,
-            setup_evidence_refs=setup_refs,
+            runner_approval_ref=applied.runner_approval_ref,
+            setup_evidence_refs=applied.setup_evidence_refs,
         )
         return validate_preparation_result(
             _ready_result(request, classified, refs, handoff_ref, coverage)
@@ -2362,18 +2395,13 @@ def _validate_hold_clearance(clearance: CookHoldClearance, root: Path) -> None:
     if dialogue.get("hold") or dialogue.get("holds"):
         raise CookEvidenceError("hold clearance dialogue preserves an execution hold")
     clear_holds = dialogue.get("clear_holds")
-    clear_hold_ids = (
-        cast("list[object]", clear_holds) if isinstance(clear_holds, list) else []
-    )
-    if (
-        not isinstance(clear_holds, list)
-        or clearance.hold_id not in clear_hold_ids
-        or any(not isinstance(item, str) for item in clear_hold_ids)
+    if not isinstance(clear_holds, list) or clearance.hold_id not in cast(
+        "list[object]", clear_holds
     ):
         raise CookEvidenceError(
             f"hold clearance dialogue does not name {clearance.hold_id!r}"
         )
-    if dialogue.get("execution_authorized") is not True:
+    if not dialogue_authorizes_execution(dialogue):
         raise CookEvidenceError("hold clearance dialogue does not authorize execution")
 
 
@@ -2436,7 +2464,7 @@ def resubmit(
     request_root = (
         Path(artifact_root).resolve()
         if artifact_root is not None
-        else Path(unquote(urlparse(request_ref.uri).path)).parent
+        else _local_path_for(request_ref.uri).parent
     )
     metadata = _request_metadata(request_ref, request_root)
     expected_source = cast(str, metadata["source"])
@@ -2528,7 +2556,6 @@ def resubmit(
         setup_evidence=setup_evidence,
         spec_binding=spec_binding,
         holds=tuple(retained_holds),
-        clearances=clearances,
         previous=previous_result,
     )
 
@@ -2545,6 +2572,9 @@ def execute_accepted_handoff(
 ) -> CookExecutionOutcome:
     """Accept one canonical pointer and execute its exact approved coverage."""
 
+    # The configured root is the containment root: a caller-supplied pointer
+    # URI names a path inside it and never defines it.
+    supplied_root = Path(artifact_root).resolve() if artifact_root is not None else None
     if isinstance(pointer_source, CookPreparationResult):
         prepared = validate_preparation_result(pointer_source)
         if prepared.outcome is not CookPreparationOutcome.READY:
@@ -2554,18 +2584,23 @@ def execute_accepted_handoff(
         if prepared.handoff_ref is None:
             raise ContractValidationError("READY preparation has no handoff pointer")
         handoff_ref = prepared.handoff_ref
-        pointer_path = Path(unquote(urlparse(handoff_ref.uri).path))
+        pointer_path = _local_path_for(handoff_ref.uri, supplied_root)
     elif isinstance(pointer_source, ArtifactRef):
         handoff_ref = pointer_source
-        pointer_path = Path(unquote(urlparse(pointer_source.uri).path))
+        pointer_path = _local_path_for(pointer_source.uri, supplied_root)
     else:
         pointer_path = Path(pointer_source)
         handoff_ref = None
     resolved_artifact_root = (
-        Path(artifact_root).resolve()
-        if artifact_root is not None
+        supplied_root
+        if supplied_root is not None
         else _pointer_artifact_root(pointer_path)
     )
+    if not pointer_path.resolve().is_relative_to(resolved_artifact_root):
+        raise ContractValidationError(
+            "canonical pointer is outside artifact root "
+            + repr(str(resolved_artifact_root))
+        )
     accepted = accept_mold_cook_handoff(
         pointer_path,
         artifact_root=resolved_artifact_root,

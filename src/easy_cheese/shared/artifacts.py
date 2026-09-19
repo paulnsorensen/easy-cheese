@@ -7,6 +7,7 @@ import hmac
 import json
 import mimetypes
 import os
+import re
 import stat
 import tempfile
 from collections.abc import Callable
@@ -28,12 +29,18 @@ __all__ = [
     "ResolvedAgentArtifact",
     "read_repository_artifact",
     "resolve_artifact",
+    "resolve_file_path",
     "resolve_verified_bytes",
+    "restrict_local_path",
 ]
 
 SchemaValidator = Callable[[bytes, str], None]
 
 _READ_CHUNK_BYTES = 64 * 1024
+
+# A retained artifact is named `sha256-<hex>` with no extension by design, so
+# no extension-based reader can type it.
+_RETAINED_ARTIFACT_NAME = re.compile(r"^sha256-[0-9a-f]{64}$")
 
 _REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
 _MAX_REDIRECTS = 5
@@ -94,14 +101,10 @@ def resolve_artifact(
             artifact.size_bytes,
         )
     elif parsed.scheme == "file":
-        path = _resolve_file_path(parsed.netloc, parsed.path)
+        path = resolve_file_path(parsed.netloc, parsed.path)
         if allowed_local_root is not None:
-            path = _restrict_local_path(path, allowed_local_root)
-        content, detected_type = _read_local(
-            path,
-            artifact.size_bytes,
-            artifact.media_type.split(";", 1)[0],
-        )
+            path = restrict_local_path(path, allowed_local_root)
+        content, detected_type = _read_local(path, artifact.size_bytes)
     elif parsed.scheme == "https":
         content, detected_type = _read_https(artifact, parsed)
     else:
@@ -121,7 +124,7 @@ def resolve_artifact(
 def resolve_verified_bytes(
     artifact: ArtifactRef,
     content: bytes,
-    detected_type: str,
+    detected_type: str | None,
     artifact_directory: str | Path,
     schema_validator: SchemaValidator | None = None,
 ) -> ResolvedAgentArtifact:
@@ -157,7 +160,7 @@ def read_repository_artifact(
     uri_path: str,
     repository_root: str | Path,
     expected_size: int | None,
-) -> tuple[bytes, str]:
+) -> tuple[bytes, str | None]:
     components = _repository_components(authority, uri_path)
     root_flags = (
         os.O_RDONLY
@@ -220,15 +223,12 @@ def read_repository_artifact(
             with contextlib.suppress(OSError):
                 os.close(root_fd)
 
-    detected_type, _encoding = mimetypes.guess_type(display_path.name)
-    if detected_type is None:
-        raise ArtifactResolutionError(
-            f"artifact media type cannot be determined from path: {display_path}"
-        )
-    return content, detected_type
+    return content, _detected_media_type(display_path)
 
 
-def _resolve_file_path(authority: str, uri_path: str) -> Path:
+def resolve_file_path(authority: str, uri_path: str) -> Path:
+    """Turn one `file:` URI authority and path into an absolute local path."""
+
     if authority not in {"", "localhost"}:
         raise ArtifactResolutionError("local file URI must not name a remote host")
     path = Path(unquote(uri_path))
@@ -237,7 +237,9 @@ def _resolve_file_path(authority: str, uri_path: str) -> Path:
     return path
 
 
-def _restrict_local_path(path: Path, allowed_root: str | Path) -> Path:
+def restrict_local_path(path: Path, allowed_root: str | Path) -> Path:
+    """Refuse a local path that resolves outside `allowed_root`."""
+
     resolved_path = path.resolve()
     resolved_root = Path(allowed_root).resolve()
     if resolved_path != resolved_root and resolved_root not in resolved_path.parents:
@@ -250,8 +252,7 @@ def _restrict_local_path(path: Path, allowed_root: str | Path) -> Path:
 def _read_local(
     path: Path,
     expected_size: int,
-    declared_type: str,
-) -> tuple[bytes, str]:
+) -> tuple[bytes, str | None]:
     flags = (
         os.O_RDONLY
         | getattr(os, "O_BINARY", 0)
@@ -271,8 +272,26 @@ def _read_local(
             with contextlib.suppress(OSError):
                 os.close(fd)
 
+    return content, _detected_media_type(path)
+
+
+def _detected_media_type(path: Path) -> str | None:
+    """Derive the media type of `path`, or fail closed when it is unknown.
+
+    `None` means "no independently derived type", never "equal to the
+    declaration".  The retained-artifact name shape is the one declared
+    exception: it carries no extension by design, so it returns `None` and
+    `_validate_integrity` skips the comparison for it.  Every other
+    undeterminable path is refused, on the `repo:` and `file:` ingresses
+    alike, so the two admit exactly the same artifacts.
+    """
+
     detected_type, _encoding = mimetypes.guess_type(path.name)
-    return content, detected_type or declared_type
+    if detected_type is None and _RETAINED_ARTIFACT_NAME.match(path.name) is None:
+        raise ArtifactResolutionError(
+            f"artifact media type cannot be determined from path: {path}"
+        )
+    return detected_type
 
 
 def _read_descriptor(
@@ -493,7 +512,7 @@ def _response_media_type(headers: Message) -> str:
 
 
 def _validate_integrity(
-    artifact: ArtifactRef, content: bytes, detected_type: str
+    artifact: ArtifactRef, content: bytes, detected_type: str | None
 ) -> None:
     _require_artifact_size(artifact.size_bytes)
     _require_artifact_size(len(content))
@@ -501,11 +520,21 @@ def _validate_integrity(
 
     actual_digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
     if not hmac.compare_digest(actual_digest, artifact.digest):
+        # The observed digest stays out of the message: the text is persisted
+        # into caller-visible artifacts, so echoing it makes validation a hash
+        # oracle for any file the root admits.
         raise ArtifactDigestMismatchError(
-            f"artifact digest mismatch: expected {artifact.digest}, got {actual_digest}"
+            f"artifact digest mismatch: expected {artifact.digest}"
         )
 
-    if _base_media_type(detected_type) != _base_media_type(artifact.media_type):
+    # A detected type of `None` reaches here only for a retained `sha256-<hex>`
+    # artifact, which is extensionless by design; every other undeterminable
+    # path already failed closed in `_detected_media_type`.  An unknown type
+    # cannot confirm the declaration, so the comparison is skipped instead of
+    # made tautological.
+    if detected_type is not None and _base_media_type(
+        detected_type
+    ) != _base_media_type(artifact.media_type):
         raise ArtifactResolutionError(
             f"artifact media type mismatch: expected {artifact.media_type}, "
             + f"got {detected_type}"
@@ -523,9 +552,9 @@ def _require_artifact_size(size: int) -> None:
 
 def _require_size(expected: int, actual: int) -> None:
     if actual != expected:
-        raise ArtifactResolutionError(
-            f"artifact size mismatch: expected {expected}, got {actual}"
-        )
+        # The observed size stays out of the message for the same reason the
+        # observed digest does: it leaks the length of any admitted file.
+        raise ArtifactResolutionError(f"artifact size mismatch: expected {expected}")
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:

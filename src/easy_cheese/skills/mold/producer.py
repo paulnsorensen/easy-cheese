@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import sys
 import tempfile
@@ -70,6 +69,7 @@ from easy_cheese.shared.mold_cook_handoff import (
 from easy_cheese.shared.publication import (
     BoundedReadOverflow,
     PublicationError,
+    atomic_write,
     publish_mold_cook_handoff,
     read_bounded,
 )
@@ -430,51 +430,28 @@ def _safe_segment(value: str) -> str:
 
 
 def _write_bytes(path: Path, payload: bytes) -> None:
+    """Bound the payload, then hand the durable write to the shared helper."""
+
     if len(payload) > MAX_ARTIFACT_BYTES:
         raise FinalizationError(
             f"artifact payload exceeds MAX_ARTIFACT_BYTES ({MAX_ARTIFACT_BYTES} bytes)"
         )
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            _ = os.fchmod(handle.fileno(), 0o600)
-            _ = handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        directory_fd = os.open(
-            str(path.parent),
-            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0),
-        )
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-    except BaseException:
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
+    atomic_write(path, payload)
 
 
 def _persist(
     root: Path,
     *,
     value: object,
-    artifact_id: str,
     role: str,
     media_type: str,
     schema_uri: str | None = None,
     suffix: str = ".json",
 ) -> _Persisted:
-    del artifact_id
     payload = value if isinstance(value, bytes) else canonical_bytes(value)
     digest = hashlib.sha256(payload).hexdigest()
     directory = _contained_path(root, "mold-artifacts")
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    directory = _contained_path(root, "mold-artifacts")
     path = _contained_path(root, "mold-artifacts", f"{digest}{suffix}")
     if path.is_symlink():
         raise FinalizationError(f"artifact destination is a symlink: {path}")
@@ -502,6 +479,63 @@ def _persist(
     return _Persisted(reference, value)
 
 
+def _gate_item(raw: str) -> str:
+    item = raw.strip().strip("'\"").strip()
+    if not item:
+        raise FinalizationError("gates_overridden must be a list of strings")
+    return item
+
+
+def _gates_overridden(text: str) -> tuple[str, ...]:
+    """Read ``gates_overridden`` as a YAML block list, flow list, or scalar.
+
+    The shared frontmatter reader keeps only scalars, so a declared override
+    list reaches this module as an empty mapping or as raw text.  A malformed
+    declaration is a caller error, never a silently dropped safety hold.
+    """
+    lines = text.splitlines()
+    try:
+        end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
+    except StopIteration:
+        raise FinalizationError("spec frontmatter is not terminated") from None
+    for index in range(1, end):
+        match = re.match(r"^gates_overridden:\s*(.*)$", lines[index])
+        if match is None:
+            continue
+        inline = match.group(1).strip()
+        if inline in {"null", "~"}:
+            return ()
+        if not inline:
+            key_indent = len(lines[index]) - len(lines[index].lstrip())
+            items: list[str] = []
+            for entry in lines[index + 1 : end]:
+                stripped = entry.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                # A block sequence may sit at the key's own indentation, so the
+                # item pattern must not require a deeper indent.
+                item = re.match(r"^\s*-\s*(.*)$", entry)
+                if item is None:
+                    if len(entry) - len(entry.lstrip()) > key_indent:
+                        # A nested value that is not a sequence item is a
+                        # malformed declaration, never an absent override.
+                        raise FinalizationError(
+                            "gates_overridden must be a list of strings"
+                        )
+                    break
+                items.append(_gate_item(item.group(1)))
+            return tuple(items)
+        if inline.startswith("["):
+            if not inline.endswith("]"):
+                raise FinalizationError("gates_overridden must be a list of strings")
+            body = inline[1:-1].strip()
+            if not body:
+                return ()
+            return tuple(_gate_item(part) for part in body.split(","))
+        return (_gate_item(inline),)
+    return ()
+
+
 def _frontmatter(text: str) -> _Frontmatter:
     if not text.startswith("---"):
         raise FinalizationError("spec has no frontmatter")
@@ -511,14 +545,7 @@ def _frontmatter(text: str) -> _Frontmatter:
         raise FinalizationError(
             f"unsupported spec lifecycle {status_value!r}; expected one of {sorted(_ALLOWED_LIFECYCLES)}"
         )
-    raw_overrides = values.get("gates_overridden", ())
-    if raw_overrides is None:
-        raw_overrides = ()
-    if not isinstance(raw_overrides, (list, tuple)):
-        raise FinalizationError("gates_overridden must be a list of strings")
-    raw_overrides = cast("Sequence[object]", raw_overrides)
-    if any(not isinstance(item, str) for item in raw_overrides):
-        raise FinalizationError("gates_overridden must be a list of strings")
+    overrides = _gates_overridden(text)
     directive = next(
         (
             parsed
@@ -531,7 +558,7 @@ def _frontmatter(text: str) -> _Frontmatter:
     ) or _section_directive(text)
     return _Frontmatter(
         status_value,
-        tuple(cast(str, item) for item in raw_overrides),
+        overrides,
         directive,
     )
 
@@ -612,6 +639,49 @@ def _save_result(root: Path, operation_id: str, output: Mapping[str, object]) ->
     return path
 
 
+def _blocked_outcome(
+    artifact_root: Path,
+    operation_id: str,
+    *,
+    request_id: str,
+    input_kind: MoldCookInputKind,
+    references: Sequence[ArtifactRef],
+    holds: Sequence[CookExecutionHold],
+    requirements: Sequence[CookUnmetRequirement],
+    spec_ref: ArtifactRef,
+) -> FinalizationOutcome:
+    """Save incomplete work as a validated, blocked preparation result."""
+    version = supported_version_for(CookPreparationResult)
+    if version is None:
+        raise FinalizationError(
+            "CookPreparationResult has no supported contract version"
+        )
+    preparation = cast(Callable[..., CookPreparationResult], CookPreparationResult)(
+        contract_version=version,
+        request_id=request_id,
+        input_kind=input_kind,
+        outcome=CookPreparationOutcome.BLOCKED,
+        references=tuple(references),
+        holds=tuple(holds),
+        requirements=tuple(requirements),
+    )
+    preparation_artifact = validate_contract(
+        canonical_bytes(preparation), CookPreparationResult, version
+    )
+    output: dict[str, object] = {
+        "status": "saved-not-ready",
+        "ready": False,
+        "saved": True,
+        "spec_ref": _canonical_output(spec_ref),
+        "preparation_result": _canonical_output(preparation_artifact.value),
+        "requirements": [_canonical_output(item) for item in requirements],
+        "holds": [_canonical_output(item) for item in holds],
+    }
+    result_path = _save_result(artifact_root, operation_id, output)
+    output["result_path"] = str(result_path)
+    return FinalizationOutcome(output)
+
+
 def finalize_mold(
     spec_path: Path,
     *,
@@ -649,7 +719,6 @@ def finalize_mold(
     spec_persisted = _persist(
         artifact_root,
         value=snapshot.content,
-        artifact_id="spec",
         role="spec",
         media_type="text/markdown",
         suffix=".md",
@@ -779,7 +848,6 @@ def finalize_mold(
             approval_persisted = _persist(
                 artifact_root,
                 value=typed_approval,
-                artifact_id="approval",
                 role="approval",
                 media_type="application/json",
                 schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
@@ -842,7 +910,6 @@ def finalize_mold(
                 planner_persisted = _persist(
                     artifact_root,
                     value=typed_planner,
-                    artifact_id="planner-result",
                     role="planner_result",
                     media_type="application/json",
                     schema_uri="https://schemas.easy-cheese.dev/planner-result",
@@ -874,7 +941,6 @@ def finalize_mold(
                 plan_persisted = _persist(
                     artifact_root,
                     value=typed_plan,
-                    artifact_id="curd-plan",
                     role="curd_plan",
                     media_type="application/json",
                     schema_uri="https://schemas.easy-cheese.dev/curd-plan",
@@ -919,7 +985,6 @@ def finalize_mold(
                 artifact_root,
                 value=taste_verdict.to_dict(),
                 schema_uri="https://schemas.easy-cheese.dev/taste-verdict",
-                artifact_id="taste-verdict",
                 role="taste_verdict",
                 media_type="application/json",
             )
@@ -952,7 +1017,6 @@ def finalize_mold(
             taste_ledger_persisted = _persist(
                 artifact_root,
                 value=ledger_value,
-                artifact_id="taste-ledger",
                 schema_uri="https://schemas.easy-cheese.dev/taste-ledger",
                 role="taste_ledger",
                 media_type="application/json",
@@ -1155,35 +1219,16 @@ def finalize_mold(
                 )
 
     if requirements or holds:
-        version = supported_version_for(CookPreparationResult)
-        if version is None:
-            raise FinalizationError(
-                "CookPreparationResult has no supported contract version"
-            )
-        preparation = cast(Callable[..., CookPreparationResult], CookPreparationResult)(
-            contract_version=version,
+        return _blocked_outcome(
+            artifact_root,
+            operation_id,
             request_id=request_id,
             input_kind=input_kind,
-            outcome=CookPreparationOutcome.BLOCKED,
-            references=tuple(references),
-            holds=tuple(holds),
-            requirements=tuple(requirements),
+            references=references,
+            holds=holds,
+            requirements=requirements,
+            spec_ref=spec_persisted.reference,
         )
-        preparation_artifact = validate_contract(
-            canonical_bytes(preparation), CookPreparationResult, version
-        )
-        output: dict[str, object] = {
-            "status": "saved-not-ready",
-            "ready": False,
-            "saved": True,
-            "spec_ref": _canonical_output(spec_persisted.reference),
-            "preparation_result": _canonical_output(preparation_artifact.value),
-            "requirements": [_canonical_output(item) for item in requirements],
-            "holds": [_canonical_output(item) for item in holds],
-        }
-        result_path = _save_result(artifact_root, operation_id, output)
-        output["result_path"] = str(result_path)
-        return FinalizationOutcome(output)
 
     if typed_approval is None or approval_persisted is None:
         raise FinalizationError("ready finalization requires approval evidence")
@@ -1243,30 +1288,19 @@ def finalize_mold(
                 f"canonical handoff failed shared validation or publication: {exc}",
             ),
         )
-        preparation = cast(Callable[..., CookPreparationResult], CookPreparationResult)(
-            contract_version=supported_version_for(CookPreparationResult),
+        return _blocked_outcome(
+            artifact_root,
+            operation_id,
             request_id=request_id,
             input_kind=input_kind,
-            outcome=CookPreparationOutcome.BLOCKED,
-            references=tuple(references),
-            holds=tuple(holds),
-            requirements=tuple(requirements),
+            references=references,
+            holds=holds,
+            requirements=requirements,
+            spec_ref=spec_persisted.reference,
         )
-        output = {
-            "status": "saved-not-ready",
-            "ready": False,
-            "saved": True,
-            "spec_ref": _canonical_output(spec_persisted.reference),
-            "preparation_result": _canonical_output(preparation),
-            "requirements": [_canonical_output(item) for item in requirements],
-            "holds": [_canonical_output(item) for item in holds],
-        }
-        result_path = _save_result(artifact_root, operation_id, output)
-        output["result_path"] = str(result_path)
-        return FinalizationOutcome(output)
 
     pointer = _canonical_output(published.pointer)
-    output = {
+    output: dict[str, object] = {
         "status": "ready",
         "ready": True,
         "saved": True,

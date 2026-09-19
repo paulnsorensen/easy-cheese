@@ -7,12 +7,12 @@ contract, and checks that approval covers exactly the handoff being accepted.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlsplit
 import attrs
 from easy_cheese_schemas.contracts import (
     ArtifactRef,
@@ -49,7 +49,8 @@ from easy_cheese.shared.artifacts import (
     ArtifactResolutionError,
     resolve_artifact,
 )
-from easy_cheese.shared.taste_test import _typed_mold_document  # pyright: ignore[reportPrivateUsage]
+from easy_cheese.shared.taste_test import typed_mold_document
+from easy_cheese.shared.wheypoint.canonical import digest_bytes
 
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "MoldCookSpecReadiness",
     "bind_mold_cook_approval",
     "canonical_mold_cook_proposal",
+    "dialogue_authorizes_execution",
     "evaluate_mold_cook_spec",
     "materialize_artifact_ref",
     "validate_mold_cook_approval",
@@ -97,7 +99,7 @@ def evaluate_mold_cook_spec(
 
     if len(content) != spec_ref.size_bytes:
         raise ContractValidationError("spec snapshot size does not match spec_ref")
-    if _digest_bytes(content) != spec_ref.digest:
+    if digest_bytes(content) != spec_ref.digest:
         raise ContractValidationError("spec snapshot digest does not match spec_ref")
     if (taste_verdict_ref is None) != (taste_ledger_ref is None):
         raise ContractValidationError(
@@ -105,7 +107,7 @@ def evaluate_mold_cook_spec(
         )
     try:
         text = content.decode("utf-8")
-        document, _, _ = _typed_mold_document(text)
+        document, _, _ = typed_mold_document(text)
     except (UnicodeDecodeError, TypeError, ValueError) as exc:
         raise ContractValidationError(
             f"spec snapshot is not a valid Mold document: {exc}"
@@ -131,10 +133,6 @@ def evaluate_mold_cook_spec(
         taste_ledger_ref=taste_ledger_ref,
         holds=tuple(holds),
     )
-
-
-def _digest_bytes(content: bytes) -> str:
-    return f"sha256:{hashlib.sha256(content).hexdigest()}"
 
 
 def _content_for(value: object) -> bytes:
@@ -166,7 +164,7 @@ def materialize_artifact_ref(
         artifact_id=artifact_id,
         role=role,
         uri=uri,
-        digest=_digest_bytes(content),
+        digest=digest_bytes(content),
         size_bytes=len(content),
         media_type=media_type,
         schema_uri=schema_uri,
@@ -263,26 +261,27 @@ def canonical_mold_cook_proposal(
     return canonical_bytes(envelope)
 
 
-def _root_and_directory(
-    artifact_root: str | Path | None,
-) -> tuple[Path, Path, Path | None]:
-    if artifact_root is None:
-        cwd = Path.cwd()
-        return cwd, cwd, None
+_LOCAL_ARTIFACT_SCHEMES = frozenset({"file", "repo"})
+
+
+def _resolve_bytes(ref: ArtifactRef, artifact_root: str | Path) -> bytes:
+    try:
+        scheme = urlsplit(ref.uri).scheme
+    except ValueError as exc:
+        raise ContractValidationError(
+            f"artifact {ref.artifact_id!r} has an invalid URI"
+        ) from exc
+    if scheme not in _LOCAL_ARTIFACT_SCHEMES:
+        raise ContractValidationError(
+            f"artifact {ref.artifact_id!r} uses unsupported URI scheme {scheme!r}"
+        )
     root = Path(artifact_root).resolve()
-    return root, root, root
-
-
-def _resolve_bytes(ref: ArtifactRef, artifact_root: str | Path | None) -> bytes:
-    repository_root, artifact_directory, allowed_local_root = _root_and_directory(
-        artifact_root
-    )
     try:
         resolved = resolve_artifact(
             attrs.evolve(ref, schema_uri=None),
-            repository_root=repository_root,
-            artifact_directory=artifact_directory,
-            allowed_local_root=allowed_local_root,
+            repository_root=root,
+            artifact_directory=root,
+            allowed_local_root=root,
         )
     except ArtifactDigestMismatchError as exc:
         raise ContractValidationError(
@@ -300,7 +299,7 @@ def _resolve_bytes(ref: ArtifactRef, artifact_root: str | Path | None) -> bytes:
 def _resolve_contract(
     ref: ArtifactRef,
     contract_type: type,
-    artifact_root: str | Path | None,
+    artifact_root: str | Path,
 ) -> CanonicalArtifact:
     content = _resolve_bytes(ref, artifact_root)
     version = supported_version_for(contract_type)
@@ -318,7 +317,7 @@ def _resolve_contract(
 
 def _validate_proposal(
     approval: MoldCookApproval,
-    artifact_root: str | Path | None,
+    artifact_root: str | Path,
     *,
     expected: bytes | None = None,
 ) -> bytes:
@@ -339,34 +338,40 @@ def _validate_proposal(
     return content
 
 
-def _response_is_negative(response_text: str) -> bool:
-    normalized = response_text.strip().casefold()
-    if normalized in {
-        "no",
-        "n",
-        "reject",
-        "rejected",
-        "deny",
-        "denied",
-        "not approved",
-        "clarify",
-        "clarification",
-    }:
-        return True
-    return normalized.startswith(
-        ("no ", "no,", "reject ", "deny ", "not approved", "cannot ")
-    )
+_AFFIRMATIVE_RESPONSES = frozenset(
+    {"approved", "approve", "yes", "y", "ok", "lgtm", "confirmed"}
+)
 
 
-def _validate_response(
-    approval: MoldCookApproval, artifact_root: str | Path | None
-) -> bytes:
+def _response_is_affirmative(response_text: str) -> bool:
+    normalized = response_text.strip().casefold().rstrip(" \t.!,;:")
+    return normalized in _AFFIRMATIVE_RESPONSES
+
+
+def dialogue_authorizes_execution(dialogue: Mapping[str, object]) -> bool:
+    """Report whether one local dialogue explicitly authorizes execution.
+
+    Authorization is affirmative and explicit: the dialogue must name the holds
+    it clears and must carry `execution_authorized` as the literal `True`. A
+    missing key is never consent.
+    """
+
+    clear_holds = dialogue.get("clear_holds")
+    if not isinstance(clear_holds, list) or not clear_holds:
+        return False
+    cleared = cast("list[object]", clear_holds)
+    if any(not isinstance(item, str) or not item.strip() for item in cleared):
+        return False
+    return dialogue.get("execution_authorized") is True
+
+
+def _validate_response(approval: MoldCookApproval, artifact_root: str | Path) -> bytes:
     content = _resolve_bytes(approval.response_ref, artifact_root)
     if approval.decision is not MoldCookApprovalDecision.APPROVED:
         raise ContractValidationError(
             f"{approval.kind.value} approval carries {approval.decision.value} response"
         )
-    if _response_is_negative(approval.response_text):
+    if not _response_is_affirmative(approval.response_text):
         raise ContractValidationError("approval response is negative or unresolved")
 
     if approval.response_ref.role == "response":
@@ -398,21 +403,48 @@ def _validate_response(
             raise ContractValidationError(
                 "approval response text is absent from or detached from local dialogue"
             )
-        for key in ("hold", "holds", "clear_holds", "execution_authorized"):
-            value = dialogue.get(key)
-            if key in {"hold", "holds"} and value:
-                raise ContractValidationError(
-                    "approval dialogue preserves an execution hold"
-                )
-            if key in {"clear_holds", "execution_authorized"} and value is False:
-                raise ContractValidationError(
-                    "approval dialogue does not authorize execution"
-                )
+        if dialogue.get("hold") or dialogue.get("holds"):
+            raise ContractValidationError(
+                "approval dialogue preserves an execution hold"
+            )
+        if not dialogue_authorizes_execution(dialogue):
+            raise ContractValidationError(
+                "approval dialogue does not authorize execution"
+            )
     return content
 
 
+def _self_bound_proposal(approval: MoldCookApproval) -> bytes | None:
+    """Rebuild the canonical envelope an approval binds on its own fields.
+
+    A plan approval names a plan digest but not the planner result that its
+    envelope carries, so only the handoff path can supply that envelope.
+    """
+
+    if approval.kind is MoldCookApprovalKind.SCOPE:
+        return canonical_mold_cook_proposal(
+            request_id=approval.request_id,
+            kind=approval.kind,
+            spec_digest=approval.spec_digest,
+            coverage=approval.coverage,
+        )
+    if approval.kind is MoldCookApprovalKind.RUNNER:
+        if approval.setup_authorization is None:
+            raise ContractValidationError(
+                "runner approval must carry the authorized setup envelope"
+            )
+        return canonical_mold_cook_proposal(
+            request_id=approval.request_id,
+            kind=approval.kind,
+            spec_digest=approval.spec_digest,
+            coverage=approval.coverage,
+            setup_authorization=approval.setup_authorization,
+        )
+    return None
+
+
 def validate_mold_cook_approval(
-    approval: object, artifact_root: str | Path | None = None
+    approval: object, artifact_root: str | Path
 ) -> MoldCookApproval:
     """Validate durable proposal/response evidence for one approval."""
 
@@ -420,8 +452,10 @@ def validate_mold_cook_approval(
         raise TypeError(
             f"validate_mold_cook_approval expects MoldCookApproval, not {type(approval).__name__}"
         )
-    _ = _validate_proposal(approval, artifact_root)
     _ = _validate_response(approval, artifact_root)
+    _ = _validate_proposal(
+        approval, artifact_root, expected=_self_bound_proposal(approval)
+    )
     return approval
 
 
@@ -471,7 +505,7 @@ def _validate_authority_refs(
     handoff: MoldCookHandoff,
     *,
     approval: MoldCookApproval,
-    artifact_root: str | Path | None,
+    artifact_root: str | Path,
 ) -> None:
     if handoff.setup_evidence_refs and handoff.runner_approval_ref is None:
         raise ContractValidationError(
@@ -509,8 +543,39 @@ def _validate_authority_refs(
     _ = validate_mold_cook_approval(runner, artifact_root)
 
 
+def _validate_bound_evidence(
+    handoff: MoldCookHandoff,
+    approval: MoldCookApproval,
+    artifact_root: str | Path,
+    *,
+    spec_content: bytes,
+    plan: CurdPlan | None = None,
+    planner: PlannerResult | None = None,
+) -> None:
+    """Check the spec snapshot, the envelope, the response, and the authority."""
+
+    _ = evaluate_mold_cook_spec(
+        spec_content,
+        spec_ref=handoff.spec_ref,
+        plan=plan,
+        taste_verdict_ref=handoff.taste_verdict_ref,
+        taste_ledger_ref=handoff.taste_ledger_ref,
+    )
+    expected = canonical_mold_cook_proposal(
+        request_id=handoff.request_id,
+        kind=approval.kind,
+        spec_digest=handoff.spec_ref.digest,
+        coverage=handoff.coverage,
+        planner_result=planner,
+        plan_digest=None if plan is None else plan.digest,
+    )
+    _ = _validate_proposal(approval, artifact_root, expected=expected)
+    _ = _validate_response(approval, artifact_root)
+    _validate_authority_refs(handoff, approval=approval, artifact_root=artifact_root)
+
+
 def validate_mold_cook_handoff(
-    handoff: object, artifact_root: str | Path | None = None
+    handoff: object, artifact_root: str | Path
 ) -> MoldCookHandoff:
     """Resolve and validate all authority bound by a canonical handoff."""
 
@@ -547,22 +612,11 @@ def validate_mold_cook_handoff(
             raise ContractValidationError(
                 "light handoff cannot discard unresolved work"
             )
-        _ = evaluate_mold_cook_spec(
-            spec_content,
-            spec_ref=handoff.spec_ref,
-            taste_verdict_ref=handoff.taste_verdict_ref,
-            taste_ledger_ref=handoff.taste_ledger_ref,
-        )
-        expected = canonical_mold_cook_proposal(
-            request_id=handoff.request_id,
-            kind=approval.kind,
-            spec_digest=handoff.spec_ref.digest,
-            coverage=handoff.coverage,
-        )
-        _ = _validate_proposal(approval, artifact_root, expected=expected)
-        _ = _validate_response(approval, artifact_root)
-        _validate_authority_refs(
-            handoff, approval=approval, artifact_root=artifact_root
+        _validate_bound_evidence(
+            handoff,
+            approval,
+            artifact_root,
+            spec_content=spec_content,
         )
         return handoff
 
@@ -594,22 +648,12 @@ def validate_mold_cook_handoff(
             f"full handoff requires {expected_kind.value} approval, got {approval.kind.value}"
         )
     _check_coverage_against_plan(handoff.coverage, planner, plan)
-    _ = evaluate_mold_cook_spec(
-        spec_content,
-        spec_ref=handoff.spec_ref,
+    _validate_bound_evidence(
+        handoff,
+        approval,
+        artifact_root,
+        spec_content=spec_content,
         plan=plan,
-        taste_verdict_ref=handoff.taste_verdict_ref,
-        taste_ledger_ref=handoff.taste_ledger_ref,
+        planner=planner,
     )
-    expected = canonical_mold_cook_proposal(
-        request_id=handoff.request_id,
-        kind=approval.kind,
-        spec_digest=handoff.spec_ref.digest,
-        coverage=handoff.coverage,
-        planner_result=planner,
-        plan_digest=plan.digest,
-    )
-    _ = _validate_proposal(approval, artifact_root, expected=expected)
-    _ = _validate_response(approval, artifact_root)
-    _validate_authority_refs(handoff, approval=approval, artifact_root=artifact_root)
     return handoff

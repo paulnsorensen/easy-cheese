@@ -161,6 +161,7 @@ __all__ = [
     "required_reflections",
     "require_decomposition",
     "taste_test",
+    "typed_mold_document",
     "validate_taste_result",
 ]
 _GOAL_HEADINGS = frozenset({"problem statement", "problem", "goal"})
@@ -862,6 +863,11 @@ def _typed_mold_document(
             message = "contract-matrix-rows-not-unique"
         raise ApplicabilityError(message) from exc
     return document, text, merged
+
+
+# The public name of the strict Mold parser. Shared hosts import this one; the
+# private name stays for the in-module callers that predate it.
+typed_mold_document = _typed_mold_document
 
 
 def _contracts_from_document(document: MoldSpecDocument) -> tuple[TestContract, ...]:

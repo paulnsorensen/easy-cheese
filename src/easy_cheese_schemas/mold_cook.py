@@ -8,12 +8,18 @@ publish or execute a handoff.
 
 from __future__ import annotations
 
+import sys
 from enum import Enum
-from typing import Protocol, TypeVar, cast
+from typing import NamedTuple, Protocol, TypeVar, cast
 
 from attrs import Attribute, define, field, validators
 
-from ._schema_catalog import SCHEMA_ROOT
+from ._schema_catalog import (
+    COOK_PREPARATION_RESULT_SCHEMA_URI,
+    MOLD_COOK_APPROVAL_SCHEMA_URI,
+    MOLD_COOK_HANDOFF_SCHEMA_URI,
+    SCHEMA_ROOT,
+)
 from .contracts import (
     ArtifactRef,
     ContractVersion,
@@ -29,13 +35,9 @@ from .contracts import (
     _string_list,  # pyright: ignore[reportPrivateUsage]
     _tuple_sequence,  # pyright: ignore[reportPrivateUsage]
     contract,
+    marked_contracts_in,
     schema_constraints,
 )
-
-
-MOLD_COOK_HANDOFF_SCHEMA_URI = f"{SCHEMA_ROOT}/mold-cook-handoff"
-MOLD_COOK_APPROVAL_SCHEMA_URI = f"{SCHEMA_ROOT}/mold-cook-approval"
-COOK_PREPARATION_RESULT_SCHEMA_URI = f"{SCHEMA_ROOT}/cook-preparation-result"
 
 
 class MoldCookMode(str, Enum):
@@ -238,6 +240,102 @@ def _forbid(*field_names: str) -> dict[str, object]:
     }
 
 
+_OUTCOME_PAYLOAD_FIELDS: frozenset[str] = frozenset(
+    {
+        "approval_kind",
+        "approved_plan_ref",
+        "approved_scope_ref",
+        "coverage",
+        "findings",
+        "handoff_ref",
+        "holds",
+        "missing_decision",
+        "planner_request",
+        "proposal_digest",
+        "proposal_ref",
+        "requirements",
+        "setup_authorization",
+    }
+)
+
+_OUTCOME_SEQUENCE_FIELDS: frozenset[str] = frozenset(
+    {"findings", "holds", "requirements"}
+)
+
+
+class _OutcomeFields(NamedTuple):
+    """The payload fields one preparation outcome requires and permits."""
+
+    required: frozenset[str] = frozenset()
+    any_of: frozenset[str] = frozenset()
+    optional: frozenset[str] = frozenset()
+
+    @property
+    def allowed(self) -> frozenset[str]:
+        return self.required | self.any_of | self.optional
+
+
+_OPTIONAL_HOLDS: frozenset[str] = frozenset({"holds"})
+
+_OUTCOME_FIELDS: dict[CookPreparationOutcome, _OutcomeFields] = {
+    CookPreparationOutcome.READY: _OutcomeFields(
+        required=frozenset({"handoff_ref", "coverage"}),
+    ),
+    CookPreparationOutcome.NEEDS_PLANNING: _OutcomeFields(
+        required=frozenset({"approved_scope_ref", "planner_request"}),
+        optional=_OPTIONAL_HOLDS,
+    ),
+    CookPreparationOutcome.NEEDS_APPROVAL: _OutcomeFields(
+        required=frozenset(
+            {
+                "approval_kind",
+                "proposal_ref",
+                "proposal_digest",
+                "missing_decision",
+            }
+        ),
+        optional=_OPTIONAL_HOLDS,
+    ),
+    CookPreparationOutcome.NEEDS_PREPARATION: _OutcomeFields(
+        required=frozenset({"approved_plan_ref", "coverage", "setup_authorization"}),
+        optional=_OPTIONAL_HOLDS,
+    ),
+    CookPreparationOutcome.BLOCKED: _OutcomeFields(
+        any_of=frozenset({"requirements", "holds"}),
+    ),
+    CookPreparationOutcome.INVALID: _OutcomeFields(
+        required=frozenset({"findings"}),
+    ),
+}
+
+
+def _non_empty(name: str) -> dict[str, object]:
+    return {"required": [name], "properties": {name: {"minItems": 1}}}
+
+
+def _outcome_constraints() -> tuple[dict[str, object], ...]:
+    """Derive one ``if``/``then`` branch per outcome from ``_OUTCOME_FIELDS``."""
+    branches: list[dict[str, object]] = []
+    for outcome, fields in _OUTCOME_FIELDS.items():
+        then: dict[str, object] = {}
+        if fields.required:
+            then["required"] = sorted(fields.required)
+        non_empty = sorted(fields.required & _OUTCOME_SEQUENCE_FIELDS)
+        if non_empty:
+            then["properties"] = {name: {"minItems": 1} for name in non_empty}
+        if fields.any_of:
+            then["anyOf"] = [_non_empty(name) for name in sorted(fields.any_of)]
+        then.update(_forbid(*sorted(_OUTCOME_PAYLOAD_FIELDS - fields.allowed)))
+        branches.append(_if_equals("outcome", outcome.value, then))
+    return tuple(branches)
+
+
+def _is_populated(value: object) -> bool:
+    if isinstance(value, tuple):
+        return bool(cast("tuple[object, ...]", value))
+    return value is not None
+
+
 @define(frozen=True)
 class MoldCookCoverage:
     """Exact runnable IDs and the acknowledged PlannerResult remainder."""
@@ -348,7 +446,9 @@ class MoldCookApproval:
     coverage: MoldCookCoverage = field(
         validator=validators.instance_of(MoldCookCoverage)
     )
-    plan_digest: str | None = field(default=None, validator=_optional_string)
+    plan_digest: str | None = field(
+        default=None, validator=validators.optional(_digest)
+    )
     setup_authorization: CookSetupAuthorization | None = field(
         default=None,
         validator=validators.optional(validators.instance_of(CookSetupAuthorization)),
@@ -488,130 +588,7 @@ class MoldCookHandoff:
 
 
 @contract("cook-preparation-result")
-@schema_constraints(
-    _if_equals(
-        "outcome",
-        CookPreparationOutcome.READY.value,
-        {
-            "required": ["handoff_ref", "coverage"],
-            "properties": {"holds": {"maxItems": 0}},
-            **_forbid(
-                "approved_scope_ref",
-                "planner_request",
-                "approval_kind",
-                "proposal_ref",
-                "proposal_digest",
-                "missing_decision",
-                "approved_plan_ref",
-                "setup_authorization",
-                "requirements",
-                "findings",
-            ),
-        },
-    ),
-    _if_equals(
-        "outcome",
-        CookPreparationOutcome.NEEDS_PLANNING.value,
-        {
-            "required": ["approved_scope_ref", "planner_request"],
-            **_forbid(
-                "handoff_ref",
-                "coverage",
-                "approval_kind",
-                "proposal_ref",
-                "proposal_digest",
-                "missing_decision",
-                "approved_plan_ref",
-                "setup_authorization",
-                "requirements",
-                "findings",
-            ),
-        },
-    ),
-    _if_equals(
-        "outcome",
-        CookPreparationOutcome.NEEDS_APPROVAL.value,
-        {
-            "required": [
-                "approval_kind",
-                "proposal_ref",
-                "proposal_digest",
-                "missing_decision",
-            ],
-            **_forbid(
-                "handoff_ref",
-                "coverage",
-                "approved_scope_ref",
-                "planner_request",
-                "approved_plan_ref",
-                "setup_authorization",
-                "requirements",
-                "findings",
-            ),
-        },
-    ),
-    _if_equals(
-        "outcome",
-        CookPreparationOutcome.NEEDS_PREPARATION.value,
-        {
-            "required": ["approved_plan_ref", "coverage", "setup_authorization"],
-            **_forbid(
-                "handoff_ref",
-                "approved_scope_ref",
-                "planner_request",
-                "approval_kind",
-                "proposal_ref",
-                "proposal_digest",
-                "missing_decision",
-                "requirements",
-                "findings",
-            ),
-        },
-    ),
-    _if_equals(
-        "outcome",
-        CookPreparationOutcome.BLOCKED.value,
-        {
-            "anyOf": [
-                {"properties": {"requirements": {"minItems": 1}}},
-                {"properties": {"holds": {"minItems": 1}}},
-            ],
-            **_forbid(
-                "handoff_ref",
-                "coverage",
-                "approved_scope_ref",
-                "planner_request",
-                "approval_kind",
-                "proposal_ref",
-                "proposal_digest",
-                "missing_decision",
-                "approved_plan_ref",
-                "setup_authorization",
-                "findings",
-            ),
-        },
-    ),
-    _if_equals(
-        "outcome",
-        CookPreparationOutcome.INVALID.value,
-        {
-            "properties": {"findings": {"minItems": 1}},
-            **_forbid(
-                "handoff_ref",
-                "coverage",
-                "approved_scope_ref",
-                "planner_request",
-                "approval_kind",
-                "proposal_ref",
-                "proposal_digest",
-                "missing_decision",
-                "approved_plan_ref",
-                "setup_authorization",
-                "requirements",
-            ),
-        },
-    ),
-)
+@schema_constraints(*_outcome_constraints())
 @define(frozen=True)
 class CookPreparationResult:
     """Closed, non-executing preparation outcomes."""
@@ -659,7 +636,9 @@ class CookPreparationResult:
         default=None,
         validator=validators.optional(_artifact_role("proposal")),
     )
-    proposal_digest: str | None = field(default=None, validator=_optional_string)
+    proposal_digest: str | None = field(
+        default=None, validator=validators.optional(_digest)
+    )
     missing_decision: str | None = field(default=None, validator=_optional_string)
     approved_plan_ref: ArtifactRef | None = field(
         default=None,
@@ -681,88 +660,39 @@ class CookPreparationResult:
     )
 
     def __attrs_post_init__(self) -> None:
-        payload_fields = (
-            "handoff_ref",
-            "coverage",
-            "approved_scope_ref",
-            "planner_request",
-            "approval_kind",
-            "proposal_ref",
-            "proposal_digest",
-            "missing_decision",
-            "approved_plan_ref",
-            "setup_authorization",
-        )
-        populated = {name for name in payload_fields if getattr(self, name) is not None}
-        allowed: set[str]
-        if self.outcome is CookPreparationOutcome.READY:
-            if self.handoff_ref is None or self.coverage is None:
-                raise ValueError("ready preparation requires handoff_ref and coverage")
-            if self.holds or self.requirements or self.findings:
-                raise ValueError("ready preparation must not carry holds or findings")
-            allowed = {"handoff_ref", "coverage"}
-        elif self.outcome is CookPreparationOutcome.NEEDS_PLANNING:
-            if self.approved_scope_ref is None or self.planner_request is None:
-                raise ValueError(
-                    "needs-planning preparation requires approved_scope_ref and planner_request"
-                )
-            allowed = {"approved_scope_ref", "planner_request"}
-        elif self.outcome is CookPreparationOutcome.NEEDS_APPROVAL:
-            if (
-                self.approval_kind is None
-                or self.proposal_ref is None
-                or self.proposal_digest is None
-                or self.missing_decision is None
-            ):
-                raise ValueError(
-                    "needs-approval preparation requires approval kind, proposal, digest, and decision"
-                )
-            if self.proposal_digest != self.proposal_ref.digest:
-                raise ValueError("proposal_digest must match proposal_ref.digest")
-            allowed = {
-                "approval_kind",
-                "proposal_ref",
-                "proposal_digest",
-                "missing_decision",
-            }
-        elif self.outcome is CookPreparationOutcome.NEEDS_PREPARATION:
-            if (
-                self.approved_plan_ref is None
-                or self.coverage is None
-                or self.setup_authorization is None
-            ):
-                raise ValueError(
-                    "needs-preparation requires approved_plan_ref, coverage, and setup authorization"
-                )
-            allowed = {"approved_plan_ref", "coverage", "setup_authorization"}
-        elif self.outcome is CookPreparationOutcome.BLOCKED:
-            if not self.requirements and not self.holds:
-                raise ValueError("blocked preparation requires requirements or holds")
-            allowed = set()
-        else:
-            if not self.findings:
-                raise ValueError("invalid preparation requires validation findings")
-            if self.holds or self.requirements:
-                raise ValueError("invalid preparation must not carry execution holds")
-            allowed = set()
-        unexpected = populated - allowed
+        fields = _OUTCOME_FIELDS[self.outcome]
+        populated = {
+            name
+            for name in _OUTCOME_PAYLOAD_FIELDS
+            if _is_populated(cast("object", getattr(self, name)))
+        }
+        missing = sorted(fields.required - populated)
+        if missing:
+            raise ValueError(
+                f"{self.outcome.value} preparation requires {', '.join(missing)}"
+            )
+        if fields.any_of and not populated & fields.any_of:
+            options = " or ".join(sorted(fields.any_of))
+            raise ValueError(f"{self.outcome.value} preparation requires {options}")
+        unexpected = sorted(populated - fields.allowed)
         if unexpected:
-            names = ", ".join(sorted(unexpected))
+            names = ", ".join(unexpected)
             raise ValueError(
                 f"{self.outcome.value} preparation carries fields for another outcome: {names}"
             )
-
-
-MOLD_COOK_CONTRACTS: tuple[tuple[str, type], ...] = (
-    ("cook-preparation-result", CookPreparationResult),
-    ("mold-cook-approval", MoldCookApproval),
-    ("mold-cook-handoff", MoldCookHandoff),
-)
+        if (
+            self.proposal_ref is not None
+            and self.proposal_digest != self.proposal_ref.digest
+        ):
+            raise ValueError("proposal_digest must match proposal_ref.digest")
 
 
 def registered_contracts() -> tuple[tuple[str, type], ...]:
-    """Return Mold-to-Cook contracts for package-wide schema discovery."""
-    return MOLD_COOK_CONTRACTS
+    """Return marked contract classes in ``mold_cook.py`` in slug order."""
+    return marked_contracts_in(sys.modules[__name__])
+
+
+MOLD_COOK_CONTRACTS: tuple[tuple[str, type], ...] = registered_contracts()
 
 
 __all__ = [

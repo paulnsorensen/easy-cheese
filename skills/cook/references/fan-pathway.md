@@ -300,7 +300,10 @@ Wiring rows exist in the manifest, not the curd block.
 - **Worker exhaustion.**
   A worker can run out of context or turns.
   The worker writes a partial typed handoff with `status: needs-context: <gap>`.
+  The worker keeps the declared Cook transition and writes `--next age`.
+  The compiled registry declares no `cook -> cook` route, so `--next cook` fails.
   The orchestrator re-dispatches that curd once.
+  That re-dispatch is an orchestrator spawn of the same phase, not a declared phase transition.
   Fold the gap into the context.
   Set `--retry-count 1`.
   A second `needs-context` at that phase halts.
@@ -475,7 +478,9 @@ The host integration calls the public
 `easy_cheese.skills.cook.execute_accepted_handoff` API for the final Full
 handoff seam. It accepts the pointer through the shared gateway, resolves the
 approved plan, checks dependency closure, and forwards only
-`handoff.coverage.curd_ids` to `workflow.cook`. It returns the workflow
-`ExecutionResults` without rewriting the referenced `PlannerResult` or its
-unresolved remainder. This callback-bearing library API is the production
-entrypoint; the `accept` CLI only validates and normalizes a pointer.
+`handoff.coverage.curd_ids` to `workflow.cook`. It returns a
+`CookExecutionOutcome` that carries the workflow `execution_results`, the
+covered curd ids, and the unchanged remainder. It does not rewrite the
+referenced `PlannerResult` or its unresolved remainder. This
+callback-bearing library API is the production entrypoint; the `accept` CLI
+only validates and normalizes a pointer.

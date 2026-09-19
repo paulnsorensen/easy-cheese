@@ -12,6 +12,7 @@ from easy_cheese_schemas.contracts import (
     CriterionDisposition,
     CriterionResultWriterView,
     CurdResultWriterView,
+    DeliverableWriterView,
     ReviewDisposition,
     ReviewResultWriterView,
 )
@@ -41,9 +42,17 @@ def _write_feature(
             CriterionResultWriterView(
                 criterion_id=criterion.criterion_id,
                 disposition=CriterionDisposition.PASSED,
+                evidence_keys=("index.html",),
             )
             for criterion in criteria
-        )
+        ),
+        deliverables=(
+            DeliverableWriterView(
+                role="feature",
+                path="index.html",
+                media_type="text/html",
+            ),
+        ),
     )
 
 
@@ -69,11 +78,13 @@ def main(argv: list[str]) -> int:
         dispatch_review=_clean_review,
         dispatch_diagnosis=_unexpected_diagnosis,
     )
+    curd_results = results.execution_results[1]
     print(
         json.dumps(
             {
                 "feature": "index.html",
-                "results": len(results.execution_results[1]),
+                "results": len(curd_results),
+                "disposition": curd_results[0].disposition.value,
             }
         )
     )

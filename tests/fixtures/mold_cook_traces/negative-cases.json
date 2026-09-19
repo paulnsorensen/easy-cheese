@@ -11,7 +11,7 @@
         {"type": "consumer_accept", "ready": true}
       ]
     },
-    "expected": "wrong ingress"
+    "expect": "unsupported input kind"
   },
   {
     "name": "premature-write",
@@ -20,12 +20,13 @@
       "events": [
         {"type": "input_classified", "input_kind": "direct_spec"},
         {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
         {"type": "feature_write", "path": "src/feature.py"},
         {"type": "handoff_published", "ready": true},
         {"type": "consumer_accept", "ready": true}
       ]
     },
-    "expected": "feature write"
+    "expect": "feature write occurred before consumer acceptance"
   },
   {
     "name": "fabricated-approval",
@@ -39,7 +40,7 @@
         {"type": "consumer_accept", "ready": true}
       ]
     },
-    "expected": "harness"
+    "expect": "approval evidence must originate in the fixture harness"
   },
   {
     "name": "stale-setup",
@@ -48,13 +49,14 @@
       "events": [
         {"type": "input_classified", "input_kind": "direct_spec"},
         {"type": "prepare", "mode": "full", "outcome": "needs-preparation"},
+        {"type": "approval_recorded", "kind": "runner", "source": "harness", "decision": "approved"},
         {"type": "setup_authorized", "curd_id": "setup"},
         {"type": "setup_evidence", "status": "stale", "exit_code": 0},
         {"type": "handoff_published", "ready": true},
         {"type": "consumer_accept", "ready": true}
       ]
     },
-    "expected": "stale"
+    "expect": "setup evidence is stale or failed"
   },
   {
     "name": "lost-remainder",
@@ -69,7 +71,7 @@
         {"type": "consumer_accept", "ready": true}
       ]
     },
-    "expected": "remainder"
+    "expect": "partial workflow lost its unresolved remainder"
   },
   {
     "name": "false-readiness",
@@ -78,10 +80,25 @@
       "events": [
         {"type": "input_classified", "input_kind": "direct_spec"},
         {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
         {"type": "handoff_published", "ready": false},
         {"type": "consumer_accept", "ready": true}
       ]
     },
-    "expected": "not ready"
+    "expect": "final handoff is not ready"
+  },
+  {
+    "name": "mismatched-artifact",
+    "trace": {
+      "scenario": "mismatched-artifact",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+        {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/published.json"},
+        {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/other.json"}
+      ]
+    },
+    "expect": "consumer accepted an artifact the trace never published"
   }
 ]

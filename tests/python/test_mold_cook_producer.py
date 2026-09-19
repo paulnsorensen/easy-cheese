@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
@@ -12,9 +13,12 @@ from easy_cheese.shared.mold_cook_handoff import (
     canonical_mold_cook_proposal,
     materialize_artifact_ref,
 )
-from easy_cheese.shared.publication import accept_mold_cook_handoff
+from easy_cheese_schemas import ContractVersion, validate_contract
+from easy_cheese.shared.publication import PublicationError, accept_mold_cook_handoff
 from easy_cheese.shared.taste_test import ForkTasteVerdict
+from easy_cheese.skills.mold import producer
 from easy_cheese.skills.mold.producer import (
+    FinalizationError,
     FinalizationOutcome,
     finalize_mold,
     normalize_planner_result,
@@ -32,6 +36,7 @@ from easy_cheese_schemas.contracts import (
     SemanticCurdWriterView,
 )
 from easy_cheese_schemas.mold_cook import (
+    CookPreparationResult,
     MoldCookApproval,
     MoldCookApprovalDecision,
     MoldCookApprovalKind,
@@ -51,6 +56,7 @@ def make_spec(
     *,
     landing_id: str | None = None,
     do_not_implement: bool = False,
+    gates_overridden: str | None = None,
 ) -> Path:
     text = FIXTURE.read_text(encoding="utf-8")
     if landing_id is not None:
@@ -66,6 +72,8 @@ def make_spec(
             "gates_overridden: []\nrequest_directive: do-not-implement\n",
             1,
         )
+    if gates_overridden is not None:
+        text = text.replace("gates_overridden: []\n", gates_overridden, 1)
     path = tmp_path / "spec.md"
     _ = path.write_text(text, encoding="utf-8")
     return path
@@ -363,3 +371,134 @@ def test_non_ready_results_are_durable(tmp_path: Path, extra: str) -> None:
     assert outcome.result_path is not None
     assert outcome.result_path.is_file()
     assert outcome.payload["saved"] is True
+
+
+def _hold_rows(outcome: FinalizationOutcome) -> Sequence[Mapping[str, object]]:
+    return cast(Sequence[Mapping[str, object]], outcome.payload["holds"])
+
+
+def test_block_list_gate_override_is_saved_with_a_curdle_anyway_hold(
+    tmp_path: Path,
+) -> None:
+    spec = make_spec(
+        tmp_path,
+        gates_overridden="gates_overridden:\n  - handshake-coherence\n  - taste-test\n",
+    )
+    outcome = finalize_fixture(tmp_path, spec_path=spec)
+
+    assert outcome.status == "saved-not-ready"
+    assert outcome.ready is False
+    holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
+    assert "curdle-anyway" in holds
+    assert holds["curdle-anyway"].endswith("handshake-coherence, taste-test")
+    assert "pointer" not in outcome.payload
+
+
+@pytest.mark.parametrize(
+    ("declaration", "expected"),
+    [
+        ('gates_overridden: ["handshake-coherence"]\n', "handshake-coherence"),
+        ("gates_overridden: handshake-coherence\n", "handshake-coherence"),
+    ],
+)
+def test_flow_list_and_scalar_gate_overrides_keep_the_hold(
+    tmp_path: Path, declaration: str, expected: str
+) -> None:
+    spec = make_spec(tmp_path, gates_overridden=declaration)
+    outcome = finalize_fixture(tmp_path, spec_path=spec)
+
+    assert outcome.status == "saved-not-ready"
+    holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
+    assert holds["curdle-anyway"].endswith(expected)
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "gates_overridden:\n- agent-coherence\n- taste-test\n",
+        "gates_overridden:\n  # the handshake keys left unchecked\n  - agent-coherence\n  - taste-test\n",
+    ],
+)
+def test_column_zero_and_commented_block_lists_keep_the_hold(
+    tmp_path: Path, declaration: str
+) -> None:
+    """A block sequence at the key's own indentation is valid YAML."""
+    spec = make_spec(tmp_path, gates_overridden=declaration)
+
+    outcome = finalize_fixture(tmp_path, spec_path=spec)
+
+    assert outcome.status == "saved-not-ready"
+    assert outcome.ready is False
+    holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
+    assert holds["curdle-anyway"].endswith("agent-coherence, taste-test")
+
+
+def test_a_mapping_under_gates_overridden_is_a_caller_error(tmp_path: Path) -> None:
+    spec = make_spec(
+        tmp_path, gates_overridden="gates_overridden:\n  waived: agent-coherence\n"
+    )
+
+    with pytest.raises(FinalizationError, match="gates_overridden"):
+        _ = finalize_fixture(tmp_path, spec_path=spec)
+
+
+def test_unparsable_gate_override_list_is_a_caller_error(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path, gates_overridden='gates_overridden: ["unterminated"\n')
+
+    with pytest.raises(FinalizationError, match="gates_overridden"):
+        _ = finalize_fixture(tmp_path, spec_path=spec)
+
+
+def test_publication_failure_saves_a_validated_blocked_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    validated: list[object] = []
+    real_validate = validate_contract
+
+    def recording_validate(payload: bytes, contract: object, version: object) -> object:
+        validated.append(contract)
+        return real_validate(
+            payload,
+            cast(type[object], contract),
+            cast("ContractVersion | None", version),
+        )
+
+    def failing_publish(*_args: object, **_kwargs: object) -> object:
+        raise PublicationError("publication refused")
+
+    monkeypatch.setattr(producer, "validate_contract", recording_validate)
+    monkeypatch.setattr(producer, "publish_mold_cook_handoff", failing_publish)
+    outcome = finalize_fixture(tmp_path)
+
+    assert outcome.status == "saved-not-ready"
+    assert CookPreparationResult in validated
+    requirements = cast(Sequence[Mapping[str, object]], outcome.payload["requirements"])
+    assert "handoff-integrity" in {str(item["requirement_id"]) for item in requirements}
+    assert not (tmp_path / "artifacts" / "pointers" / "operation-1.json").exists()
+
+
+def test_persisted_artifact_ids_derive_from_role_and_digest(tmp_path: Path) -> None:
+    assert "artifact_id" not in inspect.signature(producer._persist).parameters  # pyright: ignore[reportPrivateUsage]
+    outcome = finalize_fixture(tmp_path)
+
+    assert outcome.status == "ready"
+    handoff = cast(Mapping[str, object], outcome.payload["handoff"])
+    spec_ref = cast(Mapping[str, object], handoff["spec_ref"])
+    digest = str(spec_ref["digest"]).removeprefix("sha256:")
+    assert spec_ref["artifact_id"] == f"spec-{digest}"
+
+
+def test_failed_artifact_write_leaves_no_temporary_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def failing_replace(*_args: object, **_kwargs: object) -> None:
+        raise OSError("replace refused")
+
+    monkeypatch.setattr("easy_cheese.shared.publication.os.replace", failing_replace)
+    target = tmp_path / "artifacts" / "payload.json"
+
+    with pytest.raises(OSError, match="replace refused"):
+        producer._write_bytes(target, b"{}")  # pyright: ignore[reportPrivateUsage]
+
+    assert not target.exists()
+    assert list(target.parent.iterdir()) == []

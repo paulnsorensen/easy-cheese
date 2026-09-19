@@ -71,12 +71,19 @@ def _text(value: object, label: str) -> str:
 
 def _artifact_refs(events: Sequence[dict[str, object]]) -> tuple[str, ...]:
     refs: list[str] = []
+    published: str | None = None
     for event in events:
         if event["type"] not in {"handoff_published", "consumer_accept"}:
             continue
         value = _text(event.get("artifact_ref"), "artifact_ref")
         if value.startswith(("/", "~")) or ".." in Path(value).parts:
             raise TranscriptCheckError("artifact_ref must be repository-relative")
+        if event["type"] == "handoff_published":
+            published = value
+        elif value != published:
+            raise TranscriptCheckError(
+                "consumer accepted an artifact the trace never published"
+            )
         refs.append(value)
     return tuple(refs)
 

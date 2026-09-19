@@ -53,8 +53,11 @@ Output (JSON):
     }
 
 `next_phase` is only ever `"cook"` when `action` is `"needs_context"` at
-phase 0 — the same phase re-dispatched with the named gap, not a table
-advance.
+phase 0. That value names an orchestrator spawn of the same phase with the
+named gap; it is not a declared phase transition. The compiled registry has
+no `cook -> cook` route, so a cook worker on this path still writes
+`--next age`, the declared Cook transition, in its handoff slug. The router
+ignores `next:` under a `retry` disposition.
 
 `disposition` is the parsed handback's declared disposition; `action` is the
 router's decision. They differ on purpose at the retry cap: a second `retry`

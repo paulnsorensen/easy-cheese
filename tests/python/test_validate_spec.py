@@ -20,6 +20,10 @@ from typing import Protocol, cast
 
 import pytest
 
+from easy_cheese_schemas.spec_format import (
+    _LEGACY_NOTICE,  # pyright: ignore[reportPrivateUsage]
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VALIDATOR = REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold" / "validate_spec.py"
 SPEC_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
@@ -583,9 +587,7 @@ def test_legacy_v013_spec_is_accepted_on_read(tmp_path: Path, _run: _RunFn) -> N
     assert result.returncode == 0
     assert not _error_lines(result)
     notices = _notice_lines(result)
-    assert len(notices) == 1
-    assert "NOTICE: legacy-spec-format" in notices[0]
-    assert str(path) in notices[0]
+    assert notices == [_LEGACY_NOTICE + f" in {path}"]
 
 
 def test_legacy_v013_spec_is_not_execution_authority(tmp_path: Path) -> None:

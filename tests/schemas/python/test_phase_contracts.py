@@ -551,6 +551,41 @@ def test_registry_runtime_does_not_import_yaml() -> None:
     assert result.stdout == "age,cook,cure,mold,press\n"
 
 
+def test_registry_runtime_does_not_import_the_mold_cook_contracts() -> None:
+    """The registry module must stay free of the mold-cook contract module.
+
+    The package ``__init__`` re-exports ``mold_cook`` eagerly, so the submodule
+    loads under a stub parent package. That measures the imports of
+    ``phase_contracts`` itself, not the imports of the package.
+    """
+    code = (
+        "import sys;"
+        "import os;"
+        "import types;"
+        "sys.path[:0] = sys.argv[1:];"
+        "package = types.ModuleType('easy_cheese_schemas');"
+        "package.__path__ = [os.path.join(sys.argv[1], 'easy_cheese_schemas')];"
+        "sys.modules['easy_cheese_schemas'] = package;"
+        "import easy_cheese_schemas.phase_contracts;"
+        "print('easy_cheese_schemas.mold_cook' in sys.modules)"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            code,
+            str(REPO_ROOT / "src"),
+            str(REPO_ROOT / "vendor"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == "False\n"
+
+
 def test_validate_transition_returns_the_declared_route() -> None:
     route = validate_transition(
         COMPILED_TRANSITION_REGISTRY,
@@ -571,6 +606,12 @@ def test_validate_transition_returns_the_declared_route() -> None:
         ("unknown", "cook", CURD_PLAN_SCHEMA_URI, "unknown source phase 'unknown'"),
         ("mold", "cure", CURD_PLAN_SCHEMA_URI, "mold -> cure is not declared"),
         ("mold", "cook", CURD_RESULT_SCHEMA_URI, "payload schema .* is not declared"),
+        (
+            "mold",
+            "cook",
+            CURD_PLAN_SCHEMA_URI,
+            "payload schema .* is not declared for mold -> cook",
+        ),
     ],
 )
 def test_validate_transition_rejects_each_invalid_dimension(

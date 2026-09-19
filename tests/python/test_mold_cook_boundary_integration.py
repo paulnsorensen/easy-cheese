@@ -7,6 +7,7 @@ checks are separate opt-in tests so this module remains hermetic.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import cast
 
 import pytest
 
+from easy_cheese_schemas import canonical_bytes
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 from easy_cheese.shared.publication import accept_mold_cook_handoff
 from easy_cheese.skills.cook.preparation import prepare, resubmit
@@ -73,8 +75,8 @@ def test_approval_reuse_succeeds_but_stale_evidence_is_rejected(tmp_path: Path) 
     assert first.canonical.canonical_bytes == second.canonical.canonical_bytes
 
     approval = tmp_path / "approval.json"
-    _ = approval.write_text('{"decision":"reject"}', encoding="utf-8")
-    with pytest.raises(ContractValidationError, match="stale|mismatch|valid"):
+    _ = approval.write_bytes(approval.read_bytes().replace(b"Approve", b"Reject!"))
+    with pytest.raises(ContractValidationError, match="stale or corrupt"):
         _ = accept_mold_cook_handoff(pointer, artifact_root=tmp_path)
 
 
@@ -112,18 +114,17 @@ def test_hold_survives_resubmission_until_explicitly_cleared(tmp_path: Path) -> 
     assert repeated.holds == (hold,)
 
 
-def test_continuity_reuses_published_payload_and_bounds_historical_input(
-    tmp_path: Path,
-) -> None:
+def test_continuity_reuses_published_payload(tmp_path: Path) -> None:
     pointer, _, _ = published_handoff(tmp_path, "continuation")
     accepted = accept_mold_cook_handoff(pointer, artifact_root=tmp_path)
     repeated, _, _ = published_handoff(tmp_path / "repeat", "continuation-2")
     accepted_again = accept_mold_cook_handoff(
         repeated, artifact_root=tmp_path / "repeat"
     )
+    handoff = cast(MoldCookHandoff, accepted.canonical.value)
     assert accepted.canonical.value == accepted_again.canonical.value
-    assert accepted.canonical.canonical_bytes
-    assert accepted_again.canonical.canonical_bytes
+    assert accepted.canonical.canonical_bytes == canonical_bytes(handoff)
+    assert accepted_again.canonical.canonical_bytes == canonical_bytes(handoff)
 
 
 _BOUNDARY_FIXTURES = Path(__file__).parents[1] / "fixtures" / "mold_cook_boundary"
@@ -253,9 +254,11 @@ def test_frozen_agent_traces_reject_unsafe_actions() -> None:
         list[Mapping[str, object]],
         json.loads((TRACE_ROOT / "negative-cases.json").read_text(encoding="utf-8")),
     )
+    assert len(cases) == 7
     for case in cases:
         trace = cast(Mapping[str, object], case["trace"])
-        with pytest.raises(TranscriptCheckError):
+        expect = cast(str, case["expect"])
+        with pytest.raises(TranscriptCheckError, match=re.escape(expect)):
             _ = check_transcript(trace)
 
 

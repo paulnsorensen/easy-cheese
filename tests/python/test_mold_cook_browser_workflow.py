@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import cast, override
 from urllib.parse import unquote, urlparse
 
+import pytest
+
 from easy_cheese.skills.cook.preparation import SetupEvidence, prepare, resubmit
 from easy_cheese.shared.mold_cook_handoff import (
     bind_mold_cook_approval,
@@ -40,6 +42,11 @@ from tests.python.test_mold_cook_producer import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+pytestmark = pytest.mark.skipif(  # noqa: V107
+    os.environ.get("MOLD_COOK_BROWSER") != "1",
+    reason="opt-in; run via just test-workflow-browser",
+)
 
 
 class _QuietHandler(http.server.SimpleHTTPRequestHandler):
@@ -192,7 +199,7 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
     ).write_bytes(setup_output)
     setup_evidence = SetupEvidence(
         prerequisite_curd_id="curd-1",
-        plan_digest=f"sha256:{hashlib.sha256(canonical_bytes(plan)).hexdigest()}",
+        plan_digest=plan.digest,
         authorization_digest=(
             f"sha256:{hashlib.sha256(canonical_bytes(authorization)).hexdigest()}"
         ),
@@ -242,7 +249,11 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
     )
     assert produced.returncode == 0, produced.stderr
     production_result = cast(dict[str, object], json.loads(produced.stdout))
-    assert production_result == {"feature": "index.html", "results": 1}
+    assert production_result == {
+        "feature": "index.html",
+        "results": 1,
+        "disposition": "passed",
+    }
     document = repository / "index.html"
     assert document.is_file()
     assert "Feature executed" in document.read_text(encoding="utf-8")

@@ -38,5 +38,5 @@ The producer and consumer paths now keep incomplete designs non-ready and record
 - Durable spec: mold-cook-boundary, resolved through Mold artifact-path specs.
 - User selected F2 option A and approved the design for saving only.
 - Existing override: skills/mold/references/handshake.md:163-165.
-- Existing advisory routing behavior: src/easy_cheese/skills/mold/curd_count.py:116-169.
+- Existing advisory routing behavior: `_recommend` and `analyze` in src/easy_cheese/skills/mold/curd_count.py.
 - Related decision: [Plan approval remains explicit](./mold-cook-boundary-001.md).

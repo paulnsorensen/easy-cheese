@@ -37,7 +37,7 @@ test:
 test-workflow-browser:
     corepack pnpm --dir tests/fixtures/mold_cook_browser install --frozen-lockfile
     corepack pnpm --dir tests/fixtures/mold_cook_browser exec playwright install chromium
-    {{python}} -m pytest tests/python/test_mold_cook_browser_workflow.py -q
+    MOLD_COOK_BROWSER=1 {{python}} -m pytest tests/python/test_mold_cook_browser_workflow.py -q
 
 # Run model-free overlap analyzer tests (never fetches model artifacts)
 test-skill-overlap:

@@ -26,4 +26,4 @@ A supported historical pointer must pass its original route, schema, digest, and
 
 ## Trace acceptance
 
-Run `tests/python/mold_cook_transcript_checker.py` against each captured trace. Frozen fixtures cover checker regressions, but they do not replace one live captured run for this workflow change.
+Capture each trace with `python3 -m tests.python.mold_cook_agent_driver --fixture-repository <repo> --mold-bundle <pyz> --cook-bundle <pyz> --responses <json> --output <trace.json> -- <command>`; it exits non-zero when the transcript check fails. Frozen fixtures cover checker regressions, but they do not replace one live captured run for this workflow change.

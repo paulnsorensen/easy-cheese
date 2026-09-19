@@ -19,6 +19,7 @@ from easy_cheese_schemas import (
     SCHEMA_ROOT,
     ContractValidationError,
     ArtifactRef,
+    TransitionError,
     canonical_bytes,
     normalize_agent_output,
     supported_version_for,
@@ -191,14 +192,15 @@ def _hold_clearances(args: argparse.Namespace) -> tuple[CookHoldClearance, ...]:
         dialogue = cast("dict[str, object]", parsed)
         if not isinstance(dialogue.get("response"), str):
             raise ValueError(f"hold clearance {path} must contain a string response")
+        digest = _digest_of(content)
         clearances.append(
             CookHoldClearance(
                 hold_id=hold_id,
                 response_ref=ArtifactRef(
-                    artifact_id=f"hold-clearance-{hashlib.sha256(content).hexdigest()[:16]}",
+                    artifact_id=f"hold-clearance-{digest.removeprefix('sha256:')[:16]}",
                     role="dialogue",
                     uri=path.as_uri(),
-                    digest=f"sha256:{hashlib.sha256(content).hexdigest()}",
+                    digest=digest,
                     size_bytes=len(content),
                     media_type="application/json",
                 ),
@@ -284,10 +286,7 @@ def resubmit_main(argv: list[str]) -> int:
     previous_path = cast(Path, args.previous)
     mode = cast("str | None", args.mode)
     try:
-        previous = load_preparation_result(
-            previous_path,
-            artifact_root=cast(str, args.artifact_root),
-        )
+        previous = load_preparation_result(previous_path)
         result = resubmit(
             previous,
             source=cast("str | None", args.source),
@@ -338,6 +337,7 @@ def accept_main(argv: list[str]) -> int:
     except (
         ContractValidationError,
         PublicationError,
+        TransitionError,
         OSError,
         UnicodeDecodeError,
     ) as exc:

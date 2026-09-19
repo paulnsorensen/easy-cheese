@@ -651,6 +651,10 @@ def check_adapter_sunsets(reference_date: date) -> None:
         raise AdapterSunsetError(f"expired legacy adapters still registered: {names}")
 
 
-# Register schema-owned adapters when the schema package loads so consumers do
-# not need a workflow-layer migration module.
+# Reference-only registry: no runtime consumer reads these adapters. The
+# workflow-layer migration module that called `adapter_for` is gone, and Cook
+# now reports a historical pointer as an unmet requirement instead of migrating
+# it (wiki adr/mold-cook-boundary-001). The exact-adapter and sunset rules stay
+# in wiki adr/legacy-adapter-lifecycle-004 for the next migration that needs
+# them.
 register_adapter(_BUILTIN_CURD_PLAN_ADAPTER)

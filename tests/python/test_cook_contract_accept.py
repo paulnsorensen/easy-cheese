@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
-import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -37,16 +35,15 @@ from easy_cheese.shared.publication import (
     publish_mold_cook_handoff,
     request_digest,
 )
+from easy_cheese.skills.cook.contract_handlers import accept_main
 
 COOK_PYZ = (
     Path(__file__).resolve().parents[2] / "skills" / "cook" / "scripts" / "cook.pyz"
 )
 
 pytestmark = pytest.mark.skipif(  # noqa: V107
-    importlib.util.find_spec("build") is None
-    or importlib.util.find_spec("pip") is None
-    or (shutil.which("shiv") is None and importlib.util.find_spec("shiv") is None),
-    reason="bundle integration requires requirements-build.txt",
+    not COOK_PYZ.is_file(),
+    reason="cook.pyz bundle is not present in this checkout",
 )
 
 
@@ -321,6 +318,28 @@ def test_cook_pyz_rejects_a_wrong_destination_route(tmp_path: Path) -> None:
     assert "'age'" in result.stderr
     assert "'cook'" in result.stderr
     assert result.stdout == ""
+
+
+def test_accept_main_reports_a_wrong_route_without_a_traceback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pointer_path, _handoff, _spec_path = published_handoff(
+        tmp_path / "artifacts", "op-route-handled"
+    )
+    pointer = cast(
+        dict[str, object], json.loads(pointer_path.read_text(encoding="utf-8"))
+    )
+    pointer["destination_phase"] = "age"
+    _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+
+    code = accept_main([str(pointer_path)])
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("ERROR: ")
+    assert "'age'" in captured.err
 
 
 def test_cook_pyz_rejects_a_pointer_with_the_old_plan_schema(tmp_path: Path) -> None:

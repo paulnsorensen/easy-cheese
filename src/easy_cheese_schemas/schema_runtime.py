@@ -22,7 +22,7 @@ from attrs import Attribute
 import easy_cheese_schemas.pr_plan as pr_plan_module
 from easy_cheese_schemas._contract_modules import CONTRACT_MODULES
 from easy_cheese_schemas._schema_catalog import (
-    REGISTERED_CONTRACT_SCHEMA_URIS as _GENERATED_CONTRACT_SCHEMA_URIS,
+    REGISTERED_CONTRACT_SCHEMA_URIS,
     SCHEMA_ROOT,
 )
 from easy_cheese_schemas.compat import Loaded
@@ -128,7 +128,7 @@ def _registered_entry(slug: str, contract: type) -> _RegisteredContract:
 _REGISTERED_CONTRACTS = tuple(
     _registered_entry(slug, contract) for slug, contract in _PACKAGE_CONTRACTS
 )
-REGISTERED_CONTRACT_SCHEMA_URIS = frozenset(
+_DERIVED_CONTRACT_SCHEMA_URIS = frozenset(
     entry.schema_uri for entry in _REGISTERED_CONTRACTS
 )
 
@@ -136,7 +136,7 @@ REGISTERED_CONTRACT_SCHEMA_URIS = frozenset(
 @cache
 def _checked_registered_contracts() -> tuple[_RegisteredContract, ...]:
     """Return registered contracts after lazily checking the generated catalog."""
-    if REGISTERED_CONTRACT_SCHEMA_URIS != _GENERATED_CONTRACT_SCHEMA_URIS:
+    if _DERIVED_CONTRACT_SCHEMA_URIS != REGISTERED_CONTRACT_SCHEMA_URIS:
         raise RuntimeError("generated schema catalog is stale")
     return _REGISTERED_CONTRACTS
 
