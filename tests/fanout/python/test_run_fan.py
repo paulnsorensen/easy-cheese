@@ -8,6 +8,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+import attrs
+
 import pytest
 
 from easy_cheese_schemas import (
@@ -177,12 +179,20 @@ def _apply_all(
 AgeScript = Callable[[RemediationScopeKey, int], ReviewResult]
 
 
+PressScript = Callable[[RemediationScopeKey, int], tuple[EvidenceRef, ...]]
+
+
+def _press(_scope: RemediationScopeKey, _round: int) -> tuple[EvidenceRef, ...]:
+    return (_evidence(),)
+
+
 def _context(
     tmp_path: Path,
     age: AgeScript,
     *,
     cure: object = _apply_all,
     cook: object = _passed_cook,
+    press: PressScript | None = _press,
 ) -> FanContext:
     return FanContext(
         run_id="run-1",
@@ -190,6 +200,7 @@ def _context(
         cook=cook,  # pyright: ignore[reportArgumentType]
         age=age,
         cure=cure,  # pyright: ignore[reportArgumentType]
+        press=press,
     )
 
 
@@ -363,3 +374,112 @@ class TestResume:
                 "a-state",
                 _context(tmp_path, lambda s, r: _clean_review()),
             )
+
+
+class TestCallbackFailures:
+    def test_age_failure_publishes_blocked_scope_and_routes_mold(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+
+        def fail_age(_scope: RemediationScopeKey, _round: int) -> ReviewResult:
+            raise RuntimeError("review unavailable")
+
+        outcome = run_fan(plan, _context(tmp_path, fail_age))
+        state = outcome.scope_states["a"]
+        assert state.disposition is RemediationDisposition.BLOCKED
+        assert state.cursor is RemediationCursor.TERMINAL
+        assert outcome.next_step == "mold"
+
+    def test_cure_failure_publishes_blocked_scope_and_routes_mold(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+
+        def fail_cure(
+            _scope: RemediationScopeKey,
+            _locked: tuple[str, ...],
+            _round: int,
+        ) -> RemediationCureObservation:
+            raise RuntimeError("diagnosis unavailable")
+
+        outcome = run_fan(
+            plan,
+            _context(
+                tmp_path,
+                lambda _scope, _round: _findings_review("needs cure"),
+                cure=fail_cure,
+            ),
+        )
+        state = outcome.scope_states["a"]
+        assert state.disposition is RemediationDisposition.BLOCKED
+        assert state.cursor is RemediationCursor.TERMINAL
+        assert outcome.next_step == "mold"
+
+
+class TestPostmergePress:
+    def test_press_precedes_postmerge_age_and_skips_curds(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+        events: list[str] = []
+
+        def press(scope: RemediationScopeKey, _round: int) -> tuple[EvidenceRef, ...]:
+            events.append(f"press:{scope.scope_id}")
+            return (_evidence(),)
+
+        def age(scope: RemediationScopeKey, _round: int) -> ReviewResult:
+            events.append(f"age:{scope.scope_id}")
+            return _clean_review()
+
+        outcome = run_fan(plan, _context(tmp_path, age, press=press))
+        assert outcome.next_step == "done"
+        assert "press:a" not in events
+        assert events.index("press:postmerge") < events.index("age:postmerge")
+
+    def test_absent_press_blocks_postmerge(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+        outcome = run_fan(
+            plan,
+            _context(tmp_path, lambda _scope, _round: _clean_review(), press=None),
+        )
+        assert outcome.next_step == "mold"
+        assert outcome.postmerge_state is not None
+        assert outcome.postmerge_state.disposition is RemediationDisposition.BLOCKED
+
+
+    def test_postmerge_cure_receipt_keeps_both_gate_runs(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+
+        def press(_scope: RemediationScopeKey, gate_round: int) -> tuple[EvidenceRef, ...]:
+            return (attrs.evolve(_evidence(), evidence_id=f"gate-{gate_round}"),)
+
+        def age(scope: RemediationScopeKey, review_round: int) -> ReviewResult:
+            if scope.scope_id == "postmerge" and review_round == 1:
+                return _findings_review("merge defect")
+            return _clean_review()
+
+        outcome = run_fan(plan, _context(tmp_path, age, press=press))
+        assert outcome.postmerge_state is not None
+        gate_ids = {
+            item.evidence_id
+            for item in outcome.postmerge_state.receipts[-2].gate_evidence
+        }
+        assert {"gate-1", "gate-2"} <= gate_ids
+
+
+class TestRecordedResume:
+    def test_recorded_passed_curd_resumes_age_without_cook(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+        scope = _curd_scope("run-1", plan, "a")
+        _ = publish_state(scope_state_path(tmp_path, scope), initial_state(scope, state_id="a-state"))
+        age_calls: list[str] = []
+
+        def age(scope_key: RemediationScopeKey, _round: int) -> ReviewResult:
+            age_calls.append(scope_key.scope_id)
+            return _clean_review()
+
+        def forbidden_cook(_curd: SemanticCurd) -> CurdResult:
+            raise AssertionError("resume must not redispatch Cook")
+
+        outcome = run_fan(
+            plan,
+            _context(tmp_path, age, cook=forbidden_cook),
+            results={"a": _passed_cook(_curd("a"))},
+        )
+        assert outcome.next_step == "done"
+        assert age_calls == ["a", "postmerge"]

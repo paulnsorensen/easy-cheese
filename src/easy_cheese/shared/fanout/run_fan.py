@@ -28,6 +28,7 @@ import attrs
 from easy_cheese_schemas import (
     ArtifactRef,
     ContractVersion,
+    EvidenceRef,
     CriterionDisposition,
     CriterionResult,
     CurdDisposition,
@@ -39,6 +40,7 @@ from easy_cheese_schemas import (
     RemediationScopeKey,
     RemediationScopeKind,
     RemediationState,
+    ReviewDisposition,
     ReviewResult,
     SemanticCurd,
     SourceCurdRef,
@@ -82,6 +84,7 @@ class FanContext:
     cook: CookWorker
     age: AgeReviewer
     cure: CureWorker
+    press: Callable[[RemediationScopeKey, int], Sequence[EvidenceRef]] | None = None
 
 
 @attrs.frozen
@@ -145,7 +148,11 @@ def _persist_ref(
 
 
 def _drive_scope(
-    scope: RemediationScopeKey, state_id: str, context: FanContext
+    scope: RemediationScopeKey,
+    state_id: str,
+    context: FanContext,
+    *,
+    postmerge: bool = False,
 ) -> RemediationState:
     """Run one scope's Age/Cure remediation loop to a terminal cursor.
 
@@ -154,6 +161,7 @@ def _drive_scope(
     dispatch, so a crash resumes from the persisted cursor.
     """
     path = scope_state_path(context.artifact_directory, scope)
+    initial_postmerge_gate_evidence: tuple[EvidenceRef, ...] = ()
     if path.exists():
         state = load_state(path)
         # AC-14: a resumed state whose plan identity, digest, scope kind, or
@@ -163,17 +171,65 @@ def _drive_scope(
                 f"resumed scope {state.scope} does not match current plan scope {scope}"
             )
     else:
-        state = publish_state(path, initial_state(scope, state_id=state_id))
+        state = initial_state(scope, state_id=state_id)
+        if postmerge:
+            if context.press is None:
+                state = attrs.evolve(
+                    state,
+                    cursor=RemediationCursor.TERMINAL,
+                    disposition=RemediationDisposition.BLOCKED,
+                )
+                return publish_state(path, state)
+            try:
+                initial_postmerge_gate_evidence = tuple(context.press(scope, 1))
+            except Exception as error:
+                state = attrs.evolve(
+                    state,
+                    cursor=RemediationCursor.TERMINAL,
+                    disposition=RemediationDisposition.BLOCKED,
+                )
+                _ = _persist_ref(
+                    context,
+                    f"{scope.scope_id}-press-1-blocked",
+                    "gate-result",
+                    {"reason": _failure_reason("project gate callback failed", error)},
+                )
+                return publish_state(path, state)
+        state = publish_state(path, state)
     while state.cursor is not RemediationCursor.TERMINAL:
         this_round = len(state.receipts) + 1
         if state.cursor is RemediationCursor.AWAITING_REVIEW:
-            review = context.age(scope, this_round)
+            try:
+                review = context.age(scope, this_round)
+            except Exception as error:
+                review = _blocked_review(scope, this_round, error)
             review_ref = _persist_ref(
                 context, f"{scope.scope_id}-review-{this_round}", "review", review
             )
             state, _verdict = decide_review(state, review, review_ref)
         else:
-            observation = context.cure(scope, state.locked_selection, this_round)
+            try:
+                observation = context.cure(scope, state.locked_selection, this_round)
+            except Exception as error:
+                observation = _blocked_cure_observation(state.locked_selection, error)
+            if (
+                context.press is not None
+                and scope.scope_kind is RemediationScopeKind.POSTMERGE
+            ):
+                try:
+                    press_evidence = tuple(context.press(scope, this_round))
+                    observation = attrs.evolve(
+                        observation,
+                        gate_evidence=(
+                            *initial_postmerge_gate_evidence,
+                            *observation.gate_evidence,
+                            *press_evidence,
+                        ),
+                    )
+                except Exception as error:
+                    observation = _blocked_cure_observation(
+                        state.locked_selection, error
+                    )
             cure_ref = _persist_ref(
                 context, f"{scope.scope_id}-cure-{this_round}", "cure-result", observation
             )
@@ -249,7 +305,29 @@ def run_fan(
     curds = {curd.curd_id: curd for curd in plan.curds}
     recorded: dict[str, CurdResult] = dict(results or {})
     scope_states: dict[str, RemediationState] = {}
+    for curd_id in recorded:
+        path = scope_state_path(
+            context.artifact_directory, _curd_scope(context.run_id, plan, curd_id)
+        )
+        if path.exists():
+            scope_states[curd_id] = load_state(path)
     remediation_scopes: list[str] = []
+    for curd_id, state in tuple(scope_states.items()):
+        if curd_id == POSTMERGE_SCOPE_ID:
+            continue
+        recorded_result = recorded.get(curd_id)
+        if recorded_result is None or recorded_result.disposition is not CurdDisposition.PASSED:
+            continue
+        scope = _curd_scope(context.run_id, plan, curd_id)
+        final = (
+            _drive_scope(scope, f"{curd_id}-state", context)
+            if state.cursor is not RemediationCursor.TERMINAL
+            else state
+        )
+        scope_states[curd_id] = final
+        recorded[curd_id] = _result_after_remediation(
+            plan, curds[curd_id], recorded_result, final
+        )
 
     while True:
         decision = schedule_wave(plan, recorded, selected=selected)
@@ -291,9 +369,13 @@ def run_fan(
     )
 
     postmerge_state: RemediationState | None = None
-    if all_passed and selected is None:
+    full_coverage = selected is None or set(selected) == set(curds)
+    if all_passed and full_coverage:
         postmerge_state = _drive_scope(
-            _postmerge_scope(context.run_id, plan), "postmerge-state", context
+            _postmerge_scope(context.run_id, plan),
+            "postmerge-state",
+            context,
+            postmerge=True,
         )
         scope_states[POSTMERGE_SCOPE_ID] = postmerge_state
         if postmerge_state.disposition is RemediationDisposition.STALLED:
@@ -306,6 +388,40 @@ def run_fan(
         postmerge_state=postmerge_state,
         next_step=next_step,
         remediation_scopes=tuple(remediation_scopes),
+    )
+
+
+def _failure_reason(prefix: str, error: Exception) -> str:
+    return f"{prefix}: {error}"[:512]
+
+
+def _blocked_review(
+    scope: RemediationScopeKey, review_round: int, error: Exception
+) -> ReviewResult:
+    version = supported_version_for(ReviewResult)
+    assert isinstance(version, ContractVersion)
+    return ReviewResult(
+        contract_version=version,
+        review_id=f"{scope.scope_id}-review-{review_round}-blocked",
+        disposition=ReviewDisposition.BLOCKED,
+        findings=(),
+        coverage=(),
+        reason=_failure_reason("review callback failed", error),
+    )
+
+
+def _blocked_cure_observation(
+    locked_selection: tuple[str, ...], error: Exception
+) -> RemediationCureObservation:
+    version = supported_version_for(RemediationCureObservation)
+    assert isinstance(version, ContractVersion)
+    return RemediationCureObservation(
+        contract_version=version,
+        applied_finding_keys=locked_selection,
+        deferred_finding_keys=(),
+        touched_paths=(),
+        gate_evidence=(),
+        new_gate_failures=(f"cure-callback-failed:{type(error).__name__}",),
     )
 
 
