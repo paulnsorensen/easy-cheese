@@ -285,6 +285,53 @@ class TestIncomplete:
         assert dispositions["a"] is CurdDisposition.FAILED
         assert dispositions["b"] is CurdDisposition.BLOCKED
 
+    def test_recorded_seven_curd_trace_with_independent_branch(
+        self, tmp_path: Path
+    ) -> None:
+        # AC-8 and AC-12: the seven-curd trace adds one independent branch.
+        curds = [_curd("root")]
+        curds.extend(_curd(chr(code), ("root",)) for code in range(ord("b"), ord("h")))
+        curds.append(_curd("independent"))
+        plan = _plan(*curds)
+        cook_calls: list[str] = []
+
+        def failing_root(curd: SemanticCurd) -> CurdResult:
+            cook_calls.append(curd.curd_id)
+            if curd.curd_id != "root":
+                return _passed_cook(curd)
+            return CurdResult(
+                contract_version=ContractVersion(
+                    schema_uri=RESULT_SCHEMA, major="1", minor="0"
+                ),
+                result_id="root-result",
+                source_plan_ref=SourcePlanRef(
+                    plan_id="plan-1", revision=1, digest=DIGEST
+                ),
+                source_curd_ref=SourceCurdRef(curd_id="root", digest=DIGEST),
+                disposition=CurdDisposition.FAILED,
+                expected_criterion_ids=("root-crit",),
+                criterion_results=(
+                    CriterionResult(
+                        criterion_id="root-crit",
+                        disposition=CriterionDisposition.FAILED,
+                        evidence=(_evidence(),),
+                    ),
+                ),
+                unresolved_work=("root failed",),
+            )
+
+        outcome = run_fan(
+            plan,
+            _context(tmp_path, lambda _scope, _round: _clean_review(), cook=failing_root),
+        )
+        dispositions = {r.source_curd_ref.curd_id: r.disposition for r in outcome.results}
+        assert dispositions["root"] is CurdDisposition.FAILED
+        assert all(dispositions[curd_id] is CurdDisposition.BLOCKED for curd_id in "bcdefg")
+        assert dispositions["independent"] is CurdDisposition.PASSED
+        assert cook_calls == ["root", "independent"]
+        assert outcome.next_step == "mold"
+        assert outcome.next_step != "press"
+
     def test_dirty_postmerge_refuses_done(self, tmp_path: Path) -> None:
         # AC-10: a non-clean terminal post-merge review refuses publication.
         plan = _plan(_curd("a"))
