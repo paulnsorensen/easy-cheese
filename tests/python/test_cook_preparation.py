@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import shutil
 from pathlib import Path
 
@@ -277,11 +278,7 @@ def test_setup_evidence_binds_the_published_plan_digest(tmp_path: Path) -> None:
 
 def test_prepare_no_longer_accepts_a_dead_clearances_argument() -> None:
     """Finding 65: `prepare` declared `clearances` and discarded it."""
-    with pytest.raises(TypeError, match="clearances"):
-        _ = prepare(  # pyright: ignore[reportUnknownVariableType]
-            "implement the approved change",
-            clearances=(),  # pyright: ignore[reportCallIssue]
-        )
+    assert "clearances" not in inspect.signature(prepare).parameters
 
 
 def _legacy_migration(tmp_path: Path) -> tuple[Path, Path]:
