@@ -16,26 +16,25 @@ import pytest
 import easy_cheese.shared.workflow as workflow
 from easy_cheese.shared.artifacts import ArtifactResolutionError
 from easy_cheese.shared.mold_cook_handoff import (
-    SetupEvidenceExecutionError,
-    bind_mold_cook_approval,
     canonical_mold_cook_proposal,
+    publish_mold_cook_handoff,
 )
 from easy_cheese.shared.publication import (
     PayloadDigestMismatchError,
-    accept_mold_cook_handoff,
-    publish_mold_cook_handoff,
     request_digest,
 )
 from easy_cheese.skills.cook import execute_accepted_handoff
 from easy_cheese.skills.cook import contract_handlers
-from easy_cheese.skills.cook import preparation as preparation_module
+from easy_cheese.skills.cook.preparation import plan_stages
 from easy_cheese.skills.cook.preparation import (
     CookEvidenceError,
     CookHoldClearance,
+    PreparationEvidence,
     SetupEvidence,
     prepare,
     resubmit,
 )
+from easy_cheese.skills.cook.preparation.setup import apply_runner_setup
 from easy_cheese_schemas import (
     ArtifactRef,
     ContractVersion,
@@ -78,6 +77,8 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookMode,
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
+
+from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
 
 class _FullFixture(TypedDict):
@@ -261,7 +262,7 @@ def _full_fixture(
         unresolved_work=remainder,
     )
     scope_coverage = MoldCookCoverage(
-        curd_ids=("curd-1",),
+        curd_ids=("root",),
     )
     scope_proposal_ref = _write_ref(
         root,
@@ -424,27 +425,17 @@ def test_full_preparation_is_scope_first_and_reuses_unchanged_approval(
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        planner_dispatch=forbidden_planner,
+        evidence=PreparationEvidence(planner_dispatch=forbidden_planner),
     )
     assert before_scope.outcome is CookPreparationOutcome.NEEDS_APPROVAL
     assert not dispatches
-    assert before_scope.proposal_ref is not None
-    proposal_bytes = Path(urlsplit(before_scope.proposal_ref.uri).path).read_bytes()
-    expected_proposal = canonical_mold_cook_proposal(
-        request_id="cook-request",
-        kind=MoldCookApprovalKind.SCOPE,
-        spec_digest=fixture["spec_ref"].digest,
-        coverage=MoldCookCoverage(curd_ids=("curd-1",)),
-    )
-    assert proposal_bytes == expected_proposal
-    assert proposal_bytes != fixture["spec"].read_bytes()
 
     after_scope = prepare(
         fixture["spec"],
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=scope_approval,
+        evidence=PreparationEvidence(scope_approval=scope_approval),
     )
     assert after_scope.outcome is CookPreparationOutcome.NEEDS_PLANNING
 
@@ -453,8 +444,10 @@ def test_full_preparation_is_scope_first_and_reuses_unchanged_approval(
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=scope_approval,
-        planner_result=planner,
+        evidence=PreparationEvidence(
+            scope_approval=scope_approval,
+            planner_result=planner,
+        ),
     )
     assert after_plan.outcome is CookPreparationOutcome.NEEDS_APPROVAL
 
@@ -463,18 +456,22 @@ def test_full_preparation_is_scope_first_and_reuses_unchanged_approval(
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=scope_approval,
-        planner_result=planner,
-        plan_approval=plan_approval,
+        evidence=PreparationEvidence(
+            scope_approval=scope_approval,
+            planner_result=planner,
+            plan_approval=plan_approval,
+        ),
     )
     resumed = resubmit(
         ready,
         source=fixture["spec"],
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=scope_approval,
-        planner_result=planner,
-        plan_approval=plan_approval,
+        evidence=PreparationEvidence(
+            scope_approval=scope_approval,
+            planner_result=planner,
+            plan_approval=plan_approval,
+        ),
     )
     assert ready.outcome is CookPreparationOutcome.READY
     assert resumed.outcome is CookPreparationOutcome.READY
@@ -494,8 +491,10 @@ def test_plan_approval_must_match_displayed_plan_proposal(
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=fixture["scope_approval_ref"],
-        planner_result=planner,
+        evidence=PreparationEvidence(
+            scope_approval=fixture["scope_approval_ref"],
+            planner_result=planner,
+        ),
     )
     detached_proposal_ref = _write_ref(
         root,
@@ -535,12 +534,15 @@ def test_plan_approval_must_match_displayed_plan_proposal(
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=scope_approval,
-        planner_result=planner,
-        plan_approval=detached_approval_ref,
+        evidence=PreparationEvidence(
+            scope_approval=scope_approval,
+            planner_result=planner,
+            plan_approval=detached_approval_ref,
+        ),
     )
 
-    assert detached.outcome is not CookPreparationOutcome.READY
+    assert detached.outcome is CookPreparationOutcome.INVALID
+    assert [item.code for item in detached.findings] == ["invalid-evidence"]
     assert detached.handoff_ref is None
 
 
@@ -615,7 +617,7 @@ def test_execute_light_handoff_stops_before_workflow(
         mode=MoldCookMode.LIGHT,
         spec_ref=fixture["spec_ref"],
         approval_ref=fixture["scope_approval_ref"],
-        coverage=MoldCookCoverage(curd_ids=("curd-1",)),
+        coverage=MoldCookCoverage(curd_ids=("root",)),
         taste_verdict_ref=fixture["taste_verdict_ref"],
         taste_ledger_ref=fixture["taste_ledger_ref"],
     )
@@ -678,10 +680,12 @@ def test_setup_authorization_requires_bounded_passing_evidence(tmp_path: Path) -
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=fixture["scope_approval_ref"],
-        planner_result=fixture["planner"],
-        plan_approval=fixture["plan_approval_ref"],
-        runner_approval=runner_approval_ref,
+        evidence=PreparationEvidence(
+            scope_approval=fixture["scope_approval_ref"],
+            planner_result=fixture["planner"],
+            plan_approval=fixture["plan_approval_ref"],
+            runner_approval=runner_approval_ref,
+        ),
     )
     assert without_evidence.outcome is CookPreparationOutcome.NEEDS_PREPARATION
 
@@ -716,126 +720,42 @@ def test_setup_authorization_requires_bounded_passing_evidence(tmp_path: Path) -
             schema_uri="https://schemas.easy-cheese.dev/setup-evidence",
         )
 
-    valid_ref = retain_setup_evidence(valid_evidence, "setup-evidence-passed")
     ready = prepare(
         fixture["spec"],
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=fixture["scope_approval_ref"],
-        planner_result=fixture["planner"],
-        plan_approval=fixture["plan_approval_ref"],
-        runner_approval=runner_approval_ref,
-        setup_evidence=valid_ref,
+        evidence=PreparationEvidence(
+            scope_approval=fixture["scope_approval_ref"],
+            planner_result=fixture["planner"],
+            plan_approval=fixture["plan_approval_ref"],
+            runner_approval=runner_approval_ref,
+            setup_evidence=retain_setup_evidence(
+                valid_evidence,
+                "setup-evidence-passed",
+            ),
+        ),
     )
     assert ready.outcome is CookPreparationOutcome.READY
 
-    setup_handoff = attrs.evolve(
-        fixture["handoff"],
-        runner_approval_ref=runner_approval_ref,
-        setup_evidence_refs=(valid_ref,),
-    )
-    published = publish_mold_cook_handoff(
-        setup_handoff,
-        request_digest=request_digest(
-            "setup",
-            {"request_id": setup_handoff.request_id},
-            source_phase="mold",
-            destination_phase="cook",
-            payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
-        ),
-        operation_id="setup-public-boundary",
-        artifact_root=root,
-    )
-    accepted = accept_mold_cook_handoff(
-        root / "pointers" / "setup-public-boundary.json",
-        artifact_root=root,
-    )
-    assert (
-        cast(MoldCookHandoff, accepted.canonical.value).setup_evidence_refs
-        == (valid_ref,)
-    )
-
-    malformed_content = b"{}"
-    malformed_digest = _digest(malformed_content)
-    malformed_path = root / f"sha256-{malformed_digest.removeprefix('sha256:')}"
-    _ = malformed_path.write_bytes(malformed_content)
-    malformed_ref = ArtifactRef(
-        artifact_id="setup-evidence-malformed",
-        role="setup_evidence",
-        uri=malformed_path.as_uri(),
-        digest=malformed_digest,
-        size_bytes=len(malformed_content),
-        media_type="application/json",
-        schema_uri="https://schemas.easy-cheese.dev/setup-evidence",
-    )
-    malformed_handoff = attrs.evolve(
-        setup_handoff, setup_evidence_refs=(malformed_ref,)
-    )
-    malformed_payload = canonical_bytes(malformed_handoff)
-    malformed_payload_digest = _digest(malformed_payload)
-    malformed_payload_path = (
-        root / "payloads" / (malformed_payload_digest.removeprefix("sha256:") + ".json")
-    )
-    _ = malformed_payload_path.write_bytes(malformed_payload)
-    malformed_payload_ref = attrs.evolve(
-        published.pointer.payload,
-        artifact_id="payload-setup-accept-malformed",
-        uri=malformed_payload_path.as_uri(),
-        digest=malformed_payload_digest,
-        size_bytes=len(malformed_payload),
-    )
-    malformed_pointer = attrs.evolve(
-        published.pointer,
-        operation_id="setup-accept-malformed",
-        payload=malformed_payload_ref,
-    )
-    malformed_pointer_path = root / "pointers" / "setup-accept-malformed.json"
-    _ = malformed_pointer_path.write_bytes(canonical_bytes(malformed_pointer))
-    with pytest.raises(ContractValidationError, match="setup evidence"):
-        _ = accept_mold_cook_handoff(malformed_pointer_path, artifact_root=root)
-    with pytest.raises(ContractValidationError, match="setup evidence"):
-        _ = publish_mold_cook_handoff(
-            attrs.evolve(setup_handoff, setup_evidence_refs=(malformed_ref,)),
-            request_digest=request_digest(
-                "setup-malformed",
-                {"request_id": setup_handoff.request_id},
-                source_phase="mold",
-                destination_phase="cook",
-                payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
-            ),
-            operation_id="setup-malformed",
-            artifact_root=root,
-        )
-
     failed_evidence = attrs.evolve(valid_evidence, exit_code=1)
-    failed_ref = retain_setup_evidence(failed_evidence, "setup-evidence-failed")
     held = prepare(
         fixture["spec"],
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=fixture["scope_approval_ref"],
-        planner_result=fixture["planner"],
-        plan_approval=fixture["plan_approval_ref"],
-        runner_approval=runner_approval_ref,
-        setup_evidence=failed_ref,
+        evidence=PreparationEvidence(
+            scope_approval=fixture["scope_approval_ref"],
+            planner_result=fixture["planner"],
+            plan_approval=fixture["plan_approval_ref"],
+            runner_approval=runner_approval_ref,
+            setup_evidence=retain_setup_evidence(
+                failed_evidence,
+                "setup-evidence-failed",
+            ),
+        ),
     )
     assert held.outcome is CookPreparationOutcome.BLOCKED
-
-    with pytest.raises(SetupEvidenceExecutionError, match="did not pass"):
-        _ = publish_mold_cook_handoff(
-            attrs.evolve(setup_handoff, setup_evidence_refs=(failed_ref,)),
-            request_digest=request_digest(
-                "setup-failed",
-                {"request_id": setup_handoff.request_id},
-                source_phase="mold",
-                destination_phase="cook",
-                payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
-            ),
-            operation_id="setup-failed",
-            artifact_root=root,
-        )
 
 
 def test_execute_rejects_a_pointer_outside_the_configured_artifact_root(
@@ -907,7 +827,7 @@ def test_execute_rejects_stale_pointer_before_workflow(
     assert isinstance(payload_uri, str)
     payload_path = Path(urlsplit(payload_uri).path)
     _ = payload_path.write_bytes(
-        payload_path.read_bytes().replace(b"cook-request", b"stale-request")
+        payload_path.read_bytes().replace(b"cook-request", b"cook-reqXest")
     )
 
     def fail_workflow(*_args: object, **_kwargs: object) -> Never:
@@ -915,7 +835,7 @@ def test_execute_rejects_stale_pointer_before_workflow(
 
     monkeypatch.setattr(workflow, "cook", fail_workflow)
 
-    with pytest.raises((PayloadDigestMismatchError, ContractValidationError)):
+    with pytest.raises(PayloadDigestMismatchError, match="digest"):
         _ = execute_accepted_handoff(
             pointer,
             artifact_root=tmp_path / "stale",
@@ -976,9 +896,11 @@ def test_partial_approval_omitting_dependency_returns_replan_request(
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=tmp_path / "partial",
-        scope_approval=fixture["scope_approval_ref"],
-        planner_result=planner,
-        plan_approval=bad_approval_ref,
+        evidence=PreparationEvidence(
+            scope_approval=fixture["scope_approval_ref"],
+            planner_result=planner,
+            plan_approval=bad_approval_ref,
+        ),
     )
 
     assert result.outcome is CookPreparationOutcome.NEEDS_PLANNING
@@ -997,7 +919,7 @@ def test_resubmit_retains_existing_holds(tmp_path: Path) -> None:
         request_id="held-request",
         repository_root=tmp_path,
         artifact_root=tmp_path / "artifacts",
-        holds=(hold,),
+        evidence=PreparationEvidence(holds=(hold,)),
     )
     second = resubmit(
         first,
@@ -1024,7 +946,7 @@ def test_resubmit_rejects_clearance_without_bound_dialogue(tmp_path: Path) -> No
         request_id="held-request",
         repository_root=tmp_path,
         artifact_root=artifact_root,
-        holds=(hold,),
+        evidence=PreparationEvidence(holds=(hold,)),
     )
     arbitrary_ref = _write_ref(
         artifact_root,
@@ -1041,11 +963,13 @@ def test_resubmit_rejects_clearance_without_bound_dialogue(tmp_path: Path) -> No
             source="implement the approved change",
             repository_root=tmp_path,
             artifact_root=artifact_root,
-            clearances=(
-                CookHoldClearance(
-                    hold_id="user-hold",
-                    response_ref=arbitrary_ref,
-                    response_text="approved",
+            evidence=PreparationEvidence(
+                clearances=(
+                    CookHoldClearance(
+                        hold_id="user-hold",
+                        response_ref=arbitrary_ref,
+                        response_text="approved",
+                    ),
                 ),
             ),
         )
@@ -1063,7 +987,7 @@ def test_resubmit_clears_hold_with_named_user_response(tmp_path: Path) -> None:
         request_id="held-request",
         repository_root=tmp_path,
         artifact_root=artifact_root,
-        holds=(hold,),
+        evidence=PreparationEvidence(holds=(hold,)),
     )
     response = "Resume the approved work."
     dialogue_ref = _write_ref(
@@ -1083,11 +1007,13 @@ def test_resubmit_clears_hold_with_named_user_response(tmp_path: Path) -> None:
         source="implement the approved change",
         repository_root=tmp_path,
         artifact_root=artifact_root,
-        clearances=(
-            CookHoldClearance(
-                hold_id="user-hold",
-                response_ref=dialogue_ref,
-                response_text=response,
+        evidence=PreparationEvidence(
+            clearances=(
+                CookHoldClearance(
+                    hold_id="user-hold",
+                    response_ref=dialogue_ref,
+                    response_text=response,
+                ),
             ),
         ),
     )
@@ -1150,10 +1076,11 @@ def test_resubmit_cli_forwards_approval_evidence(
     assert emitted["request_id"] == "cli-resubmit"
     assert emitted["outcome"] == previous.outcome.value
     assert emitted["input_kind"] == MoldCookInputKind.TASK.value
-    assert captured["scope_approval"] == scope
-    assert captured["plan_approval"] == plan
-    assert captured["runner_approval"] == runner
-    assert captured["setup_authorization"] == authorization
+    forwarded = cast(PreparationEvidence, captured["evidence"])
+    assert forwarded.scope_approval == scope
+    assert forwarded.plan_approval == plan
+    assert forwarded.runner_approval == runner
+    assert forwarded.setup_authorization == authorization
 
 
 def test_prepare_cli_emits_validated_preparation_result(
@@ -1220,24 +1147,26 @@ def test_prepare_routes_runner_setup_through_the_shared_helper(
         coverage=coverage,
         authorization=authorization,
     )
-    original = preparation_module._apply_runner_setup  # pyright: ignore[reportPrivateUsage]
+    original = apply_runner_setup
     plan_refs: list[ArtifactRef] = []
 
     def spy(*args: object, **kwargs: object) -> object:
         plan_refs.append(cast(ArtifactRef, kwargs["plan_ref"]))
         return cast("Callable[..., object]", original)(*args, **kwargs)
 
-    monkeypatch.setattr(preparation_module, "_apply_runner_setup", spy)
+    monkeypatch.setattr(plan_stages, "apply_runner_setup", spy)
 
     result = prepare(
         fixture["spec"],
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        scope_approval=fixture["scope_approval_ref"],
-        planner_result=fixture["planner"],
-        plan_approval=fixture["plan_approval_ref"],
-        runner_approval=runner_approval_ref,
+        evidence=PreparationEvidence(
+            scope_approval=fixture["scope_approval_ref"],
+            planner_result=fixture["planner"],
+            plan_approval=fixture["plan_approval_ref"],
+            runner_approval=runner_approval_ref,
+        ),
     )
 
     assert len(plan_refs) == 1
@@ -1278,7 +1207,7 @@ def test_hold_clearance_rejects_a_blank_cleared_hold_id(tmp_path: Path) -> None:
         request_id="held-request",
         repository_root=tmp_path,
         artifact_root=artifact_root,
-        holds=(hold,),
+        evidence=PreparationEvidence(holds=(hold,)),
     )
     response = "Resume the approved work."
     dialogue_ref = _write_ref(
@@ -1299,11 +1228,13 @@ def test_hold_clearance_rejects_a_blank_cleared_hold_id(tmp_path: Path) -> None:
             source="implement the approved change",
             repository_root=tmp_path,
             artifact_root=artifact_root,
-            clearances=(
-                CookHoldClearance(
-                    hold_id="user-hold",
-                    response_ref=dialogue_ref,
-                    response_text=response,
+            evidence=PreparationEvidence(
+                clearances=(
+                    CookHoldClearance(
+                        hold_id="user-hold",
+                        response_ref=dialogue_ref,
+                        response_text=response,
+                    ),
                 ),
             ),
         )

@@ -25,7 +25,7 @@ from easy_cheese_schemas import MAX_CONTRACT_BYTES, PublishedArtifact
 from easy_cheese_schemas.mold_cook import MOLD_COOK_HANDOFF_SCHEMA_URI, MoldCookHandoff
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 
-from easy_cheese.shared import publication
+from easy_cheese.shared import mold_cook_handoff, publication
 from tests.python.test_mold_cook_publication import _published_handoff  # pyright: ignore[reportPrivateUsage]
 
 
@@ -60,7 +60,7 @@ def _publish(
     request_digest: str | None = None,
     _before_reveal: Callable[[], None] | None = None,
 ) -> PublishedArtifact:
-    return publication.publish_mold_cook_handoff(
+    return mold_cook_handoff.publish_mold_cook_handoff(
         handoff,
         request_digest=request_digest
         if request_digest is not None
@@ -120,7 +120,9 @@ def test_accept_rejects_non_file_artifact_uri(tmp_path: Path) -> None:
     _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
 
     with pytest.raises(ContractValidationError, match="is not a file:// uri"):
-        _ = publication.accept_mold_cook_handoff(pointer_path, artifact_root=tmp_path)
+        _ = mold_cook_handoff.accept_mold_cook_handoff(
+            pointer_path, artifact_root=tmp_path
+        )
 
 
 def test_accept_rejects_oversized_pointer_before_validation(
@@ -142,7 +144,9 @@ def test_accept_rejects_oversized_pointer_before_validation(
     monkeypatch.setattr(Path, "read_bytes", _forbidden)
 
     with pytest.raises(ContractValidationError, match="MAX_CONTRACT_BYTES"):
-        _ = publication.accept_mold_cook_handoff(pointer_path, artifact_root=tmp_path)
+        _ = mold_cook_handoff.accept_mold_cook_handoff(
+            pointer_path, artifact_root=tmp_path
+        )
 
 
 def test_read_bounded_raises_overflow_for_oversized_file(tmp_path: Path) -> None:

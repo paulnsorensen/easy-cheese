@@ -1,5 +1,4 @@
 {
-  "scope": "approved",
-  "plan": "approved",
-  "runner": "approved"
+  "scope": "approve",
+  "plan": "approved"
 }

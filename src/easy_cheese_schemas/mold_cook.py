@@ -9,10 +9,11 @@ publish or execute a handoff.
 from __future__ import annotations
 
 import sys
+from collections.abc import Mapping
 from enum import Enum
-from typing import NamedTuple, Protocol, TypeVar, cast
+from typing import NamedTuple, cast
 
-from attrs import Attribute, define, field, validators
+from attrs import define, field, validators
 
 from ._schema_catalog import (
     COOK_PREPARATION_RESULT_SCHEMA_URI,
@@ -25,12 +26,14 @@ from .contracts import (
     ContractVersion,
     PlannerRequest,
     PlannerUncertainty,
+    Validator,
     _bounded_string,  # pyright: ignore[reportPrivateUsage]
     _digest,  # pyright: ignore[reportPrivateUsage]
     _identifier,  # pyright: ignore[reportPrivateUsage]
     _identifier_list,  # pyright: ignore[reportPrivateUsage]
     _if_equals,  # pyright: ignore[reportPrivateUsage]
     _list_of,  # pyright: ignore[reportPrivateUsage]
+    _NamedAttribute,  # pyright: ignore[reportPrivateUsage]
     _optional_string,  # pyright: ignore[reportPrivateUsage]
     _string_list,  # pyright: ignore[reportPrivateUsage]
     _tuple_sequence,  # pyright: ignore[reportPrivateUsage]
@@ -112,123 +115,122 @@ class CookRequirementKind(str, Enum):
     INTEGRITY = "integrity"
 
 
-_T = TypeVar("_T")
+_ARTIFACT_REF: dict[str, object] = {"$ref": "#/$defs/ArtifactRef"}
+_SETUP_AUTHORIZATION: dict[str, object] = {"$ref": "#/$defs/CookSetupAuthorization"}
+_STRING: dict[str, object] = {"type": "string"}
+_NULL: dict[str, object] = {"type": "null"}
+
+_RESPONSE_ROLES: frozenset[str] = frozenset({"response", "dialogue"})
 
 
-class _Validator(Protocol[_T]):
-    def __call__(  # noqa: V103
-        self, instance: object, attribute: Attribute[_T], value: _T, /
-    ) -> None: ...
+def _as_artifact_ref(attribute: _NamedAttribute, value: object) -> ArtifactRef:
+    if not isinstance(value, ArtifactRef):
+        raise TypeError(f"{attribute.name} must be an ArtifactRef")
+    return value
 
 
-def _artifact_role(expected: str) -> _Validator[ArtifactRef]:
-    def validate(
-        _instance: object,
-        attribute: Attribute[ArtifactRef],
-        value: ArtifactRef,
-    ) -> None:
-        if value.role != expected:
+def _artifact_role(expected: str) -> Validator:
+    def validate(_instance: object, attribute: _NamedAttribute, value: object) -> None:
+        if _as_artifact_ref(attribute, value).role != expected:
             raise ValueError(f"{attribute.name} must use artifact role {expected!r}")
 
     return validate
 
 
-def _typed_artifact_role(expected: str) -> _Validator[ArtifactRef]:
-    role_validator = _artifact_role(expected)
-
-    def validate(
-        instance: object,
-        attribute: Attribute[ArtifactRef],
-        value: ArtifactRef,
-    ) -> None:
-        role_validator(instance, attribute, value)
-        if value.schema_uri is None:
+def _typed_artifact_role(expected: str) -> Validator:
+    def validate(_instance: object, attribute: _NamedAttribute, value: object) -> None:
+        reference = _as_artifact_ref(attribute, value)
+        if reference.role != expected:
+            raise ValueError(f"{attribute.name} must use artifact role {expected!r}")
+        if reference.schema_uri is None:
             raise ValueError(f"{attribute.name} must carry a schema_uri")
 
     return validate
 
 
-def _artifact_roles(*expected: str) -> _Validator[ArtifactRef]:
-    allowed = frozenset(expected)
-
-    def validate(
-        _instance: object, attribute: Attribute[object], value: object
-    ) -> None:
-        if not isinstance(value, ArtifactRef):
-            raise TypeError(f"{attribute.name} must be an ArtifactRef")
-        if value.role not in allowed:
-            options = ", ".join(sorted(allowed))
-            raise ValueError(f"{attribute.name} must use one of these roles: {options}")
-
-    return cast(_Validator[ArtifactRef], validate)
+def _response_or_dialogue_role(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    """Accept the two artifact roles that can carry an explicit user response."""
+    if _as_artifact_ref(attribute, value).role not in _RESPONSE_ROLES:
+        options = ", ".join(sorted(_RESPONSE_ROLES))
+        raise ValueError(f"{attribute.name} must use one of these roles: {options}")
 
 
-def _schema_uri(expected: str) -> _Validator[ArtifactRef]:
-    def validate(
-        _instance: object, attribute: Attribute[object], value: object
-    ) -> None:
-        if not isinstance(value, ArtifactRef):
-            raise TypeError(f"{attribute.name} must be an ArtifactRef")
-        if value.schema_uri != expected:
+def _schema_uri(expected: str) -> Validator:
+    def validate(_instance: object, attribute: _NamedAttribute, value: object) -> None:
+        if _as_artifact_ref(attribute, value).schema_uri != expected:
             raise ValueError(f"{attribute.name} must use schema_uri {expected!r}")
 
-    return cast(_Validator[ArtifactRef], validate)
+    return validate
 
 
-def _optional_schema_uri(expected: str) -> _Validator[ArtifactRef | None]:
-    schema_validator = _schema_uri(expected)
+def _optional_artifact_schema(expected: str, role: str) -> Validator:
+    role_check = _artifact_role(role)
+    uri_check = _schema_uri(expected)
 
-    def validate(
-        instance: object,
-        attribute: Attribute[ArtifactRef | None],
-        value: ArtifactRef | None,
-    ) -> None:
-        if value is not None:
-            schema_validator(instance, cast("Attribute[ArtifactRef]", attribute), value)
+    def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
+        if value is None:
+            return
+        role_check(instance, attribute, value)
+        uri_check(instance, attribute, value)
 
     return validate
 
 
-def _optional_artifact_schema(
-    expected: str, role: str
-) -> _Validator[ArtifactRef | None]:
-    optional_role = validators.optional(_artifact_role(role))
-    return validators.and_(optional_role, _optional_schema_uri(expected))
+def _approval_of(instance: object) -> MoldCookApproval:
+    if not isinstance(instance, MoldCookApproval):
+        raise TypeError("approval digest validators require a MoldCookApproval")
+    return instance
 
 
-def _digest_matches(reference_name: str) -> _Validator[str]:
-    def validate(instance: object, attribute: Attribute[str], value: str) -> None:
-        _digest(instance, attribute, value)
-        approval = cast("MoldCookApproval", instance)
-        if reference_name == "proposal_ref":
-            reference = approval.proposal_ref
-        elif reference_name == "response_ref":
-            reference = approval.response_ref
-        else:
-            raise ValueError(f"unsupported approval reference {reference_name!r}")
-        if value != reference.digest:
-            raise ValueError(f"{attribute.name} must match {reference_name}.digest")
-
-    return validate
+def _proposal_digest_matches(
+    instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    """Require ``proposal_digest`` to repeat ``proposal_ref.digest`` exactly."""
+    _digest(instance, attribute, value)
+    if value != _approval_of(instance).proposal_ref.digest:
+        raise ValueError(f"{attribute.name} must match proposal_ref.digest")
 
 
-def _forbid(*field_names: str) -> dict[str, object]:
-    empty_or_null: dict[str, object] = {
-        "anyOf": [
-            {"type": "null"},
-            {"type": "array", "maxItems": 0},
-        ]
-    }
+def _response_digest_matches(
+    instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    """Require ``response_digest`` to repeat ``response_ref.digest`` exactly."""
+    _digest(instance, attribute, value)
+    if value != _approval_of(instance).response_ref.digest:
+        raise ValueError(f"{attribute.name} must match response_ref.digest")
+
+
+def _requires(**fields: Mapping[str, object]) -> dict[str, object]:
+    """Require each field and narrow it to the schema its runtime type allows.
+
+    ``required`` alone is satisfied by an explicit ``null``, so every
+    conditionally mandatory field also drops the null member of its union.
+    """
     return {
-        "not": {
-            "anyOf": [
-                {
-                    "required": [name],
-                    "properties": {name: {"not": empty_or_null}},
-                }
-                for name in field_names
-            ]
-        }
+        "required": list(fields),
+        "properties": {name: dict(schema) for name, schema in fields.items()},
+    }
+
+
+def _artifact_binding(
+    field_name: str, role: str, schema_uri: str | None = None
+) -> dict[str, object]:
+    """Publish the artifact role, and schema identity, one reference must carry."""
+    identity: dict[str, object] = {"role": {"const": role}}
+    if schema_uri is not None:
+        identity["schema_uri"] = {"const": schema_uri}
+    return {"properties": {field_name: {"properties": identity}}}
+
+
+def _paired_or_absent(first: str, second: str) -> dict[str, object]:
+    """Require two optional references to appear together, or not at all."""
+    return {
+        "anyOf": [
+            {"properties": {first: _NULL, second: _NULL}},
+            _requires(**{first: {"not": _NULL}, second: {"not": _NULL}}),
+        ]
     }
 
 
@@ -253,6 +255,19 @@ _OUTCOME_PAYLOAD_FIELDS: frozenset[str] = frozenset(
 _OUTCOME_SEQUENCE_FIELDS: frozenset[str] = frozenset(
     {"findings", "holds", "requirements"}
 )
+
+_OUTCOME_PAYLOAD_SCHEMAS: dict[str, dict[str, object]] = {
+    "approval_kind": _STRING,
+    "approved_plan_ref": _ARTIFACT_REF,
+    "approved_scope_ref": _ARTIFACT_REF,
+    "coverage": {"$ref": "#/$defs/MoldCookCoverage"},
+    "handoff_ref": _ARTIFACT_REF,
+    "missing_decision": _STRING,
+    "planner_request": {"$ref": "#/$defs/PlannerRequest"},
+    "proposal_digest": _STRING,
+    "proposal_ref": _ARTIFACT_REF,
+    "setup_authorization": _SETUP_AUTHORIZATION,
+}
 
 
 class _OutcomeFields(NamedTuple):
@@ -305,6 +320,27 @@ def _non_empty(name: str) -> dict[str, object]:
     return {"required": [name], "properties": {name: {"minItems": 1}}}
 
 
+def _forbid(*field_names: str) -> dict[str, object]:
+    """Reject a branch that carries any of ``field_names`` non-null and non-empty."""
+    empty_or_null: dict[str, object] = {
+        "anyOf": [
+            {"type": "null"},
+            {"type": "array", "maxItems": 0},
+        ]
+    }
+    return {
+        "not": {
+            "anyOf": [
+                {
+                    "required": [name],
+                    "properties": {name: {"not": empty_or_null}},
+                }
+                for name in field_names
+            ]
+        }
+    }
+
+
 def _outcome_constraints() -> tuple[dict[str, object], ...]:
     """Derive one ``if``/``then`` branch per outcome from ``_OUTCOME_FIELDS``."""
     branches: list[dict[str, object]] = []
@@ -312,9 +348,14 @@ def _outcome_constraints() -> tuple[dict[str, object], ...]:
         then: dict[str, object] = {}
         if fields.required:
             then["required"] = sorted(fields.required)
-        non_empty = sorted(fields.required & _OUTCOME_SEQUENCE_FIELDS)
-        if non_empty:
-            then["properties"] = {name: {"minItems": 1} for name in non_empty}
+            then["properties"] = {
+                name: (
+                    {"minItems": 1}
+                    if name in _OUTCOME_SEQUENCE_FIELDS
+                    else dict(_OUTCOME_PAYLOAD_SCHEMAS[name])
+                )
+                for name in sorted(fields.required)
+            }
         if fields.any_of:
             then["anyOf"] = [_non_empty(name) for name in sorted(fields.any_of)]
         then.update(_forbid(*sorted(_OUTCOME_PAYLOAD_FIELDS - fields.allowed)))
@@ -399,17 +440,22 @@ class CookValidationFinding:
 
 @contract("mold-cook-approval")
 @schema_constraints(
-    _if_equals("kind", MoldCookApprovalKind.PLAN.value, {"required": ["plan_digest"]}),
+    _if_equals(
+        "kind",
+        MoldCookApprovalKind.PLAN.value,
+        _requires(plan_digest=_STRING),
+    ),
     _if_equals(
         "kind",
         MoldCookApprovalKind.PARTIAL_PLAN.value,
-        {"required": ["plan_digest"]},
+        _requires(plan_digest=_STRING),
     ),
     _if_equals(
         "kind",
         MoldCookApprovalKind.RUNNER.value,
-        {"required": ["setup_authorization"]},
+        _requires(setup_authorization=_SETUP_AUTHORIZATION),
     ),
+    _artifact_binding("proposal_ref", "proposal"),
 )
 @define(frozen=True)
 class MoldCookApproval:
@@ -430,9 +476,9 @@ class MoldCookApproval:
     )
     spec_digest: str = field(validator=_digest)
     proposal_ref: ArtifactRef = field(validator=_artifact_role("proposal"))
-    proposal_digest: str = field(validator=_digest_matches("proposal_ref"))
-    response_ref: ArtifactRef = field(validator=_artifact_roles("response", "dialogue"))
-    response_digest: str = field(validator=_digest_matches("response_ref"))
+    proposal_digest: str = field(validator=_proposal_digest_matches)
+    response_ref: ArtifactRef = field(validator=_response_or_dialogue_role)
+    response_digest: str = field(validator=_response_digest_matches)
     response_text: str = field(validator=_bounded_string)
     response_source: str = field(validator=_bounded_string)
     coverage: MoldCookCoverage = field(
@@ -487,16 +533,20 @@ class MoldCookApproval:
         MoldCookMode.LIGHT.value,
         {
             "properties": {
-                "planner_result_ref": {"type": "null"},
-                "plan_ref": {"type": "null"},
+                "planner_result_ref": _NULL,
+                "plan_ref": _NULL,
+                "coverage": {"properties": {"curd_ids": {"maxItems": 1}}},
             }
         },
     ),
     _if_equals(
         "mode",
         MoldCookMode.FULL.value,
-        {"required": ["planner_result_ref", "plan_ref"]},
+        _requires(planner_result_ref=_ARTIFACT_REF, plan_ref=_ARTIFACT_REF),
     ),
+    _artifact_binding("spec_ref", "spec"),
+    _artifact_binding("approval_ref", "approval", MOLD_COOK_APPROVAL_SCHEMA_URI),
+    _paired_or_absent("taste_verdict_ref", "taste_ledger_ref"),
 )
 @define(frozen=True)
 class MoldCookHandoff:

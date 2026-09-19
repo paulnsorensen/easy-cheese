@@ -23,17 +23,18 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookMode,
 )
 from easy_cheese.shared.mold_cook_handoff import (
-    bind_mold_cook_approval,
+    accept_mold_cook_handoff,
     canonical_mold_cook_proposal,
     materialize_artifact_ref,
+    publish_mold_cook_handoff,
 )
 from easy_cheese.shared.publication import (
     PayloadDigestMismatchError,
-    accept_mold_cook_handoff,
-    publish_mold_cook_handoff,
     request_digest,
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
+
+from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
 
 def _write_ref(
@@ -209,7 +210,7 @@ def test_accept_rejects_detached_pointer_payload(tmp_path: Path) -> None:
 def test_publish_rejects_approval_that_does_not_authorize_execution(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(ContractValidationError):
+    with pytest.raises(ContractValidationError, match="rejected response"):
         _ = _published_handoff(
             tmp_path,
             decision=MoldCookApprovalDecision.REJECTED,

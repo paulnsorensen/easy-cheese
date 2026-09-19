@@ -37,14 +37,14 @@ def _gate_graph(argv: list[str]) -> int:
 
 @bundle_command("finalize")
 def _finalize(argv: list[str]) -> int:
-    from easy_cheese.skills.mold.producer import main
+    from easy_cheese.skills.mold.contract_handlers import main
 
     return main(argv)
 
 
 @bundle_command("normalize-planner")
 def _normalize_planner(argv: list[str]) -> int:
-    from easy_cheese.skills.mold.producer import normalize_planner_main
+    from easy_cheese.skills.mold.contract_handlers import normalize_planner_main
 
     return normalize_planner_main(argv)
 

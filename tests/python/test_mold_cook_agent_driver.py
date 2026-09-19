@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import cast
 
-from tests.python.mold_cook_agent_driver import run_agent_scenario
+import pytest
+
+from tests.python.mold_cook_agent_driver import AgentScenarioError, run_agent_scenario
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "mold_cook_agent"
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,7 +38,6 @@ def test_fixture_agent_uses_harness_responses_and_writes_trace(tmp_path: Path) -
         "approval_requested",
         "approval_recorded",
         "prepare",
-        "prepare",
         "approval_requested",
         "approval_recorded",
         "plan_materialized",
@@ -48,73 +47,49 @@ def test_fixture_agent_uses_harness_responses_and_writes_trace(tmp_path: Path) -
     assert report.mode == "full"
     assert events[1]["outcome"] == "needs-approval"
     assert events[1]["approval_kind"] == "scope"
+    assert events[3]["response"] == "approve"
     assert events[3]["decision"] == "approved"
-    assert events[4]["outcome"] == "needs-planning"
-    assert events[5]["outcome"] == "needs-approval"
-    assert events[8]["outcome"] == "ready"
-    assert events[10]["ready"] is True
-    assert all(
-        event.get("tool") or event["type"] not in {"prepare", "plan_materialized"}
-        for event in events
-    )
+    assert events[4]["returncode"] == 0
+    assert events[6]["response"] == "approved"
+    assert events[6]["decision"] == "approved"
+    assert events[7]["outcome"] == "ready"
+    assert events[9]["ready"] is True
+    assert [event["tool"] for event in events if "tool" in event] == [
+        "cook.pyz prepare",
+        "cook.pyz resubmit",
+        "mold.pyz finalize",
+        "cook.pyz accept",
+    ]
     assert output.is_file()
     pointer = repository / "artifacts" / "pointers" / "agent.json"
     assert pointer.is_file()
-    pointer_value = cast(dict[str, object], json.loads(pointer.read_text(encoding="utf-8")))
+    pointer_value = cast(
+        dict[str, object], json.loads(pointer.read_text(encoding="utf-8"))
+    )
     assert pointer_value["operation_id"] == "agent"
     assert pointer_value["destination_phase"] == "cook"
 
 
-def test_fixture_agent_scope_decline_stops_before_publication_and_acceptance(
+def test_refused_scope_response_holds_cook_and_writes_no_feature(
     tmp_path: Path,
 ) -> None:
     repository = tmp_path / "repository"
     repository.mkdir()
-    responses = tmp_path / "responses.json"
-    _ = responses.write_text(
-        json.dumps({"scope": "declined", "plan": "approved"}), encoding="utf-8"
-    )
-    environment = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": os.environ.get("HOME", str(Path.home())),
-        "LANG": "C.UTF-8",
-        "LC_ALL": "C.UTF-8",
-        "MOLD_COOK_FIXTURE_REPOSITORY": str(repository),
-        "MOLD_COOK_MOLD_BUNDLE": str(MOLD_PYZ.resolve()),
-        "MOLD_COOK_COOK_BUNDLE": str(COOK_PYZ.resolve()),
-        "MOLD_COOK_TEST_ROOT": str(ROOT),
-        "MOLD_COOK_HARNESS_RESPONSES": responses.read_text(encoding="utf-8"),
-    }
-    result = subprocess.run(
-        [sys.executable, str(FIXTURE / "task_agent.py")],
-        cwd=repository,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=120,
-    )
-    assert result.returncode != 0
-    trace = cast(dict[str, object], json.loads(result.stdout))
-    events = cast(list[dict[str, object]], trace["events"])
-    assert events[3]["decision"] == "rejected"
-    assert events[4]["outcome"] != "ready"
-    pointer = repository / "artifacts" / "pointers" / "agent.json"
-    assert not pointer.exists()
-    accepted = subprocess.run(
-        [
-            sys.executable,
-            str(COOK_PYZ),
-            "accept",
-            str(pointer),
-            "--artifact-root",
-            str(repository / "artifacts"),
-        ],
-        cwd=repository,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
-    assert accepted.returncode != 0
+    output = tmp_path / "trace.json"
+
+    with pytest.raises(AgentScenarioError) as refusal:
+        _ = run_agent_scenario(
+            [sys.executable, str(FIXTURE / "task_agent.py")],
+            fixture_repository=repository,
+            mold_bundle=MOLD_PYZ,
+            cook_bundle=COOK_PYZ,
+            responses=FIXTURE / "responses-refusal.json",
+            output=output,
+        )
+
+    # The agent exits 0 only when Cook holds the refused approval, so the
+    # transcript check is the failure the driver reports.
+    assert "recorded approval does not authorize execution" in str(refusal.value)
+    assert not output.exists()
+    assert not (repository / "artifacts" / "pointers").exists()
+    assert not (repository / "src").exists()

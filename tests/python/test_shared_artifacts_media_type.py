@@ -15,6 +15,11 @@ import pytest
 
 from easy_cheese.shared.artifacts import ArtifactResolutionError, resolve_artifact
 from easy_cheese_schemas.contracts import ArtifactRef
+from easy_cheese_schemas.mold_cook import MOLD_COOK_HANDOFF_SCHEMA_URI
+from easy_cheese_schemas.schema_runtime import (
+    FORK_TASTE_VERDICT_SCHEMA_URI,
+    TASTE_LEDGER_SCHEMA_URI,
+)
 
 
 def artifact_ref(
@@ -134,3 +139,89 @@ def test_undeterminable_type_outside_the_retained_name_fails_closed(
             repository_root=repository,
             artifact_directory=tmp_path / "resolved",
         )
+
+
+def test_a_declared_document_schema_uri_retains_and_resolves(tmp_path: Path) -> None:
+    """A document label names a retained document, so retention admits it."""
+
+    content = b'{"verdict": "pass"}'
+    source = tmp_path / "taste-verdict.json"
+    _ = source.write_bytes(content)
+    reference = attrs.evolve(
+        artifact_ref(source.as_uri(), content, media_type="application/json"),
+        schema_uri=FORK_TASTE_VERDICT_SCHEMA_URI,
+    )
+
+    resolved = resolve_artifact(reference, artifact_directory=tmp_path / "resolved")
+
+    assert Path(resolved.path).read_bytes() == content
+
+
+def test_a_document_label_admits_a_bare_json_list(tmp_path: Path) -> None:
+    """A decision ledger arrives as a list, so the label must admit one."""
+
+    content = b'[{"fork": "fork-1"}]'
+    source = tmp_path / "taste-ledger.json"
+    _ = source.write_bytes(content)
+    reference = attrs.evolve(
+        artifact_ref(source.as_uri(), content, media_type="application/json"),
+        schema_uri=TASTE_LEDGER_SCHEMA_URI,
+    )
+
+    resolved = resolve_artifact(reference, artifact_directory=tmp_path / "resolved")
+
+    assert Path(resolved.path).read_bytes() == content
+
+
+def test_a_contract_label_still_requires_one_json_object(tmp_path: Path) -> None:
+    """Only a document label drops the shape rule; a contract keeps it."""
+
+    content = b'["handoff"]'
+    source = tmp_path / "handoff.json"
+    _ = source.write_bytes(content)
+    reference = attrs.evolve(
+        artifact_ref(source.as_uri(), content, media_type="application/json"),
+        schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
+    )
+
+    with pytest.raises(ArtifactResolutionError, match="must contain a JSON object"):
+        _ = resolve_artifact(reference, artifact_directory=tmp_path / "resolved")
+
+
+def test_an_unlisted_schema_uri_is_still_rejected(tmp_path: Path) -> None:
+    """Only the contract registry and the document allowlist admit a label."""
+
+    content = b'{"verdict": "pass"}'
+    source = tmp_path / "unknown.json"
+    _ = source.write_bytes(content)
+    reference = attrs.evolve(
+        artifact_ref(source.as_uri(), content, media_type="application/json"),
+        schema_uri="https://schemas.easy-cheese.dev/not-a-schema",
+    )
+
+    with pytest.raises(ArtifactResolutionError, match="artifact schema mismatch"):
+        _ = resolve_artifact(reference, artifact_directory=tmp_path / "resolved")
+
+
+def test_a_same_size_leftover_under_the_retained_name_is_replaced(
+    tmp_path: Path,
+) -> None:
+    """The retained name is not proof of content; the digest read-back is."""
+
+    content = b"verified workflow bytes\n"
+    source = tmp_path / "input.txt"
+    _ = source.write_bytes(content)
+    retained = tmp_path / "resolved"
+    retained.mkdir(mode=0o700)
+    # Same name, same size, different bytes: only a read-back can tell.
+    leftover = retained / f"sha256-{hashlib.sha256(content).hexdigest()}"
+    impostor = b"X" * len(content)
+    _ = leftover.write_bytes(impostor)
+
+    resolved = resolve_artifact(
+        artifact_ref(source.as_uri(), content),
+        artifact_directory=retained,
+    )
+
+    assert Path(resolved.path).read_bytes() == content
+    assert leftover.read_bytes() != impostor

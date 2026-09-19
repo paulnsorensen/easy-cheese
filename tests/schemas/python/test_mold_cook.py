@@ -330,8 +330,9 @@ def test_light_handoff_round_trips_without_planner_artifacts() -> None:
 
     assert validated.value == handoff
     assert validated.canonical_bytes == encoded
-    assert handoff.planner_result_ref is None
-    assert handoff.plan_ref is None
+    assert isinstance(validated.value, MoldCookHandoff)
+    assert validated.value.planner_result_ref is None
+    assert validated.value.plan_ref is None
 
 
 def test_approval_round_trips_with_local_dialogue_reference() -> None:
@@ -343,7 +344,8 @@ def test_approval_round_trips_with_local_dialogue_reference() -> None:
     )
 
     assert validated.value == value
-    assert value.response_ref.role == "dialogue"
+    assert isinstance(validated.value, MoldCookApproval)
+    assert validated.value.response_ref.role == "dialogue"
 
 
 def test_mold_cook_contracts_is_the_derived_alias() -> None:
@@ -604,3 +606,133 @@ def test_blocked_and_invalid_cannot_carry_execution_authority() -> None:
             findings=[FINDING],
             holds=[HOLD],
         )
+
+
+def contract_definition(schema_uri: str, name: str) -> dict[str, object]:
+    """Return one contract definition from its published JSON Schema document."""
+    schema = as_dict(cast(object, json.loads(schema_bytes(schema_uri))))
+    return as_dict(as_dict(schema["$defs"])[name])
+
+
+def schema_rules(schema_uri: str, name: str) -> list[dict[str, object]]:
+    definition = contract_definition(schema_uri, name)
+    return [as_dict(rule) for rule in cast("list[object]", definition["allOf"])]
+
+
+def branch_for(
+    schema_uri: str, name: str, field_name: str, value: str
+) -> dict[str, object]:
+    for rule in schema_rules(schema_uri, name):
+        condition = as_dict(as_dict(rule["if"])["properties"])
+        if as_dict(condition[field_name])["const"] == value:
+            return as_dict(rule["then"])
+    raise AssertionError(f"no {field_name}=={value} branch in {schema_uri}")
+
+
+def test_approval_schema_branches_reject_a_null_conditional_field() -> None:
+    """``required`` alone accepts an explicit null, so each branch types the field.
+
+    The suite keeps jsonschema out of its dependency surface, so the assertion
+    reads the emitted conditional instead of running a generic validator.
+    """
+    approval = mold_cook.MOLD_COOK_APPROVAL_SCHEMA_URI
+    for kind in (
+        MoldCookApprovalKind.PLAN,
+        MoldCookApprovalKind.PARTIAL_PLAN,
+    ):
+        branch = branch_for(approval, "MoldCookApproval", "kind", kind.value)
+        assert branch["required"] == ["plan_digest"]
+        assert as_dict(branch["properties"])["plan_digest"] == {"type": "string"}
+
+    runner = branch_for(
+        approval, "MoldCookApproval", "kind", MoldCookApprovalKind.RUNNER.value
+    )
+    assert runner["required"] == ["setup_authorization"]
+    assert as_dict(runner["properties"])["setup_authorization"] == {
+        "$ref": "#/$defs/CookSetupAuthorization"
+    }
+
+
+def test_approval_schema_binds_the_proposal_artifact_role() -> None:
+    rules = schema_rules(mold_cook.MOLD_COOK_APPROVAL_SCHEMA_URI, "MoldCookApproval")
+    assert {
+        "properties": {"proposal_ref": {"properties": {"role": {"const": "proposal"}}}}
+    } in rules
+
+
+def test_handoff_schema_publishes_every_expressible_runtime_invariant() -> None:
+    """Digest equality stays runtime-only; every other rule reaches the document.
+
+    ``__attrs_post_init__`` binds the spec and approval roles, forbids planner
+    artifacts on a light handoff, caps light coverage at one curd, requires both
+    planner artifacts on a full handoff, and pairs the two taste references.
+    """
+    handoff = mold_cook.MOLD_COOK_HANDOFF_SCHEMA_URI
+    rules = schema_rules(handoff, "MoldCookHandoff")
+
+    assert {
+        "properties": {"spec_ref": {"properties": {"role": {"const": "spec"}}}}
+    } in rules
+    assert {
+        "properties": {
+            "approval_ref": {
+                "properties": {
+                    "role": {"const": "approval"},
+                    "schema_uri": {"const": mold_cook.MOLD_COOK_APPROVAL_SCHEMA_URI},
+                }
+            }
+        }
+    } in rules
+    assert {
+        "anyOf": [
+            {
+                "properties": {
+                    "taste_verdict_ref": {"type": "null"},
+                    "taste_ledger_ref": {"type": "null"},
+                }
+            },
+            {
+                "required": ["taste_verdict_ref", "taste_ledger_ref"],
+                "properties": {
+                    "taste_verdict_ref": {"not": {"type": "null"}},
+                    "taste_ledger_ref": {"not": {"type": "null"}},
+                },
+            },
+        ]
+    } in rules
+
+    light = branch_for(handoff, "MoldCookHandoff", "mode", MoldCookMode.LIGHT.value)
+    assert light["properties"] == {
+        "planner_result_ref": {"type": "null"},
+        "plan_ref": {"type": "null"},
+        "coverage": {"properties": {"curd_ids": {"maxItems": 1}}},
+    }
+
+    full = branch_for(handoff, "MoldCookHandoff", "mode", MoldCookMode.FULL.value)
+    assert full["required"] == ["planner_result_ref", "plan_ref"]
+    assert full["properties"] == {
+        "planner_result_ref": {"$ref": "#/$defs/ArtifactRef"},
+        "plan_ref": {"$ref": "#/$defs/ArtifactRef"},
+    }
+
+
+def test_preparation_branches_type_every_required_payload_field() -> None:
+    expected = {
+        "approval_kind": {"type": "string"},
+        "approved_plan_ref": {"$ref": "#/$defs/ArtifactRef"},
+        "approved_scope_ref": {"$ref": "#/$defs/ArtifactRef"},
+        "coverage": {"$ref": "#/$defs/MoldCookCoverage"},
+        "findings": {"minItems": 1},
+        "handoff_ref": {"$ref": "#/$defs/ArtifactRef"},
+        "missing_decision": {"type": "string"},
+        "planner_request": {"$ref": "#/$defs/PlannerRequest"},
+        "proposal_digest": {"type": "string"},
+        "proposal_ref": {"$ref": "#/$defs/ArtifactRef"},
+        "setup_authorization": {"$ref": "#/$defs/CookSetupAuthorization"},
+    }
+    for outcome, branch in outcome_branches().items():
+        required = cast("list[str]", branch.get("required", []))
+        properties = as_dict(branch.get("properties", {}))
+        assert sorted(properties) == sorted(required), outcome
+        for name in required:
+            assert properties[name] == expected[name], (outcome, name)

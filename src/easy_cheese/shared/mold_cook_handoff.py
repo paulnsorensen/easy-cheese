@@ -9,18 +9,20 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TypeVar, cast
 from urllib.parse import urlsplit
+
 import attrs
 from easy_cheese_schemas import SCHEMA_ROOT
 from easy_cheese_schemas.contracts import (
     ArtifactRef,
-    ContractVersion,
     CurdPlan,
     Landing,
+    MAX_CONTRACT_BYTES,
+    NormalizationReceipt,
     PlannerDisposition,
     PlannerResult,
     canonical_bytes,
@@ -34,14 +36,16 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookApproval,
     MoldCookApprovalDecision,
     MoldCookApprovalKind,
-    MoldCookApprovalSource,
     MoldCookCoverage,
     MoldCookHandoff,
     MoldCookMode,
 )
 from easy_cheese_schemas.schema_runtime import (
+    AcceptedArtifact,
     CanonicalArtifact,
     ContractValidationError,
+    PublishedArtifact,
+    require_contract_version,
     supported_version_for,
     validate_contract,
 )
@@ -58,6 +62,12 @@ from easy_cheese.shared.artifacts import (
     ArtifactResolutionError,
     resolve_artifact,
 )
+from easy_cheese.shared.bounded_read import read_bounded_file
+from easy_cheese.shared.publication import (
+    accept,
+    publish_canonical,
+    register_deep_validator,
+)
 from easy_cheese.shared.taste_test import typed_mold_document
 from easy_cheese.shared.wheypoint.canonical import digest_bytes
 
@@ -72,11 +82,14 @@ __all__ = [
     "SETUP_EVIDENCE_SCHEMA_URI",
     "SetupEvidence",
     "SetupEvidenceExecutionError",
-    "bind_mold_cook_approval",
+    "accept_mold_cook_handoff",
     "canonical_mold_cook_proposal",
     "dialogue_authorizes_execution",
     "evaluate_mold_cook_spec",
     "materialize_artifact_ref",
+    "publish_mold_cook_handoff",
+    "resolve_contract",
+    "resolve_contract_value",
     "validate_mold_cook_approval",
     "validate_mold_cook_handoff",
     "validate_mold_cook_setup_evidence",
@@ -325,47 +338,6 @@ def materialize_artifact_ref(
     )
 
 
-def bind_mold_cook_approval(
-    *,
-    request_id: str,
-    kind: MoldCookApprovalKind,
-    decision: MoldCookApprovalDecision,
-    source: MoldCookApprovalSource,
-    spec_digest: str,
-    proposal_ref: ArtifactRef,
-    response_ref: ArtifactRef,
-    response_text: str,
-    response_source: str,
-    coverage: MoldCookCoverage,
-    plan_digest: str | None = None,
-    setup_authorization: CookSetupAuthorization | None = None,
-) -> MoldCookApproval:
-    """Bind explicit response evidence to stable proposal and response refs."""
-
-    version = ContractVersion(
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-        major="1",
-        minor="0",
-    )
-    return MoldCookApproval(
-        contract_version=version,
-        request_id=request_id,
-        kind=kind,
-        decision=decision,
-        source=source,
-        spec_digest=spec_digest,
-        proposal_ref=proposal_ref,
-        proposal_digest=proposal_ref.digest,
-        response_ref=response_ref,
-        response_digest=response_ref.digest,
-        response_text=response_text,
-        response_source=response_source,
-        coverage=coverage,
-        plan_digest=plan_digest,
-        setup_authorization=setup_authorization,
-    )
-
-
 def canonical_mold_cook_proposal(
     *,
     request_id: str,
@@ -450,11 +422,17 @@ def _resolve_bytes(ref: ArtifactRef, artifact_root: str | Path) -> bytes:
     return resolved.content
 
 
-def _resolve_contract(
+def resolve_contract(
     ref: ArtifactRef,
     contract_type: type,
     artifact_root: str | Path,
 ) -> CanonicalArtifact:
+    """Resolve one artifact reference into a validated canonical contract.
+
+    The reference must resolve to non-empty bytes that parse as the given
+    contract type at a host-supported version.
+    """
+
     content = _resolve_bytes(ref, artifact_root)
     version = supported_version_for(contract_type)
     if version is None:
@@ -467,6 +445,70 @@ def _resolve_contract(
         raise ContractValidationError(
             f"artifact {ref.artifact_id!r} does not contain a valid {contract_type.__name__}: {exc}"
         ) from exc
+
+
+_ContractT = TypeVar("_ContractT")
+
+
+def _read_contract_path(path: Path) -> bytes:
+    """Read one operator-named contract file under the contract size cap.
+
+    The path comes from the caller's own command line, not from inside an
+    artifact, so it is not confined to the artifact root: an operator may
+    keep an approval or a planner result anywhere. The shared reader still
+    refuses a final symlink and anything that is not a regular file, and
+    still stops at `MAX_CONTRACT_BYTES`. Containment stays on the `file://`
+    references that an artifact carries, which `resolve_artifact` resolves.
+    """
+
+    try:
+        return read_bounded_file(path, limit=MAX_CONTRACT_BYTES)
+    except OSError as exc:
+        raise ContractValidationError(
+            f"contract path {path} is unreadable: {exc}"
+        ) from exc
+
+
+def resolve_contract_value(
+    value: object,
+    contract_type: type[_ContractT],
+    artifact_root: str | Path,  # pyright: ignore[reportUnusedParameter]
+) -> _ContractT:
+    """Resolve one raw producer value into its validated contract instance.
+
+    A producer holds a contract as a local path, raw bytes, a decoded mapping,
+    or an already typed instance. Every shape passes the same host-supported
+    version check here, so a typed instance a producer built in memory is
+    trusted no further than bytes it just read. `artifact_root` stays in the
+    signature because every producer seam names its retention root here, and
+    because a shape that resolves a reference would need it; the operator-named
+    path shape does not.
+    """
+
+    raw: object
+    if isinstance(value, Path):
+        raw = _read_contract_path(value)
+    elif isinstance(value, contract_type):
+        raw = canonical_bytes(value)
+    elif isinstance(value, (bytes, Mapping)):
+        raw = cast(object, value)
+    else:
+        raise ContractValidationError(
+            f"cannot resolve a {contract_type.__name__} "
+            + f"from a {type(value).__name__} value"
+        )
+    version = supported_version_for(contract_type)
+    if version is None:
+        raise ContractValidationError(
+            f"{contract_type.__name__} has no host-supported contract version"
+        )
+    try:
+        artifact = validate_contract(raw, contract_type, version)
+    except (ContractValidationError, TypeError, ValueError) as exc:
+        raise ContractValidationError(
+            f"value is not a valid {contract_type.__name__}: {exc}"
+        ) from exc
+    return cast(_ContractT, artifact.value)
 
 
 def _validate_proposal(
@@ -483,8 +525,10 @@ def _validate_proposal(
             raise ContractValidationError(
                 "approval proposal is not valid JSON"
             ) from exc
-        if not isinstance(decoded, Mapping):
-            raise ContractValidationError("approval proposal must be a JSON object")
+        try:
+            _ = require_mapping(decoded, "approval proposal")
+        except ValueError as exc:
+            raise ContractValidationError(str(exc)) from exc
     if expected is not None and content != expected:
         raise ContractValidationError(
             "approval proposal is not the canonical envelope for the bound handoff"
@@ -544,9 +588,10 @@ def _validate_response(approval: MoldCookApproval, artifact_root: str | Path) ->
             raise ContractValidationError(
                 "local dialogue artifact is not valid JSON"
             ) from exc
-        if not isinstance(parsed, dict):
-            raise ContractValidationError("local dialogue artifact must be an object")
-        dialogue = cast(dict[str, object], parsed)
+        try:
+            dialogue = require_mapping(parsed, "local dialogue artifact")
+        except ValueError as exc:
+            raise ContractValidationError(str(exc)) from exc
         question = dialogue.get("question")
         if not isinstance(question, str) or not question.strip():
             raise ContractValidationError(
@@ -583,10 +628,9 @@ def _self_bound_proposal(approval: MoldCookApproval) -> bytes | None:
             coverage=approval.coverage,
         )
     if approval.kind is MoldCookApprovalKind.RUNNER:
-        if approval.setup_authorization is None:
-            raise ContractValidationError(
-                "runner approval must carry the authorized setup envelope"
-            )
+        # `MoldCookApproval.__attrs_post_init__` (see
+        # `src/easy_cheese_schemas/mold_cook.py:479-481`) rejects a runner
+        # approval without a setup authorization, so it is never None here.
         return canonical_mold_cook_proposal(
             request_id=approval.request_id,
             kind=approval.kind,
@@ -598,18 +642,30 @@ def _self_bound_proposal(approval: MoldCookApproval) -> bytes | None:
 
 
 def validate_mold_cook_approval(
-    approval: object, artifact_root: str | Path
+    approval: object,
+    artifact_root: str | Path,
+    *,
+    expected_proposal: bytes | None = None,
 ) -> MoldCookApproval:
-    """Validate durable proposal/response evidence for one approval."""
+    """Validate durable proposal/response evidence for one approval.
+
+    A supplied `expected_proposal` binds the approval to that canonical
+    envelope for every approval kind, including the plan kinds that cannot
+    rebuild their own envelope. Without it, only the self-bound kinds are
+    checked against an envelope.
+    """
 
     if not isinstance(approval, MoldCookApproval):
         raise TypeError(
             f"validate_mold_cook_approval expects MoldCookApproval, not {type(approval).__name__}"
         )
-    _ = _validate_response(approval, artifact_root)
-    _ = _validate_proposal(
-        approval, artifact_root, expected=_self_bound_proposal(approval)
+    expected = (
+        expected_proposal
+        if expected_proposal is not None
+        else _self_bound_proposal(approval)
     )
+    _ = _validate_proposal(approval, artifact_root, expected=expected)
+    _ = _validate_response(approval, artifact_root)
     return approval
 
 
@@ -679,7 +735,7 @@ def _validate_authority_refs(
             _ = _resolve_bytes(reference, artifact_root)
     if handoff.runner_approval_ref is None:
         return
-    runner_artifact = _resolve_contract(
+    runner_artifact = resolve_contract(
         handoff.runner_approval_ref, MoldCookApproval, artifact_root
     )
     runner = cast(MoldCookApproval, runner_artifact.value)
@@ -765,7 +821,7 @@ def validate_mold_cook_handoff(
             f"validate_mold_cook_handoff expects MoldCookHandoff, not {type(handoff).__name__}"
         )
     spec_content = _resolve_bytes(handoff.spec_ref, artifact_root)
-    approval_artifact = _resolve_contract(
+    approval_artifact = resolve_contract(
         handoff.approval_ref, MoldCookApproval, artifact_root
     )
     approval = cast(MoldCookApproval, approval_artifact.value)
@@ -805,10 +861,10 @@ def validate_mold_cook_handoff(
         raise ContractValidationError(
             "full handoff is missing planner or plan reference"
         )
-    planner_artifact = _resolve_contract(
+    planner_artifact = resolve_contract(
         handoff.planner_result_ref, PlannerResult, artifact_root
     )
-    plan_artifact = _resolve_contract(handoff.plan_ref, CurdPlan, artifact_root)
+    plan_artifact = resolve_contract(handoff.plan_ref, CurdPlan, artifact_root)
     planner = cast(PlannerResult, planner_artifact.value)
     plan = cast(CurdPlan, plan_artifact.value)
     if planner.plan is None:
@@ -838,3 +894,67 @@ def validate_mold_cook_handoff(
         planner=planner,
     )
     return handoff
+
+
+def publish_mold_cook_handoff(
+    handoff: MoldCookHandoff,
+    *,
+    request_digest: str,
+    operation_id: str,
+    artifact_root: str | Path,
+    canonical: bytes | None = None,
+    _before_reveal: Callable[[], None] | None = None,
+) -> PublishedArtifact:
+    """Publish an already materialized, strictly validated Mold handoff.
+
+    A caller that already serialized ``handoff`` -- to derive the request
+    digest, for example -- passes those bytes as ``canonical`` so the handoff
+    is serialized once for both uses.
+    """
+
+    try:
+        version = require_contract_version(MoldCookHandoff)
+    except TypeError as exc:
+        # The publish seam answers with one error type. A host that cannot
+        # name a supported version is a defect here, not a `TypeError` the
+        # caller must also catch.
+        raise ContractValidationError(str(exc)) from exc
+
+    def prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
+        return (
+            validate_contract(
+                canonical if canonical is not None else canonical_bytes(handoff),
+                MoldCookHandoff,
+                version,
+            ),
+            None,
+        )
+
+    return publish_canonical(
+        request_digest=request_digest,
+        source_phase="mold",
+        destination_phase="cook",
+        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
+        operation_id=operation_id,
+        artifact_root=artifact_root,
+        prepare=prepare,
+        _before_reveal=_before_reveal,
+    )
+
+
+def accept_mold_cook_handoff(
+    pointer_path: str | Path,
+    *,
+    artifact_root: str | Path | None = None,
+) -> AcceptedArtifact:
+    """Accept a Mold-to-Cook pointer through the shared strict validator."""
+
+    return accept(
+        pointer_path,
+        destination_phase="cook",
+        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
+        artifact_root=artifact_root,
+    )
+
+
+register_deep_validator(MOLD_COOK_HANDOFF_SCHEMA_URI, validate_mold_cook_handoff)

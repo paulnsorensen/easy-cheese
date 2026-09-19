@@ -428,6 +428,28 @@ class TestAnalyze:
         digest = curd_count.analyze(spec, "high")
         assert digest["recommended_skill"] == "/cook"
 
+    def test_malformed_gate_applicability_is_a_non_routing_warning(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        # A declared red-required spec without its Test Contracts table is
+        # malformed. Curd count sizes work, so the fault is reported as a
+        # warning and changes neither the recommendation nor the curd count.
+        body = SPEC_RED_REQUIRED.split("## Test Contracts")[0]
+        spec = _write_spec(tmp_path, "malformed.md", body)
+        digest = curd_count.analyze(spec, "low")
+        assert digest["warnings"] == [
+            "gate-applicability:Test Contracts table must cover every Acceptance ID exactly once: missing=['AC-1'] duplicated=[] unexpected=[]"
+        ]
+        assert digest["recommended_skill"] == "/cook"
+        assert digest["candidate_curds"] == 1
+
+    def test_well_formed_gate_applicability_reports_no_warning(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        spec = _write_spec(tmp_path, "behavior.md", SPEC_RED_REQUIRED)
+        digest = curd_count.analyze(spec, "low")
+        assert digest["warnings"] == []
+
     def test_missing_goals_section_with_gates_yields_zero_curds(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:

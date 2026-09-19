@@ -17,9 +17,13 @@ from urllib.parse import unquote, urlparse
 
 import pytest
 
-from easy_cheese.skills.cook.preparation import SetupEvidence, prepare, resubmit
+from easy_cheese.skills.cook.preparation import (
+    PreparationEvidence,
+    SetupEvidence,
+    prepare,
+    resubmit,
+)
 from easy_cheese.shared.mold_cook_handoff import (
-    bind_mold_cook_approval,
     canonical_mold_cook_proposal,
     materialize_artifact_ref,
 )
@@ -39,6 +43,7 @@ from tests.python.test_mold_cook_producer import (
     make_planner_result,
     make_spec,
 )
+from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -192,8 +197,10 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
         pointer,
         repository_root=repository,
         artifact_root=artifact_root,
-        runner_approval=runner_approval_ref,
-        setup_authorization=authorization,
+        evidence=PreparationEvidence(
+            runner_approval=runner_approval_ref,
+            setup_authorization=authorization,
+        ),
     )
     assert waiting.outcome is CookPreparationOutcome.NEEDS_PREPARATION
     setup = subprocess.run(
@@ -235,9 +242,11 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
     )
     ready = resubmit(
         waiting,
-        runner_approval=runner_approval_ref,
-        setup_authorization=authorization,
-        setup_evidence=setup_evidence_ref,
+        evidence=PreparationEvidence(
+            runner_approval=runner_approval_ref,
+            setup_authorization=authorization,
+            setup_evidence=setup_evidence_ref,
+        ),
     )
     assert ready.outcome is CookPreparationOutcome.READY
     assert ready.handoff_ref is not None

@@ -10,33 +10,31 @@ never converted into a runnable pointer.
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import re
-import sys
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
-from enum import Enum
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TypeVar, cast
-from easy_cheese_schemas import HandoffPointer
+
 from easy_cheese_schemas.contracts import (
     MAX_ARTIFACT_BYTES,
+    # `contracts` owns the JSON projection canonical bytes already build, so
+    # Mold borrows it instead of round-tripping bytes back through the decoder.
+    _unstructure as unstructure_contract,  # pyright: ignore[reportPrivateUsage]
     AgentWriterView,
     ArtifactRef,
     CurdPlan,
-    EvidenceKind,
     EvidenceRef,
-    IdentityAction,
     IdentityLineage,
     Landing,
     LandingShape,
+    PlannerDisposition,
     PlannerRequest,
     PlannerResult,
     PlannerResultWriterView,
-    SourceLocation,
 )
 from easy_cheese_schemas.mold_cook import (
     MOLD_COOK_APPROVAL_SCHEMA_URI,
@@ -49,37 +47,46 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookApproval,
     MoldCookApprovalDecision,
     MoldCookApprovalKind,
+    MoldCookCoverage,
     MoldCookHandoff,
     MoldCookInputKind,
     MoldCookMode,
 )
 from easy_cheese_schemas.planner import materialize_planner_result
+
+# `schema_runtime` owns typed structuring for every attrs contract but publishes
+# no structuring entry point yet. Mold borrows the private one rather than keep
+# a second field-by-field structuring path.
 from easy_cheese_schemas.schema_runtime import (
+    FORK_TASTE_VERDICT_SCHEMA_URI,
+    TASTE_LEDGER_SCHEMA_URI,
     ContractValidationError,
+    _typed_host as structure_contract_value,  # pyright: ignore[reportPrivateUsage]
     canonical_bytes,
     load_agent_writer_view,
-    supported_version_for,
+    require_contract_version,
     validate_contract,
 )
+from easy_cheese.shared.artifacts import (
+    ArtifactDigestMismatchError,
+    ArtifactResolutionError,
+    resolve_verified_bytes,
+)
+from easy_cheese.shared.bounded_read import BoundedReadOverflow, read_bounded_file
 from easy_cheese.shared.mold_cook_handoff import (
     canonical_mold_cook_proposal,
     evaluate_mold_cook_spec,
     materialize_artifact_ref,
+    publish_mold_cook_handoff,
+    resolve_contract_value,
     validate_mold_cook_approval,
 )
-from easy_cheese.shared.publication import (
-    BoundedReadOverflow,
-    PublicationError,
-    atomic_write,
-    accept_mold_cook_handoff,
-    publish_mold_cook_handoff,
-    read_bounded,
-)
+from easy_cheese.shared.publication import PublicationError, atomic_write
 from easy_cheese.shared.taste_test import (
     MAX_SPEC_BYTES,
     ForkTasteVerdict,
     TasteTestError,
-    parse_spec_frontmatter as _canonical_frontmatter,
+    parse_spec_frontmatter,
     read_spec_text,
     validate_taste_result,
 )
@@ -89,9 +96,7 @@ __all__ = [
     "FinalizationError",
     "FinalizationOutcome",
     "finalize_mold",
-    "main",
     "normalize_planner_result",
-    "normalize_planner_main",
 ]
 
 
@@ -111,7 +116,6 @@ _REQUEST_DIRECTIVE_HEADINGS = re.compile(
     r"(?im)^##\s+(?:request|execution|whole-request)\s+directive\s*$"
 )
 _ContractT = TypeVar("_ContractT")
-_EnumT = TypeVar("_EnumT", bound=Enum)
 
 
 @dataclass(frozen=True)
@@ -163,7 +167,7 @@ class _Persisted:
 
 def _read_json(path: Path) -> object:
     try:
-        raw = read_bounded(path, MAX_ARTIFACT_BYTES)
+        raw = read_bounded_file(path, limit=MAX_ARTIFACT_BYTES)
         decoded = cast(object, json.loads(raw))
         return decoded
     except (
@@ -173,6 +177,15 @@ def _read_json(path: Path) -> object:
         json.JSONDecodeError,
     ) as exc:
         raise FinalizationError(f"could not read JSON artifact {path}: {exc}") from exc
+
+
+def _write_bounded(path: Path, payload: bytes) -> None:
+    """Publish ``payload`` only while it stays inside the artifact size bound."""
+    size = len(payload)
+    if size > MAX_ARTIFACT_BYTES:
+        overflow = f"{size} bytes exceeds {MAX_ARTIFACT_BYTES} bytes"
+        raise FinalizationError(f"could not write artifact {path}: {overflow}")
+    atomic_write(path, payload)
 
 
 def _read_spec_snapshot(path: Path) -> _SpecSnapshot:
@@ -225,103 +238,34 @@ def _section_directive(text: str) -> str | None:
 
 
 def _load_contract(value: object, contract: type[_ContractT]) -> _ContractT:
+    """Validate one supplied contract value through the shared resolver.
+
+    ``resolve_contract_value`` owns every accepted shape and the host version
+    check.  A path a Mold command names is an operator input, not a retained
+    artifact, so it is decoded here through the bounded reader instead of
+    being confined to the artifact root the run retains under.
+    """
+
+    resolved = _read_json(value) if isinstance(value, Path) else value
+    try:
+        return resolve_contract_value(resolved, contract, Path())
+    except ContractValidationError as exc:
+        raise FinalizationError(f"invalid {contract.__name__}: {exc}") from exc
+
+
+def _structured(value: object, contract: type[_ContractT], label: str) -> _ContractT:
+    """Structure one host mapping into a value object through the shared path.
+
+    ``schema_runtime`` already owns typed structuring for every attrs contract,
+    including the nested references these value objects carry, and it names the
+    failing field as a path under ``label``.
+    """
+
     if isinstance(value, contract):
         return value
-    raw: object
-    if isinstance(value, Path):
-        raw = _read_json(value)
-    elif isinstance(value, (str, bytes)):
-        try:
-            raw = cast(object, json.loads(value))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise FinalizationError(
-                f"invalid JSON for {contract.__name__}: {exc}"
-            ) from exc
-    else:
-        raw = value
-    version = supported_version_for(contract)
-    if version is None:
-        raise FinalizationError(
-            f"{contract.__name__} has no supported contract version"
-        )
     try:
-        artifact = validate_contract(raw, contract, version)
+        return structure_contract_value(value, contract, label)
     except (ContractValidationError, TypeError, ValueError) as exc:
-        raise FinalizationError(f"invalid {contract.__name__}: {exc}") from exc
-    return cast(_ContractT, artifact.value)
-
-
-def _artifact_ref(value: object, label: str) -> ArtifactRef:
-    if isinstance(value, ArtifactRef):
-        return value
-    if not isinstance(value, Mapping):
-        raise FinalizationError(f"{label} must be an ArtifactRef object")
-    mapping = cast(Mapping[str, object], value)
-    try:
-        return cast(Callable[..., ArtifactRef], ArtifactRef)(
-            artifact_id=cast(str, mapping["artifact_id"]),
-            role=cast(str, mapping["role"]),
-            uri=cast(str, mapping["uri"]),
-            digest=cast(str, mapping["digest"]),
-            size_bytes=cast(int, mapping["size_bytes"]),
-            media_type=cast(str, mapping["media_type"]),
-            schema_uri=cast(str | None, mapping.get("schema_uri")),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise FinalizationError(f"invalid {label}: {exc}") from exc
-
-
-def _source_location(value: object, label: str) -> SourceLocation | None:
-    if value is None:
-        return None
-    if isinstance(value, SourceLocation):
-        return value
-    if not isinstance(value, Mapping):
-        raise FinalizationError(f"{label} must be a SourceLocation object")
-    mapping = cast(Mapping[str, object], value)
-    try:
-        return cast(Callable[..., SourceLocation], SourceLocation)(
-            artifact_id=cast(str, mapping["artifact_id"]),
-            path=cast(str, mapping["path"]),
-            start_line=cast(int, mapping["start_line"]),
-            end_line=cast(int, mapping["end_line"]),
-            start_column=cast(int | None, mapping.get("start_column")),
-            end_column=cast(int | None, mapping.get("end_column")),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise FinalizationError(f"invalid {label}: {exc}") from exc
-
-
-def _evidence_ref(value: object, label: str) -> EvidenceRef:
-    if isinstance(value, EvidenceRef):
-        return value
-    if not isinstance(value, Mapping):
-        raise FinalizationError(f"{label} must be an EvidenceRef object")
-    mapping = cast(Mapping[str, object], value)
-    try:
-        return cast(Callable[..., EvidenceRef], EvidenceRef)(
-            evidence_id=cast(str, mapping["evidence_id"]),
-            kind=EvidenceKind(cast(str, mapping["kind"])),
-            artifact=_artifact_ref(mapping["artifact"], f"{label}.artifact"),
-            location=_source_location(mapping.get("location"), f"{label}.location"),
-            summary=cast(str | None, mapping.get("summary")),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        raise FinalizationError(f"invalid {label}: {exc}") from exc
-
-
-def _lineage(value: object, label: str) -> IdentityLineage:
-    if isinstance(value, IdentityLineage):
-        return value
-    if not isinstance(value, Mapping):
-        raise FinalizationError(f"{label} must be an IdentityLineage object")
-    mapping = cast(Mapping[str, object], value)
-    try:
-        return cast(Callable[..., IdentityLineage], IdentityLineage)(
-            identity_action=IdentityAction(cast(str, mapping["identity_action"])),
-            source_curd_ids=cast(Sequence[str], mapping.get("source_curd_ids", ())),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
         raise FinalizationError(f"invalid {label}: {exc}") from exc
 
 
@@ -329,6 +273,19 @@ def _source_plan(value: object | None) -> CurdPlan | None:
     if value is None or isinstance(value, CurdPlan):
         return value
     return _load_contract(value, CurdPlan)
+
+
+def _structured_map(
+    values: Mapping[str, object] | None, contract: type[_ContractT], label: str
+) -> dict[str, _ContractT]:
+    """Structure one optional host mapping of contract values under ``label``."""
+
+    if values is None:
+        return {}
+    return {
+        key: _structured(item, contract, f"{label}.{key}")
+        for key, item in values.items()
+    }
 
 
 def normalize_planner_result(
@@ -377,27 +334,9 @@ def normalize_planner_result(
             )
         typed_writer = envelope.payload
 
-    typed_artifacts = (
-        {}
-        if artifacts is None
-        else {
-            key: _artifact_ref(item, f"artifacts.{key}")
-            for key, item in artifacts.items()
-        }
-    )
-    typed_evidence = (
-        {}
-        if evidence is None
-        else {
-            key: _evidence_ref(item, f"evidence.{key}")
-            for key, item in evidence.items()
-        }
-    )
-    typed_lineages = (
-        {}
-        if lineages is None
-        else {key: _lineage(item, f"lineages.{key}") for key, item in lineages.items()}
-    )
+    typed_artifacts = _structured_map(artifacts, ArtifactRef, "artifacts")
+    typed_evidence = _structured_map(evidence, EvidenceRef, "evidence")
+    typed_lineages = _structured_map(lineages, IdentityLineage, "lineages")
     try:
         return materialize_planner_result(
             typed_request,
@@ -413,32 +352,10 @@ def normalize_planner_result(
         raise FinalizationError(f"planner materialization failed: {exc}") from exc
 
 
-def _contained_path(root: Path, *parts: str) -> Path:
-    root_resolved = root.resolve()
-    candidate = (root_resolved.joinpath(*parts)).resolve()
-    try:
-        _ = candidate.relative_to(root_resolved)
-    except ValueError as exc:
-        raise FinalizationError(
-            f"artifact destination escapes artifact root: {candidate}"
-        ) from exc
-    return candidate
-
-
 def _safe_segment(value: str) -> str:
     if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value):
         return value
     return "id-" + hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _write_bytes(path: Path, payload: bytes) -> None:
-    """Bound the payload, then hand the durable write to the shared helper."""
-
-    if len(payload) > MAX_ARTIFACT_BYTES:
-        raise FinalizationError(
-            f"artifact payload exceeds MAX_ARTIFACT_BYTES ({MAX_ARTIFACT_BYTES} bytes)"
-        )
-    atomic_write(path, payload)
 
 
 def _persist(
@@ -448,37 +365,59 @@ def _persist(
     role: str,
     media_type: str,
     schema_uri: str | None = None,
-    suffix: str = ".json",
 ) -> _Persisted:
+    """Retain one artifact through the shared content-addressed store.
+
+    The shared store owns the ``<root>/sha256-<hex>`` layout, the size bound,
+    the digest check, and the private permissions, so an artifact Mold retains
+    resolves through ``resolve_artifact`` and through Cook's path ingress with
+    the same artifact root.
+    """
+
     payload = value if isinstance(value, bytes) else canonical_bytes(value)
     digest = hashlib.sha256(payload).hexdigest()
-    directory = _contained_path(root, "mold-artifacts")
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    path = _contained_path(root, "mold-artifacts", f"{digest}{suffix}")
-    if path.is_symlink():
-        raise FinalizationError(f"artifact destination is a symlink: {path}")
-    if path.exists():
-        try:
-            existing = read_bounded(path, MAX_ARTIFACT_BYTES)
-        except (BoundedReadOverflow, OSError) as exc:
-            raise FinalizationError(
-                f"could not read retained artifact {path}: {exc}"
-            ) from exc
-        if existing != payload:
-            raise FinalizationError(
-                f"content-addressed artifact {path} contains different bytes"
-            )
-    else:
-        _write_bytes(path, payload)
-    reference = materialize_artifact_ref(
-        payload,
-        artifact_id=f"{_safe_segment(role)}-{digest}",
-        role=role,
-        uri=path.as_uri(),
-        media_type=media_type,
-        schema_uri=schema_uri,
-    )
+    retained = root.resolve() / f"sha256-{digest}"
+    identity: dict[str, str] = {
+        "artifact_id": f"{_safe_segment(role)}-{digest}",
+        "role": role,
+        "uri": retained.as_uri(),
+        "media_type": media_type,
+    }
+    reference = materialize_artifact_ref(payload, **identity, schema_uri=schema_uri)
+    try:
+        resolved = resolve_verified_bytes(reference, payload, None, root)
+    except (ArtifactDigestMismatchError, ArtifactResolutionError, OSError) as exc:
+        raise FinalizationError(f"could not retain {role} artifact: {exc}") from exc
+    if Path(resolved.path) != retained:
+        raise FinalizationError(
+            f"retained {role} artifact landed outside the artifact root: {resolved.path}"
+        )
     return _Persisted(reference, value)
+
+
+def _flow_items(body: str) -> list[str]:
+    """Split one YAML flow sequence body on the commas outside quoted items."""
+
+    items: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    for char in body:
+        if quote is not None:
+            if char != quote:
+                current.append(char)
+            else:
+                quote = None
+        elif char in "'\"":
+            quote = char
+        elif char == ",":
+            items.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    if quote is not None:
+        raise FinalizationError("gates_overridden is malformed: unbalanced quote")
+    items.append("".join(current))
+    return items
 
 
 def _gate_item(raw: str) -> str:
@@ -533,7 +472,7 @@ def _gates_overridden(text: str) -> tuple[str, ...]:
             body = inline[1:-1].strip()
             if not body:
                 return ()
-            return tuple(_gate_item(part) for part in body.split(","))
+            return tuple(_gate_item(part) for part in _flow_items(body))
         return (_gate_item(inline),)
     return ()
 
@@ -541,7 +480,7 @@ def _gates_overridden(text: str) -> tuple[str, ...]:
 def _frontmatter(text: str) -> _Frontmatter:
     if not text.startswith("---"):
         raise FinalizationError("spec has no frontmatter")
-    values = _canonical_frontmatter(text)
+    values = parse_spec_frontmatter(text)
     status_value = values.get("status")
     if not isinstance(status_value, str) or status_value not in _ALLOWED_LIFECYCLES:
         raise FinalizationError(
@@ -570,7 +509,7 @@ def _requirement(
     kind: CookRequirementKind,
     description: str,
 ) -> CookUnmetRequirement:
-    return cast(Callable[..., CookUnmetRequirement], CookUnmetRequirement)(
+    return CookUnmetRequirement(
         requirement_id=requirement_id,
         kind=kind,
         description=description,
@@ -578,7 +517,7 @@ def _requirement(
 
 
 def _hold(hold_id: str, kind: CookHoldKind, reason: str) -> CookExecutionHold:
-    return cast(Callable[..., CookExecutionHold], CookExecutionHold)(
+    return CookExecutionHold(
         hold_id=hold_id,
         kind=kind,
         reason=reason,
@@ -602,7 +541,7 @@ def _append_hold(holds: list[CookExecutionHold], item: CookExecutionHold) -> Non
 def _validate_spec_snapshot(snapshot: _SpecSnapshot) -> tuple[list[str], str | None]:
     with tempfile.TemporaryDirectory(prefix=".mold-spec-") as directory:
         candidate = Path(directory) / snapshot.path.name
-        _write_bytes(candidate, snapshot.content)
+        _write_bounded(candidate, snapshot.content)
         return validate_spec(candidate, strict=True)
 
 
@@ -628,58 +567,44 @@ def _check_taste(
 
 
 def _canonical_output(value: object) -> dict[str, object]:
-    raw: object = cast(object, json.loads(canonical_bytes(value)))
+    raw = unstructure_contract(value)
     if not isinstance(raw, dict):
         raise FinalizationError("canonical output must be a JSON object")
     return cast(dict[str, object], raw)
 
 
 def _save_result(root: Path, operation_id: str, output: Mapping[str, object]) -> Path:
-    filename = f"{_safe_segment(operation_id)}.json"
-    path = _contained_path(root, "results", filename)
-    _write_bytes(path, (json.dumps(output, sort_keys=True, indent=2) + "\n").encode())
+    path = root / "results" / f"{_safe_segment(operation_id)}.json"
+    _write_bounded(path, (json.dumps(output, sort_keys=True, indent=2) + "\n").encode())
     return path
 
 
-def _preserve_ready_result(
-    root: Path,
-    operation_id: str,
-    result_path: Path,
-    existing: Mapping[str, object],
-) -> FinalizationOutcome | None:
-    """Preserve a ready result only when its revealed pointer still binds it."""
-    if existing.get("status") != "ready":
+def _host_coverage(
+    proposed: MoldCookCoverage | Mapping[str, object] | Path | None,
+    planner: PlannerResult | None,
+    plan: CurdPlan | None,
+) -> MoldCookCoverage | None:
+    """Return the coverage Mold proposes, never the coverage an approval carries.
+
+    An explicit host value wins.  Otherwise the canonical plan and its planner
+    result are the proposal, so the approval under test supplies only one side
+    of the coverage binding.
+    """
+
+    if proposed is not None:
+        value = _read_json(proposed) if isinstance(proposed, Path) else proposed
+        return _structured(value, MoldCookCoverage, "coverage")
+    if planner is None or plan is None:
         return None
-    pointer_path = _contained_path(
-        root, "pointers", f"{_safe_segment(operation_id)}.json"
-    )
     try:
-        accepted = accept_mold_cook_handoff(pointer_path, artifact_root=root)
-        pointer_version = supported_version_for(HandoffPointer)
-        handoff_version = supported_version_for(MoldCookHandoff)
-        if pointer_version is None or handoff_version is None:
-            return None
-        pointer_artifact = validate_contract(
-            read_bounded(pointer_path, MAX_ARTIFACT_BYTES), HandoffPointer, pointer_version
+        return MoldCookCoverage(
+            curd_ids=tuple(curd.curd_id for curd in plan.curds),
+            unresolved_work=planner.unresolved_work,
         )
-        stored_pointer = validate_contract(
-            canonical_bytes(existing["pointer"]), HandoffPointer, pointer_version
-        )
-        stored_handoff = validate_contract(
-            canonical_bytes(existing["handoff"]), MoldCookHandoff, handoff_version
-        )
-    except (ContractValidationError, OSError, PublicationError, TypeError, ValueError):
-        return None
-    pointer_value = cast(HandoffPointer, pointer_artifact.value)
-    if pointer_value.operation_id != operation_id:
-        return None
-    if pointer_artifact.canonical_bytes != stored_pointer.canonical_bytes:
-        return None
-    if accepted.canonical.canonical_bytes != stored_handoff.canonical_bytes:
-        return None
-    preserved = dict(existing)
-    preserved["result_path"] = str(result_path)
-    return FinalizationOutcome(preserved)
+    except (TypeError, ValueError) as exc:
+        raise FinalizationError(
+            f"host coverage could not be derived from the canonical plan: {exc}"
+        ) from exc
 
 
 def _blocked_outcome(
@@ -688,35 +613,15 @@ def _blocked_outcome(
     *,
     request_id: str,
     input_kind: MoldCookInputKind,
-    references: Sequence[ArtifactRef],
-    holds: Sequence[CookExecutionHold],
-    requirements: Sequence[CookUnmetRequirement],
+    ledger: _GateLedger,
     spec_ref: ArtifactRef,
 ) -> FinalizationOutcome:
     """Save incomplete work as a validated, blocked preparation result."""
-    result_path = _contained_path(
-        artifact_root, "results", f"{_safe_segment(operation_id)}.json"
-    )
-    if result_path.is_file():
-        try:
-            existing = cast(object, json.loads(result_path.read_text(encoding="utf-8")))
-        except (OSError, ValueError):
-            existing = None
-        if isinstance(existing, Mapping):
-            preserved = _preserve_ready_result(
-                artifact_root,
-                operation_id,
-                result_path,
-                cast("Mapping[str, object]", existing),
-            )
-            if preserved is not None:
-                return preserved
-    version = supported_version_for(CookPreparationResult)
-    if version is None:
-        raise FinalizationError(
-            "CookPreparationResult has no supported contract version"
-        )
-    preparation = cast(Callable[..., CookPreparationResult], CookPreparationResult)(
+    references = ledger.references
+    holds = ledger.holds
+    requirements = ledger.requirements
+    version = require_contract_version(CookPreparationResult)
+    preparation = CookPreparationResult(
         contract_version=version,
         request_id=request_id,
         input_kind=input_kind,
@@ -742,51 +647,49 @@ def _blocked_outcome(
     return FinalizationOutcome(output)
 
 
-def finalize_mold(
-    spec_path: Path,
-    *,
-    artifact_root: Path,
-    operation_id: str,
-    request_id: str,
-    input_kind: MoldCookInputKind = MoldCookInputKind.DIRECT_SPEC,
-    mode: MoldCookMode = MoldCookMode.FULL,
-    approval: MoldCookApproval | Mapping[str, object] | Path | None = None,
-    planner_result: PlannerResult | Mapping[str, object] | Path | None = None,
-    plan: CurdPlan | Mapping[str, object] | Path | None = None,
-    taste_result: ForkTasteVerdict | Mapping[str, object] | Path | None = None,
-    decision_ledger: object | None = None,
-    curdle_anyway: bool = False,
-    overrides: Mapping[str, object] | None = None,
-) -> FinalizationOutcome:
-    """Join all Mold authority checks and publish only a ready handoff.
+@dataclass(frozen=True)
+class _ApprovalEvidence:
+    """Typed approval and its retained artifact, when both are available."""
 
-    This function deliberately returns a blocked saved result for incomplete
-    but well-formed work.  Malformed lifecycle or override controls are caller
-    errors and raise ``FinalizationError`` instead of being silently treated as
-    an approval.
-    """
-    if overrides is not None:
-        unknown = set(overrides) - _ALLOWED_OVERRIDE_KEYS
-        if unknown:
-            raise FinalizationError(
-                "unknown finalization override(s): " + ", ".join(sorted(unknown))
-            )
-        curdle_anyway = bool(overrides.get("curdle_anyway", curdle_anyway))
-    artifact_root = artifact_root.resolve()
-    snapshot = _read_spec_snapshot(spec_path)
-    spec_text = snapshot.text
-    frontmatter = snapshot.frontmatter
-    spec_persisted = _persist(
-        artifact_root,
-        value=snapshot.content,
-        role="spec",
-        media_type="text/markdown",
-        suffix=".md",
-    )
-    references: list[ArtifactRef] = [spec_persisted.reference]
-    requirements: list[CookUnmetRequirement] = []
-    holds: list[CookExecutionHold] = []
+    approval: MoldCookApproval | None
+    persisted: _Persisted | None
 
+
+@dataclass(frozen=True)
+class _PlannerArtifacts:
+    """Canonical planner authority and the artifacts retained for it."""
+
+    planner: PlannerResult | None
+    plan: CurdPlan | None
+    planner_persisted: _Persisted | None
+    plan_persisted: _Persisted | None
+
+
+@dataclass(frozen=True)
+class _TasteEvidence:
+    """Retained taste verdict and taste decision ledger artifacts."""
+
+    verdict_persisted: _Persisted | None
+    ledger_persisted: _Persisted | None
+
+
+@dataclass
+class _GateLedger:
+    """Findings the gates append, in gate order."""
+
+    references: list[ArtifactRef] = field(default_factory=list)
+    requirements: list[CookUnmetRequirement] = field(default_factory=list)
+    holds: list[CookExecutionHold] = field(default_factory=list)
+
+    @property
+    def blocked(self) -> bool:
+        """Report whether any gate recorded a requirement or a hold."""
+        return bool(self.requirements or self.holds)
+
+
+def _gate_spec_validation(ledger: _GateLedger, snapshot: _SpecSnapshot) -> None:
+    """Require strict Mold spec validation to pass."""
+    requirements = ledger.requirements
     errors, _notice = _validate_spec_snapshot(snapshot)
     if errors:
         _append_requirement(
@@ -799,6 +702,11 @@ def finalize_mold(
             ),
         )
 
+
+def _gate_lifecycle(ledger: _GateLedger, frontmatter: _Frontmatter) -> None:
+    """Hold work whose declared lifecycle is not a plain approval."""
+    requirements = ledger.requirements
+    holds = ledger.holds
     if frontmatter.status == "draft":
         _append_hold(
             holds,
@@ -834,6 +742,11 @@ def finalize_mold(
             ),
         )
 
+
+def _gate_gate_override(ledger: _GateLedger, frontmatter: _Frontmatter) -> None:
+    """Hold work that declares overridden handshake gates."""
+    requirements = ledger.requirements
+    holds = ledger.holds
     if frontmatter.gates_overridden:
         _append_hold(
             holds,
@@ -852,6 +765,12 @@ def finalize_mold(
                 "unchecked handshake items require explicit follow-up before execution",
             ),
         )
+
+
+def _gate_curdle_anyway(ledger: _GateLedger, *, curdle_anyway: bool) -> None:
+    """Hold work saved through the curdle-anyway escape hatch."""
+    requirements = ledger.requirements
+    holds = ledger.holds
     if curdle_anyway:
         _append_hold(
             holds,
@@ -869,6 +788,12 @@ def finalize_mold(
                 "the agent coherence key was overridden; complete the named checks before execution",
             ),
         )
+
+
+def _gate_user_directive(ledger: _GateLedger, frontmatter: _Frontmatter) -> None:
+    """Hold work whose whole-request directive blocks execution."""
+    requirements = ledger.requirements
+    holds = ledger.holds
     if frontmatter.request_directive is not None:
         _append_hold(
             holds,
@@ -891,6 +816,22 @@ def finalize_mold(
             ),
         )
 
+
+def _gate_approval_evidence(
+    ledger: _GateLedger,
+    *,
+    approval: MoldCookApproval | Mapping[str, object] | Path | None,
+    artifact_root: Path,
+    request_id: str,
+    spec_digest: str,
+) -> _ApprovalEvidence:
+    """Load, retain, and bind explicit approval evidence.
+
+    Missing, unreadable, or unbound approval evidence is an unmet requirement,
+    never a raised error.
+    """
+    requirements = ledger.requirements
+    references = ledger.references
     typed_approval: MoldCookApproval | None = None
     approval_persisted: _Persisted | None = None
     if approval is None:
@@ -913,7 +854,6 @@ def finalize_mold(
                 schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
             )
             references.append(approval_persisted.reference)
-            _ = validate_mold_cook_approval(typed_approval, artifact_root=artifact_root)
         except (
             FinalizationError,
             ContractValidationError,
@@ -940,7 +880,7 @@ def finalize_mold(
                     "approval request identity does not match the finalization request",
                 ),
             )
-        if typed_approval.spec_digest != spec_persisted.reference.digest:
+        if typed_approval.spec_digest != spec_digest:
             _append_requirement(
                 requirements,
                 _requirement(
@@ -958,7 +898,24 @@ def finalize_mold(
                     "only an explicit approved response can authorize execution",
                 ),
             )
+    return _ApprovalEvidence(typed_approval, approval_persisted)
 
+
+def _gate_planner_artifacts(
+    ledger: _GateLedger,
+    *,
+    mode: MoldCookMode,
+    planner_result: PlannerResult | Mapping[str, object] | Path | None,
+    plan: CurdPlan | Mapping[str, object] | Path | None,
+    artifact_root: Path,
+) -> _PlannerArtifacts:
+    """Materialize and retain the planner authority the tier requires.
+
+    Invalid or absent planner artifacts are unmet requirements, never raised
+    errors.
+    """
+    requirements = ledger.requirements
+    references = ledger.references
     typed_planner: PlannerResult | None = None
     typed_plan: CurdPlan | None = None
     planner_persisted: _Persisted | None = None
@@ -1030,7 +987,22 @@ def finalize_mold(
                 "Light-tier work must not carry planner artifacts",
             ),
         )
+    return _PlannerArtifacts(
+        typed_planner, typed_plan, planner_persisted, plan_persisted
+    )
 
+
+def _gate_taste(
+    ledger: _GateLedger,
+    *,
+    spec_text: str,
+    taste_result: ForkTasteVerdict | Mapping[str, object] | Path | None,
+    decision_ledger: object | None,
+    artifact_root: Path,
+) -> _TasteEvidence:
+    """Validate and retain the taste verdict and its decision ledger."""
+    requirements = ledger.requirements
+    references = ledger.references
     taste_verdict, taste_reason = _check_taste(spec_text, taste_result, decision_ledger)
     taste_persisted: _Persisted | None = None
     taste_ledger_persisted: _Persisted | None = None
@@ -1044,7 +1016,7 @@ def finalize_mold(
             taste_persisted = _persist(
                 artifact_root,
                 value=taste_verdict.to_dict(),
-                schema_uri="https://schemas.easy-cheese.dev/taste-verdict",
+                schema_uri=FORK_TASTE_VERDICT_SCHEMA_URI,
                 role="taste_verdict",
                 media_type="application/json",
             )
@@ -1077,7 +1049,7 @@ def finalize_mold(
             taste_ledger_persisted = _persist(
                 artifact_root,
                 value=ledger_value,
-                schema_uri="https://schemas.easy-cheese.dev/taste-ledger",
+                schema_uri=TASTE_LEDGER_SCHEMA_URI,
                 role="taste_ledger",
                 media_type="application/json",
             )
@@ -1091,28 +1063,41 @@ def finalize_mold(
                     f"taste decision ledger could not be retained: {exc}",
                 ),
             )
+    return _TasteEvidence(taste_persisted, taste_ledger_persisted)
 
-    landing: Landing | None = None
+
+def _gate_landing(
+    ledger: _GateLedger,
+    *,
+    snapshot: _SpecSnapshot,
+    spec_ref: ArtifactRef,
+    lifecycle: str,
+    planner: _PlannerArtifacts,
+    taste: _TasteEvidence,
+) -> Landing | None:
+    """Read the spec's landing declaration through the shared evaluator."""
+    requirements = ledger.requirements
+    holds = ledger.holds
+    bound_taste = (
+        taste.verdict_persisted is not None and taste.ledger_persisted is not None
+    )
     try:
         readiness = evaluate_mold_cook_spec(
             snapshot.content,
-            spec_ref=spec_persisted.reference,
-            plan=typed_plan,
-            lifecycle=frontmatter.status,
+            spec_ref=spec_ref,
+            plan=planner.plan,
+            lifecycle=lifecycle,
             taste_verdict_ref=(
-                taste_persisted.reference
-                if taste_persisted is not None and taste_ledger_persisted is not None
+                taste.verdict_persisted.reference
+                if bound_taste and taste.verdict_persisted is not None
                 else None
             ),
             taste_ledger_ref=(
-                taste_ledger_persisted.reference
-                if taste_persisted is not None and taste_ledger_persisted is not None
+                taste.ledger_persisted.reference
+                if bound_taste and taste.ledger_persisted is not None
                 else None
             ),
             holds=holds,
-        )
-        landing = readiness.landing or cast(Callable[..., Landing], Landing)(
-            shape=LandingShape.SINGLE
         )
     except (ContractValidationError, TypeError, ValueError) as exc:
         _append_requirement(
@@ -1121,15 +1106,79 @@ def finalize_mold(
                 "landing-declaration", CookRequirementKind.INTEGRITY, str(exc)
             ),
         )
+        return None
+    return readiness.landing or Landing(shape=LandingShape.SINGLE)
 
-    coverage = typed_approval.coverage if typed_approval is not None else None
-    if coverage is None:
+
+def expected_plan_approval_kind(planner: PlannerResult) -> MoldCookApprovalKind:
+    """Name the approval kind one Full-tier planner disposition requires.
+
+    The shared seam owns the same test for Cook and for the handoff validator.
+    This copy stays in Mold until a wave may edit ``shared/`` and host one.
+    """
+
+    return (
+        MoldCookApprovalKind.PARTIAL_PLAN
+        if planner.disposition is PlannerDisposition.PARTIAL
+        else MoldCookApprovalKind.PLAN
+    )
+
+
+def _gate_host_coverage(
+    ledger: _GateLedger,
+    *,
+    proposed: MoldCookCoverage | Mapping[str, object] | Path | None,
+    planner: _PlannerArtifacts,
+) -> MoldCookCoverage | None:
+    """Derive the host coverage proposal, blocking on a malformed input.
+
+    Host coverage is evidence, not a lifecycle control, so a value that cannot
+    be read becomes an unmet requirement instead of a raised error.
+    """
+    try:
+        return _host_coverage(proposed, planner.planner, planner.plan)
+    except (FinalizationError, OSError) as exc:
+        _append_requirement(
+            ledger.requirements,
+            _requirement(
+                "host-coverage",
+                CookRequirementKind.SCOPE,
+                f"host-proposed scope coverage is unreadable or malformed: {exc}",
+            ),
+        )
+        return None
+
+
+def _gate_coverage(
+    ledger: _GateLedger,
+    *,
+    mode: MoldCookMode,
+    coverage: MoldCookCoverage | None,
+    approval: _ApprovalEvidence,
+    planner: _PlannerArtifacts,
+    landing: Landing | None,
+) -> None:
+    """Check the host-proposed coverage against the tier and the plan."""
+    requirements = ledger.requirements
+    typed_approval = approval.approval
+    typed_planner = planner.planner
+    typed_plan = planner.plan
+    if typed_approval is None:
         _append_requirement(
             requirements,
             _requirement(
                 "scope-approval",
                 CookRequirementKind.SCOPE,
                 "approved scope coverage is required before finalization",
+            ),
+        )
+    if coverage is None:
+        _append_requirement(
+            requirements,
+            _requirement(
+                "host-coverage",
+                CookRequirementKind.SCOPE,
+                "host-proposed scope coverage is required before finalization",
             ),
         )
     elif mode is MoldCookMode.LIGHT:
@@ -1164,11 +1213,7 @@ def finalize_mold(
                 ),
             )
     elif typed_planner is not None and typed_plan is not None:
-        expected_kind = (
-            MoldCookApprovalKind.PARTIAL_PLAN
-            if typed_planner.disposition.value == "partial"
-            else MoldCookApprovalKind.PLAN
-        )
+        expected_kind = expected_plan_approval_kind(typed_planner)
         if typed_approval is None or typed_approval.kind is not expected_kind:
             _append_requirement(
                 requirements,
@@ -1191,21 +1236,19 @@ def finalize_mold(
             )
         if landing is not None:
             declared_ids = tuple(curd.curd_id for curd in typed_plan.curds)
-            if landing.shape is LandingShape.SINGLE:
-                expected_landing = set(declared_ids)
-            else:
+            if landing.shape is not LandingShape.SINGLE:
                 expected_landing = {
                     curd_id for layer in landing.layers for curd_id in layer
                 }
-            if expected_landing != set(declared_ids):
-                _append_requirement(
-                    requirements,
-                    _requirement(
-                        "landing-coverage",
-                        CookRequirementKind.INTEGRITY,
-                        "landing coverage must cover exactly the canonical plan curds",
-                    ),
-                )
+                if expected_landing != set(declared_ids):
+                    _append_requirement(
+                        requirements,
+                        _requirement(
+                            "landing-coverage",
+                            CookRequirementKind.INTEGRITY,
+                            "landing coverage must cover exactly the canonical plan curds",
+                        ),
+                    )
             if not set(coverage.curd_ids).issubset(set(declared_ids)):
                 _append_requirement(
                     requirements,
@@ -1225,40 +1268,70 @@ def finalize_mold(
             ),
         )
 
-    if typed_approval is not None and coverage is not None:
+
+def _gate_coverage_binding(
+    ledger: _GateLedger,
+    *,
+    approval: _ApprovalEvidence,
+    coverage: MoldCookCoverage | None,
+) -> None:
+    """Require the approved coverage to still equal the host proposal."""
+    requirements = ledger.requirements
+    typed_approval = approval.approval
+    if (
+        typed_approval is not None
+        and coverage is not None
+        and typed_approval.coverage != coverage
+    ):
+        _append_requirement(
+            requirements,
+            _requirement(
+                "coverage-binding",
+                CookRequirementKind.INTEGRITY,
+                "approval coverage changed during finalization",
+            ),
+        )
+
+
+def _gate_approval_envelope(
+    ledger: _GateLedger,
+    *,
+    mode: MoldCookMode,
+    request_id: str,
+    spec_digest: str,
+    coverage: MoldCookCoverage | None,
+    approval: _ApprovalEvidence,
+    planner: _PlannerArtifacts,
+    artifact_root: Path,
+) -> None:
+    """Bind the approval to the canonical proposal envelope and revalidate it."""
+    requirements = ledger.requirements
+    typed_approval = approval.approval
+    if typed_approval is None:
+        return
+    typed_planner = planner.planner
+    typed_plan = planner.plan
+    expected_proposal: bytes | None = None
+    if coverage is not None:
         proposal_kind: MoldCookApprovalKind | None = None
         proposal_planner: PlannerResult | None = None
         proposal_plan_digest: str | None = None
         if mode is MoldCookMode.LIGHT:
             proposal_kind = MoldCookApprovalKind.SCOPE
         elif typed_planner is not None and typed_plan is not None:
-            proposal_kind = (
-                MoldCookApprovalKind.PARTIAL_PLAN
-                if typed_planner.disposition.value == "partial"
-                else MoldCookApprovalKind.PLAN
-            )
+            proposal_kind = expected_plan_approval_kind(typed_planner)
             proposal_planner = typed_planner
             proposal_plan_digest = typed_plan.digest
         if proposal_kind is not None:
             try:
-                proposal = canonical_mold_cook_proposal(
+                expected_proposal = canonical_mold_cook_proposal(
                     request_id=request_id,
                     kind=proposal_kind,
-                    spec_digest=spec_persisted.reference.digest,
+                    spec_digest=spec_digest,
                     coverage=coverage,
                     planner_result=proposal_planner,
                     plan_digest=proposal_plan_digest,
                 )
-                expected_digest = "sha256:" + hashlib.sha256(proposal).hexdigest()
-                if typed_approval.proposal_digest != expected_digest:
-                    _append_requirement(
-                        requirements,
-                        _requirement(
-                            "approval-proposal",
-                            CookRequirementKind.INTEGRITY,
-                            "approval proposal is not the canonical envelope for this handoff",
-                        ),
-                    )
             except (ContractValidationError, TypeError, ValueError) as exc:
                 _append_requirement(
                     requirements,
@@ -1268,51 +1341,91 @@ def finalize_mold(
                         f"canonical approval proposal could not be built: {exc}",
                     ),
                 )
-
-    if requirements or holds:
-        return _blocked_outcome(
-            artifact_root,
-            operation_id,
-            request_id=request_id,
-            input_kind=input_kind,
-            references=references,
-            holds=holds,
-            requirements=requirements,
-            spec_ref=spec_persisted.reference,
+            else:
+                expected_digest = (
+                    "sha256:" + hashlib.sha256(expected_proposal).hexdigest()
+                )
+                if typed_approval.proposal_digest != expected_digest:
+                    _append_requirement(
+                        requirements,
+                        _requirement(
+                            "approval-proposal",
+                            CookRequirementKind.INTEGRITY,
+                            "approval proposal is not the canonical envelope for this handoff",
+                        ),
+                    )
+    # The shared validator binds the PLAN and PARTIAL_PLAN kinds only when
+    # the host hands it the envelope those kinds cannot rebuild alone.
+    try:
+        _ = validate_mold_cook_approval(
+            typed_approval,
+            artifact_root=artifact_root,
+            expected_proposal=expected_proposal,
+        )
+    except (ContractValidationError, OSError, TypeError, ValueError) as exc:
+        _append_requirement(
+            requirements,
+            _requirement(
+                "approval-evidence",
+                CookRequirementKind.APPROVAL,
+                f"explicit approval evidence is missing, unreadable, or stale: {exc}",
+            ),
         )
 
+
+def _finalize_publication(
+    artifact_root: Path,
+    operation_id: str,
+    *,
+    request_id: str,
+    input_kind: MoldCookInputKind,
+    mode: MoldCookMode,
+    spec_ref: ArtifactRef,
+    approval: _ApprovalEvidence,
+    planner: _PlannerArtifacts,
+    taste: _TasteEvidence,
+    coverage: MoldCookCoverage | None,
+    ledger: _GateLedger,
+) -> FinalizationOutcome:
+    """Publish the canonical handoff once every gate has cleared.
+
+    A gap here is a host defect, not incomplete work, so a missing artifact
+    raises.  Only a failed publication degrades to a blocked saved result.
+    """
+    requirements = ledger.requirements
+    typed_approval = approval.approval
+    approval_persisted = approval.persisted
     if typed_approval is None or approval_persisted is None:
         raise FinalizationError("ready finalization requires approval evidence")
-    if mode is MoldCookMode.FULL and (
-        typed_planner is None
-        or typed_plan is None
-        or planner_persisted is None
-        or plan_persisted is None
-    ):
-        raise FinalizationError(
-            "ready Full-tier finalization requires planner artifacts"
-        )
-
-    assert approval_persisted is not None
-    assert coverage is not None
     planner_ref: ArtifactRef | None = None
     plan_ref: ArtifactRef | None = None
     if mode is MoldCookMode.FULL:
-        assert planner_persisted is not None
-        assert plan_persisted is not None
+        planner_persisted = planner.planner_persisted
+        plan_persisted = planner.plan_persisted
+        if (
+            planner.planner is None
+            or planner.plan is None
+            or planner_persisted is None
+            or plan_persisted is None
+        ):
+            raise FinalizationError(
+                "ready Full-tier finalization requires planner artifacts"
+            )
         planner_ref = planner_persisted.reference
         plan_ref = plan_persisted.reference
-    handoff_version = supported_version_for(MoldCookHandoff)
-    if handoff_version is None:
-        raise FinalizationError("MoldCookHandoff has no supported contract version")
-    assert taste_persisted is not None
-    assert taste_ledger_persisted is not None
-    handoff = cast(Callable[..., MoldCookHandoff], MoldCookHandoff)(
+    handoff_version = require_contract_version(MoldCookHandoff)
+    taste_persisted = taste.verdict_persisted
+    taste_ledger_persisted = taste.ledger_persisted
+    if coverage is None or taste_persisted is None or taste_ledger_persisted is None:
+        raise FinalizationError(
+            "ready finalization requires coverage and retained taste evidence"
+        )
+    handoff = MoldCookHandoff(
         contract_version=handoff_version,
         request_id=request_id,
         input_kind=input_kind,
         mode=mode,
-        spec_ref=spec_persisted.reference,
+        spec_ref=spec_ref,
         approval_ref=approval_persisted.reference,
         coverage=coverage,
         planner_result_ref=planner_ref,
@@ -1323,14 +1436,16 @@ def finalize_mold(
         setup_evidence_refs=(),
     )
     try:
-        digest = "sha256:" + hashlib.sha256(canonical_bytes(handoff)).hexdigest()
+        canonical = canonical_bytes(handoff)
+        digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
         published = publish_mold_cook_handoff(
             handoff,
             request_digest=digest,
             operation_id=operation_id,
             artifact_root=artifact_root,
+            canonical=canonical,
         )
-    except (ContractValidationError, OSError, PublicationError, TypeError, ValueError) as exc:
+    except (ContractValidationError, PublicationError, TypeError, ValueError) as exc:
         _append_requirement(
             requirements,
             _requirement(
@@ -1344,10 +1459,8 @@ def finalize_mold(
             operation_id,
             request_id=request_id,
             input_kind=input_kind,
-            references=references,
-            holds=holds,
-            requirements=requirements,
-            spec_ref=spec_persisted.reference,
+            ledger=ledger,
+            spec_ref=spec_ref,
         )
 
     pointer = _canonical_output(published.pointer)
@@ -1369,133 +1482,122 @@ def finalize_mold(
     return FinalizationOutcome(output)
 
 
-def _write_json_output(value: object, output: Path | None) -> None:
-    text = json.dumps(value, sort_keys=True, indent=2) + "\n"
-    if output is None:
-        _ = sys.stdout.write(text)
-    else:
-        _write_bytes(output, text.encode())
-        _ = sys.stdout.write(text)
+def finalize_mold(
+    spec_path: Path,
+    *,
+    artifact_root: Path,
+    operation_id: str,
+    request_id: str,
+    input_kind: MoldCookInputKind = MoldCookInputKind.DIRECT_SPEC,
+    mode: MoldCookMode = MoldCookMode.FULL,
+    approval: MoldCookApproval | Mapping[str, object] | Path | None = None,
+    planner_result: PlannerResult | Mapping[str, object] | Path | None = None,
+    plan: CurdPlan | Mapping[str, object] | Path | None = None,
+    proposed_coverage: MoldCookCoverage | Mapping[str, object] | Path | None = None,
+    taste_result: ForkTasteVerdict | Mapping[str, object] | Path | None = None,
+    decision_ledger: object | None = None,
+    curdle_anyway: bool = False,
+    overrides: Mapping[str, object] | None = None,
+) -> FinalizationOutcome:
+    """Join all Mold authority checks and publish only a ready handoff.
 
-
-def normalize_planner_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        prog="normalize-planner",
-        description="Materialize a planner writer envelope into a canonical PlannerResult.",
+    Each gate appends to the ledger in a fixed order instead of raising, so
+    incomplete but well-formed work returns a blocked saved result.  Malformed
+    lifecycle or override controls raise ``FinalizationError``.
+    """
+    if overrides is not None:
+        unknown = set(overrides) - _ALLOWED_OVERRIDE_KEYS
+        if unknown:
+            raise FinalizationError(
+                "unknown finalization override(s): " + ", ".join(sorted(unknown))
+            )
+        curdle_anyway = bool(overrides.get("curdle_anyway", curdle_anyway))
+    artifact_root = artifact_root.resolve()
+    snapshot = _read_spec_snapshot(spec_path)
+    frontmatter = snapshot.frontmatter
+    spec_ref = _persist(
+        artifact_root,
+        value=snapshot.content,
+        role="spec",
+        media_type="text/markdown",
+    ).reference
+    ledger = _GateLedger(references=[spec_ref])
+    _gate_spec_validation(ledger, snapshot)
+    _gate_lifecycle(ledger, frontmatter)
+    _gate_gate_override(ledger, frontmatter)
+    _gate_curdle_anyway(ledger, curdle_anyway=curdle_anyway)
+    _gate_user_directive(ledger, frontmatter)
+    approval_evidence = _gate_approval_evidence(
+        ledger,
+        approval=approval,
+        artifact_root=artifact_root,
+        request_id=request_id,
+        spec_digest=spec_ref.digest,
     )
-    _ = parser.add_argument("writer", type=Path)
-    _ = parser.add_argument("--request", required=True, type=Path)
-    _ = parser.add_argument("--invocation", required=True, type=Path)
-    _ = parser.add_argument("--output", type=Path)
-    args = parser.parse_args(argv)
-    try:
-        writer_raw = _read_json(cast(Path, args.writer))
-        request_raw = _read_json(cast(Path, args.request))
-        invocation = _read_json(cast(Path, args.invocation))
-        if not isinstance(invocation, Mapping):
-            raise FinalizationError("invocation must be a JSON object")
-        invocation_mapping = cast(Mapping[str, object], invocation)
-        host_raw = invocation_mapping.get("planner", invocation_mapping)
-        if not isinstance(host_raw, Mapping):
-            raise FinalizationError("invocation.planner must be a JSON object")
-        host = cast(Mapping[str, object], host_raw)
-        plan_id_raw = host.get("plan_id")
-        curd_ids_raw = host.get("curd_ids")
-        if not isinstance(plan_id_raw, str) or not plan_id_raw.strip():
-            raise FinalizationError("invocation.plan_id is required")
-        if not isinstance(curd_ids_raw, Mapping):
-            raise FinalizationError("invocation.curd_ids is required")
-        if not isinstance(request_raw, Mapping) or not isinstance(writer_raw, Mapping):
-            raise FinalizationError("request and writer must be JSON objects")
-        result = normalize_planner_result(
-            cast(Mapping[str, object], request_raw),
-            cast(Mapping[str, object], writer_raw),
-            plan_id=plan_id_raw,
-            curd_ids={
-                cast(str, key): cast(str, value)
-                for key, value in cast(Mapping[object, object], curd_ids_raw).items()
-            },
-            artifacts=cast(Mapping[str, object] | None, host.get("artifacts")),
-            evidence=cast(Mapping[str, object] | None, host.get("evidence")),
-            lineages=cast(Mapping[str, object] | None, host.get("lineages")),
-            source_plan=cast(
-                CurdPlan | Mapping[str, object] | Path | None,
-                host.get("source_plan"),
-            ),
-        )
-        _write_json_output(_canonical_output(result), cast(Path | None, args.output))
-        return 0
-    except (
-        FinalizationError,
-        OSError,
-        TypeError,
-        ValueError,
-        json.JSONDecodeError,
-    ) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-
-
-def _parse_enum(value: str, enum: type[_EnumT], label: str) -> _EnumT:
-    try:
-        return enum(value)
-    except ValueError as exc:
-        raise FinalizationError(f"invalid {label}: {value!r}") from exc
-
-
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        prog="finalize",
-        description="Finalize a Mold spec and publish only a consumer-valid handoff.",
+    planner_artifacts = _gate_planner_artifacts(
+        ledger,
+        mode=mode,
+        planner_result=planner_result,
+        plan=plan,
+        artifact_root=artifact_root,
     )
-    _ = parser.add_argument("spec", type=Path)
-    _ = parser.add_argument("--approval", type=Path)
-    _ = parser.add_argument("--artifact-root", required=True, type=Path)
-    _ = parser.add_argument("--operation-id", required=True)
-    _ = parser.add_argument("--request-id", required=True)
-    _ = parser.add_argument("--input-kind", default=MoldCookInputKind.DIRECT_SPEC.value)
-    _ = parser.add_argument("--mode", default=MoldCookMode.FULL.value)
-    _ = parser.add_argument("--planner-result", type=Path)
-    _ = parser.add_argument("--plan", type=Path)
-    _ = parser.add_argument("--taste-result", type=Path)
-    _ = parser.add_argument("--ledger", type=Path)
-    _ = parser.add_argument("--curdle-anyway", action="store_true")
-    args = parser.parse_args(argv)
-    try:
-        taste_path = cast(Path | None, args.taste_result)
-        ledger_path = cast(Path | None, args.ledger)
-        taste: object | None = None if taste_path is None else _read_json(taste_path)
-        ledger: object | None = None if ledger_path is None else _read_json(ledger_path)
-        outcome = finalize_mold(
-            cast(Path, args.spec),
-            artifact_root=cast(Path, args.artifact_root),
-            operation_id=cast(str, args.operation_id),
-            request_id=cast(str, args.request_id),
-            input_kind=_parse_enum(
-                cast(str, args.input_kind), MoldCookInputKind, "input kind"
-            ),
-            mode=_parse_enum(cast(str, args.mode), MoldCookMode, "mode"),
-            approval=cast(Path | None, args.approval),
-            planner_result=cast(Path | None, args.planner_result),
-            plan=cast(Path | None, args.plan),
-            taste_result=cast(
-                ForkTasteVerdict | Mapping[str, object] | Path | None, taste
-            ),
-            decision_ledger=ledger,
-            curdle_anyway=cast(bool, args.curdle_anyway),
+    taste_evidence = _gate_taste(
+        ledger,
+        spec_text=snapshot.text,
+        taste_result=taste_result,
+        decision_ledger=decision_ledger,
+        artifact_root=artifact_root,
+    )
+    landing = _gate_landing(
+        ledger,
+        snapshot=snapshot,
+        spec_ref=spec_ref,
+        lifecycle=frontmatter.status,
+        planner=planner_artifacts,
+        taste=taste_evidence,
+    )
+    coverage = _gate_host_coverage(
+        ledger, proposed=proposed_coverage, planner=planner_artifacts
+    )
+    _gate_coverage(
+        ledger,
+        mode=mode,
+        coverage=coverage,
+        approval=approval_evidence,
+        planner=planner_artifacts,
+        landing=landing,
+    )
+    _gate_coverage_binding(ledger, approval=approval_evidence, coverage=coverage)
+    _gate_approval_envelope(
+        ledger,
+        mode=mode,
+        request_id=request_id,
+        spec_digest=spec_ref.digest,
+        coverage=coverage,
+        approval=approval_evidence,
+        planner=planner_artifacts,
+        artifact_root=artifact_root,
+    )
+
+    if ledger.blocked:
+        return _blocked_outcome(
+            artifact_root,
+            operation_id,
+            request_id=request_id,
+            input_kind=input_kind,
+            ledger=ledger,
+            spec_ref=spec_ref,
         )
-        _write_json_output(outcome.to_dict(), None)
-        return 0
-    except (
-        FinalizationError,
-        OSError,
-        TypeError,
-        ValueError,
-        json.JSONDecodeError,
-    ) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    return _finalize_publication(
+        artifact_root,
+        operation_id,
+        request_id=request_id,
+        input_kind=input_kind,
+        mode=mode,
+        spec_ref=spec_ref,
+        approval=approval_evidence,
+        planner=planner_artifacts,
+        taste=taste_evidence,
+        coverage=coverage,
+        ledger=ledger,
+    )
