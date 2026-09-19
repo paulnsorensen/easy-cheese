@@ -18,7 +18,7 @@ Ceremony scales to the job. The Bounds pass picks one of three tiers from `refer
 5. **Plan for approval** — run the fresh-context fork-coherence taste test with `python3 skills/mold/scripts/mold.pyz taste-test` and persist its digest-bound pass; a failure reopens only named forks, and the third failed verdict stops. Light with one expected curd stops here: no planner; finalize the bounded spec with `python3 skills/mold/scripts/mold.pyz finalize` and retain its canonical `HandoffPointer`. Otherwise dispatch a typed `PlannerRequest`, validate its `PlannerResultWriterView` (one retry, then stop before the handshake), normalize on the host, and persist only the typed `PlannerResult` and `CurdPlan`. Present the plan's semantic curds and waves at the handshake. See `references/curdle.md` § "Pre-approval typed planner dispatch".
 6. **Two-key handshake** — Before extraction, the user and agent must agree to the draft spec and displayed typed plan. The user provides an explicit verb. The agent performs a coherence self-check. Neither key changes nor disappears. See `references/handshake.md`.
 7. **Curdle** — Resolve the durable spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>)`. Phase one writes the local artifact and write-ahead prepared state before any external call. It writes the approved spec at `"$SPEC"`. It also writes the host-validated `PlannerResult` and `CurdPlan`. It also writes local issue drafts and the session's non-obvious decisions as durable ADRs. Phase two publishes approved follow-ups. Retain the prepared recovery state when an external capability is unavailable or publication fails. Phase two reconciles their state and references into the durable spec before any handoff. The resolved spec path is internal; Cook receives only the finalizer's canonical `HandoffPointer`.
-8. **Finalize and hand off** — after reconciliation, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md). Finalize through `python3 skills/mold/scripts/mold.pyz finalize` and keep its consumer-valid `HandoffPointer` path. Full and Light both hand that pointer to Cook. Prompt through `## Handoff`. Dispatch only the user's non-stop selection.
+8. **Finalize and hand off** — after reconciliation, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md), then finalize through `## Handoff`. Full and Light both hand that pointer to Cook. Dispatch only the user's non-stop selection.
 
 Portability: [rules](../cheese/references/harness-portability.md). Slash commands are host renderings, not the control model.
 
@@ -41,7 +41,7 @@ Mode definitions, exit criteria, and user knobs: `references/modes.md`. Trigger 
 
 ## Agent-invoked mini-spec mode
 
-`/cheese`'s tier-1 escalation calls `/mold` after the call site passes all cook fast-path checks, and the Quick tier enters the same mode after its one confirm. It produces a spec without design dialogue. This mode skips the rest of the Flow above. Derive a slug. Write the mini-spec. Parse its declared gate applicability. Finalize with `python3 skills/mold/scripts/mold.pyz finalize` and return its canonical `HandoffPointer` to Cook. Append `--hard` when the user passed it.
+`/cheese`'s tier-1 escalation calls `/mold` after the call site passes all cook fast-path checks, and the Quick tier enters the same mode after its one confirm. It produces a spec without design dialogue. This mode skips the rest of the Flow above. Derive a slug. Write the mini-spec. Parse its declared gate applicability. Finalize through `## Handoff` and return its canonical `HandoffPointer` to Cook. Append `--hard` when the user passed it.
 
 The two-key handshake does not run in this mode. The agent-introduced-scope check still runs implicitly. Every distinguishing noun must come from the user's input or tier-2 `/culture`/`/briesearch` synthesis. Never add one silently.
 
@@ -119,7 +119,7 @@ See `../hard-cheese/references/composition.md`.
 
 **Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
 
-After Curdle's phase two finishes, run `python3 skills/mold/scripts/mold.pyz curd-count`. Then run `python3 skills/mold/scripts/mold.pyz finalize`. Prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)). Approved `red-required` behavior recommends handing the canonical `HandoffPointer` to `/cook --auto`. Keep the applicability, contract, and taste metadata unchanged. Append `--hard` when the user passed it. Never pre-select.
+After Curdle's phase two finishes, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md) for the blast-radius digest. Finalize with `python3 skills/mold/scripts/mold.pyz finalize` and keep its consumer-valid canonical `HandoffPointer` path; `finalize` does not require `curd-count` first. Prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)). Approved `red-required` behavior recommends handing the canonical `HandoffPointer` to `/cook --auto`. Keep the applicability, contract, and taste metadata unchanged. Append `--hard` when the user passed it. Never pre-select.
 
 The digest's `mode` is orientation, not a skill. Render the fixed blast-radius menu from `decomposable`, `candidate_curds`, `verdict`, and `mode`; see `references/handoff-menus.md`.
 

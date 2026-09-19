@@ -22,6 +22,14 @@ from attrs import define
 
 from easy_cheese_schemas.contracts import ArtifactRef, MAX_ARTIFACT_BYTES
 
+from easy_cheese.shared.bounded_read import (
+    BoundedReadOverflow,
+    NotRegularFileError,
+    read_bounded_descriptor,
+    read_bounded_file,
+    read_bounded_stream,
+)
+
 __all__ = [
     "MAX_ARTIFACT_BYTES",
     "ArtifactDigestMismatchError",
@@ -32,11 +40,10 @@ __all__ = [
     "resolve_file_path",
     "resolve_verified_bytes",
     "restrict_local_path",
+    "restrict_open_file",
 ]
 
 SchemaValidator = Callable[[bytes, str], None]
-
-_READ_CHUNK_BYTES = 64 * 1024
 
 # A retained artifact is named `sha256-<hex>` with no extension by design, so
 # no extension-based reader can type it.
@@ -128,9 +135,13 @@ def resolve_verified_bytes(
     artifact_directory: str | Path,
     schema_validator: SchemaValidator | None = None,
 ) -> ResolvedAgentArtifact:
-    _validate_integrity(artifact, content, detected_type)
+    # The content digest is the integrity check, the retained file name, and
+    # the snapshot identity, so it is derived once and threaded through.
+    digest = hashlib.sha256(content).digest()
+    _validate_integrity(artifact, content, detected_type, digest)
     _validate_schema(artifact, content, schema_validator)
-    path = _retain_verified_bytes(content, artifact_directory)
+    directory = _prepare_artifact_directory(artifact_directory)
+    path = _retain_verified_bytes(content, directory, digest)
     return _agent_view(artifact, path, content)
 
 
@@ -253,24 +264,20 @@ def _read_local(
     path: Path,
     expected_size: int,
 ) -> tuple[bytes, str | None]:
-    flags = (
-        os.O_RDONLY
-        | getattr(os, "O_BINARY", 0)
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
-    )
-    fd: int | None = None
+    _require_artifact_size(expected_size)
     try:
-        fd = os.open(path, flags)
-        content = _read_descriptor(fd, expected_size, path)
-    except ArtifactResolutionError:
-        raise
+        content = read_bounded_file(path, limit=expected_size)
+    except NotRegularFileError as exc:
+        raise ArtifactResolutionError(
+            f"artifact is not a regular file: {path}"
+        ) from exc
+    except BoundedReadOverflow as exc:
+        raise ArtifactResolutionError(
+            f"artifact size mismatch: expected {expected_size}"
+        ) from exc
     except (OSError, OverflowError, TypeError, ValueError) as exc:
         raise ArtifactResolutionError(f"artifact is not readable: {path}") from exc
-    finally:
-        if fd is not None:
-            with contextlib.suppress(OSError):
-                os.close(fd)
+    _require_size(expected_size, len(content))
 
     return content, _detected_media_type(path)
 
@@ -301,29 +308,28 @@ def _read_descriptor(
 ) -> bytes:
     if expected_size is not None:
         _require_artifact_size(expected_size)
+    limit = MAX_ARTIFACT_BYTES if expected_size is None else expected_size
     try:
-        metadata = os.fstat(fd)
-    except (OSError, ValueError) as exc:
+        content = read_bounded_descriptor(fd, display_path, limit=limit)
+    except NotRegularFileError as exc:
         raise ArtifactResolutionError(
-            f"artifact is not readable: {display_path}"
+            f"artifact is not a regular file: {display_path}"
         ) from exc
-    if not stat.S_ISREG(metadata.st_mode):
-        raise ArtifactResolutionError(f"artifact is not a regular file: {display_path}")
-    _require_artifact_size(metadata.st_size)
-    if expected_size is not None:
-        _require_size(expected_size, metadata.st_size)
-    try:
-        return _read_bounded(
-            lambda amount: os.read(fd, amount),
-            metadata.st_size,
-            display_path,
-        )
-    except ArtifactResolutionError:
-        raise
+    except BoundedReadOverflow as exc:
+        raise ArtifactResolutionError(_overflow_message(expected_size)) from exc
     except (OSError, OverflowError, TypeError, ValueError) as exc:
         raise ArtifactResolutionError(
             f"artifact is not readable: {display_path}"
         ) from exc
+    if expected_size is not None:
+        _require_size(expected_size, len(content))
+    return content
+
+
+def _overflow_message(expected_size: int | None) -> str:
+    if expected_size is None:
+        return f"artifact exceeds maximum size of {MAX_ARTIFACT_BYTES} bytes"
+    return f"artifact size mismatch: expected {expected_size}"
 
 
 def _read_bounded(
@@ -332,25 +338,12 @@ def _read_bounded(
     display_path: Path,
 ) -> bytes:
     _require_artifact_size(expected_size)
-    content = bytearray()
-    while len(content) <= expected_size:
-        amount = min(_READ_CHUNK_BYTES, expected_size - len(content) + 1)
-        chunk = reader(amount)
-        if not chunk:
-            break
-        if not isinstance(chunk, bytes):  # pyright: ignore[reportUnnecessaryIsInstance]
-            raise ArtifactResolutionError(
-                f"artifact reader returned invalid data: {display_path}"
-            )
-        content.extend(chunk)
-        if len(content) > MAX_ARTIFACT_BYTES:
-            raise ArtifactResolutionError(
-                f"artifact exceeds maximum size of {MAX_ARTIFACT_BYTES} bytes"
-            )
-        if len(content) > expected_size:
-            break
+    try:
+        content = read_bounded_stream(reader, display_path, limit=expected_size)
+    except BoundedReadOverflow as exc:
+        raise ArtifactResolutionError(_overflow_message(expected_size)) from exc
     _require_size(expected_size, len(content))
-    return bytes(content)
+    return content
 
 
 class _HttpsResponse(Protocol):
@@ -512,13 +505,16 @@ def _response_media_type(headers: Message) -> str:
 
 
 def _validate_integrity(
-    artifact: ArtifactRef, content: bytes, detected_type: str | None
+    artifact: ArtifactRef,
+    content: bytes,
+    detected_type: str | None,
+    digest: bytes,
 ) -> None:
     _require_artifact_size(artifact.size_bytes)
     _require_artifact_size(len(content))
     _require_size(artifact.size_bytes, len(content))
 
-    actual_digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+    actual_digest = f"sha256:{digest.hex()}"
     if not hmac.compare_digest(actual_digest, artifact.digest):
         # The observed digest stays out of the message: the text is persisted
         # into caller-visible artifacts, so echoing it makes validation a hash
@@ -588,6 +584,11 @@ def _validate_schema(
         raise
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ArtifactResolutionError("schema artifact is not valid JSON") from exc
+    if _is_document_schema_uri(artifact.schema_uri):
+        # A document URI labels a retained document that declares no contract
+        # rules, not even a shape: the decision ledger is a bare JSON list.
+        # Valid JSON with unique keys is every rule the label carries.
+        return
     if not isinstance(document, dict):
         raise ArtifactResolutionError("schema artifact must contain a JSON object")
 
@@ -600,6 +601,12 @@ def _validate_schema(
         raise ArtifactResolutionError(
             f"artifact schema mismatch: {artifact.schema_uri}"
         ) from exc
+
+
+def _is_document_schema_uri(schema_uri: str) -> bool:
+    from easy_cheese_schemas.schema_runtime import DOCUMENT_SCHEMA_URIS
+
+    return schema_uri in DOCUMENT_SCHEMA_URIS
 
 
 def _validate_registered_schema(content: bytes, schema_uri: str) -> None:
@@ -627,35 +634,22 @@ def _validate_registered_schema(content: bytes, schema_uri: str) -> None:
         ) from exc
 
 
-def _snapshot_matches(path: Path, content: bytes, expected_digest: bytes) -> bool:
-    flags = (
-        os.O_RDONLY
-        | getattr(os, "O_BINARY", 0)
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
-    )
-    fd: int | None = None
+def _snapshot_matches(path: Path, expected_size: int, expected_digest: bytes) -> bool:
+    """Report whether the retained copy at `path` already holds the bytes.
+
+    The destination name is the content digest, but the name is not proof:
+    a leftover of the same size under that name can hold other bytes. The
+    shared reader refuses a symlink and anything that is not a regular
+    file, stops at `expected_size`, and the digest read-back decides. A
+    copy that fails any of those falls through to the atomic rewrite, so
+    the returned path always holds the verified content.
+    """
+
     try:
-        fd = os.open(path, flags)
-        metadata = os.fstat(fd)
-        if not stat.S_ISREG(metadata.st_mode):
-            return False
-        if metadata.st_size != len(content):
-            return False
-        observed = _read_bounded(
-            lambda amount: os.read(fd, amount),
-            len(content),
-            path,
-        )
-        return hmac.compare_digest(hashlib.sha256(observed).digest(), expected_digest)
-    except (ArtifactResolutionError, OSError, OverflowError, ValueError):
+        retained = read_bounded_file(path, limit=expected_size)
+    except (OSError, OverflowError, ValueError):
         return False
-    finally:
-        if fd is not None:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
+    return hmac.compare_digest(hashlib.sha256(retained).digest(), expected_digest)
 
 
 def _restrict_permissions(path: Path, mode: int) -> None:
@@ -672,12 +666,22 @@ def _restrict_permissions(path: Path, mode: int) -> None:
         )
 
 
-def _restrict_open_file(fd: int, _path: Path) -> None:
+def restrict_open_file(fd: int, path: Path) -> None:
+    """Force one open file to private `0600` permissions, or refuse.
+
+    Every host-side writer that reveals a file it created shares this check,
+    so it is public. The permission change is made on the descriptor, which
+    no racing rename can redirect. A platform without `os.fchmod` falls back
+    to `path`, which `mkstemp` already created private; the descriptor is
+    still what the result is read back from.
+    """
+
     fchmod = getattr(os, "fchmod", None)
-    if not callable(fchmod):
-        raise ArtifactResolutionError("private file permissions are unavailable")
     try:
-        _ = fchmod(fd, 0o600)
+        if callable(fchmod):
+            _ = fchmod(fd, 0o600)
+        else:
+            os.chmod(path, 0o600, follow_symlinks=False)
         metadata = os.fstat(fd)
     except (NotImplementedError, OSError, TypeError, ValueError) as exc:
         raise ArtifactResolutionError(
@@ -689,10 +693,15 @@ def _restrict_open_file(fd: int, _path: Path) -> None:
         )
 
 
-def _retain_verified_bytes(content: bytes, artifact_directory: str | Path) -> str:
+def _prepare_artifact_directory(artifact_directory: str | Path) -> Path:
+    """Create, resolve, and lock down the retention root exactly once.
+
+    The caller hoists this out of the retention itself, so one resolution
+    chain prepares its root a single time instead of once per artifact.
+    """
+
     if artifact_directory is None:  # pyright: ignore[reportUnnecessaryComparison]
         raise ArtifactResolutionError("artifact_directory is required")  # pyright: ignore[reportUnreachable]
-    _require_artifact_size(len(content))
     directory = Path(artifact_directory)
     try:
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -708,10 +717,15 @@ def _retain_verified_bytes(content: bytes, artifact_directory: str | Path) -> st
         raise ArtifactResolutionError(
             f"artifact directory is not writable: {directory}"
         ) from exc
+    return directory
 
-    expected_digest = hashlib.sha256(content).digest()
+
+def _retain_verified_bytes(
+    content: bytes, directory: Path, expected_digest: bytes
+) -> str:
+    _require_artifact_size(len(content))
     destination = directory / f"sha256-{expected_digest.hex()}"
-    if _snapshot_matches(destination, content, expected_digest):
+    if _snapshot_matches(destination, len(content), expected_digest):
         _restrict_permissions(destination, 0o600)
         return str(destination)
 
@@ -726,7 +740,7 @@ def _retain_verified_bytes(content: bytes, artifact_directory: str | Path) -> st
         temp_path = Path(temp_name)
         with os.fdopen(temp_fd, "wb") as writer:
             temp_fd = None
-            _restrict_open_file(writer.fileno(), temp_path)
+            restrict_open_file(writer.fileno(), temp_path)
             _ = writer.write(content)
             writer.flush()
             os.fsync(writer.fileno())

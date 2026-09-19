@@ -1,5 +1,4 @@
 {
-  "scope": "Approve the bounded scope",
-  "plan": "Approve the complete plan",
-  "runner": "Approve the named setup only"
+  "scope": "approve",
+  "plan": "approved"
 }

@@ -29,6 +29,7 @@ except ImportError:  # pragma: no cover
 from easy_cheese_schemas import (
     COMPILED_TRANSITION_REGISTRY,
     MAX_CONTRACT_BYTES,
+    MOLD_COOK_HANDOFF_SCHEMA_URI,
     NORMALIZATION_RECEIPT_SCHEMA_URI,
     AcceptedArtifact,
     ArtifactRef,
@@ -42,17 +43,13 @@ from easy_cheese_schemas import (
     validate_contract,
     validate_transition,
 )
-from easy_cheese_schemas.mold_cook import (
-    MOLD_COOK_HANDOFF_SCHEMA_URI,
-    MoldCookHandoff,
-)
-from easy_cheese.shared.mold_cook_handoff import validate_mold_cook_handoff
 from easy_cheese.shared.artifacts import (
     ArtifactDigestMismatchError,
     ArtifactResolutionError,
-    _restrict_open_file,  # pyright: ignore[reportPrivateUsage]
     resolve_artifact,
+    restrict_open_file,
 )
+from easy_cheese.shared.bounded_read import BoundedReadOverflow, read_bounded_file
 
 
 __all__ = [
@@ -63,13 +60,29 @@ __all__ = [
     "PointerNotFoundError",
     "PublicationError",
     "accept",
-    "accept_mold_cook_handoff",
     "atomic_write",
+    "pointer_path",
     "publish_canonical",
-    "publish_mold_cook_handoff",
     "read_bounded",
+    "register_deep_validator",
     "request_digest",
 ]
+
+
+# Payload schema URIs whose canonical value alone does not prove the payload
+# valid: the host must also resolve and check the bytes it references. The
+# owning module registers that pass through `register_deep_validator`, so this
+# generic gateway holds no phase-specific policy.
+_DEEP_VALIDATION_REQUIRED: frozenset[str] = frozenset({MOLD_COOK_HANDOFF_SCHEMA_URI})
+_DEEP_VALIDATORS: dict[str, Callable[[object, Path], object]] = {}
+
+
+def register_deep_validator(
+    schema_uri: str, validator: Callable[[object, Path], object]
+) -> None:
+    """Bind a payload schema URI to its host-side deep validator."""
+
+    _DEEP_VALIDATORS[schema_uri] = validator
 
 
 class PublicationError(ValueError):
@@ -102,18 +115,6 @@ class PointerNotFoundError(PublicationError):
 
 class PayloadDigestMismatchError(PublicationError):
     """A previously revealed pointer's payload no longer matches its digest."""
-
-
-class BoundedReadOverflow(OSError):
-    """A bounded read hit a file larger than its caller-supplied cap."""
-
-    path: Path
-    max_bytes: int
-
-    def __init__(self, path: Path, max_bytes: int) -> None:
-        self.path = path
-        self.max_bytes = max_bytes
-        super().__init__(f"{path} exceeds {max_bytes} bytes")
 
 
 @dataclass(frozen=True)
@@ -189,7 +190,7 @@ def atomic_write(path: Path, content: bytes) -> None:
     )
     try:
         with os.fdopen(descriptor, "wb") as handle:
-            _restrict_open_file(handle.fileno(), Path(temp_name))
+            restrict_open_file(handle.fileno(), Path(temp_name))
             _ = handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
@@ -199,10 +200,6 @@ def atomic_write(path: Path, content: bytes) -> None:
         with suppress(OSError):
             os.unlink(temp_name)
         raise
-
-
-# Retained for the recovery tests that reach for the module-private name.
-_atomic_write = atomic_write
 
 
 def _exclusive_reveal(temp_name: str, path: Path, content: bytes) -> None:
@@ -304,7 +301,7 @@ def _retain_content(directory: Path, digest: str, content: bytes) -> Path:
                     ) from exc
                 quarantined = quarantine.read_bytes()
                 if _digest_bytes(quarantined) == digest:
-                    _atomic_write(path, quarantined)
+                    atomic_write(path, quarantined)
                     raise CorruptLeftoverError(
                         f"prepared content at {path} changed during repair; retained"
                     )
@@ -313,7 +310,7 @@ def _retain_content(directory: Path, digest: str, content: bytes) -> Path:
             raise CorruptLeftoverError(
                 f"prepared content at {path} does not match digest {digest}; removed"
             )
-        _atomic_write(path, content)
+        atomic_write(path, content)
     return path
 
 
@@ -321,13 +318,11 @@ def read_bounded(path: Path, max_bytes: int) -> bytes:
     """Read at most ``max_bytes`` of ``path``, rejecting a larger file unread.
 
     A caller-supplied path never causes the gateway to allocate more than
-    ``max_bytes`` for it before validation runs.
+    ``max_bytes`` for it before validation runs. The shared reader also
+    refuses a final symlink and any path that is not a regular file, so a
+    caller-supplied pointer path cannot redirect the gateway.
     """
-    with path.open("rb") as handle:
-        raw = handle.read(max_bytes + 1)
-    if len(raw) > max_bytes:
-        raise BoundedReadOverflow(path, max_bytes)
-    return raw
+    return read_bounded_file(path, limit=max_bytes)
 
 
 def _read_bounded(path: Path) -> bytes:
@@ -415,8 +410,13 @@ def _resolve_pointer(
         request.payload_schema_uri,
         supported_version_for(request.payload_schema_uri),
     )
-    if isinstance(canonical.value, MoldCookHandoff):
-        _ = validate_mold_cook_handoff(canonical.value, artifact_root)
+    deep_validator = _DEEP_VALIDATORS.get(request.payload_schema_uri)
+    if deep_validator is not None:
+        _ = deep_validator(canonical.value, artifact_root)
+    elif request.payload_schema_uri in _DEEP_VALIDATION_REQUIRED:
+        raise PublicationError(
+            f"no deep validator registered for {request.payload_schema_uri}"
+        )
 
     receipt_ref = pointer.normalization_receipt
     if receipt_ref is not None:
@@ -457,6 +457,17 @@ def _pointer_path(root: Path, operation_id: str) -> Path:
     return pointer_path
 
 
+def pointer_path(root: Path, operation_id: str) -> Path:
+    """Return the pointer path this gateway reveals for one operation.
+
+    A consumer that must name a published pointer asks the gateway instead of
+    joining the path itself, so the identifier check and the containment check
+    apply to every caller.
+    """
+
+    return _pointer_path(root, operation_id)
+
+
 def _validate_replay(pointer: HandoffPointer, request: _PublicationRequest) -> None:
     if (
         pointer.operation_id != request.operation_id
@@ -491,44 +502,6 @@ def publish_canonical(
     )
     return _publish_canonical(
         request=request,
-        artifact_root=artifact_root,
-        prepare=prepare,
-        _before_reveal=_before_reveal,
-    )
-
-
-def publish_mold_cook_handoff(
-    handoff: MoldCookHandoff,
-    *,
-    request_digest: str,
-    operation_id: str,
-    artifact_root: str | Path,
-    _before_reveal: Callable[[], None] | None = None,
-) -> PublishedArtifact:
-    """Publish an already materialized, strictly validated Mold handoff."""
-
-    version = supported_version_for(MoldCookHandoff)
-    if version is None:
-        raise ContractValidationError(
-            "MoldCookHandoff has no host-supported contract version"
-        )
-
-    def prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
-        return (
-            validate_contract(
-                canonical_bytes(handoff),
-                MoldCookHandoff,
-                version,
-            ),
-            None,
-        )
-
-    return publish_canonical(
-        request_digest=request_digest,
-        source_phase="mold",
-        destination_phase="cook",
-        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
-        operation_id=operation_id,
         artifact_root=artifact_root,
         prepare=prepare,
         _before_reveal=_before_reveal,
@@ -654,18 +627,3 @@ def accept(
     )
     canonical, receipt_ref = _resolve_pointer(pointer, request, root)
     return AcceptedArtifact(canonical=canonical, normalization_receipt=receipt_ref)
-
-
-def accept_mold_cook_handoff(
-    pointer_path: str | Path,
-    *,
-    artifact_root: str | Path | None = None,
-) -> AcceptedArtifact:
-    """Accept a Mold-to-Cook pointer through the shared strict validator."""
-
-    return accept(
-        pointer_path,
-        destination_phase="cook",
-        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
-        artifact_root=artifact_root,
-    )

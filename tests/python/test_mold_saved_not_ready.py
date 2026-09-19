@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import cast
 
 from easy_cheese.skills.mold.producer import finalize_mold
+from easy_cheese_schemas.contracts import CurdPlan
 from easy_cheese_schemas.mold_cook import MoldCookMode
+
+from tests.python.test_mold_cook_producer import make_planner_result, make_spec
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "spec_format" / "valid_spec.md"
@@ -50,6 +53,29 @@ def test_incomplete_finalization_saves_a_blocked_preparation_result(
     assert preparation["outcome"] == "blocked"
     assert preparation["request_id"] == "saved-request-1"
     assert not (tmp_path / "artifacts" / "pointers" / "saved-1.json").exists()
+
+
+def test_full_tier_without_approval_still_names_the_plan_approval_kind(
+    tmp_path: Path,
+) -> None:
+    """An absent approval keeps the published requirement the plan needs."""
+    planner = make_planner_result()
+
+    outcome = finalize_mold(
+        make_spec(tmp_path),
+        artifact_root=tmp_path / "artifacts",
+        operation_id="saved-kind",
+        request_id="request-1",
+        mode=MoldCookMode.FULL,
+        planner_result=planner,
+        plan=cast(CurdPlan, planner.plan),
+    )
+
+    assert outcome.status == "saved-not-ready"
+    requirements = cast(Sequence[Mapping[str, object]], outcome.payload["requirements"])
+    assert "plan-approval-kind" in {
+        str(item["requirement_id"]) for item in requirements
+    }
 
 
 def test_save_only_override_and_user_hold_never_emit_a_pointer(tmp_path: Path) -> None:

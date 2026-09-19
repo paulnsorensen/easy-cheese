@@ -100,5 +100,33 @@
       ]
     },
     "expect": "consumer accepted an artifact the trace never published"
+  },
+  {
+    "name": "approval-after-accept",
+    "trace": {
+      "scenario": "approval-after-accept",
+      "events": [
+        {"type": "input_classified", "input_kind": "slug"},
+        {"type": "prepare", "mode": "light", "outcome": "needs-approval"},
+        {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/late.json"},
+        {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/late.json"},
+        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"}
+      ]
+    },
+    "expect": "handoff_published is not authorized by any approval that precedes it"
+  },
+  {
+    "name": "wrong-approval-kind",
+    "trace": {
+      "scenario": "wrong-approval-kind",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-planning"},
+        {"type": "approval_recorded", "kind": "runner", "source": "harness", "decision": "approved"},
+        {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/unplanned.json"},
+        {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/unplanned.json"}
+      ]
+    },
+    "expect": "full preparation requires an approved plan"
   }
 ]

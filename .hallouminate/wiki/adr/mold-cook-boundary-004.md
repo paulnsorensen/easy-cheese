@@ -18,12 +18,12 @@ Relying on the structured `decision` field alone and deleting the free-text scre
 
 ## Consequences
 
-External callers of the two validators must pass a root. Approval prose must be an explicit affirmative; a reply such as "no blockers remain, approved" is no longer accepted by prefix and must be restated. PLAN and PARTIAL_PLAN envelopes still cannot be rebuilt from the approval alone; the handoff validator binds those through planner evidence, and a caller-supplied expected envelope on the exported validator remains follow-up work.
+External callers of the two validators must pass a root. Approval prose must be an explicit affirmative; a reply such as "no blockers remain, approved" is no longer accepted by prefix and must be restated. PLAN and PARTIAL_PLAN envelopes cannot be rebuilt from the approval alone; the handoff validator binds those through planner evidence, and the exported validator accepts a caller-supplied `expected_proposal` envelope, which Mold finalize passes.
 
 ## Implementation status
 
 - Validators and helpers: `src/easy_cheese/shared/mold_cook_handoff.py` (`_root_and_directory`, `_resolve_bytes`, `_validate_response`, `dialogue_authorizes_execution`, `validate_mold_cook_approval`).
-- Cook twin: `src/easy_cheese/skills/cook/preparation.py` `_validate_hold_clearance` delegates to the shared helper.
+- Cook twin: `src/easy_cheese/skills/cook/preparation/pipeline.py` `_validate_hold_clearance` delegates to the shared helper.
 - Tests: `tests/python/test_mold_cook_handoff.py`, `tests/python/test_mold_cook_publication.py`.
 
 ## Evidence

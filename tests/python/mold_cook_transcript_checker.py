@@ -51,6 +51,21 @@ _INPUT_KINDS = frozenset(
 )
 _MODES = frozenset({"full", "light"})
 _APPROVAL_KINDS = frozenset({"scope", "plan", "partial_plan", "runner"})
+_PLAN_APPROVAL_KINDS = frozenset({"plan", "partial_plan"})
+
+# Each recorded approval kind authorizes only the actions listed here, and only
+# for events that occur after it.
+_AUTHORIZED_ACTIONS: dict[str, frozenset[str]] = {
+    "scope": frozenset({"handoff_published", "consumer_accept"}),
+    "plan": frozenset({"handoff_published", "consumer_accept", "feature_write"}),
+    "partial_plan": frozenset(
+        {"handoff_published", "consumer_accept", "feature_write"}
+    ),
+    "runner": frozenset({"setup_authorized", "setup_evidence"}),
+}
+_GATED_ACTIONS = frozenset(
+    action for actions in _AUTHORIZED_ACTIONS.values() for action in actions
+)
 
 
 def _mapping(value: object, label: str) -> dict[str, object]:
@@ -102,10 +117,17 @@ def check_transcript(
         raise TranscriptCheckError("events must be a list")
     if not raw_events or len(raw_events) > MAX_EVENTS:
         raise TranscriptCheckError("events must contain between one and 64 items")
-    events = [_mapping(item, f"events[{index}]") for index, item in enumerate(raw_events)]
-    types = tuple(_text(event.get("type"), f"events[{index}].type") for index, event in enumerate(events))
+    events = [
+        _mapping(item, f"events[{index}]") for index, item in enumerate(raw_events)
+    ]
+    types = tuple(
+        _text(event.get("type"), f"events[{index}].type")
+        for index, event in enumerate(events)
+    )
     if any(event_type not in _EVENT_TYPES for event_type in types):
-        unknown = next(event_type for event_type in types if event_type not in _EVENT_TYPES)
+        unknown = next(
+            event_type for event_type in types if event_type not in _EVENT_TYPES
+        )
         raise TranscriptCheckError(f"unknown event type {unknown!r}")
     if types[0] != "input_classified":
         raise TranscriptCheckError("trace must classify input before any action")
@@ -126,25 +148,63 @@ def check_transcript(
     if expected_mode is not None and mode != expected_mode:
         raise TranscriptCheckError("trace used the wrong preparation mode")
 
-    approvals = [event for event in events if event["type"] == "approval_recorded"]
+    approvals = [
+        (index, event)
+        for index, event in enumerate(events)
+        if event["type"] == "approval_recorded"
+    ]
     if not approvals:
         raise TranscriptCheckError("trace has no harness approval evidence")
-    for approval in approvals:
+    approval_gates: list[tuple[int, str]] = []
+    for index, approval in approvals:
         if approval.get("source") != "harness":
-            raise TranscriptCheckError("approval evidence must originate in the fixture harness")
+            raise TranscriptCheckError(
+                "approval evidence must originate in the fixture harness"
+            )
         kind = _text(approval.get("kind"), "approval.kind")
         if kind not in _APPROVAL_KINDS:
             raise TranscriptCheckError(f"unsupported approval kind {kind!r}")
         if approval.get("decision") != "approved":
             raise TranscriptCheckError("recorded approval does not authorize execution")
+        approval_gates.append((index, kind))
 
-    first_write = next((index for index, event in enumerate(events) if event["type"] == "feature_write"), None)
-    accepted_index = next((index for index, event in enumerate(events) if event["type"] == "consumer_accept"), None)
-    if first_write is not None and (accepted_index is None or first_write < accepted_index):
+    first_write = next(
+        (
+            index
+            for index, event in enumerate(events)
+            if event["type"] == "feature_write"
+        ),
+        None,
+    )
+    accepted_index = next(
+        (
+            index
+            for index, event in enumerate(events)
+            if event["type"] == "consumer_accept"
+        ),
+        None,
+    )
+    if first_write is not None and (
+        accepted_index is None or first_write < accepted_index
+    ):
         raise TranscriptCheckError("feature write occurred before consumer acceptance")
 
-    setup_authorized = next((index for index, event in enumerate(events) if event["type"] == "setup_authorized"), None)
-    setup_evidence = next((index for index, event in enumerate(events) if event["type"] == "setup_evidence"), None)
+    setup_authorized = next(
+        (
+            index
+            for index, event in enumerate(events)
+            if event["type"] == "setup_authorized"
+        ),
+        None,
+    )
+    setup_evidence = next(
+        (
+            index
+            for index, event in enumerate(events)
+            if event["type"] == "setup_evidence"
+        ),
+        None,
+    )
     if setup_authorized is not None and setup_evidence is None:
         raise TranscriptCheckError("setup authorization has no evidence")
     if setup_evidence is not None:
@@ -154,17 +214,23 @@ def check_transcript(
         if evidence.get("status") != "valid" or evidence.get("exit_code") != 0:
             raise TranscriptCheckError("setup evidence is stale or failed")
 
-    partial = any(event.get("kind") == "partial_plan" for event in approvals) or any(
+    partial = any(kind == "partial_plan" for _, kind in approval_gates) or any(
         event.get("outcome") == "partial"
         for event in events
         if event["type"] == "plan_materialized"
     )
     if partial:
-        preserved = [event for event in events if event["type"] == "remainder_preserved"]
+        preserved = [
+            event for event in events if event["type"] == "remainder_preserved"
+        ]
         if len(preserved) != 1 or not preserved[0].get("unresolved_work"):
             raise TranscriptCheckError("partial workflow lost its unresolved remainder")
 
-    published_indices = [index for index, event in enumerate(events) if event["type"] == "handoff_published"]
+    published_indices = [
+        index
+        for index, event in enumerate(events)
+        if event["type"] == "handoff_published"
+    ]
     if not published_indices:
         raise TranscriptCheckError("trace has no published handoff")
     final_published = events[published_indices[-1]]
@@ -175,11 +241,29 @@ def check_transcript(
     if events[accepted_index].get("ready") is not True:
         raise TranscriptCheckError("consumer reported a false ready result")
 
+    refs = _artifact_refs(events)
+
+    if mode == "full" and not any(
+        kind in _PLAN_APPROVAL_KINDS for _, kind in approval_gates
+    ):
+        raise TranscriptCheckError("full preparation requires an approved plan")
+    for index, event in enumerate(events):
+        action = event["type"]
+        if action not in _GATED_ACTIONS:
+            continue
+        if not any(
+            gate_index < index and action in _AUTHORIZED_ACTIONS[kind]
+            for gate_index, kind in approval_gates
+        ):
+            raise TranscriptCheckError(
+                f"{action} is not authorized by any approval that precedes it"
+            )
+
     return TranscriptReport(
         scenario=scenario,
         input_kind=input_kind,
         mode=mode,
-        artifact_refs=_artifact_refs(events),
+        artifact_refs=refs,
         event_types=types,
     )
 
@@ -197,4 +281,9 @@ def load_transcript(path: str | Path) -> dict[str, object]:
     return _mapping(value, "trace")
 
 
-__all__ = ["TranscriptCheckError", "TranscriptReport", "check_transcript", "load_transcript"]
+__all__ = [
+    "TranscriptCheckError",
+    "TranscriptReport",
+    "check_transcript",
+    "load_transcript",
+]

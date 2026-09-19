@@ -35,7 +35,10 @@ from easy_cheese_schemas._schema_catalog import (
     REGISTERED_CONTRACT_SCHEMA_URIS as GENERATED_CONTRACT_SCHEMA_URIS,
 )
 from easy_cheese_schemas.schema_runtime import (
+    DOCUMENT_SCHEMA_URIS,
+    FORK_TASTE_VERDICT_SCHEMA_URI,
     REGISTERED_CONTRACT_SCHEMA_URIS,
+    TASTE_LEDGER_SCHEMA_URI,
     _collect_registered_contracts,  # pyright: ignore[reportPrivateUsage]
     _DERIVED_CONTRACT_SCHEMA_URIS,  # pyright: ignore[reportPrivateUsage]
     _definition,  # pyright: ignore[reportPrivateUsage]
@@ -60,6 +63,25 @@ def as_dict(value: object) -> dict[str, object]:
 
 def as_list(value: object) -> list[object]:
     return cast(list[object], value)
+
+
+def test_document_schema_uris_name_documents_the_catalog_does_not_publish() -> None:
+    """The document allowlist is closed and never shadows a contract URI."""
+
+    assert DOCUMENT_SCHEMA_URIS == {
+        FORK_TASTE_VERDICT_SCHEMA_URI,
+        TASTE_LEDGER_SCHEMA_URI,
+    }
+    assert not DOCUMENT_SCHEMA_URIS & REGISTERED_CONTRACT_SCHEMA_URIS
+    for uri in DOCUMENT_SCHEMA_URIS:
+        assert uri.startswith(f"{SCHEMA_ROOT}/")
+
+
+def test_document_schema_uris_are_exported_from_the_package() -> None:
+    import easy_cheese_schemas as schemas
+
+    assert schemas.DOCUMENT_SCHEMA_URIS is DOCUMENT_SCHEMA_URIS
+    assert "DOCUMENT_SCHEMA_URIS" in schemas.__all__
 
 
 def test_registered_contract_schema_uris_publishes_the_generated_catalog() -> None:
@@ -359,7 +381,7 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
 
 
 @pytest.mark.parametrize("schema_uri", sorted(REGISTERED_CONTRACT_SCHEMA_URIS))
-def test_registered_schema_matches_pre_migration_golden(schema_uri: str) -> None:
+def test_registered_schema_matches_checked_in_golden(schema_uri: str) -> None:
     golden = (
         Path(__file__).with_name("goldens") / f"{schema_uri.rsplit('/', 1)[-1]}.json"
     )

@@ -76,6 +76,16 @@ from easy_cheese_schemas.contracts import (
 
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
 
+# Two retained Mold artifacts carry a schema label that names a document, not
+# a registered contract: the fork taste verdict and the decision ledger it
+# reads. Neither has contract rules to validate, so the allowlist is explicit
+# and closed; an unlisted URI stays a rejection.
+FORK_TASTE_VERDICT_SCHEMA_URI = f"{SCHEMA_ROOT}/fork-taste-verdict"
+TASTE_LEDGER_SCHEMA_URI = f"{SCHEMA_ROOT}/taste-ledger"
+DOCUMENT_SCHEMA_URIS = frozenset(
+    {FORK_TASTE_VERDICT_SCHEMA_URI, TASTE_LEDGER_SCHEMA_URI}
+)
+
 
 @attrs.define(frozen=True, slots=True)
 class _RegisteredContract:
@@ -461,6 +471,21 @@ def _registered(schema: str | type) -> _RegisteredContract:
 
 def supported_version_for(schema: str | type) -> ContractVersion | None:
     return _registered(schema).supported_version
+
+
+def require_contract_version(schema: str | type) -> ContractVersion:
+    """Return the version this host supports for a contract it must support.
+
+    Every seam that builds a contract instance needs the supported version and
+    treats its absence as a host defect, not as user input.  One helper holds
+    that guard so no seam states the rule differently.
+    """
+
+    version = supported_version_for(schema)
+    if version is None:
+        name = schema if isinstance(schema, str) else schema.__name__
+        raise TypeError(f"{name} has no supported contract version")
+    return version
 
 
 def load_pr_plan(raw: object) -> Loaded[pr_plan_module.PrPlan]:
@@ -1345,12 +1370,15 @@ __all__ = [
     "AcceptedArtifact",
     "CanonicalArtifact",
     "ContractValidationError",
+    "DOCUMENT_SCHEMA_URIS",
     "DRAFT_2020_12",
+    "FORK_TASTE_VERDICT_SCHEMA_URI",
     "MAX_CONTRACT_BYTES",
     "MAX_CONTRACT_DEPTH",
     "PublishedArtifact",
     "REGISTERED_CONTRACT_SCHEMA_URIS",
     "SCHEMA_ROOT",
+    "TASTE_LEDGER_SCHEMA_URI",
     "canonical_bytes",
     "contract_registry",
     "canonical_digest",
@@ -1359,6 +1387,7 @@ __all__ = [
     "load_agent_writer_view",
     "normalize_agent_output",
     "normalize_agent_value",
+    "require_contract_version",
     "schema_bytes",
     "supported_version_for",
     "validate_contract",

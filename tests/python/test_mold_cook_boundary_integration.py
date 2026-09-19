@@ -17,8 +17,12 @@ import pytest
 
 from easy_cheese_schemas import canonical_bytes
 from easy_cheese_schemas.schema_runtime import ContractValidationError
-from easy_cheese.shared.publication import accept_mold_cook_handoff
-from easy_cheese.skills.cook.preparation import prepare, resubmit
+from easy_cheese.shared.mold_cook_handoff import accept_mold_cook_handoff
+from easy_cheese.skills.cook.preparation import (
+    PreparationEvidence,
+    prepare,
+    resubmit,
+)
 from easy_cheese_schemas.mold_cook import (
     CookExecutionHold,
     CookHoldKind,
@@ -80,7 +84,7 @@ def test_approval_reuse_succeeds_but_stale_evidence_is_rejected(tmp_path: Path) 
         _ = accept_mold_cook_handoff(pointer, artifact_root=tmp_path)
 
 
-def test_hold_survives_resubmission_until_explicitly_cleared(tmp_path: Path) -> None:
+def test_hold_survives_resubmission(tmp_path: Path) -> None:
     spec = make_spec(tmp_path)
     planner = make_planner_result()
     approval = make_approval(tmp_path, spec, plan=planner)
@@ -95,9 +99,11 @@ def test_hold_survives_resubmission_until_explicitly_cleared(tmp_path: Path) -> 
         repository_root=tmp_path,
         artifact_root=tmp_path,
         mode=MoldCookMode.FULL,
-        planner_result=planner,
-        plan_approval=approval,
-        holds=(hold,),
+        evidence=PreparationEvidence(
+            planner_result=planner,
+            plan_approval=approval,
+            holds=(hold,),
+        ),
     )
     assert blocked.outcome is CookPreparationOutcome.BLOCKED
     repeated = resubmit(
@@ -106,9 +112,11 @@ def test_hold_survives_resubmission_until_explicitly_cleared(tmp_path: Path) -> 
         repository_root=tmp_path,
         artifact_root=tmp_path,
         mode=MoldCookMode.FULL,
-        planner_result=planner,
-        plan_approval=approval,
-        holds=(hold,),
+        evidence=PreparationEvidence(
+            planner_result=planner,
+            plan_approval=approval,
+            holds=(hold,),
+        ),
     )
     assert repeated.outcome is CookPreparationOutcome.BLOCKED
     assert repeated.holds == (hold,)
@@ -224,12 +232,12 @@ def test_setup_authority_is_named_and_does_not_claim_feature_execution(
         repository_root=tmp_path,
         artifact_root=tmp_path,
         mode=MoldCookMode.FULL,
-        setup_authorization=auth,
+        evidence=PreparationEvidence(setup_authorization=auth),
     )
     assert result.outcome is CookPreparationOutcome.INVALID
     assert result.handoff_ref is None
-    assert result.findings[0].message == (
-        "setup authority and evidence must be derived from runner approval"
+    assert tuple(item.message for item in result.findings) == (
+        "setup authority and evidence must be derived from runner approval",
     )
 
 
@@ -254,7 +262,7 @@ def test_frozen_agent_traces_reject_unsafe_actions() -> None:
         list[Mapping[str, object]],
         json.loads((TRACE_ROOT / "negative-cases.json").read_text(encoding="utf-8")),
     )
-    assert len(cases) == 7
+    assert len(cases) == 9
     for case in cases:
         trace = cast(Mapping[str, object], case["trace"])
         expect = cast(str, case["expect"])

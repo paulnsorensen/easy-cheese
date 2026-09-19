@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -17,18 +18,22 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookApprovalKind,
     MoldCookApprovalSource,
     MoldCookCoverage,
+    MoldCookHandoff,
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 
-from easy_cheese.shared import taste_test
+from easy_cheese.shared import mold_cook_handoff, taste_test
 from easy_cheese.shared.mold_cook_handoff import (
-    bind_mold_cook_approval,
     canonical_mold_cook_proposal,
     dialogue_authorizes_execution,
     materialize_artifact_ref,
+    publish_mold_cook_handoff,
+    resolve_contract_value,
     validate_mold_cook_approval,
     validate_mold_cook_handoff,
 )
+
+from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
 SPEC_DIGEST = "sha256:" + ("a" * 64)
 
@@ -296,3 +301,166 @@ def test_typed_mold_document_is_a_public_taste_test_export() -> None:
 
     assert "typed_mold_document" in taste_test.__all__
     assert taste_test.typed_mold_document is not None
+
+
+PLAN_DIGEST = "sha256:" + ("b" * 64)
+
+
+def _plan_approval(root: Path, *, proposal_bytes: bytes) -> MoldCookApproval:
+    coverage = MoldCookCoverage(curd_ids=["curd-1"])
+    proposal_ref = _write_ref(
+        root,
+        proposal_bytes,
+        artifact_id="plan-proposal-1",
+        role="proposal",
+        filename="plan-proposal.json",
+        media_type="application/json",
+    )
+    response_ref = _write_ref(
+        root,
+        b"Approve",
+        artifact_id="plan-response-1",
+        role="response",
+        filename="plan-response.txt",
+        media_type="text/plain",
+    )
+    return bind_mold_cook_approval(
+        request_id="request-1",
+        kind=MoldCookApprovalKind.PLAN,
+        decision=MoldCookApprovalDecision.APPROVED,
+        source=MoldCookApprovalSource.USER_RESPONSE,
+        spec_digest=SPEC_DIGEST,
+        proposal_ref=proposal_ref,
+        response_ref=response_ref,
+        response_text="Approve",
+        response_source=response_ref.artifact_id,
+        coverage=coverage,
+        plan_digest=PLAN_DIGEST,
+    )
+
+
+def test_a_supplied_envelope_binds_a_plan_approval(tmp_path: Path) -> None:
+    """A plan approval cannot rebuild its envelope, so the caller supplies it."""
+
+    envelope = b'{"kind": "plan", "request_id": "request-1"}'
+    approval = _plan_approval(tmp_path, proposal_bytes=envelope)
+
+    assert (
+        validate_mold_cook_approval(approval, tmp_path, expected_proposal=envelope)
+        is approval
+    )
+
+
+def test_a_plan_approval_is_rejected_when_the_supplied_envelope_differs(
+    tmp_path: Path,
+) -> None:
+    """A supplied envelope binds every kind, including the plan kinds."""
+
+    approval = _plan_approval(
+        tmp_path, proposal_bytes=b'{"kind": "plan", "request_id": "request-1"}'
+    )
+
+    with pytest.raises(ContractValidationError, match="canonical envelope"):
+        _ = validate_mold_cook_approval(
+            approval,
+            tmp_path,
+            expected_proposal=b'{"kind": "plan", "request_id": "request-2"}',
+        )
+
+
+def test_a_plan_approval_stays_self_unbound_without_an_expected_envelope(
+    tmp_path: Path,
+) -> None:
+    """Omitting the envelope keeps the pre-existing self-bound kinds only."""
+
+    approval = _plan_approval(
+        tmp_path, proposal_bytes=b'{"kind": "plan", "request_id": "request-1"}'
+    )
+
+    assert validate_mold_cook_approval(approval, tmp_path) is approval
+
+
+@pytest.mark.parametrize("shape", ["instance", "bytes", "mapping", "path"])
+def test_resolve_contract_value_validates_every_producer_input_shape(
+    tmp_path: Path, shape: str
+) -> None:
+    """Finding 61: one seam types the four shapes a producer holds."""
+
+    approval = _plan_approval(tmp_path, proposal_bytes=b'{"kind": "plan"}')
+    payload = canonical_bytes(approval)
+    document = tmp_path / "approval.json"
+    _ = document.write_bytes(payload)
+    value: object = {
+        "instance": approval,
+        "bytes": payload,
+        "mapping": cast("dict[str, object]", json.loads(payload)),
+        "path": document,
+    }[shape]
+
+    assert resolve_contract_value(value, MoldCookApproval, tmp_path) == approval
+
+
+def test_resolve_contract_value_rejects_an_unsupported_input_type(
+    tmp_path: Path,
+) -> None:
+    """A value the seam cannot type is never structured into a contract."""
+
+    with pytest.raises(ContractValidationError, match="from a int value"):
+        _ = resolve_contract_value(7, MoldCookApproval, tmp_path)
+
+
+def test_resolve_contract_value_reads_a_path_outside_the_artifact_root(
+    tmp_path: Path,
+) -> None:
+    """An operator names the contract path; the retention root does not bound it."""
+
+    approval = _plan_approval(tmp_path, proposal_bytes=b'{"kind": "plan"}')
+    document = tmp_path / "approval.json"
+    _ = document.write_bytes(canonical_bytes(approval))
+    root = tmp_path / "artifacts"
+    root.mkdir()
+
+    assert resolve_contract_value(document, MoldCookApproval, root) == approval
+
+
+def test_resolve_contract_value_refuses_a_symlinked_contract_path(
+    tmp_path: Path,
+) -> None:
+    """A symlink still cannot redirect the read to another file."""
+
+    approval = _plan_approval(tmp_path, proposal_bytes=b'{"kind": "plan"}')
+    document = tmp_path / "approval.json"
+    _ = document.write_bytes(canonical_bytes(approval))
+    link = tmp_path / "link.json"
+    link.symlink_to(document)
+
+    with pytest.raises(ContractValidationError, match="is unreadable"):
+        _ = resolve_contract_value(link, MoldCookApproval, tmp_path)
+
+
+def test_publish_reports_an_unsupported_host_version_as_a_contract_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The publish seam answers a host defect with its own error type."""
+
+    def unsupported(_contract: object) -> str:
+        raise TypeError("MoldCookHandoff has no supported contract version")
+
+    monkeypatch.setattr(mold_cook_handoff, "require_contract_version", unsupported)
+
+    with pytest.raises(ContractValidationError, match="no supported contract version"):
+        _ = publish_mold_cook_handoff(
+            cast("MoldCookHandoff", object()),
+            request_digest=SPEC_DIGEST,
+            operation_id="publish-host-defect",
+            artifact_root=tmp_path,
+        )
+
+
+def test_resolve_contract_value_rejects_bytes_that_are_not_the_contract(
+    tmp_path: Path,
+) -> None:
+    """Bytes of the wrong document fail against the host-supported version."""
+
+    with pytest.raises(ContractValidationError, match="not a valid MoldCookApproval"):
+        _ = resolve_contract_value(b'{"kind": "plan"}', MoldCookApproval, tmp_path)

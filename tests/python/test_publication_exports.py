@@ -26,6 +26,6 @@ def test_dead_syntax_repair_surface_is_gone(name: str) -> None:
 
 
 def test_the_live_gateway_surface_is_still_exported() -> None:
-    for name in ("accept", "publish_canonical", "publish_mold_cook_handoff"):
+    for name in ("accept", "publish_canonical", "register_deep_validator"):
         assert name in publication.__all__
         assert hasattr(publication, name)

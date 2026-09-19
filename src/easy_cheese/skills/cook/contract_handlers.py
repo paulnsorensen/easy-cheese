@@ -30,10 +30,12 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookHandoff,
     MoldCookMode,
 )
-from easy_cheese.shared.publication import PublicationError, accept_mold_cook_handoff
+from easy_cheese.shared.mold_cook_handoff import accept_mold_cook_handoff
+from easy_cheese.shared.publication import PublicationError
 from easy_cheese.shared.taste_test import read_spec_text
 from easy_cheese.skills.cook.preparation import (
     CookHoldClearance,
+    PreparationEvidence,
     execute_accepted_handoff,
     load_preparation_result,
     prepare,
@@ -169,12 +171,6 @@ def _path_option(args: argparse.Namespace, name: str) -> Path | None:
     return cast("Path | None", getattr(args, name, None))
 
 
-def _setup_authorization(args: argparse.Namespace) -> Path | None:
-    """Return the host-retained authorization path for strict resolution."""
-
-    return _path_option(args, "setup_authorization")
-
-
 def _hold_clearances(args: argparse.Namespace) -> tuple[CookHoldClearance, ...]:
     clearances: list[CookHoldClearance] = []
     for value in cast("list[str]", getattr(args, "clear_hold", ())):
@@ -210,6 +206,25 @@ def _hold_clearances(args: argparse.Namespace) -> tuple[CookHoldClearance, ...]:
     return tuple(clearances)
 
 
+def _evidence_from_args(
+    args: argparse.Namespace,
+    *,
+    clearances: tuple[CookHoldClearance, ...] = (),
+) -> PreparationEvidence:
+    """Collect the host-owned evidence the command-line options name."""
+
+    return PreparationEvidence(
+        scope_approval=_path_option(args, "scope_approval"),
+        plan_approval=_path_option(args, "plan_approval"),
+        runner_approval=_path_option(args, "runner_approval"),
+        planner_result=_path_option(args, "planner_result"),
+        setup_authorization=_path_option(args, "setup_authorization"),
+        setup_evidence=_path_option(args, "setup_evidence"),
+        spec_binding=_path_option(args, "bound_spec"),
+        clearances=clearances,
+    )
+
+
 def _prepare_from_args(args: argparse.Namespace) -> CookPreparationResult:
     source, explicit_kind = _source_from_args(args)
     return prepare(
@@ -219,13 +234,7 @@ def _prepare_from_args(args: argparse.Namespace) -> CookPreparationResult:
         artifact_root=cast("str", args.artifact_root),
         mode=MoldCookMode(cast(str, args.mode)),
         explicit_kind=explicit_kind,
-        scope_approval=_path_option(args, "scope_approval"),
-        plan_approval=_path_option(args, "plan_approval"),
-        runner_approval=_path_option(args, "runner_approval"),
-        planner_result=_path_option(args, "planner_result"),
-        setup_authorization=_setup_authorization(args),
-        setup_evidence=_path_option(args, "setup_evidence"),
-        spec_binding=_path_option(args, "bound_spec"),
+        evidence=_evidence_from_args(args),
     )
 
 
@@ -293,14 +302,7 @@ def resubmit_main(argv: list[str]) -> int:
             repository_root=cast(str, args.repository_root),
             artifact_root=cast(str, args.artifact_root),
             mode=None if mode is None else MoldCookMode(mode),
-            scope_approval=_path_option(args, "scope_approval"),
-            plan_approval=_path_option(args, "plan_approval"),
-            runner_approval=_path_option(args, "runner_approval"),
-            planner_result=_path_option(args, "planner_result"),
-            setup_authorization=_setup_authorization(args),
-            setup_evidence=_path_option(args, "setup_evidence"),
-            spec_binding=_path_option(args, "bound_spec"),
-            clearances=_hold_clearances(args),
+            evidence=_evidence_from_args(args, clearances=_hold_clearances(args)),
         )
     except (ContractValidationError, ValueError, OSError, TypeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

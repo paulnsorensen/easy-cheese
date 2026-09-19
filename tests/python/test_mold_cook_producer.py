@@ -9,12 +9,12 @@ from typing import cast
 import pytest
 
 from easy_cheese.shared.mold_cook_handoff import (
-    bind_mold_cook_approval,
+    accept_mold_cook_handoff,
     canonical_mold_cook_proposal,
     materialize_artifact_ref,
 )
 from easy_cheese_schemas import ContractVersion, validate_contract
-from easy_cheese.shared.publication import PublicationError, accept_mold_cook_handoff
+from easy_cheese.shared.publication import PublicationError
 from easy_cheese.shared.taste_test import ForkTasteVerdict
 from easy_cheese.skills.mold import producer
 from easy_cheese.skills.mold.producer import (
@@ -46,6 +46,8 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookMode,
 )
 from easy_cheese_schemas.schema_runtime import supported_version_for
+
+from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "spec_format" / "valid_spec.md"
@@ -131,12 +133,27 @@ def make_planner_result() -> PlannerResult:
     )
 
 
+_AFFIRMATIVE_RESPONSES = frozenset(
+    {"approved", "approve", "yes", "y", "ok", "lgtm", "confirmed"}
+)
+
+
+def response_decision(response: str) -> MoldCookApprovalDecision:
+    """Map a harness reply to the decision the executed workflow records."""
+    if response.strip().strip(" \t.!,;:").casefold() in _AFFIRMATIVE_RESPONSES:
+        return MoldCookApprovalDecision.APPROVED
+    return MoldCookApprovalDecision.REJECTED
+
+
 def make_approval(
     tmp_path: Path,
     spec_path: Path,
     *,
     plan: PlannerResult | None,
     coverage: MoldCookCoverage | None = None,
+    kind: MoldCookApprovalKind = MoldCookApprovalKind.PLAN,
+    response: bytes = b"approved\n",
+    request_id: str = "request-1",
 ) -> MoldCookApproval:
     selected_coverage = coverage or cast(
         Callable[..., MoldCookCoverage], MoldCookCoverage
@@ -144,45 +161,47 @@ def make_approval(
         curd_ids=["curd-1"],
     )
     plan_digest = None if plan is None else cast(CurdPlan, plan.plan).digest
+    spec_digest = "sha256:" + hashlib.sha256(spec_path.read_bytes()).hexdigest()
     proposal = canonical_mold_cook_proposal(
-        request_id="request-1",
-        kind=MoldCookApprovalKind.PLAN,
-        spec_digest="sha256:" + hashlib.sha256(spec_path.read_bytes()).hexdigest(),
+        request_id=request_id,
+        kind=kind,
+        spec_digest=spec_digest,
         coverage=selected_coverage,
         planner_result=plan,
         plan_digest=plan_digest,
     )
-    response = b"approved\n"
     evidence_root = tmp_path / "artifacts" / "approval-evidence"
     evidence_root.mkdir(parents=True, exist_ok=True)
-    proposal_path = evidence_root / "proposal.json"
-    response_path = evidence_root / "response.txt"
+    proposal_id = f"proposal-{kind.value}"
+    response_id = f"response-{kind.value}"
+    proposal_path = evidence_root / f"{proposal_id}.json"
+    response_path = evidence_root / f"{response_id}.txt"
     _ = proposal_path.write_bytes(proposal)
     _ = response_path.write_bytes(response)
     proposal_ref = materialize_artifact_ref(
         proposal,
-        artifact_id="proposal-1",
+        artifact_id=proposal_id,
         role="proposal",
         uri=proposal_path.resolve().as_uri(),
         media_type="application/json",
     )
     response_ref = materialize_artifact_ref(
         response,
-        artifact_id="response-1",
+        artifact_id=response_id,
         role="response",
         uri=response_path.resolve().as_uri(),
         media_type="text/plain",
     )
     return bind_mold_cook_approval(
-        request_id="request-1",
-        kind=MoldCookApprovalKind.PLAN,
-        decision=MoldCookApprovalDecision.APPROVED,
+        request_id=request_id,
+        kind=kind,
+        decision=response_decision(response.decode()),
         source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest="sha256:" + hashlib.sha256(spec_path.read_bytes()).hexdigest(),
+        spec_digest=spec_digest,
         proposal_ref=proposal_ref,
         response_ref=response_ref,
         response_text=response.decode(),
-        response_source="response.txt",
+        response_source=response_id,
         coverage=selected_coverage,
         plan_digest=plan_digest,
     )
@@ -277,6 +296,12 @@ def test_missing_approval_is_saved_without_execution_authority(tmp_path: Path) -
             "requirement_id": "scope-approval",
             "kind": "scope",
             "description": "approved scope coverage is required before finalization",
+            "evidence": [],
+        },
+        {
+            "requirement_id": "plan-approval-kind",
+            "kind": "approval",
+            "description": "Full-tier complete work requires plan approval",
             "evidence": [],
         },
     ]
@@ -486,19 +511,3 @@ def test_persisted_artifact_ids_derive_from_role_and_digest(tmp_path: Path) -> N
     spec_ref = cast(Mapping[str, object], handoff["spec_ref"])
     digest = str(spec_ref["digest"]).removeprefix("sha256:")
     assert spec_ref["artifact_id"] == f"spec-{digest}"
-
-
-def test_failed_artifact_write_leaves_no_temporary_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def failing_replace(*_args: object, **_kwargs: object) -> None:
-        raise OSError("replace refused")
-
-    monkeypatch.setattr("easy_cheese.shared.publication.os.replace", failing_replace)
-    target = tmp_path / "artifacts" / "payload.json"
-
-    with pytest.raises(OSError, match="replace refused"):
-        producer._write_bytes(target, b"{}")  # pyright: ignore[reportPrivateUsage]
-
-    assert not target.exists()
-    assert list(target.parent.iterdir()) == []

@@ -29,7 +29,14 @@ from pathlib import Path
 from typing import cast
 
 from easy_cheese.shared.fanout.mode import PARALLEL_THRESHOLD
-from easy_cheese.shared.taste_test import ApplicabilityError, parse_landing, read_spec_text
+from easy_cheese.shared.taste_test import (
+    ApplicabilityError,
+    TasteTestError,
+    is_new_mold_spec,
+    parse_gate_applicability,
+    parse_landing,
+    read_spec_text,
+)
 from easy_cheese_schemas.contracts import Landing, LandingShape, landing_mapping
 
 HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
@@ -105,6 +112,26 @@ def _read_spec(spec_path: Path) -> str:
 
 
 
+def _gate_applicability_warnings(body: str) -> list[str]:
+    """Report a malformed ``gate_applicability`` block as a sizing warning.
+
+    Curd-count sizes work and never gates it, so a bad declaration changes no
+    recommendation here.  Reporting it names the problem the finalize gate
+    raises later, while the spec is still open.
+    """
+    try:
+        _ = parse_gate_applicability(body, require_ui_surface=True)
+    except ApplicabilityError as exc:
+        if exc.problems == (
+            "gate-applicability-declaration-required",
+        ) and not is_new_mold_spec(body):
+            return []
+        return [f"gate-applicability:{problem}" for problem in exc.problems]
+    except TasteTestError as exc:
+        return [f"gate-applicability:{exc}"]
+    return []
+
+
 def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
     body = _read_spec(spec_path)
     goals = _count_bullets(_extract_section(body, GOALS_HEADINGS))
@@ -133,6 +160,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
         "decomposable": candidate_curds >= PARALLEL_THRESHOLD,
         "recommended_skill": recommended,
         "landing": landing,
+        "warnings": _gate_applicability_warnings(body),
         "mode": mode,
         "rationale": rationale,
         "notes": [

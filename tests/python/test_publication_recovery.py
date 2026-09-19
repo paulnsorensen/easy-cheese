@@ -166,9 +166,7 @@ def test_corrupt_repair_keeps_a_concurrent_valid_replacement(
         content = original_read_bytes(path)
         if path == payload_path and not replaced:
             replaced = True
-            publication._atomic_write(  # pyright: ignore[reportPrivateUsage]
-                path, validated.canonical_bytes
-            )
+            publication.atomic_write(path, validated.canonical_bytes)
         return content
 
     monkeypatch.setattr(Path, "read_bytes", _read_bytes)
@@ -194,9 +192,7 @@ def test_corrupt_repair_restores_a_valid_post_read_replacement(
         nonlocal replaced
         if source == payload_path and not replaced:
             replaced = True
-            publication._atomic_write(  # pyright: ignore[reportPrivateUsage]
-                payload_path, validated.canonical_bytes
-            )
+            publication.atomic_write(payload_path, validated.canonical_bytes)
         original_replace(source, destination)
 
     monkeypatch.setattr(os, "replace", _replace)

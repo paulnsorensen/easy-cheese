@@ -25,17 +25,16 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookMode,
 )
 from easy_cheese.shared.mold_cook_handoff import (
-    bind_mold_cook_approval,
     canonical_mold_cook_proposal,
     materialize_artifact_ref,
+    publish_mold_cook_handoff,
     validate_mold_cook_approval,
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
-from easy_cheese.shared.publication import (
-    publish_mold_cook_handoff,
-    request_digest,
-)
+from easy_cheese.shared.publication import request_digest
 from easy_cheese.skills.cook.contract_handlers import accept_main
+
+from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
 COOK_PYZ = (
     Path(__file__).resolve().parents[2] / "skills" / "cook" / "scripts" / "cook.pyz"
@@ -193,9 +192,17 @@ def published_handoff(
 def test_local_dialogue_requires_the_question_and_exact_response(
     tmp_path: Path, dialogue: dict[str, str], message: str
 ) -> None:
+    coverage_factory = cast("Callable[..., MoldCookCoverage]", MoldCookCoverage)
+    coverage = coverage_factory(curd_ids=["curd-1"])
+    spec_digest = "sha256:" + ("a" * 64)
     proposal_ref = _write_ref(
         tmp_path,
-        b'{"decision":"approve"}',
+        canonical_mold_cook_proposal(
+            request_id="request-1",
+            kind=MoldCookApprovalKind.SCOPE,
+            spec_digest=spec_digest,
+            coverage=coverage,
+        ),
         artifact_id="proposal-1",
         role="proposal",
         filename="proposal.json",
@@ -209,18 +216,17 @@ def test_local_dialogue_requires_the_question_and_exact_response(
         filename="dialogue.json",
         media_type="application/json",
     )
-    coverage_factory = cast("Callable[..., MoldCookCoverage]", MoldCookCoverage)
     approval = bind_mold_cook_approval(
         request_id="request-1",
         kind=MoldCookApprovalKind.SCOPE,
         decision=MoldCookApprovalDecision.APPROVED,
         source=MoldCookApprovalSource.LOCAL_DIALOGUE,
-        spec_digest="sha256:" + ("a" * 64),
+        spec_digest=spec_digest,
         proposal_ref=proposal_ref,
         response_ref=response_ref,
         response_text="Approve",
         response_source="dialogue.json",
-        coverage=coverage_factory(curd_ids=["curd-1"]),
+        coverage=coverage,
     )
 
     with pytest.raises(ContractValidationError, match=message):
