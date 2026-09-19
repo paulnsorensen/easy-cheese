@@ -98,13 +98,13 @@ reason, and no contracts. Mold never infers applicability. Row-level rules:
 
 `python3 skills/mold/scripts/mold.pyz taste-test` binds the verdict to draft SHA256 and each settled fork. Stale, partial, or blocked verdicts fail; a failure reopens only named forks, with two rounds. Approved `red-required` specs pass unchanged metadata and the published pointer to `/cook --auto`.
 
-Each fork appears in Approach, Interface sketches, Acceptance, plus Test Contracts for `red-required`; no Test Contracts in `not-applicable` specs. Do not rename sections. Tag reflecting lines with fork id and run `taste-test --precheck` before dispatch; see `references/curdle.md` § Spec template. `goal` must survive verbatim in Problem statement (`goal-drift`) and each `G-n` clause needs an Acceptance or disposition tag (`goal-coverage`); see `references/gate-graph.md`.
+Each fork appears in Approach, Interface sketches, Acceptance, plus Test Contracts for `red-required`; none in `not-applicable` specs. Do not rename sections. Tag reflecting lines with fork id and run `taste-test --precheck` before dispatch. `goal` must survive verbatim in Problem statement (`goal-drift`); each `G-n` clause carries an Acceptance or disposition tag (`goal-coverage`). See `references/curdle.md` § Spec template and `references/gate-graph.md`.
 
 ## Approval gate
 
 Curdle requires the **two-key handshake**. It requires an explicit user verb: `curdle` or `ship it`. It also requires the agent's coherence self-check. Present the validated typed `CurdPlan`'s `N curds / M waves` with the final approval request in Flow step 5; on Light's single-curd path there is no plan, so present the spec alone and mark the plan boxes `n/a`. See `references/handshake.md` for the checklist, mandatory gates, and override semantics.
 
-Before the handshake, print the **narrowing delta** (`taste-test --coverage`; under half the `G-n` clauses shipping forces a re-pin-or-widen fork), then present the **scope audit table** once. One confirm approves the defaults; only leverage rows and unresolved bindings need a verb. `curdle anyway` waives neither. Procedure: `references/handshake.md` § Goal coverage, § Scope audit table.
+Before the handshake, print the **narrowing delta** (`taste-test --coverage`), then present the **scope audit table** once. One confirm approves the defaults; only leverage rows and unresolved bindings need a verb, and `curdle anyway` waives neither. See `references/handshake.md`.
 
 If any gate is unmet, propose the smallest next question, evidence check, or planner correction. Do the same if the typed plan remains invalid after one retry. Write artifacts only after both keys pass.
 
