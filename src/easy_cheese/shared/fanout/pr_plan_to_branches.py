@@ -5,21 +5,21 @@ Reads the plan (YAML or JSON) from a path argument or stdin and prints one shell
 command per line. The orchestrator reviews the commands, then pipes them to
 `bash -s` to execute. Dry-run friendly — this script never invokes git or gh.
 
-Validation is delegated to ``validate_pr_plan`` so there is exactly one source
-of truth for plan shape.
+The plan is loaded through the registered ``PrPlan`` v1 contract, the single
+source of truth for plan shape, before any command is emitted.
 """
 
 from __future__ import annotations
 
 import sys
-from typing import cast
 
 from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
     read_mapping_arg_or_stdin,
 )
 
-from easy_cheese.shared.fanout.validate_pr_plan import validate_pr_plan  # noqa: E402
+from easy_cheese_schemas import PrPlan  # noqa: E402
+from easy_cheese_schemas.schema_runtime import load_pr_plan  # noqa: E402
 
 PROG = "pr_plan_to_branches.py"
 
@@ -51,29 +51,23 @@ def sq(value: str) -> str:
     return "'" + value.replace("'", "'\\''") + "'"
 
 
-def emit_commands(plan: dict[str, object]) -> None:
-    shape = plan["shape"]
-    groups = cast("list[object]", plan["groups"])
-    print(f"# pr-plan shape: {shape} ({len(groups)} groups)")
+def emit_commands(plan: PrPlan) -> None:
+    print(f"# pr-plan shape: {plan.shape.value} ({len(plan.groups)} groups)")
     print("set -euo pipefail")
-    for index, group_obj in enumerate(groups, start=1):
-        group = cast("dict[str, object]", group_obj)
-        branch = cast(str, group["branch"])
-        title = cast(str, group["title"])
-        body = cast(str, group.get("body", ""))
-        base = cast(str, group["base"])
-        commits = cast("list[object]", group["commits"])
-
+    for index, group in enumerate(plan.groups, start=1):
+        # `body` is optional and may be absent, null, or empty; all three mean
+        # the same thing here, so `gh pr create --body ''` is what is rendered.
+        body = group.body or ""
         print()
-        print(f"# Group {index}: {branch} (base: {base})")
-        print(f"git checkout -b {sq(branch)} {sq(base)}")
-        for sha_obj in commits:
-            print(f"git cherry-pick {sq(cast(str, sha_obj))}")
-        print(f"git push -u origin {sq(branch)}")
+        print(f"# Group {index}: {group.branch} (base: {group.base})")
+        print(f"git checkout -b {sq(group.branch)} {sq(group.base)}")
+        for sha in group.commits:
+            print(f"git cherry-pick {sq(sha)}")
+        print(f"git push -u origin {sq(group.branch)}")
         print(
-            f"gh pr view {sq(branch)} --json number >/dev/null 2>&1 || "
-            + f"gh pr create --base {sq(base)} --head {sq(branch)} "
-            + f"--title {sq(title)} --body {sq(body)}"
+            f"gh pr view {sq(group.branch)} --json number >/dev/null 2>&1 || "
+            + f"gh pr create --base {sq(group.base)} --head {sq(group.branch)} "
+            + f"--title {sq(group.title)} --body {sq(body)}"
         )
 
 
@@ -88,13 +82,13 @@ def main(argv: list[str]) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2 if str(exc).startswith("usage:") else 1
 
-    errors = validate_pr_plan(plan)
-    if errors:
-        for error in errors:
-            print(f"ERROR: {error}", file=sys.stderr)
+    loaded = load_pr_plan(plan)
+    for error in loaded.problems:
+        print(f"ERROR: {error}", file=sys.stderr)
+    if loaded.value is None:
         return 1
 
-    emit_commands(plan)
+    emit_commands(loaded.value)
     return 0
 
 

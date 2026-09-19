@@ -1,6 +1,6 @@
 # Schema intertwine
 
-Run `scripts/render_generated_regions.py` to generate this file. Do not edit it manually. The generator joins the phase registry (`_compiled_phase_registry`), the schema catalog (`_schema_catalog`), and the registered contract models (`contracts.py`) for each phase transition.
+Run `scripts/render_generated_regions.py` to generate this file. Do not edit it manually. The generator joins the phase registry (`_compiled_phase_registry`), the schema catalog (`_schema_catalog`), and the registered contract models (contracts.py, pr_plan.py) for each phase transition.
 
 ## Phase transitions
 
@@ -30,6 +30,7 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | phase-contract | PhaseContract | — | — |
 | planner-request | PlannerRequest | mold | cook |
 | planner-result | PlannerResult | — | — |
+| pr-plan | PrPlan | — | — |
 | review-request | ReviewRequest | — | — |
 | review-result | ReviewResult | — | — |
 | wheypoint-record | WheypointRecord | — | — |

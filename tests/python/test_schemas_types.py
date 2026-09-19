@@ -172,6 +172,11 @@ RUN_MANIFEST: dict[str, object] = {
 }
 
 PR_PLAN: dict[str, object] = {
+    "contract_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/pr-plan",
+        "major": "1",
+        "minor": "0",
+    },
     "shape": "single",
     "groups": [
         {
@@ -470,6 +475,51 @@ class TestPrPlanInvariants:
             "PrPlan.groups[1].branch contains characters unsafe for a git ref",
         )
 
+    @pytest.mark.parametrize(
+        "ref",
+        [
+            "/topic",
+            "topic/",
+            "a//b",
+            "a..b",
+            "x.lock",
+            "a.lock/b",
+            "a.b.lock/c",
+            ".topic",
+            "a/.hidden",
+            "topic.",
+            "-flag",
+        ],
+    )
+    def test_branch_forms_git_check_ref_format_rejects_are_rejected(
+        self, ref: str
+    ) -> None:
+        payload = deepcopy(PR_PLAN)
+        _as_dict(_as_list(payload["groups"])[0])["branch"] = ref
+        result = load(payload, PrPlan, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "PrPlan.groups[1].branch contains characters unsafe for a git ref",
+        )
+
+    def test_base_form_git_check_ref_format_reject_is_rejected(self) -> None:
+        payload = deepcopy(PR_PLAN)
+        _as_dict(_as_list(payload["groups"])[0])["base"] = "topic.lock"
+        result = load(payload, PrPlan, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "PrPlan.groups[1].base contains characters unsafe for a git ref",
+        )
+
+    @pytest.mark.parametrize("ref", ["feat/x.y", "release-1.2", "a/b/c"])
+    def test_branch_forms_git_check_ref_format_accepts_are_accepted(
+        self, ref: str
+    ) -> None:
+        payload = deepcopy(PR_PLAN)
+        _as_dict(_as_list(payload["groups"])[0])["branch"] = ref
+        result = load(payload, PrPlan, strict=True)
+        assert result.value is not None
+
     def test_commit_that_is_not_a_hex_sha_is_rejected(self) -> None:
         payload = deepcopy(PR_PLAN)
         _as_dict(_as_list(payload["groups"])[0])["commits"] = ["HEAD~1"]
@@ -484,7 +534,11 @@ class TestPrPlanInvariants:
         """Two pull requests pushing the same ref would race each other."""
         group = deepcopy(_as_dict(_as_list(PR_PLAN["groups"])[0]))
         result = load(
-            {"shape": "orthogonal_flat", "groups": [group, deepcopy(group)]},
+            {
+                "contract_version": PR_PLAN["contract_version"],
+                "shape": "orthogonal_flat",
+                "groups": [group, deepcopy(group)],
+            },
             PrPlan,
             strict=True,
         )
@@ -497,7 +551,11 @@ class TestPrPlanInvariants:
     def test_single_shape_with_two_groups_is_rejected(self) -> None:
         group = deepcopy(_as_dict(_as_list(PR_PLAN["groups"])[0]))
         result = load(
-            {"shape": "single", "groups": [group, dict(group, branch="claude/other")]},
+            {
+                "contract_version": PR_PLAN["contract_version"],
+                "shape": "single",
+                "groups": [group, dict(group, branch="claude/other")],
+            },
             PrPlan,
             strict=True,
         )
@@ -511,7 +569,13 @@ class TestPrPlanInvariants:
         from main; a group based elsewhere is a stack in disguise."""
         group = dict(deepcopy(_as_dict(_as_list(PR_PLAN["groups"])[0])), base="develop")
         result = load(
-            {"shape": "orthogonal_flat", "groups": [group]}, PrPlan, strict=True
+            {
+                "contract_version": PR_PLAN["contract_version"],
+                "shape": "orthogonal_flat",
+                "groups": [group],
+            },
+            PrPlan,
+            strict=True,
         )
         assert result.value is None
         assert result.problems == (
@@ -522,6 +586,7 @@ class TestPrPlanInvariants:
         group = deepcopy(_as_dict(_as_list(PR_PLAN["groups"])[0]))
         result = load(
             {
+                "contract_version": PR_PLAN["contract_version"],
                 "shape": "orthogonal_flat",
                 "groups": [group, dict(group, branch="claude/other")],
             },
@@ -530,6 +595,27 @@ class TestPrPlanInvariants:
         )
         assert result.problems == ()
         assert result.value is not None
+
+
+class TestRunManifestPrPlanLayout:
+    """AC-6: a stored plate_layout must equal the layout the plan shape projects to."""
+
+    def test_layout_that_disagrees_with_plan_shape_is_rejected(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        payload["plate_layout"] = "single"
+        payload["pr_plan"] = dict(deepcopy(PR_PLAN), shape="stacked_linear")
+        result = load(payload, RunManifest, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "RunManifest.pr_plan must be valid: pr_plan: plate_layout_for(shape "
+            + "'stacked_linear') is 'stacked' but plate_layout is 'single'",
+        )
+
+    def test_layout_matching_plan_shape_is_accepted(self) -> None:
+        payload = deepcopy(RUN_MANIFEST)
+        payload["plate_layout"] = "single"
+        payload["pr_plan"] = deepcopy(PR_PLAN)
+        assert load(payload, RunManifest, strict=True).problems == ()
 
 
 class TestGateReceiptShapes:

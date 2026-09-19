@@ -4,7 +4,7 @@ import importlib.util
 import os
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, cast
@@ -88,9 +88,12 @@ class _WriterModule(Protocol):
 
 class _BuildPyzModule(Protocol):
     REPO_ROOT: Path
-    SCHEMA_CONTRACT_SOURCE: Path
+    SCHEMA_ROOT: Path
+    GENERATED_RUNTIME_SOURCES: tuple[tuple[Path, str, Callable[[], str]], ...]
 
     def _compiled_phase_registry_source(self) -> str: ...
+
+    def _contract_modules_inventory(self) -> ModuleType: ...
 
     def _checked_in_generated_file_bytes(
         self, expected_source: str, source: Path, *, artifact_name: str
@@ -386,38 +389,40 @@ def test_checked_in_catalog_projection_matches_build_generator() -> None:
     ).read_text(encoding="utf-8") == build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
 
 
-def test_schema_catalog_compilation_is_fresh_per_call(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_schema_catalog_compilation_follows_the_inventory(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The compiled catalog spans every module the inventory names.
+
+    Compilation imports the contract modules normally. A module added to
+    ``CONTRACT_MODULES`` therefore contributes its marked contracts without any
+    build-side special case.
+    """
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
     build_pyz: _BuildPyzModule = cast(
         _BuildPyzModule,
-        cast(object, _load("schema_catalog_build_fresh", scripts / "build_pyz.py")),
+        cast(object, _load("schema_catalog_build_inventory", scripts / "build_pyz.py")),
     )
-    source = REPO_ROOT / "src" / "easy_cheese_schemas" / "contracts.py"
-    staged = tmp_path / "contracts.py"
-    _ = staged.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-    monkeypatch.setattr(build_pyz, "SCHEMA_CONTRACT_SOURCE", staged)
+    stub = ModuleType("easy_cheese_schemas._fresh_plan_stub")
+    fresh_plan = type("FreshPlan", (), {})
+    stub.__dict__["registered_contracts"] = lambda: (("fresh-plan", fresh_plan),)
+    monkeypatch.setitem(sys.modules, stub.__name__, stub)
+    inventory = build_pyz._contract_modules_inventory()  # pyright: ignore[reportPrivateUsage]
+    listed = cast(tuple[str, ...], getattr(inventory, "CONTRACT_MODULES"))
+    monkeypatch.setattr(inventory, "CONTRACT_MODULES", (*listed, stub.__name__))
 
-    first = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
-    _ = staged.write_text(
-        staged.read_text(encoding="utf-8").replace(
-            '@contract("curd-plan")', '@contract("fresh-plan")', 1
-        ),
-        encoding="utf-8",
-    )
-    second = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    rendered = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
 
-    assert "curd-plan" in first
-    assert "fresh-plan" in second
-    assert first != second
+    assert "curd-plan" in rendered
+    assert "fresh-plan" in rendered
 
 
 def test_bundle_build_rejects_stale_checked_in_catalog(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A checked-in catalog that disagrees with the compiled one stops the build."""
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
@@ -425,15 +430,15 @@ def test_bundle_build_rejects_stale_checked_in_catalog(
         _BuildPyzModule,
         cast(object, _load("schema_catalog_build_stale", scripts / "build_pyz.py")),
     )
-    source = REPO_ROOT / "src" / "easy_cheese_schemas" / "contracts.py"
-    staged = tmp_path / "contracts.py"
-    _ = staged.write_text(
-        source.read_text(encoding="utf-8").replace(
-            '@contract("curd-plan")', '@contract("fresh-plan")', 1
-        ),
-        encoding="utf-8",
+    compiled = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    stale = tmp_path / "_schema_catalog.py"
+    _ = stale.write_text(compiled.replace('/pr-plan"', '/stale-plan"', 1), encoding="utf-8")
+    assert stale.read_text(encoding="utf-8") != compiled
+    monkeypatch.setattr(
+        build_pyz,
+        "GENERATED_RUNTIME_SOURCES",
+        ((stale, "schema catalog", build_pyz._compiled_schema_catalog_source),),  # pyright: ignore[reportPrivateUsage]
     )
-    monkeypatch.setattr(build_pyz, "SCHEMA_CONTRACT_SOURCE", staged)
     target = tmp_path / "cook.pyz"
 
     with pytest.raises(RuntimeError, match="checked-in schema catalog is stale"):

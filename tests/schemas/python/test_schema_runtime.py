@@ -4,10 +4,12 @@ import importlib
 import json
 import subprocess
 import sys
+import types
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
+import attrs
 import pytest
 from _schema_catalog_compiler import (
     _ContractModule,  # pyright: ignore[reportPrivateUsage]
@@ -26,8 +28,12 @@ from easy_cheese_schemas.contracts import (
     CurdPlan,
     contract,
 )
+from easy_cheese_schemas import contracts as contracts_module
+from easy_cheese_schemas.pr_plan import PrPlan
 from easy_cheese_schemas.schema_runtime import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
+    _collect_registered_contracts,  # pyright: ignore[reportPrivateUsage]
+    _definition,  # pyright: ignore[reportPrivateUsage]
     ContractValidationError,
     canonical_digest,
     normalize_agent_output,
@@ -142,6 +148,38 @@ def test_marker_authority_rejects_duplicate_slugs() -> None:
         setattr(contract_type, "__contract_slug__", original_slug)
 
 
+def _stub_contract_module(name: str, slug: str) -> _ContractModule:
+    """Build a module exporting exactly one contract class marked with ``slug``."""
+    module = types.ModuleType(name)
+
+    @contract(slug)
+    class Marked:
+        pass
+
+    Marked.__module__ = name
+    setattr(module, "Marked", Marked)
+    setattr(
+        module,
+        "registered_contracts",
+        lambda: contracts_module.marked_contracts_in(module),
+    )
+    return cast(_ContractModule, cast(object, module))
+
+
+def test_duplicate_slugs_across_modules_are_rejected_by_runtime_and_compiler() -> None:
+    """Marker authority spans modules: the same slug exported by two modules is
+    an error for the runtime collector and for the catalog compiler alike."""
+    left = _stub_contract_module("stub_contracts_left", "twin")
+    right = _stub_contract_module("stub_contracts_right", "twin")
+
+    with pytest.raises(ValueError, match=r"duplicate contract marker 'twin'"):
+        _ = _collect_registered_contracts(left, right)
+
+    with pytest.raises(
+        ValueError, match=r"duplicate contract marker\(s\) across modules"
+    ):
+        _ = collect_schema_markers((left, right))
+
 @pytest.mark.parametrize("slug", ["", "  ", 7])
 def test_contract_rejects_invalid_markers(slug: object) -> None:
     with pytest.raises(ValueError, match="contract slug must be a non-empty string"):
@@ -166,20 +204,27 @@ def test_marker_authority_rejects_invalid_registered_markers(slug: object) -> No
         setattr(contract_type, "__contract_slug__", original_slug)
 
 
-def test_runtime_and_compiler_project_one_marker_authority() -> None:
-    contracts = importlib.import_module("easy_cheese_schemas.contracts")
+def test_runtime_and_compiler_project_the_module_inventory() -> None:
+    inventory = importlib.import_module("easy_cheese_schemas._contract_modules")
+    module_names = cast(tuple[str, ...], getattr(inventory, "CONTRACT_MODULES"))
     runtime = importlib.import_module("easy_cheese_schemas.schema_runtime")
     registered = cast(
-        Callable[[], tuple[tuple[str, type], ...]], contracts.registered_contracts
+        Callable[[], tuple[tuple[str, type], ...]], runtime.registered_contracts
     )
     entries = registered()
     marked_contracts = cast(tuple[tuple[str, type], ...], runtime._MARKED_CONTRACTS)
+    modules = tuple(
+        cast(_ContractModule, cast(object, importlib.import_module(name)))
+        for name in module_names
+    )
+    projected = collect_schema_markers(modules)
 
     assert entries == tuple(sorted(entries, key=lambda entry: entry[0]))
     assert marked_contracts == entries
-    assert collect_schema_markers(
-        cast(_ContractModule, cast(object, contracts))
-    ) == tuple((slug, contract_type.__name__) for slug, contract_type in entries)
+    assert ("pr-plan", "PrPlan") in projected
+    assert projected == tuple(
+        (slug, contract_type.__name__) for slug, contract_type in entries
+    )
 
 
 def test_compiler_retains_constant_name_collision_validation() -> None:
@@ -191,10 +236,16 @@ def test_compiler_retains_constant_name_collision_validation() -> None:
 
 def test_generated_catalog_bytes_match_compiler_projection() -> None:
     contracts = importlib.import_module("easy_cheese_schemas.contracts")
+    pr_plan = importlib.import_module("easy_cheese_schemas.pr_plan")
     generated = ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
 
     assert generated.read_bytes() == render_schema_catalog(
-        collect_schema_markers(cast(_ContractModule, cast(object, contracts)))
+        collect_schema_markers(
+            (
+                cast(_ContractModule, cast(object, contracts)),
+                cast(_ContractModule, cast(object, pr_plan)),
+            )
+        )
     ).encode("utf-8")
 
 
@@ -254,6 +305,7 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         f"{SCHEMA_ROOT}/phase-contract",
         f"{SCHEMA_ROOT}/planner-request",
         f"{SCHEMA_ROOT}/planner-result",
+        f"{SCHEMA_ROOT}/pr-plan",
         f"{SCHEMA_ROOT}/review-request",
         f"{SCHEMA_ROOT}/review-result",
         f"{SCHEMA_ROOT}/wheypoint-record",
@@ -306,6 +358,42 @@ def test_registered_schema_matches_pre_migration_golden(schema_uri: str) -> None
     )
 
     assert schema_bytes(schema_uri) == golden.read_bytes()
+
+
+def test_field_metadata_min_items_produces_json_schema_min_items() -> None:
+    """The generator reads `min_items` off attrs metadata for any array field,
+    not just PrPlan's -- PrPlan.groups is checked separately below."""
+
+    @attrs.define(frozen=True)
+    class _Sample:
+        items: list[str] = attrs.field(metadata={"min_items": 2})
+
+    definitions: dict[str, object] = {}
+    _ = _definition(_Sample, definitions)
+    properties = as_dict(as_dict(definitions["_Sample"])["properties"])
+    assert as_dict(properties["items"])["minItems"] == 2
+
+
+def test_field_metadata_min_items_reaches_an_optional_array() -> None:
+    """An optional array keeps `min_items` on its array member of the union."""
+
+    @attrs.define(frozen=True)
+    class _Optional:
+        items: list[str] | None = attrs.field(default=None, metadata={"min_items": 1})
+
+    definitions: dict[str, object] = {}
+    _ = _definition(_Optional, definitions)
+    properties = as_dict(as_dict(definitions["_Optional"])["properties"])
+    members = cast("list[object]", as_dict(properties["items"])["anyOf"])
+    array_member = next(as_dict(m) for m in members if as_dict(m).get("type") == "array")
+    assert array_member["minItems"] == 1
+
+
+def test_pr_plan_groups_schema_requires_at_least_one_group() -> None:
+    schema = cast(dict[str, object], json.loads(schema_bytes(PrPlan)))
+    defs = as_dict(schema["$defs"])
+    groups_schema = as_dict(as_dict(defs["PrPlan"])["properties"])["groups"]
+    assert as_dict(groups_schema)["minItems"] == 1
 
 
 def test_registered_schema_registry_is_immutable_and_private_authority_is_not_public() -> (
