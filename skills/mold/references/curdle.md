@@ -36,7 +36,9 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 
 `landing.layers` records ordered groups of canonical curd ids from the approved CurdPlan, as a one-line flow list. Leave it `[]` only when `shape` is `single`; a non-single shape requires at least one layer.
 
-**Fork-id tags.** Every settled consequential fork in the decision ledger must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`. Each line that reflects a fork carries the fork id in parentheses, for example `- AC-3: WHEN ... THE SYSTEM SHALL ... (F-3)` or `public interface: parse(...) -> Result  (F-2)`. The taste test matches the fork id literally, or every 3+ letter word of the decision text; the tag is the reliable form. Run `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` before the reviewer dispatch; fix every reported gap first.
+**Fork-id tags.** Every settled consequential fork in the decision ledger must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`. Each line that reflects a fork carries the fork id in parentheses, for example `- AC-3: WHEN ... THE SYSTEM SHALL ... (F-3)` or `public interface: parse(...) -> Result  (F-2)`. The taste test matches the fork id literally, or every 3+ letter word of the decision text; the tag is the reliable form.
+
+**Goal-clause tags.** Every `G-n` clause from the ledger's `goal_clauses` carries its tag on at least one Acceptance line, or on exactly one disposition line: a `Non-goals` bullet, a `Deferred follow-ups` entry, or a `[TBD]` item under `Open questions`. The pre-check fails `goal-coverage:G-n` for an untagged clause and `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses reach Acceptance. See `handshake.md` § Goal coverage. Run `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` before the reviewer dispatch; fix every reported gap first.
 
 ```markdown
 ---
@@ -48,6 +50,7 @@ confidence: <low | medium | high>
 leverage: []   # fired trigger ids per `../../cheese/references/routing-policy.md` § Leverage triggers; copied from the handoff packet, extended when a later mode fires one
 gates_overridden: []   # list of unchecked handshake items if `curdle anyway` was used
 agent_introduced_scope: []   # terms in the spec the user did not type — approved through the scope audit table per `handshake.md` § Scope audit table (audit trail; downstream skills trust this list)
+goal_coverage: {}   # G-n -> covered | non-goal | follow-up | tbd, the final disposition map printed as the narrowing delta per `handshake.md` § Goal coverage (audit trail; downstream skills trust this map)
 entity_referent_bindings: []   # list of binding records {noun, verdict, referent, citation, note} for identity/ownership-role nouns bound to code referents or marked NEW ENTITY — each resolved per `handshake.md` § Entity-referent binding (audit trail; downstream skills trust this list)
 agent_resolution: []   # the shared agent-resolution block per `../../cheese/references/agent-resolution.md`
 gate_applicability:
@@ -67,10 +70,11 @@ landing:
 <one paragraph; what's broken or missing today, who feels it>
 
 ## Goals
-- <bullet>
+- G-1: <one outcome clause of the pinned goal, verbatim from the ledger>
+- G-2: <...>
 
 ## Non-goals
-- <bullet>
+- <bullet>  (G-n when this bullet defers a goal clause)
 
 ## Deferred follow-ups
 - **<deterministic follow-up ID>** — <summary>
@@ -104,8 +108,8 @@ WHEN <trigger> THE SYSTEM SHALL <response>
 ```
 If the trigger cannot be stated precisely (e.g. pure internal utilities with no external event), use prose with a `[prose-fallback]` marker.
 
-- AC-1: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>)
-- AC-2: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>)
+- AC-1: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>, <G-n>)
+- AC-2: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>, <G-n>)
 
 ## Test Contracts
 

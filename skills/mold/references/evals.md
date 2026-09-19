@@ -36,6 +36,7 @@ For each completed `/mold` Grill-mode run, verify:
 4. **Clean-steelman batching stays scoped.** Batch-report a consequential item as upheld only when its steelman finds nothing. Never include a consequential item with a live tension in a batch. Below-the-line items always batch, tension or not; the ledger carries their vetoable alternative.
 5. **Every user fork names what it moves.** Each `Asking` entry cites the acceptance criterion, public seam, or non-goal it changes. A fork with no such target is `[AGENT-DECIDED]` or a follow-up candidate, never a question.
 6. **The `Goal:` line survives every round.** The ledger repeats the pinned goal verbatim from the bounds pass to the handshake. A reworded goal traces to an explicit user fork.
+7. **Every `G-n` clause reaches the handshake with a disposition.** The bounds pass prints the clauses. The narrowing delta names each one as covered, follow-up, non-goal, or `[TBD]`. A spec that covers fewer than half the clauses triggers a re-pin-or-widen fork, never a silent proceed.
 
 ## Failure modes to watch for
 
@@ -45,6 +46,7 @@ For each completed `/mold` Grill-mode run, verify:
 - **Under-batching** — a below-the-line item (naming, internal scope, a trade-off that fires no trigger) gets its own user turn instead of a ledger line.
 - **Altitude drift** — three or more consecutive forks move no acceptance criterion, seam, or non-goal, and the decision map never renders. The rabbit hole this eval exists to catch: every noun traces to the user, so the noun-level scope gates stay green while the dialogue burrows.
 - **Goal fade** — the `Goal:` line drops out of the ledger render or silently rewords. The taste test catches the terminal form as `goal-drift`; the per-round render is the early form.
+- **Quarter build** — the goal sentence survives and every noun traces, but Acceptance delivers a fraction of the clauses and the agent presents the slice as the whole. The pre-check catches the terminal form as `goal-coverage:G-n` or `goal-coverage-cap`; a missing narrowing delta at the handshake is the early form.
 
 ## Mold-to-Cook live trace
 
