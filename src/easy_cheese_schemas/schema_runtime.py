@@ -102,7 +102,8 @@ def registered_contracts() -> tuple[tuple[str, type], ...]:
     return _collect_registered_contracts(*_contract_modules())
 
 
-_PACKAGE_CONTRACTS = registered_contracts()
+_MARKED_CONTRACTS = registered_contracts()
+_PACKAGE_CONTRACTS = _MARKED_CONTRACTS
 
 
 def contract_registry() -> tuple[tuple[str, type], ...]:
