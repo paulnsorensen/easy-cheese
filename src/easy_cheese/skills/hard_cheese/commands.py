@@ -25,12 +25,22 @@ def _freshness_check(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("rank-hunks")
+def _rank_hunks(argv: list[str]) -> int:
+    from easy_cheese.skills.hard_cheese.rank_hunks import main
+
+    return main(argv)
+
+
 COMMANDS = (
     derive_command(
         _append_attempt, "Atomically append an attempt row to the audit trail"
     ),
     derive_command(
         _freshness_check, "Decide whether a prior attempt is fresh, stale, or new"
+    ),
+    derive_command(
+        _rank_hunks, "Score git diff hunks by risk and emit the top N as JSON"
     ),
 )
 

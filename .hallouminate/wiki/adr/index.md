@@ -25,6 +25,9 @@
 - [hallouminate-wiring-stack-002](./hallouminate-wiring-stack-002.md) — ADR: cook and age record durable-change flags; only the publication boundary writes the wiki
 - [hallouminate-wiring-stack-003](./hallouminate-wiring-stack-003.md) — ADR: liberal wiki grounding in mold/culture is prose guidance, not a coherence gate
 - [hallouminate-wiring-stack-004](./hallouminate-wiring-stack-004.md) — ADR: validate_wiki.py hardcodes .hallouminate/wiki/ discovery, ignoring config.toml corpus_paths
+- [hard-cheese-question-targeting-001](./hard-cheese-question-targeting-001.md) — ADR: hard-cheese targets diff hunks with a script and lets the judge phrase the questions
+- [hard-cheese-question-targeting-002](./hard-cheese-question-targeting-002.md) — ADR: ranked regions appear before the first attempt; targeted questions appear only after a FAIL
+- [hard-cheese-question-targeting-003](./hard-cheese-question-targeting-003.md) — ADR: the hard-cheese prompt opens with a purpose-first sentence and keeps the paper's questions verbatim
 - [hard-cheese-retained-001](./hard-cheese-retained-001.md) — ADR: hard-cheese retained despite local zero-use signal
 - [legacy-adapter-lifecycle-004](./legacy-adapter-lifecycle-004.md) — ADR: Legacy handoff adapters are exact, explicit, and temporary
 - [legacy-migration-withdrawal-001](./legacy-migration-withdrawal-001.md) — ADR: Workflow-layer CurdPlan migration is withdrawn
