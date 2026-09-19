@@ -186,7 +186,7 @@ def test_publish_tolerates_directory_open_failure(
     pointer_dir = tmp_path / "pointers"
 
     def _open(
-        path: str, flags: int, mode: int = 0o777, *, dir_fd: int | None = None
+        path: str, flags: int, mode: int = 0o600, *, dir_fd: int | None = None
     ) -> int:
         if Path(path) == pointer_dir:
             raise OSError(errno.EACCES, "directory handles are unsupported")
@@ -209,7 +209,7 @@ def test_publish_tolerates_directory_fsync_failure(
     pointer_dir = tmp_path / "pointers"
 
     def _open(
-        path: str, flags: int, mode: int = 0o777, *, dir_fd: int | None = None
+        path: str, flags: int, mode: int = 0o600, *, dir_fd: int | None = None
     ) -> int:
         descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
         if Path(path) == pointer_dir:
