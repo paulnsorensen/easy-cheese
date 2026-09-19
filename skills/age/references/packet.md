@@ -65,6 +65,15 @@ If new observations require replanning, preserve the prior plan and record the c
 A production-tree change requires a new review, not a refreshed lock that makes stale findings appear current.
 Leave transient artifact removal to normal `.cheese/` cleanup.
 
+## Late evidence
+
+The report write can fail with `review evidence changed`. The error names each moved `.cheese/` file.
+This error means that the source tree still matches the lock. Only review evidence moved, for example a late packet.
+Run `python3 skills/age/scripts/age.pyz review-lock --slug <slug> --refresh-evidence`. Then write the report again.
+The refresh refuses when a source file moved.
+Record the refresh and the named files under `## Agent resolution` in the report.
+Every other lock failure stays final. Do not take a new lock to force the write.
+
 ## Evidence tools and fallbacks
 
 Use `../../cheese/references/code-intelligence-routing.md` for backend selection.

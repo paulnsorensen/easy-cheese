@@ -149,6 +149,75 @@ def test_editing_a_tracked_file_after_the_lock_blocks_the_report_and_names_cure(
     assert not _report(repo, "demo").exists()
 
 
+def _write_late_packet(repo: Path) -> None:
+    packet = repo / ".cheese" / "age" / "demo-packet.md"
+    packet.parent.mkdir(parents=True, exist_ok=True)
+    _ = packet.write_text("# packet written after the lock\n", encoding="utf-8")
+
+
+def test_a_late_packet_is_named_as_evidence_and_not_as_a_production_change(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+    _write_late_packet(repo)
+
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    stderr = capsys.readouterr().err
+    assert "review evidence changed" in stderr
+    assert ".cheese/age/demo-packet.md" in stderr
+    assert "--refresh-evidence" in stderr
+    assert "production tree changed" not in stderr
+    assert not _report(repo, "demo").exists()
+
+
+def test_refresh_evidence_lets_the_report_write_after_a_late_packet(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _write_late_packet(repo)
+
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 0
+    _ = capsys.readouterr()
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 0
+    assert _report(repo, "demo").is_file()
+
+
+def test_refresh_evidence_refuses_when_a_source_file_also_moved(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    lock = review_lock.lock_path(root=repo, slug="demo")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    locked = lock.read_text(encoding="utf-8")
+    _write_late_packet(repo)
+    _ = (repo / "app.py").write_text("def add(a, b):\n    return 0\n", encoding="utf-8")
+    _ = capsys.readouterr()
+
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 2
+    stderr = capsys.readouterr().err
+    assert "refresh is refused" in stderr
+    assert "/cure" in stderr
+    assert lock.read_text(encoding="utf-8") == locked
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    assert "production tree changed" in capsys.readouterr().err
+
+
+def test_refresh_evidence_needs_an_existing_lock_with_a_source_digest(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 2
+    assert "no review lock" in capsys.readouterr().err
+
+    lock = review_lock.lock_path(root=repo, slug="demo")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    _ = lock.write_text(json.dumps({"slug": "demo", "digest": "0" * 64}), encoding="utf-8")
+    assert review_lock.main(refresh) == 2
+    assert "recorded no source digest" in capsys.readouterr().err
+
+
 def test_a_new_untracked_production_file_after_the_lock_blocks_the_report(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -354,7 +423,9 @@ def test_changing_the_fan_out_packet_after_the_lock_blocks_the_report(
     _ = packet.write_text("# packet\n\nrewritten evidence\n", encoding="utf-8")
 
     assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
-    assert "production tree changed" in capsys.readouterr().err
+    stderr = capsys.readouterr().err
+    assert "review evidence changed" in stderr
+    assert ".cheese/age/demo-packet.md" in stderr
     assert not _report(repo, "demo").exists()
 
 
@@ -370,7 +441,9 @@ def test_another_slugs_report_still_counts_as_production_state(
     _ = other.write_text("# Age Report — other\n\nedited\n", encoding="utf-8")
 
     assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
-    assert "production tree changed" in capsys.readouterr().err
+    stderr = capsys.readouterr().err
+    assert "review evidence changed" in stderr
+    assert ".cheese/age/other.md" in stderr
 
 
 def test_the_lock_resolves_the_repository_root_from_a_nested_directory(

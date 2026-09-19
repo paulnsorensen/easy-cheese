@@ -17,6 +17,12 @@ and HTML copy. Every other ``.cheese/age`` file — the fan-out packet included 
 stays in the digest, so a report cannot be certified after its own evidence
 moved.
 
+The lock also records a source-only digest and a hash for each review input. They
+never decide the gate. They let a refusal say which side moved and name the
+file. When only review evidence moved, ``review-lock --refresh-evidence``
+captures the lock again. It refuses when the source digest differs, so it cannot
+hide an inline fix.
+
 Git runs with text conversion, external diff drivers, hooks, and the file-system
 monitor disabled, so a repository under review cannot execute a configured
 command with the reviewer's privileges.
@@ -194,7 +200,9 @@ def _hash_untracked_listing(
         _hash_untracked_path(bytes(pending), root, digest, slug)
 
 
-def _hash_untracked(root: Path, digest: _Digest, slug: str) -> None:
+def _hash_untracked(
+    root: Path, digest: _Digest, slug: str, *, evidence: bool = True
+) -> None:
     digest.update(b"untracked\0")
     _hash_untracked_listing(
         [
@@ -211,6 +219,8 @@ def _hash_untracked(root: Path, digest: _Digest, slug: str) -> None:
         digest,
         slug,
     )
+    if not evidence:
+        return
     _hash_untracked_listing(
         ["ls-files", "--others", "--full-name", "-z", "--", SCRATCH_DIR],
         root,
@@ -219,8 +229,8 @@ def _hash_untracked(root: Path, digest: _Digest, slug: str) -> None:
     )
 
 
-def tree_digest(root: Path, *, slug: str) -> str | None:
-    """Hash the captured git tree and every review input for `slug`."""
+def tree_digest(root: Path, *, slug: str, evidence: bool = True) -> str | None:
+    """Hash the captured git tree and, with `evidence`, every review input for `slug`."""
     top = repo_root(root)
     if top is None:
         return None
@@ -236,6 +246,8 @@ def tree_digest(root: Path, *, slug: str) -> str | None:
     else:
         digest.update(b"<unborn>")
     excludes = _exclude_pathspecs(slug)
+    if not evidence:
+        excludes.append(f":(exclude,glob){SCRATCH_DIR}/**")
     if head.returncode == 0:
         digest.update(b"\0diff\0")
         _stream_git([*_DIFF_BASE, "HEAD", "--", ".", *excludes], top, digest.update)
@@ -246,8 +258,35 @@ def tree_digest(root: Path, *, slug: str) -> str | None:
         _stream_git([*_DIFF_BASE, "--cached", "--", ".", *excludes], top, digest.update)
         digest.update(b"\0worktree\0")
         _stream_git([*_DIFF_BASE, "--", ".", *excludes], top, digest.update)
-    _hash_untracked(top, digest, slug)
+    _hash_untracked(top, digest, slug, evidence=evidence)
     return digest.hexdigest()
+
+
+def _evidence_files(root: Path, slug: str) -> dict[str, str]:
+    """Hash each review input under `.cheese/`, so a mismatch can name the file."""
+    if repo_root(root) is None:
+        return {}
+    listing = _run_git(
+        ["ls-files", "--cached", "--others", "--full-name", "-z", "--", SCRATCH_DIR],
+        root,
+    )
+    if listing.returncode != 0:
+        raise cli.CliError(f"cannot list {SCRATCH_DIR}/: {listing.stderr.strip()}")
+    files: dict[str, str] = {}
+    for name in filter(None, listing.stdout.split("\0")):
+        if _is_review_output(name, slug):
+            continue
+        path = root / name
+        try:
+            if path.is_symlink():
+                files[name] = f"link:{os.readlink(path)}"
+            elif path.is_file():
+                files[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+            else:
+                files[name] = "absent"
+        except OSError as exc:
+            raise cli.CliError(f"cannot hash review input {name!r}: {exc}") from exc
+    return files
 
 
 def _reject_symlink_components(root: Path, target: Path) -> None:
@@ -293,12 +332,18 @@ def capture(*, root: Path, slug: str) -> Path:
     target = lock_path(root=top, slug=slug)
     target.parent.mkdir(parents=True, exist_ok=True)
     _reject_symlink_components(top, target)
-    payload = {"slug": slug, "digest": tree_digest(top, slug=slug)}
+    payload = {
+        "slug": slug,
+        "digest": tree_digest(top, slug=slug),
+        # The two fields below only explain a mismatch. `digest` decides it.
+        "source_digest": tree_digest(top, slug=slug, evidence=False),
+        "evidence_files": _evidence_files(top, slug),
+    }
     _write_no_follow(target, json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return target
 
 
-def _locked_digest(target: Path, slug: str) -> str:
+def _read_lock(target: Path, slug: str) -> dict[str, object]:
     if not target.is_file():
         raise cli.CliError(
             f"no review lock for {slug!r}: run `{_LOCK_COMMAND} {slug}` at the start "
@@ -309,17 +354,13 @@ def _locked_digest(target: Path, slug: str) -> str:
         payload = cast(object, json.loads(target.read_text(encoding="utf-8")))
     except ValueError as exc:
         raise cli.CliError(f"unreadable review lock {target}: {exc}") from exc
-    locked = (
-        cast("dict[str, object]", payload).get("digest")
-        if isinstance(payload, dict)
-        else None
-    )
-    if not isinstance(locked, str):
+    fields = cast("dict[str, object]", payload) if isinstance(payload, dict) else {}
+    if not isinstance(fields.get("digest"), str):
         raise cli.CliError(
             f"review lock {target} recorded no digest: re-run `{_LOCK_COMMAND} {slug}` "
             + "from inside the git work tree under review."
         )
-    return locked
+    return fields
 
 
 def verify(*, root: Path, slug: str) -> None:
@@ -330,19 +371,60 @@ def verify(*, root: Path, slug: str) -> None:
         return
     # Validate the lock before the digest: a missing lock must not pay for the
     # git walk first.
-    locked = _locked_digest(lock_path(root=top, slug=slug), slug)
-    current = tree_digest(top, slug=slug)
-    if locked != current:
-        raise cli.CliError(
-            f"the production tree changed after {slug!r}'s review lock: /age does not "
-            + "apply fixes — invoke /cure with the findings instead. If the change came "
-            + f"from outside this review, re-run `{_LOCK_COMMAND} {slug}` and review again."
+    payload = _read_lock(lock_path(root=top, slug=slug), slug)
+    if payload["digest"] == tree_digest(top, slug=slug):
+        return
+    if payload.get("source_digest") == tree_digest(top, slug=slug, evidence=False):
+        locked_files = payload.get("evidence_files")
+        before = cast("dict[str, str]", locked_files) if isinstance(locked_files, dict) else {}
+        after = _evidence_files(top, slug)
+        moved = sorted(
+            name for name in before.keys() | after.keys() if before.get(name) != after.get(name)
         )
+        raise cli.CliError(
+            f"review evidence changed after {slug!r}'s review lock, and the source tree "
+            + f"did not: {', '.join(moved) or 'unknown file'}. Write the packet and every "
+            + "other .cheese/ input before the lock. To continue this review, run "
+            + f"`{_LOCK_COMMAND} {slug} --refresh-evidence`, then write the report again."
+        )
+    raise cli.CliError(
+        f"the production tree changed after {slug!r}'s review lock: /age does not "
+        + "apply fixes — invoke /cure with the findings instead. If the change came "
+        + f"from outside this review, re-run `{_LOCK_COMMAND} {slug}` and review again. "
+        + "Run `git status --short` to see the changed files."
+    )
+
+
+def refresh_evidence(*, root: Path, slug: str) -> Path:
+    """Capture the lock again after review evidence moved; refuse a source change.
+
+    The source digest must equal the locked one, so this command cannot hide an
+    inline fix.
+    """
+    top = repo_root(root) or root
+    payload = _read_lock(lock_path(root=top, slug=slug), slug)
+    locked_source = payload.get("source_digest")
+    if not isinstance(locked_source, str):
+        raise cli.CliError(
+            f"review lock for {slug!r} recorded no source digest: "
+            + f"re-run `{_LOCK_COMMAND} {slug}` and review again."
+        )
+    if locked_source != tree_digest(top, slug=slug, evidence=False):
+        raise cli.CliError(
+            f"the source tree changed after {slug!r}'s review lock, so the evidence "
+            + "refresh is refused: /age does not apply fixes — invoke /cure with the "
+            + "findings instead. Run `git status --short` to see the changed files."
+        )
+    return capture(root=top, slug=slug)
 
 
 def _cmd_lock(args: argparse.Namespace) -> None:
     root = Path(cast("str | None", args.root) or Path.cwd())
-    target = capture(root=root, slug=cast(str, args.slug))
+    slug = cast(str, args.slug)
+    if cast(bool, args.refresh_evidence):
+        target = refresh_evidence(root=root, slug=slug)
+    else:
+        target = capture(root=root, slug=slug)
     cli.emit(str(target), stdout=cast(TextIO, args.stdout))
 
 
@@ -354,6 +436,14 @@ def _setup(parser: argparse.ArgumentParser) -> None:
         "--root",
         default=None,
         help="repo root (default: cwd); the lock lands under .cheese/age/",
+    )
+    _ = parser.add_argument(
+        "--refresh-evidence",
+        action="store_true",
+        help=(
+            "capture the lock again after a file under .cheese/ moved; "
+            "refused when the source tree differs from the existing lock"
+        ),
     )
     parser.set_defaults(func=_cmd_lock)
 
