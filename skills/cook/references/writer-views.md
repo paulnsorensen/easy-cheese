@@ -110,6 +110,7 @@ type ReproductionWriterView {
 
 type ReviewFindingWriterView {
   severity ReviewSeverity
+  dimension ReviewDimension
   summary str
   evidence_keys tuple[str, ...]
   location? SourceLocationWriterView | None = None
@@ -148,6 +149,8 @@ enum HypothesisDisposition = "confirmed" | "rejected" | "unresolved"
 enum PlannerDisposition = "complete" | "partial" | "no_work" | "blocked" | "invalid" | "executor_failure"
 
 enum ReproductionDisposition = "reproduced" | "not_reproduced" | "blocked"
+
+enum ReviewDimension = "correctness" | "security" | "encapsulation" | "spec" | "complexity" | "deslop" | "assertions" | "nih" | "efficiency" | "telemetry" | "conventions" | "altitude"
 
 enum ReviewDisposition = "clean" | "findings" | "blocked" | "invalid" | "executor_failure"
 

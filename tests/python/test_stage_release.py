@@ -70,6 +70,8 @@ def test_skill_metadata_ships(staged: Path) -> None:
         assert (staged / "skills" / skill / "SKILL.md").is_file()
 
 
+
+
 def test_no_raw_python_under_skills(staged: Path) -> None:
     """The release ships the .pyz, never the loose .py — the whole point of the
     src/ relocation. A stray .py here means a skill leaked its sources."""

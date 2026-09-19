@@ -317,6 +317,8 @@ def test_rendering_command_docs_never_resolves_targets(
         )
 
 
+
+
 def test_checked_in_command_docs_match_the_manifests() -> None:
     from scripts import build_pyz
     from scripts import render_generated_regions as rgr

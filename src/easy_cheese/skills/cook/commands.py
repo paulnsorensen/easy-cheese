@@ -25,13 +25,6 @@ def _artifact_path(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("age-route")
-def _age_route(argv: list[str]) -> int:
-    from easy_cheese.shared.fanout.age_route_cli import main
-
-    return main(argv)
-
-
 @bundle_command("baseline")
 def _baseline(argv: list[str]) -> int:
     from easy_cheese.shared.fanout.baseline import main
@@ -194,10 +187,6 @@ COMMANDS = (
     derive_command(
         _artifact_path,
         "Resolve the durable or transient artifact path for a phase and slug",
-    ),
-    derive_command(
-        _age_route,
-        "Size an /age review into single-pass or fan-out lanes (JSON in, JSON out)",
     ),
     derive_command(
         _baseline, "Classify a current test-failure list against a stored baseline"

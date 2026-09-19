@@ -1,6 +1,12 @@
 # ADR-003 — No LLM classifier in the sizing path
 
 **Status:** accepted · **Spec:** `deterministic-fanout-sizing`
+**Current qualification (2026-09):** Superseded as the complete Age input
+policy. The no-standalone-classifier boundary remains current, and glob
+matching remains a workload-scoring mechanism. The active planner also accepts
+evidence-bearing semantic context from the coordinator; this historical
+decision must not be read as a glob-only input boundary. See
+[age-fanout-router](../architecture/age-fanout-router.md).
 
 ## Context
 

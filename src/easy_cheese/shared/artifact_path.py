@@ -14,15 +14,6 @@ from typing import cast
 
 from easy_cheese.shared import paths
 
-PHASES = paths.PHASES
-XDG_PHASES = paths.XDG_PHASES
-PHASE_DIRS = paths.PHASE_DIRS
-KEBAB_SLUG = paths.KEBAB_SLUG
-
-
-def project_corpus_root() -> Path:
-    return paths.project_corpus_root()
-
 
 def artifact_path(phase: str, slug: str) -> Path:
     # paths.validate_slug reports an empty slug as "must be a non-empty

@@ -14,6 +14,7 @@ import pytest
 
 import easy_cheese_schemas as schemas
 from easy_cheese_schemas.contracts import CurdPlan
+from easy_cheese_schemas.schema_runtime import load_curd_plan
 
 
 def raw_plan() -> dict[str, object]:
@@ -57,7 +58,7 @@ def test_decoded_json_mapping_reaches_a_validated_plan() -> None:
     with pytest.raises(TypeError, match="expects CurdPlan, not dict"):
         _ = schemas.validate_curd_plan(raw)
 
-    plan = schemas.load_curd_plan(raw)
+    plan = load_curd_plan(raw)
     assert isinstance(plan, CurdPlan)
     assert plan.plan_id == "plan"
     assert plan == schemas.validate_curd_plan(plan)
@@ -65,29 +66,24 @@ def test_decoded_json_mapping_reaches_a_validated_plan() -> None:
 
 def test_raw_json_text_loads() -> None:
     raw = raw_plan()
-    plan = schemas.load_curd_plan(json.dumps(raw))
+    plan = load_curd_plan(json.dumps(raw))
     assert isinstance(plan, CurdPlan)
-    assert plan == schemas.load_curd_plan(raw)
+    assert plan == load_curd_plan(raw)
 
 
 def test_raw_json_bytes_load() -> None:
     raw = raw_plan()
-    plan = schemas.load_curd_plan(json.dumps(raw).encode())
+    plan = load_curd_plan(json.dumps(raw).encode())
     assert isinstance(plan, CurdPlan)
-    assert plan == schemas.load_curd_plan(raw)
+    assert plan == load_curd_plan(raw)
 
 
 def test_yaml_frontmatter_is_rejected_as_wrong_artifact_format() -> None:
     document = "---\nplan_id: plan\nobjective: x\n---\n# body\n"
     with pytest.raises(schemas.ContractValidationError, match="canonical JSON"):
-        _ = schemas.load_curd_plan(document)
+        _ = load_curd_plan(document)
 
 
 def test_tampered_digest_is_still_rejected() -> None:
     with pytest.raises(schemas.ContractValidationError):
-        _ = schemas.load_curd_plan({**raw_plan(), "objective": "Tampered"})
-
-
-def test_public_package_exposes_load_curd_plan() -> None:
-    assert "load_curd_plan" in schemas.__all__
-    assert hasattr(schemas, "load_curd_plan")
+        _ = load_curd_plan({**raw_plan(), "objective": "Tampered"})

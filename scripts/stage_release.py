@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -37,9 +38,14 @@ SHIP = [
 ]
 
 
-def _copy(src: Path, dst: Path) -> None:
+def _copy(
+    src: Path,
+    dst: Path,
+    *,
+    ignore: Callable[[str, list[str]], set[str]] | None = None,
+) -> None:
     if src.is_dir():
-        _ = shutil.copytree(src, dst)
+        _ = shutil.copytree(src, dst, ignore=ignore)
     else:
         dst.parent.mkdir(parents=True, exist_ok=True)
         _ = shutil.copy2(src, dst)
@@ -52,7 +58,9 @@ def _guard_out(out: Path) -> None:
     if resolved == Path(resolved.anchor):
         raise SystemExit(f"stage_release: refusing to wipe filesystem root {resolved}")
     if resolved == REPO_ROOT or resolved in REPO_ROOT.parents:
-        raise SystemExit(f"stage_release: refusing to wipe {resolved} (repo root or ancestor)")
+        raise SystemExit(
+            f"stage_release: refusing to wipe {resolved} (repo root or ancestor)"
+        )
 
 
 def stage(out: Path) -> Path:
@@ -65,7 +73,9 @@ def stage(out: Path) -> Path:
     for rel in SHIP:
         src = REPO_ROOT / rel
         if src.exists():
-            _copy(src, out / rel)
+            # Rebuild bundles instead of copying stale archives into the release.
+            ignore = shutil.ignore_patterns("*.pyz") if rel == "skills" else None
+            _copy(src, out / rel, ignore=ignore)
 
     _ = build_pyz.build_bundles(
         {
@@ -100,7 +110,9 @@ def _verify(out: Path) -> None:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Stage the shippable release tree.")
-    _ = parser.add_argument("--out", type=Path, required=True, help="Output directory (wiped first).")
+    _ = parser.add_argument(
+        "--out", type=Path, required=True, help="Output directory (wiped first)."
+    )
     args = parser.parse_args(argv[1:])
     out = stage(cast(Path, args.out))
     print(f"staged release tree at {out}")

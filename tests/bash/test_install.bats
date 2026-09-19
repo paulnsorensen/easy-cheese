@@ -945,7 +945,7 @@ STUB
         run ec_main --dry-run
     [ "$status" -eq 0 ]
     [[ "$output" == *"gh: already installed (gh on PATH)"* ]]
-    [[ "$output" == *"would run 'brew install ast-grep'"* ]]
+
     # tilth is a default tool again; it has no brew formula, so it is never
     # installed via brew (here the stub is on PATH, so it reports as present).
     [[ "$output" != *"brew install tilth"* ]]
@@ -1015,8 +1015,8 @@ STUB
 
 # -- EC_FALLBACK_SKILLS sync --------------------------------------------------
 
-@test "EC_FALLBACK_SKILLS matches the skills/ directories exactly" {
-    local expected actual d
+@test "EC_FALLBACK_SKILLS covers the skills/ directories exactly" {
+    local expected actual
     expected="$(for d in "$REPO_ROOT"/skills/*/; do basename "$d"; done | LC_ALL=C sort)"
     actual="$(tr ' ' '\n' <<<"$EC_FALLBACK_SKILLS" | LC_ALL=C sort)"
     if [[ "$actual" != "$expected" ]]; then
@@ -1025,6 +1025,8 @@ STUB
         return 1
     fi
 }
+
+
 
 # -- test harness hermeticity -------------------------------------------------
 

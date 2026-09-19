@@ -23,6 +23,7 @@ from typing import Self, TextIO, cast
 from typing_extensions import override
 
 from easy_cheese.shared import cli
+from easy_cheese_schemas import ReviewDimension
 
 
 class RubricError(ValueError):
@@ -48,7 +49,9 @@ class _OrderedRubricTier(IntEnum):
             return cls[value.upper()]
         except KeyError:
             expected = ", ".join(str(tier) for tier in cls)
-            raise RubricError(f"unknown {field} {value!r}; expected one of {expected}") from None
+            raise RubricError(
+                f"unknown {field} {value!r}; expected one of {expected}"
+            ) from None
 
 
 class Severity(_OrderedRubricTier):
@@ -68,20 +71,7 @@ class FixCostNow(_OrderedRubricTier):
     SPRAWLING = 2
 
 
-DIMENSIONS: frozenset[str] = frozenset(
-    {
-        "correctness",
-        "security",
-        "encapsulation",
-        "spec",
-        "complexity",
-        "deslop",
-        "assertions",
-        "nih",
-        "efficiency",
-        "telemetry",
-    }
-)
+DIMENSIONS: frozenset[str] = frozenset(dimension.value for dimension in ReviewDimension)
 
 LOCATION_SENSITIVE: frozenset[str] = frozenset(
     {
@@ -116,7 +106,9 @@ def compute_severity(
         raise RubricError(f"unknown dimension {dimension!r}")
     sev = Severity.parse(base, field="base")
     if location not in LOCATIONS:
-        raise RubricError(f"unknown location {location!r}; expected one of {sorted(LOCATIONS)}")
+        raise RubricError(
+            f"unknown location {location!r}; expected one of {sorted(LOCATIONS)}"
+        )
     if fix_cost_later not in FIX_COST_LATER:
         raise RubricError(
             f"unknown fix-cost-later {fix_cost_later!r}; expected one of {sorted(FIX_COST_LATER)}"
@@ -176,9 +168,15 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     _ = compute.add_argument("--fix-cost-later", required=True)
     compute.set_defaults(func=_cmd_compute)
 
-    bucket = sub.add_parser("bucket", help="bucket fix-cost-now from blast-radius counts")
-    _ = bucket.add_argument("--files", type=int, required=True, help="file count from tilth_deps")
-    _ = bucket.add_argument("--modules", type=int, default=1, help="distinct module count (default 1)")
+    bucket = sub.add_parser(
+        "bucket", help="bucket fix-cost-now from blast-radius counts"
+    )
+    _ = bucket.add_argument(
+        "--files", type=int, required=True, help="file count from tilth_deps"
+    )
+    _ = bucket.add_argument(
+        "--modules", type=int, default=1, help="distinct module count (default 1)"
+    )
     bucket.set_defaults(func=_cmd_bucket)
 
 

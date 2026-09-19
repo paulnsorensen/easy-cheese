@@ -1,27 +1,25 @@
 # Fan-out engine entities
 
-The fan-out engine (`src/fanout/`, formerly `/cheese-factory`, now driven by
-`/cook`'s fan pathway — `/ultracook` is retired to a redirect stub) has three
-domain entities the validators check: the **Curd**, the **Wiring node**, and
-the **Curd block**. Curd and Wiring node are each *one* entity that appears at
-two pipeline stages with a growing field set; each entity has a single
-validation home under `src/fanout/` rather than splitting its rules across
-files.
+The `/cook` fan-out engine validates curds and wiring nodes.
+Shared semantic shapes live in `src/easy_cheese_schemas/manifest.py`.
+Runtime stage checks live in `src/easy_cheese/shared/fanout/`.
+The retired Curd-block parser is not a third active validation home.
 
 ## The Curd
 
 A Curd is the unit of independent parallel work in `/cook`'s fan pathway — one
 behaviour, file-disjoint from its siblings. It appears at two stages:
 
-- **Decomposition stage** — `{id, behavior, acceptance_criterion,
+- **Decomposition stage** — `{behavior, acceptance_criterion,
   test_target, files}`. Validated for *behavioural* invariants: a single
   verb (no "X and Y"), acceptance present, a focused single-command
   `test_target`, and file-disjointness across the curd set
-  (`validate_decomposition.py:28-86`).
-- **Run-manifest stage** — the same curd plus runtime fields `status` and
-  `retry_count`, with `id` now constrained to `int >= 1`. Validated for
+  (`src/easy_cheese_schemas/manifest.py:331-345` and
+  `src/easy_cheese/shared/fanout/validate_decomposition.py:60-103`).
+- **Run-manifest stage** — the same curd plus `id`, `status`, and
+  `retry_count`. The run requires `id >= 1`. Validated for
   *lifecycle* invariants on top of the behavioural ones
-  (`validate_manifest.py:63-97`).
+  (`src/easy_cheese/shared/fanout/curd.py::lifecycle_errors`).
 
 So the Curd *gains* fields as it moves down the pipeline, and its
 validation is layered to match: behavioural rules at every stage,
@@ -34,78 +32,43 @@ A Wiring node (`W<n>`) is the unit of cross-curd integration —
 `config_entry`. It has the same two-stage shape:
 
 - **Always** — *graph* invariants: the wiring forms an acyclic DAG and
-  every `depends_on` references a known id (`check_wiring_dag`,
-  `validate_decomposition.py:89-133`).
+  every `depends_on` references a known id (`src/easy_cheese/shared/fanout/wiring.py::graph_errors`, called by
+  `src/easy_cheese/shared/fanout/validate_decomposition.py:101`).
 - **Run-manifest** — *node lifecycle*: `W<n>` id format, `type` in the
-  known set, `file` present, `status` enum (`_validate_wiring`,
-  `validate_manifest.py:100-119`).
+  known set, `file` present, `status` enum (`src/easy_cheese/shared/fanout/wiring.py:61-78`).
 
-## The Curd block
+## Decomposition ownership
 
-Added in the subagent-routing overhaul foundation (PR #315). A Curd block is
-the **decomposition artifact** both decomposer doors emit -- `/mold`'s
-pre-approval decomposer dispatch and `/cook`'s fallback decompose gate -- with
-a **locked vocabulary that deliberately does not overlap the run-manifest
-Curd**:
-`curds[]` entries carry `{slug, contract, files, test_target, acceptance,
-seed, est_edit_lines}` plus block-level `waves[]` and `decomposer{}`
-(`src/fanout/curd_block.py`).
-The disjointness of the two vocabularies is test-locked: the field-name set is
-AST-derived from `curd.py`'s actual source so a collision fails the suite
-(`tests/fanout/python/test_curd_block.py`).
+`DecomposedCurd` defines `behavior`, `acceptance_criterion`, `files`, and `test_target` in `src/easy_cheese_schemas/manifest.py:331-345`.
+`CurdRecord` adds run-state fields such as `id`, `status`, and `retry_count`.
 
-`est_edit_lines` is a **required**, declared estimate of the curd's total
-source-plus-test edit lines -- the whole dispatch's work, not just the files
-it touches. `MIN_CURD_SURFACE = 25` gates it: a curd estimated below the
-floor fails validation as a **merge candidate**, because a fresh coder
-dispatch's context setup costs more than the edit itself. See
-[ADR-004](./adr/deterministic-fanout-sizing-004.md) for why this is a
-declared-and-gated estimate rather than a measurement -- at decomposition
-time the diff the curd would produce does not exist yet, so it cannot be
-measured the way `review_surface` measures a completed diff.
+`src/easy_cheese/shared/fanout/validate_decomposition.py` loads each curd through the shared schema.
+It checks shared-file conflicts through `reject_shared_curd_files` and wiring edges through `wiring.graph_errors`.
+Its minimum-curd-count check remains pipeline policy, not a property of an individual curd.
 
-- The single producer contract lives at `skills/cheese/references/decomposer.md`
-  ("same schema both doors"); the legacy `skills/ultracook/references/decomposer-prompt.md`
-  produces the **incompatible run-manifest schema** and is scope-noted as
-  such -- do not present the two as the same decomposer.
-- Deployed as the `curd-block` subcommand of the `/cook` fan-pathway bundle (`scripts/build_pyz.py`).
+PR #672 removes the old Curd-block parser, its dedicated test, and its `MIN_CURD_SURFACE` gate.
+The former `slug`/`contract`/`est_edit_lines` shape is not the current decomposition contract.
 
-## One validation home per entity
+## Validation homes
 
-Each entity has its own module under `src/fanout/`, so "what is a valid curd"
-has a single definition rather than being split across the two validators:
+- `src/easy_cheese_schemas/manifest.py` — shared decomposition and run-state models.
+- `src/easy_cheese/shared/fanout/curd.py` — content checks, run lifecycle checks, and file-disjointness helpers.
+- `src/easy_cheese/shared/fanout/wiring.py` — wiring graph and lifecycle checks.
+- `src/easy_cheese/shared/fanout/validate_decomposition.py` — schema-backed decomposition checks and pipeline minimum count.
+- `src/easy_cheese/shared/fanout/validate_manifest.py` — run-state checks composed with decomposition, Curd, Wiring, and PR-plan validation.
 
-- `src/fanout/curd.py` — `behaviour_errors` (`curd.py:59`), `lifecycle_errors`
-  (`curd.py:69`), `disjoint_files_errors` (`curd.py:90`).
-- `src/fanout/wiring.py` — `graph_errors` (`wiring.py:26`), `lifecycle_errors`
-  (`wiring.py:58`).
-- `src/fanout/curd_block.py` — `validate_curd_block` (locked decomposition
-  vocabulary; see The Curd block above).
+`curd.disjoint_files_errors` uses `src/easy_cheese/shared/schema.py::disjoint_errors`.
+The schema-backed decomposition path uses `easy_cheese_schemas.manifest.reject_shared_curd_files`.
+No active caller depends on the removed Curd-block parser.
 
-The always-on layer is named per entity, not forced symmetric: a Curd's is
-*content* (`behaviour_errors`), a Wiring node's is *graph* (`graph_errors`).
-The run-manifest-only rules sit in each module's `lifecycle_errors`.
-The pairwise file-disjointness **algorithm** is generalized into
-`shared/scripts/schema.py::disjoint_errors` and called by both `curd.py`
-(strict, `id`-keyed) and `curd_block.py` (lenient, `slug`-keyed) with each
-module's original error text byte-preserved — the *invariant* stays owned per
-entity, only the algorithm is shared. The parallel-eligibility gate
-(`len(curds) >= PARALLEL_THRESHOLD` routes to the fan pathway; below it stays
-a linear `/cook` run) stays in `validate_decomposition.py` because it is
-pipeline policy, not a fact about whether a curd is valid.
-
-**The validators are deliberately NOT merged.** `validate_decomposition.py`
-and `validate_manifest.py` stay as leaf/composite validators that
-*compose* the entity modules — `validate_manifest.py:17-18` already
-delegates to both leaves and `pr_plan_to_branches.py:18` reuses
-`validate_pr_plan`. The entities, not the validators, are the
-consolidation unit. A future architecture review should not re-suggest a
-four-way validator merge.
+The validators remain separate entry points.
+Their shared types and entity rules do not require a combined validator.
 
 ## Related
 
 - [architecture](./architecture.md) — the skills-only collection and the cheese pipeline.
 - [workflow-invariants](./workflow-invariants.md) — pipeline ordering and the curdle gate.
-- [age-fanout-router](./architecture/age-fanout-router.md) — deterministic review fan-out sizing (same PR).
+- [age-fanout-router](./architecture/age-fanout-router.md) — contextual
+  review subject planning and workload allowances.
 
-_Source: subagent-routing-overhaul PR1 stack (PR #315 entity/validation foundation; PR #317 `/mold` integration and `/ultracook` retirement) cure/plate write-back · Updated: 2026-07-24 · Supersedes: /ultracook-owned framing (retired in PR #317)_
+_Source: subagent-routing-overhaul PR1 stack (PR #315 entity/validation foundation; PR #317 `/mold` integration and `/ultracook` retirement) cure/plate write-back · Updated: 2026-09-16 · Supersedes: /ultracook-owned framing (retired in PR #317)_

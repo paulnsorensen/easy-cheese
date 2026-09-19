@@ -1,8 +1,7 @@
-"""CLI entry point for age_route.route -- JSON in (arg path or stdin), JSON out.
+"""CLI entry point for age_route.route -- contextual JSON in, JSON out.
 
-Split from age_route.py so that module stays a pure function with zero I/O
-imports (see age_route.py's module docstring); all I/O for pyz dispatch
-lives here instead.
+The request is read from an optional JSON path or stdin and passed to the pure
+contextual planner.  This wrapper owns only argument and stream I/O.
 """
 from __future__ import annotations
 
