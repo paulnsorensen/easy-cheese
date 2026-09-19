@@ -15,6 +15,8 @@ from typing import cast
 
 import pytest
 
+from easy_cheese_schemas.schema_runtime import load_pr_plan
+
 JSONDict = dict[str, object]
 
 
@@ -135,6 +137,11 @@ def example_manifest() -> JSONDict:
             },
         },
         "pr_plan": {
+            "contract_version": {
+                "schema_uri": "https://schemas.easy-cheese.dev/pr-plan",
+                "major": "1",
+                "minor": "0",
+            },
             "shape": "diamond_stack",
             "groups": [
                 {
@@ -142,10 +149,8 @@ def example_manifest() -> JSONDict:
                     "title": "feat(orders): shared types",
                     "body": "Adds shared types.",
                     "base": "main",
-                    "commits": ["abc123"],
+                    "commits": ["abc1234"],
                     "depends_on": [],
-                    "pr_number": 101,
-                    "pr_url": "https://github.com/owner/repo/pull/101",
                 }
             ],
         },
@@ -276,3 +281,7 @@ class TestExampleManifestMatchesSchema:
     def test_pr_plan_shape_value_in_enum(self, pr_plan_schema: JSONDict, example_manifest: JSONDict) -> None:
         shapes = _l(_at(pr_plan_schema, "$defs", "PrPlan", "properties", "shape", "enum"))
         assert _d(example_manifest["pr_plan"])["shape"] in shapes
+
+    def test_pr_plan_example_loads_as_a_valid_v1_document(self, example_manifest: JSONDict) -> None:
+        loaded = load_pr_plan(example_manifest["pr_plan"])
+        assert loaded.problems == ()

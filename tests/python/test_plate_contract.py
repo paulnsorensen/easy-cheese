@@ -168,6 +168,7 @@ def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
         "artifacts",
         "gate",
         "commits",
+        "pr_plan",
         "prs",
         "risk",
     }

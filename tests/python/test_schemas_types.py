@@ -475,6 +475,51 @@ class TestPrPlanInvariants:
             "PrPlan.groups[1].branch contains characters unsafe for a git ref",
         )
 
+    @pytest.mark.parametrize(
+        "ref",
+        [
+            "/topic",
+            "topic/",
+            "a//b",
+            "a..b",
+            "x.lock",
+            "a.lock/b",
+            "a.b.lock/c",
+            ".topic",
+            "a/.hidden",
+            "topic.",
+            "-flag",
+        ],
+    )
+    def test_branch_forms_git_check_ref_format_rejects_are_rejected(
+        self, ref: str
+    ) -> None:
+        payload = deepcopy(PR_PLAN)
+        _as_dict(_as_list(payload["groups"])[0])["branch"] = ref
+        result = load(payload, PrPlan, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "PrPlan.groups[1].branch contains characters unsafe for a git ref",
+        )
+
+    def test_base_form_git_check_ref_format_reject_is_rejected(self) -> None:
+        payload = deepcopy(PR_PLAN)
+        _as_dict(_as_list(payload["groups"])[0])["base"] = "topic.lock"
+        result = load(payload, PrPlan, strict=True)
+        assert result.value is None
+        assert result.problems == (
+            "PrPlan.groups[1].base contains characters unsafe for a git ref",
+        )
+
+    @pytest.mark.parametrize("ref", ["feat/x.y", "release-1.2", "a/b/c"])
+    def test_branch_forms_git_check_ref_format_accepts_are_accepted(
+        self, ref: str
+    ) -> None:
+        payload = deepcopy(PR_PLAN)
+        _as_dict(_as_list(payload["groups"])[0])["branch"] = ref
+        result = load(payload, PrPlan, strict=True)
+        assert result.value is not None
+
     def test_commit_that_is_not_a_hex_sha_is_rejected(self) -> None:
         payload = deepcopy(PR_PLAN)
         _as_dict(_as_list(payload["groups"])[0])["commits"] = ["HEAD~1"]

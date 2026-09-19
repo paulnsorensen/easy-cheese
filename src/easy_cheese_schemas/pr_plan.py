@@ -26,7 +26,13 @@ class _NamedAttribute(Protocol):
 
 # A leading `-` makes the ref option-shaped: `git checkout -b '-x' main` still
 # reaches git as a flag, since shell quoting does not stop option parsing.
-BRANCH_RE = re.compile(r"^(?!-)[A-Za-z0-9._/-]+$")
+# The lookaheads reject the other `git check-ref-format` violations that a
+# shell emitter would otherwise hit late: a leading or trailing `/`, `//`,
+# `..`, and a trailing `.`. `_git_ref` checks each path component for a
+# leading `.` and a `.lock` suffix, because git applies both per component.
+BRANCH_RE = re.compile(
+    r"^(?!-)(?!/)(?!.*\.\.)(?!.*//)(?!.*/$)(?!.*\.$)[A-Za-z0-9._/-]+$"
+)
 # 7 is git's default short-SHA floor (`core.abbrev`); shorter values risk
 # colliding with a branch or tag of the same name, since git resolves refs
 # before SHA prefixes. Full SHA-1 is 40 hex chars.
@@ -63,8 +69,24 @@ def _non_empty_list(_instance: object, attribute: _NamedAttribute, value: object
         raise ValueError(f"{attribute.name} must be a non-empty list")
 
 
+def _is_git_ref(value: object) -> bool:
+    """Return True when ``value`` is a branch name git accepts.
+
+    A path component that starts with `.` or ends with `.lock` is a
+    `check-ref-format` violation the regex does not cover, since git applies
+    both rules to every component, not only to the whole ref.
+    """
+    return (
+        isinstance(value, str)
+        and BRANCH_RE.match(value) is not None
+        and not any(
+            part.startswith(".") or part.endswith(".lock") for part in value.split("/")
+        )
+    )
+
+
 def _git_ref(_instance: object, attribute: _NamedAttribute, value: object) -> None:
-    if not isinstance(value, str) or BRANCH_RE.match(value) is None:
+    if not _is_git_ref(value):
         raise ValueError(f"{attribute.name} contains characters unsafe for a git ref")
 
 
@@ -152,7 +174,7 @@ def _validate_topology(
         # A charset-invalid base is a shell-injection seam that PrGroup's own
         # git-ref validator reports; skip only the membership check for it, so
         # the group's `depends_on` entries are still checked.
-        base_is_safe = BRANCH_RE.match(group.base) is not None
+        base_is_safe = _is_git_ref(group.base)
         if base_is_safe and group.base not in valid_targets:
             raise ValueError(
                 f"{attribute.name}: group {group.branch!r} base {group.base!r} "
@@ -173,21 +195,30 @@ def _validate_topology(
 
 
 def _reject_cycles(field_name: str, groups: list[PrGroup]) -> None:
-    edges = {
-        group.branch: [dep for dep in (group.depends_on or []) if dep != group.branch]
-        for group in groups
-    }
-    branches = set(edges)
+    # A base edge is a topology dependency too: a group cannot land before its
+    # own base, so a base-only cycle (a based on b, b based on a) is just as
+    # non-executable as a depends_on cycle. The edge exists whenever the base
+    # names a plan branch, so a group named like the target branch still joins
+    # the walk.
+    branches = {group.branch for group in groups}
+    edges: dict[str, list[tuple[str, str]]] = {}
+    for group in groups:
+        entries = [
+            (dep, "depends_on") for dep in (group.depends_on or []) if dep != group.branch
+        ]
+        if group.base in branches:
+            entries.append((group.base, "is based on"))
+        edges[group.branch] = entries
     state: dict[str, int] = {}
 
     def visit(node: str) -> None:
         state[node] = 1
-        for dep in edges[node]:
+        for dep, verb in edges[node]:
             if dep not in branches:
                 continue
             if state.get(dep) == 1:
                 raise ValueError(
-                    f"{field_name}: group {node!r} depends_on {dep!r} forms a cycle"
+                    f"{field_name}: group {node!r} {verb} {dep!r} forms a cycle"
                 )
             if state.get(dep) != 2:
                 visit(dep)
@@ -211,7 +242,8 @@ class PrPlan:
         default="main", kw_only=True, validator=[_non_empty_string, _git_ref]
     )
     groups: list[PrGroup] = field(
-        validator=[_non_empty_list, _distinct_branches, _matches_shape, _validate_topology]
+        validator=[_non_empty_list, _distinct_branches, _matches_shape, _validate_topology],
+        metadata={"min_items": 1},
     )
 
 

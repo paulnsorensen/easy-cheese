@@ -172,6 +172,26 @@ CASES: list[Case] = [
             ],
         ),
     ),
+    agreed_invalid(
+        "two groups form a base-only cycle",
+        plan(
+            shape="stacked_linear",
+            groups=[
+                {"branch": "a", "title": "feat: a", "base": "b", "commits": ["abc1234"], "depends_on": []},
+                {"branch": "b", "title": "feat: b", "base": "a", "commits": ["abc1234"], "depends_on": []},
+            ],
+        ),
+    ),
+    agreed_invalid(
+        "a group named like the target branch still joins the base cycle walk",
+        plan(
+            shape="stacked_linear",
+            groups=[
+                {"branch": "main", "title": "feat: main", "base": "b", "commits": ["abc1234"], "depends_on": []},
+                {"branch": "b", "title": "feat: b", "base": "main", "commits": ["abc1234"], "depends_on": []},
+            ],
+        ),
+    ),
     agreed_invalid("branch starting with a dash", group(branch="-delete-everything")),
     agreed_invalid("base starting with a dash", group(base="-f")),
     agreed_valid(

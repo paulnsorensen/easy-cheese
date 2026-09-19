@@ -69,8 +69,11 @@ def contract(slug: str) -> Callable[[_ClsT], _ClsT]:
 def marked_contracts_in(module: object) -> tuple[tuple[str, type], ...]:
     """Return marked contract classes defined in ``module`` in slug order."""
     pairs: list[tuple[str, type]] = []
+    module_name = getattr(module, "__name__", None)
     for value in cast(Iterable[object], vars(module).values()):
         if not isinstance(value, type):
+            continue
+        if value.__module__ != module_name:
             continue
         slug = cast(object, getattr(value, _CONTRACT_MARKER, None))
         if slug is None:

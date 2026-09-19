@@ -15,8 +15,7 @@ import sys
 import tempfile
 import tomllib
 import zipfile
-from collections.abc import Callable, Generator, Iterable, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable, Sequence
 from email.parser import Parser
 from pathlib import Path
 from types import ModuleType
@@ -29,7 +28,6 @@ SKILLS_ROOT = PACKAGE_ROOT / "skills"
 RUNTIME_LOCK = REPO_ROOT / "requirements" / "runtime.txt"
 SCHEMA_ROOT = SRC_ROOT / "easy_cheese_schemas"
 BUILD_SCRIPTS_ROOT = REPO_ROOT / "scripts"
-SCHEMA_MODULE_INVENTORY_SOURCE = SCHEMA_ROOT / "_contract_modules.py"
 SCHEMA_CATALOG_SOURCE = SCHEMA_ROOT / "_schema_catalog.py"
 PHASE_REGISTRY_SOURCE = SCHEMA_ROOT / "_compiled_phase_registry.py"
 DOCUMENT_RULES_SOURCE = PACKAGE_ROOT / "shared" / "document_rules.py"
@@ -85,80 +83,24 @@ def _schema_catalog_compiler() -> tuple[
     )
 
 
-def _schema_module_source(module_name: str) -> Path:
-    leaf = module_name.rsplit(".", 1)[-1]
-    return SCHEMA_ROOT / f"{leaf}.py"
+def _contract_modules_inventory() -> ModuleType:
+    return _import_from(SRC_ROOT, "easy_cheese_schemas._contract_modules")
 
 
-def _schema_inventory_module() -> ModuleType:
-    module = ModuleType("_build_schema_module_inventory")
-    source = SCHEMA_MODULE_INVENTORY_SOURCE.read_bytes()
-    exec(compile(source, str(SCHEMA_MODULE_INVENTORY_SOURCE), "exec"), module.__dict__)
-    return module
-
-
-def _schema_module_inventory() -> tuple[str, ...]:
-    return cast(tuple[str, ...], getattr(_schema_inventory_module(), "CONTRACT_MODULES"))
-
-
-def _schema_generated_target(name: str) -> tuple[str, str]:
-    return cast(tuple[str, str], getattr(_schema_inventory_module(), name))
-
-
-@contextmanager
-def _isolated_schema_modules() -> Generator[tuple[ModuleType, ...], None, None]:
-    module_names = _schema_module_inventory()
-    package_name = module_names[0].rpartition(".")[0]
-    package = ModuleType(package_name)
-    package.__dict__["__path__"] = [str(SCHEMA_ROOT)]
-    namespace_prefix = f"{package_name}."
-    saved = {
-        name: module
-        for name, module in sys.modules.items()
-        if name == package_name or name.startswith(namespace_prefix)
-    }
-    for name in saved:
-        _ = sys.modules.pop(name, None)
-    sys.modules[package_name] = package
-    loaded: list[ModuleType] = []
-    try:
-        for module_name in module_names:
-            source_path = _schema_module_source(module_name)
-            module = ModuleType(module_name)
-            module.__file__ = str(source_path)
-            module.__dict__["__package__"] = module_name.rpartition(".")[0]
-            sys.modules[module_name] = module
-            source = source_path.read_bytes()
-            exec(compile(source, str(source_path), "exec"), module.__dict__)
-            loaded.append(module)
-        yield tuple(loaded)
-    finally:
-        for name in tuple(sys.modules):
-            if name == package_name or name.startswith(namespace_prefix):
-                _ = sys.modules.pop(name, None)
-        sys.modules.update(saved)
-
-
-def _schema_target_attribute(target_name: str) -> object:
-    module_name, attribute_name = _schema_generated_target(target_name)
-    with _isolated_schema_modules() as modules:
-        by_name = {module.__name__: module for module in modules}
-        module = by_name.get(module_name)
-        if module is None:
-            raise RuntimeError(f"schema target module is not in the inventory: {module_name}")
-        try:
-            return cast(object, getattr(module, attribute_name))
-        except AttributeError as exc:
-            raise RuntimeError(
-                f"schema target attribute is missing: {module_name}.{attribute_name}"
-            ) from exc
+def _imported_contract_modules() -> tuple[ModuleType, ...]:
+    inventory = _contract_modules_inventory()
+    module_names = cast(tuple[str, ...], getattr(inventory, "CONTRACT_MODULES"))
+    return tuple(_import_from(SRC_ROOT, module_name) for module_name in module_names)
 
 
 def _compiled_schema_catalog_source() -> str:
-    """Compile the catalog from isolated executions of the inventory modules."""
+    """Compile the catalog from a normal import of each contract module.
+
+    The import is safe. `schema_runtime` checks catalog staleness lazily,
+    on first catalog use, not at import time.
+    """
     collect, render = _schema_catalog_compiler()
-    with _isolated_schema_modules() as modules:
-        return render(collect(modules))
+    return render(collect(_imported_contract_modules()))
 
 
 def _document_rules_compiler() -> tuple[
@@ -174,7 +116,12 @@ def _document_rules_compiler() -> tuple[
 
 def compiled_document_rules_source() -> str:
     collect, render = _document_rules_compiler()
-    target = cast(type, _schema_target_attribute("DOCUMENT_RULES_TARGET"))
+    inventory = _contract_modules_inventory()
+    module_name, attribute_name = cast(
+        tuple[str, str], getattr(inventory, "DOCUMENT_RULES_TARGET")
+    )
+    module = _import_from(SRC_ROOT, module_name)
+    target = cast(type, getattr(module, attribute_name))
     return render(collect(target))
 
 

@@ -41,6 +41,7 @@ import attrs  # noqa: E402
 import build_pyz  # noqa: E402
 from easy_cheese.shared.bundle_commands import Command, command_map  # noqa: E402
 from easy_cheese_schemas import contracts  # noqa: E402
+from easy_cheese_schemas._contract_modules import CONTRACT_MODULES  # noqa: E402
 from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
 from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS  # noqa: E402
 from easy_cheese_schemas import PrPlan  # noqa: E402
@@ -262,6 +263,9 @@ def render_schema_intertwine() -> str:
     catalog_slugs = sorted(
         _slug_from_uri(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS
     )
+    module_leaves = ", ".join(
+        f"{name.rsplit('.', 1)[-1]}.py" for name in CONTRACT_MODULES
+    )
 
     lines = [
         "# Schema intertwine",
@@ -270,7 +274,7 @@ def render_schema_intertwine() -> str:
             "Run `scripts/render_generated_regions.py` to generate this file. Do not"
             " edit it manually. The generator joins the phase registry"
             " (`_compiled_phase_registry`), the schema catalog (`_schema_catalog`),"
-            " and the registered contract models (`contracts.py`) for each phase"
+            f" and the registered contract models ({module_leaves}) for each phase"
             " transition."
         ),
         "",

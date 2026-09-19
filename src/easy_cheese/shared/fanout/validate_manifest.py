@@ -487,8 +487,8 @@ def validate_run_manifest(manifest: dict[str, object]) -> list[str]:
             errors.append("manifest.pr_plan must be an object")
         else:
             pr_plan_dict = cast("dict[str, object]", pr_plan)
-            # validate_pr_plan now delegates to easy_cheese_schemas.PrPlan, whose
-            # problems already carry a "PrPlan." prefix; swap it for
+            # validate_pr_plan reports through easy_cheese_schemas.load_pr_plan,
+            # whose problems already carry a "PrPlan." prefix; swap it for
             # "manifest.pr_plan." instead of prepending on top of it.
             errors.extend(
                 error.replace("PrPlan.", "manifest.pr_plan.", 1)

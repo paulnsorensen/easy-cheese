@@ -19,11 +19,11 @@ from easy_cheese_schemas import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     ContractValidationError,
     PrPlan,
-    load_pr_plan,
     schema_bytes,
     supported_version_for,
     validate_contract,
 )
+from easy_cheese_schemas.schema_runtime import load_pr_plan
 from schema_conformance import pr_plan
 
 ROOT = Path(__file__).resolve().parents[3]

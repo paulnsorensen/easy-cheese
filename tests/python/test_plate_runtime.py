@@ -646,6 +646,16 @@ def test_validate_publication_rejects_explicit_null_landing() -> None:
     assert "landing-closed-class landing must be a mapping" in error.value.errors
 
 
+def test_validate_publication_rejects_explicit_null_pr_plan() -> None:
+    overrides: dict[str, object] = {"pr_plan": None}
+    state = valid_publication() | overrides
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert "pr_plan must be an object" in error.value.errors
+
+
 def test_validate_publication_pr_plan_layout_that_disagrees_with_landing_is_refused() -> None:
     overrides: dict[str, object] = {
         "landing": {"shape": "single"},

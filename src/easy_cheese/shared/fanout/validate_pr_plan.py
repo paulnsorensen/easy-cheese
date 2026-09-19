@@ -14,16 +14,16 @@ interface.
 from __future__ import annotations
 
 import sys
-from typing import cast
 
 from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
     read_mapping_arg_or_stdin,
 )
-from easy_cheese_schemas import load_pr_plan  # noqa: E402
+from easy_cheese_schemas.schema_runtime import load_pr_plan  # noqa: E402
 
 
 def validate_pr_plan(plan: dict[str, object]) -> list[str]:
+    """Report the problems of one pr-plan document through the registered seam."""
     return list(load_pr_plan(plan).problems)
 
 
@@ -34,16 +34,15 @@ def main(argv: list[str]) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2 if str(exc).startswith("usage:") else 1
 
-    errors = validate_pr_plan(plan)
-    if errors:
-        for error in errors:
+    loaded = load_pr_plan(plan)
+    if loaded.problems:
+        for error in loaded.problems:
             print(f"ERROR: {error}", file=sys.stderr)
-        print(f"\nFAIL: {len(errors)} validation error(s)", file=sys.stderr)
+        print(f"\nFAIL: {len(loaded.problems)} validation error(s)", file=sys.stderr)
         return 1
 
-    groups = plan.get("groups")
-    group_count = len(cast("list[object]", groups)) if isinstance(groups, list) else 0
-    print(f"OK: {group_count} PR group(s), plan valid")
+    assert loaded.value is not None
+    print(f"OK: {len(loaded.value.groups)} PR group(s), plan valid")
     return 0
 
 
