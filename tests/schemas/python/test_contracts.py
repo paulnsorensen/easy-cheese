@@ -32,6 +32,8 @@ from easy_cheese_schemas.contracts import (
     DiagnosisRequest,
     DiagnosisResult,
     DiagnosisResultWriterView,
+    EntryKind,
+    EntryState,
     EvidenceKind,
     EvidenceRef,
     HandoffPointer,
@@ -58,11 +60,14 @@ from easy_cheese_schemas.contracts import (
     PlannerResultWriterView,
     PlannerUncertainty,
     PlannerUncertaintyWriterView,
+    ProposedEntry,
+    ProtectedEntry,
     Reproduction,
     ReproductionDisposition,
     ReproductionWriterView,
     ReviewCoverage,
     ReviewDisposition,
+    ReviewDimension,
     ReviewFinding,
     ReviewFindingWriterView,
     ReviewKind,
@@ -409,6 +414,14 @@ def test_landing_layer_errors_accepts_backward_and_same_layer_dependencies() -> 
         == ()
     )
 
+def test_landing_layer_errors_rejects_writer_keys_as_canonical_ids() -> None:
+    errors = landing_layer_errors(plan(_curd("canonical-curd")), _layers(["writer-key"]))
+
+    assert errors == (
+        "landing-layer-unknown-curd landing.layers names unknown curd 'writer-key'",
+        "landing-layer-missing-curd curd 'canonical-curd' is missing from landing.layers",
+    )
+
 
 def test_landing_layer_errors_empty_group_reports_curd_missing() -> None:
     errors = landing_layer_errors(plan(curd("c1")), _layers([]))
@@ -689,6 +702,7 @@ def test_review_findings_disposition_requires_a_finding() -> None:
 def test_blocked_review_rejects_findings_at_both_contract_boundaries() -> None:
     finding = ReviewFinding(
         finding_id="finding-1",
+        dimension=ReviewDimension.CORRECTNESS,
         severity=ReviewSeverity.HIGH,
         summary="The failure path loses data",
         evidence=[evidence()],
@@ -718,6 +732,7 @@ def test_review_request_and_result_accept_typed_evidence() -> None:
     assert request.review_kind is None
     finding = ReviewFinding(
         finding_id="finding-1",
+        dimension=ReviewDimension.CORRECTNESS,
         severity=ReviewSeverity.HIGH,
         summary="The failure path loses data",
         location=SourceLocation(
@@ -768,6 +783,73 @@ def test_review_request_accepts_typed_review_kind_and_rejects_invalid_values() -
             subject=artifact(),
             coverage_targets=["correctness"],
             review_kind="not_a_review_kind",  # pyright: ignore[reportArgumentType]
+        )
+
+
+def test_protected_entry_rejects_non_enum_kind_and_state() -> None:
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind="decision",  # pyright: ignore[reportArgumentType]
+            summary="a decision",
+            state=EntryState.ACTIVE,
+            blocks_continuation=False,
+        )
+
+    with pytest.raises(TypeError, match="'state' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=EntryKind.DECISION,
+            summary="a decision",
+            state="active",  # pyright: ignore[reportArgumentType]
+            blocks_continuation=False,
+        )
+
+
+def test_proposed_entry_rejects_non_enum_kind() -> None:
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProposedEntry(
+            kind="question",  # pyright: ignore[reportArgumentType]
+            summary="why?",
+        )
+
+
+def test_protected_entry_rejects_cross_enum_and_none() -> None:
+    # EntryKind and EntryState are both `str, Enum`; the validator must reject a
+    # member of the sibling enum, not just a plain string.
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=EntryState.ACTIVE,  # pyright: ignore[reportArgumentType]
+            summary="a decision",
+            state=EntryState.ACTIVE,
+            blocks_continuation=False,
+        )
+
+    with pytest.raises(TypeError, match="'state' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=EntryKind.DECISION,
+            summary="a decision",
+            state=EntryKind.DECISION,  # pyright: ignore[reportArgumentType]
+            blocks_continuation=False,
+        )
+
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=None,  # pyright: ignore[reportArgumentType]
+            summary="a decision",
+            state=EntryState.ACTIVE,
+            blocks_continuation=False,
+        )
+
+
+def test_proposed_entry_rejects_cross_enum_kind() -> None:
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProposedEntry(
+            kind=EntryState.ACTIVE,  # pyright: ignore[reportArgumentType]
+            summary="why?",
         )
 
 
@@ -1030,6 +1112,7 @@ def test_writer_views_expose_only_agent_authored_fields() -> None:
     }
     assert set(attrs.fields_dict(ReviewFindingWriterView)) == {
         "severity",
+        "dimension",
         "summary",
         "evidence_keys",
         "location",
@@ -1108,6 +1191,7 @@ def test_planner_writer_view_rejects_no_work_with_unresolved_work() -> None:
 def test_review_writer_view_enforces_disposition() -> None:
     finding_fields = attrs.fields_dict(ReviewFindingWriterView)
     finding_kwargs: dict[str, object] = {
+        "dimension": ReviewDimension.CORRECTNESS,
         "severity": ReviewSeverity.HIGH,
         "summary": "The implementation violates the contract",
         "evidence_keys": ["evidence-1"],

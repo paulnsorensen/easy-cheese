@@ -121,8 +121,8 @@ Procedure:
 
 1. **Decompose in the bounds pass.** Split the pinned goal into 2–6 outcome clauses, `G-1` … `G-n`. Each clause names one observable outcome the user asked for. Print the clauses under the `Goal:` ledger line in round one, and repeat them each round. Only an explicit user fork adds, removes, or rewords a clause. Record them in the ledger JSON as `goal_clauses: [{id: G-n, text: ...}, ...]`.
 2. **Tag the draft.** Every Acceptance line that delivers a clause carries its tag, for example `- AC-2: WHEN ... THE SYSTEM SHALL ... (F-1, G-2)`. A clause the spec does not deliver carries its tag on exactly one disposition line instead: a `Non-goals` bullet, a `Deferred follow-ups` entry, or an `Open questions` item marked `[TBD]`. Acceptance wins when a tag appears in more than one place.
-3. **Run the check.** `taste-test --precheck` fails `goal-coverage:G-n` for each clause with no tag in any of those four sections. It fails `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses are covered by Acceptance. Both codes also fail the digest-bound verdict.
-4. **Print the narrowing delta.** Before the handshake, run `taste-test --coverage` and print one line: `Original ask: G-1..G-n. This spec ships: <covered>. Deferred: <G-n (follow-up)>, <G-n (non-goal)>, <G-n (tbd)>.` The delta is the visible cut list. A spec with no deferred clause prints `Deferred: none`.
+3. **Run the check.** `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` fails `goal-coverage:G-n` for each clause with no tag in any of those four sections. It fails `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses are covered by Acceptance. Both codes also fail the digest-bound verdict.
+4. **Print the narrowing delta.** Before the handshake, run `python3 skills/mold/scripts/mold.pyz taste-test --coverage --draft <draft> --ledger <ledger>` and print one line: `Original ask: G-1..G-n. This spec ships: <covered>. Deferred: <G-n (follow-up)>, <G-n (non-goal)>, <G-n (tbd)>.` The delta is the visible cut list. A spec with no deferred clause prints `Deferred: none`.
 5. **Respect the cap.** When `goal-coverage-cap` fires, the spec is a slice of the goal. Do not proceed. Put one fork to the user: **re-pin** the goal to the slice (the ledger `Goal:` line and clauses change through an explicit user fork), or **widen** the spec until at least half the clauses are covered. Never rename a slice as the whole.
 6. **No override.** `curdle anyway` accepts unchecked coherence items. It does not waive an uncovered clause or the cap, for the same reason it does not waive a leverage row: downstream skills trust the spec and never re-check.
 
@@ -181,7 +181,17 @@ This gate is the referent-level sibling of Agent-introduced scope. That gate ask
 
 ## Override semantics
 
-`curdle anyway` overrides the agent key for one extraction. It does not disable future gates. Record the override and unchecked items in the spec frontmatter. This record lets the human reviewer see them. `curdle anyway` does **not** waive the scope audit table's leverage rows, its unresolved bindings, an uncovered `G-n` clause, or the goal-coverage cap. It accepts every other default. The gate prevents silent inclusion, and downstream skills do not re-check. Under `curdle anyway`, an unbound or aliased identity noun still blocks extraction. Downstream skills trust the frontmatter bindings and do not re-derive them.
+`curdle anyway` permits one durable save when the agent coherence key is
+unchecked. It does not grant execution authority and does not disable later
+gates. Record the override and every unchecked item in the spec frontmatter.
+It accepts every other default.
+Finalization returns `saved-not-ready` with a preparation hold; it must not
+publish a pointer or an automatic Cook command until the requirements are
+cleared through fresh approval. The override does not waive the scope-audit
+leverage rows, unresolved identity bindings, failed taste, stale references,
+invalid landing IDs, an uncovered `G-n` clause, the goal-coverage cap, or a
+user do-not-implement hold. Downstream skills trust the saved preparation
+result and never reinterpret the override as approval.
 
 ## Why both keys
 

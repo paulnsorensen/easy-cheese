@@ -7,6 +7,13 @@ import sys
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
 
+@bundle_command("domain-model-target")
+def _domain_model_target(argv: list[str]) -> int:
+    from easy_cheese.shared.paths import main
+
+    return main(["domain-model-target", *argv])
+
+
 @bundle_command("artifact-path")
 def _artifact_path(argv: list[str]) -> int:
     from easy_cheese.shared.artifact_path import main
@@ -28,18 +35,18 @@ def _gate_graph(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("migrate")
-def _migrate(argv: list[str]) -> int:
-    from easy_cheese.skills.mold.contract_handlers import migrate_main
+@bundle_command("finalize")
+def _finalize(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.contract_handlers import main
 
-    return migrate_main(argv)
+    return main(argv)
 
 
-@bundle_command("publish")
-def _publish(argv: list[str]) -> int:
-    from easy_cheese.skills.mold.contract_handlers import publish_main
+@bundle_command("normalize-planner")
+def _normalize_planner(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.contract_handlers import normalize_planner_main
 
-    return publish_main(argv)
+    return normalize_planner_main(argv)
 
 
 @bundle_command("render-html")
@@ -69,17 +76,22 @@ COMMANDS = (
         "Resolve the durable or transient artifact path for a phase and slug",
     ),
     derive_command(
+        _finalize,
+        "Finalize a Mold spec and publish only a consumer-valid handoff",
+    ),
+    derive_command(
+        _normalize_planner,
+        "Materialize a planner writer envelope into a canonical PlannerResult",
+    ),
+    derive_command(
         _curd_count, "Count candidate curds in a spec and recommend the next skill"
     ),
     derive_command(
+        _domain_model_target,
+        "Resolve the domain-model store from explicit Hallouminate probe results",
+    ),
+    derive_command(
         _gate_graph, "Render the gate state machine as dot, svg, png, or mermaid"
-    ),
-    derive_command(
-        _migrate,
-        "Migrate a legacy artifact and emit its handoff pointer as canonical JSON",
-    ),
-    derive_command(
-        _publish, "Publish a curd plan and emit its handoff pointer as canonical JSON"
     ),
     derive_command(
         _render_html,
@@ -91,7 +103,8 @@ COMMANDS = (
         + " --precheck runs the lexical pre-check on the draft without a verdict",
     ),
     derive_command(
-        _validate_spec, "Check a spec against the current Mold specification requirements"
+        _validate_spec,
+        "Check a spec against the current Mold specification requirements",
     ),
 )
 

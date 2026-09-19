@@ -4,6 +4,7 @@
 `skills/mold/SKILL.md`. That check passes while a route drops the requested
 gate. These tests assert the propagation rule at each Mold producer surface.
 """
+
 from __future__ import annotations
 
 import re
@@ -25,7 +26,7 @@ def test_mini_spec_mode_in_skill_appends_hard() -> None:
     line = next(
         line
         for line in _read("SKILL.md").splitlines()
-        if "Return the resolved spec path with `/cook --auto" in line
+        if "return its canonical `HandoffPointer` to Cook" in line
     )
     assert HARD_RULE.search(line), line
 

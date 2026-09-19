@@ -11,6 +11,26 @@ import pytest
 from easy_cheese.skills.plate import publication, stack_tools
 
 
+def _pr_plan_v1(shape: str = "single") -> dict[str, object]:
+    return {
+        "contract_version": {
+            "schema_uri": "https://schemas.easy-cheese.dev/pr-plan",
+            "major": "1",
+            "minor": "0",
+        },
+        "shape": shape,
+        "groups": [
+            {
+                "branch": "feature",
+                "title": "feat: ship",
+                "base": "main",
+                "commits": ["abc1234"],
+                "depends_on": [],
+            }
+        ],
+    }
+
+
 def valid_publication() -> dict[str, object]:
     return {
         "mode": "new-pr",
@@ -67,15 +87,41 @@ def test_validate_publication_rejects_impossible_states(
 def test_validate_publication_rejects_unverified_artifacts_and_pr_plan_drift() -> None:
     state = valid_publication()
     cast(dict[str, object], cast(list[object], state["artifacts"])[0])["verified"] = False
-    state["pr_plan"] = {"plate_layout": "stacked"}
+    state["pr_plan"] = _pr_plan_v1(shape="stacked_linear")
 
     with pytest.raises(publication.PublicationValidationError) as error:
         _ = publication.validate_publication(state)
 
     assert error.value.errors == (
         "artifacts[0].verified must be true",
-        "pr_plan.plate_layout must match topology",
+        "pr_plan projects to stacked layout but topology is single",
     )
+
+
+def test_validate_publication_rejects_plate_layout_only_pr_plan() -> None:
+    """A pre-v1 plan carrying only plate_layout is refused at the plate boundary:
+    plate_layout is not a PrPlan field and the v1 envelope is missing."""
+    state = valid_publication()
+    state["pr_plan"] = {"plate_layout": "single"}
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert error.value.errors == (
+        "pr_plan PrPlan.contract_version is required",
+        "pr_plan PrPlan.shape is required",
+        "pr_plan PrPlan.groups is required",
+        "pr_plan PrPlan.plate_layout: unknown field",
+    )
+
+
+def test_validate_publication_accepts_a_matching_v1_pr_plan() -> None:
+    state = valid_publication()
+    state["pr_plan"] = _pr_plan_v1(shape="single")
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
 
 
 def test_validate_publication_rejects_landing_topology_mismatch() -> None:
@@ -600,17 +646,29 @@ def test_validate_publication_rejects_explicit_null_landing() -> None:
     assert "landing-closed-class landing must be a mapping" in error.value.errors
 
 
+def test_validate_publication_rejects_explicit_null_pr_plan() -> None:
+    overrides: dict[str, object] = {"pr_plan": None}
+    state = valid_publication() | overrides
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert "pr_plan must be an object" in error.value.errors
+
+
 def test_validate_publication_pr_plan_layout_that_disagrees_with_landing_is_refused() -> None:
     overrides: dict[str, object] = {
         "landing": {"shape": "single"},
-        "pr_plan": {"plate_layout": "stacked"},
+        "pr_plan": _pr_plan_v1(shape="stacked_linear"),
     }
     state = valid_publication() | overrides
 
     with pytest.raises(publication.PublicationValidationError) as error:
         _ = publication.validate_publication(state)
 
-    assert error.value.errors == ("pr_plan.plate_layout must match topology",)
+    assert error.value.errors == (
+        "pr_plan projects to stacked layout but topology is single",
+    )
 
 
 def test_validate_publication_cli_reports_a_landing_topology_mismatch(

@@ -1,10 +1,10 @@
 ---
 name: age
 description: >-
-  Review a diff, PR, branch, or path across ten dimensions. Emit a severity-grouped findings report.
+  Review a diff, PR, branch, or path across twelve dimensions. Emit a severity-grouped findings report.
   Use when the user wants a code review. Trigger on "review this", "/age", "is this safe to merge", or "find bugs".
   Also trigger on "spot security issues", "check for slop", "review my PR", or "what's wrong with this code".
-  Review every requested dimension. Review all ten dimensions by default.
+  Review every requested dimension. Review all twelve dimensions by default.
   Do not apply fixes. Route them to /cure.
   Do not harden tests; route that work to /press.
 license: MIT
@@ -26,8 +26,8 @@ Show advisory `stale-commit` and `grounded-path-missing` findings.
 ## Inputs
 
 ```text
-/age [<ref-or-range>] [--scope <path>]... [--slug <slug>] [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
-/age <slug> [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
+/age [<ref-or-range>] [--scope <path>]... [--slug <slug>] [--effort quick|normal|deep] [--overall] [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
+/age <slug> [--effort quick|normal|deep] [--overall] [--full] [--safe] [--open-pr] [--auto] [--hard] [--html]
 ```
 
 Repeat `--scope <path>` for each reviewed path.
@@ -76,9 +76,15 @@ Treat `${CLAUDE_SKILL_DIR}` as an optional host-provided fallback.
 The handoff blocks below define the portable contract.
 Remember: slash commands are host renderings, not the control model.
 
+## Review effort and scope
+
+Use `--effort quick|normal|deep`; the default is `normal`.
+Use `--overall` for full subject fan-out across the review target.
+`--full` still controls finding visibility, not review scope.
+
 ## Review dimensions
 
-Review correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, and telemetry.
+Review correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry, conventions, and altitude.
 Assign one `blocker`, `high`, `medium`, or `low` severity to each finding.
 Use `references/dimensions.md` for severity rules and recommendation shapes.
 This workflow omits the git-history/precedent dimension.
@@ -86,14 +92,10 @@ This workflow omits the git-history/precedent dimension.
 ## Flow
 
 1. Identify the diff, scope, and relevant specification or issue.
-   Compute the review range's `review_surface` score and risk flags.
-   Call `age_route.route(score=..., risk_flags=..., entry="age")` from `src/easy_cheese/shared/fanout/age_route.py`.
-   For `n=1`, continue with steps 2 through 4.
-   For `n>1`, read `references/fan-out.md` first.
-   Use its `lenses` list to set the worker count.
-   Do not use fan-out when `/age` runs as a sub-agent.
-   Pass the router's `effort` value to the reviewer.
-   Assemble the fan-out packet before the lock.
+   Read `references/fan-out.md` for the context checklist and deterministic planning contract.
+   Collect instruction sources, build context, and run `age.pyz age-route` through its bundle path.
+   Use the returned assignments, effort, dispatch batches, and explicit capability restrictions.
+   Assemble shared evidence and the plan before the lock; do not launch a separate classifier agent.
    The lock covers the packet, because the packet is review evidence.
    Then run `python3 skills/age/scripts/age.pyz review-lock --slug <slug>` to lock the production tree.
    Use the resolved slug from `## Inputs`.
@@ -115,13 +117,14 @@ If `.cheese/glossary/<slug>.md` exists, read it to flag naming drift as a deslop
    Omit dimensions with no findings.
    Report every defect, however minor.
    Do not filter findings by perceived significance.
-   The verifier pass (`n>1`) or severity computation (single-parent) filters findings later.
+   Verification filters findings after reconciliation.
    Do not report a gate failure that matches the diff's recorded `baseline:` block.
    Read [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md) for the baseline rules.
    Report only new or changed failures.
 4. Compute severity per finding (base + location bump + compounding bump, capped at `blocker`).
    Group findings by severity (`## Blocker → ## High → ## Medium → ## Low`).
    Order findings by file within each severity group.
+   Follow `references/fan-out.md` for verification and the deep-only gap sweep before writing.
 5. Write the report body to `.cheese/age/<slug>-body.md`.
    Write the body only. Do not write the handoff preamble into that file.
    Do not write `.cheese/age/<slug>.md` yourself. The gated writer creates it.
@@ -138,13 +141,10 @@ If `.cheese/glossary/<slug>.md` exists, read it to flag naming drift as a deslop
 
 ## Sub-agent fan-out
 
-`/age` sizes its own fan-out with the age router (`src/easy_cheese/shared/fanout/age_route.py`), not a size-only threshold.
-`/age` resolves every dispatched worker through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
-Use read-only, fresh-context workers.
+`/age` plans independent review subjects with the contextual age router (`src/easy_cheese/shared/fanout/age_route.py`).
 See `references/fan-out.md`, `references/packet.md`, and `references/sub-agent-gate.md` for mechanics.
 
 Call each source-code backend through the shared [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) contract.
-`references/packet.md` § Evidence tools and fallbacks lists the tool for each need.
 
 ## Output
 
@@ -176,8 +176,10 @@ Set `next: cure` when that set is not empty.
 Set `next: done` when that set is empty.
 Keep every finding in the report, whatever `next` says.
 Set `durable_flags:` to `none` by default, as in cook's gate.
-When the review-surface score exceeds 400, set `durable_flags: coverage-degraded: review-surface score <score> exceeds the 400-point ceiling` and lead `## Next step` with a stacked-split recommendation for `/plate`.
+When the plan or host restricts coverage, record the actual restriction in `durable_flags` and `## Confidence`, not a size-only warning.
 Record the resolved worker types under `## Agent resolution` in the body.
+Record dispatch metadata for every topology. Use the fields in [report-example.md](references/report-example.md).
+Check supplied dispatch observations with `age.pyz review-plan-check` before writing; absent observations remain explicitly unobserved.
 
 Print `Age report: .cheese/age/<slug>.md`.
 When `press: skipped` is set, print the following warning:
@@ -242,7 +244,7 @@ Apply `references/voice.md` (output discipline, reasoning posture, confidence vo
 
 - Read the generated command inventory in [`references/commands.md`](references/commands.md).
 - Read `references/dimensions.md` before grading a finding.
-- Read `references/fan-out.md` before an `n>1` dispatch.
+- Read `references/fan-out.md` before every review.
 - Read `references/packet.md` before assembling a fan-out context packet.
 - Read `references/sub-agent-gate.md` before a sub-agent dispatch.
 - Read `references/handoff-detail.md` before the selection gate or a `/cure` dispatch.
@@ -254,15 +256,13 @@ Apply `references/voice.md` (output discipline, reasoning posture, confidence vo
 
 ## Agent resolution
 
-Resolve every dimension worker and fresh-context review through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
+Resolve every subject worker and fresh-context review through [`../cheese/references/agent-resolution.md`](../cheese/references/agent-resolution.md).
 
 | Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
 | --- | --- | --- | --- | --- | --- |
-| Review a diff or one dimension | reviewer | read-only, fresh-context | powerful | high | compatible reviewer, then general |
+| Review a diff or assigned subjects | reviewer | read-only, fresh-context | powerful | high | compatible reviewer, then general |
 
-The table gives the default effort.
-The router overrides it. Use the `low`, `medium`, or `high` value that `age_route.route(...)` returns.
-Pass that value to every dispatched worker.
+The router sets each assignment's `effort` to `low`, `medium`, or `high`.
+Pass that assignment value to its worker, not the plan's `quick`, `normal`, or `deep` review mode.
 
 The report body carries the shared `agent_resolution` block under `## Agent resolution`.
-`references/report-example.md` shows that section in the full skeleton.

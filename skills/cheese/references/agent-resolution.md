@@ -109,7 +109,7 @@ An unsubstituted `{model}` makes the spawn use the parent model.
 | mold | planner / integrator | powerful | high |
 | cook | coder | default | medium |
 | press | coder | default | medium |
-| age (first and final) | reviewer | powerful | dial: low \| medium \| high, set by the age router |
+| age (first and final) | reviewer | powerful | per-assignment `effort`: low \| medium \| high, set by the age router |
 | cure | coder | default | medium |
 | wiring task | coder | default | low — single-file glue, capped at ~20 tool calls |
 | cook / cure taste-test | reviewer (taste-test) | default | medium |

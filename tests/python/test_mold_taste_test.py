@@ -60,12 +60,6 @@ class _MoldTasteTestModule(Protocol):
     def goal_coverage(
         self, draft: object, decision_ledger: object
     ) -> dict[str, str]: ...
-    def auto_handoff(
-        self,
-        spec_ref: str | Path,
-        applicability: "_RedRequired | _NotApplicable",
-        metadata: Mapping[str, object] | None = ...,
-    ) -> dict[str, object]: ...
     def main(self, argv: list[str]) -> int: ...
 
 
@@ -780,23 +774,6 @@ def test_legacy_spec_without_ui_surface_remains_compatible(taste: _MoldTasteTest
     assert applicability.ui_surface is None
 
 
-def test_red_required_handoff_preserves_pointer_and_metadata(taste: _MoldTasteTestModule) -> None:
-    applicability = taste.parse_gate_applicability(red_spec())
-    metadata = {"spec_sha256": "abc", "taste_sha256": "def"}
-    handoff = taste.auto_handoff("artifact://specs/a.md", applicability, metadata)
-    assert handoff["command"] == ["/cook", "--auto", "artifact://specs/a.md"]
-    assert handoff["spec_ref"] == "artifact://specs/a.md"
-    handoff_metadata = handoff["metadata"]
-    assert isinstance(handoff_metadata, dict)
-    handoff_metadata = cast(dict[str, object], handoff_metadata)
-    assert handoff_metadata["spec_sha256"] == "abc"
-    assert handoff_metadata["taste_sha256"] == "def"
-    gate_applicability = handoff_metadata["gate_applicability"]
-    assert isinstance(gate_applicability, dict)
-    gate_applicability = cast(dict[str, object], gate_applicability)
-    assert gate_applicability["disposition"] == "red-required"
-    assert gate_applicability["ui_surface"] == "non-browser"
-    assert metadata == {"spec_sha256": "abc", "taste_sha256": "def"}
 
 
 def test_lexical_precheck_passes_on_reflected_draft(
@@ -983,6 +960,47 @@ def test_goal_coverage_skips_when_ledger_has_no_clauses(
 ) -> None:
     assert taste.lexical_precheck(GOAL_DRAFT, GOAL_LEDGER) == ()
     assert taste.goal_coverage(GOAL_DRAFT, GOAL_LEDGER) == {}
+
+
+def test_cli_coverage_prints_disposition_envelope_and_exits_zero(
+    taste: _MoldTasteTestModule, tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    draft = tmp_path / "draft.md"
+    ledger = tmp_path / "ledger.json"
+    _ = draft.write_text(COVERAGE_DRAFT, encoding="utf-8")
+    _ = ledger.write_text(json.dumps(COVERAGE_LEDGER), encoding="utf-8")
+    exit_code = taste.main(["--draft", str(draft), "--ledger", str(ledger), "--coverage"])
+    assert exit_code == 0
+    output = cast(dict[str, object], json.loads(capsys.readouterr().out))
+    assert output == {
+        "clauses": {
+            "G-1": "covered",
+            "G-2": "covered",
+            "G-3": "non-goal",
+            "G-4": "covered",
+        },
+        "covered": 3,
+        "total": 4,
+    }
+
+
+def test_cli_coverage_ignores_a_goal_tag_in_acceptance_prose(
+    taste: _MoldTasteTestModule, tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    # G-4 appears only in prose, not on a structured `AC-n:` line: not covered.
+    draft_text = COVERAGE_DRAFT.replace(", G-4)", ")").replace(
+        "## Acceptance\n",
+        "## Acceptance\nThis section defers G-4 to a later spec.\n",
+        1,
+    )
+    draft = tmp_path / "draft.md"
+    ledger = tmp_path / "ledger.json"
+    _ = draft.write_text(draft_text, encoding="utf-8")
+    _ = ledger.write_text(json.dumps(COVERAGE_LEDGER), encoding="utf-8")
+    exit_code = taste.main(["--draft", str(draft), "--ledger", str(ledger), "--coverage"])
+    assert exit_code == 0
+    output = cast(dict[str, object], json.loads(capsys.readouterr().out))
+    assert cast(dict[str, str], output["clauses"])["G-4"] == "uncovered"
 
 
 @pytest.mark.parametrize(

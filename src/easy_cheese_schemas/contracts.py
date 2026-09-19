@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
 from typing import ClassVar, Protocol, TypeVar, cast
@@ -65,11 +66,14 @@ def contract(slug: str) -> Callable[[_ClsT], _ClsT]:
     return decorate
 
 
-def registered_contracts() -> tuple[tuple[str, type], ...]:
-    """Return marked contract classes in deterministic slug order."""
+def marked_contracts_in(module: object) -> tuple[tuple[str, type], ...]:
+    """Return marked contract classes defined in ``module`` in slug order."""
     pairs: list[tuple[str, type]] = []
-    for value in cast(Iterable[object], globals().values()):
+    module_name = getattr(module, "__name__", None)
+    for value in cast(Iterable[object], vars(module).values()):
         if not isinstance(value, type):
+            continue
+        if value.__module__ != module_name:
             continue
         slug = cast(object, getattr(value, _CONTRACT_MARKER, None))
         if slug is None:
@@ -80,6 +84,11 @@ def registered_contracts() -> tuple[tuple[str, type], ...]:
         if previous[0] == current[0]:
             raise ValueError(f"duplicate contract marker {current[0]!r}")
     return tuple(pairs)
+
+
+def registered_contracts() -> tuple[tuple[str, type], ...]:
+    """Return marked contract classes in ``contracts.py`` in slug order."""
+    return marked_contracts_in(sys.modules[__name__])
 
 
 def _unstructure(value: object) -> object:
@@ -204,12 +213,26 @@ class ReviewDisposition(str, Enum):
     EXECUTOR_FAILURE = "executor_failure"
 
 
+class ReviewDimension(str, Enum):
+    CORRECTNESS = "correctness"
+    SECURITY = "security"
+    ENCAPSULATION = "encapsulation"
+    SPEC = "spec"
+    COMPLEXITY = "complexity"
+    DESLOP = "deslop"
+    ASSERTIONS = "assertions"
+    NIH = "nih"
+    EFFICIENCY = "efficiency"
+    TELEMETRY = "telemetry"
+    CONVENTIONS = "conventions"
+    ALTITUDE = "altitude"
+
+
 class ReviewSeverity(str, Enum):
     CRITICAL = "critical"
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
-
 
 class CoverageDisposition(str, Enum):
     COVERED = "covered"
@@ -1307,6 +1330,9 @@ class ReviewCoverage:
 @define(frozen=True)
 class ReviewFinding:
     finding_id: str = field(validator=_identifier)
+    dimension: ReviewDimension = field(
+        validator=validators.instance_of(ReviewDimension)
+    )
     severity: ReviewSeverity = field(validator=validators.instance_of(ReviewSeverity))
     summary: str = field(validator=_bounded_string)
     evidence: tuple[EvidenceRef, ...] = field(
@@ -1965,6 +1991,9 @@ class PlannerResultWriterView:
 @define(frozen=True)
 class ReviewFindingWriterView:
     severity: ReviewSeverity = field(validator=validators.instance_of(ReviewSeverity))
+    dimension: ReviewDimension = field(
+        validator=validators.instance_of(ReviewDimension)
+    )
     summary: str = field(validator=_bounded_string)
     evidence_keys: tuple[str, ...] = field(
         converter=_tuple_sequence, validator=_identifier_list(non_empty=True)
@@ -3218,9 +3247,9 @@ class ProtectedEntry:
     rather than a note."""
 
     entry_id: str = field(validator=_lower_identifier)
-    kind: EntryKind
+    kind: EntryKind = field(validator=validators.instance_of(EntryKind))
     summary: str = field(validator=_bounded_text)
-    state: EntryState
+    state: EntryState = field(validator=validators.instance_of(EntryState))
     blocks_continuation: bool = field(validator=_gating_kind_rule)
     rationale: str | None = field(default=None, validator=_rationale_rule)
     superseded_by: str | None = field(default=None, validator=_successor_rule)
@@ -3237,7 +3266,7 @@ class ProposedEntry:
     `entry_id`: the runtime assigns one, so a delta cannot address -- and so
     cannot overwrite -- an entry that already exists."""
 
-    kind: EntryKind
+    kind: EntryKind = field(validator=validators.instance_of(EntryKind))
     summary: str = field(validator=_bounded_text)
     blocks_continuation: bool = field(default=False, validator=_gating_kind_rule)
     rationale: str | None = field(
@@ -3817,6 +3846,7 @@ __all__ = [
     "ReproductionWriterView",
     "ReviewCoverage",
     "ReviewDisposition",
+    "ReviewDimension",
     "ReviewFinding",
     "ReviewFindingWriterView",
     "ReviewRequest",

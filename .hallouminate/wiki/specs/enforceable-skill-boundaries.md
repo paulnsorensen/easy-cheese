@@ -1,18 +1,35 @@
 # Enforceable skill boundaries
 
-<certain> The approved target is one enforceable Mold → Cook handoff slice plus doctrine-compliant bundle building. Canonical typed artifacts are validated at both producer and consumer boundaries; execution begins only from a canonical `HandoffPointer`.[^spec]
+<certain> The approved target is one enforceable Mold → Cook handoff slice plus doctrine-compliant bundle building. Canonical typed artifacts are validated at both producer and consumer boundaries; feature execution begins only from a ready `MoldCookHandoff` carried by a canonical `HandoffPointer`.[^spec]
 
 ## Boundary protocol
 
 The public gateway is:
 
 ```text
-migrate(legacy_handoff, operation_id) -> PublishedArtifact
-accept(pointer: HandoffPointer) -> AcceptedArtifact
-publish(writer_view, invocation, destination, operation_id) -> PublishedArtifact
+Mold.finalize(spec, approval, planner_result?, plan?, mode) -> HandoffPointer
+Cook.prepare(input, approvals, setup_evidence?) -> CookPreparationResult
+Cook.accept(pointer: HandoffPointer) -> AcceptedArtifact
 ```
 
-Publication writes and validates the canonical payload and optional `NormalizationReceipt` before atomically revealing the pointer. Repeating the same operation and request returns the fully revalidated result; reusing the operation with a different request or corrupted referenced bytes rejects.[^spec]
+Publication writes and validates the canonical payload and optional
+`NormalizationReceipt` before atomically revealing the pointer. Repeating the
+same operation and request returns the fully revalidated result; reusing the
+operation with a different request or corrupted referenced bytes rejects.[^spec]
+
+## Preparation and authority
+
+`CookPreparationResult` is a closed, non-executing outcome. Full mode requires
+scope approval before planning and exact plan approval before a handoff;
+unchanged approval is reused by digest, while detached or stale approval is
+rejected. Light mode authorizes one curd without planner artifacts. Partial
+approval carries its exact runnable subset and acknowledged remainder.
+
+Runner setup is a separate approval. Its authorization is limited to named
+paths and commands, and evidence must match the approved plan and authorization.
+Missing or stale setup proof preserves the hold and does not permit feature
+writes. Historical pointers are read only through the bounded migration path,
+which verifies original integrity before asking for missing bindings.
 
 ## Acceptance zones
 

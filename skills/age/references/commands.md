@@ -4,7 +4,7 @@
 
 | Command | Purpose |
 | --- | --- |
-| `age-route` | Size an /age review into single-pass or fan-out lanes (JSON in, JSON out) |
+| `age-route` | Plan scoped review subjects from evidence-bearing context (JSON in, JSON out) |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
 | `findings` | Render an /age report's selection table or coder brief and resolve selection verbs |
 | `gates` | Map each quality-gate result to a readiness verdict |
@@ -13,7 +13,9 @@
 | `paths` | Slugify, validate, resolve, and list .cheese artifact paths |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
+| `review-instructions` | Collect scoped repository and explicit external instruction sources |
 | `review-lock` | Record the production tree digest that keeps /age review-only |
+| `review-plan-check` | Check a review plan against supplied dispatch observations (JSON in, JSON out) |
 | `review-surface` | Score the git surface that the age router sizes (JSON out) |
 | `severity` | Compute per-finding severity and fix-cost-now buckets |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text |

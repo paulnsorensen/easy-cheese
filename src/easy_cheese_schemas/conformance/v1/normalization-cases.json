@@ -132,6 +132,7 @@
           "disposition": "findings",
           "findings": [
             {
+              "dimension": "correctness",
               "severity": "high",
               "summary": "Unknown fields are not rejected",
               "evidence_keys": [
@@ -190,6 +191,7 @@
         "findings": [
           {
             "finding_id": "review-normalized/finding/1",
+            "dimension": "correctness",
             "severity": "high",
             "summary": "Unknown fields are not rejected",
             "evidence": [

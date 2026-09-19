@@ -65,7 +65,7 @@ The durable rationale and migration boundary live in
 | `/pasteurize` | Hard-bug diagnosis — feedback-loop-first investigation, regression test, minimal fix, then handoff to `/cook` |
 | `/cook` | Single implementation orchestrator: TDD-disciplined single-coder execution or fresh-context fan-out of an approved curd block |
 | `/press` | Adversarial test hardening after `/cook` |
-| `/age` | Ten-dimension code review producing a severity-grouped findings report |
+| `/age` | Twelve-dimension code review producing a severity-grouped findings report |
 | `/affinage` | Triages a PR's review comments and CI failures through the `/age` lens, routes fixes to `/cure`, posts replies |
 | `/cure` | Applies selected `/age` findings as focused fixes |
 | `/plate` | Final durable-artifact gate, safe commit transaction, and ordinary-or-stacked PR publication |

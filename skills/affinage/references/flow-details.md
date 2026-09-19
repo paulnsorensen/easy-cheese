@@ -28,24 +28,15 @@ Use the complete PR range against its base branch.
 After checkout, use `origin/<base>...HEAD`.
 Do not use the bare `HEAD` default because it scores only uncommitted changes.
 
-Search added lines outside `skills/**` and `.hallouminate/**` for `age_route.OVERRIDE_FLAGS`.
-A missed token prevents lens promotion.
-It does not remove the security lens.
+Build the evidence-bearing review context described in `../../age/references/fan-out.md`.
+Include all changed paths, even when their workload weight is zero.
+Use `entry="affinage"`, `comments=<unresolved-thread-count>`, and `ci_class=<"passing"|"failing"|"red"|"flaky"|null>` alongside `context`.
+The router preserves comment-count and CI workload escalation.
+Use normal review effort unless the user explicitly selects quick or deep.
 
-Call `age_route.route(score=<float>, ...)` with these values:
-
-- `score=<float>`
-- `risk_flags=[...]`
-- `entry="affinage"`
-- `comments=<unresolved-thread-count>`
-- `ci_class=<"failing"|"red"|"flaky"|None>`
-
-This route includes comment count and CI class.
-It can increase fan-out for a small PR with many comments or red CI.
-
-If only the bundle exists, pipe JSON to `python3 skills/affinage/scripts/affinage.pyz age-route`.
-The command reads JSON from standard input and writes route JSON to standard output.
-Pass the returned `n`, `lenses`, and `effort` to `/age`.
+Run `python3 skills/affinage/scripts/affinage.pyz age-route <request.json>`.
+The command reads the contextual request and emits a deterministic subject plan.
+Pass the complete plan and its evidence to `/age`, not the old dimension-lens tuple.
 Then treat each `/age` finding as an additional claim.
 
 ## Step 6 — Grading rules

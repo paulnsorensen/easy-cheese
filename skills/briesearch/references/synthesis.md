@@ -111,6 +111,6 @@ Short form (always returned to the caller):
 
 Long form (when the question warranted a deep look):
 
-- Resolve each path with `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. Use a slug with four to six kebab-case words. The command prints `corpus_root`, `dir`, `report`, `raw_dir`, `manifest`, and `artifact`. Write the complete report to `report`. Write raw bodies under `raw_dir`. Report `artifact` to a caller that records a corpus-relative path. Do not construct these paths manually.
+- Resolve each path with `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. Use a slug with four to six kebab-case words. The command prints `corpus_root`, `dir`, `report`, `raw_dir`, `manifest`, and `artifact`. Write the complete report to `report`. Write raw bodies under `raw_dir`. Give `report` to a caller that records a link in another durable document. Keep `artifact` only as the corpus-relative storage identity. Do not construct these paths manually.
 - Include the complete claim table and the verification log. Cite each raw body with a path relative to `raw_dir`, such as `raw/01-example.md#Lstart-end`. Never put URL user information, query values, or a fragment in a persisted citation.
 - Return one summary paragraph, the report path, and the confidence line in chat. Do not paste the complete report in chat.

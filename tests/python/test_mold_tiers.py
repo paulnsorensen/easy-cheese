@@ -70,7 +70,7 @@ def test_three_tiers_each_name_entry_runs_skips_and_handoff() -> None:
         assert len(row) == 5 and all(row), f"tier row incomplete: {row}"
     quick, light, full = rows
     assert "Standalone fast-path" in quick[1], "Quick reuses Cook's clarity check"
-    assert "mini-spec" in quick[4] and "/cook --auto <spec-path>" in quick[4]
+    assert "mini-spec" in quick[4] and "canonical `HandoffPointer`" in quick[4]
     assert "validate-spec --strict" in quick[4], "Quick still validates its spec"
     assert "two-key handshake" in light[2] and "fork taste test" in light[2], (
         "Light skips dialogue, not the coherence gates"
@@ -102,7 +102,7 @@ def test_quick_tier_reuses_mini_spec_mode_with_one_confirm() -> None:
 def test_light_single_curd_skips_the_planner_not_the_handshake() -> None:
     step5 = _flow_step(5)
     assert "Light with one expected curd" in step5 and "no planner" in step5
-    assert "/cook --auto <spec-path>" in step5
+    assert "mold.pyz finalize" in step5 and "canonical `HandoffPointer`" in step5
     assert "taste-test" in step5.split("Light with one expected curd")[0], (
         "the taste test runs before the Light shortcut, so Light cannot skip it"
     )
@@ -115,6 +115,8 @@ def test_upgrade_rules_and_user_knobs() -> None:
     assert "Downgrade only on the user's knob" in upgrade
     assert "`high` or `[?]`" in upgrade and "Grill mandatory" in upgrade
     assert "reaches two" in upgrade and "typed planner" in upgrade
-    knobs = _section(MODES.read_text(encoding="utf-8"), "User knobs (free-form interrupts)")
+    knobs = _section(
+        MODES.read_text(encoding="utf-8"), "User knobs (free-form interrupts)"
+    )
     for knob in ("`quick`", "`light`", "`full`"):
         assert knob in knobs, f"tier knob {knob} missing from modes.md"

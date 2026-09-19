@@ -326,46 +326,17 @@ class TestAnalyze:
         digest = curd_count.analyze(spec, None)
         assert digest["recommended_skill"] == "/cook"
 
-    def test_red_required_spec_routes_to_cook_with_handoff(
+    def test_gate_disposition_remains_sizing_only(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
         spec = _write_spec(tmp_path, "behavior.md", SPEC_RED_REQUIRED)
         digest = curd_count.analyze(spec, "medium")
         assert digest["recommended_skill"] == "/cook"
-        assert _dig(digest, "handoff", "command") == ["/cook", "--auto", str(spec)]
+        assert "handoff" not in digest
+        assert "command" not in digest
+        assert "--auto" not in json.dumps(digest)
 
-    def test_new_mold_spec_without_ui_surface_is_blocked(
-        self, curd_count: _CurdCountModule, tmp_path: Path
-    ) -> None:
-        body = SPEC_RED_REQUIRED.replace("  ui_surface: non-browser\n", "")
-        spec = _write_spec(tmp_path, "missing-ui.md", body)
-        with pytest.raises(curd_count.SpecReadError, match="ui-surface-required"):
-            _ = curd_count.analyze(spec, "medium")
-
-    def test_browser_ui_without_browser_e2e_seam_is_blocked(
-        self, curd_count: _CurdCountModule, tmp_path: Path
-    ) -> None:
-        body = SPEC_RED_REQUIRED.replace(
-            "  ui_surface: non-browser", "  ui_surface: browser"
-        )
-        body = body.replace("existing service boundary", "internal helper")
-        spec = _write_spec(tmp_path, "browser-missing-seam.md", body)
-        with pytest.raises(curd_count.SpecReadError, match="browser-e2e-seam"):
-            _ = curd_count.analyze(spec, "medium")
-
-    def test_valid_browser_ui_carries_surface_in_handoff(
-        self, curd_count: _CurdCountModule, tmp_path: Path
-    ) -> None:
-        body = SPEC_RED_REQUIRED.replace(
-            "  ui_surface: non-browser", "  ui_surface: browser"
-        )
-        body = body.replace("public call", "existing browser interface")
-        body = body.replace("existing service boundary", "existing browser E2E outer seam")
-        spec = _write_spec(tmp_path, "browser.md", body)
-        digest = curd_count.analyze(spec, "medium")
-        assert _dig(digest, "handoff", "metadata", "gate_applicability", "ui_surface") == "browser"
-
-    def test_declared_landing_shape_carries_into_handoff(
+    def test_declared_landing_shape_is_reported_in_sizing_digest(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
         body = SPEC_RED_REQUIRED.replace(
@@ -379,17 +350,17 @@ class TestAnalyze:
         )
         spec = _write_spec(tmp_path, "stacked.md", body)
         digest = curd_count.analyze(spec, "medium")
-        assert _dig(digest, "handoff", "metadata", "landing", "shape") == "stacked_linear"
-        assert _dig(digest, "handoff", "metadata", "landing", "layers") == [["c1"], ["c2"]]
-        assert _dig(digest, "handoff", "metadata", "landing", "per_layer_green") == "required"
-        assert _dig(digest, "handoff", "metadata", "landing", "review_fixes") == "fold"
+        assert _dig(digest, "landing", "shape") == "stacked_linear"
+        assert _dig(digest, "landing", "layers") == [["c1"], ["c2"]]
+        assert _dig(digest, "landing", "per_layer_green") == "required"
+        assert _dig(digest, "landing", "review_fixes") == "fold"
 
-    def test_absent_landing_block_defaults_to_single_in_handoff(
+    def test_absent_landing_block_defaults_to_single_in_digest(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
         spec = _write_spec(tmp_path, "no-landing.md", SPEC_RED_REQUIRED)
         digest = curd_count.analyze(spec, "medium")
-        assert _dig(digest, "handoff", "metadata", "landing") == {
+        assert _dig(digest, "landing") == {
             "shape": "single",
             "layers": [],
             "per_layer_green": "required",
@@ -407,7 +378,7 @@ class TestAnalyze:
         with pytest.raises(curd_count.SpecReadError, match="landing-closed-class"):
             _ = curd_count.analyze(spec, "medium")
 
-    def test_unmarked_legacy_spec_without_ui_surface_keeps_red_required_handoff(
+    def test_unmarked_legacy_spec_without_ui_surface_remains_sizing_only(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
         body = SPEC_RED_REQUIRED.replace("source: mold-handshake\n", "")
@@ -415,15 +386,14 @@ class TestAnalyze:
         spec = _write_spec(tmp_path, "legacy.md", body)
         digest = curd_count.analyze(spec, "medium")
         assert digest["recommended_skill"] == "/cook"
-        assert digest["handoff"] is not None
+        assert "handoff" not in digest
 
-    def test_not_applicable_spec_with_acceptance_ids_routes_to_cook(
+    def test_not_applicable_spec_with_acceptance_ids_remains_sizing_only(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
         spec = _write_spec(tmp_path, "docs.md", SPEC_NOT_APPLICABLE)
         digest = curd_count.analyze(spec, "low")
         assert digest["recommended_skill"] == "/cook"
-        assert digest["handoff"] is None
 
     def test_candidate_curds_counts_goals_not_gates(
         self, curd_count: _CurdCountModule, tmp_path: Path
@@ -457,6 +427,28 @@ class TestAnalyze:
         spec = _write_spec(tmp_path, "refactor.md", SPEC_GATES_HEAVY)
         digest = curd_count.analyze(spec, "high")
         assert digest["recommended_skill"] == "/cook"
+
+    def test_malformed_gate_applicability_is_a_non_routing_warning(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        # A declared red-required spec without its Test Contracts table is
+        # malformed. Curd count sizes work, so the fault is reported as a
+        # warning and changes neither the recommendation nor the curd count.
+        body = SPEC_RED_REQUIRED.split("## Test Contracts")[0]
+        spec = _write_spec(tmp_path, "malformed.md", body)
+        digest = curd_count.analyze(spec, "low")
+        assert digest["warnings"] == [
+            "gate-applicability:Test Contracts table must cover every Acceptance ID exactly once: missing=['AC-1'] duplicated=[] unexpected=[]"
+        ]
+        assert digest["recommended_skill"] == "/cook"
+        assert digest["candidate_curds"] == 1
+
+    def test_well_formed_gate_applicability_reports_no_warning(
+        self, curd_count: _CurdCountModule, tmp_path: Path
+    ) -> None:
+        spec = _write_spec(tmp_path, "behavior.md", SPEC_RED_REQUIRED)
+        digest = curd_count.analyze(spec, "low")
+        assert digest["warnings"] == []
 
     def test_missing_goals_section_with_gates_yields_zero_curds(
         self, curd_count: _CurdCountModule, tmp_path: Path
@@ -573,6 +565,8 @@ class TestMain:
         digest = cast(dict[str, object], json.loads(out))
         assert digest["recommended_skill"] == "/cook"
         assert digest["blast_radius"] == "high"
+        assert "handoff" not in digest
+        assert "command" not in digest
 
     def test_no_blast_radius_arg_still_works(
         self, curd_count: _CurdCountModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -657,7 +651,7 @@ class TestLandingEdgeCases:
         with pytest.raises(curd_count.SpecReadError, match="landing-closed-class"):
             _ = curd_count.analyze(spec, "low")
 
-    def test_not_applicable_spec_with_landing_block_produces_no_handoff(
+    def test_not_applicable_spec_with_landing_block_reports_landing(
         self, curd_count: _CurdCountModule, tmp_path: Path
     ) -> None:
         body = SPEC_NOT_APPLICABLE.replace(
@@ -667,7 +661,7 @@ class TestLandingEdgeCases:
         )
         spec = _write_spec(tmp_path, "na-landing.md", body)
         digest = curd_count.analyze(spec, "low")
-        assert digest["handoff"] is None
+        assert "handoff" not in digest
         assert _dig(digest, "landing", "shape") == "stacked_linear"
         assert _dig(digest, "landing", "layers") == [["c1"], ["c2"]]
 
@@ -683,7 +677,7 @@ class TestLandingEdgeCases:
         )
         spec = _write_spec(tmp_path, "ab-layers.md", body)
         digest = curd_count.analyze(spec, "medium")
-        layers = _dig(digest, "handoff", "metadata", "landing", "layers")
+        layers = _dig(digest, "landing", "layers")
         assert layers == [["a"], ["b"]]
         serialized = json.dumps(digest)
         assert json.loads(serialized) == digest
@@ -703,7 +697,6 @@ class TestLandingEdgeCases:
         )
         spec = _write_spec(tmp_path, "legacy-landing.md", body)
         digest = curd_count.analyze(spec, "low")
-        assert digest["handoff"] is None
         assert digest["landing"] == {
             "shape": "stacked_linear",
             "layers": [["c1"], ["c2"]],

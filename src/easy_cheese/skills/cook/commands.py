@@ -25,13 +25,6 @@ def _artifact_path(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("age-route")
-def _age_route(argv: list[str]) -> int:
-    from easy_cheese.shared.fanout.age_route_cli import main
-
-    return main(argv)
-
-
 @bundle_command("baseline")
 def _baseline(argv: list[str]) -> int:
     from easy_cheese.shared.fanout.baseline import main
@@ -123,6 +116,20 @@ def _validate(argv: list[str]) -> int:
     return validate_main(argv)
 
 
+@bundle_command("prepare")
+def _prepare(argv: list[str]) -> int:
+    from easy_cheese.skills.cook.contract_handlers import prepare_main
+
+    return prepare_main(argv)
+
+
+@bundle_command("resubmit")
+def _resubmit(argv: list[str]) -> int:
+    from easy_cheese.skills.cook.contract_handlers import resubmit_main
+
+    return resubmit_main(argv)
+
+
 @bundle_command("accept")
 def _accept(argv: list[str]) -> int:
     from easy_cheese.skills.cook.contract_handlers import accept_main
@@ -196,10 +203,6 @@ COMMANDS = (
         "Resolve the durable or transient artifact path for a phase and slug",
     ),
     derive_command(
-        _age_route,
-        "Size an /age review into single-pass or fan-out lanes (JSON in, JSON out)",
-    ),
-    derive_command(
         _baseline, "Classify a current test-failure list against a stored baseline"
     ),
     derive_command(
@@ -232,6 +235,14 @@ COMMANDS = (
         _validate, "Validate a typed contract payload against its registered schema"
     ),
     derive_command(_accept, "Validate and accept a canonical Mold handoff pointer"),
+    derive_command(
+        _prepare,
+        "Classify a Cook input and return a closed preparation outcome",
+    ),
+    derive_command(
+        _resubmit,
+        "Recompute a Cook preparation outcome with new evidence",
+    ),
     derive_command(
         _slugify, "Derive a kebab-case slug and durable spec path from task text"
     ),

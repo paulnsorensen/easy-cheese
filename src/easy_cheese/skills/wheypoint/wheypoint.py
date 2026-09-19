@@ -48,7 +48,6 @@ from easy_cheese_schemas import (
     Durability,
     WheypointDelta,
     load,
-    registered_contracts,
 )
 from easy_cheese_schemas import schema_runtime
 
@@ -634,7 +633,7 @@ def _run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
 def _run_schema(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     """The JSON Schema for one registered contract, so no one unzips the bundle (AC-12)."""
     slug = cast(str, args.slug)
-    table = dict(registered_contracts())
+    table = dict(schema_runtime.contract_registry())
     if slug not in table:
         raise _Refused(
             "unknown-contract",

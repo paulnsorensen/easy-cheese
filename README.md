@@ -69,7 +69,7 @@ A Python-backed skill ships exactly one executable archive at `skills/<skill>/sc
 | `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
 | `skills/cook/SKILL.md` | `/cook` | Single implementation orchestrator: runs a focused spec through one coder or fans an approved curd block through fresh-context phase agents. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
-| `skills/age/SKILL.md` | `/age` | Review diffs across ten staff-engineer dimensions and produce a severity-grouped findings report. |
+| `skills/age/SKILL.md` | `/age` | Review diffs across twelve staff-engineer dimensions and produce a severity-grouped findings report. |
 | `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
 | `skills/plate/SKILL.md` | `/plate` | Final writing, validation, commit, and ordinary-or-stacked PR publication gate. Explicit topology choices win; obvious cohesive work opens as one PR, while stack recommendations and ambiguous shapes ask before mutation. |

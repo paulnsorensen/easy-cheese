@@ -48,6 +48,18 @@ For each completed `/mold` Grill-mode run, verify:
 - **Goal fade** — the `Goal:` line drops out of the ledger render or silently rewords. The taste test catches the terminal form as `goal-drift`; the per-round render is the early form.
 - **Quarter build** — the goal sentence survives and every noun traces, but Acceptance delivers a fraction of the clauses and the agent presents the slice as the whole. The pre-check catches the terminal form as `goal-coverage:G-n` or `goal-coverage-cap`; a missing narrowing delta at the handshake is the early form.
 
+## Mold-to-Cook live trace
+
+Run this scenario with a fresh OMP task agent in an isolated repository. Supply the changed Mold and Cook bundles explicitly.
+
+1. Give the agent a strict, valid spec that needs two curds.
+2. Supply the planner result, taste verdict, and user approval as scripted host events.
+3. Require `mold.pyz finalize`; reject any `publish` command or direct `CurdPlan` hand-off.
+4. Pass the emitted `HandoffPointer` to Cook's preparation command.
+5. Capture actual tool calls, approval events, and final artifact references.
+
+The trace passes only when the bounded transcript checker accepts it and Cook loads the emitted handoff. Missing approval evidence must stop finalization.
+
 ## How to run
 
 These evals are intentionally manual today.

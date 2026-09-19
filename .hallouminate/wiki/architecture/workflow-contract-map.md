@@ -11,7 +11,7 @@ The approved flow below is a target, not proof of end-to-end adoption.
 This inspection uses Easy Cheese commit `4639f6f5b3dfaf68a195c6d247ef65af57b0debb` from draft PR 628.
 The package extraction preserves payload semantics and does not complete the contract redesign.[^extraction-scope]
 
-Current phase declarations send Mold's CurdPlan to Cook and Cook's CurdResult to Press or Age.
+Current phase declarations send Mold's `MoldCookHandoff` to Cook; the handoff references approved plan and approval evidence, while Cook still emits `CurdResult` to Press or Age.
 Press declares CurdResult output to Age, while Age declares CurdPlan output to Cure.[^declared-routes]
 Age's instructions instead prohibit JSON sidecars and require Cure to read Markdown directly.[^age-prose]
 These declarations and instructions do not establish one enforced evidence-to-plan handoff.
@@ -37,7 +37,7 @@ Canonical contracts, the compiled registry, and pointer-last publication have im
 Mold exposes the publish command, while the broader skill handoffs remain split between typed and Markdown paths.[^implemented-pointer]
 CurdBlock, Decomposition, and CurdRecord still have active representations.[^current]
 
-[^implemented-pointer]: src/easy_cheese/shared/publication.py:619-691; src/easy_cheese/skills/mold/contract_handlers.py:65-98; skills/cure/SKILL.md:49-57.
+[^implemented-pointer]: src/easy_cheese/shared/publication.py:654-694; src/easy_cheese/skills/mold/producer.py:1231; skills/cure/SKILL.md:49-57.
 
 <certain> Milknado still owns a separate batch plan and has no easy-cheese-schemas dependency.[^milknado]
 
@@ -50,7 +50,7 @@ The map includes Python runtime uses and skill instructions; it does not claim e
 
 | Roots | Producer | Consumer and evidence |
 | --- | --- | --- |
-| PlannerRequest; PlannerResult; CurdPlan | Host request; planner writer; pure materializer | Workflow plan and Mold publication; Cook consumes CurdPlan.[^planning-seams] |
+| PlannerRequest; PlannerResult; CurdPlan | Host request; planner writer; pure materializer | Workflow plan and Mold publication; Cook consumes a MoldCookHandoff that references the CurdPlan.[^planning-seams] |
 | CurdResult | Cook or Cure writer; host normalizer | Workflow review loop; declared Press and Age inputs.[^execution-seams] |
 | ReviewRequest; ReviewResult | Execution host; review writer | Workflow review normalization; Age's direct report path remains Markdown.[^review-seams] |
 | DiagnosisRequest; DiagnosisResult | Failed-criterion host; diagnosis writer | Workflow diagnosis and confirmed-cause repair path.[^diagnosis-seams] |
@@ -84,9 +84,12 @@ flowchart LR
   D[Pasteurize DiagnosisResult] -. F001 .-> P
   P --> R[PlannerResult]
   R -->|complete or partial| C[CurdPlan]
-  C --> K[Cook or Cure]
+  C --> H[MoldCookHandoff]
+  H --> K[Cook]
+  C --> U[Cure]
   C -. target only .-> I[Milknado importer]
   K --> O[CurdResult array]
+  U --> O
   I -. target only .-> B[milknado.plan.v2]
   B -. target only .-> O
 ```
@@ -141,7 +144,7 @@ flowchart LR
 
 <certain> DiagnosisResult has symptom, reproduction, hypotheses, optional confirmed cause, regression seam, and unresolved evidence. A diagnosis without a confirmed cause does not dispatch Cure work.
 
-<certain> Cook and Cure consume CurdPlan directly after transport resolution. CurdResult has exactly one row per criterion and one result per semantic curd.
+<certain> Cook consumes a MoldCookHandoff that references the approved CurdPlan; only a freshly accepted ready handoff reaches execution. Cure consumes CurdPlan directly after transport resolution. CurdResult has exactly one row per criterion and one result per semantic curd.
 
 <certain> Target-only Milknado flow: Milknado maps one semantic curd to one or more physical nodes, then aggregates every node outcome, including unstarted nodes, back into the source CurdResult.
 
@@ -169,6 +172,33 @@ flowchart LR
 <certain> F002, execution continuity protocol, is prepared at `.cheese/issues/workflow-contract-milknado-seam-F002.md`. It covers OperationInvocation, checkpoints, recovery, WorkAttempt, and WorkTask.
 
 <certain> Wiki-roadmap publication was attempted and rolled back. Milknado's importable roadmap format requires YAML frontmatter, while the current repository wiki validator rejects any page whose first non-blank line is not an H1.[^roadmap-format]
+
+## Mold-to-Cook boundary (2026-09-17)
+
+<certain> Mold finalization and Cook preparation now meet at the versioned
+`MoldCookHandoff` (`src/easy_cheese_schemas/mold_cook.py`). A Full handoff binds
+the canonical planner result and plan; a Light handoff authorizes exactly one
+curd and has no planner artifacts. Both producer publication and Cook
+acceptance resolve and digest-check their references before readiness.
+
+<certain> Cook's `CookPreparationResult` is deliberately non-executing until
+the `ready` outcome. Scope, plan, partial-plan, and runner approvals are
+separate evidence kinds. Setup authorization names only its prerequisite curd,
+paths, and commands; setup evidence cannot clear unrelated holds.
+
+<certain> Partial planner output carries an exact approved subset plus the
+acknowledged remainder through `MoldCookCoverage`. A changed remainder requires
+renewed approval, and incomplete work never becomes terminal whole-task
+success. Historical pointer input is accepted only through its bounded reader
+after original integrity verification.
+
+The hermetic cross-boundary checks live in
+`tests/python/test_mold_cook_boundary_integration.py` and
+`tests/python/test_mold_cook_publication.py`; opt-in browser and live-agent
+evidence is covered separately by
+`tests/python/test_mold_cook_browser_workflow.py` and
+`tests/python/test_mold_cook_agent_driver.py`. Frozen transcripts test
+ordering without claiming a live model run.
 
 ## Related
 
