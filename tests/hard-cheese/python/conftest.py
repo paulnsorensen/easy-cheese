@@ -25,3 +25,8 @@ def append_attempt() -> ModuleType:
 @pytest.fixture(scope="session")
 def freshness_check() -> ModuleType:
     return importlib.import_module("easy_cheese.skills.hard_cheese.freshness_check")
+
+
+@pytest.fixture(scope="session")
+def rank_hunks() -> ModuleType:
+    return importlib.import_module("easy_cheese.skills.hard_cheese.rank_hunks")
