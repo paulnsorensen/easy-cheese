@@ -41,8 +41,12 @@ import attrs  # noqa: E402
 import build_pyz  # noqa: E402
 from easy_cheese.shared.bundle_commands import Command, command_map  # noqa: E402
 from easy_cheese_schemas import contracts  # noqa: E402
+from easy_cheese_schemas._contract_modules import CONTRACT_MODULES  # noqa: E402
 from easy_cheese_schemas import COMPILED_TRANSITION_REGISTRY  # noqa: E402
 from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS  # noqa: E402
+from easy_cheese_schemas import PrPlan  # noqa: E402
+from easy_cheese_schemas import registered_contracts  # noqa: E402
+from easy_cheese_schemas import schema_bytes  # noqa: E402
 
 
 class _DocumentContract(Protocol):
@@ -73,6 +77,9 @@ CURDLE_PATH = REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
 WRITER_VIEWS_PATH = REPO_ROOT / "skills" / "cook" / "references" / "writer-views.md"
 INTERTWINE_PATH = (
     REPO_ROOT / "skills" / "cheese" / "references" / "schema-intertwine.md"
+)
+PR_PLAN_SCHEMA_PATH = (
+    REPO_ROOT / "skills" / "ultracook" / "references" / "pr-plan-schema.json"
 )
 
 # Keep the command inventory aligned with the bundle builder instead of maintaining a second discovery rule here.
@@ -249,12 +256,15 @@ def _slug_from_uri(uri: str) -> str:
 
 
 def render_schema_intertwine() -> str:
-    contract_slugs = {
-        slug: cls.__name__ for slug, cls in contracts.registered_contracts()
-    }
+    # The package-level collector spans every contract-bearing module, not just
+    # contracts.py, so a model registered elsewhere (PrPlan) still renders.
+    contract_slugs = {slug: cls.__name__ for slug, cls in registered_contracts()}
     phases = cast(list[_Phase], COMPILED_TRANSITION_REGISTRY.to_data())
     catalog_slugs = sorted(
         _slug_from_uri(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS
+    )
+    module_leaves = ", ".join(
+        f"{name.rsplit('.', 1)[-1]}.py" for name in CONTRACT_MODULES
     )
 
     lines = [
@@ -264,7 +274,7 @@ def render_schema_intertwine() -> str:
             "Run `scripts/render_generated_regions.py` to generate this file. Do not"
             " edit it manually. The generator joins the phase registry"
             " (`_compiled_phase_registry`), the schema catalog (`_schema_catalog`),"
-            " and the registered contract models (`contracts.py`) for each phase"
+            f" and the registered contract models ({module_leaves}) for each phase"
             " transition."
         ),
         "",
@@ -376,6 +386,7 @@ def refresh(check: bool) -> bool:
             WRITER_VIEWS_PATH, WRITER_VIEWS_TAG, render_writer_views_region()
         ),
         INTERTWINE_PATH: render_schema_intertwine(),
+        PR_PLAN_SCHEMA_PATH: schema_bytes(PrPlan).decode(),
         **{
             commands_doc_path(slug): render_skill_commands(slug) for slug in SKILL_SLUGS
         },

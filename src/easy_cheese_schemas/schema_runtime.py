@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import importlib
 import json
 import types
 from collections.abc import Mapping
 from enum import Enum
 from functools import cache
+from types import ModuleType
 from typing import (
     Any,
     TypeVar,
@@ -17,10 +19,14 @@ from typing import (
 import attrs
 from attrs import Attribute
 
+import easy_cheese_schemas.pr_plan as pr_plan_module
+from easy_cheese_schemas._contract_modules import CONTRACT_MODULES
 from easy_cheese_schemas._schema_catalog import (
     REGISTERED_CONTRACT_SCHEMA_URIS,
     SCHEMA_ROOT,
 )
+from easy_cheese_schemas.compat import Loaded
+from easy_cheese_schemas.compat import load as _load
 from easy_cheese_schemas.contracts import (
     MAX_CONTRACT_BYTES,
     MAX_CONTRACT_DEPTH,
@@ -65,7 +71,7 @@ from easy_cheese_schemas.contracts import (
     canonical_digest,
     curd_plan_digest,
     derive_curd_disposition,
-    registered_contracts,
+    marked_contracts_in,
 )
 
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
@@ -76,6 +82,28 @@ class _RegisteredContract:
     schema_uri: str
     contract: type
     supported_version: ContractVersion | None
+
+
+def _contract_modules() -> tuple[ModuleType, ...]:
+    return tuple(importlib.import_module(name) for name in CONTRACT_MODULES)
+
+
+def _collect_registered_contracts(*modules: object) -> tuple[tuple[str, type], ...]:
+    pairs = [
+        pair
+        for module in modules
+        for pair in marked_contracts_in(module)
+    ]
+    pairs.sort(key=lambda pair: pair[0])
+    for previous, current in zip(pairs, pairs[1:]):
+        if previous[0] == current[0]:
+            raise ValueError(f"duplicate contract marker {current[0]!r}")
+    return tuple(pairs)
+
+
+def registered_contracts() -> tuple[tuple[str, type], ...]:
+    """Collect marked contracts across the explicit module tuple."""
+    return _collect_registered_contracts(*_contract_modules())
 
 
 _MARKED_CONTRACTS = registered_contracts()
@@ -91,10 +119,22 @@ _REGISTERED_CONTRACTS = tuple(
     )
     for slug, contract in _MARKED_CONTRACTS
 )
-if frozenset(entry.schema_uri for entry in _REGISTERED_CONTRACTS) != (
-    REGISTERED_CONTRACT_SCHEMA_URIS
-):
-    raise RuntimeError("generated schema catalog is stale")
+
+
+@cache
+def _checked_registered_contracts() -> tuple[_RegisteredContract, ...]:
+    """Return the registered contracts, checked lazily against the catalog.
+
+    Import must succeed on a stale checked-in catalog; only the first catalog
+    use raises. This lets ``--write-generated`` import the package it repairs.
+    """
+    if frozenset(entry.schema_uri for entry in _REGISTERED_CONTRACTS) != (
+        REGISTERED_CONTRACT_SCHEMA_URIS
+    ):
+        raise RuntimeError("generated schema catalog is stale")
+    return _REGISTERED_CONTRACTS
+
+
 _CANONICAL_SCHEMA_BY_WRITER_KIND = {
     WriterViewKind.CURD_PLAN: f"{SCHEMA_ROOT}/curd-plan",
     WriterViewKind.PLANNER_RESULT: f"{SCHEMA_ROOT}/planner-result",
@@ -284,6 +324,7 @@ def _definition(type_: type, definitions: dict[str, object]) -> dict[str, object
             attribute.validator,
             field_name=attribute.name,
             owner=type_,
+            metadata=attribute.metadata,
         )
         if (
             attribute.name in _UNIQUE_COLLECTION_FIELDS.get(name, set())
@@ -317,6 +358,7 @@ def _type_schema(
     *,
     field_name: str | None = None,
     owner: type | None = None,
+    metadata: Mapping[object, object] | None = None,
 ) -> dict[str, object]:
     constraints = _validator_constraints(validator)
     item_constraints = dict(
@@ -339,6 +381,8 @@ def _type_schema(
     origin = get_origin(annotation)
     if origin is types.UnionType:
         members = cast("tuple[object, ...]", get_args(annotation))
+        # Field metadata such as `min_items` applies to the array member of an
+        # optional array, so the union passes it through unchanged.
         schema: dict[str, object] = {
             "anyOf": [
                 _type_schema(
@@ -346,6 +390,7 @@ def _type_schema(
                     definitions,
                     field_name=field_name,
                     owner=owner,
+                    metadata=metadata,
                 )
                 for member in members
             ]
@@ -368,6 +413,9 @@ def _type_schema(
             if item_constraints:
                 item_schema = _apply_schema_constraints(item_schema, item_constraints)
             schema = {"items": item_schema, "type": "array"}
+            min_items = (metadata or {}).get("min_items")
+            if min_items is not None:
+                schema["minItems"] = min_items
     elif annotation is type(None):
         schema = {"type": "null"}
     elif annotation is Any:
@@ -392,12 +440,13 @@ def _type_schema(
 
 
 def _registered(schema: str | type) -> _RegisteredContract:
+    contracts = _checked_registered_contracts()
     if isinstance(schema, str):
-        for entry in _REGISTERED_CONTRACTS:
+        for entry in contracts:
             if entry.schema_uri == schema:
                 return entry
         raise KeyError(f"unregistered contract schema {schema!r}")
-    for entry in _REGISTERED_CONTRACTS:
+    for entry in contracts:
         if entry.contract is schema:
             return entry
     name = getattr(schema, "__name__", repr(schema))
@@ -406,6 +455,38 @@ def _registered(schema: str | type) -> _RegisteredContract:
 
 def supported_version_for(schema: str | type) -> ContractVersion | None:
     return _registered(schema).supported_version
+
+
+def load_pr_plan(raw: object) -> Loaded[pr_plan_module.PrPlan]:
+    """Load a pr-plan document the way every consuming seam must load it.
+
+    Three rules the plain ``load`` call does not carry, held in one place so no
+    seam can drift from another: unknown keys are refused (a pre-v1 document's
+    ``plate_layout`` must not slip through as an ignored additive field), the
+    document must carry the contract version this host supports, and problems
+    are reported without a usable value.
+
+    It lives here rather than in ``pr_plan.py`` because ``compat.load`` would
+    close an import cycle back through the contract module.
+    """
+    loaded = _load(raw, pr_plan_module.PrPlan, strict=True, forbid_unknown=True)
+    if loaded.value is None or loaded.problems:
+        return Loaded(None, loaded.provenance, loaded.problems)
+    supported = supported_version_for(pr_plan_module.PrPlan)
+    actual = loaded.value.contract_version
+    if actual != supported:
+        assert supported is not None
+        return Loaded(
+            None,
+            loaded.provenance,
+            (
+                *loaded.problems,
+                f"PrPlan.contract_version {actual.major}.{actual.minor} for "
+                + f"{actual.schema_uri} is unsupported; expected "
+                + f"{supported.major}.{supported.minor} for {supported.schema_uri}",
+            ),
+        )
+    return loaded
 
 
 def schema_bytes(schema: str | type) -> bytes:
