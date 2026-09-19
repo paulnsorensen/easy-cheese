@@ -414,6 +414,14 @@ def test_landing_layer_errors_accepts_backward_and_same_layer_dependencies() -> 
         == ()
     )
 
+def test_landing_layer_errors_rejects_writer_keys_as_canonical_ids() -> None:
+    errors = landing_layer_errors(plan(_curd("canonical-curd")), _layers(["writer-key"]))
+
+    assert errors == (
+        "landing-layer-unknown-curd landing.layers names unknown curd 'writer-key'",
+        "landing-layer-missing-curd curd 'canonical-curd' is missing from landing.layers",
+    )
+
 
 def test_landing_layer_errors_empty_group_reports_curd_missing() -> None:
     errors = landing_layer_errors(plan(curd("c1")), _layers([]))

@@ -100,7 +100,8 @@ def _compiled_schema_catalog_source() -> str:
     on first catalog use, not at import time.
     """
     collect, render = _schema_catalog_compiler()
-    return render(collect(_imported_contract_modules()))
+    pairs = collect(_imported_contract_modules())
+    return render(pairs)
 
 
 def _document_rules_compiler() -> tuple[

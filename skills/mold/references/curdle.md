@@ -427,22 +427,26 @@ Before this procedure, run the digest-bound fresh-context fork taste test on the
 2. **Validate and normalize** the writer view on the host. The normal selected path is the typed `PlannerResult` containing a typed `CurdPlan`; reject malformed or wrong-kind output before approval.
 3. **Still invalid after one retry** — stop before the two-key handshake. Do not approve or persist an invalid plan.
 4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` with the final approval request. The typed plan is part of what both handshake keys approve. When candidate curds are two or more, ask the landing shape once in that same approval request, alongside the curd-independence confirmation.
-5. **During Curdle phase one**, persist the approved spec, typed `PlannerResult`, and typed `CurdPlan`. Put them after `## Quality gates` or the natural equivalent section for this spec's shape. Do not regenerate or mutate them after approval.
+5. Persist the approved spec, typed `PlannerResult`, and typed `CurdPlan`. Do not regenerate or mutate them after approval.
 
-## Publication
+## Finalization
 
-Publish the approved plan before the hand-off. Run this command after reconciliation:
+Finalize the approved spec and plan before the hand-off:
 
 ```bash
-POINTER_JSON=$(python3 skills/mold/scripts/mold.pyz publish "$CURD_PLAN_JSON" \
-  --invocation "$INVOCATION_JSON" \
+python3 skills/mold/scripts/mold.pyz finalize "$SPEC" \
+  --approval "$APPROVAL_JSON" \
+  --artifact-root "$ARTIFACT_ROOT" \
   --operation-id "<slug>-<ordinal>" \
-  --artifact-root "$ARTIFACT_ROOT")
+  --request-id "$REQUEST_ID" \
+  --mode full \
+  --planner-result "$PLANNER_RESULT_JSON" \
+  --plan "$CURD_PLAN_JSON"
 ```
 
-The command validates the payload and the `mold -> cook` route. It stores the pointer at `$ARTIFACT_ROOT/pointers/<operation-id>.json`. Stop on a nonzero status. Never hand off an unpublished plan.
+The command validates the complete approved boundary and stores a canonical `HandoffPointer`. Stop on a nonzero status.
 
-Pass that stored pointer path to Cook. Cook runs its own `accept` command before any executor. That command verifies the route, the receipt, and each referenced artifact. See `skills/cook/SKILL.md` § Inputs.
+Pass the stored pointer path to `/cook <pointer path>`. Cook must report `ready` before `accept` or feature execution.
 
 ## Hand-off
 

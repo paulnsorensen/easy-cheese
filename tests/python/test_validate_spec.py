@@ -9,6 +9,8 @@ semantic-rejection rules.
 """
 
 from __future__ import annotations
+
+import json
 import os
 import re
 import subprocess
@@ -17,6 +19,10 @@ from pathlib import Path
 from typing import Protocol, cast
 
 import pytest
+
+from easy_cheese_schemas.spec_format import (
+    _LEGACY_NOTICE,  # pyright: ignore[reportPrivateUsage]
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VALIDATOR = REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold" / "validate_spec.py"
@@ -28,6 +34,7 @@ RED_MINI_SPEC = (SPEC_FIXTURES / "valid_red_required_mini_spec.md").read_text(
     encoding="utf-8"
 )
 MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
+COOK_PYZ = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 class _RunFn(Protocol):
@@ -47,6 +54,22 @@ def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     mold_pyz = MOLD_PYZ
     return subprocess.run(
         [sys.executable, str(mold_pyz), "validate-spec", *flags, str(path)],
+        capture_output=True,
+        text=True,
+    )
+
+
+def _run_cook(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
+    cook_pyz = COOK_PYZ
+    return subprocess.run(
+        [
+            sys.executable,
+            str(cook_pyz),
+            "prepare",
+            "--spec",
+            str(path),
+            *flags,
+        ],
         capture_output=True,
         text=True,
     )
@@ -563,12 +586,40 @@ def test_legacy_v013_spec_is_accepted_on_read(tmp_path: Path, _run: _RunFn) -> N
     result = _run(path)
     assert result.returncode == 0
     assert not _error_lines(result)
-    assert _notice_lines(result) == [
-        "NOTICE: legacy-spec-format this spec predates the current format "
-        + "(no mold provenance marker, so Test Contracts, Grounding and "
-        + "gate_applicability are not required); accepted on read — re-mint it "
-        + f"with /mold to adopt them in {path}"
+    notices = _notice_lines(result)
+    assert notices == [_LEGACY_NOTICE + f" in {path}"]
+
+
+def test_legacy_v013_spec_is_not_execution_authority(tmp_path: Path) -> None:
+    path = _write(tmp_path, "legacy-v013.md", LEGACY_SPEC)
+    original = path.read_bytes()
+    result = _run_cook(
+        path,
+        "--request-id",
+        "legacy-v013",
+        "--repository-root",
+        str(tmp_path),
+        "--artifact-root",
+        str(tmp_path / "artifacts"),
+        "--mode",
+        "full",
+    )
+
+    assert result.returncode == 0, result.stderr
+    preparation = cast(dict[str, object], json.loads(result.stdout))
+    assert preparation["outcome"] == "invalid"
+    findings = cast(list[dict[str, object]], preparation["findings"])
+    assert findings == [
+        {
+            "code": "invalid-input",
+            "message": (
+                "spec snapshot is not a valid Mold document: "
+                "gate-applicability-declaration-required"
+            ),
+            "path": None,
+        }
     ]
+    assert path.read_bytes() == original
 
 
 def test_legacy_v013_spec_is_rejected_under_strict_mint(
@@ -972,7 +1023,10 @@ def test_landing_layers_block_sequence_of_scalars_is_rejected(
     result = _run(path)
     assert result.returncode == 1, result.stdout + result.stderr
     errors = "\n".join(_error_lines(result))
-    assert "landing-closed-class landing.layers must be a list of lists of strings" in errors
+    assert (
+        "landing-closed-class landing.layers must be a list of lists of strings"
+        in errors
+    )
     assert "Traceback" not in result.stdout + result.stderr
 
 
@@ -989,7 +1043,10 @@ def test_landing_layers_with_non_string_item_is_rejected(
     result = _run(path)
     assert result.returncode == 1, result.stdout + result.stderr
     errors = "\n".join(_error_lines(result))
-    assert "landing-closed-class landing.layers must be a list of lists of strings" in errors
+    assert (
+        "landing-closed-class landing.layers must be a list of lists of strings"
+        in errors
+    )
 
 
 def test_landing_layers_with_duplicate_curd_id_is_rejected(
@@ -1062,9 +1119,9 @@ def test_curdle_spec_template_landing_block_validates(
     valid, real example once an author picks one value per `a | b` line: a
     non-single shape needs a non-empty layers list, and no line may carry an
     inline `#` comment because the front-matter reader keeps it as the value."""
-    curdle = (
-        REPO_ROOT / "skills" / "mold" / "references" / "curdle.md"
-    ).read_text(encoding="utf-8")
+    curdle = (REPO_ROOT / "skills" / "mold" / "references" / "curdle.md").read_text(
+        encoding="utf-8"
+    )
     match = re.search(
         r"^landing:\n(  shape: .*\n  layers: .*\n  per_layer_green: .*\n"
         + r"  review_fixes: .*\n)",

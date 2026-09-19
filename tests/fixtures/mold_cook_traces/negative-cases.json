@@ -1,0 +1,104 @@
+[
+  {
+    "name": "wrong-route",
+    "trace": {
+      "scenario": "wrong-route",
+      "events": [
+        {"type": "input_classified", "input_kind": "unsupported"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-planning"},
+        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expect": "unsupported input kind"
+  },
+  {
+    "name": "premature-write",
+    "trace": {
+      "scenario": "premature-write",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+        {"type": "feature_write", "path": "src/feature.py"},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expect": "feature write occurred before consumer acceptance"
+  },
+  {
+    "name": "fabricated-approval",
+    "trace": {
+      "scenario": "fabricated-approval",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "approval_recorded", "kind": "plan", "source": "agent", "decision": "approved"},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expect": "approval evidence must originate in the fixture harness"
+  },
+  {
+    "name": "stale-setup",
+    "trace": {
+      "scenario": "stale-setup",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-preparation"},
+        {"type": "approval_recorded", "kind": "runner", "source": "harness", "decision": "approved"},
+        {"type": "setup_authorized", "curd_id": "setup"},
+        {"type": "setup_evidence", "status": "stale", "exit_code": 0},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expect": "setup evidence is stale or failed"
+  },
+  {
+    "name": "lost-remainder",
+    "trace": {
+      "scenario": "lost-remainder",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "plan_materialized", "outcome": "partial"},
+        {"type": "approval_recorded", "kind": "partial_plan", "source": "harness", "decision": "approved"},
+        {"type": "handoff_published", "ready": true},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expect": "partial workflow lost its unresolved remainder"
+  },
+  {
+    "name": "false-readiness",
+    "trace": {
+      "scenario": "false-readiness",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+        {"type": "handoff_published", "ready": false},
+        {"type": "consumer_accept", "ready": true}
+      ]
+    },
+    "expect": "final handoff is not ready"
+  },
+  {
+    "name": "mismatched-artifact",
+    "trace": {
+      "scenario": "mismatched-artifact",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+        {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/published.json"},
+        {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/other.json"}
+      ]
+    },
+    "expect": "consumer accepted an artifact the trace never published"
+  }
+]

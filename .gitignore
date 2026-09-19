@@ -35,6 +35,7 @@ __pycache__/
 .venv/
 .venv-typing/
 node_modules/
+tests/fixtures/mold_cook_browser/test-results/
 
 # OS / editor
 .DS_Store

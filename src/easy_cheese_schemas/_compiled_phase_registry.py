@@ -27,16 +27,12 @@ PHASE_REGISTRY_DATA = [
             "schema_uri": "https://schemas.easy-cheese.dev/phase-contract"
         },
         "input_schema_uris": [
-            "https://schemas.easy-cheese.dev/curd-plan"
+            "https://schemas.easy-cheese.dev/mold-cook-handoff"
         ],
         "outputs": [
             {
                 "destination": "age",
                 "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-result"
-            },
-            {
-                "destination": "cook",
-                "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
             },
             {
                 "destination": "mold",
@@ -78,7 +74,7 @@ PHASE_REGISTRY_DATA = [
         "outputs": [
             {
                 "destination": "cook",
-                "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+                "payload_schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff"
             }
         ],
         "source": "mold"
@@ -102,4 +98,4 @@ PHASE_REGISTRY_DATA = [
     }
 ]
 
-PHASE_REGISTRY_JSON = '{"phases":[{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/curd-result"],"outputs":[{"destination":"cure","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-plan"}],"source":"age"},{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/curd-plan"],"outputs":[{"destination":"age","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-result"},{"destination":"cook","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-plan"},{"destination":"mold","payload_schema_uri":"https://schemas.easy-cheese.dev/planner-request"},{"destination":"press","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-result"}],"source":"cook"},{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/curd-plan"],"outputs":[{"destination":"age","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-result"}],"source":"cure"},{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/planner-request"],"outputs":[{"destination":"cook","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-plan"}],"source":"mold"},{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/curd-result"],"outputs":[{"destination":"age","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-result"}],"source":"press"}]}'
+PHASE_REGISTRY_JSON = '{"phases":[{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/curd-result"],"outputs":[{"destination":"cure","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-plan"}],"source":"age"},{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/mold-cook-handoff"],"outputs":[{"destination":"age","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-result"},{"destination":"mold","payload_schema_uri":"https://schemas.easy-cheese.dev/planner-request"},{"destination":"press","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-result"}],"source":"cook"},{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/curd-plan"],"outputs":[{"destination":"age","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-result"}],"source":"cure"},{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/planner-request"],"outputs":[{"destination":"cook","payload_schema_uri":"https://schemas.easy-cheese.dev/mold-cook-handoff"}],"source":"mold"},{"contract_version":{"major":"1","minor":"0","schema_uri":"https://schemas.easy-cheese.dev/phase-contract"},"input_schema_uris":["https://schemas.easy-cheese.dev/curd-result"],"outputs":[{"destination":"age","payload_schema_uri":"https://schemas.easy-cheese.dev/curd-result"}],"source":"press"}]}'

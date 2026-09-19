@@ -1,0 +1,18 @@
+{
+  "contract_version": {
+    "schema_uri": "https://schemas.easy-cheese.dev/normalization-receipt",
+    "major": "1",
+    "minor": "0"
+  },
+  "ingress_kind": "legacy_artifact",
+  "normalizer_id": "historical-curd-plan-1.0",
+  "source_digest": "sha256:0676cd8fdb8265f86b69d008d9a84f1febd49ab80eabb2b0d250ec124d711d18",
+  "canonical_digest": "sha256:0676cd8fdb8265f86b69d008d9a84f1febd49ab80eabb2b0d250ec124d711d18",
+  "actions": [],
+  "source_schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+  "source_version": {
+    "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+    "major": "1",
+    "minor": "0"
+  }
+}
