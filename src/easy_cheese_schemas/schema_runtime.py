@@ -76,6 +76,16 @@ from easy_cheese_schemas.contracts import (
 
 DRAFT_2020_12 = "https://json-schema.org/draft/2020-12/schema"
 
+# Two retained Mold artifacts carry a schema label that names a document, not
+# a registered contract: the fork taste verdict and the decision ledger it
+# reads. Neither has contract rules to validate, so the allowlist is explicit
+# and closed; an unlisted URI stays a rejection.
+FORK_TASTE_VERDICT_SCHEMA_URI = f"{SCHEMA_ROOT}/fork-taste-verdict"
+TASTE_LEDGER_SCHEMA_URI = f"{SCHEMA_ROOT}/taste-ledger"
+DOCUMENT_SCHEMA_URIS = frozenset(
+    {FORK_TASTE_VERDICT_SCHEMA_URI, TASTE_LEDGER_SCHEMA_URI}
+)
+
 
 @attrs.define(frozen=True, slots=True)
 class _RegisteredContract:
@@ -89,11 +99,7 @@ def _contract_modules() -> tuple[ModuleType, ...]:
 
 
 def _collect_registered_contracts(*modules: object) -> tuple[tuple[str, type], ...]:
-    pairs = [
-        pair
-        for module in modules
-        for pair in marked_contracts_in(module)
-    ]
+    pairs = [pair for module in modules for pair in marked_contracts_in(module)]
     pairs.sort(key=lambda pair: pair[0])
     for previous, current in zip(pairs, pairs[1:]):
         if previous[0] == current[0]:
@@ -107,30 +113,40 @@ def registered_contracts() -> tuple[tuple[str, type], ...]:
 
 
 _MARKED_CONTRACTS = registered_contracts()
-_REGISTERED_CONTRACTS = tuple(
-    _RegisteredContract(
-        schema_uri := f"{SCHEMA_ROOT}/{slug}",
-        contract,
-        (
+_PACKAGE_CONTRACTS = _MARKED_CONTRACTS
+
+
+def contract_registry() -> tuple[tuple[str, type], ...]:
+    """Return every package contract in one deterministic registry."""
+
+    return _PACKAGE_CONTRACTS
+
+
+def _registered_entry(slug: str, contract: type) -> _RegisteredContract:
+    schema_uri = f"{SCHEMA_ROOT}/{slug}"
+    return _RegisteredContract(
+        schema_uri=schema_uri,
+        contract=contract,
+        supported_version=(
             ContractVersion(schema_uri=schema_uri, major="1", minor="0")
             if "contract_version" in attrs.fields_dict(contract)
             else None
         ),
     )
-    for slug, contract in _MARKED_CONTRACTS
+
+
+_REGISTERED_CONTRACTS = tuple(
+    _registered_entry(slug, contract) for slug, contract in _PACKAGE_CONTRACTS
+)
+_DERIVED_CONTRACT_SCHEMA_URIS = frozenset(
+    entry.schema_uri for entry in _REGISTERED_CONTRACTS
 )
 
 
 @cache
 def _checked_registered_contracts() -> tuple[_RegisteredContract, ...]:
-    """Return the registered contracts, checked lazily against the catalog.
-
-    Import must succeed on a stale checked-in catalog; only the first catalog
-    use raises. This lets ``--write-generated`` import the package it repairs.
-    """
-    if frozenset(entry.schema_uri for entry in _REGISTERED_CONTRACTS) != (
-        REGISTERED_CONTRACT_SCHEMA_URIS
-    ):
+    """Return registered contracts after lazily checking the generated catalog."""
+    if _DERIVED_CONTRACT_SCHEMA_URIS != REGISTERED_CONTRACT_SCHEMA_URIS:
         raise RuntimeError("generated schema catalog is stale")
     return _REGISTERED_CONTRACTS
 
@@ -457,6 +473,21 @@ def supported_version_for(schema: str | type) -> ContractVersion | None:
     return _registered(schema).supported_version
 
 
+def require_contract_version(schema: str | type) -> ContractVersion:
+    """Return the version this host supports for a contract it must support.
+
+    Every seam that builds a contract instance needs the supported version and
+    treats its absence as a host defect, not as user input.  One helper holds
+    that guard so no seam states the rule differently.
+    """
+
+    version = supported_version_for(schema)
+    if version is None:
+        name = schema if isinstance(schema, str) else schema.__name__
+        raise TypeError(f"{name} has no supported contract version")
+    return version
+
+
 def load_pr_plan(raw: object) -> Loaded[pr_plan_module.PrPlan]:
     """Load a pr-plan document the way every consuming seam must load it.
 
@@ -776,6 +807,13 @@ def load_curd_plan(raw: object) -> CurdPlan:
     value = _structure(data, CurdPlan)
     assert isinstance(value, CurdPlan)
     return validate_curd_plan(value)
+
+
+def load_agent_writer_view(raw: object) -> AgentWriterView:
+    """Structure an agent-owned writer envelope without granting host authority."""
+    value = _structure(_raw_mapping(raw), AgentWriterView)
+    assert isinstance(value, AgentWriterView)
+    return value
 
 
 def validate_contract(
@@ -1332,18 +1370,24 @@ __all__ = [
     "AcceptedArtifact",
     "CanonicalArtifact",
     "ContractValidationError",
+    "DOCUMENT_SCHEMA_URIS",
     "DRAFT_2020_12",
+    "FORK_TASTE_VERDICT_SCHEMA_URI",
     "MAX_CONTRACT_BYTES",
     "MAX_CONTRACT_DEPTH",
     "PublishedArtifact",
     "REGISTERED_CONTRACT_SCHEMA_URIS",
     "SCHEMA_ROOT",
+    "TASTE_LEDGER_SCHEMA_URI",
     "canonical_bytes",
+    "contract_registry",
     "canonical_digest",
     "curd_plan_digest",
     "load_curd_plan",
+    "load_agent_writer_view",
     "normalize_agent_output",
     "normalize_agent_value",
+    "require_contract_version",
     "schema_bytes",
     "supported_version_for",
     "validate_contract",

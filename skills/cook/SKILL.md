@@ -94,10 +94,10 @@ Read [`references/fan-pathway.md`](references/fan-pathway.md) for the complete t
 
 **Fast path.** Use the ordinary single-coder path when the curd-count hint is `1` with low or medium blast radius.
 
-**Curded.** Load the typed `PlannerResult` or `CurdPlan`.
-Run `validate_curd_plan`.
+**Curded.** Accept a `ready` Full `MoldCookHandoff` first (§ Mold-to-Cook ingress).
+Run `validate_curd_plan` on its `CurdPlan`.
 Treat the validated plan as the semantic authority.
-Run behavior curds through `cook(CurdPlan) → reviewer(age) → cure(CurdPlan, binding) → reviewer(final age)` without Press.
+Run behavior curds through `cook(handoff) → reviewer(age) → cure(CurdPlan, binding) → reviewer(final age)` without Press.
 After you wire the curds, run one global `/press → /age → /cure` chain.
 Closed N/A bypasses Press.
 
@@ -283,3 +283,12 @@ Publish a terminal Age only when it contains `next: done`.
 Stop when it contains `next: cure` or does not contain `next`.
 
 Generated bundle command inventory: [`references/commands.md`](references/commands.md).
+
+## Mold-to-Cook ingress and preparation
+
+Classify and prepare every input before execution.
+Only a freshly accepted `ready` Full handoff may reach `workflow.cook`.
+Follow the closed outcomes, resubmission rules, setup evidence, legacy handling,
+and typed execution seam in [`references/fan-pathway.md`](references/fan-pathway.md)
+§ Classified Mold-to-Cook ingress.
+Run the fresh-agent regression scenarios in [`references/evals.md`](references/evals.md) when this boundary changes.

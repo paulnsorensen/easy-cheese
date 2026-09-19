@@ -89,7 +89,7 @@ def summarize_file(path: str, context_lines: int = 3) -> _Summary | _ErrorSummar
         }
 
     try:
-        content = Path(path).read_text()
+        content = Path(path).read_text(encoding="utf-8")
     except Exception as e:
         return {"path": path, "error": str(e)}
     hunks = cast(list[_Hunk], parse_conflict_hunks(content))

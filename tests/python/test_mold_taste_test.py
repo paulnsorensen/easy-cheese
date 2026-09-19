@@ -57,12 +57,6 @@ class _MoldTasteTestModule(Protocol):
     def lexical_precheck(
         self, draft: object, decision_ledger: object
     ) -> tuple[str, ...]: ...
-    def auto_handoff(
-        self,
-        spec_ref: str | Path,
-        applicability: "_RedRequired | _NotApplicable",
-        metadata: Mapping[str, object] | None = ...,
-    ) -> dict[str, object]: ...
     def main(self, argv: list[str]) -> int: ...
 
 
@@ -777,23 +771,6 @@ def test_legacy_spec_without_ui_surface_remains_compatible(taste: _MoldTasteTest
     assert applicability.ui_surface is None
 
 
-def test_red_required_handoff_preserves_pointer_and_metadata(taste: _MoldTasteTestModule) -> None:
-    applicability = taste.parse_gate_applicability(red_spec())
-    metadata = {"spec_sha256": "abc", "taste_sha256": "def"}
-    handoff = taste.auto_handoff("artifact://specs/a.md", applicability, metadata)
-    assert handoff["command"] == ["/cook", "--auto", "artifact://specs/a.md"]
-    assert handoff["spec_ref"] == "artifact://specs/a.md"
-    handoff_metadata = handoff["metadata"]
-    assert isinstance(handoff_metadata, dict)
-    handoff_metadata = cast(dict[str, object], handoff_metadata)
-    assert handoff_metadata["spec_sha256"] == "abc"
-    assert handoff_metadata["taste_sha256"] == "def"
-    gate_applicability = handoff_metadata["gate_applicability"]
-    assert isinstance(gate_applicability, dict)
-    gate_applicability = cast(dict[str, object], gate_applicability)
-    assert gate_applicability["disposition"] == "red-required"
-    assert gate_applicability["ui_surface"] == "non-browser"
-    assert metadata == {"spec_sha256": "abc", "taste_sha256": "def"}
 
 
 def test_lexical_precheck_passes_on_reflected_draft(

@@ -19,6 +19,7 @@ from _phase_registry_compiler import (
 from easy_cheese_schemas.phase_contracts import (
     COMPILED_TRANSITION_REGISTRY,
     CURD_PLAN_SCHEMA_URI,
+    MOLD_COOK_HANDOFF_SCHEMA_URI,
     CURD_RESULT_SCHEMA_URI,
     PHASE_CONTRACT_SCHEMA_URI,
     PLANNER_REQUEST_SCHEMA_URI,
@@ -27,7 +28,10 @@ from easy_cheese_schemas.phase_contracts import (
 )
 
 if TYPE_CHECKING:
-    from easy_cheese_schemas.phase_contracts import CompiledTransition, TransitionRegistry
+    from easy_cheese_schemas.phase_contracts import (
+        CompiledTransition,
+        TransitionRegistry,
+    )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS_ROOT = REPO_ROOT / "scripts"
@@ -110,11 +114,14 @@ def writer() -> _WriterModule:
         sys.path.insert(0, str(SHARED_SCRIPTS))
     _ = _load("cli", SHARED_SCRIPTS / "cli.py")
     _ = _load("handoff", SHARED_SCRIPTS / "handoff.py")
-    return cast(_WriterModule, cast(object, _load("phase_contract_writer", WRITER_PATH)))
+    return cast(
+        _WriterModule, cast(object, _load("phase_contract_writer", WRITER_PATH))
+    )
 
 
 def as_dict(value: object) -> dict[str, object]:
     return cast(dict[str, object], value)
+
 
 def _grounded(root: Path) -> tuple[str, ...]:
     _ = (root / "grounded.md").write_text("grounded context\n", encoding="utf-8")
@@ -137,12 +144,16 @@ def test_phase_declarations_compile_to_embedded_registry_deterministically() -> 
 
     forward = compile_phase_declarations(declarations)
     reverse = compile_phase_declarations(reversed(declarations))
-    assert forward.to_json() == reverse.to_json() == COMPILED_TRANSITION_REGISTRY.to_json()
+    assert (
+        forward.to_json() == reverse.to_json() == COMPILED_TRANSITION_REGISTRY.to_json()
+    )
 
 
 def test_phase_compiler_bootstraps_without_schema_package_initialization() -> None:
     environment = os.environ.copy()
-    environment["PYTHONPATH"] = os.pathsep.join((str(SCRIPTS_ROOT), str(REPO_ROOT / "src")))
+    environment["PYTHONPATH"] = os.pathsep.join(
+        (str(SCRIPTS_ROOT), str(REPO_ROOT / "src"))
+    )
     result = subprocess.run(
         [
             sys.executable,
@@ -221,7 +232,9 @@ def test_compile_rejects_unregistered_payload_schema() -> None:
 
 def test_compile_rejects_route_not_declared_by_registered_destination() -> None:
     declaration = _declarations()[0]
-    as_dict(as_list(declaration["outputs"])[0])["payload_schema_uri"] = CURD_RESULT_SCHEMA_URI
+    as_dict(as_list(declaration["outputs"])[0])["payload_schema_uri"] = (
+        CURD_RESULT_SCHEMA_URI
+    )
     with pytest.raises(ValueError, match="destination input"):
         _ = compile_phase_declarations([declaration, *_declarations()[1:]])
 
@@ -235,12 +248,12 @@ def test_writer_uses_the_compiled_registry_projection(writer: _WriterModule) -> 
         writer.COMPILED_TRANSITION_REGISTRY,
         "mold",
         "cook",
-        CURD_PLAN_SCHEMA_URI,
+        MOLD_COOK_HANDOFF_SCHEMA_URI,
     ) == phase_contracts.validate_transition(
         phase_contracts.COMPILED_TRANSITION_REGISTRY,
         "mold",
         "cook",
-        CURD_PLAN_SCHEMA_URI,
+        MOLD_COOK_HANDOFF_SCHEMA_URI,
     )
 
 
@@ -259,13 +272,13 @@ def test_checked_in_registry_projection_matches_build_generator() -> None:
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
     build_pyz: _BuildPyzModule = cast(
-        _BuildPyzModule, cast(object, _load("phase_contract_build_pyz", scripts / "build_pyz.py"))
+        _BuildPyzModule,
+        cast(object, _load("phase_contract_build_pyz", scripts / "build_pyz.py")),
     )
 
     assert (
         REPO_ROOT / "src" / "easy_cheese_schemas" / "_compiled_phase_registry.py"
     ).read_text(encoding="utf-8") == build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
-
 
 
 def _write_phase_yaml(path: Path, source: str) -> None:
@@ -306,13 +319,15 @@ def test_build_compiler_is_clean_bootstrap_safe_and_fresh_per_call(
 
     first = build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
     _ = declaration.write_text(
-        declaration.read_text(encoding="utf-8").replace("source: smoke", "source: fresh"),
+        declaration.read_text(encoding="utf-8").replace(
+            "source: smoke", "source: fresh"
+        ),
         encoding="utf-8",
     )
     second = build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
 
-    assert "source\": \"smoke\"" in first
-    assert "source\": \"fresh\"" in second
+    assert 'source": "smoke"' in first
+    assert 'source": "fresh"' in second
     assert first != second
 
 
@@ -381,12 +396,13 @@ def test_checked_in_catalog_projection_matches_build_generator() -> None:
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
     build_pyz: _BuildPyzModule = cast(
-        _BuildPyzModule, cast(object, _load("schema_catalog_build_pyz", scripts / "build_pyz.py"))
+        _BuildPyzModule,
+        cast(object, _load("schema_catalog_build_pyz", scripts / "build_pyz.py")),
     )
 
-    assert (
-        REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py"
-    ).read_text(encoding="utf-8") == build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    assert (REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py").read_text(
+        encoding="utf-8"
+    ) == build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_schema_catalog_compilation_follows_the_inventory(
@@ -459,10 +475,13 @@ def test_compile_rejects_duplicate_source() -> None:
 
 def test_compile_rejects_duplicate_output_route() -> None:
     declaration = _declarations()[0]
-    as_list(declaration["outputs"]).append(dict(as_dict(as_list(declaration["outputs"])[0])))
+    as_list(declaration["outputs"]).append(
+        dict(as_dict(as_list(declaration["outputs"])[0]))
+    )
 
     with pytest.raises(ValueError, match="duplicate output transitions"):
         _ = compile_phase_declarations([declaration])
+
 
 def test_parse_phase_yaml_rejects_duplicate_authority_fields() -> None:
     with pytest.raises(ValueError, match=r"duplicate field 'major'"):
@@ -532,18 +551,53 @@ def test_registry_runtime_does_not_import_yaml() -> None:
     assert result.stdout == "age,cook,cure,mold,press\n"
 
 
+def test_registry_runtime_does_not_import_the_mold_cook_contracts() -> None:
+    """The registry module must stay free of the mold-cook contract module.
+
+    The package ``__init__`` re-exports ``mold_cook`` eagerly, so the submodule
+    loads under a stub parent package. That measures the imports of
+    ``phase_contracts`` itself, not the imports of the package.
+    """
+    code = (
+        "import sys;"
+        "import os;"
+        "import types;"
+        "sys.path[:0] = sys.argv[1:];"
+        "package = types.ModuleType('easy_cheese_schemas');"
+        "package.__path__ = [os.path.join(sys.argv[1], 'easy_cheese_schemas')];"
+        "sys.modules['easy_cheese_schemas'] = package;"
+        "import easy_cheese_schemas.phase_contracts;"
+        "print('easy_cheese_schemas.mold_cook' in sys.modules)"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            code,
+            str(REPO_ROOT / "src"),
+            str(REPO_ROOT / "vendor"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == "False\n"
+
+
 def test_validate_transition_returns_the_declared_route() -> None:
     route = validate_transition(
         COMPILED_TRANSITION_REGISTRY,
         source="mold",
         destination="cook",
-        payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
     )
 
     assert route is not None
     assert route.source == "mold"
     assert route.destination == "cook"
-    assert route.payload_schema_uri == CURD_PLAN_SCHEMA_URI
+    assert route.payload_schema_uri == MOLD_COOK_HANDOFF_SCHEMA_URI
 
 
 @pytest.mark.parametrize(
@@ -552,6 +606,12 @@ def test_validate_transition_returns_the_declared_route() -> None:
         ("unknown", "cook", CURD_PLAN_SCHEMA_URI, "unknown source phase 'unknown'"),
         ("mold", "cure", CURD_PLAN_SCHEMA_URI, "mold -> cure is not declared"),
         ("mold", "cook", CURD_RESULT_SCHEMA_URI, "payload schema .* is not declared"),
+        (
+            "mold",
+            "cook",
+            CURD_PLAN_SCHEMA_URI,
+            "payload schema .* is not declared for mold -> cook",
+        ),
     ],
 )
 def test_validate_transition_rejects_each_invalid_dimension(
@@ -577,9 +637,9 @@ def test_writer_validates_registered_transition_and_preserves_phase_path(
         status="ok",
         phase="mold",
         next_skill="cook",
-        payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
         artifact="",
-        orientation="mold produced a curd plan",
+        orientation="mold produced a canonical handoff",
         body=None,
         root=tmp_path,
     )
@@ -589,7 +649,7 @@ def test_writer_validates_registered_transition_and_preserves_phase_path(
         "status: ok",
         "next: cook",
         "artifact: ",
-        "mold produced a curd plan",
+        "mold produced a canonical handoff",
     ]
 
 
@@ -692,6 +752,7 @@ def test_writer_never_follows_preplaced_predictable_tmp_symlink(
     assert target.exists()
     assert sentinel.read_text(encoding="utf-8") == "untouched"
     assert predictable_tmp.is_symlink()
+
 
 def test_unregistered_legacy_age_route_preserves_phase_path(
     writer: _WriterModule, tmp_path: Path

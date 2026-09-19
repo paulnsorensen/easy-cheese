@@ -17,6 +17,11 @@ from easy_cheese_schemas.contracts import (
     PlannerResult,
     ReviewResult,
 )
+from easy_cheese_schemas.mold_cook import (
+    CookPreparationResult,
+    MoldCookApproval,
+    MoldCookHandoff,
+)
 from easy_cheese_schemas.phase_contracts import (
     COMPILED_TRANSITION_REGISTRY,
     TransitionError,
@@ -175,6 +180,35 @@ def _validated_contract_observation(case: dict[str, object]) -> dict[str, object
                 for curd in value.curds
                 for criterion in curd.criteria
             ],
+        }
+    if schema_uri.endswith("/mold-cook-handoff"):
+        assert isinstance(value, MoldCookHandoff)
+        return {
+            "type": type(value).__name__,
+            "request_id": value.request_id,
+            "input_kind": value.input_kind.value,
+            "mode": value.mode.value,
+            "curd_ids": list(value.coverage.curd_ids),
+        }
+    if schema_uri.endswith("/mold-cook-approval"):
+        assert isinstance(value, MoldCookApproval)
+        return {
+            "type": type(value).__name__,
+            "request_id": value.request_id,
+            "kind": value.kind.value,
+            "decision": value.decision.value,
+            "curd_ids": list(value.coverage.curd_ids),
+        }
+    if schema_uri.endswith("/cook-preparation-result"):
+        assert isinstance(value, CookPreparationResult)
+        return {
+            "type": type(value).__name__,
+            "request_id": value.request_id,
+            "outcome": value.outcome.value,
+            "reference_ids": [item.artifact_id for item in value.references],
+            "curd_ids": (
+                [] if value.coverage is None else list(value.coverage.curd_ids)
+            ),
         }
     assert isinstance(value, CurdResult)
     return {

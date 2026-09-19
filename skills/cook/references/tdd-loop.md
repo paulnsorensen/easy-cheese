@@ -158,3 +158,30 @@ Confirm every item that the package report asserts (`package-report.md` § Self-
 
 - [ ] Spec or acceptance criteria are clear.
 - [ ] The report documents every remaining risk and every skipped check.
+
+## Boundary-specific RED checks
+
+For Mold-to-Cook changes, the inner RED loop covers the consumer seam rather
+than only a helper function:
+
+- classify explicit mode before inference and reject malformed declared
+  pointers/projections without task fallback;
+- return `needs-approval` before planning when scope evidence is absent;
+- materialize a Full plan once, reuse unchanged approval, and renew it when
+  coverage or the acknowledged remainder changes;
+- keep holds across every resubmission and permit execution only from `ready`;
+- accept Light only with explicit bounded authority and no invented planner
+  artifact;
+- reject runner evidence that is stale, failed, or outside its authorized
+  paths and commands; and
+- read supported historical pointers through their original integrity route,
+  preserving incomplete work and exact missing-decision requests.
+
+The command under test supplies no agent callback and no user response.  The
+orchestrator supplies planner output and approval/setup artifacts explicitly;
+the Cook result is recomputed from those references on every transition.
+The final execution-boundary test uses
+`execute_accepted_handoff` with real dispatch callbacks.  It proves that
+non-ready, held, stale, and overbroad handoffs stop before `workflow.cook`,
+while a ready Full handoff forwards the exact approved IDs and leaves the
+canonical planner remainder untouched.
