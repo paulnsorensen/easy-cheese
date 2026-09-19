@@ -20,6 +20,7 @@
 | `pr-plan-to-branches` | Convert a fan-out PR plan into branch, cherry-pick, and PR commands |  |
 | `prepare` | Classify a Cook input and return a closed preparation outcome |  |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |  |
+| `remediation-decision` | Apply one fan-remediation event and publish the next scope state |  |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |  |
 | `resubmit` | Recompute a Cook preparation outcome with new evidence |  |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text | `from-task` |

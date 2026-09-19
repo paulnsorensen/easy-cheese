@@ -36,6 +36,7 @@ from easy_cheese_schemas.contracts import (
     EntryState,
     EvidenceKind,
     EvidenceRef,
+    FixCostNow,
     HandoffPointer,
     HypothesisDisposition,
     IdentityAction,
@@ -706,6 +707,7 @@ def test_blocked_review_rejects_findings_at_both_contract_boundaries() -> None:
         severity=ReviewSeverity.HIGH,
         summary="The failure path loses data",
         evidence=[evidence()],
+        fix_cost_now=FixCostNow.CONTAINED,
     )
 
     with pytest.raises(
@@ -742,6 +744,7 @@ def test_review_request_and_result_accept_typed_evidence() -> None:
             end_line=44,
         ),
         evidence=[evidence()],
+        fix_cost_now=FixCostNow.CONTAINED,
     )
     result = ReviewResult(
         contract_version=VERSION,
@@ -1115,6 +1118,7 @@ def test_writer_views_expose_only_agent_authored_fields() -> None:
         "dimension",
         "summary",
         "evidence_keys",
+        "fix_cost_now",
         "location",
     }
     assert set(attrs.fields_dict(ReviewResultWriterView)) == {
@@ -1195,6 +1199,7 @@ def test_review_writer_view_enforces_disposition() -> None:
         "severity": ReviewSeverity.HIGH,
         "summary": "The implementation violates the contract",
         "evidence_keys": ["evidence-1"],
+        "fix_cost_now": FixCostNow.CONTAINED,
     }
     if "evidence" in finding_fields:
         finding_kwargs["evidence"] = [evidence()]

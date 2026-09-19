@@ -234,6 +234,12 @@ class ReviewSeverity(str, Enum):
     MEDIUM = "medium"
     LOW = "low"
 
+
+class FixCostNow(str, Enum):
+    CONTAINED = "contained"
+    SPRAWLING = "sprawling"
+
+
 class CoverageDisposition(str, Enum):
     COVERED = "covered"
     NOT_COVERED = "not_covered"
@@ -1339,6 +1345,7 @@ class ReviewFinding:
         converter=_tuple_sequence,
         validator=_list_of(EvidenceRef, non_empty=True),
     )
+    fix_cost_now: FixCostNow = field(validator=validators.instance_of(FixCostNow))
     location: SourceLocation | None = field(
         default=None,
         validator=validators.optional(validators.instance_of(SourceLocation)),
@@ -1448,6 +1455,168 @@ class ReviewResult:
             raise ValueError(
                 f"{self.disposition.value} review result must include a reason"
             )
+
+
+class RemediationScopeKind(str, Enum):
+    CURD = "curd"
+    POSTMERGE = "postmerge"
+
+
+class RemediationCursor(str, Enum):
+    AWAITING_REVIEW = "awaiting_review"
+    AWAITING_CURE = "awaiting_cure"
+    TERMINAL = "terminal"
+
+
+class RemediationDisposition(str, Enum):
+    ACTIVE = "active"
+    CLEAN = "clean"
+    STALLED = "stalled"
+    BLOCKED = "blocked"
+
+
+@define(frozen=True)
+class RemediationScopeKey:
+    run_id: str = field(validator=_identifier)
+    source_plan_ref: SourcePlanRef = field(
+        validator=validators.instance_of(SourcePlanRef)
+    )
+    scope_kind: RemediationScopeKind = field(
+        validator=validators.instance_of(RemediationScopeKind)
+    )
+    scope_id: str = field(validator=_identifier)
+
+    @scope_id.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_scope_id(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+        if (
+            self.scope_kind is RemediationScopeKind.POSTMERGE
+            and self.scope_id != "postmerge"
+        ):
+            raise ValueError("postmerge scope_id must be the literal 'postmerge'")
+
+
+@define(frozen=True)
+class ReviewDebt:
+    critical: int = field(validator=_non_negative_integer)
+    high: int = field(validator=_non_negative_integer)
+    medium: int = field(validator=_non_negative_integer)
+    contained_low: int = field(validator=_non_negative_integer)
+    score: int = field(validator=_non_negative_integer)
+
+    @score.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_score(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+        expected = (
+            16 * self.critical + 8 * self.high + 4 * self.medium + self.contained_low
+        )
+        if self.score != expected:
+            raise ValueError(
+                f"score must equal 16*critical + 8*high + 4*medium + contained_low ({expected}), got {self.score}"
+            )
+
+    @classmethod
+    def compute(
+        cls, *, critical: int, high: int, medium: int, contained_low: int
+    ) -> "ReviewDebt":
+        return cls(
+            critical=critical,
+            high=high,
+            medium=medium,
+            contained_low=contained_low,
+            score=16 * critical + 8 * high + 4 * medium + contained_low,
+        )
+
+
+@define(frozen=True)
+class ProgressReceipt:
+    round_number: int = field(validator=_positive_integer)
+    review_ref: ArtifactRef = field(validator=validators.instance_of(ArtifactRef))
+    selected_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    applied_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    deferred_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    debt: ReviewDebt = field(validator=validators.instance_of(ReviewDebt))
+    gate_evidence: tuple[EvidenceRef, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(EvidenceRef)
+    )
+    touched_paths: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(path=True)
+    )
+    progress: bool = field(validator=validators.instance_of(bool))
+    preceding_cure_result_ref: ArtifactRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ArtifactRef)),
+    )
+    stop_reason: str | None = field(default=None, validator=_optional_string)
+
+
+@contract("remediation-state")
+@define(frozen=True)
+class RemediationState:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    state_id: str = field(validator=_identifier)
+    scope: RemediationScopeKey = field(
+        validator=validators.instance_of(RemediationScopeKey)
+    )
+    cursor: RemediationCursor = field(
+        validator=validators.instance_of(RemediationCursor)
+    )
+    disposition: RemediationDisposition = field(
+        validator=validators.instance_of(RemediationDisposition)
+    )
+    locked_selection: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    pending_cure_result_ref: ArtifactRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ArtifactRef)),
+    )
+    best_debt: ReviewDebt | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ReviewDebt)),
+    )
+    stagnation_count: int = field(default=0, validator=_non_negative_integer)
+    receipts: tuple[ProgressReceipt, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_list_of(ProgressReceipt)
+    )
+
+
+@contract("remediation-cure-observation")
+@define(frozen=True)
+class RemediationCureObservation:
+    """Agent-authored Cure observation the host validates before scoring.
+
+    Cure operates on the immutable ``locked_selection`` (finding keys) the host
+    published in the current ``RemediationState``. It reports which selected
+    keys it applied and which it deferred, the paths it touched, the gate
+    evidence it produced, and any new or changed failing project gates. The
+    host derives the progress decision; this contract carries only observations.
+    """
+
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    applied_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    deferred_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    touched_paths: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(path=True)
+    )
+    gate_evidence: tuple[EvidenceRef, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(EvidenceRef)
+    )
+    new_gate_failures: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_identifier_list()
+    )
 
 
 @contract("diagnosis-request")
@@ -1998,6 +2167,7 @@ class ReviewFindingWriterView:
     evidence_keys: tuple[str, ...] = field(
         converter=_tuple_sequence, validator=_identifier_list(non_empty=True)
     )
+    fix_cost_now: FixCostNow = field(validator=validators.instance_of(FixCostNow))
     location: SourceLocationWriterView | None = field(
         default=None,
         validator=validators.optional(validators.instance_of(SourceLocationWriterView)),
