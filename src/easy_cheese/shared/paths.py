@@ -715,6 +715,9 @@ def _cmd_resolve(args: argparse.Namespace) -> None:
     cli.emit(result, json_mode=True, stdout=cast(TextIO, args.stdout))
 
 
+LEAVES = ("slugify", "validate", "existing", "resolve", "list", "domain-model-target")
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 

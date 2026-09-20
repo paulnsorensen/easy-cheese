@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import tempfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from enum import Enum
@@ -67,18 +68,15 @@ from easy_cheese_schemas.schema_runtime import (
     validate_curd_plan,
 )
 
-from . import handoff, paths
+from . import git_utils, handoff, paths
 from .artifacts import (
     MAX_ARTIFACT_BYTES,
     read_repository_artifact,
     resolve_artifact,
     resolve_verified_bytes,
 )
-from .wheypoint import checkpoint as wheypoint_checkpoint
-from .wheypoint import commit as wheypoint_commit
 from .wheypoint import grounded as wheypoint_grounded
-from .wheypoint import resolve as wheypoint_resolve
-from .wheypoint import storage as wheypoint_storage
+from .wheypoint import recovery as wheypoint_recovery
 
 PlannerDispatch = Callable[[PlannerRequest], object]
 WriterDispatch = Callable[[Mapping[str, object]], object]
@@ -948,8 +946,25 @@ def _finalize_view(
     return _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation), deliverables
 
 
-def _budget_work_id(plan: CurdPlan, curd: SemanticCurd) -> str:
-    payload = f"{plan.plan_id}:{plan.revision}:{plan.digest}:{curd.curd_id}".encode()
+def _budget_target_identity(root: Path) -> str:
+    try:
+        result = git_utils.run_git(
+            ["config", "--get", "remote.origin.url"], cwd=root, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
+        return str(root.resolve())
+    remote = result.stdout.strip() if result.returncode == 0 else ""
+    return remote or str(root.resolve())
+
+
+def _budget_work_id(
+    plan: CurdPlan, curd: SemanticCurd, repository_root: Path | None = None
+) -> str:
+    root = paths.resolve_repo_root(repository_root)
+    target = _budget_target_identity(root)
+    payload = (
+        f"{target}:{plan.plan_id}:{plan.revision}:{plan.digest}:{curd.curd_id}"
+    ).encode()
     return "cook-" + hashlib.sha256(payload).hexdigest()[:32]
 
 
@@ -971,37 +986,17 @@ def _validate_budget_checkpoint(
     checkpoint: WriterCheckpoint,
     repository_root: Path,
     host_evidence: Mapping[str, EvidenceRef],
-    baseline: WriterCheckpoint | None = None,
-) -> None:
-    grounded_values = checkpoint.grounded
-    if not grounded_values and baseline is not None:
-        grounded_values = baseline.grounded
-    grounded = tuple(grounded_values or ())
+) -> CurdResult:
+    if not checkpoint.remaining:
+        raise ValueError("writer checkpoint remaining work is empty")
+    grounded = tuple(checkpoint.grounded or ())
     if not grounded:
         raise ValueError("writer checkpoint grounded context is empty")
     root = paths.resolve_repo_root(repository_root)
     _ = wheypoint_grounded.validate_grounded(grounded, root=root)
     writer_view = _checkpoint_writer_view(curd, checkpoint.reason, checkpoint)
-    candidate = checkpoint
-    if baseline is not None:
-        deliverables = cast(
-            "tuple[DeliverableWriterView, ...]",
-            _merge_checkpoint_items(
-                baseline.deliverables,
-                checkpoint.deliverables,
-                label="deliverable path",
-                key=lambda item: cast(DeliverableWriterView, item).path,
-            ),
-        )
-        candidate = attrs.evolve(
-            checkpoint,
-            deliverables=deliverables,
-            grounded=grounded,
-        )
-    if baseline is not None:
-        writer_view = _checkpoint_writer_view(curd, checkpoint.reason, candidate)
     with tempfile.TemporaryDirectory(prefix=".budget-checkpoint-") as staging:
-        _ = _finalize_view(
+        provisional, _ = _finalize_view(
             plan,
             curd,
             index,
@@ -1012,6 +1007,8 @@ def _validate_budget_checkpoint(
             host_evidence=dict(host_evidence),
             provenance_refs=(),
         )
+    assert isinstance(provisional.value, CurdResult)
+    return provisional.value
 
 
 def _commit_budget_checkpoint(
@@ -1028,7 +1025,7 @@ def _commit_budget_checkpoint(
         raise ValueError("writer checkpoint grounded context is empty")
     root = paths.resolve_repo_root(repository_root)
     grounded_entries = wheypoint_grounded.validate_grounded(grounded, root=root)
-    work_id = _budget_work_id(plan, curd)
+    work_id = _budget_work_id(plan, curd, root)
     orientation = f"Resume cook for {curd.curd_id} from the writer budget checkpoint."
     notes = _budget_notes(curd, checkpoint)
     if len(notes) > 4096:
@@ -1038,20 +1035,6 @@ def _commit_budget_checkpoint(
     artifact = artifact_path.relative_to(root).as_posix()
     project = paths.project_key(root)
     corpus_root = paths.project_corpus_root(project)
-    store = wheypoint_storage.WorkStore.open(work_id, corpus_root=corpus_root)
-    current = store.read_record()
-    artifact_path.parent.mkdir(parents=True, exist_ok=True)
-    slug = handoff.HandoffSlug(
-        status="needs-context",
-        reason="writer budget exhausted; resume from the authoritative checkpoint",
-        next_skill="cook",
-        artifact=artifact,
-        orientation=orientation,
-    )
-    wheypoint_storage.write_atomic(
-        artifact_path,
-        (handoff.render_handoff_slug(slug) + "\n\n" + notes + "\n").encode(),
-    )
     intent = CheckpointIntent(
         work_id=work_id,
         orientation=orientation,
@@ -1061,32 +1044,29 @@ def _commit_budget_checkpoint(
         artifact=artifact,
         artifact_links=[ArtifactLink(path=artifact)],
     )
-    delta = wheypoint_checkpoint.build_delta(intent, current)
-    try:
-        _ = wheypoint_commit.commit(delta, store=store, artifact_root=root)
-    except (wheypoint_commit.StaleParentError, wheypoint_commit.GenesisConflictError):
-        refreshed = store.read_record()
-        if refreshed is None:
-            raise ValueError("wheypoint retry found no current record")
-        retry_delta = wheypoint_checkpoint.build_delta(
-            attrs.evolve(intent, base_revision_id=refreshed.revision_id), refreshed
+    payload = (
+        handoff.render_handoff_slug(
+            handoff.HandoffSlug(
+                status="needs-context",
+                reason="writer budget exhausted; resume from the authoritative checkpoint",
+                next_skill="cook",
+                artifact=artifact,
+                orientation=orientation,
+            )
         )
-        _ = wheypoint_commit.commit(retry_delta, store=store, artifact_root=root)
-    resolution = wheypoint_resolve.resolve(
-        work_id,
+        + "\n\n"
+        + notes
+        + "\n"
+    ).encode()
+    recovery = wheypoint_recovery.persist_checkpoint(
+        intent,
+        artifact_path=artifact_path,
+        artifact_payload=payload,
+        repository_root=root,
         corpus_root=corpus_root,
         project_key=project,
-        workspace_root=root,
     )
-    if not resolution.dispatchable or resolution.record is None:
-        detail = resolution.detail or resolution.outcome.value
-        raise ValueError(
-            f"wheypoint is not authoritative: {detail}"
-        )
-    working_context = tuple(resolution.record.working_context)
-    if not working_context:
-        raise ValueError("authoritative wheypoint has empty working context")
-    return work_id, working_context
+    return recovery.work_id, recovery.working_context
 
 
 def _recovery_context(
@@ -1228,6 +1208,7 @@ def _execute_curd(
     retried = False
 
     recovery_overrun: WriterBudgetExceeded | None = None
+    recovery_snapshot: CurdResult | None = None
 
     def retry_failure(
         label: str,
@@ -1242,6 +1223,19 @@ def _execute_curd(
                 curd,
                 index,
                 reason,
+                provenance_refs=refs,
+            )
+        if recovery_snapshot is not None:
+            rows = tuple(
+                attrs.evolve(row, reason=reason)
+                if row.disposition is CriterionDisposition.BLOCKED
+                else row
+                for row in recovery_snapshot.criterion_results
+            )
+            return None, attrs.evolve(
+                recovery_snapshot,
+                criterion_results=rows,
+                unresolved_work=(reason, *recovery_snapshot.unresolved_work[1:]),
                 provenance_refs=refs,
             )
         return None, _execute_overrun(
@@ -1274,14 +1268,20 @@ def _execute_curd(
             if retried:
                 assert recovery_overrun is not None
                 try:
-                    _validate_budget_checkpoint(
+                    latest = attrs.evolve(
+                        overrun.checkpoint,
+                        grounded=(
+                            overrun.checkpoint.grounded
+                            or recovery_overrun.checkpoint.grounded
+                        ),
+                    )
+                    _ = _validate_budget_checkpoint(
                         plan=plan,
                         curd=curd,
                         index=index,
-                        checkpoint=overrun.checkpoint,
+                        checkpoint=latest,
                         repository_root=repository_root,
                         host_evidence=host_evidence,
-                        baseline=recovery_overrun.checkpoint,
                     )
                     merged = _merge_budget_checkpoints(
                         recovery_overrun.checkpoint,
@@ -1290,6 +1290,21 @@ def _execute_curd(
                     _ = _checkpoint_writer_view(curd, merged.reason, merged)
                 except Exception as error:
                     return retry_failure("second budget checkpoint invalid", error)
+                if recovery_snapshot is not None:
+                    merged_reason = _failure_reason(
+                        "writer stopped at its budget", WriterBudgetExceeded(merged)
+                    )
+                    rows = tuple(
+                        attrs.evolve(row, reason=merged_reason)
+                        if row.disposition is CriterionDisposition.BLOCKED
+                        else row
+                        for row in recovery_snapshot.criterion_results
+                    )
+                    return None, attrs.evolve(
+                        recovery_snapshot,
+                        criterion_results=rows,
+                        unresolved_work=(merged_reason, *merged.remaining),
+                    )
                 return None, _execute_overrun(
                     plan,
                     curd,
@@ -1312,7 +1327,7 @@ def _execute_curd(
                     provenance_refs=provenance_refs,
                 )
             try:
-                _validate_budget_checkpoint(
+                recovery_snapshot = _validate_budget_checkpoint(
                     plan=plan,
                     curd=curd,
                     index=index,

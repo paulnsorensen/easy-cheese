@@ -4,6 +4,7 @@ Public API:
     CliError       -- one-line message with `exit_code` (default 2); cli.run
                       reports 'ERROR: <msg>' and returns that code.
     contract_error -- convert a contract violation to exit 3.
+    repair_argv    -- split a quoted token that merges arguments; cli.run calls it.
     cli.run        -- dispatch and return integer statuses for normal,
                       missing-handler, and CliError paths; argparse
                       help/errors retain SystemExit.
@@ -46,12 +47,33 @@ def _iter_parsers(parser: argparse.ArgumentParser) -> Iterable[argparse.Argument
 
 
 def _inject_global_flags(parser: argparse.ArgumentParser) -> None:
-    for p in _iter_parsers(parser):
+    # Subparser copies default to SUPPRESS so a root-set flag value survives.
+    for index, p in enumerate(_iter_parsers(parser)):
+        default = False if index == 0 else argparse.SUPPRESS
         opts = {tuple(a.option_strings) for a in p._actions}
         if ("--full",) not in opts:
-            _ = p.add_argument("--full", action="store_true", help="emit full output, overriding default limit")
+            _ = p.add_argument("--full", action="store_true", default=default, help="emit full output, overriding default limit")
         if ("--json",) not in opts:
-            _ = p.add_argument("--json", dest="json_mode", action="store_true", help="emit JSON instead of plain text")
+            _ = p.add_argument("--json", dest="json_mode", action="store_true", default=default, help="emit JSON instead of plain text")
+
+
+def _build(
+    setup: Callable[[argparse.ArgumentParser], None],
+    parser_class: type[argparse.ArgumentParser] = argparse.ArgumentParser,
+) -> argparse.ArgumentParser:
+    parser = parser_class()
+    setup(parser)
+    _inject_global_flags(parser)
+    return parser
+
+
+def repair_argv(setup: Callable[[argparse.ArgumentParser], None], argv: Sequence[str]) -> list[str]:
+    """Return `argv` after quote repair against the parser that `setup` builds."""
+    arguments = list(argv)
+    if any(character.isspace() for token in arguments for character in token):
+        from easy_cheese.shared.argv_repair import QuietParser, repair_split_quotes
+        arguments = repair_split_quotes(arguments, _iter_parsers(_build(setup)), lambda: _build(setup, QuietParser))
+    return arguments
 
 
 def run(
@@ -60,10 +82,8 @@ def run(
     stdout: TextIO | None = None,
 ) -> int:
     """Dispatch and return a status; argparse help/errors retain SystemExit."""
-    parser = argparse.ArgumentParser()
-    setup(parser)
-    _inject_global_flags(parser)
-    args = parser.parse_args(argv)
+    parser = _build(setup)
+    args = parser.parse_args(repair_argv(setup, sys.argv[1:] if argv is None else argv))
     args.stdout = stdout if stdout is not None else sys.stdout
     func: Callable[[argparse.Namespace], int | None] | None = getattr(args, "func", None)
     if func is None:
@@ -75,8 +95,6 @@ def run(
         print(f"ERROR: {exc}", file=sys.stderr)
         return exc.exit_code
     return 0 if status is None else status
-
-
 
 
 def emit(value: object, *, limit: int | None = None, full: bool = False, json_mode: bool = False, stdout: TextIO | None = None) -> None:

@@ -465,6 +465,9 @@ def _cmd_render_brief(args: argparse.Namespace) -> None:
     )
 
 
+LEAVES = ("render-table", "parse-selection", "render-brief")
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
 

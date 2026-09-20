@@ -1832,6 +1832,8 @@ def test_invalid_second_checkpoint_retains_first_progress(
     def dispatch_writer(_context: Mapping[str, object]) -> object:
         nonlocal attempts
         attempts += 1
+        if attempts == 2:
+            _ = (tmp_path / "repair.txt").write_bytes(b"overwritten on retry\n")
         raise WriterBudgetExceeded(first if attempts == 1 else second)
 
     def dispatch_review(request: ReviewRequest) -> ReviewResultWriterView:
@@ -1917,3 +1919,130 @@ def test_merged_full_coverage_checkpoint_retains_first_progress(
     assert result.criterion_results[1].disposition is CriterionDisposition.BLOCKED
     assert result.deliverables[0].digest == digest(payload)
     assert "second budget checkpoint invalid" in result.unresolved_work[0]
+
+
+def test_budget_checkpoint_secret_rejection_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, store_root = _budget_checkpoint_plan(tmp_path, monkeypatch)
+    attempts = 0
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(
+            WriterCheckpoint(
+                reason="context budget reached",
+                remaining=["Remove api_key=abcdefghijklmnop before retry"],
+                grounded=["src/workflow.py#1-2"],
+            )
+        )
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert attempts == 1
+    assert results[0].disposition is CurdDisposition.BLOCKED
+    assert "wheypoint recovery failed" in results[0].unresolved_work[0]
+    project = paths.project_key(tmp_path)
+    assert not tuple(storage.WorkStore.enumerate(store_root / project))
+    assert not (tmp_path / ".cheese").exists()
+
+
+def test_budget_checkpoint_empty_remaining_is_rejected_before_persistence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, store_root = _budget_checkpoint_plan(tmp_path, monkeypatch)
+    attempts = 0
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(
+            WriterCheckpoint(
+                reason="context budget reached",
+                remaining=[],
+                grounded=["src/workflow.py#1-2"],
+            )
+        )
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert attempts == 1
+    assert "remaining work is empty" in results[0].unresolved_work[0]
+    project = paths.project_key(tmp_path)
+    assert not tuple(storage.WorkStore.enumerate(store_root / project))
+
+
+def test_budget_checkpoint_symlink_parent_cannot_escape_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, _store_root = _budget_checkpoint_plan(tmp_path, monkeypatch)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / "cook").symlink_to(outside, target_is_directory=True)
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        raise WriterBudgetExceeded(
+            WriterCheckpoint(
+                reason="context budget reached",
+                remaining=["Apply the repair"],
+                grounded=["src/workflow.py#1-2"],
+            )
+        )
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert results[0].disposition is CurdDisposition.BLOCKED
+    assert "symlink" in results[0].unresolved_work[0]
+    assert not tuple(outside.iterdir())
+
+
+def test_identical_budget_checkpoint_reuses_current_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, store_root = _budget_checkpoint_plan(tmp_path, monkeypatch)
+    checkpoint = WriterCheckpoint(
+        reason="context budget reached",
+        remaining=["Apply the second repair"],
+        grounded=["src/workflow.py#1-2"],
+    )
+
+    first = workflow_module._commit_budget_checkpoint(  # pyright: ignore[reportPrivateUsage]
+        plan=planned,
+        curd=planned.curds[0],
+        checkpoint=checkpoint,
+        repository_root=tmp_path,
+    )
+    second = workflow_module._commit_budget_checkpoint(  # pyright: ignore[reportPrivateUsage]
+        plan=planned,
+        curd=planned.curds[0],
+        checkpoint=checkpoint,
+        repository_root=tmp_path,
+    )
+
+    assert second == first
+    project = paths.project_key(tmp_path)
+    stores = storage.WorkStore.enumerate(store_root / project)
+    assert len(stores) == 1
+    assert len(stores[0].recover().complete) == 1

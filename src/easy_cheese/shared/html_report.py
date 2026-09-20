@@ -36,49 +36,63 @@ import re
 
 # Theme inlined verbatim (light + dark via prefers-color-scheme). A fixed string
 # we own, so byte-output stability is guaranteed -- no CDN, no scan/JIT step.
+# Token names and values follow the Easy Cheese Design System (tokens.json);
+# frontend/mold-review/src/design/tokens.css derives the same values.
 _CSS = """:root {
-  --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280;
-  --border: #e5e7eb; --code-bg: #f3f4f6; --link: #2563eb;
-  --accent: #f9fafb;
+  --field: #f8f7f3; --field-sunk: #f0eee6; --panel: #fdfcfa;
+  --text: #191512; --text-dim: #615953; --hairline: #140f0b24;
+  --accent: #965300; --accent-low: #f9e4d0; --accent-high: #7a4c19;
+  --sev-blocker: #b91c1c; --sev-high: #c2410c; --sev-medium: #a16207;
+  --sev-low: #4b5563; --on-sev: #ffffff;
+  --font-serif: Fraunces, Georgia, serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1115; --fg: #e5e7eb; --muted: #9ca3af;
-    --border: #2a2e37; --code-bg: #1a1d24; --link: #60a5fa;
-    --accent: #161a21;
+    --field: #140f0b; --field-sunk: #110c08; --panel: #1b1613;
+    --text: #ecdfd3; --text-dim: #8c8177; --hairline: #ecdfd321;
+    --accent: #dd8c33; --accent-low: #3a230c; --accent-high: #f8bd86;
   }
 }
 * { box-sizing: border-box; }
 body {
   margin: 0 auto; max-width: 860px; padding: 2.5rem 1.5rem;
-  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: var(--bg); color: var(--fg);
+  font: 16px/1.6 var(--font-sans);
+  background: var(--field); color: var(--text);
 }
 h1, h2, h3 { line-height: 1.25; margin: 1.6em 0 0.6em; }
-h1 { font-size: 1.75rem; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
-h2 { font-size: 1.35rem; }
-h3 { font-size: 1.1rem; color: var(--muted); }
-p, li { color: var(--fg); }
-a { color: var(--link); text-decoration: none; }
-a:hover { text-decoration: underline; }
-blockquote {
-  margin: 1em 0; padding: .2em 1em; border-left: 3px solid var(--border);
-  color: var(--muted); background: var(--accent);
+h1 {
+  font: 560 2.625rem/1.1 var(--font-serif); letter-spacing: -0.035em;
+  border-bottom: 1px solid var(--hairline); padding-bottom: .3em;
 }
-hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
+h2 { font-size: 1.375rem; letter-spacing: -0.025em; }
+h3 { font-size: 1.0625rem; color: var(--text-dim); }
+p, li { color: var(--text); }
+a { color: var(--accent); text-underline-offset: 3px; }
+a > code { background: var(--accent-low); color: var(--accent-high); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+::selection { background: var(--accent); color: var(--field); }
+blockquote {
+  margin: 1em 0; padding: .2em 1em; border: 1px solid var(--hairline);
+  border-radius: 8px; color: var(--text-dim); background: var(--field-sunk);
+}
+hr { border: none; border-top: 1px solid var(--hairline); margin: 2em 0; }
 code {
-  font: 0.9em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  background: var(--code-bg); padding: .15em .4em; border-radius: 4px;
+  font: 0.9em/1.4 var(--font-mono);
+  background: var(--field-sunk); padding: .15em .4em; border-radius: 4px;
 }
 pre {
-  background: var(--code-bg); padding: 1em; border-radius: 6px;
-  overflow-x: auto; border: 1px solid var(--border);
+  background: var(--field-sunk); padding: 1em; border-radius: 8px;
+  overflow-x: auto; border: 1px solid var(--hairline);
 }
 pre code { background: none; padding: 0; }
 table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.95em; }
-th, td { border: 1px solid var(--border); padding: .5em .75em; text-align: left; }
-th { background: var(--accent); font-weight: 600; }
-tr:nth-child(even) td { background: color-mix(in srgb, var(--accent) 50%, transparent); }"""
+th, td { border-bottom: 1px solid var(--hairline); padding: .5em .75em; text-align: left; vertical-align: top; }
+th {
+  background: var(--field-sunk); color: var(--text-dim);
+  font: 400 0.72rem/1.4 var(--font-mono); letter-spacing: 0.18em; text-transform: uppercase;
+}"""
 
 _MERMAID_SCRIPTS = (
     '<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>\n'

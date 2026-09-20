@@ -215,5 +215,22 @@ _Avoid_: filename heuristic, inferred docs-only, UI exemption
 _Code_: `GateApplicability` in `src/mold/taste_test.py:180`
 
 
+## Mold visual review
+
+The review canvas is implemented as a local, token-protected Mold surface. The aggregate persists immutable revisions, working feedback, and submitted snapshots; the frontend renders declared image, Mermaid, contract-table, and Excalidraw artifacts. It remains separate from approval, workflow continuity, and semantic work authorities.[^mold-review-canvas]
+
+**MoldReview** — the skill-local aggregate for review artifacts, questions, working feedback, and submitted snapshots.
+_Avoid_: WheypointRecord, CurdPlan
+_Code_: NEW ENTITY; intended owner `src/easy_cheese/skills/mold/`
+
+**ReviewRevision** — one immutable agent-authored document within a MoldReview, with a revision number, content digest, and parent revision.
+_Avoid_: mutable working copy, submitted feedback snapshot
+_Code_: NEW ENTITY; intended owner `src/easy_cheese/skills/mold/`
+
+Neither entity grants approval or replaces workflow continuity and semantic work authorities.
+Browser tests now exercise the local canvas. Typed-plan approval remains a separate prerequisite for workflow authorization.
+
+[^mold-review-canvas]: Approved design spec: /Users/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-review-canvas.md; persistence model and extraction status. [Snapshot decision](./adr/mold-review-canvas-005.md).
+
 _Source: Mold domain-model artifacts; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for CureDiagnosisBinding, PlannerRequest kind, and Domain-model target · Updated: 2026-09-04_
 

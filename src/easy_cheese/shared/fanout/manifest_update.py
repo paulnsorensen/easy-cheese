@@ -394,6 +394,9 @@ def cmd_check_files(args: _CheckFilesArgs) -> None:
 # ----- argparse wiring -----------------------------------------------------
 
 
+LEAVES = ("set-phase", "set-curd-status", "set-post-review", "set-wiring-status", "check-files")
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     subs = parser.add_subparsers(dest="cmd")
 

@@ -472,6 +472,43 @@ dependency-closed approved IDs to `workflow.cook`, while the canonical
 subset or remainder invalidates the old approval and returns to
 `needs-approval`.
 
+### Preparation loop
+
+The agent drives the transitions with three bundle commands. Use one
+`ARTIFACT_ROOT` for the whole loop; for a Mold pointer, use the root that Mold
+used.
+
+1. Run `cook.pyz prepare <source> --artifact-root "$ARTIFACT_ROOT"` and save the
+   JSON result. Name the source with `--spec`, `--pointer`, `--slug`, or `--task`.
+2. Read `outcome`, act, then run `cook.pyz resubmit <saved result> --source
+   <source>` with every evidence flag that you supplied before plus the new one.
+   Save each new result.
+
+| `outcome` | Action | New evidence flag |
+| --- | --- | --- |
+| `needs-approval` | Show the retained `proposal_ref` content. Ask the user once through the [question transport](../../cheese/references/ask-user-question.md). Run `cook.pyz approve` with the literal reply. | `--scope-approval` or `--plan-approval`, as `approval_kind` names |
+| `needs-planning` | Dispatch a fresh-context planner on `planner_request`. Normalize its writer view on the host. | `--planner-result` |
+| `needs-preparation` | Follow the setup authorization rules below. The host records the runner approval; `approve` does not. | `--runner-approval`, `--setup-authorization`, `--setup-evidence` |
+| `blocked` | Show each hold. Only a fresh user dialogue clears a hold. | `--clear-hold HOLD_ID=DIALOGUE_JSON` |
+| `invalid` | Stop and show the findings. | none |
+| `ready` | Run `cook.pyz accept <pointer> --spec <spec>` on `handoff_ref`, then execute. | none |
+
+```bash
+python3 skills/cook/scripts/cook.pyz approve "$SPEC" \
+  --artifact-root "$ARTIFACT_ROOT" \
+  --request-id "<request_id from the result>" \
+  --kind scope \
+  --response "<the user's literal reply>"
+```
+
+For `--kind plan` or `--kind partial_plan`, add `--planner-result`. When a scope
+proposal has no plan and the spec declares no landing, name each covered curd
+with `--curd-id`. The command prints `approval_path`; pass that path to
+`resubmit`. A reply that is not an approval records a rejection, and the next
+`resubmit` does not advance. Only a reply to the question that showed this
+proposal counts. The invocation text, `--auto`, a status string, and a taste
+verdict are never a reply.
+
 Setup authorization names one prerequisite, a finite path set, and a finite
 command set.  Evidence must include that prerequisite, exact command and
 fixture, environment identity, successful exit result, and captured-output

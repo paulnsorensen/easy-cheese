@@ -1,0 +1,13 @@
+@import './design/tokens.css';
+@import './design/components.css';
+
+/* Page base. Every component rule lives in design/components.css. */
+:root { font-synthesis: none; }
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--field);
+  color: var(--text);
+  font: 400 14px/1.5 var(--font-sans);
+}
+.questions .ec-btn { justify-self: start; }

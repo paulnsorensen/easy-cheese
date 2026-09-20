@@ -322,6 +322,11 @@ def write_artifact(
 
     contents = _build_contents(preamble=preamble, body=body)
 
+    effective_corpus_root = (
+        Path(corpus_root)
+        if corpus_root is not None
+        else paths.project_corpus_root(paths.project_key(root_path))
+    )
     _wheypoint_revision(
         slug=slug,
         phase=phase,
@@ -330,7 +335,7 @@ def write_artifact(
         orientation=orientation,
         grounded=grounded,
         root=root_path,
-        corpus_root=corpus_root,
+        corpus_root=effective_corpus_root,
         write_contents=lambda: _atomic_write(target, contents),
     )
 
@@ -384,7 +389,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
     cli.emit(str(target), stdout=a.stdout)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
+def setup_parser(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--slug", required=True, help="artifact slug (filename stem)")
     _ = parser.add_argument(
         "--status", required=True, help=f"handback status: {status_vocabulary()}"
@@ -449,8 +454,8 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(setup_parser, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(cli.run(setup_parser))

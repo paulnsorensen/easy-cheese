@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -16,13 +15,9 @@ sys.path.insert(0, str(test_root))
 sys.path.insert(0, str(test_root / "src"))
 
 from easy_cheese_schemas import canonical_bytes  # noqa: E402
-from easy_cheese_schemas.mold_cook import (  # noqa: E402
-    MoldCookApprovalDecision,
-    MoldCookApprovalKind,
-)
+from easy_cheese_schemas.mold_cook import MoldCookApprovalDecision  # noqa: E402
 from tests.python.test_mold_cook_producer import (  # noqa: E402
     taste_fixture,
-    make_approval,
     make_planner_result,
     make_spec,
     response_decision,
@@ -50,14 +45,6 @@ def _call(
     if not isinstance(decoded, Mapping):
         raise SystemExit(f"{bundle.name} did not return an object")
     return dict(cast(Mapping[str, object], decoded)), result.returncode
-
-
-def _retain(payload: bytes, artifact_root: Path) -> Path:
-    """Retain approval bytes under the digest name Cook demands."""
-    artifact_root.mkdir(parents=True, exist_ok=True)
-    retained = artifact_root / f"sha256-{hashlib.sha256(payload).hexdigest()}"
-    _ = retained.write_bytes(payload)
-    return retained
 
 
 responses = cast(object, json.loads(os.environ["MOLD_COOK_HARNESS_RESPONSES"]))
@@ -100,17 +87,25 @@ request_id = prepare.get("request_id")
 if not isinstance(request_id, str):
     raise SystemExit("Cook preparation did not name a request id")
 
-scope_approval = make_approval(
+scope_approval, _ = _call(
+    cook,
     repository,
-    spec,
-    plan=None,
-    kind=MoldCookApprovalKind.SCOPE,
-    response=f"{scope_response}\n".encode(),
-    request_id=request_id,
+    "approve",
+    str(spec),
+    "--artifact-root",
+    str(artifacts),
+    "--request-id",
+    request_id,
+    "--kind",
+    "scope",
+    "--response",
+    scope_response,
+    "--curd-id",
+    "curd-1",
 )
 prepare_path = repository / "prepare.json"
 _ = prepare_path.write_text(json.dumps(prepare), encoding="utf-8")
-scope_approval_path = _retain(canonical_bytes(scope_approval), artifacts)
+scope_approval_path = Path(cast(str, scope_approval["approval_path"]))
 resubmitted, resubmit_code = _call(
     cook,
     repository,
@@ -165,20 +160,29 @@ if scope_decision is not MoldCookApprovalDecision.APPROVED:
 if resubmit_code != 0:
     raise SystemExit("Cook refused the approved scope approval")
 
-plan_approval = make_approval(
-    repository,
-    spec,
-    plan=planner,
-    response=f"{plan_response}\n".encode(),
-)
 planner_path = repository / "planner.json"
 plan_path = repository / "plan.json"
-approval_path = repository / "approval.json"
 taste_path = repository / "taste.json"
 ledger_path = repository / "ledger.json"
 _ = planner_path.write_bytes(canonical_bytes(planner))
 _ = plan_path.write_bytes(canonical_bytes(planner.plan))
-_ = approval_path.write_bytes(canonical_bytes(plan_approval))
+plan_approval, _ = _call(
+    mold,
+    repository,
+    "approve",
+    str(spec),
+    "--artifact-root",
+    str(artifacts),
+    "--request-id",
+    "request-1",
+    "--kind",
+    "plan",
+    "--response",
+    plan_response,
+    "--planner-result",
+    str(planner_path),
+)
+approval_path = Path(cast(str, plan_approval["approval_path"]))
 taste = taste_fixture(spec)
 _ = taste_path.write_text(
     json.dumps(

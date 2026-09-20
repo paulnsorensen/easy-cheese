@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 
+from easy_cheese.shared import findings, gates, handoff, paths, severity, slugify
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
 
@@ -155,9 +156,15 @@ COMMANDS = (
         _review_surface,
         "Score the git surface that the age router sizes (JSON out)",
     ),
-    derive_command(_severity, "Compute per-finding severity and fix-cost-now buckets"),
     derive_command(
-        _slugify, "Derive a kebab-case slug and durable spec path from task text"
+        _severity,
+        "Compute per-finding severity and fix-cost-now buckets",
+        leaves=severity.LEAVES,
+    ),
+    derive_command(
+        _slugify,
+        "Derive a kebab-case slug and durable spec path from task text",
+        leaves=slugify.LEAVES,
     ),
     derive_command(
         _review_lock,
@@ -173,14 +180,23 @@ COMMANDS = (
     derive_command(
         _findings,
         "Render an /age report's selection table or coder brief and resolve selection verbs",
+        leaves=findings.LEAVES,
     ),
     derive_command(
-        _gates, "Map each quality-gate result to a readiness verdict"
+        _gates,
+        "Map each quality-gate result to a readiness verdict",
+        leaves=gates.LEAVES,
     ),
     derive_command(
-        _paths, "Slugify, validate, resolve, and list .cheese artifact paths"
+        _paths,
+        "Slugify, validate, resolve, and list .cheese artifact paths",
+        leaves=paths.LEAVES,
     ),
-    derive_command(_handoff, "Render, parse, and dispatch-split handoff preambles"),
+    derive_command(
+        _handoff,
+        "Render, parse, and dispatch-split handoff preambles",
+        leaves=handoff.LEAVES,
+    ),
     derive_command(
         _render_html,
         "Render a markdown report into one self-contained offline HTML file",

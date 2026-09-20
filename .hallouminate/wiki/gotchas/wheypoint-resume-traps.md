@@ -43,3 +43,23 @@ A missing checkpoint, invalid context, or second exhaustion halts.
 The parent must not implement the remainder automatically.[^writer-recovery]
 
 [^writer-recovery]: `src/easy_cheese/shared/workflow.py` (`WriterCheckpoint`, `WriterBudgetExceeded`, `_execute_curd`); `src/easy_cheese/shared/wheypoint/checkpoint.py`; `src/easy_cheese/shared/fanout/phase_decision.py`. Recovery decision: September 19, 2026. Source verification and release status belong to the implementation PR.
+
+
+The Wheypoint recovery boundary owns checkpoint validation, artifact publication, commit, rollback, and authoritative resolve.
+It rejects credential-like intent text before persistence.
+A directory advisory lock serializes the record read, idempotency check, publication, and commit.
+Identical recovery requires matching intent, recorded digest, and stored artifact bytes.
+Cleanup preserves an artifact when a committed record references it or authority cannot be read.[^recovery-publication]
+
+The host validates the first partial result before retry dispatch.
+A failed retry retains that immutable result and its original evidence digests.
+The retry cannot rehash its own edits as proof of earlier completed work.[^recovery-snapshot]
+
+An explicit repository root controls both default project identity and the checkpoint corpus.
+Explicit caller overrides remain authoritative.
+Recovery work identifiers include the full remote identity without changing the global project-key format.[^recovery-root]
+
+[^recovery-publication]: src/easy_cheese/shared/wheypoint/recovery.py:161-333; tests/wheypoint/python/test_recovery.py.
+[^recovery-snapshot]: src/easy_cheese/shared/workflow.py (`_validate_budget_checkpoint`, `_execute_curd`); tests/schemas/python/test_workflow_thread.py.
+[^recovery-root]: src/easy_cheese/shared/write_handoff_artifact.py; src/easy_cheese/shared/wheypoint/resolve.py; src/easy_cheese/shared/workflow.py (`_budget_target_identity`, `_budget_work_id`); tests/python/test_cross_root_continuity.py.
+
