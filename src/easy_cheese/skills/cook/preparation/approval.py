@@ -25,10 +25,7 @@ from easy_cheese_schemas.mold_cook import (
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 from easy_cheese_schemas.validate import require_relative_path
-from easy_cheese.shared.mold_cook_handoff import (
-    MoldCookSpecReadiness,
-    validate_mold_cook_approval,
-)
+from easy_cheese.shared.mold_cook_handoff import validate_mold_cook_approval
 from easy_cheese.shared.wheypoint.canonical import digest_bytes
 
 from ._types import (
@@ -227,31 +224,6 @@ def coverage_for_plan(
         curd_ids=selected,
         unresolved_work=expected_remainder,
     )
-
-
-def host_scope_coverage(
-    readiness: MoldCookSpecReadiness | None,
-    planner_value: PlannerResult | None,
-) -> MoldCookCoverage | None:
-    """Return the coverage Cook proposes for scope, never the approval's own.
-
-    A materialized plan is the strongest declaration of the work in hand; a
-    spec that declares landing layers names its full coverage instead. A spec
-    that declares neither leaves Cook with no coverage of its own to propose.
-    """
-
-    if planner_value is not None and planner_value.plan is not None:
-        return MoldCookCoverage(
-            curd_ids=tuple(curd.curd_id for curd in planner_value.plan.curds),
-            unresolved_work=planner_value.unresolved_work,
-        )
-    if readiness is not None and readiness.landing is not None:
-        declared = tuple(
-            curd_id for layer in readiness.landing.layers for curd_id in layer
-        )
-        if declared:
-            return MoldCookCoverage(curd_ids=declared)
-    return None
 
 
 def check_previous_proposal(

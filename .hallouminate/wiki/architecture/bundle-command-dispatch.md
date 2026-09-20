@@ -37,9 +37,9 @@ Quote repair fixes one bundle call shape: `--files '2 --modules 2'` arrives as o
 
 The repair never splits a positional token or the value of a plain string option. An earlier rule split free text, and it could write a shortened `orientation` into a durable handoff. The repair stops at a bare `--`. It returns the original argv when a split frees `-h` or `--help`, because the probe parse would print a help page to stdout and corrupt a `--json` consumer. The note prints the pieces.
 
-**Boundary.** Only `cli.run` calls the repair, through the public `cli.repair_argv` (`src/easy_cheese/shared/cli.py:68`). A handler that builds its own parser gets flag standardization from `dispatch`, but no quote repair.
+**Boundary.** `cli.run` and the age review-lock gate `gated_write_handoff_artifact` both call the public `cli.repair_argv` (`src/easy_cheese/shared/cli.py:70`). A handler that builds its own parser gets flag standardization from `dispatch`, but no quote repair.
 
-**One argv for a gate.** A gate that peeks at argv before a `cli.run` handler must repair first. The age review-lock gate calls `cli.repair_argv(write_handoff_artifact.setup_parser, argv)` and passes that one list to the peek and to the writer (`src/easy_cheese/skills/age/review_lock.py:379`). Otherwise the gate and the writer can read different `--slug` values.
+**One argv for a gate.** A gate that peeks at argv before a `cli.run` handler must repair first. The age review-lock gate calls `cli.repair_argv(write_handoff_artifact.setup_parser, argv)` and passes that one list to the peek and to the writer (`src/easy_cheese/skills/age/review_lock.py:382`). Otherwise the gate and the writer can read different `--slug` values.
 
 `read_mapping_arg_or_stdin` rejects an `argv[0]` that starts with `-` with the handler's usage error (`src/easy_cheese/shared/manifest_io.py:35`). A hoisted `--json` therefore never becomes a manifest path.
 

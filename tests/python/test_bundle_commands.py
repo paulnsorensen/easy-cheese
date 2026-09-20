@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import ast
 import contextlib
 import importlib
@@ -17,6 +18,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 import pytest
 
 from easy_cheese.shared import bundle_commands as bc
+from easy_cheese.shared import cli
 from scripts import build_pyz as _build_pyz
 
 _CommandHandler = Callable[[list[str]], int]
@@ -568,3 +570,59 @@ def test_dispatch_standardizes_flag_names_before_the_handler_runs(
     commands = (command("go"),)
     assert bc.dispatch(commands, ["go", "--flag_name=1", "--", "--kept_as_is"]) == 7
     assert calls == [["--flag-name=1", "--", "--kept_as_is"]]
+
+
+def test_dispatch_hoisted_json_flag_reaches_a_leaf_handler_via_cli_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hoisted `--json` given before the command must survive `cli.run`'s
+    subparser dispatch, not get overwritten by the subparser's own default.
+    """
+    seen: list[bool] = []
+    module = ModuleType("test_bundle_target_json_subparser")
+
+    def record(args: argparse.Namespace) -> None:
+        seen.append(cast(bool, args.json_mode))
+
+    def setup(parser: argparse.ArgumentParser) -> None:
+        sub = parser.add_subparsers()
+        leaf = sub.add_parser("list")
+        leaf.set_defaults(func=record)
+
+    def handler(argv: list[str]) -> int:
+        return cli.run(setup, argv=argv)
+
+    module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    commands = (command("paths", target=f"{module.__name__}:handler"),)
+
+    assert bc.dispatch(commands, ["--json", "paths", "list"]) == 0
+    assert seen == [True]
+
+
+def test_dispatch_hoisted_full_flag_reaches_a_leaf_handler_via_cli_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hoisted `--full` given before the command must survive `cli.run`'s
+    subparser dispatch, not get overwritten by the subparser's own default.
+    """
+    seen: list[bool] = []
+    module = ModuleType("test_bundle_target_full_subparser")
+
+    def record(args: argparse.Namespace) -> None:
+        seen.append(cast(bool, args.full))
+
+    def setup(parser: argparse.ArgumentParser) -> None:
+        sub = parser.add_subparsers()
+        leaf = sub.add_parser("list")
+        leaf.set_defaults(func=record)
+
+    def handler(argv: list[str]) -> int:
+        return cli.run(setup, argv=argv)
+
+    module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    commands = (command("paths", target=f"{module.__name__}:handler"),)
+
+    assert bc.dispatch(commands, ["--full", "paths", "list"]) == 0
+    assert seen == [True]

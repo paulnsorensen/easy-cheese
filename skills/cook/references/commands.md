@@ -5,6 +5,7 @@
 | Command | Purpose | Subcommands |
 | --- | --- | --- |
 | `accept` | Validate and accept a canonical Mold handoff pointer |  |
+| `approve` | Record the user's literal approval response as a retained MoldCookApproval |  |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |  |
 | `baseline` | Classify a current test-failure list against a stored baseline |  |
 | `findings` | Render an /age report's selection table or coder brief and resolve selection verbs | `render-table`, `parse-selection`, `render-brief` |

@@ -47,12 +47,14 @@ def _iter_parsers(parser: argparse.ArgumentParser) -> Iterable[argparse.Argument
 
 
 def _inject_global_flags(parser: argparse.ArgumentParser) -> None:
-    for p in _iter_parsers(parser):
+    # Subparser copies default to SUPPRESS so a root-set flag value survives.
+    for index, p in enumerate(_iter_parsers(parser)):
+        default = False if index == 0 else argparse.SUPPRESS
         opts = {tuple(a.option_strings) for a in p._actions}
         if ("--full",) not in opts:
-            _ = p.add_argument("--full", action="store_true", help="emit full output, overriding default limit")
+            _ = p.add_argument("--full", action="store_true", default=default, help="emit full output, overriding default limit")
         if ("--json",) not in opts:
-            _ = p.add_argument("--json", dest="json_mode", action="store_true", help="emit JSON instead of plain text")
+            _ = p.add_argument("--json", dest="json_mode", action="store_true", default=default, help="emit JSON instead of plain text")
 
 
 def _build(

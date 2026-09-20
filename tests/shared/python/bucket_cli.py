@@ -8,7 +8,7 @@ from typing import TextIO, cast
 
 def print_bucket(args: argparse.Namespace) -> None:
     values = (cast(int, args.files), cast(int, args.modules), cast(str, args.title))
-    print(*values, file=cast("TextIO", args.stdout))
+    print(*values, file=cast(TextIO, args.stdout))
 
 
 def bucket_setup(parser: argparse.ArgumentParser) -> None:

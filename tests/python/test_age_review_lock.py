@@ -23,6 +23,12 @@ def _git(repo: Path, *args: str) -> None:
     assert result.returncode == 0, result.stderr
 
 
+@pytest.fixture(autouse=True)
+def isolated_corpus_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep wheypoint revisions out of the shared durable store; parallel tests race on one slug there."""
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path_factory.mktemp("corpus-home")))
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     _git(tmp_path, "init", "--initial-branch=main", ".")

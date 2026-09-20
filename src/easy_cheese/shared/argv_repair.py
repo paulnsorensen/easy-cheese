@@ -6,8 +6,10 @@ option has `choices`, or a `type` other than `str`. It never splits a positional
 token or the value of a plain string option. The repair applies only when the
 original arguments fail to parse and the split arguments parse.
 
-Boundary: only `cli.run` calls this module. A handler that builds its own parser
-gets flag standardization from `dispatch`, but no quote repair.
+Boundary: `cli.run` calls this module through `cli.repair_argv`, and so does the
+pre-handler gate `review_lock.gated_write_handoff_artifact`. A handler that
+builds its own parser gets flag standardization from `dispatch`, but no quote
+repair.
 """
 
 from __future__ import annotations
