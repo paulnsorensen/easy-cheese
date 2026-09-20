@@ -6,7 +6,7 @@ import re
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
-from typing import ClassVar, Protocol, TypeVar, cast
+from typing import ClassVar, Protocol, TypeVar, cast, override
 
 import attrs
 from attrs import define, field, validators
@@ -237,7 +237,12 @@ class ReviewSeverity(str, Enum):
 
 class FixCostNow(str, Enum):
     CONTAINED = "contained"
+    MODERATE = "moderate"
     SPRAWLING = "sprawling"
+
+    @override
+    def __str__(self) -> str:
+        return self.value
 
 
 class CoverageDisposition(str, Enum):
@@ -405,7 +410,14 @@ def _media_type(_instance: object, attribute: _NamedAttribute, value: object) ->
         raise ValueError(f"{attribute.name} must be a valid media type")
 
 
-@schema_constraints(_constraints_of(_bounded_string))
+_REPOSITORY_RELATIVE_PATH_PATTERN = (
+    r"^(?!/)(?!\.{1,2}$)(?!.*(?:^|/)\.\.(?:/|$))[\s\S]+$"
+)
+
+
+@schema_constraints(
+    _constraints_of(_bounded_string), pattern=_REPOSITORY_RELATIVE_PATH_PATTERN
+)
 def _scope_path(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     _bounded_string(_instance, attribute, value)
     assert isinstance(value, str)
@@ -4096,6 +4108,7 @@ __all__ = [
     "DiagnosisResultWriterView",
     "EvidenceKind",
     "EvidenceRef",
+    "FixCostNow",
     "GateApplicability",
     "GateApplicabilityDisposition",
     "GroundingOutcome",
@@ -4122,6 +4135,7 @@ __all__ = [
     "PlannerResultWriterView",
     "PlannerUncertainty",
     "PlannerUncertaintyWriterView",
+    "ProgressReceipt",
     "RemediationCureObservation",
     "RemediationCursor",
     "RemediationDisposition",
@@ -4133,6 +4147,7 @@ __all__ = [
     "ReproductionDisposition",
     "ReproductionWriterView",
     "ReviewCoverage",
+    "ReviewDebt",
     "ReviewDisposition",
     "ReviewDimension",
     "ReviewFinding",

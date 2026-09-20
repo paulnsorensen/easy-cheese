@@ -13,6 +13,10 @@ Inputs:
     --state <path>            The current RemediationState artifact. The router
                               publishes the next state back to this path.
     --event {review,cure}     Which event to apply.
+    --request-digest <sha256:...>
+                              Required. The digest of the host request that
+                              produced the event. The router rejects an event
+                              whose identity binds a different request.
     --review <path>           Required for a review event: the ReviewResult.
     --cure-result <path>      Required for a cure event: the
                               RemediationCureObservation the Cure agent authored.
@@ -42,7 +46,7 @@ phase (raises, never emits a soft-fail verdict).
 from __future__ import annotations
 
 import argparse
-import hashlib
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol, TextIO, cast
@@ -53,7 +57,6 @@ from easy_cheese_schemas import (
     RemediationCureObservation,
     RemediationState,
     ReviewResult,
-    canonical_bytes,
     supported_version_for,
     validate_contract,
 )
@@ -65,7 +68,12 @@ from easy_cheese.shared.fanout.remediation import (
     decide_cure,
     decide_review,
 )
-from easy_cheese.shared.publication import PublicationError, atomic_write
+from easy_cheese.shared.fanout.remediation_store import (
+    StateStoreError,
+    load_state,
+    publish_state,
+)
+from easy_cheese.shared.remediation_artifacts import build_artifact_ref, bytes_digest
 
 
 def _read_bytes(path: Path) -> bytes:
@@ -84,16 +92,32 @@ def _load_contract(path: Path, schema: type, context: str) -> tuple[object, byte
     return value, raw
 
 
+_REQUEST_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def _load_state(state_path: Path) -> RemediationState:
+    """Load the state through the store. Exit 2 for I/O, exit 3 for contract."""
+    try:
+        return load_state(state_path.parent, state_path)
+    except StateStoreError as exc:
+        cause = exc.__cause__
+        if isinstance(cause, ContractValidationError):
+            raise cli.contract_error(cause, context="remediation state") from exc
+        raise cli.CliError(f"cannot read {state_path}: {cause or exc}") from exc
+
+
+def _require_request_digest(value: str | None) -> str:
+    if value is None or _REQUEST_DIGEST.fullmatch(value) is None:
+        raise cli.CliError(
+            "--request-digest is required and must match sha256:<64 lowercase hex>",
+            exit_code=3,
+        )
+    return value
+
+
 def _artifact_ref(path: Path, raw: bytes, *, role: str) -> ArtifactRef:
     """Build a host-owned reference to an already-at-rest input file."""
-    return ArtifactRef(
-        artifact_id=role,
-        role=role,
-        uri=path.resolve().as_uri(),
-        digest=f"sha256:{hashlib.sha256(raw).hexdigest()}",
-        size_bytes=len(raw),
-        media_type="application/json",
-    )
+    return build_artifact_ref(path, raw, artifact_id=role, role=role)
 
 
 def _cross_check_gate_evidence(
@@ -101,9 +125,9 @@ def _cross_check_gate_evidence(
 ) -> None:
     """Verify each --gate-evidence file's bytes match the claimed digest.
 
-    When no paths are given, the contract's shape validation still applies and
-    no byte-level cross-check runs. When paths are given, their count must equal
-    the claimed gate-evidence count and each digest must match in order.
+    The check rejects an observation that claims gate evidence when no
+    --gate-evidence path is given. It also rejects a path count or a digest that
+    does not match the claimed gate evidence, in order.
     """
     claimed = observation.gate_evidence
     if not gate_evidence_paths and claimed:
@@ -125,7 +149,7 @@ def _cross_check_gate_evidence(
         )
     for path, evidence in zip(gate_evidence_paths, claimed):
         raw = _read_bytes(path)
-        actual = f"sha256:{hashlib.sha256(raw).hexdigest()}"
+        actual = bytes_digest(raw)
         if actual != evidence.artifact.digest:
             raise cli.CliError(
                 f"gate-evidence digest mismatch for {path}: file is {actual}, cure observation claims {evidence.artifact.digest}",
@@ -134,19 +158,14 @@ def _cross_check_gate_evidence(
 
 
 def _publish_and_reload(state_path: Path, next_state: RemediationState) -> RemediationState:
-    """Publish next_state atomically, then reload and validate it. Fail closed."""
+    """Publish next_state through the store. Fail closed with exit 2."""
     try:
-        atomic_write(state_path, canonical_bytes(next_state))
-        reread = state_path.read_bytes()
-        result = validate_contract(
-            reread, RemediationState, supported_version_for(RemediationState)
-        )
-    except (PublicationError, OSError, ContractValidationError) as exc:
+        return publish_state(state_path.parent, state_path, next_state)
+    except StateStoreError as exc:
         raise cli.CliError(
             f"state publish/reload failed; no next phase dispatched: {exc}",
             exit_code=2,
         ) from exc
-    return cast(RemediationState, result.value)
 
 
 def apply_event(
@@ -158,6 +177,7 @@ def apply_event(
     observation: RemediationCureObservation | None = None,
     request_digest: str | None = None,
     publish: Callable[[RemediationState], RemediationState] | None = None,
+    max_rounds: int = 8,
 ) -> tuple[RemediationState, Verdict]:
     """Validate and route one event through the shared in-process decision core."""
     if event == "review":
@@ -168,7 +188,7 @@ def apply_event(
         validate_event_identity(
             state, review.event_identity, event="review", request_digest=request_digest
         )
-        next_state, verdict = decide_review(state, review, artifact_ref)
+        next_state, verdict = decide_review(state, review, artifact_ref, max_rounds=max_rounds)
     elif event == "cure":
         if observation is None or review is not None:
             raise ValueError("cure routing requires only a Cure payload")
@@ -196,10 +216,8 @@ def apply_event(
 
 def _decide(args: _Args) -> Verdict:
     state_path = args.state
-    state_value, _state_raw = _load_contract(
-        state_path, RemediationState, "remediation state"
-    )
-    state = cast(RemediationState, state_value)
+    request_digest = _require_request_digest(args.request_digest)
+    state = _load_state(state_path)
 
     if args.event == "review":
         if args.review is None:
@@ -214,6 +232,7 @@ def _decide(args: _Args) -> Verdict:
         try:
             _next_state, verdict = apply_event(
                 state, event="review", artifact_ref=review_ref, review=review,
+                request_digest=request_digest,
                 publish=lambda value: _publish_and_reload(state_path, value),
             )
         except ValueError as exc:
@@ -233,6 +252,7 @@ def _decide(args: _Args) -> Verdict:
         try:
             _next_state, verdict = apply_event(
                 state, event="cure", artifact_ref=cure_ref, observation=observation,
+                request_digest=request_digest,
                 publish=lambda value: _publish_and_reload(state_path, value),
             )
         except ValueError as exc:
@@ -245,6 +265,7 @@ def _decide(args: _Args) -> Verdict:
 class _Args(Protocol):
     state: Path
     event: str
+    request_digest: str | None
     review: Path | None
     cure_result: Path | None
     gate_evidence: list[Path] | None
@@ -265,6 +286,12 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     )
     _ = parser.add_argument(
         "--event", required=True, choices=("review", "cure"), help="event to apply"
+    )
+    _ = parser.add_argument(
+        "--request-digest",
+        dest="request_digest",
+        default=None,
+        help="required sha256:<hex> digest of the host request that produced the event",
     )
     _ = parser.add_argument(
         "--review", type=Path, default=None, help="ReviewResult for a review event"

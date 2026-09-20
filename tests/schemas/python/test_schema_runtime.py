@@ -422,6 +422,75 @@ def test_field_metadata_min_items_reaches_an_optional_array() -> None:
     assert array_member["minItems"] == 1
 
 
+def _remediation_properties(schema_slug: str, definition: str) -> dict[str, object]:
+    schema = cast(
+        dict[str, object], json.loads(schema_bytes(f"{SCHEMA_ROOT}/{schema_slug}"))
+    )
+    return as_dict(as_dict(as_dict(schema["$defs"])[definition])["properties"])
+
+
+def test_field_validator_constraints_survive_a_relational_validator() -> None:
+    """attrs composes `field(validator=X)` with an `@<field>.validator` method.
+
+    The composed validator must still publish the constraints that X declares.
+    """
+    scope_id = as_dict(
+        _remediation_properties("remediation-state", "RemediationScopeKey")["scope_id"]
+    )
+    assert scope_id["pattern"] == contracts_module._ID_RE.pattern  # pyright: ignore[reportPrivateUsage]
+    assert scope_id["maxLength"] == 128
+
+    score = as_dict(_remediation_properties("remediation-state", "ReviewDebt")["score"])
+    assert score["minimum"] == 0
+
+    receipts = as_dict(
+        _remediation_properties("remediation-state", "RemediationState")["receipts"]
+    )
+    assert receipts["maxItems"] == 256
+
+
+@pytest.mark.parametrize(
+    ("schema_slug", "definition"),
+    [
+        ("remediation-state", "ProgressReceipt"),
+        ("remediation-cure-observation", "RemediationCureObservation"),
+    ],
+)
+def test_touched_paths_items_carry_the_repository_relative_pattern(
+    schema_slug: str, definition: str
+) -> None:
+    touched_paths = as_dict(
+        _remediation_properties(schema_slug, definition)["touched_paths"]
+    )
+    assert (
+        as_dict(touched_paths["items"])["pattern"]
+        == contracts_module._REPOSITORY_RELATIVE_PATH_PATTERN  # pyright: ignore[reportPrivateUsage]
+    )
+
+
+def test_composed_validator_publishes_item_constraints() -> None:
+    def _check(_instance: object, _attribute: object, _value: object) -> None:
+        return None
+
+    @attrs.define(frozen=True)
+    class _Composed:
+        names: tuple[str, ...] = attrs.field(
+            validator=attrs.validators.and_(
+                contracts_module._string_list(path=True),  # pyright: ignore[reportPrivateUsage]
+                _check,
+            )
+        )
+
+    definitions: dict[str, object] = {}
+    _ = _definition(_Composed, definitions)
+    names = as_dict(as_dict(as_dict(definitions["_Composed"])["properties"])["names"])
+    assert names["uniqueItems"] is True
+    assert (
+        as_dict(names["items"])["pattern"]
+        == contracts_module._REPOSITORY_RELATIVE_PATH_PATTERN  # pyright: ignore[reportPrivateUsage]
+    )
+
+
 def test_pr_plan_groups_schema_requires_at_least_one_group() -> None:
     schema = cast(dict[str, object], json.loads(schema_bytes(PrPlan)))
     defs = as_dict(schema["$defs"])

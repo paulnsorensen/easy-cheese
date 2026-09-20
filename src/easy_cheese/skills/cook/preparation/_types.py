@@ -37,6 +37,7 @@ from easy_cheese_schemas.validate import (
     require_str,
 )
 from easy_cheese.shared import workflow
+from easy_cheese.shared.fanout.run_fan import ScopeRemediationSummary
 from easy_cheese.shared.mold_cook_handoff import MoldCookSpecReadiness
 
 
@@ -184,7 +185,9 @@ class CookExecutionOutcome:
     stop_evidence_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
     remediation_request_ref: ArtifactRef | None = None
     execution_result_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
-    scope_summaries: Mapping[str, object] = attrs.field(factory=lambda: cast(Mapping[str, object], {}))
+    scope_summaries: Mapping[str, ScopeRemediationSummary] = attrs.field(
+        factory=lambda: cast(dict[str, ScopeRemediationSummary], {})
+    )
 
 
 @attrs.define(frozen=True)
