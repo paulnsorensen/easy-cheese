@@ -26,4 +26,119 @@ test('AC-9 ordinary feedback does not grant Mold approval',async({page,request})
 test('AC-10 script-bearing artifacts display inertly without execution',async({page})=>{const s=await server();try{await page.goto(`${s.url}`);await expect(page.getByText('<script>window.__moldXss=1</script>',{exact:true})).toBeVisible();expect(await page.evaluate(()=>window.__moldXss)).toBeUndefined();expect(await page.locator('script').evaluateAll(nodes=>nodes.some(node=>node.textContent.includes('window.__moldXss')))).toBeFalsy();}finally{s.child.kill();}});
 
 
-test('declared artifacts render from the revision document',async({page})=>{const state=await mkdtemp(join(tmpdir(),'mold-review-artifacts-'));const input=join(state,'revision.json');await writeFile(input,JSON.stringify({questions:[],artifacts:[{id:'image',type:'image',title:'Supplied image',src:'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='},{id:'diagram',type:'mermaid',title:'Supplied diagram',source:'graph TD; A-->B'},{id:'contract',type:'contract_table',title:'Contract table',columns:['Name','Value'],rows:[['mode','local']]},{id:'scene',type:'excalidraw',title:'Supplied scene',scene:{elements:[],appState:{viewBackgroundColor:'#fff'},files:{}}}]}));execFileSync('python3',[archive,'review','publish','--state-dir',state,'--input',input],{cwd:root});const s=await start(state,root);try{await page.goto(`${s.url}`);await expect(page.getByRole('heading',{name:'Supplied image'})).toBeVisible();await expect(page.locator('img[alt="Supplied image"]')).toBeVisible();await expect(page.getByRole('heading',{name:'Supplied diagram'})).toBeVisible();await expect(page.locator('.diagram svg')).toBeVisible();await expect(page.getByRole('heading',{name:'Contract table'})).toBeVisible();await expect(page.getByRole('cell',{name:'local'})).toBeVisible();await expect(page.getByRole('heading',{name:'Supplied scene'})).toBeVisible();await expect(page.locator('.excalidraw canvas.interactive')).toBeVisible();}finally{s.child.kill();}});
+const seededImageData='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+const declaredSceneFixture={
+  elements:[{
+    id:'seed-image',
+    type:'image',
+    x:100,
+    y:100,
+    width:120,
+    height:80,
+    angle:0,
+    strokeColor:'#000000',
+    backgroundColor:'transparent',
+    fillStyle:'solid',
+    strokeWidth:1,
+    strokeStyle:'solid',
+    roughness:1,
+    opacity:100,
+    groupIds:[],
+    frameId:null,
+    roundness:null,
+    seed:1,
+    version:1,
+    versionNonce:1,
+    isDeleted:false,
+    boundElements:null,
+    updated:1,
+    link:null,
+    locked:false,
+    status:'saved',
+    fileId:'seed-image',
+    scale:[1,1],
+  }],
+  appState:{
+    collaborators:{},
+    viewBackgroundColor:'#fef3c7',
+    gridSize:24,
+    gridStep:6,
+    scrollX:18,
+    scrollY:-12,
+  },
+  files:{
+    'seed-image':{
+      id:'seed-image',
+      dataURL:seededImageData,
+      mimeType:'image/png',
+      created:1,
+      lastRetrieved:1,
+    },
+  },
+};
+
+test('declared artifacts render and reload as editable scenes',async({page,request})=>{
+  const state=await mkdtemp(join(tmpdir(),'mold-review-artifacts-'));
+  const input=join(state,'revision.json');
+  await writeFile(input,JSON.stringify({questions:[],artifacts:[
+    {id:'image',type:'image',title:'Supplied image',src:'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='},
+    {id:'diagram',type:'mermaid',title:'Supplied diagram',source:'graph TD; A-->B'},
+    {id:'contract',type:'contract_table',title:'Contract table',columns:['Name','Value'],rows:[['mode','local']]},
+    {id:'scene',type:'excalidraw',title:'Supplied scene',scene:declaredSceneFixture},
+  ]}));
+  execFileSync('python3',[archive,'review','publish','--state-dir',state,'--input',input],{cwd:root});
+  const s=await start(state,root);
+  const errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  try{
+    await page.goto(`${s.url}`);
+    await expect(page.getByRole('heading',{name:'Supplied image'})).toBeVisible();
+    await expect(page.locator('img[alt="Supplied image"]')).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Supplied diagram'})).toBeVisible();
+    await expect(page.locator('.diagram svg')).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Contract table'})).toBeVisible();
+    await expect(page.getByRole('cell',{name:'local'})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Supplied scene'})).toBeVisible();
+    const canvas=page.locator('.excalidraw canvas.interactive');
+    await expect(canvas).toBeVisible();
+    const sceneSnapshot=async()=>{
+      const response=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}});
+      const review=await response.json();
+      return review.working?.[review.revision.number]?.artifacts?.scene?.scene||{};
+    };
+    const sceneCount=async()=>(await sceneSnapshot()).elements?.length||0;
+    const rectangle=page.getByTestId('toolbar-rectangle');
+    await rectangle.locator('..').click();
+    const box=await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box.x+120,box.y+220);
+    await page.mouse.down();
+    await page.mouse.move(box.x+260,box.y+330,{steps:5});
+    await page.mouse.up();
+    await expect.poll(sceneCount,{timeout:10000}).toBeGreaterThan(1);
+    const saved=await sceneSnapshot();
+    expect(saved.elements.some(element=>element.id==='seed-image')).toBeTruthy();
+    expect(saved.files['seed-image']).toMatchObject({dataURL:seededImageData,mimeType:'image/png'});
+    expect(saved.appState).toMatchObject({viewBackgroundColor:'#fef3c7',gridSize:24,gridStep:6});
+    const savedCount=saved.elements.length;
+    await page.reload();
+    await expect(canvas).toBeVisible();
+    const restored=await sceneSnapshot();
+    expect(restored.elements.length).toBe(savedCount);
+    expect(restored.files['seed-image']).toMatchObject({dataURL:seededImageData,mimeType:'image/png'});
+    expect(restored.appState).toMatchObject({viewBackgroundColor:'#fef3c7',gridSize:24,gridStep:6});
+    await rectangle.locator('..').click();
+    const restoredBox=await canvas.boundingBox();
+    expect(restoredBox).not.toBeNull();
+    await page.mouse.move(restoredBox.x+300,restoredBox.y+220);
+    await page.mouse.down();
+    await page.mouse.move(restoredBox.x+400,restoredBox.y+320,{steps:5});
+    await page.mouse.up();
+    await expect.poll(sceneCount,{timeout:10000}).toBeGreaterThan(savedCount);
+    const edited=await sceneSnapshot();
+    expect(edited.files['seed-image']).toMatchObject({dataURL:seededImageData,mimeType:'image/png'});
+    expect(edited.appState).toMatchObject({viewBackgroundColor:'#fef3c7',gridSize:24,gridStep:6});
+    expect(errors).toEqual([]);
+  }finally{s.child.kill();}
+});
+test('reload restores editable Excalidraw scene after autosave',async({page,request})=>{const s=await server();const errors=[];page.on('pageerror',error=>errors.push(error.message));try{await page.goto(s.url);const canvas=page.locator('.excalidraw canvas.interactive');await expect(canvas).toBeVisible();const rectangle=page.getByTestId('toolbar-rectangle');await rectangle.locator('..').click();await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox();expect(box).not.toBeNull();await page.mouse.move(box.x+120,box.y+220);await page.mouse.down();await page.mouse.move(box.x+260,box.y+330,{steps:5});await page.mouse.up();await expect.poll(async()=>{const response=await request.get(new URL(s.url).origin+'/api/review',{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());return response.working?.[response.revision.number]?.scene?.elements?.length||0;},{timeout:10000}).toBeGreaterThan(0);const saved=await request.get(new URL(s.url).origin+'/api/review',{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());const savedCount=saved.working?.[saved.revision.number]?.scene?.elements?.length||0;expect(savedCount).toBeGreaterThan(0);await page.reload();await expect(canvas).toBeVisible();const restored=await request.get(new URL(s.url).origin+'/api/review',{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());const restoredCount=restored.working?.[restored.revision.number]?.scene?.elements?.length||0;expect(restoredCount).toBe(savedCount);await rectangle.locator('..').click();const restoredBox=await canvas.boundingBox();expect(restoredBox).not.toBeNull();await page.mouse.move(restoredBox.x+300,restoredBox.y+220);await page.mouse.down();await page.mouse.move(restoredBox.x+400,restoredBox.y+320,{steps:5});await page.mouse.up();await expect.poll(async()=>{const response=await request.get(new URL(s.url).origin+'/api/review',{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());return response.working?.[response.revision.number]?.scene?.elements?.length||0;},{timeout:10000}).toBeGreaterThan(restoredCount);expect(errors).toEqual([]);}finally{s.child.kill();}});

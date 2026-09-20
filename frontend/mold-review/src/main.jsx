@@ -50,24 +50,31 @@ function Question({question, answer, onChange}) {
   return (
     <fieldset className="question">
       <legend>{question.prompt || question.text}</legend>
-      <small>Question ID: {question.id} · Selection mode: {mode}</small>
+      <small className="question-meta">Question ID: {question.id} · Selection mode: {mode}</small>
+      <p className="selection-help">{mode === 'single' ? 'Choose one response.' : 'Choose all responses that apply.'}</p>
       <div className="options">
-        {(question.options || []).map(option => (
-          <label key={option.id}>
-            <input
-              type={mode === 'single' ? 'radio' : 'checkbox'}
-              name={question.id}
-              checked={selected.includes(option.id)}
-              onChange={() => selectOption(option.id)}
-            />
-            <b>{option.label}</b>
-            <small>
-              Option ID: {option.id}
-              {(option.id === recommended || option.recommended) && ' · Recommended'}
-              {option.tradeoff || option.description ? ` · ${option.tradeoff || option.description}` : ''}
-            </small>
-          </label>
-        ))}
+        {(question.options || []).map(option => {
+          const isSelected = selected.includes(option.id);
+          const isRecommended = option.id === recommended || option.recommended;
+          return (
+            <label className={`option-card${isSelected ? ' selected' : ''}${isRecommended ? ' recommended' : ''}`} key={option.id}>
+              <input
+                type={mode === 'single' ? 'radio' : 'checkbox'}
+                name={question.id}
+                checked={isSelected}
+                onChange={() => selectOption(option.id)}
+              />
+              <span className="option-copy">
+                <strong>{option.label}</strong>
+                <small className="option-meta">
+                  Option ID: {option.id}
+                  {isRecommended && <span className="recommended-badge">Recommended</span>}
+                  {option.tradeoff || option.description ? ` · ${option.tradeoff || option.description}` : ''}
+                </small>
+              </span>
+            </label>
+          );
+        })}
       </div>
       <label className="other">
         Other
@@ -102,7 +109,11 @@ function MermaidPanel({source, title = 'Mermaid source', onChange}) {
   return (
     <section className="artifact">
       <h3>{title}</h3>
-      <textarea aria-label={title} value={source} onChange={event => onChange(event.target.value)} />
+      <p className="artifact-note">Edit the Mermaid source directly. The preview updates as you work.</p>
+      <label className="source-label">
+        Source
+        <textarea className="mermaid-source" aria-label={title} value={source} onChange={event => onChange(event.target.value)} />
+      </label>
       <div className="diagram" aria-label="Mermaid rendering">
         {error ? <p role="alert">Diagram error: {error}</p> : <div dangerouslySetInnerHTML={{__html: svg}} />}
       </div>
@@ -110,12 +121,19 @@ function MermaidPanel({source, title = 'Mermaid source', onChange}) {
   );
 }
 
+function hydrateScene(scene) {
+  const initial = scene || {elements: [], appState: {viewBackgroundColor: '#ffffff'}, files: {}};
+  const collaborators = initial.appState?.collaborators;
+  if (!collaborators || collaborators instanceof Map) return initial;
+  return {
+    ...initial,
+    appState: {...initial.appState, collaborators: new Map(Object.entries(collaborators))},
+  };
+}
+
 function ExcalidrawPanel({scene, title = 'Editable Excalidraw scene', onChange}) {
   const [exported, setExported] = useState('');
-  const initial = useMemo(
-    () => scene || {elements: [], appState: {viewBackgroundColor: '#ffffff'}, files: {}},
-    [scene],
-  );
+  const initial = useMemo(() => hydrateScene(scene), [scene]);
   const initialKey = JSON.stringify({elements: initial.elements || [], files: initial.files || {}});
   const last = useRef(initialKey);
   if (last.current !== initialKey) last.current = initialKey;
@@ -138,6 +156,7 @@ function ExcalidrawPanel({scene, title = 'Editable Excalidraw scene', onChange})
   return (
     <section className="artifact">
       <h3>{title}</h3>
+      <p className="artifact-note">Draw and revise the spatial artifact in the embedded editor.</p>
       <div className="excalidraw">
         <Excalidraw
           initialData={initial}
@@ -157,14 +176,16 @@ function ContractTable({artifact}) {
   return (
     <section className="artifact">
       <h3>{artifact.title || artifact.label || 'Contract table'}</h3>
-      <table>
-        <thead><tr>{columns.map(column => <th key={String(column)}>{String(column)}</th>)}</tr></thead>
-        <tbody>{rows.map((row, index) => (
-          <tr key={index}>{(Array.isArray(row) ? row : columns.map(column => row[column])).map((cell, cellIndex) => (
-            <td key={cellIndex}>{String(cell ?? '')}</td>
-          ))}</tr>
-        ))}</tbody>
-      </table>
+      <div className="table-wrap">
+        <table>
+          <thead><tr>{columns.map(column => <th key={String(column)}>{String(column)}</th>)}</tr></thead>
+          <tbody>{rows.map((row, index) => (
+            <tr key={index}>{(Array.isArray(row) ? row : columns.map(column => row[column])).map((cell, cellIndex) => (
+              <td key={cellIndex}>{String(cell ?? '')}</td>
+            ))}</tr>
+          ))}</tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -185,7 +206,7 @@ function ArtifactCanvas({artifacts, values, onChange}) {
     const changed = value => onChange(id, {...declared, ...artifact, ...value});
     if (type === 'image' || type === 'picture') {
       const source = artifact.src || artifact.url || artifact.uri || artifact.data;
-      return <section className="artifact" key={id}><h3>{artifact.title || artifact.alt || 'Image'}</h3><img src={source} alt={artifact.alt || artifact.title || 'Review artifact'} /></section>;
+      return <section className="artifact" key={id}><h3>{artifact.title || artifact.alt || 'Image'}</h3><p className="artifact-note">Reference image for this review decision.</p><img className="artifact-image" src={source} alt={artifact.alt || artifact.title || 'Review artifact'} /></section>;
     }
     if (type === 'mermaid' || type === 'diagram') {
       const source = artifact.source || artifact.mermaid || artifact.data?.source || '';
@@ -458,6 +479,7 @@ function App() {
       <section className={`layout ${layout}`}>
         <article className="questions">
           <h2>Decision questions</h2>
+          <p className="section-lede">Choose the response that best reflects your review. Your working notes save as you type.</p>
           {questions.map(question => (
             <Question
               key={question.id}
