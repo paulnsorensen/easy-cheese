@@ -26,7 +26,6 @@ from easy_cheese_schemas.contracts import (
     CurdResult,
     CurdResultWriterView,
     RemediationCureWriterView,
-    RemediationScopeKey,
     DeliverableWriterView,
     DiagnosisDisposition,
     DiagnosisRequest,
@@ -56,7 +55,6 @@ from easy_cheese_schemas.contracts import (
     _string_list,  # pyright: ignore[reportPrivateUsage]
     _tuple_sequence,  # pyright: ignore[reportPrivateUsage]
 )
-from easy_cheese.shared.fanout.remediation import PressGateResult
 from easy_cheese_schemas.planner import materialize_planner_result
 from easy_cheese_schemas.schema_runtime import (
     CanonicalArtifact,
@@ -78,7 +76,6 @@ PlannerDispatch = Callable[[PlannerRequest], object]
 WriterDispatch = Callable[[Mapping[str, object]], object]
 ReviewDispatch = Callable[[ReviewRequest], object]
 DiagnosisDispatch = Callable[[DiagnosisRequest], object]
-PressDispatch = Callable[[RemediationScopeKey, int], PressGateResult]
 BranchResult = ReviewResult | DiagnosisResult
 ExecutionResults = tuple[tuple[BranchResult, ...], tuple[CurdResult, ...]]
 WorkflowResults = tuple[PlannerResult, tuple[BranchResult, ...], tuple[CurdResult, ...]]
@@ -1605,12 +1602,38 @@ def run_workflow(
     return planner_result, branches, results
 
 
+
+# Public phase seams consumed by the Cook fan adapter.
+resolve_plan_context = _resolve_plan_context
+blocked_result = _blocked_result
+blocked_writer_view = _blocked_writer_view
+contract_version = _version
+diagnosis = _diagnosis
+evidence_values = _evidence_values
+failure_reason = _failure_reason
+review = _review
+reviewed_result_view = _reviewed_result_view
+result_invocation = _result_invocation
+normalize = _normalize
+subject_artifact = _subject_artifact
 __all__ = [
     "CureDiagnosisBinding",
     "CureDiagnosisBindings",
     "CurdWriterExecution",
     "WriterBudgetExceeded",
     "WriterCheckpoint",
+    "blocked_result",
+    "blocked_writer_view",
+    "contract_version",
+    "diagnosis",
+    "evidence_values",
+    "failure_reason",
+    "resolve_plan_context",
+    "review",
+    "reviewed_result_view",
+    "result_invocation",
+    "normalize",
+    "subject_artifact",
     "bind_diagnosis",
     "cook",
     "cure",

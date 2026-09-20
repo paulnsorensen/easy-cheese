@@ -331,9 +331,10 @@ def _accepted_reason(finding: _Finding, module: ast.Module, imports: dict[str, s
                     target_line = item.lineno
                 if target_line != finding.first_line:
                     continue
-                if _is_attrs_decorated(node, imports):
-                    return "attrs field declaration"
-                if schema_owned and any(_is_enum_base(_resolve_base(b, imports, node.lineno)) for b in node.bases):
+                if not schema_owned:
+                    continue
+                is_enum = any(_is_enum_base(_resolve_base(b, imports, node.lineno)) for b in node.bases)
+                if is_enum or _is_attrs_decorated(node, imports):
                     return "enum member or attrs field owned by easy_cheese_schemas"
     if finding.typ == "function":
         for node in ast.walk(module):

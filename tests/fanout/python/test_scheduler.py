@@ -117,7 +117,7 @@ class TestReadyWaves:
         assert not decision.complete
 
     def test_independent_siblings_both_ready_after_root(self) -> None:
-        # AC-6/AC-7: b and c are independent and both continue once a passes.
+        # Independent siblings become ready after their shared root passes.
         decision = schedule_wave(_plan(), {"a": _result("a", CurdDisposition.PASSED)})
         assert decision.ready == ("b", "c")
         assert decision.remaining == ("d",)

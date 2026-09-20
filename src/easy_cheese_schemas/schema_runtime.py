@@ -222,20 +222,29 @@ def _enum_schema(enum: type[Enum]) -> dict[str, object]:
     return {"enum": values, "type": json_type}
 
 
-def _validator_constraints(validator: object) -> dict[str, object]:
-    if validator is None:
-        return {}
-    constraints = cast(
-        "Mapping[str, object]", getattr(validator, "__schema_constraints__", {})
-    )
-    result = dict(constraints)
+def _validator_children(validator: object) -> tuple[object, ...]:
+    # attrs composes `field(validator=X)` with an `@<field>.validator` method into
+    # an and-validator that keeps its members in the private `_validators` slot.
+    children: list[object] = []
     nested = cast(object, getattr(validator, "validator", None))
     if nested is not None and nested is not validator:
-        result.update(_validator_constraints(nested))
-    nested_many = cast("tuple[object, ...]", getattr(validator, "validators", ()))
-    for child in nested_many:
-        result.update(_validator_constraints(child))
+        children.append(nested)
+    for name in ("validators", "_validators"):
+        children.extend(cast("tuple[object, ...]", getattr(validator, name, ())))
+    return tuple(children)
+
+
+def _collect_constraints(validator: object, attribute: str) -> dict[str, object]:
+    if validator is None:
+        return {}
+    result = dict(cast("Mapping[str, object]", getattr(validator, attribute, {})))
+    for child in _validator_children(validator):
+        result.update(_collect_constraints(child, attribute))
     return result
+
+
+def _validator_constraints(validator: object) -> dict[str, object]:
+    return _collect_constraints(validator, "__schema_constraints__")
 
 
 def _apply_schema_constraints(
@@ -246,11 +255,6 @@ def _apply_schema_constraints(
     constrained = dict(schema)
     constrained.update(constraints)
     return constrained
-
-
-_REPOSITORY_RELATIVE_PATH_PATTERN = (
-    r"^(?!/)(?!\.{1,2}$)(?!.*(?:^|/)\.\.(?:/|$))[\s\S]+$"
-)
 
 
 def _contract_version_definition(
@@ -377,23 +381,9 @@ def _type_schema(
     metadata: Mapping[object, object] | None = None,
 ) -> dict[str, object]:
     constraints = _validator_constraints(validator)
-    item_constraints = dict(
-        cast(
-            "Mapping[str, object]",
-            getattr(validator, "__schema_item_constraints__", {}),
-        )
+    item_constraints = _collect_constraints(
+        validator, "__schema_item_constraints__"
     )
-    if field_name in {"path", "paths", "excluded_paths"}:
-        if field_name == "path":
-            constraints = {
-                **constraints,
-                "pattern": _REPOSITORY_RELATIVE_PATH_PATTERN,
-            }
-        else:
-            item_constraints = {
-                **item_constraints,
-                "pattern": _REPOSITORY_RELATIVE_PATH_PATTERN,
-            }
     origin = get_origin(annotation)
     if origin is types.UnionType:
         members = cast("tuple[object, ...]", get_args(annotation))

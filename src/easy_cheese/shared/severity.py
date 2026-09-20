@@ -23,7 +23,7 @@ from typing import Self, TextIO, cast
 from typing_extensions import override
 
 from easy_cheese.shared import cli
-from easy_cheese_schemas import ReviewDimension
+from easy_cheese_schemas import FixCostNow, ReviewDimension
 
 
 class RubricError(ValueError):
@@ -61,14 +61,6 @@ class Severity(_OrderedRubricTier):
     MEDIUM = 1
     HIGH = 2
     BLOCKER = 3
-
-
-class FixCostNow(_OrderedRubricTier):
-    """Blast-radius bucket for fixing now, least → most costly."""
-
-    CONTAINED = 0
-    MODERATE = 1
-    SPRAWLING = 2
 
 
 DIMENSIONS: frozenset[str] = frozenset(dimension.value for dimension in ReviewDimension)

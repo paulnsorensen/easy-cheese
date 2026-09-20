@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Never, NotRequired, TypedDict, cast
@@ -14,7 +15,8 @@ import attrs
 import pytest
 
 import easy_cheese.shared.workflow as workflow
-from easy_cheese.shared.fanout.remediation import PressGateResult
+from easy_cheese.shared.fanout.press_types import PressGateResult
+from easy_cheese.shared.fanout.run_fan import PressDispatcher
 from easy_cheese.shared.artifacts import ArtifactResolutionError
 from easy_cheese.shared.mold_cook_handoff import (
     canonical_mold_cook_proposal,
@@ -110,7 +112,7 @@ class ExecuteAcceptedHandoffKwargs(TypedDict):
     dispatch_writer: workflow.WriterDispatch
     dispatch_review: workflow.ReviewDispatch
     dispatch_diagnosis: workflow.DiagnosisDispatch
-    dispatch_press: NotRequired[workflow.PressDispatch | None]
+    dispatch_press: NotRequired[PressDispatcher | None]
     evidence: NotRequired[Mapping[str, EvidenceRef] | None]
 
 
@@ -139,6 +141,12 @@ def _version(contract: type) -> ContractVersion:
 
 def _digest(content: bytes) -> str:
     return f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+
+def _git(root: Path, *args: str) -> None:
+    _ = subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, text=True
+    )
 
 
 def _write_ref(
@@ -234,6 +242,8 @@ def _full_fixture(
     *,
     coverage_ids: tuple[str, ...] = ("root",),
     partial: bool = True,
+    curds: tuple[SemanticCurd, ...] | None = None,
+    scope_coverage_ids: tuple[str, ...] = ("root",),
 ) -> _FullFixture:
     root.mkdir(parents=True, exist_ok=True)
     spec_content = (
@@ -247,7 +257,8 @@ def _full_fixture(
         filename="spec.md",
         media_type="text/markdown",
     )
-    curds = (_curd("root"), _curd("leaf", dependencies=("root",)))
+    if curds is None:
+        curds = (_curd("root"), _curd("leaf", dependencies=("root",)))
     plan = CurdPlan.signed(
         contract_version=_version(CurdPlan),
         plan_id="cook-plan",
@@ -294,9 +305,7 @@ def _full_fixture(
         curd_ids=coverage_ids,
         unresolved_work=remainder,
     )
-    scope_coverage = MoldCookCoverage(
-        curd_ids=("root",),
-    )
+    scope_coverage = MoldCookCoverage(curd_ids=scope_coverage_ids)
     scope_proposal_ref = _write_ref(
         root,
         canonical_mold_cook_proposal(
@@ -1275,22 +1284,16 @@ def test_hold_clearance_rejects_a_blank_cleared_hold_id(tmp_path: Path) -> None:
 
 
 
-def test_execute_full_fan_handoff_routes_through_run_fan(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _route_fan_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
     result_artifact = _write_ref(
-        tmp_path,
-        b"verified\n",
-        artifact_id="result",
-        role="evidence",
-        filename="result.txt",
-        media_type="text/plain",
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
     )
     evidence = EvidenceRef(
-        evidence_id="result.txt",
-        kind=EvidenceKind.SOURCE,
-        artifact=result_artifact,
-        summary="Verified Cook execution result",
+        evidence_id="result.txt", kind=EvidenceKind.SOURCE,
+        artifact=result_artifact, summary="Verified Cook execution result",
     )
     fixture = _full_fixture(tmp_path / "fan", coverage_ids=("root", "leaf"), partial=False)
     calls: list[str] = []
@@ -1306,35 +1309,114 @@ def test_execute_full_fan_handoff_routes_through_run_fan(
 
     def traced_run_fan(*args: object, **kwargs: object) -> object:
         calls.append("run_fan")
-        from easy_cheese.shared.fanout.run_fan import FanContext, run_fan as real_run_fan
-
-        return real_run_fan(
-            cast(CurdPlan, args[0]),
-            cast(FanContext, args[1]),
+        from easy_cheese.shared.fanout.run_fan import FanContext, run_fan_locked
+        return run_fan_locked(
+            cast(CurdPlan, args[0]), cast(FanContext, args[1]),
             selected=cast(Sequence[str], kwargs["selected"]),
         )
 
     import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
-
-    monkeypatch.setattr(fan_execute, "run_fan", traced_run_fan)
-    from easy_cheese.shared.fanout.remediation import PressGateResult
-
-    result = execute_accepted_handoff(
-        fixture["pointer"],
-        artifact_root=tmp_path / "fan",
-        repository_root=tmp_path,
-        dispatch_writer=_writer,
-        dispatch_review=traced_review,
-        dispatch_diagnosis=_diagnosis,
-        dispatch_press=lambda _scope, _round: PressGateResult(True, "baseline-1", evidence=(press_evidence,)),
-        evidence={"result.txt": evidence},
+    monkeypatch.setattr(fan_execute, "run_fan_locked", traced_run_fan)
+    return (
+        fixture, evidence, press_evidence, calls, review_subjects, review_evidence, traced_review
     )
 
+
+def test_execute_full_fan_handoff_routes_through_run_fan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture, evidence, press_evidence, calls, review_subjects, review_evidence, traced_review = (
+        _route_fan_setup(tmp_path, monkeypatch)
+    )
+    result = execute_accepted_handoff(
+        fixture["pointer"], artifact_root=tmp_path / "fan", repository_root=tmp_path,
+        dispatch_writer=_writer, dispatch_review=traced_review,
+        dispatch_diagnosis=_diagnosis,
+        dispatch_press=lambda _scope, _round: PressGateResult(
+            True, "baseline-1", evidence=(press_evidence,)
+        ),
+        evidence={"result.txt": evidence},
+    )
     assert calls == ["run_fan"]
     assert result.completed_curds == ("root", "leaf")
     assert len(review_subjects) == 3
     assert review_subjects[-1].artifact_id == "cook-plan/postmerge-subject"
     assert "press-gate" in review_evidence[-1]
+
+
+def _install_manifest_write_spy(
+    root: Path, monkeypatch: pytest.MonkeyPatch,
+) -> list[int]:
+    import easy_cheese.shared.fanout.remediation_store as remediation_store
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+
+    real_write = cast(
+        Callable[..., ArtifactRef], getattr(fan_execute, "_write_checkpoint_manifest")
+    )
+    writes: list[int] = [0]
+
+    def traced_write(*args: object, **kwargs: object) -> ArtifactRef:
+        writes[0] += 1
+        with pytest.raises(remediation_store.StateStoreError):
+            with remediation_store.run_lock(root, "cook-plan-cook-request"):
+                pass
+        return real_write(*args, **kwargs)
+
+    monkeypatch.setattr(fan_execute, "_write_checkpoint_manifest", traced_write)
+    return writes
+
+
+def _concurrent_resume_setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    evidence_ref = _write_ref(
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef("result.txt", EvidenceKind.SOURCE, evidence_ref)
+    root = tmp_path / "locked"
+    fixture = _full_fixture(root, coverage_ids=("root", "leaf"), partial=False)
+    from easy_cheese.shared.fanout.remediation_store import StateStoreError
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+    manifest_path = cast(Callable[[Path, str], Path], getattr(fan_execute, "_manifest_path"))
+    manifest = manifest_path(root, "cook-plan-cook-request")
+    writes = _install_manifest_write_spy(root, monkeypatch)
+    return evidence, root, fixture, StateStoreError, manifest, writes
+
+
+def test_execute_fan_rejects_concurrent_resume_before_manifest_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence, root, fixture, state_store_error, manifest, writes = _concurrent_resume_setup(
+        tmp_path, monkeypatch
+    )
+    attempted = False
+
+    def writer(context: Mapping[str, object]) -> CurdResultWriterView:
+        nonlocal attempted
+        if not attempted:
+            attempted = True
+            before = manifest.read_bytes()
+            before_writes = writes[0]
+            with pytest.raises(state_store_error):
+                _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+            assert writes[0] == before_writes
+            assert manifest.read_bytes() == before
+        return _writer(context)
+
+    kwargs: ExecuteAcceptedHandoffKwargs = {
+        "artifact_root": root, "repository_root": tmp_path,
+        "dispatch_writer": _writer, "dispatch_review": _review,
+        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "evidence": {"result.txt": evidence},
+    }
+    result = execute_accepted_handoff(
+        fixture["pointer"], artifact_root=root, repository_root=tmp_path,
+        dispatch_writer=writer, dispatch_review=_review,
+        dispatch_diagnosis=_diagnosis, dispatch_press=_passing_press(evidence),
+        evidence={"result.txt": evidence},
+    )
+    assert result.fan_next_step == "done"
+    assert attempted
+    assert writes[0] > 1
 
 
 
@@ -1387,15 +1469,9 @@ def test_execute_fan_stops_closed_when_state_publication_fails(
 
 
 
-def test_execute_full_fan_handoff_runs_postmerge_cure_writer(tmp_path: Path) -> None:
-    result_artifact = _write_ref(tmp_path, b"verified\\n", artifact_id="result", role="evidence", filename="result.txt", media_type="text/plain")
-    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
-    fixture = _full_fixture(tmp_path / "postmerge-cure", coverage_ids=("root", "leaf"), partial=False)
-    writer_calls: list[Mapping[str, object]] = []
-    review_calls = 0
-    review_subjects: list[ArtifactRef] = []
-    diagnosis_calls = 0
-
+def _postmerge_writer(
+    writer_calls: list[Mapping[str, object]],
+) -> Callable[[Mapping[str, object]], object]:
     def writer(context: Mapping[str, object]) -> object:
         writer_calls.append(context)
         criteria = cast("tuple[Criterion, ...]", context["criteria"])
@@ -1408,42 +1484,72 @@ def test_execute_full_fan_handoff_runs_postmerge_cure_writer(tmp_path: Path) -> 
         )
         if not locked:
             return view
-        return RemediationCureWriterView(
-            result=view, applied_finding_keys=locked,
-        )
+        return RemediationCureWriterView(result=view, applied_finding_keys=locked)
 
+    return writer
+
+
+def _postmerge_review(
+    review_calls: list[int], review_subjects: list[ArtifactRef],
+) -> Callable[[object], ReviewResultWriterView]:
     def review(request: object) -> ReviewResultWriterView:
-        nonlocal review_calls
-        review_calls += 1
+        review_calls[0] += 1
         review_subjects.append(cast("ReviewRequest", request).subject)
-        if review_calls != 3:
+        if review_calls[0] != 3:
             return _review(request)
         return ReviewResultWriterView(ReviewDisposition.FINDINGS, [ReviewFindingWriterView(
-            ReviewSeverity.MEDIUM, ReviewDimension.CORRECTNESS, "Aggregate defect", ("cook-plan/postmerge-subject/evidence",), FixCostNow.CONTAINED,
-        )]) if review_calls == 3 else _review(request)
+            ReviewSeverity.MEDIUM, ReviewDimension.CORRECTNESS, "Aggregate defect",
+            ("cook-plan/postmerge-subject/evidence",), FixCostNow.CONTAINED,
+        )])
 
+    return review
+
+
+def _postmerge_diagnosis(
+    diagnosis_calls: list[int],
+) -> Callable[[object], DiagnosisResultWriterView]:
     def diagnosis(request: object) -> DiagnosisResultWriterView:
-        nonlocal diagnosis_calls
-        diagnosis_calls += 1
+        diagnosis_calls[0] += 1
         diagnosis_request = cast(DiagnosisRequest, request)
         subject_key = next(
-            item.evidence_id
-            for item in diagnosis_request.evidence
+            item.evidence_id for item in diagnosis_request.evidence
             if item.artifact.artifact_id == diagnosis_request.subject.artifact_id
         )
         return DiagnosisResultWriterView(
             DiagnosisDisposition.CONFIRMED,
-            ReproductionWriterView(ReproductionDisposition.REPRODUCED, ("Run aggregate verification",), "Aggregate defect", (subject_key,)),
+            ReproductionWriterView(
+                ReproductionDisposition.REPRODUCED, ("Run aggregate verification",),
+                "Aggregate defect", (subject_key,),
+            ),
             (), DiagnosisCauseWriterView("Aggregate defect cause", (subject_key,)),
             SourceLocationWriterView("src/postmerge.py", 1, 1),
         )
 
-    from easy_cheese.shared.fanout.remediation import PressGateResult
+    return diagnosis
 
-    result = execute_accepted_handoff(fixture["pointer"], artifact_root=tmp_path / "postmerge-cure", repository_root=tmp_path, dispatch_writer=writer, dispatch_review=review, dispatch_diagnosis=diagnosis, dispatch_press=lambda _scope, _round: PressGateResult(True, "baseline-1", evidence=(evidence,)), evidence={"result.txt": evidence})
+
+def test_execute_full_fan_handoff_runs_postmerge_cure_writer(tmp_path: Path) -> None:
+    result_artifact = _write_ref(
+        tmp_path, b"verified\\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    fixture = _full_fixture(tmp_path / "postmerge-cure", coverage_ids=("root", "leaf"), partial=False)
+    writer_calls: list[Mapping[str, object]] = []
+    review_calls = [0]
+    review_subjects: list[ArtifactRef] = []
+    diagnosis_calls = [0]
+    result = execute_accepted_handoff(
+        fixture["pointer"], artifact_root=tmp_path / "postmerge-cure", repository_root=tmp_path,
+        dispatch_writer=_postmerge_writer(writer_calls),
+        dispatch_review=_postmerge_review(review_calls, review_subjects),
+        dispatch_diagnosis=_postmerge_diagnosis(diagnosis_calls),
+        dispatch_press=lambda _scope, _round: PressGateResult(True, "baseline-1", evidence=(evidence,)),
+        evidence={"result.txt": evidence},
+    )
     assert result.fan_next_step == "done"
     assert result.whole_task_complete
-    assert diagnosis_calls == 1
+    assert diagnosis_calls[0] == 1
     assert len(writer_calls) == 3
     assert len(review_subjects) == 4
     assert review_subjects[2].artifact_id == "cook-plan/postmerge-subject"
@@ -1518,8 +1624,7 @@ def test_execute_fan_writer_failure_blocks_without_review_or_diagnosis(tmp_path:
     assert all(item.disposition is CurdDisposition.BLOCKED for item in result.execution_results[1])
 
 
-def _passing_press(evidence: EvidenceRef) -> workflow.PressDispatch:
-    from easy_cheese.shared.fanout.remediation import PressGateResult
+def _passing_press(evidence: EvidenceRef) -> PressDispatcher:
 
     def press(_scope: RemediationScopeKey, _round: int) -> PressGateResult:
         return PressGateResult(True, "baseline-1", evidence=(evidence,))
@@ -1566,6 +1671,80 @@ def test_execute_accepted_handoff_resumes_from_persisted_results(
     assert counts == first_counts
 
 
+def _linear_rerun_kwargs(tmp_path: Path, root: Path, writer: object) -> ExecuteAcceptedHandoffKwargs:
+    result_artifact = _write_ref(
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    return cast(ExecuteAcceptedHandoffKwargs, cast(object, {
+        "artifact_root": root, "repository_root": tmp_path,
+        "dispatch_writer": writer, "dispatch_review": _review,
+        "dispatch_diagnosis": _diagnosis, "evidence": {"result.txt": evidence},
+    }))
+
+
+def test_linear_rerun_redispatches_a_cached_blocked_result(tmp_path: Path) -> None:
+    root = tmp_path / "blocked"
+    fixture = _full_fixture(root, partial=False, curds=(_curd("root"),))
+    calls: list[CriterionDisposition] = []
+
+    def writer(context: Mapping[str, object]) -> CurdResultWriterView:
+        disposition = CriterionDisposition.PASSED if calls else CriterionDisposition.BLOCKED
+        calls.append(disposition)
+        view = _writer(context)
+        return CurdResultWriterView(
+            criterion_results=[
+                CriterionResultWriterView(
+                    criterion_id=item.criterion_id,
+                    disposition=disposition,
+                    evidence_keys=item.evidence_keys,
+                )
+                for item in view.criterion_results
+            ],
+        )
+
+    kwargs = _linear_rerun_kwargs(tmp_path, root, writer)
+    first = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    assert first.completed_curds == ()
+    second = execute_accepted_handoff(fixture["pointer"], **kwargs)
+
+    assert len(calls) == 2
+    assert second.completed_curds == ("root",)
+    third = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    assert len(calls) == 2
+    assert third.completed_curds == ("root",)
+    assert [item.source_curd_ref.curd_id for item in third.execution_results[1]] == ["root"]
+
+
+def test_linear_rerun_ignores_a_cached_result_outside_coverage(tmp_path: Path) -> None:
+    root = tmp_path / "outside"
+    fixture = _full_fixture(root, partial=False, curds=(_curd("root"),))
+    calls: list[int] = []
+
+    def writer(context: Mapping[str, object]) -> CurdResultWriterView:
+        calls.append(1)
+        return _writer(context)
+
+    kwargs = _linear_rerun_kwargs(tmp_path, root, writer)
+    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    import easy_cheese.skills.cook.preparation.execute as execute_module
+    record_path = cast(Callable[[Path, str], Path], getattr(execute_module, "_execution_record_path"))(
+        root, "cook-plan-cook-request"
+    )
+    payload = cast(dict[str, list[dict[str, dict[str, object]]]], json.loads(record_path.read_text()))
+    stranger = cast(dict[str, dict[str, object]], json.loads(json.dumps(payload["results"][0])))
+    stranger["source_curd_ref"]["curd_id"] = "stranger"
+    payload["results"].append(stranger)
+    _ = record_path.write_bytes(canonical_bytes(payload))
+
+    rerun = execute_accepted_handoff(fixture["pointer"], **kwargs)
+
+    assert len(calls) == 1
+    assert [item.source_curd_ref.curd_id for item in rerun.execution_results[1]] == ["root"]
+    assert rerun.completed_curds == ("root",)
+
+
 def test_execute_partial_coverage_routes_to_mold(tmp_path: Path) -> None:
     result_artifact = _write_ref(
         tmp_path, b"verified\n", artifact_id="result", role="evidence",
@@ -1608,24 +1787,29 @@ def test_execute_persisted_stall_exposes_validated_remediation_request(
     assert {item.artifact.role for item in request.evidence} >= {"remediation_state", "curd-result"}
 
 
-def test_execute_rejects_corrupt_resume_context_and_cross_plan_cache(
-    tmp_path: Path,
-) -> None:
+def _corrupt_resume_inputs(tmp_path: Path):
     result_artifact = _write_ref(
         tmp_path, b"verified\n", artifact_id="result", role="evidence",
         filename="result.txt", media_type="text/plain",
     )
     evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
-    fixture = _full_fixture(tmp_path / "corrupt", coverage_ids=("root", "leaf"), partial=False)
+    root = tmp_path / "corrupt"
+    fixture = _full_fixture(root, coverage_ids=("root", "leaf"), partial=False)
     kwargs: ExecuteAcceptedHandoffKwargs = {
-        "artifact_root": tmp_path / "corrupt", "repository_root": tmp_path,
+        "artifact_root": root, "repository_root": tmp_path,
         "dispatch_writer": _writer, "dispatch_review": _review,
         "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
         "evidence": {"result.txt": evidence},
     }
     _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
-    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+    return fixture, kwargs
 
+
+def test_execute_rejects_corrupt_resume_context_and_cross_plan_cache(
+    tmp_path: Path,
+) -> None:
+    fixture, kwargs = _corrupt_resume_inputs(tmp_path)
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
     context_path = cast(Callable[[Path, str, str], Path], getattr(fan_execute, "_context_path"))(
         tmp_path / "corrupt", "cook-plan-cook-request", "root"
     )
@@ -1714,27 +1898,7 @@ def test_execute_rejects_invalid_checkpoint_commit_marker(tmp_path: Path) -> Non
 
 
 
-def test_execute_resume_from_productive_cure_skips_cure(
-    tmp_path: Path,
-) -> None:
-    from easy_cheese.shared.fanout.remediation_store import load_state, publish_state, scope_state_path
-    from easy_cheese.shared.fanout.remediation import PressGateResult
-    from easy_cheese_schemas import (
-        CoverageDisposition,
-        FixCostNow,
-        RemediationCursor,
-        RemediationDisposition,
-        RemediationScopeKey,
-        RemediationScopeKind,
-        ReviewCoverage,
-        ReviewDimension,
-        ReviewFinding,
-        ReviewResult,
-        ReviewSeverity,
-        SourcePlanRef,
-    )
-    from easy_cheese.shared.fanout import remediation
-
+def _productive_cure_fixture(tmp_path: Path):
     result_artifact = _write_ref(
         tmp_path, b"verified\n", artifact_id="result", role="evidence",
         filename="result.txt", media_type="text/plain",
@@ -1744,10 +1908,7 @@ def test_execute_resume_from_productive_cure_skips_cure(
     counts = {"cook": 0, "age": 0, "cure": 0}
 
     def writer(context: Mapping[str, object]) -> CurdResultWriterView:
-        if context.get("locked_selection"):
-            counts["cure"] += 1
-        else:
-            counts["cook"] += 1
+        counts["cure" if context.get("locked_selection") else "cook"] += 1
         return _writer(context)
 
     def review(request: object) -> ReviewResultWriterView:
@@ -1765,46 +1926,29 @@ def test_execute_resume_from_productive_cure_skips_cure(
     }
     first = execute_accepted_handoff(fixture["pointer"], **kwargs)
     assert first.fan_next_step == "done"
+    return fixture, evidence, counts, kwargs
 
-    scope = RemediationScopeKey(
-        run_id="cook-plan-cook-request",
-        source_plan_ref=SourcePlanRef(
-            fixture["plan"].plan_id, fixture["plan"].revision, fixture["plan"].digest
-        ),
-        scope_kind=RemediationScopeKind.CURD,
-        scope_id="root",
+
+def _productive_cure_review(evidence: EvidenceRef):
+    from easy_cheese_schemas import (
+        CoverageDisposition, FixCostNow, ReviewCoverage, ReviewDimension,
+        ReviewFinding, ReviewResult, ReviewSeverity,
     )
-    state_path = scope_state_path(tmp_path / "awaiting", scope)
-    state = load_state(state_path)
-    state = attrs.evolve(
-        state,
-        cursor=RemediationCursor.AWAITING_REVIEW,
-        disposition=RemediationDisposition.ACTIVE,
-        locked_selection=(),
-        receipts=(),
-    )
-    review_result = ReviewResult(
-        contract_version=_version(ReviewResult),
-        review_id="resume-findings",
+    return ReviewResult(
+        contract_version=_version(ReviewResult), review_id="resume-findings",
         disposition=ReviewDisposition.FINDINGS,
         findings=(ReviewFinding(
-            finding_id="resume-finding",
-            dimension=ReviewDimension.CORRECTNESS,
-            severity=ReviewSeverity.MEDIUM,
-            summary="resume finding",
-            evidence=(evidence,),
-            fix_cost_now=FixCostNow.CONTAINED,
-            location=None,
+            finding_id="resume-finding", dimension=ReviewDimension.CORRECTNESS,
+            severity=ReviewSeverity.MEDIUM, summary="resume finding", evidence=(evidence,),
+            fix_cost_now=FixCostNow.CONTAINED, location=None,
         ),),
         coverage=(ReviewCoverage(target="root", disposition=CoverageDisposition.COVERED),),
     )
-    state, _ = remediation.decide_review(state, review_result, evidence.artifact)
-    state, _ = remediation.decide_cure(
-        state, evidence.artifact, state.locked_selection, (), (), ("src/root.py",), new_gate_failures=False
-    )
-    assert state.cursor is RemediationCursor.AWAITING_REVIEW
-    assert state.receipts[-1].cure_result_ref is not None
-    _ = publish_state(state_path, state)
+
+
+def _rewrite_productive_cure_manifest(
+    tmp_path: Path, fixture: _FullFixture, state_path: Path,
+) -> None:
     import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
     manifest_path = cast(Callable[[Path, str], Path], getattr(fan_execute, "_manifest_path"))(
         tmp_path / "awaiting", "cook-plan-cook-request"
@@ -1818,17 +1962,210 @@ def test_execute_resume_from_productive_cure_skips_cure(
     for raw_reference in raw_references:
         reference = artifact_from_json(raw_reference)
         if reference.uri == state_path.resolve().as_uri():
-            reference = path_ref(
-                state_path, artifact_id=reference.artifact_id, role=reference.role
-            )
+            reference = path_ref(state_path, artifact_id=reference.artifact_id, role=reference.role)
         references.append(reference)
     _ = write_manifest(
         tmp_path / "awaiting", "cook-plan-cook-request", fixture["plan"], tmp_path, tuple(references)
     )
+
+
+def _prepare_productive_cure_resume(
+    tmp_path: Path, fixture: _FullFixture, evidence: EvidenceRef,
+) -> Path:
+    from easy_cheese.shared.fanout.remediation_store import load_state, publish_state, scope_state_path
+    from easy_cheese.shared.fanout import remediation
+    from easy_cheese_schemas import (
+        RemediationCursor, RemediationDisposition, RemediationScopeKey,
+        RemediationScopeKind, SourcePlanRef,
+    )
+    scope = RemediationScopeKey(
+        run_id="cook-plan-cook-request",
+        source_plan_ref=SourcePlanRef(fixture["plan"].plan_id, fixture["plan"].revision, fixture["plan"].digest),
+        scope_kind=RemediationScopeKind.CURD, scope_id="root",
+    )
+    state_path = scope_state_path(tmp_path / "awaiting", scope)
+    state = load_state(tmp_path / "awaiting", state_path)
+    state = attrs.evolve(
+        state, cursor=RemediationCursor.AWAITING_REVIEW,
+        disposition=RemediationDisposition.ACTIVE, locked_selection=(), receipts=(),
+    )
+    state, _ = remediation.decide_review(state, _productive_cure_review(evidence), evidence.artifact)
+    state, _ = remediation.decide_cure(
+        state, evidence.artifact, state.locked_selection, (), (), ("src/root.py",), new_gate_failures=False
+    )
+    assert state.cursor is RemediationCursor.AWAITING_REVIEW
+    assert state.receipts[-1].cure_result_ref is not None
+    _ = publish_state(tmp_path / "awaiting", state_path, state)
+    _rewrite_productive_cure_manifest(tmp_path, fixture, state_path)
+    return state_path
+
+
+def test_execute_resume_from_productive_cure_skips_cure(
+    tmp_path: Path,
+) -> None:
+    fixture, evidence, counts, kwargs = _productive_cure_fixture(tmp_path)
+    _ = _prepare_productive_cure_resume(tmp_path, fixture, evidence)
     before = counts.copy()
     second = execute_accepted_handoff(fixture["pointer"], **kwargs)
-
     assert second.fan_next_step == "done"
     assert counts["cook"] == before["cook"]
     assert counts["cure"] == before["cure"]
     assert counts["age"] == before["age"] + 1
+
+
+def test_fan_context_path_isolated_by_scope_kind(tmp_path: Path) -> None:
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+    from easy_cheese_schemas import RemediationScopeKind
+
+    context_path = cast(Callable[..., Path], getattr(fan_execute, "_context_path"))
+    curd = context_path(tmp_path, "run-1", RemediationScopeKind.CURD, "postmerge")
+    postmerge = context_path(tmp_path, "run-1", RemediationScopeKind.POSTMERGE, "postmerge")
+
+    assert curd != postmerge
+
+
+def test_press_resume_requires_manifest_refs(tmp_path: Path) -> None:
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+
+    loader = cast(Callable[..., tuple[object, ...]], getattr(fan_execute, "_load_persisted_press_results"))
+    with pytest.raises(TypeError):
+        _ = loader(tmp_path, "run-1")
+
+
+
+def _manifest_artifact_ids(root: Path, run_id: str) -> set[str]:
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+
+    manifest_path = cast(Callable[[Path, str], Path], getattr(fan_execute, "_manifest_path"))(
+        root, run_id
+    )
+    payload = cast(dict[str, object], json.loads(manifest_path.read_text()))
+    references = cast(list[object], payload["references"])
+    return {
+        cast(str, cast(dict[str, object], item)["artifact_id"])
+        for item in references
+    }
+
+
+def test_manifest_reload_separates_curd_named_postmerge_from_postmerge(
+    tmp_path: Path,
+) -> None:
+    evidence_ref = _write_ref(
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef("result.txt", EvidenceKind.SOURCE, evidence_ref)
+    root = tmp_path / "manifest"
+    fixture = _full_fixture(
+        root,
+        coverage_ids=("postmerge", "leaf"),
+        scope_coverage_ids=("root",),
+        partial=False,
+        curds=(_curd("postmerge"), _curd("leaf", dependencies=("postmerge",))),
+    )
+    kwargs: ExecuteAcceptedHandoffKwargs = {
+        "artifact_root": root, "repository_root": tmp_path,
+        "dispatch_writer": _writer, "dispatch_review": _review,
+        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "evidence": {"result.txt": evidence},
+    }
+    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    run_id = "cook-plan-cook-request"
+    ids = _manifest_artifact_ids(root, run_id)
+    assert f"{run_id}/curd/postmerge/state" in ids
+    assert f"{run_id}/postmerge/postmerge/state" in ids
+    assert "postmerge-press-1" in ids
+    assert execute_accepted_handoff(fixture["pointer"], **kwargs).fan_next_step == "done"
+    assert "postmerge-press-1" in _manifest_artifact_ids(root, run_id)
+    assert execute_accepted_handoff(fixture["pointer"], **kwargs).fan_next_step == "done"
+    assert "postmerge-press-1" in _manifest_artifact_ids(root, run_id)
+
+
+def _tracked_resume_setup(
+    root: Path,
+) -> tuple[Path, _FullFixture, Path, EvidenceRef]:
+    artifact_root = root / "artifacts"
+    fixture = _full_fixture(artifact_root, coverage_ids=("root", "leaf"), partial=False)
+    tracked = root / "src" / "root.py"
+    tracked.parent.mkdir()
+    _ = tracked.write_text("baseline\n")
+    _git(root, "init")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Cook Test")
+    _git(root, "add", ".")
+    _git(root, "commit", "-m", "baseline")
+    evidence_ref = _write_ref(
+        root, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    return artifact_root, fixture, tracked, EvidenceRef(
+        "result.txt", EvidenceKind.SOURCE, evidence_ref
+    )
+
+
+def test_resume_accepts_writer_snapshot_then_rejects_external_edit(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path
+    artifact_root, fixture, tracked, evidence = _tracked_resume_setup(root)
+    calls = 0
+
+    def writer(context: Mapping[str, object]) -> CurdResultWriterView:
+        nonlocal calls
+        calls += 1
+        _ = tracked.write_text(f"writer-{calls}\n")
+        return _writer(context)
+
+    kwargs: ExecuteAcceptedHandoffKwargs = {
+        "artifact_root": artifact_root, "repository_root": root,
+        "dispatch_writer": writer, "dispatch_review": _review,
+        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "evidence": {"result.txt": evidence},
+    }
+    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    before = calls
+    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    assert calls == before
+    _ = tracked.write_text("external-edit\n")
+    with pytest.raises(ContractValidationError, match="repository identity mismatch"):
+        _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    assert calls == before
+
+
+def test_repository_identity_ignores_ignored_entries_and_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path
+    tracked = root / "tracked.py"
+    _ = tracked.write_text("tracked\n")
+    ignored = root / "ignored"
+    ignored.mkdir()
+    ignored_file = ignored / "value.txt"
+    _ = ignored_file.write_text("ignored\n")
+    outside = tmp_path.parent / "outside.txt"
+    _ = outside.write_text("outside\n")
+    (root / "ignored-link").symlink_to(outside)
+    _ = (root / ".gitignore").write_text("ignored/\nignored-link\n")
+    _git(root, "init")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "Cook Test")
+    _git(root, "add", "tracked.py", ".gitignore")
+    _git(root, "commit", "-m", "baseline")
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+
+    identity_fn = cast(
+        Callable[[Path], str], getattr(fan_execute, "_repository_identity")
+    )
+    identity = identity_fn(root)
+    _ = ignored_file.write_text("changed\n")
+    _ = outside.write_text("changed\n")
+    assert identity_fn(root) == identity
+    _ = (root / "untracked.py").write_text("untracked\n")
+    assert identity_fn(root) != identity
+    with monkeypatch.context() as patch:
+        def fail_git(*_args: object, **_kwargs: object) -> Never:
+            raise subprocess.TimeoutExpired("git", 1)
+
+        patch.setattr(fan_execute, "run_git", fail_git)
+        with pytest.raises(ContractValidationError):
+            _ = identity_fn(root)

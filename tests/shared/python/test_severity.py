@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Protocol
 import pytest
 
 if TYPE_CHECKING:
-    from easy_cheese.shared.severity import FixCostNow, RubricError, Severity
+    from easy_cheese.shared.severity import RubricError, Severity
+    from easy_cheese_schemas.contracts import FixCostNow
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SEVERITY_CLI = REPO_ROOT / "src" / "easy_cheese" / "shared" / "severity.py"
