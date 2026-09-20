@@ -60,6 +60,10 @@ Explicit caller overrides remain authoritative.
 Recovery work identifiers include the full remote identity without changing the global project-key format.[^recovery-root]
 
 [^recovery-publication]: src/easy_cheese/shared/wheypoint/recovery.py:161-333; tests/wheypoint/python/test_recovery.py.
+Linear and fan Cook share one workflow-owned writer dispatch and bounded recovery operation.
+The fan adapter does not own a retry loop. Cure and generic workflows retain their no-retry policy.[^recovery-seam]
+
 [^recovery-snapshot]: src/easy_cheese/shared/workflow.py (`_validate_budget_checkpoint`, `_execute_curd`); tests/schemas/python/test_workflow_thread.py.
+[^recovery-seam]: src/easy_cheese/shared/workflow.py (`_dispatch_writer_with_recovery`, `execute_curd_writer`, `_execute_curd`); tests/python/test_cook_execution.py.
 [^recovery-root]: src/easy_cheese/shared/write_handoff_artifact.py; src/easy_cheese/shared/wheypoint/resolve.py; src/easy_cheese/shared/workflow.py (`_budget_target_identity`, `_budget_work_id`); tests/python/test_cross_root_continuity.py.
 

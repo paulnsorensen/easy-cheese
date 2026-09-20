@@ -19,7 +19,8 @@ metadata: {dispatches-agents: true}
 
 `cook(spec_ref, correction = false) -> handoff(next = press | age | mold)`.
 
-Cook returns `next: mold` only for a specification failure.
+Cook returns `next: mold` for a specification failure.
+A fan run also returns `next: mold` for a stalled remediation scope, a curd that does not pass, or partial coverage.
 
 A `red-required` gate disposition identifies behavior work.
 Run the inner RED → GREEN TDD loop against the approved spec before you change production code.
@@ -88,28 +89,23 @@ Route the task to `/mold` if an ambiguity check fails.
 
 ## Fan pathway
 
-`/cook` routes a spec through one of three shapes.
-The available typed planner result selects the shape.
+`/cook` selects one of three shapes from the typed planner result.
+Read [`references/fan-pathway.md`](references/fan-pathway.md) for topology and lifecycle.
 
-**Fast path.** Use the ordinary single-coder path when the curd-count hint is `1` with low or medium blast radius.
+**Fast path.** Use the single-coder path for one low- or medium-blast-radius curd.
 
-**Curded.** Accept a `ready` Full `MoldCookHandoff` first (§ Mold-to-Cook ingress).
-Run `validate_curd_plan` on its `CurdPlan`.
-Treat the validated plan as the semantic authority.
-Run behavior curds through `cook(handoff) → reviewer(age) → cure(CurdPlan, binding) → reviewer(final age)` without Press.
-After you wire the curds, run one global `/press → /age → /cure` chain.
+**Curded.** Require a `ready` Full `MoldCookHandoff` and validated `CurdPlan`.
+Run `cook(CurdPlan) → reviewer(age)` with confirmed diagnosis and `CureDiagnosisBinding` through the progress-aware fan state machine until clean, stalled, or blocked.
+Run one global `/press → /age → /cure` chain only after every curd passes.
+Incomplete fan work never emits `next: press`; stalls route to Mold remediation planning.
 Closed N/A bypasses Press.
-
-Use `python3 skills/cook/scripts/cook.pyz worktree teardown` for worktree cleanup.
-The fan-pathway reference defines its arguments and lifecycle.
 
 **Un-curded.** Keep small work in the single-coder path.
 For big work, ask "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
 Keep waves at a maximum of four.
 
-Before orchestration, read [`references/fan-pathway.md`](references/fan-pathway.md).
-It defines sizing, topology, phase execution, recovery, resume, Milknado integration, worktree teardown, and resolution provenance.
-Propagate `--auto` through each dispatched phase when it is active.
+Use `python3 skills/cook/scripts/cook.pyz worktree teardown` for cleanup.
+Propagate `--auto` through dispatched phases.
 
 ## Baseline capture
 
@@ -236,6 +232,7 @@ It defines validation, phase chains, early stops, Cure limits, publication owner
 Show each stopping report and reason; never downgrade the result.
 In the linear chain, Cook does not invoke `/plate`.
 In the fan pathway, the Cook orchestrator owns its own terminal `/plate` dispatch.
+Fan progress state, not the legacy phase tables, decides each next action.
 
 ## No-chain isolation directive
 

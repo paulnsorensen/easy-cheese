@@ -86,7 +86,7 @@ Do not create a preflight helper.
    A blocked prerequisite produces a deterministic blocked `CurdResult` for its dependents.
    Never use declaration order instead of the plan's dependency graph.
 
-4. Call `easy_cheese.shared.workflow.cook` with the validated plan.
+4. Keep the linear path on `easy_cheese.shared.workflow.cook` with the validated plan.
    The host resolves every `ArtifactRef` with `resolve_artifact`.
    The host finalizes exactly one `CurdResult` for each selected curd through `normalize_agent_output`.
    Treat writer output only as an observation.
@@ -94,20 +94,30 @@ Do not create a preflight helper.
    Executor or normalization failure still produces a host-finalized blocked result.
    Never produce zero results for this failure.
 
-5. A failed review starts a host-controlled Review → Diagnosis transition.
+   For fan topology, route the accepted handoff through
+   `easy_cheese.skills.cook.preparation.fan_execute.execute_fan`.
+   `execute_fan` adapts the existing writer, review, diagnosis, and Press dispatches
+   into `run_fan`, which owns the progress-aware state machine.
+
+5. `run_fan` schedules the validated plan in topological waves.
+   A blocked prerequisite produces a deterministic blocked `CurdResult` for its dependents.
+   Never use declaration order instead of the plan's dependency graph.
+   A failed review starts a host-controlled Review → Diagnosis transition.
    The diagnosis callback returns a `DiagnosisResultWriterView`.
    The canonical normalizer produces a `DiagnosisResult`.
    Only a confirmed result can continue to Cure.
    Bind the result to the exact source plan and curd.
    Use `easy_cheese.shared.workflow.bind_diagnosis(plan, curd, diagnosis_result)`.
 
-6. Call `easy_cheese.shared.workflow.cure` with the same validated `CurdPlan`.
+6. The linear path calls `easy_cheese.shared.workflow.cure` with the same validated `CurdPlan`.
+   The fan path calls its adapted Cure callback through `run_fan`.
    Supply the complete tuple or mapping of `CureDiagnosisBinding` values.
    Before dispatch, Cure validates each binding's plan reference, curd reference, digest, and confirmed disposition.
    Cure then repeats artifact resolution and host-owned `CurdResult` normalization.
    Never accept a diagnosis from another plan or curd.
 
-The direct `plan` → `cook` → `bind_diagnosis` → `cure` calls define the canonical steel thread.
+The direct `plan` → `workflow.cook` → `bind_diagnosis` → `workflow.cure` calls define the linear steel thread.
+The accepted fan handoff uses `execute_fan` → `run_fan` without a second workflow state machine.
 
 `run_workflow` is the typed convenience entrypoint when a host requires one call.
 
@@ -254,18 +264,21 @@ Then proceed.
 | Stage | Chain | Canonical handoff |
 | --- | --- | --- |
 | Planner | `planner-request → PlannerResult → validated CurdPlan` | `PlannerResult` |
-| Per curd | `cook(CurdPlan) → reviewer(age) → confirmed diagnosis → cure(CurdPlan, bindings) → reviewer(final age)` | `CurdResult` + `CureDiagnosisBinding` |
-| Post-merge | `press → age → cure → age` over the merged typed results | final `CurdResult` |
-| Per curd, closed N/A | `coder(cook) → reviewer(age) → coder(cure) → reviewer(final age)` | `not-applicable-curd` |
-| Post-merge, closed N/A | `age → cure → age` | `not-applicable-postmerge` |
+| Per curd | `cook → age ↔ cure` until clean, stalled, or blocked | `CurdResult` + remediation state |
+| Post-merge | `press → age ↔ cure → age` over the merged typed results | final `CurdResult` |
+| Per curd, closed N/A | `coder(cook) → age ↔ coder(cure)` until terminal | `not-applicable-curd` |
+| Post-merge, closed N/A | `age ↔ cure → age` | `not-applicable-postmerge` |
 
 Per-curd workers own incomplete implementation slices.
 
 They never run Press while sibling curds remain unfinished.
 
-After wiring and merge, the orchestrator runs one global Press → Age/Cure chain.
+The progress-aware state machine records each review, Cure receipt, debt score, and stop reason.
+A clean review completes the scope. Two non-improving reviews stall the scope and route to Mold remediation planning.
+A blocked scope blocks every dependent curd without worker dispatch.
 
-The per-curd chain can end early when a review returns a clean completion.
+After wiring and merge, the orchestrator runs one global Press → Age/Cure chain only after every curd passes.
+Incomplete fan work never emits `next: press`.
 
 The host still records one normalized result.
 
@@ -281,15 +294,15 @@ Publish a terminal age only when it writes `next: done`.
 
 **Projected dispatch count.**
 
-The upper bound that `/cook` shows at the decompose gate depends on the disposition.
+The progress-aware loop has no fixed per-curd phase table.
 
-For RED-required, use 1 seed + 4 × curds + 4 post-merge = `5 + 4 × curds`.
+Count one Cook, one Age per review, and one Cure per selected finding round.
 
-For closed N/A, use 1 seed + 4 × curds + 3 post-merge = `4 + 4 × curds`.
+A clean first Age skips Cure.
 
-A first-age `clean_complete` shortens a RED curd to 2 dispatches.
+A stalled or blocked scope stops its loop and routes to Mold.
 
-A first-age `clean_complete` shortens an N/A curd to 2 dispatches.
+Count the global Press only after every curd passes.
 
 Exclude wiring dispatches.
 
@@ -328,7 +341,8 @@ Wiring rows exist in the manifest, not the curd block.
 - **Compute the verdict** —
   Normalize each typed `CurdResult`.
   A halted result stops the workflow.
-  A clean first review finalizes that curd without Cure.
+  A clean review finalizes that curd without another Cure.
+  A stalled or blocked scope routes to Mold remediation planning.
   After wiring and merge, the project gates must pass before the global post-merge chain.
 
 ## Worktree harvest and teardown
@@ -465,11 +479,13 @@ scope -> planner result -> unchanged Full/partial plan approval
 ```
 
 Each transition recomputes its outcome and revalidates every reference and
-hold.  Only `ready` may enter `workflow.cook`.  Light work has one explicitly
-authorized curd and no planner ceremony.  Partial work passes exactly the
-dependency-closed approved IDs to `workflow.cook`, while the canonical
-`PlannerResult.unresolved_work` remains durable for resumption.  A changed
-subset or remainder invalidates the old approval and returns to
+hold.  Only `ready` may enter execution.  Linear plans pass their
+approved curd IDs to `workflow.cook`.  Fan plans route through
+`execute_fan` → `run_fan`.  Light work has one explicitly authorized curd and
+no planner ceremony.  Partial work passes exactly the dependency-closed
+approved IDs to the selected route, while the canonical
+`PlannerResult.unresolved_work` remains durable for resumption.
+A changed subset or remainder invalidates the old approval and returns to
 `needs-approval`.
 
 ### Preparation loop
@@ -519,10 +535,10 @@ receipt checks before Cook asks for missing spec or approval bindings.
 The host integration calls the public
 `easy_cheese.skills.cook.execute_accepted_handoff` API for the final Full
 handoff seam. It accepts the pointer through the shared gateway, resolves the
-approved plan, checks dependency closure, and forwards only
-`handoff.coverage.curd_ids` to `workflow.cook`. It returns a
-`CookExecutionOutcome` that carries the workflow `execution_results`, the
-covered curd ids, and the unchanged remainder. It does not rewrite the
-referenced `PlannerResult` or its unresolved remainder. This
-callback-bearing library API is the production entrypoint; the `accept` CLI
-only validates and normalizes a pointer.
+approved plan, and checks dependency closure. A linear plan forwards
+`handoff.coverage.curd_ids` to `workflow.cook`. Fan topology routes through
+`preparation.fan_execute.execute_fan`, which adapts the existing dispatches into
+`run_fan`. The returned `CookExecutionOutcome` carries the selected execution
+results, covered curd ids, unchanged remainder, fan next step, and remediation
+state references. The callback-bearing library API is the production entrypoint;
+the `accept` CLI only validates and normalizes a pointer.
