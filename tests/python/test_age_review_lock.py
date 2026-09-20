@@ -8,8 +8,12 @@ artifact that does or does not land on disk.
 
 from __future__ import annotations
 
+import io
 import json
+import os
 import subprocess
+import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -153,6 +157,75 @@ def test_editing_a_tracked_file_after_the_lock_blocks_the_report_and_names_cure(
     assert "production tree changed" in stderr
     assert "/cure" in stderr
     assert not _report(repo, "demo").exists()
+
+
+def _write_late_packet(repo: Path) -> None:
+    packet = repo / ".cheese" / "age" / "demo-packet.md"
+    packet.parent.mkdir(parents=True, exist_ok=True)
+    _ = packet.write_text("# packet written after the lock\n", encoding="utf-8")
+
+
+def test_a_late_packet_is_named_as_evidence_and_not_as_a_production_change(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+    _write_late_packet(repo)
+
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    stderr = capsys.readouterr().err
+    assert "review evidence changed" in stderr
+    assert ".cheese/age/demo-packet.md" in stderr
+    assert "--refresh-evidence" in stderr
+    assert "production tree changed" not in stderr
+    assert not _report(repo, "demo").exists()
+
+
+def test_refresh_evidence_lets_the_report_write_after_a_late_packet(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _write_late_packet(repo)
+
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 0
+    _ = capsys.readouterr()
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 0
+    assert _report(repo, "demo").is_file()
+
+
+def test_refresh_evidence_refuses_when_a_source_file_also_moved(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    lock = review_lock.lock_path(root=repo, slug="demo")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    locked = lock.read_text(encoding="utf-8")
+    _write_late_packet(repo)
+    _ = (repo / "app.py").write_text("def add(a, b):\n    return 0\n", encoding="utf-8")
+    _ = capsys.readouterr()
+
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 2
+    stderr = capsys.readouterr().err
+    assert "refresh is refused" in stderr
+    assert "/cure" in stderr
+    assert lock.read_text(encoding="utf-8") == locked
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    assert "production tree changed" in capsys.readouterr().err
+
+
+def test_refresh_evidence_needs_an_existing_lock_with_a_source_digest(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 2
+    assert "no review lock" in capsys.readouterr().err
+
+    lock = review_lock.lock_path(root=repo, slug="demo")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    _ = lock.write_text(json.dumps({"slug": "demo", "digest": "0" * 64}), encoding="utf-8")
+    assert review_lock.main(refresh) == 2
+    assert "recorded no source digest" in capsys.readouterr().err
 
 
 def test_a_new_untracked_production_file_after_the_lock_blocks_the_report(
@@ -360,7 +433,9 @@ def test_changing_the_fan_out_packet_after_the_lock_blocks_the_report(
     _ = packet.write_text("# packet\n\nrewritten evidence\n", encoding="utf-8")
 
     assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
-    assert "production tree changed" in capsys.readouterr().err
+    stderr = capsys.readouterr().err
+    assert "review evidence changed" in stderr
+    assert ".cheese/age/demo-packet.md" in stderr
     assert not _report(repo, "demo").exists()
 
 
@@ -376,7 +451,9 @@ def test_another_slugs_report_still_counts_as_production_state(
     _ = other.write_text("# Age Report — other\n\nedited\n", encoding="utf-8")
 
     assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
-    assert "production tree changed" in capsys.readouterr().err
+    stderr = capsys.readouterr().err
+    assert "review evidence changed" in stderr
+    assert ".cheese/age/other.md" in stderr
 
 
 def test_the_lock_resolves_the_repository_root_from_a_nested_directory(
@@ -428,3 +505,113 @@ def test_a_slug_inside_quoted_free_text_never_reaches_the_writer(
     assert raised.value.code == 2
     assert "--slug" in capsys.readouterr().err
     assert not _report(repo, "demo").exists()
+
+
+def test_refresh_rejects_changed_prior_evidence(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    packet = repo / ".cheese" / "age" / "demo-packet.md"
+    packet.parent.mkdir(parents=True, exist_ok=True)
+    _ = packet.write_text("original\n", encoding="utf-8")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    locked = review_lock.lock_path(root=repo, slug="demo").read_text(encoding="utf-8")
+
+    _ = packet.write_text("changed\n", encoding="utf-8")
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 2
+    assert "refresh is refused" in capsys.readouterr().err
+    assert review_lock.lock_path(root=repo, slug="demo").read_text(encoding="utf-8") == locked
+
+
+def test_refresh_rejects_an_unexpected_new_evidence_file(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    unexpected = repo / ".cheese" / "age" / "other-packet.md"
+    unexpected.parent.mkdir(parents=True, exist_ok=True)
+    _ = unexpected.write_text("not the current packet\n", encoding="utf-8")
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 2
+    assert ".cheese/age/other-packet.md" in capsys.readouterr().err
+
+
+def test_source_digest_ignores_evidence_only_commit(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    before = review_lock.tree_digest(repo, slug="demo", evidence=False)
+    evidence = repo / ".cheese" / "age" / "committed.md"
+    _ = evidence.write_text("committed evidence\n", encoding="utf-8")
+    _git(repo, "add", "-f", str(evidence.relative_to(repo)))
+    _git(repo, "commit", "-m", "evidence")
+    assert review_lock.tree_digest(repo, slug="demo", evidence=False) == before
+    _ = capsys.readouterr()
+
+
+def test_lock_parser_rejects_invalid_optional_fields(repo: Path) -> None:
+    lock = review_lock.lock_path(root=repo, slug="demo")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    _ = lock.write_text(json.dumps({"slug": "demo", "digest": "0" * 64, "source_digest": 3}), encoding="utf-8")
+    with pytest.raises(cli.CliError, match="invalid source_digest"):
+        review_lock.verify(root=repo, slug="demo")
+
+
+def test_evidence_mode_change_is_named(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    packet = repo / ".cheese" / "age" / "demo-packet.md"
+    packet.parent.mkdir(parents=True, exist_ok=True)
+    _ = packet.write_text("packet\n", encoding="utf-8")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+    packet.chmod(0o755)
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    stderr = capsys.readouterr().err
+    assert "review evidence changed" in stderr
+    assert ".cheese/age/demo-packet.md" in stderr
+
+
+def test_non_utf8_evidence_path_is_named_without_loss(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    packet = repo / ".cheese" / "age"
+    packet.mkdir(parents=True, exist_ok=True)
+    raw_name = os.fsdecode(b"demo-\xff-packet.md")
+    evidence = packet / raw_name
+    try:
+        _ = evidence.write_text("packet\n", encoding="utf-8")
+    except OSError as exc:
+        pytest.skip(f"filesystem rejects non-UTF-8 names: {exc}")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+    _ = evidence.write_text("changed\n", encoding="utf-8")
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    assert "\\xff" in capsys.readouterr().err
+
+
+def test_surrogate_path_diagnostic_is_safe_for_strict_utf8(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_name = os.fsdecode(b".cheese/age/demo-\xff-packet.md")
+    @dataclass(frozen=True)
+    class StubLock:
+        digest: str
+        source_digest: str
+        evidence_files: dict[str, str]
+
+    lock = StubLock("locked", "source", {raw_name: "old"})
+
+    def read_lock(_target: Path, _slug: str) -> StubLock:
+        return lock
+
+    def tree_digest(_root: Path, slug: str, evidence: bool = True) -> str:
+        _ = slug
+        return "current" if evidence else "source"
+
+    def evidence_files(_root: Path, _slug: str) -> dict[str, str]:
+        return {raw_name: "new"}
+
+    monkeypatch.setattr(review_lock, "_read_lock", read_lock)
+    monkeypatch.setattr(review_lock, "tree_digest", tree_digest)
+    monkeypatch.setattr(review_lock, "_evidence_files", evidence_files)
+    output = io.BytesIO()
+    stderr = io.TextIOWrapper(output, encoding="utf-8", errors="strict")
+    monkeypatch.setattr(sys, "stderr", stderr)
+
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    stderr.flush()
+    assert b"\\xff" in output.getvalue()

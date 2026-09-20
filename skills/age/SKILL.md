@@ -136,7 +136,8 @@ If `.cheese/glossary/<slug>.md` exists, read it to flag naming drift as a deslop
    Run `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --grounded <path[#start-end]> --body-file ".cheese/age/<slug>-body.md"`.
 
    Print the path.
-   The write fails when the production tree moved after step 1. Do not retry it with a new lock.
+   Only a new packet for this slug permits recovery; follow `references/packet.md` § Late evidence.
+   Other changes require a fresh review.
 6. Hand off (see `## Handoff` below).
 
 ## Sub-agent fan-out

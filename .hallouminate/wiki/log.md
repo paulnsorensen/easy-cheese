@@ -90,3 +90,5 @@
 - 2026-09-20 · cdfe10a30b682635 · merged · gotchas/wheypoint-resume-traps.md · PR710 recovery publication ownership, serialized idempotency, immutable first-checkpoint evidence, and explicit-root corpus selection.
 
 - 2026-09-20 · 4a9b7570d7f195e2 · merged · architecture/ultracook-agent-topology.md · replace legacy fan ordering and manifest authority with progress-aware scope identity, OS run locking, completed-observation replay, and contained-low selection.
+
+- 2026-09-20 · 4045ae852414459a · merged · gotchas/age-review-lock-invariants.md · record source/evidence identity separation, narrow late-packet refresh, stable snapshots, and streaming no-follow evidence hashing.
