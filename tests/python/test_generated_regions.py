@@ -24,7 +24,9 @@ import render_generated_regions as regen  # noqa: E402
 
 def test_curdle_region_matches_fresh_render() -> None:
     text = regen.CURDLE_PATH.read_text(encoding="utf-8")
-    expected = regen.replace_region(text, regen.MOLD_SPEC_TAG, regen.render_mold_spec_region())
+    expected = regen.replace_region(
+        text, regen.MOLD_SPEC_TAG, regen.render_mold_spec_region()
+    )
     assert text == expected
 
 
@@ -39,7 +41,11 @@ def test_writer_views_region_matches_fresh_render() -> None:
 def test_both_surfaces_carry_a_non_empty_generated_region() -> None:
     for path, tag, render in (
         (regen.CURDLE_PATH, regen.MOLD_SPEC_TAG, regen.render_mold_spec_region),
-        (regen.WRITER_VIEWS_PATH, regen.WRITER_VIEWS_TAG, regen.render_writer_views_region),
+        (
+            regen.WRITER_VIEWS_PATH,
+            regen.WRITER_VIEWS_TAG,
+            regen.render_writer_views_region,
+        ),
     ):
         text = path.read_text(encoding="utf-8")
         assert "BEGIN GENERATED" in text and "END GENERATED" in text
@@ -54,6 +60,7 @@ def _prepared_stale_tree(tmp_path: Path) -> Path:
         symlinks=True,
         ignore=shutil.ignore_patterns(
             ".git",
+            ".claude",
             "__pycache__",
             ".venv",
             ".worktrees",
@@ -71,11 +78,17 @@ def test_seeded_stale_region_copy_is_detected_as_drift(tmp_path: Path) -> None:
     stale = tree / "skills" / "mold" / "references" / "curdle.md"
     text = stale.read_text(encoding="utf-8")
     _ = stale.write_text(
-        regen.replace_region(text, regen.MOLD_SPEC_TAG, "document mold-spec { stale }\n"),
+        regen.replace_region(
+            text, regen.MOLD_SPEC_TAG, "document mold-spec { stale }\n"
+        ),
         encoding="utf-8",
     )
     result = subprocess.run(
-        [sys.executable, str(tree / "scripts" / "render_generated_regions.py"), "--check"],
+        [
+            sys.executable,
+            str(tree / "scripts" / "render_generated_regions.py"),
+            "--check",
+        ],
         cwd=tree,
         capture_output=True,
         text=True,
@@ -85,7 +98,9 @@ def test_seeded_stale_region_copy_is_detected_as_drift(tmp_path: Path) -> None:
     assert "curdle.md" in result.stderr
 
 
-def test_intertwine_generator_runs_twice_byte_identical_and_matches_checked_in() -> None:
+def test_intertwine_generator_runs_twice_byte_identical_and_matches_checked_in() -> (
+    None
+):
     first = regen.render_schema_intertwine()
     second = regen.render_schema_intertwine()
     assert first == second
@@ -97,7 +112,11 @@ def test_intertwine_seeded_stale_copy_is_detected_as_drift(tmp_path: Path) -> No
     stale = tree / "skills" / "cheese" / "references" / "schema-intertwine.md"
     _ = stale.write_text("stale content\n", encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, str(tree / "scripts" / "render_generated_regions.py"), "--check"],
+        [
+            sys.executable,
+            str(tree / "scripts" / "render_generated_regions.py"),
+            "--check",
+        ],
         cwd=tree,
         capture_output=True,
         text=True,
@@ -109,7 +128,10 @@ def test_intertwine_seeded_stale_copy_is_detected_as_drift(tmp_path: Path) -> No
 
 def test_intertwine_lists_a_real_registered_phase_transition_row() -> None:
     text = regen.INTERTWINE_PATH.read_text(encoding="utf-8")
-    assert "| mold | 1.0 | planner-request | cook | curd-plan | CurdPlan |" in text
+    assert (
+        "| mold | 1.0 | planner-request | cook | mold-cook-handoff | MoldCookHandoff |"
+        in text
+    )
 
 
 # Pinned sha256 digests of the phase-registry compiler and its compiled output.
@@ -122,14 +144,17 @@ _PHASE_REGISTRY_COMPILER_DIGEST = (
     "84cb45b0e3efea3dc53eaa53265ab0da9584e4016ecabfd1faf7d60e5f3a5136"
 )
 _COMPILED_PHASE_REGISTRY_DIGEST = (
-    "5fb1a336e8eb7ee23e5ab44916808341cf6adf972e92a14ac5521c66f41eec30"
+    "b716453db1a717ad69adf6bedff1ddb365e2bdf55ec5e69bb6655bfb1061694b"
 )
 
 
 def test_phase_registry_sources_are_untouched() -> None:
     for relative_path, expected_digest in (
         ("scripts/_phase_registry_compiler.py", _PHASE_REGISTRY_COMPILER_DIGEST),
-        ("src/easy_cheese_schemas/_compiled_phase_registry.py", _COMPILED_PHASE_REGISTRY_DIGEST),
+        (
+            "src/easy_cheese_schemas/_compiled_phase_registry.py",
+            _COMPILED_PHASE_REGISTRY_DIGEST,
+        ),
     ):
         content = (REPO_ROOT / relative_path).read_bytes()
         digest = hashlib.sha256(content).hexdigest()

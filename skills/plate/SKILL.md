@@ -173,6 +173,24 @@ Report completion only when the command returns normalized evidence with `valid:
   ],
   "gate": {"command": "just check", "result": "pass"},
   "commits": ["0123456789abcdef0123456789abcdef01234567"],
+  "pr_plan": {
+    "contract_version": {
+      "schema_uri": "https://schemas.easy-cheese.dev/pr-plan",
+      "major": "1",
+      "minor": "0"
+    },
+    "shape": "single",
+    "target_branch": "main",
+    "groups": [
+      {
+        "branch": "feature",
+        "title": "docs: example ADR",
+        "base": "main",
+        "commits": ["0123456789abcdef0123456789abcdef01234567"],
+        "depends_on": []
+      }
+    ]
+  },
   "prs": [
     {
       "url": "https://github.com/example/repo/pull/42",

@@ -25,12 +25,27 @@
 - [hallouminate-wiring-stack-002](./hallouminate-wiring-stack-002.md) — ADR: cook and age record durable-change flags; only the publication boundary writes the wiki
 - [hallouminate-wiring-stack-003](./hallouminate-wiring-stack-003.md) — ADR: liberal wiki grounding in mold/culture is prose guidance, not a coherence gate
 - [hallouminate-wiring-stack-004](./hallouminate-wiring-stack-004.md) — ADR: validate_wiki.py hardcodes .hallouminate/wiki/ discovery, ignoring config.toml corpus_paths
+- [hard-cheese-question-targeting-001](./hard-cheese-question-targeting-001.md) — ADR: hard-cheese targets diff hunks with a script and lets the judge phrase the questions
+- [hard-cheese-question-targeting-002](./hard-cheese-question-targeting-002.md) — ADR: ranked regions appear before the first attempt; targeted questions appear only after a FAIL
+- [hard-cheese-question-targeting-003](./hard-cheese-question-targeting-003.md) — ADR: the hard-cheese prompt opens with a purpose-first sentence and keeps the paper's questions verbatim
 - [hard-cheese-retained-001](./hard-cheese-retained-001.md) — ADR: hard-cheese retained despite local zero-use signal
 - [legacy-adapter-lifecycle-004](./legacy-adapter-lifecycle-004.md) — ADR: Legacy handoff adapters are exact, explicit, and temporary
+- [legacy-migration-withdrawal-001](./legacy-migration-withdrawal-001.md) — ADR: Workflow-layer CurdPlan migration is withdrawn
+- [mold-cook-boundary-001](./mold-cook-boundary-001.md) — ADR: Cook prepares missing plans but preserves plan approval
+- [mold-cook-boundary-002](./mold-cook-boundary-002.md) — ADR: Curdle overrides save work without granting execution
+- [mold-cook-boundary-003](./mold-cook-boundary-003.md) — ADR: Partial plans need explicit subset approval and preserved remainder
+- [mold-cook-boundary-004](./mold-cook-boundary-004.md) — ADR: Handoff validation binds to an explicit artifact root and affirmative consent
 - [mold-follow-up-routing-001](./mold-follow-up-routing-001.md) — ADR: every non-goal enters a disposition batch before Curdle
 - [mold-follow-up-routing-002](./mold-follow-up-routing-002.md) — ADR: route follow-ups per deliverable unit instead of choosing one backlog
 - [mold-follow-up-routing-003](./mold-follow-up-routing-003.md) — ADR: publish follow-ups after the local Curdle write
 - [mold-follow-up-routing-004](./mold-follow-up-routing-004.md) — ADR: external follow-up publication uses deterministic identity
+- [mold-review-canvas-001](./mold-review-canvas-001.md) — ADR: Browser choices preserve Mold authority
+- [mold-review-canvas-002](./mold-review-canvas-002.md) — ADR: Bundle the review server and assets in mold.pyz
+- [mold-review-canvas-003](./mold-review-canvas-003.md) — ADR: Embed upstream Excalidraw and retain Mermaid source
+- [mold-review-canvas-004](./mold-review-canvas-004.md) — ADR: Use browser layouts for frontend TUI and backend reviews
+- [mold-review-canvas-005](./mold-review-canvas-005.md) — ADR: Submit snapshots and preserve revision-bound working feedback
+- [mold-review-canvas-006](./mold-review-canvas-006.md) — ADR: Review artifacts without executing supplied programs
+- [mold-review-canvas-007](./mold-review-canvas-007.md) — ADR: Keep the local review transport bounded
 - [outer-tdd-gates-001](./outer-tdd-gates-001.md) — ADR: Hybrid outside-in RED evidence uses a phase-neutral receipt
 - [outer-tdd-gates-002](./outer-tdd-gates-002.md) — ADR: Cut owns pre-implementation RED establishment
 - [outer-tdd-gates-003](./outer-tdd-gates-003.md) — ADR: Press retains ownership of bounded corrective Cook continuations

@@ -300,7 +300,10 @@ Wiring rows exist in the manifest, not the curd block.
 - **Worker exhaustion.**
   A worker can run out of context or turns.
   The worker writes a partial typed handoff with `status: needs-context: <gap>`.
+  The worker keeps the declared Cook transition and writes `--next age`.
+  The compiled registry declares no `cook -> cook` route, so `--next cook` fails.
   The orchestrator re-dispatches that curd once.
+  That re-dispatch is an orchestrator spawn of the same phase, not a declared phase transition.
   Fold the gap into the context.
   Set `--retry-count 1`.
   A second `needs-context` at that phase halts.
@@ -425,3 +428,96 @@ Publish a terminal age only when it writes `next: done`.
 Do not publish a terminal age that writes `next: cure`.
 
 Do not publish a terminal age that omits `next`.
+
+## Classified Mold-to-Cook ingress
+
+The fan pathway starts only after Cook has classified the input.  Explicit
+mode wins over inference in this order:
+
+1. `--continue` enters the existing Wheypoint resolver.
+2. A canonical pointer enters strict handoff acceptance.
+3. `--spec` enters bounded spec ingestion.
+4. A bare slug resolves through the spec store.
+5. `--task` enters the focused-task path.
+
+When no flag is supplied, inspect declared artifact structure before using a
+filename suffix.  A malformed pointer or projection remains that artifact and
+returns a typed invalid outcome; it is never treated as task text.  A direct
+spec independently checks matching continuity.  A missing continuation is a
+cold start, while a hold, blocker, ambiguity, scope conflict, or integrity
+failure remains a hold even when a direct spec is also supplied.
+
+## Preparation transitions
+
+Preparation is a pure orchestration boundary around host evidence.  It may
+call `workflow.plan` with an orchestrator-provided planner result and must
+reuse `materialize_planner_result`; it does not dispatch an agent or create a
+human response.  The transition sequence is:
+
+```
+scope -> planner result -> unchanged Full/partial plan approval
+      -> optional bounded runner setup -> accepted handoff -> execute
+```
+
+Each transition recomputes its outcome and revalidates every reference and
+hold.  Only `ready` may enter `workflow.cook`.  Light work has one explicitly
+authorized curd and no planner ceremony.  Partial work passes exactly the
+dependency-closed approved IDs to `workflow.cook`, while the canonical
+`PlannerResult.unresolved_work` remains durable for resumption.  A changed
+subset or remainder invalidates the old approval and returns to
+`needs-approval`.
+
+### Preparation loop
+
+The agent drives the transitions with three bundle commands. Use one
+`ARTIFACT_ROOT` for the whole loop; for a Mold pointer, use the root that Mold
+used.
+
+1. Run `cook.pyz prepare <source> --artifact-root "$ARTIFACT_ROOT"` and save the
+   JSON result. Name the source with `--spec`, `--pointer`, `--slug`, or `--task`.
+2. Read `outcome`, act, then run `cook.pyz resubmit <saved result> --source
+   <source>` with every evidence flag that you supplied before plus the new one.
+   Save each new result.
+
+| `outcome` | Action | New evidence flag |
+| --- | --- | --- |
+| `needs-approval` | Show the retained `proposal_ref` content. Ask the user once through the [question transport](../../cheese/references/ask-user-question.md). Run `cook.pyz approve` with the literal reply. | `--scope-approval` or `--plan-approval`, as `approval_kind` names |
+| `needs-planning` | Dispatch a fresh-context planner on `planner_request`. Normalize its writer view on the host. | `--planner-result` |
+| `needs-preparation` | Follow the setup authorization rules below. The host records the runner approval; `approve` does not. | `--runner-approval`, `--setup-authorization`, `--setup-evidence` |
+| `blocked` | Show each hold. Only a fresh user dialogue clears a hold. | `--clear-hold HOLD_ID=DIALOGUE_JSON` |
+| `invalid` | Stop and show the findings. | none |
+| `ready` | Run `cook.pyz accept <pointer> --spec <spec>` on `handoff_ref`, then execute. | none |
+
+```bash
+python3 skills/cook/scripts/cook.pyz approve "$SPEC" \
+  --artifact-root "$ARTIFACT_ROOT" \
+  --request-id "<request_id from the result>" \
+  --kind scope \
+  --response "<the user's literal reply>"
+```
+
+For `--kind plan` or `--kind partial_plan`, add `--planner-result`. When a scope
+proposal has no plan and the spec declares no landing, name each covered curd
+with `--curd-id`. The command prints `approval_path`; pass that path to
+`resubmit`. A reply that is not an approval records a rejection, and the next
+`resubmit` does not advance. Only a reply to the question that showed this
+proposal counts. The invocation text, `--auto`, a status string, and a taste
+verdict are never a reply.
+
+Setup authorization names one prerequisite, a finite path set, and a finite
+command set.  Evidence must include that prerequisite, exact command and
+fixture, environment identity, successful exit result, and captured-output
+digest.  Setup authority cannot clear a feature hold or authorize feature
+writes.  Historical pointers pass their original route, schema, payload, and
+receipt checks before Cook asks for missing spec or approval bindings.
+
+The host integration calls the public
+`easy_cheese.skills.cook.execute_accepted_handoff` API for the final Full
+handoff seam. It accepts the pointer through the shared gateway, resolves the
+approved plan, checks dependency closure, and forwards only
+`handoff.coverage.curd_ids` to `workflow.cook`. It returns a
+`CookExecutionOutcome` that carries the workflow `execution_results`, the
+covered curd ids, and the unchanged remainder. It does not rewrite the
+referenced `PlannerResult` or its unresolved remainder. This
+callback-bearing library API is the production entrypoint; the `accept` CLI
+only validates and normalizes a pointer.

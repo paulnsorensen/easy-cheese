@@ -1,13 +1,11 @@
-"""Handlers for Cook's normalize, validate, and accept contract commands.
+"""Handlers for Cook contract, ingress, and preparation commands.
 
-``normalize`` combines agent-authored JSON with host-owned invocation data,
-then emits a canonical artifact. ``validate`` checks a payload against a named
-schema-catalog contract. ``accept`` is the canonical execution entry: it
-rejects bare payloads and admits only a route-bound ``HandoffPointer`` whose
-referenced payload (and any normalization receipt) has been verified, then
-emits the resulting ``CurdPlan`` for execution. All three handlers validate
-through shared, non-drifting paths.
+``normalize`` and ``validate`` remain the writer-contract utilities.  ``accept``
+is the canonical execution entry for a validated MoldCookHandoff; ``prepare``
+and ``resubmit`` classify input and recompute closed preparation outcomes
+without dispatching agents or inventing approval evidence.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,24 +16,41 @@ from pathlib import Path
 from typing import cast
 
 from easy_cheese_schemas import (
-    CURD_PLAN_SCHEMA_URI,
     SCHEMA_ROOT,
     ContractValidationError,
-    CurdPlan,
+    ArtifactRef,
     TransitionError,
     canonical_bytes,
-    landing_layer_errors,
     normalize_agent_output,
     supported_version_for,
     validate_contract,
 )
+from easy_cheese_schemas.mold_cook import (
+    CookPreparationResult,
+    MoldCookHandoff,
+    MoldCookMode,
+)
+from easy_cheese.shared.mold_cook_handoff import accept_mold_cook_handoff
+from easy_cheese.shared.publication import PublicationError
+from easy_cheese.shared.taste_test import read_spec_text
+from easy_cheese.skills.cook.preparation import (
+    CookHoldClearance,
+    PreparationEvidence,
+    execute_accepted_handoff,
+    load_preparation_result,
+    prepare,
+    resubmit,
+    validate_preparation_result,
+)
 
-from easy_cheese_schemas.contracts import LandingShape
-
-from easy_cheese.shared.publication import PublicationError, accept
-from easy_cheese.shared.taste_test import ApplicabilityError, parse_landing, read_spec_text
-
-__all__ = ["accept_main", "normalize_main", "validate_main"]
+__all__ = [
+    "accept_main",
+    "execute_accepted_handoff",
+    "normalize_main",
+    "prepare_main",
+    "resubmit_main",
+    "validate_main",
+]
 
 
 def _digest_of(canonical: bytes) -> str:
@@ -119,55 +134,219 @@ def validate_main(argv: list[str]) -> int:
     return 0
 
 
-def _check_landing_layers(spec_path: Path, plan: CurdPlan) -> int:
-    quoted = repr(str(spec_path))
+def _source_options(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_mutually_exclusive_group()
+    _ = group.add_argument("--spec", type=Path)
+    _ = group.add_argument("--pointer", type=Path)
+    _ = group.add_argument("--slug")
+    _ = group.add_argument("--task")
+    _ = group.add_argument("--continuation")
+
+
+def _source_from_args(args: argparse.Namespace) -> tuple[str | Path, str | None]:
+    positional = cast("str | None", getattr(args, "source", None))
+    selected: tuple[tuple[str, str | Path | None], ...] = (
+        ("spec", cast("Path | None", getattr(args, "spec", None))),
+        ("pointer", cast("Path | None", getattr(args, "pointer", None))),
+        ("slug", cast("str | None", getattr(args, "slug", None))),
+        ("task", cast("str | None", getattr(args, "task", None))),
+        ("continuation", cast("str | None", getattr(args, "continuation", None))),
+    )
+    present = tuple((kind, value) for kind, value in selected if value is not None)
+    if positional is not None and present:
+        raise ValueError(
+            "source positional argument cannot be combined with an explicit input option"
+        )
+    if len(present) > 1:
+        raise ValueError("only one explicit input option may be supplied")
+    if present:
+        kind, value = present[0]
+        return value, kind
+    if positional is None:
+        raise ValueError("Cook preparation requires an input source")
+    return positional, None
+
+
+def _path_option(args: argparse.Namespace, name: str) -> Path | None:
+    return cast("Path | None", getattr(args, name, None))
+
+
+def _hold_clearances(args: argparse.Namespace) -> tuple[CookHoldClearance, ...]:
+    clearances: list[CookHoldClearance] = []
+    for value in cast("list[str]", getattr(args, "clear_hold", ())):
+        hold_id, separator, raw_path = value.partition("=")
+        if not separator or not hold_id or not raw_path:
+            raise ValueError("--clear-hold requires HOLD_ID=DIALOGUE_JSON")
+        path = Path(raw_path).expanduser().resolve()
+        content = path.read_bytes()
+        try:
+            parsed = cast(object, json.loads(content))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(f"hold clearance {path} is not valid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError(f"hold clearance {path} must be a JSON object")
+        dialogue = cast("dict[str, object]", parsed)
+        if not isinstance(dialogue.get("response"), str):
+            raise ValueError(f"hold clearance {path} must contain a string response")
+        digest = _digest_of(content)
+        clearances.append(
+            CookHoldClearance(
+                hold_id=hold_id,
+                response_ref=ArtifactRef(
+                    artifact_id=f"hold-clearance-{digest.removeprefix('sha256:')[:16]}",
+                    role="dialogue",
+                    uri=path.as_uri(),
+                    digest=digest,
+                    size_bytes=len(content),
+                    media_type="application/json",
+                ),
+                response_text=cast(str, dialogue["response"]),
+            )
+        )
+    return tuple(clearances)
+
+
+def _evidence_from_args(
+    args: argparse.Namespace,
+    *,
+    clearances: tuple[CookHoldClearance, ...] = (),
+) -> PreparationEvidence:
+    """Collect the host-owned evidence the command-line options name."""
+
+    return PreparationEvidence(
+        scope_approval=_path_option(args, "scope_approval"),
+        plan_approval=_path_option(args, "plan_approval"),
+        runner_approval=_path_option(args, "runner_approval"),
+        planner_result=_path_option(args, "planner_result"),
+        setup_authorization=_path_option(args, "setup_authorization"),
+        setup_evidence=_path_option(args, "setup_evidence"),
+        spec_binding=_path_option(args, "bound_spec"),
+        clearances=clearances,
+    )
+
+
+def _prepare_from_args(args: argparse.Namespace) -> CookPreparationResult:
+    source, explicit_kind = _source_from_args(args)
+    return prepare(
+        source,
+        request_id=cast("str | None", args.request_id),
+        repository_root=cast("str", args.repository_root),
+        artifact_root=cast("str", args.artifact_root),
+        mode=MoldCookMode(cast(str, args.mode)),
+        explicit_kind=explicit_kind,
+        evidence=_evidence_from_args(args),
+    )
+
+
+def _emit_preparation(result: object) -> int:
     try:
-        landing = parse_landing(read_spec_text(spec_path))
-    except (OSError, UnicodeDecodeError) as exc:
-        print(f"ERROR: cannot read spec {quoted}: {exc}", file=sys.stderr)
-        return 1
-    except ApplicabilityError as exc:
+        validated = validate_preparation_result(result)
+    except (ContractValidationError, TypeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-    if landing is None:
-        print(f"NOTE: landing layers not checked ({quoted} has no landing block)", file=sys.stderr)
-        return 0
-    if landing.shape is LandingShape.SINGLE:
-        print(f"NOTE: landing layers not checked ({quoted} declares shape single)", file=sys.stderr)
-        return 0
-    violations = landing_layer_errors(plan, landing)
-    if violations:
-        for error in violations:
-            print(f"ERROR: {error}", file=sys.stderr)
-        return 1
-    print(f"NOTE: landing layers checked against {quoted}", file=sys.stderr)
+    _ = sys.stdout.buffer.write(canonical_bytes(validated))
     return 0
+
+
+def prepare_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="prepare.py")
+    _ = parser.add_argument("source", nargs="?")
+    _source_options(parser)
+    _ = parser.add_argument("--request-id")
+    _ = parser.add_argument("--repository-root", default=".")
+    _ = parser.add_argument("--artifact-root", default=".cheese/cook")
+    _ = parser.add_argument("--mode", choices=("full", "light"), default="full")
+    _ = parser.add_argument("--scope-approval", type=Path)
+    _ = parser.add_argument("--plan-approval", type=Path)
+    _ = parser.add_argument("--runner-approval", type=Path)
+    _ = parser.add_argument("--planner-result", type=Path)
+    _ = parser.add_argument("--setup-authorization", type=Path)
+    _ = parser.add_argument("--setup-evidence", type=Path)
+    _ = parser.add_argument("--bound-spec", type=Path)
+    try:
+        result = _prepare_from_args(parser.parse_args(argv))
+    except (ValueError, OSError, TypeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    return _emit_preparation(result)
+
+
+def resubmit_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="resubmit.py")
+    _ = parser.add_argument("previous", type=Path)
+    _ = parser.add_argument("--source")
+    _ = parser.add_argument("--repository-root", default=None)
+    _ = parser.add_argument("--artifact-root", default=None)
+    _ = parser.add_argument("--mode", choices=("full", "light"), default=None)
+    _ = parser.add_argument("--scope-approval", type=Path)
+    _ = parser.add_argument("--plan-approval", type=Path)
+    _ = parser.add_argument("--runner-approval", type=Path)
+    _ = parser.add_argument("--planner-result", type=Path)
+    _ = parser.add_argument("--setup-authorization", type=Path)
+    _ = parser.add_argument("--setup-evidence", type=Path)
+    _ = parser.add_argument("--bound-spec", type=Path)
+    _ = parser.add_argument(
+        "--clear-hold",
+        action="append",
+        default=[],
+        metavar="HOLD_ID=DIALOGUE_JSON",
+    )
+    args = parser.parse_args(argv)
+    previous_path = cast(Path, args.previous)
+    mode = cast("str | None", args.mode)
+    try:
+        previous = load_preparation_result(previous_path)
+        result = resubmit(
+            previous,
+            source=cast("str | None", args.source),
+            repository_root=cast(str, args.repository_root),
+            artifact_root=cast(str, args.artifact_root),
+            mode=None if mode is None else MoldCookMode(mode),
+            evidence=_evidence_from_args(args, clearances=_hold_clearances(args)),
+        )
+    except (ContractValidationError, ValueError, OSError, TypeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    return _emit_preparation(result)
 
 
 def accept_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="accept.py")
     _ = parser.add_argument("pointer")
-    _ = parser.add_argument("--spec", type=Path, default=None)
+    _ = parser.add_argument(
+        "--spec",
+        type=Path,
+        default=None,
+        help="optional identity assertion; it cannot replace the handoff binding",
+    )
+    _ = parser.add_argument("--artifact-root", type=Path, default=None)
     args = parser.parse_args(argv)
     pointer_source = cast(str, args.pointer)
     spec_path = cast("Path | None", args.spec)
+    artifact_root = cast("Path | None", args.artifact_root)
     try:
-        accepted = accept(
+        accepted = accept_mold_cook_handoff(
             pointer_source,
-            destination_phase="cook",
-            payload_schema_uri=CURD_PLAN_SCHEMA_URI,
+            artifact_root=artifact_root,
         )
-    except (ContractValidationError, TransitionError, PublicationError) as exc:
+        handoff = cast(MoldCookHandoff, accepted.canonical.value)
+        if spec_path is not None:
+            spec_raw = read_spec_text(spec_path).encode("utf-8")
+            if _digest_of(spec_raw) != handoff.spec_ref.digest:
+                raise ContractValidationError(
+                    "--spec does not match the handoff's bound spec"
+                )
+    except (
+        ContractValidationError,
+        PublicationError,
+        TransitionError,
+        OSError,
+        UnicodeDecodeError,
+    ) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-    if spec_path is None:
-        print("NOTE: landing layers not checked (no --spec)", file=sys.stderr)
-    else:
-        exit_code = _check_landing_layers(spec_path, cast(CurdPlan, accepted.canonical.value))
-        if exit_code:
-            return exit_code
     wrapper = {
-        "value": accepted.canonical.value,
+        "value": handoff,
         "digest": _digest_of(accepted.canonical.canonical_bytes),
         "normalization_receipt": accepted.normalization_receipt,
     }

@@ -42,7 +42,7 @@ Show advisory `stale-commit` and `grounded-path-missing` findings.
 Accept a pasted spec or issue, focused acceptance criteria, or an unambiguous task.
 Read explicit spec paths verbatim.
 Resolve a bare slug with `SPEC=$(python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>)`.
-Use `python3 skills/cook/scripts/cook.pyz accept <pointer>` for a Mold handoff pointer; it verifies the route and referenced artifacts first.
+A Mold handoff pointer, a spec path, and a slug enter through § Mold-to-Cook ingress and preparation.
 Flags:
 
 - `--auto` chains `/press → /age → /cure`.
@@ -90,14 +90,13 @@ Route the task to `/mold` if an ambiguity check fails.
 
 `/cook` routes a spec through one of three shapes.
 The available typed planner result selects the shape.
-Read [`references/fan-pathway.md`](references/fan-pathway.md) for the complete topology.
 
 **Fast path.** Use the ordinary single-coder path when the curd-count hint is `1` with low or medium blast radius.
 
-**Curded.** Load the typed `PlannerResult` or `CurdPlan`.
-Run `validate_curd_plan`.
+**Curded.** Accept a `ready` Full `MoldCookHandoff` first (§ Mold-to-Cook ingress).
+Run `validate_curd_plan` on its `CurdPlan`.
 Treat the validated plan as the semantic authority.
-Run behavior curds through `cook(CurdPlan) → reviewer(age) → cure(CurdPlan, binding) → reviewer(final age)` without Press.
+Run behavior curds through `cook(handoff) → reviewer(age) → cure(CurdPlan, binding) → reviewer(final age)` without Press.
 After you wire the curds, run one global `/press → /age → /cure` chain.
 Closed N/A bypasses Press.
 
@@ -283,3 +282,11 @@ Publish a terminal Age only when it contains `next: done`.
 Stop when it contains `next: cure` or does not contain `next`.
 
 Generated bundle command inventory: [`references/commands.md`](references/commands.md).
+
+## Mold-to-Cook ingress and preparation
+
+Classify and prepare every input before execution; only the standalone fast-path skips this step.
+A spec needs no strict Mold format and no Mold handoff, because Cook asks for each missing plan and approval.
+Only a freshly accepted `ready` Full handoff may reach `workflow.cook`.
+Follow [`references/fan-pathway.md`](references/fan-pathway.md) § Classified Mold-to-Cook ingress and § Preparation loop.
+Run the fresh-agent regression scenarios in [`references/evals.md`](references/evals.md) when this boundary changes.

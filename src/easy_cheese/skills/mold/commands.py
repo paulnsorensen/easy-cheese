@@ -35,18 +35,36 @@ def _gate_graph(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("migrate")
-def _migrate(argv: list[str]) -> int:
-    from easy_cheese.skills.mold.contract_handlers import migrate_main
+@bundle_command("approve")
+def _approve(argv: list[str]) -> int:
+    from easy_cheese.shared.mold_cook_approve import main
 
-    return migrate_main(argv)
+    return main(argv)
 
 
-@bundle_command("publish")
-def _publish(argv: list[str]) -> int:
-    from easy_cheese.skills.mold.contract_handlers import publish_main
+@bundle_command("finalize")
+def _finalize(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.contract_handlers import main
 
-    return publish_main(argv)
+    return main(argv)
+
+
+@bundle_command("normalize-planner")
+def _normalize_planner(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.contract_handlers import normalize_planner_main
+
+    return normalize_planner_main(argv)
+
+
+@bundle_command("review")
+def _review(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.review import close_main, poll_main, publish_main, serve_main
+
+    handlers = {"serve": serve_main, "publish": publish_main, "poll": poll_main, "close": close_main}
+    if not argv or argv[0] not in handlers:
+        print("usage: review {serve|publish|poll|close} [args...]", file=sys.stderr)
+        return 2
+    return handlers[argv[0]](argv[1:])
 
 
 @bundle_command("render-html")
@@ -71,9 +89,22 @@ def _validate_spec(argv: list[str]) -> int:
 
 
 COMMANDS = (
+    derive_command(_review, "Serve and manage the local Mold review canvas"),
     derive_command(
         _artifact_path,
         "Resolve the durable or transient artifact path for a phase and slug",
+    ),
+    derive_command(
+        _approve,
+        "Record the user's literal approval response as a retained MoldCookApproval",
+    ),
+    derive_command(
+        _finalize,
+        "Finalize a Mold spec and publish only a consumer-valid handoff",
+    ),
+    derive_command(
+        _normalize_planner,
+        "Materialize a planner writer envelope into a canonical PlannerResult",
     ),
     derive_command(
         _curd_count, "Count candidate curds in a spec and recommend the next skill"
@@ -86,13 +117,6 @@ COMMANDS = (
         _gate_graph, "Render the gate state machine as dot, svg, png, or mermaid"
     ),
     derive_command(
-        _migrate,
-        "Migrate a legacy artifact and emit its handoff pointer as canonical JSON",
-    ),
-    derive_command(
-        _publish, "Publish a curd plan and emit its handoff pointer as canonical JSON"
-    ),
-    derive_command(
         _render_html,
         "Render a markdown report into one self-contained offline HTML file",
     ),
@@ -102,7 +126,8 @@ COMMANDS = (
         + " --precheck runs the lexical pre-check on the draft without a verdict",
     ),
     derive_command(
-        _validate_spec, "Check a spec against the current Mold specification requirements"
+        _validate_spec,
+        "Check a spec against the current Mold specification requirements",
     ),
 )
 

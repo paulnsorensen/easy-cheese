@@ -37,19 +37,19 @@ _ANY_HEADING_RE = re.compile(r"^#{1,6}\s")
 
 # Badge + distribution-bar styling for the age body. Selectors stay lowercase so
 # an empty report never leaks a capitalised severity word into the document.
-_EXTRA_CSS = """.dist { display: flex; gap: 2px; margin: 1.5em 0; border-radius: 6px; overflow: hidden; }
-.seg { padding: .4em .6em; font-size: .85em; font-weight: 600; color: #fff; white-space: nowrap; }
-.sev-blocker { background: #b91c1c; }
-.sev-high { background: #c2410c; }
-.sev-medium { background: #a16207; }
-.sev-low { background: #4b5563; }
-h2.sev { display: inline-block; padding: .15em .6em; border-radius: 5px;
-  color: #fff; font-size: 1rem; border: none; }
-.finding { border: 1px solid var(--border); border-radius: 6px;
-  padding: .75em 1em; margin: .6em 0; background: var(--accent); }
-.body.whitespace-pre-wrap { white-space: pre-wrap; font: 0.9em/1.5 ui-monospace,
-  SFMono-Regular, Menlo, Consolas, monospace; margin: 0; }
-.empty { color: var(--muted); font-style: italic; }"""
+# Every color is a token from the shared theme in html_report._CSS.
+_EXTRA_CSS = """.dist { display: flex; gap: 2px; margin: 1.5em 0; border-radius: 4px; overflow: hidden; }
+.seg { padding: .4em .6em; font-size: .85em; font-weight: 600; color: var(--on-sev); white-space: nowrap; }
+.sev-blocker { background: var(--sev-blocker); }
+.sev-high { background: var(--sev-high); }
+.sev-medium { background: var(--sev-medium); }
+.sev-low { background: var(--sev-low); }
+h2.sev { display: inline-block; padding: .15em .6em; border-radius: 4px;
+  color: var(--on-sev); font-size: 1rem; letter-spacing: 0; border: none; }
+.finding { border: 1px solid var(--hairline); border-radius: 12px;
+  padding: .75em 1em; margin: .6em 0; background: var(--panel); }
+.body.whitespace-pre-wrap { white-space: pre-wrap; font: 0.9em/1.5 var(--font-mono); margin: 0; }
+.empty { color: var(--text-dim); font-style: italic; }"""
 
 
 def _finding_blocks(text: str) -> list[tuple[str, str]]:

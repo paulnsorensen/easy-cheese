@@ -57,12 +57,9 @@ class _MoldTasteTestModule(Protocol):
     def lexical_precheck(
         self, draft: object, decision_ledger: object
     ) -> tuple[str, ...]: ...
-    def auto_handoff(
-        self,
-        spec_ref: str | Path,
-        applicability: "_RedRequired | _NotApplicable",
-        metadata: Mapping[str, object] | None = ...,
-    ) -> dict[str, object]: ...
+    def goal_coverage(
+        self, draft: object, decision_ledger: object
+    ) -> dict[str, str]: ...
     def main(self, argv: list[str]) -> int: ...
 
 
@@ -777,23 +774,6 @@ def test_legacy_spec_without_ui_surface_remains_compatible(taste: _MoldTasteTest
     assert applicability.ui_surface is None
 
 
-def test_red_required_handoff_preserves_pointer_and_metadata(taste: _MoldTasteTestModule) -> None:
-    applicability = taste.parse_gate_applicability(red_spec())
-    metadata = {"spec_sha256": "abc", "taste_sha256": "def"}
-    handoff = taste.auto_handoff("artifact://specs/a.md", applicability, metadata)
-    assert handoff["command"] == ["/cook", "--auto", "artifact://specs/a.md"]
-    assert handoff["spec_ref"] == "artifact://specs/a.md"
-    handoff_metadata = handoff["metadata"]
-    assert isinstance(handoff_metadata, dict)
-    handoff_metadata = cast(dict[str, object], handoff_metadata)
-    assert handoff_metadata["spec_sha256"] == "abc"
-    assert handoff_metadata["taste_sha256"] == "def"
-    gate_applicability = handoff_metadata["gate_applicability"]
-    assert isinstance(gate_applicability, dict)
-    gate_applicability = cast(dict[str, object], gate_applicability)
-    assert gate_applicability["disposition"] == "red-required"
-    assert gate_applicability["ui_surface"] == "non-browser"
-    assert metadata == {"spec_sha256": "abc", "taste_sha256": "def"}
 
 
 def test_lexical_precheck_passes_on_reflected_draft(
@@ -889,3 +869,163 @@ def test_cli_precheck_and_verdict_are_mutually_exclusive(
             "--precheck"
         ])
     assert exc_info.value.code == 2
+
+
+COVERAGE_CLAUSES: list[dict[str, str]] = [
+    {"id": "G-1", "text": "resume an interrupted session"},
+    {"id": "G-2", "text": "without re-authenticating"},
+    {"id": "G-3", "text": "across devices"},
+    {"id": "G-4", "text": "with an audit log entry"},
+]
+COVERAGE_LEDGER: dict[str, object] = {
+    "goal": GOAL,
+    "goal_clauses": COVERAGE_CLAUSES,
+    "forks": LEDGER,
+}
+COVERAGE_DRAFT = GOAL_DRAFT.replace(
+    "## Acceptance\nF-1 outer tracer; F-2 browser seam",
+    """## Non-goals
+- cross-device resume (G-3) [AGENT-INTRODUCED]
+
+## Acceptance
+- AC-1: WHEN x THE SYSTEM SHALL y (F-1, G-1)
+- AC-2: WHEN x THE SYSTEM SHALL z (F-2, G-2, G-4)""",
+    1,
+)
+
+
+def test_goal_coverage_passes_when_every_clause_has_a_disposition(
+    taste: _MoldTasteTestModule,
+) -> None:
+    assert taste.lexical_precheck(COVERAGE_DRAFT, COVERAGE_LEDGER) == ()
+    result = taste.taste_test(
+        COVERAGE_DRAFT, COVERAGE_LEDGER, verdict(taste, COVERAGE_DRAFT)
+    )
+    assert result.passed, result.acceptance_gaps
+
+
+def test_goal_coverage_names_each_uncovered_clause(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = COVERAGE_DRAFT.replace(", G-4)", ")")
+    assert taste.lexical_precheck(draft, COVERAGE_LEDGER) == ("goal-coverage:G-4",)
+    result = taste.taste_test(draft, COVERAGE_LEDGER, verdict(taste, draft))
+    assert not result.passed
+    assert result.acceptance_gaps == ("goal-coverage:G-4",)
+    assert not taste.decomposition_gate(result).allowed
+
+
+def test_goal_coverage_cap_fails_when_fewer_than_half_ship(
+    taste: _MoldTasteTestModule,
+) -> None:
+    # G-2 and G-4 move to follow-ups: dispositions are explicit, but only 1/4 ships.
+    draft = COVERAGE_DRAFT.replace(", G-2, G-4)", ")").replace(
+        "## Acceptance\n",
+        "## Deferred follow-ups\n- **FU-1** — later (G-2, G-4)\n\n## Acceptance\n",
+        1,
+    )
+    assert taste.lexical_precheck(draft, COVERAGE_LEDGER) == ("goal-coverage-cap:1/4",)
+
+
+def test_goal_coverage_accepts_exactly_half_shipped_and_reports_dispositions(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = COVERAGE_DRAFT.replace(", G-4)", ")").replace(
+        "## Acceptance\n",
+        "## Open questions\n- [TBD] audit log shape (G-4)\n\n## Acceptance\n",
+        1,
+    )
+    assert taste.lexical_precheck(draft, COVERAGE_LEDGER) == ()
+    assert taste.goal_coverage(draft, COVERAGE_LEDGER) == {
+        "G-1": "covered",
+        "G-2": "covered",
+        "G-3": "non-goal",
+        "G-4": "tbd",
+    }
+
+
+def test_goal_coverage_tag_does_not_match_a_longer_id(
+    taste: _MoldTasteTestModule,
+) -> None:
+    ledger = {"goal_clauses": [{"id": "G-1", "text": "a"}], "forks": LEDGER}
+    draft = DRAFT.replace("## Acceptance\n", "## Acceptance\n- AC-1: x (G-12)\n", 1)
+    assert taste.lexical_precheck(draft, ledger) == (
+        "goal-coverage:G-1",
+        "goal-coverage-cap:0/1",
+    )
+
+
+def test_goal_coverage_skips_when_ledger_has_no_clauses(
+    taste: _MoldTasteTestModule,
+) -> None:
+    assert taste.lexical_precheck(GOAL_DRAFT, GOAL_LEDGER) == ()
+    assert taste.goal_coverage(GOAL_DRAFT, GOAL_LEDGER) == {}
+
+
+def test_cli_coverage_prints_disposition_envelope_and_exits_zero(
+    taste: _MoldTasteTestModule, tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    draft = tmp_path / "draft.md"
+    ledger = tmp_path / "ledger.json"
+    _ = draft.write_text(COVERAGE_DRAFT, encoding="utf-8")
+    _ = ledger.write_text(json.dumps(COVERAGE_LEDGER), encoding="utf-8")
+    exit_code = taste.main(["--draft", str(draft), "--ledger", str(ledger), "--coverage"])
+    assert exit_code == 0
+    output = cast(dict[str, object], json.loads(capsys.readouterr().out))
+    assert output == {
+        "clauses": {
+            "G-1": "covered",
+            "G-2": "covered",
+            "G-3": "non-goal",
+            "G-4": "covered",
+        },
+        "covered": 3,
+        "total": 4,
+    }
+
+
+def test_cli_coverage_ignores_a_goal_tag_in_acceptance_prose(
+    taste: _MoldTasteTestModule, tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
+    # G-4 appears only in prose, not on a structured `AC-n:` line: not covered.
+    draft_text = COVERAGE_DRAFT.replace(", G-4)", ")").replace(
+        "## Acceptance\n",
+        "## Acceptance\nThis section defers G-4 to a later spec.\n",
+        1,
+    )
+    draft = tmp_path / "draft.md"
+    ledger = tmp_path / "ledger.json"
+    _ = draft.write_text(draft_text, encoding="utf-8")
+    _ = ledger.write_text(json.dumps(COVERAGE_LEDGER), encoding="utf-8")
+    exit_code = taste.main(["--draft", str(draft), "--ledger", str(ledger), "--coverage"])
+    assert exit_code == 0
+    output = cast(dict[str, object], json.loads(capsys.readouterr().out))
+    assert cast(dict[str, str], output["clauses"])["G-4"] == "uncovered"
+
+
+@pytest.mark.parametrize(
+    ("clauses", "problem"),
+    [
+        ("G-1", "ledger-goal-clauses-invalid"),
+        ([{"id": "F-1", "text": "wrong prefix"}], "ledger-goal-clauses-invalid"),
+        ([{"id": "G-1", "text": " "}], "ledger-goal-clauses-invalid"),
+        (
+            [{"id": "G-1", "text": "a"}, {"id": "G-1", "text": "b"}],
+            "ledger-duplicate-goal-clause",
+        ),
+    ],
+)
+def test_malformed_goal_clauses_are_ledger_errors(
+    taste: _MoldTasteTestModule, clauses: object, problem: str
+) -> None:
+    with pytest.raises(taste.TasteTestError, match=problem):
+        _ = taste.lexical_precheck(DRAFT, {"goal_clauses": clauses, "forks": LEDGER})
+
+
+def test_id_keyed_ledger_ignores_goal_clauses_key(taste: _MoldTasteTestModule) -> None:
+    ledger: dict[str, object] = {
+        "goal_clauses": [{"id": "G-1", "text": "a"}],
+        "F-1": {"decision": "outer tracer", "status": "settled", "consequential": True},
+    }
+    draft = DRAFT.replace("## Acceptance\n", "## Acceptance\n- AC-1: x (G-1)\n", 1)
+    assert taste.lexical_precheck(draft, ledger) == ()

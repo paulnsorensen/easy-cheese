@@ -1,0 +1,37 @@
+{
+  "contract_version": {
+    "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+    "major": "1",
+    "minor": "0"
+  },
+  "plan_id": "historical-plan",
+  "revision": 1,
+  "objective": "Preserve a historical CurdPlan through Cook migration",
+  "curds": [
+    {
+      "curd_id": "curd-1",
+      "outcome": "Preserve the historical plan",
+      "scope": {
+        "paths": ["src/core.py"],
+        "excluded_paths": []
+      },
+      "inputs": [],
+      "outputs": ["historical-plan"],
+      "dependencies": [],
+      "criteria": [
+        {
+          "criterion_id": "curd-1-criterion-1",
+          "description": "The legacy pointer is migrated without changing its payload",
+          "check": "pytest tests/python/test_mold_cook_boundary_integration.py"
+        }
+      ],
+      "lineage": {
+        "identity_action": "new",
+        "source_curd_ids": []
+      }
+    }
+  ],
+  "context": null,
+  "parent_plan_ref": null,
+  "digest": "sha256:f0b159720f40791ac09348d0111790cfeb656b7b270cb7999d9e77dd272eb14d"
+}

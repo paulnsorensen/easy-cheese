@@ -160,3 +160,12 @@ enum UncertaintyScope = "omitted_work" | "emitted_work" | "dependency" | "shared
 
 enum WriterViewKind = "curd_plan" | "planner_result" | "review_result" | "diagnosis_result" | "curd_result"
 <!-- END GENERATED -->
+
+## Mold-to-Cook boundary
+
+The `planner_result` writer view is the only planner payload Cook accepts from
+an agent. The host supplies request identity, canonical curd IDs, bound
+artifacts, approval evidence, and any setup authorization; an agent response
+cannot grant execution authority. Cook preparation returns a closed outcome
+(`ready`, `needs-planning`, `needs-approval`, `needs-preparation`, `blocked`, or
+`invalid`) and only `ready` carries an accepted `MoldCookHandoff`.

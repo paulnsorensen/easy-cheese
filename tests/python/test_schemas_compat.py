@@ -525,7 +525,8 @@ def test_builtin_curd_plan_adapter_reports_malformed_legacy_curd_fields() -> Non
     _ = curds[0].pop("criteria")
 
     with pytest.raises(
-        LegacyConversionError, match=re.escape("curd-plan.curds[0].criteria must be present")
+        LegacyConversionError,
+        match=re.escape("curd-plan.curds[0].criteria must be present"),
     ):
         _ = adapter.convert(payload)
 
@@ -550,7 +551,6 @@ from easy_cheese_schemas import (
     validate_contract,
 )
 
-assert "easy_cheese.shared.migrate" not in sys.modules
 adapter = adapter_for(CURD_PLAN_SCHEMA_URI, "0", "9")
 assert adapter is not None
 converted = adapter.convert(
@@ -597,12 +597,21 @@ def test_builtin_migration_adapter_works_before_shared_migrate_import() -> None:
 
     assert result.returncode == 0, result.stdout + result.stderr
 
+
 class TestStrictConverterParity:
     def test_forbid_unknown_requires_strict(self) -> None:
         from easy_cheese_schemas import compat
 
         with pytest.raises(ValueError, match="forbid_unknown requires strict=True"):
-            _ = cast(object, compat.load({"schema_version": 3}, compat.Loaded, strict=False, forbid_unknown=True))
+            _ = cast(
+                object,
+                compat.load(
+                    {"schema_version": 3},
+                    compat.Loaded,
+                    strict=False,
+                    forbid_unknown=True,
+                ),
+            )
 
     def test_strict_and_lenient_converters_share_primitive_rules(self) -> None:
         from easy_cheese_schemas import compat

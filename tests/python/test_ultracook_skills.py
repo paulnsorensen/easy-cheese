@@ -91,7 +91,9 @@ class TestUltracookResolvesToCook:
             in redirect_section
         )
         for flag in ("--open-pr", "--resume <slug>", "--auto"):
-            assert flag in redirect_section, f"redirect section missing `{flag}` passthrough"
+            assert flag in redirect_section, (
+                f"redirect section missing `{flag}` passthrough"
+            )
 
     def test_cheese_routing_table_mirrors_the_redirect(self) -> None:
         body = _skill("cheese")
@@ -336,7 +338,7 @@ class TestMoldLowMediumHandoff:
     def test_routes_low_medium_by_gate_disposition(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_low_medium_handoff_menu()
-        assert "auto choices use `/cook --auto <spec-path>`" in body
+        assert "use the disposition-selected auto command" in body
         assert "**Implement the spec**" in menu
         assert "**Implement and auto-review**" in menu
 
@@ -397,9 +399,11 @@ class TestCheeseContinueFlag:
         assert "worktree_strategy" in body, (
             "parallel continuation must define how write tasks get separate checkouts"
         )
-        assert "existing" in body_lower and "create" in body_lower and "harness" in body_lower, (
-            "parallel continuation must support existing, create, and harness isolation"
-        )
+        assert (
+            "existing" in body_lower
+            and "create" in body_lower
+            and "harness" in body_lower
+        ), "parallel continuation must support existing, create, and harness isolation"
         assert "distinct" in body_lower and "worktree" in body_lower, (
             "parallel write tasks must require distinct worktrees"
         )
@@ -463,11 +467,17 @@ def _handoff_schema_fence() -> list[str]:
     than by fence so it is insensitive to the surrounding code-fence syntax."""
     lines = _skill("wheypoint").splitlines()
     start = next(
-        (i for i, ln in enumerate(lines) if ln.startswith("status: <canonical status field>")),
+        (
+            i
+            for i, ln in enumerate(lines)
+            if ln.startswith("status: <canonical status field>")
+        ),
         None,
     )
     if start is None:
-        raise AssertionError("wheypoint must carry the `status: <canonical status field>` header schema")
+        raise AssertionError(
+            "wheypoint must carry the `status: <canonical status field>` header schema"
+        )
     end = next(
         (
             i
@@ -477,12 +487,19 @@ def _handoff_schema_fence() -> list[str]:
         None,
     )
     if end is None:
-        raise AssertionError("wheypoint header schema must end with the orientation line")
+        raise AssertionError(
+            "wheypoint header schema must end with the orientation line"
+        )
     return lines[start : end + 1]
 
 
 class TestWheypointProvenance:
-    PROVENANCE_KEYS: tuple[str, str, str, str] = ("session:", "git:", "created:", "parents:")
+    PROVENANCE_KEYS: tuple[str, str, str, str] = (
+        "session:",
+        "git:",
+        "created:",
+        "parents:",
+    )
 
     def test_legacy_section_documents_every_provenance_field(self) -> None:
         # The canonical projection carries the Wheypoint pins after the
@@ -492,7 +509,9 @@ class TestWheypointProvenance:
         # `tests/wheypoint/python/test_legacy.py` proves the parser itself
         # accepts them between `artifact:` and the orientation.
         body = _skill_corpus("wheypoint")
-        section = re.split(r"^#{2,3} Handwritten legacy notes$", body, maxsplit=1, flags=re.M)
+        section = re.split(
+            r"^#{2,3} Handwritten legacy notes$", body, maxsplit=1, flags=re.M
+        )
         assert len(section) == 2, (
             "wheypoint must keep a `Handwritten legacy notes` section (SKILL.md or a reference)"
         )
@@ -549,9 +568,9 @@ class TestWheypointJoinSplitVerbs:
     def test_split_documented_with_current_slug_as_parent(self) -> None:
         body = _skill_corpus("wheypoint")
         assert "--split" in body, "wheypoint must document the --split verb"
-        assert (
-            "parents: [<current-slug>]" in body or "parents: [<current>]" in body
-        ), "--split children must each be parented on the current slug"
+        assert "parents: [<current-slug>]" in body or "parents: [<current>]" in body, (
+            "--split children must each be parented on the current slug"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -584,9 +603,14 @@ class TestReadmeMentionsUltracook:
 
         assert "`/cook` is the single implementation orchestrator" in readme
         assert "Compatibility redirect to `/cook`" in readme
-        assert "milknado (MCP) | Mikado task-graph backend for `/cook`'s fan-path" in readme
+        assert (
+            "milknado (MCP) | Mikado task-graph backend for `/cook`'s fan-path"
+            in readme
+        )
         assert "Single implementation orchestrator" in agents
-        assert "milknado (mikado task-graph backend for `/cook`'s fan pathway)" in agents
+        assert (
+            "milknado (mikado task-graph backend for `/cook`'s fan pathway)" in agents
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -641,8 +665,10 @@ class TestUltracookReadsSlugFile:
         # handoff slug", or any explicit instruction not to infer from
         # stdout. Match on the substantive prohibition.
         body_lower = body.lower()
-        assert "read the file" in body_lower or "read the slug" in body_lower or (
-            "read each phase" in body_lower and "handoff" in body_lower
+        assert (
+            "read the file" in body_lower
+            or "read the slug" in body_lower
+            or ("read each phase" in body_lower and "handoff" in body_lower)
         ), "cook must instruct the fan pathway to read the slug file"
         assert "stdout" in body_lower or "last line" in body_lower, (
             "cook must explicitly forbid inferring success from sub-agent stdout"
@@ -757,7 +783,9 @@ class TestUltracookNoChainDirective:
         # The override must be visible in the Agent() prompt template.
         # Acceptable phrasings: "do not chain forward", "this phase only",
         # "stop" + "do not invoke the next phase", or the equivalent.
-        assert "do not chain forward" in body_lower or "this phase only" in body_lower, (
+        assert (
+            "do not chain forward" in body_lower or "this phase only" in body_lower
+        ), (
             "cook's spawn prompt must explicitly direct the sub-agent "
             "not to chain forward to the next phase"
         )
@@ -786,8 +814,10 @@ def test_phase_documents_ultracook_no_chain_override(phase: str) -> None:
     # Either an explicit section header, or the no-chain phrasing inline,
     # is acceptable. The point is that a contributor reading the auto-mode
     # contract sees the override.
-    assert "from /ultracook" in body_lower or "no-chain" in body_lower or (
-        "do not chain forward" in body_lower
+    assert (
+        "from /ultracook" in body_lower
+        or "no-chain" in body_lower
+        or ("do not chain forward" in body_lower)
     ), f"{phase}'s auto-mode section must document the ultracook no-chain override"
 
 
@@ -808,7 +838,9 @@ class TestUltracookChainTerminatesInAge:
         # forcing the old table format to reappear.
         body = _skill_corpus("cook")
         assert "next: done" in body
-        assert "/age <slug> --auto" in body, "cook's chain must include the initial full age"
+        assert "/age <slug> --auto" in body, (
+            "cook's chain must include the initial full age"
+        )
         assert "/age --scope <touched-paths> --auto" in body, (
             "cook's chain must include the scoped re-verification age that "
             "runs after each cure pass"
@@ -829,8 +861,10 @@ class TestUltracookCapEnforcedByChainLength:
         body_lower = body.lower()
         # Mechanism-B signal: somewhere in cook's body, the cap must be
         # attributed to chain length / table length, not to age.
-        assert "chain length" in body_lower or "table length" in body_lower or (
-            "fixed chain" in body_lower
+        assert (
+            "chain length" in body_lower
+            or "table length" in body_lower
+            or ("fixed chain" in body_lower)
         ), "cook must declare that chain length (not age) enforces the cap"
 
     def test_ultracook_says_age_next_is_informational(self) -> None:
@@ -909,10 +943,13 @@ class TestWheypointGatedStatus:
 
     def test_status_enum_lists_gated(self) -> None:
         body = _skill("wheypoint")
-        assert "status: <canonical status field>" in body and "handback-contract.md" in body, (
-            "wheypoint status: line must defer to the canonical handback contract"
+        assert (
+            "status: <canonical status field>" in body
+            and "handback-contract.md" in body
+        ), "wheypoint status: line must defer to the canonical handback contract"
+        assert "gated" in body, (
+            "wheypoint must still document the gated stop-and-ask path"
         )
-        assert "gated" in body, "wheypoint must still document the gated stop-and-ask path"
 
     def test_gated_means_decision_not_auto_dispatch(self) -> None:
         body = _skill("wheypoint")
@@ -937,9 +974,11 @@ class TestCheeseGatedRouting:
             "cheese --continue must document a gated: routing branch"
         )
         # The three directions the reader must offer.
-        assert "research" in body_lower and "decide" in body_lower and "build" in body_lower, (
-            "gated: branch must ask the user which direction: research / decide / build"
-        )
+        assert (
+            "research" in body_lower
+            and "decide" in body_lower
+            and "build" in body_lower
+        ), "gated: branch must ask the user which direction: research / decide / build"
 
     def test_gated_does_not_auto_dispatch(self) -> None:
         body = _skill_corpus("cheese")
@@ -1021,8 +1060,10 @@ class TestCheeseHoldAndMissingNext:
         body_lower = body.lower()
         assert "hold" in body, "cheese --continue must route next: hold"
         # hold surfaces orientation and stops without dispatching.
-        assert "without dispatching" in body_lower or "stop without dispatch" in body_lower or (
-            "hold" in body_lower and "wait" in body_lower
+        assert (
+            "without dispatching" in body_lower
+            or "stop without dispatch" in body_lower
+            or ("hold" in body_lower and "wait" in body_lower)
         ), "next: hold must surface orientation and stop without dispatching"
 
     def test_missing_next_flagged_not_guessed(self) -> None:
@@ -1048,7 +1089,7 @@ class TestWheypointNextListForm:
         body = _skill_corpus("wheypoint")
         # The bracketed list shape and the required order: key.
         assert "next: [" in body, (
-            "wheypoint must document the inline next: list form `next: [<skill> \"<arg>\", ...]`"
+            'wheypoint must document the inline next: list form `next: [<skill> "<arg>", ...]`'
         )
         assert "order:" in body, "next: list form must document the order: key"
         assert "order: parallel" in body and "order: sequential" in body, (
@@ -1112,9 +1153,7 @@ class TestCheeseNextListRouting:
         body_lower = body.lower()
         # A write/pipeline skill in the inline list must be rejected and
         # routed to the heavy tasks: block (which carries write isolation).
-        assert "reject" in body_lower, (
-            "inline list must reject write/pipeline skills"
-        )
+        assert "reject" in body_lower, "inline list must reject write/pipeline skills"
         assert "tasks:" in body, (
             "rejection must point at the heavyweight mode: parallel + tasks: block"
         )
@@ -1131,9 +1170,9 @@ class TestWheypointDeriveNextFromBlockers:
         body = _skill("wheypoint")
         body_lower = body.lower()
         # Must instruct reading the blockers section before authoring next:.
-        assert "open questions and blockers" in body_lower or "blockers" in body_lower, (
-            "wheypoint must tell the author to read the Open-questions/blockers section"
-        )
+        assert (
+            "open questions and blockers" in body_lower or "blockers" in body_lower
+        ), "wheypoint must tell the author to read the Open-questions/blockers section"
         # The derive-from-blockers-not-optimism rule.
         assert "optimism" in body_lower or "derive" in body_lower, (
             "wheypoint must state next: derives from blockers, not optimism"
@@ -1152,8 +1191,8 @@ class TestWheypointDeriveNextFromBlockers:
         "state_value",
         [
             "briesearch",  # research wanted
-            "gated:",      # decision pending
-            "hold",        # compacting / no action
+            "gated:",  # decision pending
+            "hold",  # compacting / no action
         ],
     )
     def test_suggested_skills_map_includes_new_values(self, state_value: str) -> None:
@@ -1229,9 +1268,7 @@ class TestUltracookModeGate:
 
     def test_mode_selection_section_present(self) -> None:
         body = _skill_corpus("cook")
-        assert "Mode selection" in body, (
-            "cook must document a mode-selection gate"
-        )
+        assert "Mode selection" in body, "cook must document a mode-selection gate"
         assert "decomposer" in body.lower(), "the decomposer is the mode gate"
 
     def test_mode_selector_and_threshold_referenced(self) -> None:
@@ -1254,7 +1291,9 @@ class TestUltracookModeGate:
             "cook must state a 1-curd spec stays linear"
         )
 
-    def test_fast_path_skips_decomposer_for_single_low_or_medium_blast_curd(self) -> None:
+    def test_fast_path_skips_decomposer_for_single_low_or_medium_blast_curd(
+        self,
+    ) -> None:
         body = _skill_corpus("cook")
         body_lower = body.lower()
         assert "fast-path" in body_lower, (
@@ -1302,15 +1341,21 @@ class TestUltracookWorktreeLifecycle:
     def test_harvest_no_fetch(self) -> None:
         body = _skill_corpus("cook")
         body_lower = body.lower()
-        assert "worktree harvest" in body_lower, "the fan pathway must harvest curd branches"
-        assert "no `git fetch`" in body or "no git fetch" in body_lower or (
-            "shared" in body_lower and "object store" in body_lower
+        assert "worktree harvest" in body_lower, (
+            "the fan pathway must harvest curd branches"
+        )
+        assert (
+            "no `git fetch`" in body
+            or "no git fetch" in body_lower
+            or ("shared" in body_lower and "object store" in body_lower)
         ), "harvest must state it needs no git fetch (shared object store)"
 
     def test_teardown_leaves_no_leak(self) -> None:
         body = _skill_corpus("cook")
         body_lower = body.lower()
-        assert "worktree teardown" in body_lower, "the fan pathway must tear worktrees down"
+        assert "worktree teardown" in body_lower, (
+            "the fan pathway must tear worktrees down"
+        )
         assert "leak" in body_lower, (
             "the teardown contract must state no worktree/branch leaks"
         )

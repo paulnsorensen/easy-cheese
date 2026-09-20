@@ -32,6 +32,8 @@ from easy_cheese_schemas.contracts import (
     DiagnosisRequest,
     DiagnosisResult,
     DiagnosisResultWriterView,
+    EntryKind,
+    EntryState,
     EvidenceKind,
     EvidenceRef,
     HandoffPointer,
@@ -58,6 +60,8 @@ from easy_cheese_schemas.contracts import (
     PlannerResultWriterView,
     PlannerUncertainty,
     PlannerUncertaintyWriterView,
+    ProposedEntry,
+    ProtectedEntry,
     Reproduction,
     ReproductionDisposition,
     ReproductionWriterView,
@@ -408,6 +412,14 @@ def test_landing_layer_errors_accepts_backward_and_same_layer_dependencies() -> 
             _layers(["c1"], ["c2", "c3"]),
         )
         == ()
+    )
+
+def test_landing_layer_errors_rejects_writer_keys_as_canonical_ids() -> None:
+    errors = landing_layer_errors(plan(_curd("canonical-curd")), _layers(["writer-key"]))
+
+    assert errors == (
+        "landing-layer-unknown-curd landing.layers names unknown curd 'writer-key'",
+        "landing-layer-missing-curd curd 'canonical-curd' is missing from landing.layers",
     )
 
 
@@ -771,6 +783,73 @@ def test_review_request_accepts_typed_review_kind_and_rejects_invalid_values() -
             subject=artifact(),
             coverage_targets=["correctness"],
             review_kind="not_a_review_kind",  # pyright: ignore[reportArgumentType]
+        )
+
+
+def test_protected_entry_rejects_non_enum_kind_and_state() -> None:
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind="decision",  # pyright: ignore[reportArgumentType]
+            summary="a decision",
+            state=EntryState.ACTIVE,
+            blocks_continuation=False,
+        )
+
+    with pytest.raises(TypeError, match="'state' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=EntryKind.DECISION,
+            summary="a decision",
+            state="active",  # pyright: ignore[reportArgumentType]
+            blocks_continuation=False,
+        )
+
+
+def test_proposed_entry_rejects_non_enum_kind() -> None:
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProposedEntry(
+            kind="question",  # pyright: ignore[reportArgumentType]
+            summary="why?",
+        )
+
+
+def test_protected_entry_rejects_cross_enum_and_none() -> None:
+    # EntryKind and EntryState are both `str, Enum`; the validator must reject a
+    # member of the sibling enum, not just a plain string.
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=EntryState.ACTIVE,  # pyright: ignore[reportArgumentType]
+            summary="a decision",
+            state=EntryState.ACTIVE,
+            blocks_continuation=False,
+        )
+
+    with pytest.raises(TypeError, match="'state' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=EntryKind.DECISION,
+            summary="a decision",
+            state=EntryKind.DECISION,  # pyright: ignore[reportArgumentType]
+            blocks_continuation=False,
+        )
+
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProtectedEntry(
+            entry_id="d-1",
+            kind=None,  # pyright: ignore[reportArgumentType]
+            summary="a decision",
+            state=EntryState.ACTIVE,
+            blocks_continuation=False,
+        )
+
+
+def test_proposed_entry_rejects_cross_enum_kind() -> None:
+    with pytest.raises(TypeError, match="'kind' must be"):
+        _ = ProposedEntry(
+            kind=EntryState.ACTIVE,  # pyright: ignore[reportArgumentType]
+            summary="why?",
         )
 
 

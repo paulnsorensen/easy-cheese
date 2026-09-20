@@ -16,5 +16,14 @@ BAML demonstrates a useful separation: accept varied LLM-shaped text at ingress,
 
 Receipts record action and field names, not raw values. Strict paths have no receipt. Zero or multiple candidates, unknown or missing semantic fields, inferred values, and fuzzy scalar coercion reject.
 
+## Mold-to-Cook consequence (2026-09-17)
+
+The phase handoff is a strict `MoldCookHandoff`, not a writer envelope. Its
+artifact references are resolved and digest-checked by both Mold publication
+and Cook acceptance. `MoldCookApproval` records the exact proposal and
+response bytes; syntax normalization cannot create scope, plan, partial-plan,
+or runner authority. Cook's non-ready preparation outcomes retain their
+holds and requirements instead of being coerced into a runnable pointer.
+
 [^spec]: `.cheese/specs/enforceable-skill-boundaries.md` sections Approach, Decisions, and Risks.
 [^research]: `.cheese/research/baml-generous-input/baml-generous-input.md`; https://docs.boundaryml.com/guide/why-baml

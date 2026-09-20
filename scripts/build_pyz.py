@@ -28,7 +28,6 @@ SKILLS_ROOT = PACKAGE_ROOT / "skills"
 RUNTIME_LOCK = REPO_ROOT / "requirements" / "runtime.txt"
 SCHEMA_ROOT = SRC_ROOT / "easy_cheese_schemas"
 BUILD_SCRIPTS_ROOT = REPO_ROOT / "scripts"
-SCHEMA_CONTRACT_SOURCE = SCHEMA_ROOT / "contracts.py"
 SCHEMA_CATALOG_SOURCE = SCHEMA_ROOT / "_schema_catalog.py"
 PHASE_REGISTRY_SOURCE = SCHEMA_ROOT / "_compiled_phase_registry.py"
 DOCUMENT_RULES_SOURCE = PACKAGE_ROOT / "shared" / "document_rules.py"
@@ -71,31 +70,38 @@ def _compiled_phase_registry_source() -> str:
 
 
 def _schema_catalog_compiler() -> tuple[
-    Callable[[ModuleType], tuple[tuple[str, str], ...]],
+    Callable[[Sequence[ModuleType]], tuple[tuple[str, str], ...]],
     Callable[[Sequence[tuple[str, str]]], str],
 ]:
     compiler = _compiler_module("_schema_catalog_compiler")
     return (
         cast(
-            Callable[[ModuleType], tuple[tuple[str, str], ...]],
+            Callable[[Sequence[ModuleType]], tuple[tuple[str, str], ...]],
             getattr(compiler, "collect"),
         ),
         cast(Callable[[Sequence[tuple[str, str]]], str], getattr(compiler, "render")),
     )
 
 
-def _schema_contract_module() -> ModuleType:
-    module = ModuleType("_build_schema_contracts")
-    module.__file__ = str(SCHEMA_CONTRACT_SOURCE)
-    sys.modules[module.__name__] = module
-    source = SCHEMA_CONTRACT_SOURCE.read_bytes()
-    exec(compile(source, str(SCHEMA_CONTRACT_SOURCE), "exec"), module.__dict__)
-    return module
+def _contract_modules_inventory() -> ModuleType:
+    return _import_from(SRC_ROOT, "easy_cheese_schemas._contract_modules")
+
+
+def _imported_contract_modules() -> tuple[ModuleType, ...]:
+    inventory = _contract_modules_inventory()
+    module_names = cast(tuple[str, ...], getattr(inventory, "CONTRACT_MODULES"))
+    return tuple(_import_from(SRC_ROOT, module_name) for module_name in module_names)
 
 
 def _compiled_schema_catalog_source() -> str:
+    """Compile the catalog from a normal import of each contract module.
+
+    The import is safe. `schema_runtime` checks catalog staleness lazily,
+    on first catalog use, not at import time.
+    """
     collect, render = _schema_catalog_compiler()
-    return render(collect(_schema_contract_module()))
+    pairs = collect(_imported_contract_modules())
+    return render(pairs)
 
 
 def _document_rules_compiler() -> tuple[
@@ -111,8 +117,13 @@ def _document_rules_compiler() -> tuple[
 
 def compiled_document_rules_source() -> str:
     collect, render = _document_rules_compiler()
-    contract = cast(type, getattr(_schema_contract_module(), "MoldSpecDocument"))
-    return render(collect(contract))
+    inventory = _contract_modules_inventory()
+    module_name, attribute_name = cast(
+        tuple[str, str], getattr(inventory, "DOCUMENT_RULES_TARGET")
+    )
+    module = _import_from(SRC_ROOT, module_name)
+    target = cast(type, getattr(module, attribute_name))
+    return render(collect(target))
 
 
 def _checked_in_generated_file_bytes(

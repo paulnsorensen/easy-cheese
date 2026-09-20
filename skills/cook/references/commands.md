@@ -5,6 +5,7 @@
 | Command | Purpose |
 | --- | --- |
 | `accept` | Validate and accept a canonical Mold handoff pointer |
+| `approve` | Record the user's literal approval response as a retained MoldCookApproval |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
 | `baseline` | Classify a current test-failure list against a stored baseline |
 | `findings` | Render an /age report's selection table or coder brief and resolve selection verbs |
@@ -17,8 +18,10 @@
 | `paths` | Slugify, validate, resolve, and list .cheese artifact paths |
 | `phase-decision` | Decide what the fan-out pathway does after a phase sub-agent returns |
 | `pr-plan-to-branches` | Convert a fan-out PR plan into branch, cherry-pick, and PR commands |
+| `prepare` | Classify a Cook input and return a closed preparation outcome |
 | `read-handoff-slug` | Read the handoff preamble back from a phase artifact |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |
+| `resubmit` | Recompute a Cook preparation outcome with new evidence |
 | `slugify` | Derive a kebab-case slug and durable spec path from task text |
 | `validate` | Validate a typed contract payload against its registered schema |
 | `validate-decomposition` | Validate a fan-out decomposition manifest |

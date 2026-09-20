@@ -18,6 +18,7 @@ from easy_cheese.shared.git_utils import (
     MARKER_OURS,
     MARKER_SEP,
     MARKER_THEIRS,
+    binary_conflict_guidance,
     run_git,
 )
 
@@ -112,10 +113,18 @@ def main(argv: list[str] | None = None) -> int:
 
     strategy = "ours" if args.ours else "theirs"
 
+    guidance = binary_conflict_guidance(args.file)
+    if guidance is not None:
+        print(f"Error: {guidance}", file=sys.stderr)
+        return 1
+
     try:
-        content = Path(args.file).read_text()
+        content = Path(args.file).read_text(encoding="utf-8")
     except FileNotFoundError:
         print(f"Error: File not found: {args.file}", file=sys.stderr)
+        return 1
+    except UnicodeDecodeError:
+        print(f"Error: {args.file} is not UTF-8 text; resolve it manually", file=sys.stderr)
         return 1
 
     if "<<<<<<" not in content:
@@ -131,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
             print("# some conflicts remain (not matching --grep)", file=sys.stderr)
         return 0
 
-    _ = Path(args.file).write_text(resolved)
+    _ = Path(args.file).write_text(resolved, encoding="utf-8")
     if has_remaining:
         print(f"partial {args.file}: some conflicts remain")
         return 0

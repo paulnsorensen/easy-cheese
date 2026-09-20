@@ -11,16 +11,16 @@ Ceremony scales to the job. The Bounds pass picks one of three tiers from `refer
 
 ## Flow
 
-1. **Bounds pass** — open the `Goal / Decided / Asking / [AGENT-DECIDED]` ledger with the goal pinned as one sentence; only an explicit user fork changes it. Map every input's goals and **non-goals** as one `[AGENT-DECIDED]` line; ask the user only when the goal is genuinely unknown or a leverage trigger fires. Run the shape check, then announce the tier with its reason (`references/tiers.md`). Quick exits here: one fast confirm, then `## Agent-invoked mini-spec mode`. Upgrade the tier whenever the evidence changes; never downgrade silently.
+1. **Bounds pass** — open the `Goal / Decided / Asking / [AGENT-DECIDED]` ledger with the goal pinned as one sentence; only an explicit user fork changes it. Split it into `G-n` clauses (`references/handshake.md` § Goal coverage). Map every input's goals and **non-goals** as one `[AGENT-DECIDED]` line; ask the user only when the goal is genuinely unknown or a leverage trigger fires. Run the shape check, then announce the tier with its reason (`references/tiers.md`). Quick exits here: one fast confirm, then `## Agent-invoked mini-spec mode`. Upgrade the tier whenever the evidence changes; never downgrade silently.
 2. **Route** — choose the secondary mode from `references/modes.md`, announce it, and correct false premises first.
 3. **Dialogue** — consequential forks are the user's to pick. A fork is consequential per the leverage line in `../age/references/voice.md`. Every other fork is `[AGENT-DECIDED]`. Supply options, trade-offs, and evidence before you ask. Ground each critical claim through code, the [Validate Cycle](references/validate-cycle.md), or a [Prototype Cycle](references/prototype-cycle.md). Resolve every contradiction. Render the decision map after three consecutive fork questions, or on request.
 4. **Sketch** — For work across modules or with a new public interface, run `references/shape-check.md`. Bind identity and role nouns to code referents. Record the Placement block; no bodies.
-5. **Plan for approval** — run the fresh-context fork-coherence taste test with `python3 skills/mold/scripts/mold.pyz taste-test` and persist its digest-bound pass; a failure reopens only named forks, and the third failed verdict stops. Light with one expected curd stops here: no planner, and the handoff is `/cook --auto <spec-path>`. Otherwise dispatch a typed `PlannerRequest`, validate its `PlannerResultWriterView` (one retry, then stop before the handshake), normalize on the host, and persist only the typed `PlannerResult` and `CurdPlan`. Present the plan's semantic curds and waves at the handshake. See `references/curdle.md` § "Pre-approval typed planner dispatch".
+5. **Plan for approval** — run the fresh-context fork-coherence taste test with `python3 skills/mold/scripts/mold.pyz taste-test` and persist its digest-bound pass; a failure reopens only named forks, and the third failed verdict stops. Light with one expected curd stops here: no planner; finalize the bounded spec with `python3 skills/mold/scripts/mold.pyz finalize` and retain its canonical `HandoffPointer`. Otherwise dispatch a typed `PlannerRequest`, validate its `PlannerResultWriterView` (one retry, then stop before the handshake), normalize on the host, and persist only the typed `PlannerResult` and `CurdPlan`. Present the plan's semantic curds and waves at the handshake. See `references/curdle.md` § "Pre-approval typed planner dispatch".
 6. **Two-key handshake** — Before extraction, the user and agent must agree to the draft spec and displayed typed plan. The user provides an explicit verb. The agent performs a coherence self-check. Neither key changes nor disappears. See `references/handshake.md`.
-7. **Curdle** — Resolve the durable spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>)`. Phase one writes the local artifact and write-ahead prepared state before any external call. It writes the approved spec at `"$SPEC"`. It also writes the host-validated `PlannerResult` and `CurdPlan`. It also writes local issue drafts and the session's non-obvious decisions as durable ADRs. Phase two publishes approved follow-ups. Retain the prepared recovery state when an external capability is unavailable or publication fails. Phase two reconciles their state and references into the durable spec before any handoff.
-8. **Publish and hand off** — after reconciliation, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md). Then publish the approved `CurdPlan` with `python3 skills/mold/scripts/mold.pyz publish` and keep the returned `HandoffPointer` path; Light with one curd skips publish and hands `/cook --auto <spec-path>`. Prompt through `## Handoff`. Dispatch only the user's non-stop selection.
+7. **Curdle** — Resolve the durable spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>)`. Phase one writes the local artifact and write-ahead prepared state before any external call. It writes the approved spec at `"$SPEC"`. It also writes the host-validated `PlannerResult` and `CurdPlan`. It also writes local issue drafts and the session's non-obvious decisions as durable ADRs. Phase two publishes approved follow-ups. Retain the prepared recovery state when an external capability is unavailable or publication fails. Phase two reconciles their state and references into the durable spec before any handoff. The resolved spec path is internal; Cook receives only the finalizer's canonical `HandoffPointer`.
+8. **Finalize and hand off** — after reconciliation, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md), then finalize through `## Handoff`. Full and Light both hand that pointer to Cook. Dispatch only the user's non-stop selection.
 
-Portability: [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md). Prefer bundled/repo-local helpers; slash commands are host renderings, not the control model.
+Portability: [rules](../cheese/references/harness-portability.md). Slash commands are host renderings, not the control model.
 
 ## Follow-up candidates
 
@@ -37,11 +37,11 @@ Every non-goal and explicit dialogue deferral becomes a `[FOLLOW-UP?]` follow-up
 | Grill | A favoured approach needs stress-testing | Steelman each item, then put every design-changing call to the user as a fork |
 | Diagnose | A symptom, failure, or trace is supplied | Build a Loop → reproduce → hypothesize → confirm root cause |
 
-Mode definitions, exit criteria, and user knobs: `references/modes.md`. Trigger and trace evals, including Grill user-fork checks: `references/evals.md`.
+Modes: references/modes.md. Evals: references/evals.md. Canvas: [review-canvas.md](references/review-canvas.md).
 
 ## Agent-invoked mini-spec mode
 
-`/cheese`'s tier-1 escalation calls `/mold` after the call site passes all cook fast-path checks, and the Quick tier enters the same mode after its one confirm. It produces a spec without design dialogue. This mode skips the rest of the Flow above. Derive a slug. Write the mini-spec. Parse its declared gate applicability. Return the resolved spec path with `/cook --auto <spec-path>`. Append `--hard` when the user passed it.
+`/cheese`'s tier-1 escalation calls `/mold` after the call site passes all cook fast-path checks, and the Quick tier enters the same mode after its one confirm. It produces a spec without design dialogue. This mode skips the rest of the Flow above. Derive a slug. Write the mini-spec. Parse its declared gate applicability. Finalize through `## Handoff` and return its canonical `HandoffPointer` to Cook. Append `--hard` when the user passed it.
 
 The two-key handshake does not run in this mode. The agent-introduced-scope check still runs implicitly. Every distinguishing noun must come from the user's input or tier-2 `/culture`/`/briesearch` synthesis. Never add one silently.
 
@@ -58,7 +58,7 @@ Mold-specific tools beyond source-code routing:
 | External validation | `/briesearch` with Context7/Tavily | user docs, repo docs, or note as unverified |
 | Wiki grounding (Ground entry + decision points; scope per `references/grounding.md` § When to probe) | `mcp__hallouminate__list_corpora` + `mcp__hallouminate__ground` on `repo:<repo>:wiki` | record `hallouminate: absent` in the ledger, proceed on code evidence, and cap at `speculating` when design rationale is central |
 
-**The grounding record is a precondition for the first structured question.** Do not ask the question until the ledger contains a probe result. The result contains citations or `hallouminate: absent`. Mark each unsupported claim `[?]` until you settle it.
+**The grounding record precedes the first structured question:** the ledger holds a probe result — citations or `hallouminate: absent` — first. Mark each unsupported claim `[?]` until settled.
 
 ## Sub-agent context gate
 
@@ -98,13 +98,13 @@ reason, and no contracts. Mold never infers applicability. Row-level rules:
 
 `python3 skills/mold/scripts/mold.pyz taste-test` binds the verdict to draft SHA256 and each settled fork. Stale, partial, or blocked verdicts fail; a failure reopens only named forks, with two rounds. Approved `red-required` specs pass unchanged metadata and the published pointer to `/cook --auto`.
 
-Each fork appears in Approach, Interface sketches, Acceptance, plus Test Contracts for `red-required`; no Test Contracts in `not-applicable` specs. Do not rename sections. Tag reflecting lines with fork id and run `taste-test --precheck` before dispatch; see `references/curdle.md` § Spec template. `goal` must survive unchanged, case- and whitespace-insensitively, in Problem statement, or `goal-drift` fails; see `references/gate-graph.md` § Fork taste planner gate.
+Each fork appears in Approach, Interface sketches, Acceptance, plus Test Contracts for `red-required`; none in `not-applicable` specs. Do not rename sections. Tag reflecting lines with fork id and run `taste-test --precheck` before dispatch. `goal` must survive verbatim in Problem statement (`goal-drift`); each `G-n` clause carries an Acceptance or disposition tag (`goal-coverage`). See `references/curdle.md` § Spec template and `references/gate-graph.md`.
 
 ## Approval gate
 
 Curdle requires the **two-key handshake**. It requires an explicit user verb: `curdle` or `ship it`. It also requires the agent's coherence self-check. Present the validated typed `CurdPlan`'s `N curds / M waves` with the final approval request in Flow step 5; on Light's single-curd path there is no plan, so present the spec alone and mark the plan boxes `n/a`. See `references/handshake.md` for the checklist, mandatory gates, and override semantics.
 
-Before the handshake runs, present the **scope audit table** once: agent-introduced nouns, non-goals, entity bindings, and follow-ups, each with a default. One confirm approves the defaults; only leverage rows and unresolved bindings need their own verb. Procedure: `references/handshake.md` § Scope audit table.
+Before the handshake, print the **narrowing delta** (`taste-test --coverage`), then present the **scope audit table** once. One confirm approves the defaults; only leverage rows and unresolved bindings need a verb, and `curdle anyway` waives neither. See `references/handshake.md`.
 
 If any gate is unmet, propose the smallest next question, evidence check, or planner correction. Do the same if the typed plan remains invalid after one retry. Write artifacts only after both keys pass.
 
@@ -119,7 +119,7 @@ See `../hard-cheese/references/composition.md`.
 
 **Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
 
-After Curdle's phase two finishes, run `python3 skills/mold/scripts/mold.pyz curd-count`. Then publish the approved plan with `python3 skills/mold/scripts/mold.pyz publish`. Then prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)). Approved `red-required` behavior recommends `/cook --auto <pointer path>`. Keep the applicability, contract, and taste metadata unchanged. Append `--hard` when the user passed it. Never pre-select.
+After Curdle's phase two finishes, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md) for the blast-radius digest. Finalize with `python3 skills/mold/scripts/mold.pyz finalize` and keep its consumer-valid canonical `HandoffPointer` path; `finalize` does not require `curd-count` first. Prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)). Approved `red-required` behavior recommends handing the canonical `HandoffPointer` to `/cook --auto`. Keep the applicability, contract, and taste metadata unchanged. Append `--hard` when the user passed it. Never pre-select.
 
 The digest's `mode` is orientation, not a skill. Render the fixed blast-radius menu from `decomposable`, `candidate_curds`, `verdict`, and `mode`; see `references/handoff-menus.md`.
 
@@ -148,5 +148,4 @@ Resolve delegates through [`../cheese/references/agent-resolution.md`](../cheese
 | Plan for approval | planner, general | read-only, fresh-context | powerful | high | compatible planner, then general |
 
 The canonical mold spec or mini-spec carries the shared `agent_resolution` block.
-
-Generated bundle command inventory: [`references/commands.md`](references/commands.md).
+Commands: [`references/commands.md`](references/commands.md).

@@ -70,7 +70,7 @@ Include this section only for `red-required`; omit it for `not-applicable`.
 
 ## Provenance (tier 2 only)
 - culture: <one-line synthesis of what /culture concluded>
-- briesearch: <one-line synthesis>; artifact: research/<slug>/<slug>.md
+- briesearch: <one-line synthesis>; artifact: <absolute report path returned by research-layout>
 ```
 
 Mini-spec mode writes `shape: single` unless the user named a shape.
@@ -93,6 +93,6 @@ Mold owns the dialogue and the approval state for every research request. Apply 
 - Send `invocation: sidechain` in the request. A missing value defaults to `top-level`, which releases the run from Mold's control.
 - Send `allow_question: false`. Mold asks every user question itself.
 - Reuse the Mold parent slug for the request. Do not derive a second slug. The parent slug also names the research artifact.
-- Record the corpus-relative artifact path `research/<slug>/<slug>.md` in the `artifact:` field. Never record an absolute path. This link preserves the citations. It lets `/cook` or any later skill read them again without new research.
+- Record the full absolute report path returned by `research-layout` in the `artifact:` field. This link preserves the citations. It lets `/cook` or any later skill read them again without new research.
 - Map a `don't know` result to an open hypothesis. Record no `outcome`. Keep Curdle blocked until new evidence or an explicit `[TBD]` decision settles it.
 - Omit `artifact:` only when `/briesearch` reads local code patterns and writes no durable file.

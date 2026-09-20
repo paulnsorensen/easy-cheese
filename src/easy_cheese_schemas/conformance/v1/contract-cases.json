@@ -626,7 +626,7 @@
       "expected": {
         "status": "reject",
         "error_type": "ArtifactResolutionError",
-        "message": "artifact digest mismatch: expected sha256:0000000000000000000000000000000000000000000000000000000000000000, got sha256:ec181d66f3195970310491929f04640fac08d456277fe015c6f4fb00f2b5ee84"
+        "message": "artifact digest mismatch: expected sha256:0000000000000000000000000000000000000000000000000000000000000000"
       }
     },
     {
@@ -659,7 +659,7 @@
       "input": {
         "source": "mold",
         "destination": "cook",
-        "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+        "payload_schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff"
       },
       "expected": {
         "status": "accept",
@@ -667,7 +667,7 @@
           "type": "CompiledTransition",
           "source": "mold",
           "destination": "cook",
-          "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+          "payload_schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff"
         }
       }
     },
@@ -683,6 +683,407 @@
         "status": "reject",
         "error_type": "TransitionError",
         "message": "transition mold -> cure is not declared"
+      }
+    },
+    {
+      "name": "retired-mold-cook-curd-plan-route-rejected",
+      "operation": "validate_transition",
+      "input": {
+        "source": "mold",
+        "destination": "cook",
+        "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "TransitionError",
+        "message": "payload schema 'https://schemas.easy-cheese.dev/curd-plan' is not declared for mold -> cook"
+      }
+    },
+    {
+      "name": "mold-cook-handoff-light-accepted",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "approval_ref": {
+          "artifact_id": "artifact-approval",
+          "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "media_type": "application/json",
+          "role": "approval",
+          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval",
+          "size_bytes": 64,
+          "uri": "repo://conformance/approval.json"
+        },
+        "contract_version": {
+          "major": "1",
+          "minor": "0",
+          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff"
+        },
+        "coverage": {
+          "curd_ids": [
+            "curd-runtime"
+          ],
+          "unresolved_work": []
+        },
+        "input_kind": "direct_spec",
+        "mode": "light",
+        "plan_ref": null,
+        "planner_result_ref": null,
+        "request_id": "request-conformance",
+        "runner_approval_ref": null,
+        "setup_evidence_refs": [],
+        "spec_ref": {
+          "artifact_id": "artifact-spec",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "media_type": "application/json",
+          "role": "spec",
+          "schema_uri": null,
+          "size_bytes": 64,
+          "uri": "repo://conformance/spec.json"
+        },
+        "taste_ledger_ref": null,
+        "taste_verdict_ref": null
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "MoldCookHandoff",
+          "request_id": "request-conformance",
+          "input_kind": "direct_spec",
+          "mode": "light",
+          "curd_ids": [
+            "curd-runtime"
+          ]
+        }
+      }
+    },
+    {
+      "name": "mold-cook-handoff-light-carrying-plan-rejected",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "approval_ref": {
+          "artifact_id": "artifact-approval",
+          "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "media_type": "application/json",
+          "role": "approval",
+          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval",
+          "size_bytes": 64,
+          "uri": "repo://conformance/approval.json"
+        },
+        "contract_version": {
+          "major": "1",
+          "minor": "0",
+          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff"
+        },
+        "coverage": {
+          "curd_ids": [
+            "curd-runtime"
+          ],
+          "unresolved_work": []
+        },
+        "input_kind": "direct_spec",
+        "mode": "light",
+        "plan_ref": {
+          "artifact_id": "artifact-curd-plan",
+          "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "media_type": "application/json",
+          "role": "curd_plan",
+          "schema_uri": "https://schemas.easy-cheese.dev/curd-plan",
+          "size_bytes": 64,
+          "uri": "repo://conformance/curd_plan.json"
+        },
+        "planner_result_ref": null,
+        "request_id": "request-conformance",
+        "runner_approval_ref": null,
+        "setup_evidence_refs": [],
+        "spec_ref": {
+          "artifact_id": "artifact-spec",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "media_type": "application/json",
+          "role": "spec",
+          "schema_uri": null,
+          "size_bytes": 64,
+          "uri": "repo://conformance/spec.json"
+        },
+        "taste_ledger_ref": null,
+        "taste_verdict_ref": null
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ContractValidationError",
+        "message": "$ is invalid: light handoff must not carry planner or plan references"
+      }
+    },
+    {
+      "name": "mold-cook-approval-scope-accepted",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "major": "1",
+          "minor": "0",
+          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval"
+        },
+        "coverage": {
+          "curd_ids": [
+            "curd-runtime"
+          ],
+          "unresolved_work": []
+        },
+        "decision": "approved",
+        "kind": "scope",
+        "plan_digest": null,
+        "proposal_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "proposal_ref": {
+          "artifact_id": "artifact-proposal",
+          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "media_type": "application/json",
+          "role": "proposal",
+          "schema_uri": null,
+          "size_bytes": 64,
+          "uri": "repo://conformance/proposal.json"
+        },
+        "request_id": "request-conformance",
+        "response_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "response_ref": {
+          "artifact_id": "artifact-response",
+          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "media_type": "application/json",
+          "role": "response",
+          "schema_uri": null,
+          "size_bytes": 64,
+          "uri": "repo://conformance/response.json"
+        },
+        "response_source": "user-response-1",
+        "response_text": "Approved the scope",
+        "setup_authorization": null,
+        "source": "user_response",
+        "spec_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "MoldCookApproval",
+          "request_id": "request-conformance",
+          "kind": "scope",
+          "decision": "approved",
+          "curd_ids": [
+            "curd-runtime"
+          ]
+        }
+      }
+    },
+    {
+      "name": "mold-cook-approval-proposal-digest-mismatch-rejected",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "contract_version": {
+          "major": "1",
+          "minor": "0",
+          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval"
+        },
+        "coverage": {
+          "curd_ids": [
+            "curd-runtime"
+          ],
+          "unresolved_work": []
+        },
+        "decision": "approved",
+        "kind": "scope",
+        "plan_digest": null,
+        "proposal_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        "proposal_ref": {
+          "artifact_id": "artifact-proposal",
+          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "media_type": "application/json",
+          "role": "proposal",
+          "schema_uri": null,
+          "size_bytes": 64,
+          "uri": "repo://conformance/proposal.json"
+        },
+        "request_id": "request-conformance",
+        "response_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "response_ref": {
+          "artifact_id": "artifact-response",
+          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "media_type": "application/json",
+          "role": "response",
+          "schema_uri": null,
+          "size_bytes": 64,
+          "uri": "repo://conformance/response.json"
+        },
+        "response_source": "user-response-1",
+        "response_text": "Approved the scope",
+        "setup_authorization": null,
+        "source": "user_response",
+        "spec_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ContractValidationError",
+        "message": "$ is invalid: proposal_digest must match proposal_ref.digest"
+      }
+    },
+    {
+      "name": "cook-preparation-result-ready-accepted",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/cook-preparation-result",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/cook-preparation-result",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "approval_kind": null,
+        "approved_plan_ref": null,
+        "approved_scope_ref": null,
+        "contract_version": {
+          "major": "1",
+          "minor": "0",
+          "schema_uri": "https://schemas.easy-cheese.dev/cook-preparation-result"
+        },
+        "coverage": {
+          "curd_ids": [
+            "curd-runtime"
+          ],
+          "unresolved_work": []
+        },
+        "findings": [],
+        "handoff_ref": {
+          "artifact_id": "artifact-handoff",
+          "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "media_type": "application/json",
+          "role": "handoff",
+          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff",
+          "size_bytes": 64,
+          "uri": "repo://conformance/handoff.json"
+        },
+        "holds": [],
+        "input_kind": "direct_spec",
+        "missing_decision": null,
+        "outcome": "ready",
+        "planner_request": null,
+        "proposal_digest": null,
+        "proposal_ref": null,
+        "references": [
+          {
+            "artifact_id": "artifact-handoff",
+            "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "media_type": "application/json",
+            "role": "handoff",
+            "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff",
+            "size_bytes": 64,
+            "uri": "repo://conformance/handoff.json"
+          }
+        ],
+        "request_id": "request-conformance",
+        "requirements": [],
+        "setup_authorization": null
+      },
+      "expected": {
+        "status": "accept",
+        "value": {
+          "type": "CookPreparationResult",
+          "request_id": "request-conformance",
+          "outcome": "ready",
+          "reference_ids": [
+            "artifact-handoff"
+          ],
+          "curd_ids": [
+            "curd-runtime"
+          ]
+        }
+      }
+    },
+    {
+      "name": "cook-preparation-result-ready-carrying-approval-payload-rejected",
+      "operation": "validate_contract",
+      "schema_uri": "https://schemas.easy-cheese.dev/cook-preparation-result",
+      "supported_version": {
+        "schema_uri": "https://schemas.easy-cheese.dev/cook-preparation-result",
+        "major": "1",
+        "minor": "0"
+      },
+      "input": {
+        "approval_kind": null,
+        "approved_plan_ref": null,
+        "approved_scope_ref": null,
+        "contract_version": {
+          "major": "1",
+          "minor": "0",
+          "schema_uri": "https://schemas.easy-cheese.dev/cook-preparation-result"
+        },
+        "coverage": {
+          "curd_ids": [
+            "curd-runtime"
+          ],
+          "unresolved_work": []
+        },
+        "findings": [],
+        "handoff_ref": {
+          "artifact_id": "artifact-handoff",
+          "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "media_type": "application/json",
+          "role": "handoff",
+          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff",
+          "size_bytes": 64,
+          "uri": "repo://conformance/handoff.json"
+        },
+        "holds": [],
+        "input_kind": "direct_spec",
+        "missing_decision": "plan",
+        "outcome": "ready",
+        "planner_request": null,
+        "proposal_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "proposal_ref": {
+          "artifact_id": "artifact-proposal",
+          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "media_type": "application/json",
+          "role": "proposal",
+          "schema_uri": null,
+          "size_bytes": 64,
+          "uri": "repo://conformance/proposal.json"
+        },
+        "references": [
+          {
+            "artifact_id": "artifact-handoff",
+            "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "media_type": "application/json",
+            "role": "handoff",
+            "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff",
+            "size_bytes": 64,
+            "uri": "repo://conformance/handoff.json"
+          }
+        ],
+        "request_id": "request-conformance",
+        "requirements": [],
+        "setup_authorization": null
+      },
+      "expected": {
+        "status": "reject",
+        "error_type": "ContractValidationError",
+        "message": "$ is invalid: ready preparation carries fields for another outcome: missing_decision, proposal_digest, proposal_ref"
       }
     }
   ]

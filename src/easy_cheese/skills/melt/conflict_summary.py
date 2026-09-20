@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import NotRequired, Protocol, TypedDict, cast
 
 from easy_cheese.shared.git_utils import (
+    binary_conflict_guidance,
     get_conflicted_files,
     get_file_extension,
     get_surrounding_context,
@@ -75,12 +76,22 @@ def _recommendation(path: str, ext: str, hunk_count: int, mergiraf_ok: bool) -> 
 
 
 def summarize_file(path: str, context_lines: int = 3) -> _Summary | _ErrorSummary:
+    ext = get_file_extension(path)
+    guidance = binary_conflict_guidance(path)
+    if guidance is not None:
+        return {
+            "path": path,
+            "extension": ext,
+            "mergiraf_supported": False,
+            "hunk_count": 0,
+            "hunks": [],
+            "recommendation": guidance,
+        }
+
     try:
-        content = Path(path).read_text()
+        content = Path(path).read_text(encoding="utf-8")
     except Exception as e:
         return {"path": path, "error": str(e)}
-
-    ext = get_file_extension(path)
     hunks = cast(list[_Hunk], parse_conflict_hunks(content))
 
     hunk_summaries: list[_HunkSummary] = []

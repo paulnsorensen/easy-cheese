@@ -36,7 +36,9 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 
 `landing.layers` records ordered groups of canonical curd ids from the approved CurdPlan, as a one-line flow list. Leave it `[]` only when `shape` is `single`; a non-single shape requires at least one layer.
 
-**Fork-id tags.** Every settled consequential fork in the decision ledger must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`. Each line that reflects a fork carries the fork id in parentheses, for example `- AC-3: WHEN ... THE SYSTEM SHALL ... (F-3)` or `public interface: parse(...) -> Result  (F-2)`. The taste test matches the fork id literally, or every 3+ letter word of the decision text; the tag is the reliable form. Run `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` before the reviewer dispatch; fix every reported gap first.
+**Fork-id tags.** Every settled consequential fork in the decision ledger must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`. Each line that reflects a fork carries the fork id in parentheses, for example `- AC-3: WHEN ... THE SYSTEM SHALL ... (F-3)` or `public interface: parse(...) -> Result  (F-2)`. The taste test matches the fork id literally, or every 3+ letter word of the decision text; the tag is the reliable form.
+
+**Goal-clause tags.** Every `G-n` clause from the ledger's `goal_clauses` carries its tag on at least one Acceptance line, or on exactly one disposition line: a `Non-goals` bullet, a `Deferred follow-ups` entry, or a `[TBD]` item under `Open questions`. The pre-check fails `goal-coverage:G-n` for an untagged clause and `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses reach Acceptance. See `handshake.md` § Goal coverage. Run `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` before the reviewer dispatch; fix every reported gap first.
 
 ```markdown
 ---
@@ -48,6 +50,7 @@ confidence: <low | medium | high>
 leverage: []   # fired trigger ids per `../../cheese/references/routing-policy.md` § Leverage triggers; copied from the handoff packet, extended when a later mode fires one
 gates_overridden: []   # list of unchecked handshake items if `curdle anyway` was used
 agent_introduced_scope: []   # terms in the spec the user did not type — approved through the scope audit table per `handshake.md` § Scope audit table (audit trail; downstream skills trust this list)
+goal_coverage: {}   # G-n -> covered | non-goal | follow-up | tbd, the final disposition map printed as the narrowing delta per `handshake.md` § Goal coverage (audit trail; downstream skills trust this map)
 entity_referent_bindings: []   # list of binding records {noun, verdict, referent, citation, note} for identity/ownership-role nouns bound to code referents or marked NEW ENTITY — each resolved per `handshake.md` § Entity-referent binding (audit trail; downstream skills trust this list)
 agent_resolution: []   # the shared agent-resolution block per `../../cheese/references/agent-resolution.md`
 gate_applicability:
@@ -67,10 +70,11 @@ landing:
 <one paragraph; what's broken or missing today, who feels it>
 
 ## Goals
-- <bullet>
+- G-1: <one outcome clause of the pinned goal, verbatim from the ledger>
+- G-2: <...>
 
 ## Non-goals
-- <bullet>
+- <bullet>  (G-n when this bullet defers a goal clause)
 
 ## Deferred follow-ups
 - **<deterministic follow-up ID>** — <summary>
@@ -104,8 +108,8 @@ WHEN <trigger> THE SYSTEM SHALL <response>
 ```
 If the trigger cannot be stated precisely (e.g. pure internal utilities with no external event), use prose with a `[prose-fallback]` marker.
 
-- AC-1: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>)
-- AC-2: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>)
+- AC-1: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>, <G-n>)
+- AC-2: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>, <G-n>)
 
 ## Test Contracts
 
@@ -427,22 +431,46 @@ Before this procedure, run the digest-bound fresh-context fork taste test on the
 2. **Validate and normalize** the writer view on the host. The normal selected path is the typed `PlannerResult` containing a typed `CurdPlan`; reject malformed or wrong-kind output before approval.
 3. **Still invalid after one retry** — stop before the two-key handshake. Do not approve or persist an invalid plan.
 4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` with the final approval request. The typed plan is part of what both handshake keys approve. When candidate curds are two or more, ask the landing shape once in that same approval request, alongside the curd-independence confirmation.
-5. **During Curdle phase one**, persist the approved spec, typed `PlannerResult`, and typed `CurdPlan`. Put them after `## Quality gates` or the natural equivalent section for this spec's shape. Do not regenerate or mutate them after approval.
+5. Persist the approved spec, typed `PlannerResult`, and typed `CurdPlan`. Do not regenerate or mutate them after approval.
 
-## Publication
+## Finalization
 
-Publish the approved plan before the hand-off. Run this command after reconciliation:
+Finalize the approved spec and plan before the hand-off. The host owns three values and sets each one once:
+
+- `REQUEST_ID` is the `request_id` of the `PlannerRequest`. On a path with no planner, use the spec slug.
+- `ARTIFACT_ROOT` is `.cheese/cook/<slug>-artifacts`. Mold and Cook must use the same directory.
+- The operation id is `<slug>-<ordinal>`. Keep it for an identical retry. Increase the ordinal when an input changes.
+
+Record the handshake verb first. Pass the user's reply word for word; a reply that is not an approval records a rejection:
 
 ```bash
-POINTER_JSON=$(python3 skills/mold/scripts/mold.pyz publish "$CURD_PLAN_JSON" \
-  --invocation "$INVOCATION_JSON" \
-  --operation-id "<slug>-<ordinal>" \
-  --artifact-root "$ARTIFACT_ROOT")
+python3 skills/mold/scripts/mold.pyz approve "$SPEC" \
+  --artifact-root "$ARTIFACT_ROOT" \
+  --request-id "$REQUEST_ID" \
+  --kind plan \
+  --response "<the user's literal reply>" \
+  --planner-result "$PLANNER_RESULT_JSON"
 ```
 
-The command validates the payload and the `mold -> cook` route. It stores the pointer at `$ARTIFACT_ROOT/pointers/<operation-id>.json`. Stop on a nonzero status. Never hand off an unpublished plan.
+Use `--kind partial_plan` for a partial planner disposition. On the Light path, use `--kind scope --curd-id <curd-id>` and omit `--planner-result`. The command prints `approval_path`. Then finalize:
 
-Pass that stored pointer path to Cook. Cook runs its own `accept` command before any executor. That command verifies the route, the receipt, and each referenced artifact. See `skills/cook/SKILL.md` § Inputs.
+```bash
+python3 skills/mold/scripts/mold.pyz finalize "$SPEC" \
+  --approval "$APPROVAL_PATH" \
+  --artifact-root "$ARTIFACT_ROOT" \
+  --operation-id "<slug>-<ordinal>" \
+  --request-id "$REQUEST_ID" \
+  --mode full \
+  --planner-result "$PLANNER_RESULT_JSON" \
+  --taste-result "$TASTE_RESULT_JSON" \
+  --ledger "$TASTE_LEDGER_JSON"
+```
+
+`--taste-result` is the persisted `taste-test` verdict. `--ledger` is the decision ledger as JSON. `--plan` is optional when the `PlannerResult` embeds its plan.
+
+Read `status` in the output, not only the exit status. A nonzero exit status is an input error; stop. `ready` stores a canonical `HandoffPointer` and prints the Cook `command`. `saved-not-ready` exits zero, stores no pointer, and lists each unmet `requirements` entry and hold.
+
+For `ready`, render the ready branch of [`handoff-menus.md`](handoff-menus.md). The printed `command` contains `--auto`; run it only when the user selects an automatic choice. A manual choice uses `/cook <pointer path> --spec "$SPEC"`. For `saved-not-ready`, follow the saved-not-ready branch of the same menu.
 
 ## Hand-off
 

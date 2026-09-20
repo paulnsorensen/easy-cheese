@@ -22,6 +22,10 @@ setup() {
 # Helper: write a plan with one group. YAML is the canonical format.
 write_single_plan() {
     cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
 shape: single
 groups:
   - branch: ultracook/foo/pr-1
@@ -36,6 +40,10 @@ YAML
 
 write_orthogonal_flat_plan() {
     cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
 shape: orthogonal_flat
 groups:
   - branch: ultracook/foo/pr-curd-1
@@ -58,6 +66,10 @@ YAML
 
 write_stacked_linear_plan() {
     cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
 shape: stacked_linear
 groups:
   - branch: ultracook/foo/pr-1-seed
@@ -80,6 +92,10 @@ YAML
 
 write_diamond_stack_plan() {
     cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
 shape: diamond_stack
 groups:
   - branch: ultracook/foo/pr-seed
@@ -156,6 +172,7 @@ YAML
     JSON_PLAN="$BATS_TEST_TMPDIR/plan.json"
     cat > "$JSON_PLAN" <<'JSON'
 {
+  "contract_version": {"schema_uri": "https://schemas.easy-cheese.dev/pr-plan", "major": "1", "minor": "0"},
   "shape": "single",
   "groups": [
     {
@@ -241,6 +258,10 @@ YAML
 
 @test "script rejects empty groups" {
     cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
 shape: single
 groups: []
 YAML
@@ -269,6 +290,10 @@ YAML
     # option-shaped tokens. The validator must reject this before commands
     # are emitted.
     cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
 shape: single
 groups:
   - branch: ultracook/foo/pr-1
@@ -282,6 +307,47 @@ YAML
     [[ "$output" == *"must be a hex SHA"* ]]
     # No git command should have leaked into stdout.
     [[ "$output" != *"git cherry-pick"* ]]
+}
+
+@test "script rejects option-shaped branch and base at integration layer" {
+    # A leading `-` makes the token look like a flag to git even after single
+    # quoting, so `-f` as a base would reach `git checkout -b <branch> -f`.
+    # The validator must reject it before any command is emitted.
+    cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
+shape: single
+groups:
+  - branch: ultracook/foo/pr-1
+    title: t
+    body: ""
+    base: -f
+    commits: [abc1234]
+YAML
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"base contains characters unsafe for a git ref"* ]]
+    [[ "$output" != *"git checkout -b"* ]]
+
+    cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
+shape: single
+groups:
+  - branch: -delete-everything
+    title: t
+    body: ""
+    base: main
+    commits: [abc1234]
+YAML
+    run "$SCRIPT" "$PLAN_FILE"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"branch contains characters unsafe for a git ref"* ]]
+    [[ "$output" != *"git checkout -b"* ]]
 }
 
 @test "script reads from stdin when no argument given" {
@@ -319,6 +385,10 @@ SH
     # PR titles routinely contain apostrophes ("don't", "it's"). The sq()
     # escape must produce output that bash can evaluate without syntax error.
     cat > "$PLAN_FILE" <<'YAML'
+contract_version:
+  schema_uri: https://schemas.easy-cheese.dev/pr-plan
+  major: "1"
+  minor: "0"
 shape: single
 groups:
   - branch: ultracook/foo/pr-1
@@ -374,6 +444,7 @@ SH
     JSON_PLAN="$BATS_TEST_TMPDIR/plan.json"
     cat > "$JSON_PLAN" <<'JSON'
 {
+  "contract_version": {"schema_uri": "https://schemas.easy-cheese.dev/pr-plan", "major": "1", "minor": "0"},
   "shape": "single",
   "groups": [
     {

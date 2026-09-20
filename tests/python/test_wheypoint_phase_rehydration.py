@@ -20,10 +20,17 @@ from easy_cheese_schemas import (
     RepositoryProvenance,
     WheypointRecord,
     WheypointRevision,
+    canonical_bytes,
 )
 
 from easy_cheese.shared.git_utils import run_git
 from easy_cheese.shared.wheypoint import canonical, projection, records, storage
+from tests.python.test_mold_cook_producer import (
+    make_approval,
+    make_planner_result,
+    make_spec,
+    taste_fixture,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -617,35 +624,60 @@ def test_curd_4_mold_publication_creates_no_wheypoint_revision(tmp_path: Path) -
     root = tmp_path / "guard"
     root.mkdir()
     env = _env(root, f"{SLUG}-guard")
-    artifact_root = root / "published"
+    artifact_root = root / "artifacts"
+    spec = make_spec(root)
+    planner = make_planner_result()
+    approval = make_approval(root, spec, plan=planner)
+    taste = taste_fixture(spec)
+    approval_path = root / "approval.json"
+    planner_path = root / "planner.json"
+    plan_path = root / "plan.json"
+    taste_path = root / "taste.json"
+    ledger_path = root / "ledger.json"
+    _ = approval_path.write_bytes(canonical_bytes(approval))
+    _ = planner_path.write_bytes(canonical_bytes(planner))
+    _ = plan_path.write_bytes(canonical_bytes(planner.plan))
+    _ = taste_path.write_text(
+        json.dumps(
+            {
+                "draft_sha256": taste.draft_sha256,
+                "verdict": taste.verdict,
+                "forks": [],
+                "contradictions": [],
+                "orphaned_decisions": [],
+                "unsupported_assumptions": [],
+                "acceptance_gaps": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _ = ledger_path.write_text("[]\n", encoding="utf-8")
     publish = _run(
         "mold",
-        "publish",
-        str(
-            REPO_ROOT
-            / "tests"
-            / "python"
-            / "fixtures"
-            / "cook_payloads"
-            / "clean_writer_view.json"
-        ),
-        "--invocation",
-        str(
-            REPO_ROOT
-            / "tests"
-            / "python"
-            / "fixtures"
-            / "cook_payloads"
-            / "clean_invocation.json"
-        ),
+        "finalize",
+        str(spec),
+        "--approval",
+        str(approval_path),
+        "--planner-result",
+        str(planner_path),
+        "--plan",
+        str(plan_path),
+        "--taste-result",
+        str(taste_path),
+        "--ledger",
+        str(ledger_path),
         "--operation-id",
         "phase-rehydration-guard",
+        "--request-id",
+        "request-1",
         "--artifact-root",
         str(artifact_root),
         cwd=root,
         env=env,
     )
     assert publish.returncode == 0, publish.stderr
+    payload = _json(publish)
+    assert payload["status"] == "ready", payload
     corpus = Path(env["EASY_CHEESE_HOME"]) / env["EASY_CHEESE_PROJECT"]
     assert not (corpus / "work").exists()
 
