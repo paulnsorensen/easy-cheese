@@ -8,10 +8,10 @@ from typing import cast
 
 import pytest
 
+from easy_cheese.shared.mold_cook_approve import approve
 from easy_cheese.shared.mold_cook_handoff import (
     accept_mold_cook_handoff,
-    canonical_mold_cook_proposal,
-    materialize_artifact_ref,
+    response_is_affirmative,
 )
 from easy_cheese_schemas import ContractVersion, validate_contract
 from easy_cheese.shared.publication import PublicationError
@@ -40,7 +40,6 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookApproval,
     MoldCookApprovalDecision,
     MoldCookApprovalKind,
-    MoldCookApprovalSource,
     MoldCookCoverage,
     MoldCookHandoff,
     MoldCookMode,
@@ -133,14 +132,9 @@ def make_planner_result() -> PlannerResult:
     )
 
 
-_AFFIRMATIVE_RESPONSES = frozenset(
-    {"approved", "approve", "yes", "y", "ok", "lgtm", "confirmed"}
-)
-
-
 def response_decision(response: str) -> MoldCookApprovalDecision:
     """Map a harness reply to the decision the executed workflow records."""
-    if response.strip().strip(" \t.!,;:").casefold() in _AFFIRMATIVE_RESPONSES:
+    if response_is_affirmative(response):
         return MoldCookApprovalDecision.APPROVED
     return MoldCookApprovalDecision.REJECTED
 
@@ -155,56 +149,17 @@ def make_approval(
     response: bytes = b"approved\n",
     request_id: str = "request-1",
 ) -> MoldCookApproval:
-    selected_coverage = coverage or cast(
-        Callable[..., MoldCookCoverage], MoldCookCoverage
-    )(
-        curd_ids=["curd-1"],
-    )
-    plan_digest = None if plan is None else cast(CurdPlan, plan.plan).digest
-    spec_digest = "sha256:" + hashlib.sha256(spec_path.read_bytes()).hexdigest()
-    proposal = canonical_mold_cook_proposal(
+    """Build an approval through the production `approve` path."""
+    approval, _ = approve(
+        spec_path,
+        artifact_root=tmp_path / "artifacts",
         request_id=request_id,
         kind=kind,
-        spec_digest=spec_digest,
-        coverage=selected_coverage,
-        planner_result=plan,
-        plan_digest=plan_digest,
-    )
-    evidence_root = tmp_path / "artifacts" / "approval-evidence"
-    evidence_root.mkdir(parents=True, exist_ok=True)
-    proposal_id = f"proposal-{kind.value}"
-    response_id = f"response-{kind.value}"
-    proposal_path = evidence_root / f"{proposal_id}.json"
-    response_path = evidence_root / f"{response_id}.txt"
-    _ = proposal_path.write_bytes(proposal)
-    _ = response_path.write_bytes(response)
-    proposal_ref = materialize_artifact_ref(
-        proposal,
-        artifact_id=proposal_id,
-        role="proposal",
-        uri=proposal_path.resolve().as_uri(),
-        media_type="application/json",
-    )
-    response_ref = materialize_artifact_ref(
-        response,
-        artifact_id=response_id,
-        role="response",
-        uri=response_path.resolve().as_uri(),
-        media_type="text/plain",
-    )
-    return bind_mold_cook_approval(
-        request_id=request_id,
-        kind=kind,
-        decision=response_decision(response.decode()),
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_digest,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
         response_text=response.decode(),
-        response_source=response_id,
-        coverage=selected_coverage,
-        plan_digest=plan_digest,
+        planner_result=plan,
+        coverage=coverage or MoldCookCoverage(curd_ids=("curd-1",)),
     )
+    return approval
 
 
 _MISSING_APPROVAL = object()

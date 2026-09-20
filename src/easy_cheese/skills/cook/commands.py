@@ -130,6 +130,13 @@ def _resubmit(argv: list[str]) -> int:
     return resubmit_main(argv)
 
 
+@bundle_command("approve")
+def _approve(argv: list[str]) -> int:
+    from easy_cheese.shared.mold_cook_approve import main
+
+    return main(argv)
+
+
 @bundle_command("accept")
 def _accept(argv: list[str]) -> int:
     from easy_cheese.skills.cook.contract_handlers import accept_main
@@ -233,6 +240,10 @@ COMMANDS = (
     derive_command(_normalize, "Normalize a typed contract payload on the host"),
     derive_command(
         _validate, "Validate a typed contract payload against its registered schema"
+    ),
+    derive_command(
+        _approve,
+        "Record the user's literal approval response as a retained MoldCookApproval",
     ),
     derive_command(_accept, "Validate and accept a canonical Mold handoff pointer"),
     derive_command(
