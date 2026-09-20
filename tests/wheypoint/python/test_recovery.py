@@ -92,11 +92,9 @@ def test_committed_artifact_survives_lost_commit_response(
             project_key=project_key,
         )
 
+    record = storage.WorkStore.open(intent.work_id, corpus_root=corpus_root).read_record()
     assert artifact_path.read_bytes() == b"committed payload"
-    assert (
-        storage.WorkStore.open(intent.work_id, corpus_root=corpus_root).read_record()
-        is not None
-    )
+    assert record is not None
 
 
 def test_parent_directory_closes_fds_when_setup_fails(

@@ -67,23 +67,37 @@ def _relative_parts(path: Path, root: Path) -> tuple[str, ...]:
 
 
 @contextlib.contextmanager
-def _parent_directory(root: Path, parts: tuple[str, ...]):
-    root_fd = -1
-    opened: list[int] = []
+def _opened_fd(
+    path: Path | str, flags: int, *, dir_fd: int | None = None
+):
+    fd = os.open(path, flags, dir_fd=dir_fd)
     try:
+        yield fd
+    finally:
+        with contextlib.suppress(OSError):
+            os.close(fd)
+
+
+@contextlib.contextmanager
+def _parent_directory(root: Path, parts: tuple[str, ...]):
+    with contextlib.ExitStack() as stack:
+        current_fd = -1
         try:
-            root_fd = os.open(root, _DIRECTORY_FLAGS)
-            current_fd = root_fd
+            current_fd = stack.enter_context(_opened_fd(root, _DIRECTORY_FLAGS))
             for part in parts[:-1]:
                 try:
-                    next_fd = os.open(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
+                    next_fd = stack.enter_context(
+                        _opened_fd(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
+                    )
                 except FileNotFoundError:
                     try:
                         os.mkdir(part, 0o755, dir_fd=current_fd)
                     except FileExistsError:
+                        # Another writer created the directory after the lookup.
                         pass
-                    next_fd = os.open(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
-                opened.append(next_fd)
+                    next_fd = stack.enter_context(
+                        _opened_fd(part, _DIRECTORY_FLAGS, dir_fd=current_fd)
+                    )
                 current_fd = next_fd
         except OSError as exc:
             if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
@@ -94,13 +108,6 @@ def _parent_directory(root: Path, parts: tuple[str, ...]):
                 "checkpoint artifact directory is not writable"
             ) from exc
         yield current_fd, parts[-1]
-    finally:
-        for fd in reversed(opened):
-            with contextlib.suppress(OSError):
-                os.close(fd)
-        if root_fd >= 0:
-            with contextlib.suppress(OSError):
-                os.close(root_fd)
 
 
 def _read_existing(root: Path, parts: tuple[str, ...]) -> bytes | None:
