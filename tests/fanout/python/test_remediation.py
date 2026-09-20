@@ -170,8 +170,9 @@ class TestLockedSelectionAndDeferred:
             _finding("f3", ReviewSeverity.LOW, FixCostNow.SPRAWLING),
         ]
         selected, deferred = remediation.locked_selection_and_deferred(tuple(findings))
-        assert len(selected) == 2
-        assert len(deferred) == 1
+        # Duplicate normalized keys remain one selection plus unresolved debt.
+        assert len(selected) == 1
+        assert len(deferred) == 2
         assert remediation.finding_key(findings[2]) in deferred
 
 
@@ -268,6 +269,7 @@ class TestDecideReviewHostDerivation:
             "findings",
             "coverage",
             "reason",
+            "event_identity",
         }
 
 

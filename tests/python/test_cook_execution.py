@@ -7,13 +7,14 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Never, TypedDict, cast
+from typing import Never, NotRequired, TypedDict, cast
 from urllib.parse import urlsplit
 
 import attrs
 import pytest
 
 import easy_cheese.shared.workflow as workflow
+from easy_cheese.shared.fanout.remediation import PressGateResult
 from easy_cheese.shared.artifacts import ArtifactResolutionError
 from easy_cheese.shared.mold_cook_handoff import (
     canonical_mold_cook_proposal,
@@ -22,6 +23,7 @@ from easy_cheese.shared.mold_cook_handoff import (
 from easy_cheese.shared.publication import (
     PayloadDigestMismatchError,
     PublicationError,
+    atomic_write,
     request_digest,
 )
 from easy_cheese.skills.cook import execute_accepted_handoff
@@ -41,6 +43,7 @@ from easy_cheese_schemas import (
     ContractVersion,
     canonical_bytes,
     supported_version_for,
+    validate_contract,
 )
 from easy_cheese_schemas.contracts import (
     BoundedScope,
@@ -49,6 +52,7 @@ from easy_cheese_schemas.contracts import (
     CriterionResultWriterView,
     CurdDisposition,
     CurdResultWriterView,
+    RemediationCureWriterView,
     DiagnosisCauseWriterView,
     DiagnosisRequest,
     DiagnosisDisposition,
@@ -59,6 +63,8 @@ from easy_cheese_schemas.contracts import (
     EvidenceRef,
     IdentityLineage,
     PlannerDisposition,
+    PlannerRequest,
+    PlannerRequestKind,
     PlannerResult,
     PlannerUncertainty,
     FixCostNow,
@@ -71,9 +77,12 @@ from easy_cheese_schemas.contracts import (
     SourceLocationWriterView,
     ReviewDisposition,
     ReviewResultWriterView,
+    RemediationScopeKey,
     SemanticCurd,
     UncertaintyScope,
 )
+
+
 from easy_cheese_schemas.mold_cook import (
     MOLD_COOK_APPROVAL_SCHEMA_URI,
     MOLD_COOK_HANDOFF_SCHEMA_URI,
@@ -93,6 +102,16 @@ from easy_cheese_schemas.mold_cook import (
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 
 from tests.python.mold_cook_helpers import bind_mold_cook_approval
+
+
+class ExecuteAcceptedHandoffKwargs(TypedDict):
+    artifact_root: str | Path | None
+    repository_root: str | Path
+    dispatch_writer: workflow.WriterDispatch
+    dispatch_review: workflow.ReviewDispatch
+    dispatch_diagnosis: workflow.DiagnosisDispatch
+    dispatch_press: NotRequired[workflow.PressDispatch | None]
+    evidence: NotRequired[Mapping[str, EvidenceRef] | None]
 
 
 class _FullFixture(TypedDict):
@@ -1298,6 +1317,8 @@ def test_execute_full_fan_handoff_routes_through_run_fan(
     import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
 
     monkeypatch.setattr(fan_execute, "run_fan", traced_run_fan)
+    from easy_cheese.shared.fanout.remediation import PressGateResult
+
     result = execute_accepted_handoff(
         fixture["pointer"],
         artifact_root=tmp_path / "fan",
@@ -1305,7 +1326,7 @@ def test_execute_full_fan_handoff_routes_through_run_fan(
         dispatch_writer=_writer,
         dispatch_review=traced_review,
         dispatch_diagnosis=_diagnosis,
-        dispatch_press=lambda _scope, _round: (press_evidence,),
+        dispatch_press=lambda _scope, _round: PressGateResult(True, "baseline-1", evidence=(press_evidence,)),
         evidence={"result.txt": evidence},
     )
 
@@ -1375,13 +1396,21 @@ def test_execute_full_fan_handoff_runs_postmerge_cure_writer(tmp_path: Path) -> 
     review_subjects: list[ArtifactRef] = []
     diagnosis_calls = 0
 
-    def writer(context: Mapping[str, object]) -> CurdResultWriterView:
+    def writer(context: Mapping[str, object]) -> object:
         writer_calls.append(context)
         criteria = cast("tuple[Criterion, ...]", context["criteria"])
-        return CurdResultWriterView(criterion_results=[
-            CriterionResultWriterView(item.criterion_id, CriterionDisposition.PASSED, ("result.txt",))
-            for item in criteria
-        ])
+        locked = tuple(cast("tuple[str, ...]", context.get("locked_selection", ())))
+        view = CurdResultWriterView(
+            criterion_results=[
+                CriterionResultWriterView(item.criterion_id, CriterionDisposition.PASSED, ("result.txt",))
+                for item in criteria
+            ],
+        )
+        if not locked:
+            return view
+        return RemediationCureWriterView(
+            result=view, applied_finding_keys=locked,
+        )
 
     def review(request: object) -> ReviewResultWriterView:
         nonlocal review_calls
@@ -1409,7 +1438,9 @@ def test_execute_full_fan_handoff_runs_postmerge_cure_writer(tmp_path: Path) -> 
             SourceLocationWriterView("src/postmerge.py", 1, 1),
         )
 
-    result = execute_accepted_handoff(fixture["pointer"], artifact_root=tmp_path / "postmerge-cure", repository_root=tmp_path, dispatch_writer=writer, dispatch_review=review, dispatch_diagnosis=diagnosis, dispatch_press=lambda _scope, _round: (evidence,), evidence={"result.txt": evidence})
+    from easy_cheese.shared.fanout.remediation import PressGateResult
+
+    result = execute_accepted_handoff(fixture["pointer"], artifact_root=tmp_path / "postmerge-cure", repository_root=tmp_path, dispatch_writer=writer, dispatch_review=review, dispatch_diagnosis=diagnosis, dispatch_press=lambda _scope, _round: PressGateResult(True, "baseline-1", evidence=(evidence,)), evidence={"result.txt": evidence})
     assert result.fan_next_step == "done"
     assert result.whole_task_complete
     assert diagnosis_calls == 1
@@ -1485,3 +1516,319 @@ def test_execute_fan_writer_failure_blocks_without_review_or_diagnosis(tmp_path:
     assert events == []
     assert result.execution_results[1]
     assert all(item.disposition is CurdDisposition.BLOCKED for item in result.execution_results[1])
+
+
+def _passing_press(evidence: EvidenceRef) -> workflow.PressDispatch:
+    from easy_cheese.shared.fanout.remediation import PressGateResult
+
+    def press(_scope: RemediationScopeKey, _round: int) -> PressGateResult:
+        return PressGateResult(True, "baseline-1", evidence=(evidence,))
+
+    return press
+
+
+def test_execute_accepted_handoff_resumes_from_persisted_results(
+    tmp_path: Path,
+) -> None:
+    result_artifact = _write_ref(
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    fixture = _full_fixture(tmp_path / "resume", coverage_ids=("root", "leaf"), partial=False)
+    counts = {"cook": 0, "age": 0, "press": 0}
+
+    def writer(context: Mapping[str, object]) -> CurdResultWriterView:
+        counts["cook"] += 1
+        return _writer(context)
+
+    def review(request: object) -> ReviewResultWriterView:
+        counts["age"] += 1
+        return _review(request)
+
+    def press(scope: RemediationScopeKey, round_number: int) -> PressGateResult:
+        counts["press"] += 1
+        return _passing_press(evidence)(scope, round_number)
+
+    kwargs: ExecuteAcceptedHandoffKwargs = {
+        "artifact_root": tmp_path / "resume", "repository_root": tmp_path,
+        "dispatch_writer": writer, "dispatch_review": review,
+        "dispatch_diagnosis": _diagnosis, "dispatch_press": press,
+        "evidence": {"result.txt": evidence},
+    }
+    first = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    first_counts = counts.copy()
+    second = execute_accepted_handoff(fixture["pointer"], **kwargs)
+
+    assert first.fan_next_step == "done"
+    assert second.fan_next_step == "done"
+    assert second.execution_result_refs
+    assert counts == first_counts
+
+
+def test_execute_partial_coverage_routes_to_mold(tmp_path: Path) -> None:
+    result_artifact = _write_ref(
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    fixture = _full_fixture(tmp_path / "partial-execution", coverage_ids=("root",), partial=True)
+    result = execute_accepted_handoff(
+        fixture["pointer"], artifact_root=tmp_path / "partial-execution",
+        repository_root=tmp_path, dispatch_writer=_writer,
+        dispatch_review=_review, dispatch_diagnosis=_diagnosis,
+        evidence={"result.txt": evidence},
+    )
+    assert result.fan_next_step == "mold"
+    assert not result.whole_task_complete
+
+
+def test_execute_persisted_stall_exposes_validated_remediation_request(
+    tmp_path: Path,
+) -> None:
+    fixture = _full_fixture(tmp_path / "stall", coverage_ids=("root", "leaf"), partial=False)
+
+    def failing_writer(_context: Mapping[str, object]) -> CurdResultWriterView:
+        raise RuntimeError("writer unavailable")
+
+    result = execute_accepted_handoff(
+        fixture["pointer"], artifact_root=tmp_path / "stall",
+        repository_root=tmp_path, dispatch_writer=failing_writer,
+        dispatch_review=_review, dispatch_diagnosis=_diagnosis,
+    )
+    assert result.fan_next_step == "mold"
+    assert result.remediation_request_ref is not None
+    payload = Path(urlsplit(result.remediation_request_ref.uri).path).read_bytes()
+    request = cast("PlannerRequest", validate_contract(
+        payload, PlannerRequest, _version(PlannerRequest)
+    ).value)
+    assert request.kind is PlannerRequestKind.REMEDIATE
+    assert request.source_plan_ref is not None
+    assert request.source_plan_ref.plan_id == fixture["plan"].plan_id
+    assert {item.artifact.role for item in request.evidence} >= {"remediation_state", "curd-result"}
+
+
+def test_execute_rejects_corrupt_resume_context_and_cross_plan_cache(
+    tmp_path: Path,
+) -> None:
+    result_artifact = _write_ref(
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    fixture = _full_fixture(tmp_path / "corrupt", coverage_ids=("root", "leaf"), partial=False)
+    kwargs: ExecuteAcceptedHandoffKwargs = {
+        "artifact_root": tmp_path / "corrupt", "repository_root": tmp_path,
+        "dispatch_writer": _writer, "dispatch_review": _review,
+        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "evidence": {"result.txt": evidence},
+    }
+    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+
+    context_path = cast(Callable[[Path, str, str], Path], getattr(fan_execute, "_context_path"))(
+        tmp_path / "corrupt", "cook-plan-cook-request", "root"
+    )
+    _ = context_path.write_text("not-json")
+    with pytest.raises(ContractValidationError, match="checkpoint artifact digest mismatch"):
+        _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+
+    other_root = tmp_path / "cross-plan"
+    other_fixture = _full_fixture(other_root, coverage_ids=("root", "leaf"), partial=False)
+    other_kwargs = cast(ExecuteAcceptedHandoffKwargs, cast(object, dict(kwargs)))
+    other_kwargs["artifact_root"] = other_root
+    _ = execute_accepted_handoff(other_fixture["pointer"], **other_kwargs)
+    import easy_cheese.skills.cook.preparation.execute as execute_module
+    record_path = cast(Callable[[Path, str], Path], getattr(execute_module, "_execution_record_path"))(
+        other_root, "cook-plan-cook-request"
+    )
+    payload = cast(object, json.loads(record_path.read_text()))
+    assert isinstance(payload, dict)
+    payload = cast(dict[str, object], payload)
+    results_payload = payload["results"]
+    assert isinstance(results_payload, list)
+    results_payload = cast(list[object], results_payload)
+    first_result = results_payload[0]
+    assert isinstance(first_result, dict)
+    first_result = cast(dict[str, object], first_result)
+    source_plan_ref = first_result["source_plan_ref"]
+    assert isinstance(source_plan_ref, dict)
+    source_plan_ref = cast(dict[str, object], source_plan_ref)
+    source_plan_ref["plan_id"] = "other-plan"
+    _ = record_path.write_bytes(canonical_bytes(payload))
+    with pytest.raises(ContractValidationError, match="another plan"):
+        _ = execute_accepted_handoff(other_fixture["pointer"], **other_kwargs)
+
+def test_execute_rejects_missing_checkpoint_commit_marker(tmp_path: Path) -> None:
+    result_artifact = _write_ref(
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    root = tmp_path / "missing-marker"
+    fixture = _full_fixture(root, coverage_ids=("root", "leaf"), partial=False)
+    kwargs: ExecuteAcceptedHandoffKwargs = {
+        "artifact_root": root, "repository_root": tmp_path,
+        "dispatch_writer": _writer, "dispatch_review": _review,
+        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "evidence": {"result.txt": evidence},
+    }
+    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+    manifest_path = cast(Callable[[Path, str], Path], getattr(fan_execute, "_manifest_path"))(
+        root, "cook-plan-cook-request"
+    )
+    payload = cast(dict[str, object], json.loads(manifest_path.read_text()))
+    _ = payload.pop("commit_marker")
+    atomic_write(manifest_path, canonical_bytes(payload))
+    with pytest.raises(ContractValidationError, match="commit marker mismatch"):
+        _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+
+
+def test_execute_rejects_invalid_checkpoint_commit_marker(tmp_path: Path) -> None:
+    result_artifact = _write_ref(
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    root = tmp_path / "invalid-marker"
+    fixture = _full_fixture(root, coverage_ids=("root", "leaf"), partial=False)
+    kwargs: ExecuteAcceptedHandoffKwargs = {
+        "artifact_root": root, "repository_root": tmp_path,
+        "dispatch_writer": _writer, "dispatch_review": _review,
+        "dispatch_diagnosis": _diagnosis, "dispatch_press": _passing_press(evidence),
+        "evidence": {"result.txt": evidence},
+    }
+    _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+    manifest_path = cast(Callable[[Path, str], Path], getattr(fan_execute, "_manifest_path"))(
+        root, "cook-plan-cook-request"
+    )
+    payload = cast(dict[str, object], json.loads(manifest_path.read_text()))
+    payload["commit_marker"] = "invalid"
+    atomic_write(manifest_path, canonical_bytes(payload))
+    with pytest.raises(ContractValidationError, match="commit marker mismatch"):
+        _ = execute_accepted_handoff(fixture["pointer"], **kwargs)
+
+
+
+
+
+def test_execute_resume_from_productive_cure_skips_cure(
+    tmp_path: Path,
+) -> None:
+    from easy_cheese.shared.fanout.remediation_store import load_state, publish_state, scope_state_path
+    from easy_cheese.shared.fanout.remediation import PressGateResult
+    from easy_cheese_schemas import (
+        CoverageDisposition,
+        FixCostNow,
+        RemediationCursor,
+        RemediationDisposition,
+        RemediationScopeKey,
+        RemediationScopeKind,
+        ReviewCoverage,
+        ReviewDimension,
+        ReviewFinding,
+        ReviewResult,
+        ReviewSeverity,
+        SourcePlanRef,
+    )
+    from easy_cheese.shared.fanout import remediation
+
+    result_artifact = _write_ref(
+        tmp_path, b"verified\n", artifact_id="result", role="evidence",
+        filename="result.txt", media_type="text/plain",
+    )
+    evidence = EvidenceRef(evidence_id="result.txt", kind=EvidenceKind.SOURCE, artifact=result_artifact)
+    fixture = _full_fixture(tmp_path / "awaiting", coverage_ids=("root", "leaf"), partial=False)
+    counts = {"cook": 0, "age": 0, "cure": 0}
+
+    def writer(context: Mapping[str, object]) -> CurdResultWriterView:
+        if context.get("locked_selection"):
+            counts["cure"] += 1
+        else:
+            counts["cook"] += 1
+        return _writer(context)
+
+    def review(request: object) -> ReviewResultWriterView:
+        counts["age"] += 1
+        return _review(request)
+
+    kwargs: ExecuteAcceptedHandoffKwargs = {
+        "artifact_root": tmp_path / "awaiting", "repository_root": tmp_path,
+        "dispatch_writer": writer, "dispatch_review": review,
+        "dispatch_diagnosis": _diagnosis,
+        "dispatch_press": lambda _scope, _round: PressGateResult(
+            True, "baseline-1", evidence=(evidence,)
+        ),
+        "evidence": {"result.txt": evidence},
+    }
+    first = execute_accepted_handoff(fixture["pointer"], **kwargs)
+    assert first.fan_next_step == "done"
+
+    scope = RemediationScopeKey(
+        run_id="cook-plan-cook-request",
+        source_plan_ref=SourcePlanRef(
+            fixture["plan"].plan_id, fixture["plan"].revision, fixture["plan"].digest
+        ),
+        scope_kind=RemediationScopeKind.CURD,
+        scope_id="root",
+    )
+    state_path = scope_state_path(tmp_path / "awaiting", scope)
+    state = load_state(state_path)
+    state = attrs.evolve(
+        state,
+        cursor=RemediationCursor.AWAITING_REVIEW,
+        disposition=RemediationDisposition.ACTIVE,
+        locked_selection=(),
+        receipts=(),
+    )
+    review_result = ReviewResult(
+        contract_version=_version(ReviewResult),
+        review_id="resume-findings",
+        disposition=ReviewDisposition.FINDINGS,
+        findings=(ReviewFinding(
+            finding_id="resume-finding",
+            dimension=ReviewDimension.CORRECTNESS,
+            severity=ReviewSeverity.MEDIUM,
+            summary="resume finding",
+            evidence=(evidence,),
+            fix_cost_now=FixCostNow.CONTAINED,
+            location=None,
+        ),),
+        coverage=(ReviewCoverage(target="root", disposition=CoverageDisposition.COVERED),),
+    )
+    state, _ = remediation.decide_review(state, review_result, evidence.artifact)
+    state, _ = remediation.decide_cure(
+        state, evidence.artifact, state.locked_selection, (), (), ("src/root.py",), new_gate_failures=False
+    )
+    assert state.cursor is RemediationCursor.AWAITING_REVIEW
+    assert state.receipts[-1].cure_result_ref is not None
+    _ = publish_state(state_path, state)
+    import easy_cheese.skills.cook.preparation.fan_execute as fan_execute
+    manifest_path = cast(Callable[[Path, str], Path], getattr(fan_execute, "_manifest_path"))(
+        tmp_path / "awaiting", "cook-plan-cook-request"
+    )
+    manifest = cast(dict[str, object], json.loads(manifest_path.read_text()))
+    raw_references = cast(list[object], manifest["references"])
+    artifact_from_json = cast(Callable[[object], ArtifactRef], getattr(fan_execute, "_artifact_from_json"))
+    path_ref = cast(Callable[..., ArtifactRef], getattr(fan_execute, "_path_ref"))
+    write_manifest = cast(Callable[..., ArtifactRef], getattr(fan_execute, "_write_checkpoint_manifest"))
+    references: list[ArtifactRef] = []
+    for raw_reference in raw_references:
+        reference = artifact_from_json(raw_reference)
+        if reference.uri == state_path.resolve().as_uri():
+            reference = path_ref(
+                state_path, artifact_id=reference.artifact_id, role=reference.role
+            )
+        references.append(reference)
+    _ = write_manifest(
+        tmp_path / "awaiting", "cook-plan-cook-request", fixture["plan"], tmp_path, tuple(references)
+    )
+    before = counts.copy()
+    second = execute_accepted_handoff(fixture["pointer"], **kwargs)
+
+    assert second.fan_next_step == "done"
+    assert counts["cook"] == before["cook"]
+    assert counts["cure"] == before["cure"]
+    assert counts["age"] == before["age"] + 1

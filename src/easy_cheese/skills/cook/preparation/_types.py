@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TypeAlias
+from typing import TypeAlias, cast
 
 import attrs
 
@@ -181,6 +181,10 @@ class CookExecutionOutcome:
     outcome_ref: ArtifactRef | None = None
     fan_next_step: str | None = None
     remediation_state_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
+    stop_evidence_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
+    remediation_request_ref: ArtifactRef | None = None
+    execution_result_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
+    scope_summaries: Mapping[str, object] = attrs.field(factory=lambda: cast(Mapping[str, object], {}))
 
 
 @attrs.define(frozen=True)

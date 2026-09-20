@@ -25,6 +25,7 @@ author. Nothing here ever accepts such a field from a caller.
 """
 from __future__ import annotations
 
+from enum import Enum
 from typing import Literal, TypedDict
 
 import attrs
@@ -40,12 +41,46 @@ from easy_cheese_schemas import (
     ReviewDebt,
     ReviewDisposition,
     ReviewFinding,
+    RemediationEventIdentity,
     ReviewResult,
     ReviewSeverity,
+    RemediationScopeKey,
     canonical_digest,
 )
 
 Action = Literal["age", "cure", "complete", "remediate", "blocked"]
+
+
+@attrs.frozen
+class PressGateResult:
+    """Host-validated result from one post-merge Press gate."""
+
+    passed: bool
+    baseline_id: str
+    new_failures: tuple[str, ...] = ()
+    evidence: tuple[EvidenceRef, ...] = ()
+    scope: RemediationScopeKey | None = None
+    gate_round: int | None = None
+
+
+class PressStopClassification(str, Enum):
+    """Reason an initial Press gate stopped post-merge execution."""
+
+    ABSENT = "absent"
+    FAILED = "failed"
+    ERROR = "error"
+
+
+@attrs.frozen
+class PressStopRecord:
+    """Typed host record for an absent or failed initial Press gate."""
+
+    scope: RemediationScopeKey
+    gate_round: int
+    baseline_id: str | None
+    classification: PressStopClassification
+    failure_reason: str
+    evidence: tuple[EvidenceRef, ...] = ()
 
 _BLOCKING_DISPOSITIONS = (
     ReviewDisposition.BLOCKED,
@@ -82,6 +117,11 @@ def finding_key(finding: ReviewFinding) -> str:
     """
     dimension = finding.dimension.value
     path = finding.location.path if finding.location is not None else ""
+    if path:
+        parts = path.replace("\\", "/").split("/")
+        if path.startswith("/") or any(part == ".." for part in parts):
+            raise ValueError(f"unsafe finding location path: {path!r}")
+        path = "/".join(part for part in parts if part not in {"", "."})
     claim = " ".join(finding.summary.casefold().split())
     return canonical_digest(f"{dimension}\n{path}\n{claim}")
 
@@ -116,8 +156,14 @@ def locked_selection_and_deferred(
     """
     selected: list[str] = []
     deferred: list[str] = []
+    seen: set[str] = set()
     for finding in findings:
         key = finding_key(finding)
+        if key in seen:
+            # Duplicate normalized findings remain unresolved new debt.
+            deferred.append(key)
+            continue
+        seen.add(key)
         if finding.severity is ReviewSeverity.LOW:
             if finding.fix_cost_now is FixCostNow.CONTAINED:
                 selected.append(key)
@@ -126,6 +172,18 @@ def locked_selection_and_deferred(
         else:
             selected.append(key)
     return tuple(selected), tuple(deferred)
+
+
+def duplicate_finding_keys(findings: tuple[ReviewFinding, ...]) -> tuple[str, ...]:
+    """Return normalized finding keys whose collision makes reconciliation ambiguous."""
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for finding in findings:
+        key = finding_key(finding)
+        if key in seen:
+            duplicates.add(key)
+        seen.add(key)
+    return tuple(sorted(duplicates))
 
 
 def is_automation_clean(findings: tuple[ReviewFinding, ...]) -> bool:
@@ -153,6 +211,67 @@ def _verdict(
         "progress": progress,
         "reason": reason,
     }
+
+
+def bind_event_identity(
+    state: RemediationState,
+    request_digest: str,
+    *,
+    event: Literal["review", "cure"],
+) -> RemediationEventIdentity:
+    """Bind an event to active state and the exact host request digest."""
+    expected_cursor = (
+        RemediationCursor.AWAITING_REVIEW
+        if event == "review"
+        else RemediationCursor.AWAITING_CURE
+    )
+    if state.cursor is not expected_cursor:
+        raise ValueError(
+            f"{event} event rejected: cursor is {state.cursor.value}, not {expected_cursor.value}"
+        )
+    return RemediationEventIdentity(
+        run_id=state.scope.run_id,
+        plan_id=state.scope.source_plan_ref.plan_id,
+        plan_revision=state.scope.source_plan_ref.revision,
+        plan_digest=state.scope.source_plan_ref.digest,
+        scope_kind=state.scope.scope_kind,
+        scope_id=state.scope.scope_id,
+        state_id=state.state_id,
+        cursor=state.cursor,
+        expected_request=request_digest,
+        round_number=len(state.receipts) + 1,
+    )
+
+
+def validate_event_identity(
+    state: RemediationState,
+    identity: RemediationEventIdentity,
+    *,
+    event: Literal["review", "cure"],
+    request_digest: str | None = None,
+) -> None:
+    """Reject an event unless its host-owned identity matches active state."""
+    expected_cursor = (
+        RemediationCursor.AWAITING_REVIEW
+        if event == "review"
+        else RemediationCursor.AWAITING_CURE
+    )
+    expected = {
+        "run_id": state.scope.run_id,
+        "plan_id": state.scope.source_plan_ref.plan_id,
+        "plan_revision": state.scope.source_plan_ref.revision,
+        "plan_digest": state.scope.source_plan_ref.digest,
+        "scope_kind": state.scope.scope_kind,
+        "scope_id": state.scope.scope_id,
+        "state_id": state.state_id,
+        "cursor": expected_cursor,
+        "round_number": len(state.receipts) + 1,
+    }
+    for name, value in expected.items():
+        if getattr(identity, name) != value:
+            raise ValueError(f"{event} event identity mismatch: {name}")
+    if request_digest is not None and identity.expected_request != request_digest:
+        raise ValueError(f"{event} event identity mismatch: expected_request")
 
 
 def decide_review(
@@ -184,7 +303,16 @@ def decide_review(
     else:
         selected, deferred = locked_selection_and_deferred(review.findings)
         debt = compute_debt(review.findings)
-        if not selected:
+        collisions = duplicate_finding_keys(review.findings)
+        if collisions:
+            disposition = RemediationDisposition.STALLED
+            cursor = RemediationCursor.TERMINAL
+            action = "remediate"
+            best_debt = state.best_debt
+            stagnation_count = state.stagnation_count
+            progress = False
+            reason = "ambiguous duplicate finding keys: " + ", ".join(collisions)
+        elif not selected:
             disposition = RemediationDisposition.CLEAN
             cursor = RemediationCursor.TERMINAL
             action = "complete"
@@ -253,6 +381,7 @@ def decide_cure(
     touched_paths: tuple[str, ...],
     *,
     new_gate_failures: bool,
+    reverted_finding_keys: tuple[str, ...] = (),
 ) -> tuple[RemediationState, Verdict]:
     """Apply mini-spec Sec4's Cure event to `state`.
 
@@ -271,6 +400,10 @@ def decide_cure(
 
     applied = tuple(applied_finding_keys)
     deferred = tuple(deferred_finding_keys)
+    reverted = set(reverted_finding_keys)
+    locked = set(state.locked_selection)
+    if not reverted <= locked:
+        raise ValueError("reverted finding keys must be a subset of locked_selection")
     if set(applied) & set(deferred):
         raise ValueError("applied and deferred finding keys must not overlap")
     if set(applied) | set(deferred) != set(state.locked_selection):
@@ -278,20 +411,29 @@ def decide_cure(
             "applied and deferred finding keys must exactly partition locked_selection"
         )
 
+    final_applied = tuple(key for key in applied if key not in reverted)
+    final_deferred = tuple(dict.fromkeys((*deferred, *reverted)))
     latest_receipt = state.receipts[-1]
     updated_receipt = attrs.evolve(
         latest_receipt,
-        applied_finding_keys=applied,
-        deferred_finding_keys=deferred,
+        applied_finding_keys=final_applied,
+        deferred_finding_keys=final_deferred,
         gate_evidence=tuple(gate_evidence),
         touched_paths=tuple(touched_paths),
+        cure_result_ref=cure_ref,
     )
-    receipts = (*state.receipts[:-1], updated_receipt)
 
-    if not applied:
+    if reverted == locked:
         disposition = RemediationDisposition.STALLED
         cursor = RemediationCursor.TERMINAL
         action: Action = "remediate"
+        progress = False
+        reason = "all selected findings were reverted"
+        pending_cure_result_ref = None
+    elif not final_applied:
+        disposition = RemediationDisposition.STALLED
+        cursor = RemediationCursor.TERMINAL
+        action = "remediate"
         progress = False
         reason = "cure applied zero selected findings"
         pending_cure_result_ref = None
@@ -309,6 +451,9 @@ def decide_cure(
         progress = True
         reason = None
         pending_cure_result_ref = cure_ref
+
+    updated_receipt = attrs.evolve(updated_receipt, progress=progress, stop_reason=reason)
+    receipts = (*state.receipts[:-1], updated_receipt)
 
     next_state = attrs.evolve(
         state,

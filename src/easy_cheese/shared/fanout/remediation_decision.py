@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol, TextIO, cast
 
@@ -58,7 +59,12 @@ from easy_cheese_schemas import (
 )
 
 from easy_cheese.shared import cli
-from easy_cheese.shared.fanout.remediation import Verdict, decide_cure, decide_review
+from easy_cheese.shared.fanout.remediation import (
+    Verdict,
+    validate_event_identity,
+    decide_cure,
+    decide_review,
+)
 from easy_cheese.shared.publication import PublicationError, atomic_write
 
 
@@ -99,9 +105,19 @@ def _cross_check_gate_evidence(
     no byte-level cross-check runs. When paths are given, their count must equal
     the claimed gate-evidence count and each digest must match in order.
     """
+    claimed = observation.gate_evidence
+    if not gate_evidence_paths and claimed:
+        raise cli.CliError(
+            "every claimed gate-evidence reference requires a host-resolved --gate-evidence path",
+            exit_code=3,
+        )
+    if gate_evidence_paths and not claimed:
+        raise cli.CliError(
+            "--gate-evidence paths require claimed gate-evidence references",
+            exit_code=3,
+        )
     if not gate_evidence_paths:
         return
-    claimed = observation.gate_evidence
     if len(gate_evidence_paths) != len(claimed):
         raise cli.CliError(
             f"--gate-evidence count {len(gate_evidence_paths)} does not match the {len(claimed)} gate-evidence references in the cure observation",
@@ -117,12 +133,12 @@ def _cross_check_gate_evidence(
             )
 
 
-def _publish_and_reload(state_path: Path, next_state: RemediationState) -> None:
+def _publish_and_reload(state_path: Path, next_state: RemediationState) -> RemediationState:
     """Publish next_state atomically, then reload and validate it. Fail closed."""
     try:
         atomic_write(state_path, canonical_bytes(next_state))
         reread = state_path.read_bytes()
-        _ = validate_contract(
+        result = validate_contract(
             reread, RemediationState, supported_version_for(RemediationState)
         )
     except (PublicationError, OSError, ContractValidationError) as exc:
@@ -130,6 +146,52 @@ def _publish_and_reload(state_path: Path, next_state: RemediationState) -> None:
             f"state publish/reload failed; no next phase dispatched: {exc}",
             exit_code=2,
         ) from exc
+    return cast(RemediationState, result.value)
+
+
+def apply_event(
+    state: RemediationState,
+    *,
+    event: str,
+    artifact_ref: ArtifactRef,
+    review: ReviewResult | None = None,
+    observation: RemediationCureObservation | None = None,
+    request_digest: str | None = None,
+    publish: Callable[[RemediationState], RemediationState] | None = None,
+) -> tuple[RemediationState, Verdict]:
+    """Validate and route one event through the shared in-process decision core."""
+    if event == "review":
+        if review is None or observation is not None:
+            raise ValueError("review routing requires only a review payload")
+        if review.event_identity is None:
+            raise ValueError("review event is missing host-owned identity")
+        validate_event_identity(
+            state, review.event_identity, event="review", request_digest=request_digest
+        )
+        next_state, verdict = decide_review(state, review, artifact_ref)
+    elif event == "cure":
+        if observation is None or review is not None:
+            raise ValueError("cure routing requires only a Cure payload")
+        if observation.event_identity is None:
+            raise ValueError("cure event is missing host-owned identity")
+        validate_event_identity(
+            state, observation.event_identity, event="cure", request_digest=request_digest
+        )
+        next_state, verdict = decide_cure(
+            state,
+            artifact_ref,
+            observation.applied_finding_keys,
+            observation.deferred_finding_keys,
+            observation.gate_evidence,
+            observation.touched_paths,
+            new_gate_failures=bool(observation.new_gate_failures),
+            reverted_finding_keys=observation.reverted_finding_keys,
+        )
+    else:
+        raise ValueError(f"unknown remediation event: {event}")
+    if publish is not None:
+        next_state = publish(next_state)
+    return next_state, verdict
 
 
 def _decide(args: _Args) -> Verdict:
@@ -150,7 +212,10 @@ def _decide(args: _Args) -> Verdict:
         review = cast(ReviewResult, review_value)
         review_ref = _artifact_ref(args.review, review_raw, role="review")
         try:
-            next_state, verdict = decide_review(state, review, review_ref)
+            _next_state, verdict = apply_event(
+                state, event="review", artifact_ref=review_ref, review=review,
+                publish=lambda value: _publish_and_reload(state_path, value),
+            )
         except ValueError as exc:
             raise cli.CliError(f"review event rejected: {exc}", exit_code=3) from exc
     else:
@@ -166,19 +231,13 @@ def _decide(args: _Args) -> Verdict:
         _cross_check_gate_evidence(observation, gate_paths)
         cure_ref = _artifact_ref(args.cure_result, cure_raw, role="cure-result")
         try:
-            next_state, verdict = decide_cure(
-                state,
-                cure_ref,
-                observation.applied_finding_keys,
-                observation.deferred_finding_keys,
-                observation.gate_evidence,
-                observation.touched_paths,
-                new_gate_failures=bool(observation.new_gate_failures),
+            _next_state, verdict = apply_event(
+                state, event="cure", artifact_ref=cure_ref, observation=observation,
+                publish=lambda value: _publish_and_reload(state_path, value),
             )
         except ValueError as exc:
             raise cli.CliError(f"cure event rejected: {exc}", exit_code=3) from exc
 
-    _publish_and_reload(state_path, next_state)
     verdict["state_ref"] = str(state_path)
     return verdict
 

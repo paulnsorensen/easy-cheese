@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
-from easy_cheese_schemas import ArtifactRef, CurdPlan, EvidenceRef, RemediationState
+from easy_cheese_schemas import ArtifactRef, CurdPlan, CurdResult, EvidenceRef, RemediationState, validate_contract, supported_version_for, SourcePlanRef, canonical_bytes
 from easy_cheese_schemas.mold_cook import (
     CookPreparationOutcome,
     CookPreparationResult,
@@ -110,8 +111,15 @@ def execute_accepted_handoff(
     # `accept_mold_cook_handoff` already proved the planner result and the plan
     # are attached and that the coverage is a dependency-closed plan subset.
     selected = tuple(handoff.coverage.curd_ids)
+    execution_id = f"{plan.plan_id}-{handoff.request_id}"
+    cached_results, cached_refs = _load_execution_results(resolved_artifact_root, execution_id, plan)
+    legacy_results, legacy_refs = _load_execution_results(resolved_artifact_root, handoff.request_id, plan)
+    if legacy_results:
+        cached_results.update(legacy_results)
+        cached_refs = (*cached_refs, *legacy_refs)
     fan_outcome = None
     remediation_state_refs: tuple[ArtifactRef, ...] = ()
+    stop_evidence_refs: tuple[ArtifactRef, ...] = ()
     fan_topology = len(plan.curds) > 1 or any(curd.dependencies for curd in plan.curds)
     if fan_topology:
         fan_outcome = execute_fan(
@@ -123,14 +131,18 @@ def execute_accepted_handoff(
             dispatch_diagnosis=dispatch_diagnosis,
             evidence=evidence,
             selected=selected,
-            execution_id=f"{plan.plan_id}-{handoff.request_id}",
+            execution_id=execution_id,
             dispatch_press=dispatch_press,
+            results=cached_results,
         )
         execution_results = ((), fan_outcome.results)
         remediation_state_refs = tuple(
             _state_ref(resolved_artifact_root, state)
             for state in fan_outcome.scope_states.values()
         )
+        stop_evidence_refs = fan_outcome.stop_evidence_refs
+    elif cached_results:
+        execution_results = ((), tuple(cached_results.values()))
     else:
         execution_results = workflow.cook(
             plan,
@@ -154,7 +166,7 @@ def execute_accepted_handoff(
         pointer_path,
         request_id=handoff.request_id,
     )
-    outcome_payload = {
+    outcome_payload: dict[str, object] = {
         "request_id": handoff.request_id,
         "handoff_ref": resumable_ref,
         "planner_result_ref": handoff.planner_result_ref,
@@ -166,7 +178,17 @@ def execute_accepted_handoff(
         "resumable_ref": resumable_ref,
         "fan_next_step": fan_outcome.next_step if fan_outcome else None,
         "remediation_state_refs": remediation_state_refs,
+        "stop_evidence_refs": stop_evidence_refs,
+        "remediation_request_ref": fan_outcome.remediation_request_ref if fan_outcome else None,
+        "execution_result_refs": cached_refs,
+        "scope_summaries": fan_outcome.scope_summaries if fan_outcome else {},
     }
+    result_refs = tuple(
+        persist_value(resolved_artifact_root, result, artifact_id=f"{handoff.request_id}/result/{result.source_curd_ref.curd_id}", role="curd-result", schema_uri=result.contract_version.schema_uri)
+        for result in execution_results[1]
+    )
+    _persist_execution_results(resolved_artifact_root, handoff.request_id, execution_results[1])
+    outcome_payload["execution_result_refs"] = result_refs
     outcome_ref = persist_value(
         resolved_artifact_root,
         outcome_payload,
@@ -188,7 +210,56 @@ def execute_accepted_handoff(
         outcome_ref=outcome_ref,
         fan_next_step=fan_outcome.next_step if fan_outcome else None,
         remediation_state_refs=remediation_state_refs,
+        stop_evidence_refs=stop_evidence_refs,
+        remediation_request_ref=fan_outcome.remediation_request_ref if fan_outcome else None,
+        execution_result_refs=result_refs,
+        scope_summaries=fan_outcome.scope_summaries if fan_outcome else {},
     )
+
+
+def _execution_record_path(root: Path, request_id: str) -> Path:
+    resolved_root = root.resolve()
+    target = resolved_root / "execution" / f"{hashlib.sha256(request_id.encode()).hexdigest()}.json"
+    if not target.resolve().is_relative_to(resolved_root):
+        raise ContractValidationError("execution record escapes artifact root")
+    return target.resolve()
+
+
+def _persist_execution_results(root: Path, request_id: str, results: tuple[CurdResult, ...]) -> None:
+    from easy_cheese.shared.publication import atomic_write
+    path = _execution_record_path(root, request_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(path, canonical_bytes({"request_id": request_id, "results": list(results)}))
+
+
+def _load_execution_results(root: Path, request_id: str, plan: CurdPlan) -> tuple[dict[str, CurdResult], tuple[ArtifactRef, ...]]:
+    path = _execution_record_path(root, request_id)
+    if not path.exists():
+        return {}, ()
+    try:
+        payload = cast(object, json.loads(path.read_text()))
+        if not isinstance(payload, dict):
+            raise ValueError("execution results must be an object")
+        payload = cast(dict[str, object], payload)
+        raw_results = payload.get("results")
+        if not isinstance(raw_results, list):
+            raise ValueError("execution results must be a list")
+        raw_results = cast(list[object], raw_results)
+        results: dict[str, CurdResult] = {}
+        refs: list[ArtifactRef] = []
+        version = supported_version_for(CurdResult)
+        expected = SourcePlanRef(plan.plan_id, plan.revision, plan.digest)
+        for value in raw_results:
+            loaded = validate_contract(json.dumps(value, sort_keys=True).encode(), CurdResult, version)
+            result = cast(CurdResult, loaded.value)
+            if result.source_plan_ref != expected:
+                raise ContractValidationError("cached result belongs to another plan")
+            results[result.source_curd_ref.curd_id] = result
+            raw = json.dumps(value, sort_keys=True).encode()
+            refs.append(ArtifactRef(artifact_id=f"{request_id}/result/{result.source_curd_ref.curd_id}", role="curd-result", uri=path.resolve().as_uri(), digest=f"sha256:{hashlib.sha256(raw).hexdigest()}", size_bytes=len(raw), media_type="application/json"))
+        return results, tuple(refs)
+    except (OSError, KeyError, TypeError, ValueError, ContractValidationError) as error:
+        raise ContractValidationError(f"invalid persisted execution results: {error}") from error
 
 
 
