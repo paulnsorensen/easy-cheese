@@ -132,7 +132,7 @@ It never chains forward to the next phase, although its own `--auto` contract do
 
 The fan-pathway orchestrator loop decides and dispatches the next phase.
 
-`fan-pathway.md`'s `## Deterministic phase loop` defines this loop.
+`fan-pathway.md`'s `## Phase-chain topology` defines this loop.
 
 The retired `/ultracook` orchestrator previously owned the same responsibility.
 

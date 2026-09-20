@@ -102,6 +102,7 @@ Closed N/A bypasses Press.
 
 **Un-curded.** Keep small work in the single-coder path.
 For big work, ask "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
+Keep waves at a maximum of four.
 
 Use `python3 skills/cook/scripts/cook.pyz worktree teardown` for cleanup.
 Propagate `--auto` through dispatched phases.

@@ -117,7 +117,7 @@ class TestReadyWaves:
         assert not decision.complete
 
     def test_independent_siblings_both_ready_after_root(self) -> None:
-        # AC-6/AC-7: b and c are independent and both continue once a passes.
+        # Independent siblings become ready after their shared root passes.
         decision = schedule_wave(_plan(), {"a": _result("a", CurdDisposition.PASSED)})
         assert decision.ready == ("b", "c")
         assert decision.remaining == ("d",)
@@ -184,3 +184,17 @@ class TestCompletion:
         decision = schedule_wave(_plan(), {}, selected=("a", "b"))
         assert decision.ready == ("a",)
         assert decision.remaining == ("b",)
+
+
+class TestSelectedValidation:
+    def test_unknown_selected_curd_is_rejected(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="unknown curd"):
+            _ = schedule_wave(_plan(), {}, selected=("missing",))
+
+    def test_non_dependency_closed_selection_is_rejected(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="dependency-closed"):
+            _ = schedule_wave(_plan(), {}, selected=("b",))

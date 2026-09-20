@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from typing import cast
 
+from easy_cheese.shared.fanout.remediation_store import load_state
 from easy_cheese_schemas import (
     ArtifactRef,
     ContractVersion,
@@ -49,6 +50,11 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
+
+
+def _run_bound(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run the CLI with the request digest the fixtures bind."""
+    return _run_cli(*args, "--request-digest", DIGEST)
 
 
 def _write(path: Path, contract: object) -> Path:
@@ -92,9 +98,12 @@ def _finding(
 
 
 def _review(
+    state: RemediationState,
     findings: list[ReviewFinding] | None,
     disposition: ReviewDisposition,
 ) -> ReviewResult:
+    from easy_cheese.shared.fanout.remediation import bind_event_identity
+
     return ReviewResult(
         contract_version=ContractVersion(schema_uri=REVIEW_SCHEMA, major="1", minor="0"),
         review_id="review-1",
@@ -106,7 +115,10 @@ def _review(
             )
         ],
         reason=None,
+        event_identity=bind_event_identity(state, DIGEST, event="review"),
     )
+
+
 
 
 def _state(
@@ -130,8 +142,12 @@ def _state(
 
 
 def _cure_observation(
-    applied: tuple[str, ...], deferred: tuple[str, ...]
+    state: RemediationState,
+    applied: tuple[str, ...],
+    deferred: tuple[str, ...],
 ) -> RemediationCureObservation:
+    from easy_cheese.shared.fanout.remediation import bind_event_identity
+
     return RemediationCureObservation(
         contract_version=ContractVersion(schema_uri=CURE_SCHEMA, major="1", minor="0"),
         applied_finding_keys=applied,
@@ -139,17 +155,19 @@ def _cure_observation(
         touched_paths=("src/parser.py",),
         gate_evidence=(),
         new_gate_failures=(),
+        event_identity=bind_event_identity(state, DIGEST, event="cure"),
     )
 
 
 class TestReviewEvent:
     def test_findings_review_routes_to_cure_and_publishes(self, tmp_path: Path) -> None:
-        state = _write(tmp_path / "state.json", _state())
+        state_value = _state()
+        state = _write(tmp_path / "state.json", state_value)
         review = _write(
             tmp_path / "review.json",
-            _review([_finding()], ReviewDisposition.FINDINGS),
+            _review(state_value, [_finding()], ReviewDisposition.FINDINGS),
         )
-        result = _run_cli("--state", str(state), "--event", "review", "--review", str(review))
+        result = _run_bound("--state", str(state), "--event", "review", "--review", str(review))
         assert result.returncode == 0, result.stderr
         payload = cast("dict[str, object]", json.loads(result.stdout))
         assert payload["action"] == "cure"
@@ -161,11 +179,12 @@ class TestReviewEvent:
         assert len(cast("list[str]", republished["locked_selection"])) == 1
 
     def test_clean_review_completes_without_cure(self, tmp_path: Path) -> None:
-        state = _write(tmp_path / "state.json", _state())
+        state_value = _state()
+        state = _write(tmp_path / "state.json", state_value)
         review = _write(
-            tmp_path / "review.json", _review(None, ReviewDisposition.CLEAN)
+            tmp_path / "review.json", _review(state_value, None, ReviewDisposition.CLEAN)
         )
-        result = _run_cli("--state", str(state), "--event", "review", "--review", str(review))
+        result = _run_bound("--state", str(state), "--event", "review", "--review", str(review))
         assert result.returncode == 0, result.stderr
         payload = cast("dict[str, object]", json.loads(result.stdout))
         assert payload["action"] == "complete"
@@ -175,22 +194,24 @@ class TestReviewEvent:
 
 class TestCureEvent:
     def _review_then_state(self, tmp_path: Path) -> tuple[Path, list[str]]:
-        state = _write(tmp_path / "state.json", _state())
+        state_value = _state()
+        state = _write(tmp_path / "state.json", state_value)
         review = _write(
             tmp_path / "review.json",
-            _review([_finding()], ReviewDisposition.FINDINGS),
+            _review(state_value, [_finding()], ReviewDisposition.FINDINGS),
         )
-        result = _run_cli("--state", str(state), "--event", "review", "--review", str(review))
+        result = _run_bound("--state", str(state), "--event", "review", "--review", str(review))
         assert result.returncode == 0, result.stderr
         published = cast("dict[str, object]", json.loads(state.read_bytes()))
         return state, cast("list[str]", published["locked_selection"])
 
     def test_cure_applies_selection_and_returns_to_age(self, tmp_path: Path) -> None:
         state, selection = self._review_then_state(tmp_path)
+        cure_state = load_state(state.parent, state)
         cure = _write(
-            tmp_path / "cure.json", _cure_observation(tuple(selection), ())
+            tmp_path / "cure.json", _cure_observation(cure_state, tuple(selection), ())
         )
-        result = _run_cli(
+        result = _run_bound(
             "--state", str(state), "--event", "cure", "--cure-result", str(cure)
         )
         assert result.returncode == 0, result.stderr
@@ -201,10 +222,11 @@ class TestCureEvent:
 
     def test_zero_applied_cure_remediates(self, tmp_path: Path) -> None:
         state, selection = self._review_then_state(tmp_path)
+        cure_state = load_state(state.parent, state)
         cure = _write(
-            tmp_path / "cure.json", _cure_observation((), tuple(selection))
+            tmp_path / "cure.json", _cure_observation(cure_state, (), tuple(selection))
         )
-        result = _run_cli(
+        result = _run_bound(
             "--state", str(state), "--event", "cure", "--cure-result", str(cure)
         )
         assert result.returncode == 0, result.stderr
@@ -217,23 +239,21 @@ class TestCureEvent:
 class TestFailClosed:
     def test_review_event_without_review_flag_exits_2(self, tmp_path: Path) -> None:
         state = _write(tmp_path / "state.json", _state())
-        result = _run_cli("--state", str(state), "--event", "review")
+        result = _run_bound("--state", str(state), "--event", "review")
         assert result.returncode == 2
         assert "--review" in result.stderr
 
     def test_cure_event_without_cure_result_exits_2(self, tmp_path: Path) -> None:
-        state = _write(
-            tmp_path / "state.json", _state(cursor=RemediationCursor.AWAITING_CURE)
-        )
-        result = _run_cli("--state", str(state), "--event", "cure")
+        state = _write(tmp_path / "state.json", _state())
+        result = _run_bound("--state", str(state), "--event", "cure")
         assert result.returncode == 2
 
     def test_missing_state_file_exits_2(self, tmp_path: Path) -> None:
         review = _write(
             tmp_path / "review.json",
-            _review([_finding()], ReviewDisposition.FINDINGS),
+            _review(_state(), [_finding()], ReviewDisposition.FINDINGS),
         )
-        result = _run_cli(
+        result = _run_bound(
             "--state", str(tmp_path / "absent.json"), "--event", "review",
             "--review", str(review),
         )
@@ -245,9 +265,9 @@ class TestFailClosed:
         _ = state.write_bytes(b'{"not": "a remediation state"}')
         review = _write(
             tmp_path / "review.json",
-            _review([_finding()], ReviewDisposition.FINDINGS),
+            _review(_state(), [_finding()], ReviewDisposition.FINDINGS),
         )
-        result = _run_cli(
+        result = _run_bound(
             "--state", str(state), "--event", "review", "--review", str(review)
         )
         assert result.returncode == 3
@@ -258,3 +278,77 @@ class TestFailClosed:
         assert "--state" in result.stdout
         assert "--event" in result.stdout
         assert "--cure-result" in result.stdout
+        assert "--request-digest" in result.stdout
+
+
+OTHER_DIGEST = f"sha256:{'b' * 64}"
+
+
+class TestRequestDigest:
+    def _inputs(self, tmp_path: Path) -> tuple[Path, Path]:
+        state_value = _state()
+        state = _write(tmp_path / "state.json", state_value)
+        review = _write(
+            tmp_path / "review.json",
+            _review(state_value, [_finding()], ReviewDisposition.FINDINGS),
+        )
+        return state, review
+
+    def test_missing_request_digest_is_rejected(self, tmp_path: Path) -> None:
+        state, review = self._inputs(tmp_path)
+        before = state.read_bytes()
+        result = _run_cli("--state", str(state), "--event", "review", "--review", str(review))
+        assert result.returncode == 3
+        assert "--request-digest" in result.stderr
+        assert state.read_bytes() == before
+
+    def test_malformed_request_digest_is_rejected(self, tmp_path: Path) -> None:
+        state, review = self._inputs(tmp_path)
+        result = _run_cli(
+            "--state", str(state), "--event", "review", "--review", str(review),
+            "--request-digest", "sha256:abc",
+        )
+        assert result.returncode == 3
+        assert "--request-digest" in result.stderr
+
+    def test_wrong_request_digest_is_rejected(self, tmp_path: Path) -> None:
+        state, review = self._inputs(tmp_path)
+        before = state.read_bytes()
+        result = _run_cli(
+            "--state", str(state), "--event", "review", "--review", str(review),
+            "--request-digest", OTHER_DIGEST,
+        )
+        assert result.returncode == 3
+        assert "expected_request" in result.stderr
+        assert state.read_bytes() == before
+
+    def test_wrong_request_digest_rejects_cure_event(self, tmp_path: Path) -> None:
+        state, review = self._inputs(tmp_path)
+        assert _run_bound(
+            "--state", str(state), "--event", "review", "--review", str(review)
+        ).returncode == 0
+        cure_state = load_state(state.parent, state)
+        cure = _write(
+            tmp_path / "cure.json",
+            _cure_observation(cure_state, cure_state.locked_selection, ()),
+        )
+        result = _run_cli(
+            "--state", str(state), "--event", "cure", "--cure-result", str(cure),
+            "--request-digest", OTHER_DIGEST,
+        )
+        assert result.returncode == 3
+        assert "expected_request" in result.stderr
+
+    def test_matching_request_digest_passes(self, tmp_path: Path) -> None:
+        state, review = self._inputs(tmp_path)
+        result = _run_bound("--state", str(state), "--event", "review", "--review", str(review))
+        assert result.returncode == 0, result.stderr
+
+    def test_main_checks_request_digest_in_process(self, tmp_path: Path) -> None:
+        from easy_cheese.shared.fanout.remediation_decision import main
+
+        state, review = self._inputs(tmp_path)
+        base = ["--state", str(state), "--event", "review", "--review", str(review)]
+        assert main(base) == 3
+        assert main([*base, "--request-digest", OTHER_DIGEST]) == 3
+        assert main([*base, "--request-digest", DIGEST]) == 0

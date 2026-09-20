@@ -1,6 +1,9 @@
 """Unit tests for the pure remediation decision core (mini-spec Sec4/Sec5)."""
 from __future__ import annotations
 
+import attrs
+import pytest
+
 from easy_cheese_schemas import (
     ArtifactRef,
     ContractVersion,
@@ -26,6 +29,7 @@ from easy_cheese_schemas import (
 from easy_cheese.shared.fanout import remediation
 
 DIGEST = f"sha256:{'a' * 64}"
+OTHER_DIGEST = f"sha256:{'b' * 64}"
 REVIEW_SCHEMA = "https://schemas.easy-cheese.dev/review-result"
 
 
@@ -165,27 +169,51 @@ class TestComputeDebt:
 class TestLockedSelectionAndDeferred:
     def test_medium_plus_floor_and_contained_low_carve_out(self) -> None:
         findings = [
-            _finding("f1", ReviewSeverity.MEDIUM),
-            _finding("f2", ReviewSeverity.LOW, FixCostNow.CONTAINED),
-            _finding("f3", ReviewSeverity.LOW, FixCostNow.SPRAWLING),
+            _finding("f1", ReviewSeverity.MEDIUM, summary="medium defect"),
+            _finding("f2", ReviewSeverity.LOW, FixCostNow.CONTAINED, summary="contained low"),
+            _finding("f3", ReviewSeverity.LOW, FixCostNow.SPRAWLING, summary="sprawling low"),
+            _finding("f4", ReviewSeverity.LOW, FixCostNow.MODERATE, summary="moderate low"),
         ]
-        selected, deferred = remediation.locked_selection_and_deferred(tuple(findings))
-        assert len(selected) == 2
-        assert len(deferred) == 1
-        assert remediation.finding_key(findings[2]) in deferred
+        keys = [remediation.finding_key(finding) for finding in findings]
+        assert len(set(keys)) == 4
+        selected, deferred, collisions = remediation.locked_selection_and_deferred(
+            tuple(findings)
+        )
+        assert selected == (keys[0], keys[1])
+        assert deferred == (keys[2], keys[3])
+        assert collisions == ()
+
+    def test_duplicate_key_is_deferred_and_reported_as_collision(self) -> None:
+        findings = [
+            _finding("f1", ReviewSeverity.MEDIUM),
+            _finding("f2", ReviewSeverity.HIGH),
+            _finding("f3", ReviewSeverity.LOW, FixCostNow.CONTAINED),
+        ]
+        key = remediation.finding_key(findings[0])
+        selected, deferred, collisions = remediation.locked_selection_and_deferred(
+            tuple(findings)
+        )
+        assert selected == (key,)
+        assert deferred == (key, key)
+        assert collisions == (key,)
 
 
-class TestIsAutomationClean:
-    def test_only_non_contained_low_is_clean(self) -> None:
-        findings = [_finding("f1", ReviewSeverity.LOW, FixCostNow.SPRAWLING)]
-        assert remediation.is_automation_clean(tuple(findings)) is True
+class TestAutomationCleanSelection:
+    # AC-18: a review is automation-clean when the selection floor is empty.
+    def test_only_non_contained_low_selects_nothing(self) -> None:
+        findings = (_finding("f1", ReviewSeverity.LOW, FixCostNow.SPRAWLING),)
+        selected, deferred, _ = remediation.locked_selection_and_deferred(findings)
+        assert selected == ()
+        assert deferred == (remediation.finding_key(findings[0]),)
 
-    def test_contained_low_blocks_clean(self) -> None:
-        findings = [_finding("f1", ReviewSeverity.LOW, FixCostNow.CONTAINED)]
-        assert remediation.is_automation_clean(tuple(findings)) is False
+    def test_contained_low_is_selected(self) -> None:
+        findings = (_finding("f1", ReviewSeverity.LOW, FixCostNow.CONTAINED),)
+        selected, deferred, _ = remediation.locked_selection_and_deferred(findings)
+        assert selected == (remediation.finding_key(findings[0]),)
+        assert deferred == ()
 
-    def test_no_findings_is_clean(self) -> None:
-        assert remediation.is_automation_clean(()) is True
+    def test_no_findings_selects_nothing(self) -> None:
+        assert remediation.locked_selection_and_deferred(()) == ((), (), ())
 
 
 class TestDecideReviewCleanAndBlocked:
@@ -212,10 +240,24 @@ class TestDecideReviewCleanAndBlocked:
         assert verdict["action"] == "blocked"
         assert next_state.disposition is RemediationDisposition.BLOCKED
 
+    def test_identical_key_findings_stall_as_collision(self) -> None:
+        # T8b: two findings with one key make reconciliation ambiguous.
+        findings = [_finding("f1"), _finding("f2")]
+        key = remediation.finding_key(findings[0])
+        next_state, verdict = remediation.decide_review(
+            _state(), _review(findings), _artifact()
+        )
+        assert verdict["action"] == "remediate"
+        assert verdict["reason"] == f"ambiguous duplicate finding keys: {key}"
+        assert next_state.disposition is RemediationDisposition.STALLED
+        assert next_state.cursor is RemediationCursor.TERMINAL
+        assert next_state.best_debt is None
+        assert next_state.receipts[-1].deferred_finding_keys == (key,)
+
 
 class TestDecideReviewStagnation:
     def test_initial_review_sets_best_debt_no_stagnation(self) -> None:
-        # AC-8/scenario 8: fresh state, best_debt is None
+        # The initial review establishes best debt without stagnation.
         state = _state()
         review = _review([_finding("f1", ReviewSeverity.HIGH)])
         next_state, verdict = remediation.decide_review(state, review, _artifact())
@@ -250,6 +292,92 @@ class TestDecideReviewStagnation:
         assert verdict["action"] == "remediate"
         assert next_state.disposition is RemediationDisposition.STALLED
         assert next_state.cursor is RemediationCursor.TERMINAL
+        assert next_state.stagnation_count == 2
+
+
+class TestDecideReviewRoundCeiling:
+    def _second_round_state(self) -> RemediationState:
+        cured = _reviewed_state((DIGEST,))
+        state, _ = remediation.decide_cure(
+            cured, _artifact("cure-1"), (DIGEST,), (), (), (), new_gate_failures=False
+        )
+        return attrs.evolve(
+            state, best_debt=remediation.compute_debt((_finding("f0", ReviewSeverity.HIGH),))
+        )
+
+    def test_unclean_review_past_ceiling_stalls(self) -> None:
+        # R29: round 2 with max_rounds=1 stops, even with a new best debt.
+        state = self._second_round_state()
+        review = _review([_finding("f1", ReviewSeverity.MEDIUM)])
+        next_state, verdict = remediation.decide_review(
+            state, review, _artifact("review-2"), max_rounds=1
+        )
+        assert verdict["action"] == "remediate"
+        assert verdict["reason"] == "round ceiling reached"
+        assert next_state.disposition is RemediationDisposition.STALLED
+        assert next_state.cursor is RemediationCursor.TERMINAL
+        assert next_state.receipts[-1].stop_reason == "round ceiling reached"
+        assert next_state.stagnation_count == state.stagnation_count
+
+    def test_clean_review_past_ceiling_completes(self) -> None:
+        state = self._second_round_state()
+        review = _review([], disposition=ReviewDisposition.CLEAN)
+        _next_state, verdict = remediation.decide_review(
+            state, review, _artifact("review-2"), max_rounds=1
+        )
+        assert verdict["action"] == "complete"
+
+    def test_review_at_ceiling_continues(self) -> None:
+        state = self._second_round_state()
+        review = _review([_finding("f1", ReviewSeverity.MEDIUM)])
+        _next_state, verdict = remediation.decide_review(
+            state, review, _artifact("review-2"), max_rounds=2
+        )
+        assert verdict["action"] == "cure"
+
+    def test_default_ceiling_is_eight(self) -> None:
+        state = self._second_round_state()
+        review = _review([_finding("f1", ReviewSeverity.MEDIUM)])
+        _next_state, verdict = remediation.decide_review(state, review, _artifact("review-2"))
+        assert verdict["action"] == "cure"
+        with pytest.raises(ValueError, match="max_rounds"):
+            _ = remediation.decide_review(state, review, _artifact("review-2"), max_rounds=0)
+
+
+class TestEventIdentity:
+    def test_review_binds_next_round_and_cure_binds_receipt_round(self) -> None:
+        # L2: a Cure event shares the round of the receipt it completes.
+        review_identity = remediation.bind_event_identity(_state(), DIGEST, event="review")
+        assert review_identity.round_number == 1
+        state = _reviewed_state((DIGEST,))
+        cure_identity = remediation.bind_event_identity(state, DIGEST, event="cure")
+        assert cure_identity.round_number == 1
+        remediation.validate_event_identity(
+            state, cure_identity, event="cure", request_digest=DIGEST
+        )
+
+    def test_cure_bound_to_other_round_is_rejected(self) -> None:
+        state = _reviewed_state((DIGEST,))
+        identity = remediation.bind_event_identity(state, DIGEST, event="cure")
+        stale = attrs.evolve(identity, round_number=identity.round_number + 1)
+        with pytest.raises(ValueError, match="identity mismatch: round_number"):
+            remediation.validate_event_identity(state, stale, event="cure")
+
+    def test_mismatched_scope_id_is_rejected(self) -> None:
+        state = _reviewed_state((DIGEST,))
+        identity = remediation.bind_event_identity(state, DIGEST, event="cure")
+        foreign = attrs.evolve(identity, scope_id="curd-2")
+        with pytest.raises(ValueError, match="identity mismatch: scope_id"):
+            remediation.validate_event_identity(state, foreign, event="cure")
+
+    def test_wrong_expected_request_is_rejected(self) -> None:
+        state = _reviewed_state((DIGEST,))
+        identity = remediation.bind_event_identity(state, DIGEST, event="cure")
+        remediation.validate_event_identity(state, identity, event="cure")
+        with pytest.raises(ValueError, match="identity mismatch: expected_request"):
+            remediation.validate_event_identity(
+                state, identity, event="cure", request_digest=OTHER_DIGEST
+            )
 
 
 class TestDecideReviewHostDerivation:
@@ -258,8 +386,6 @@ class TestDecideReviewHostDerivation:
         # for an agent to author; decide_review only ever reads disposition
         # and findings.
         review = _review([_finding("f1", ReviewSeverity.HIGH)])
-        import attrs
-
         field_names = set(attrs.fields_dict(type(review)))
         assert field_names == {
             "contract_version",
@@ -268,31 +394,67 @@ class TestDecideReviewHostDerivation:
             "findings",
             "coverage",
             "reason",
+            "event_identity",
         }
+
+
+def _reviewed_state(selection: tuple[str, ...]) -> RemediationState:
+    receipt = ProgressReceipt(
+        round_number=1,
+        review_ref=_artifact(),
+        preceding_cure_result_ref=None,
+        selected_finding_keys=selection,
+        applied_finding_keys=(),
+        deferred_finding_keys=(),
+        debt=ReviewDebt.compute(critical=0, high=1, medium=0, contained_low=0),
+        gate_evidence=[],
+        touched_paths=[],
+        progress=True,
+        stop_reason=None,
+    )
+    return _state(
+        cursor=RemediationCursor.AWAITING_CURE,
+        locked_selection=selection,
+        receipts=(receipt,),
+    )
 
 
 class TestDecideCure:
     def _reviewed_state(self, selection: tuple[str, ...]) -> RemediationState:
-        from easy_cheese_schemas import ProgressReceipt, ReviewDebt
+        return _reviewed_state(selection)
 
-        receipt = ProgressReceipt(
-            round_number=1,
-            review_ref=_artifact(),
-            preceding_cure_result_ref=None,
-            selected_finding_keys=selection,
-            applied_finding_keys=(),
-            deferred_finding_keys=(),
-            debt=ReviewDebt.compute(critical=0, high=1, medium=0, contained_low=0),
-            gate_evidence=[],
-            touched_paths=[],
-            progress=True,
-            stop_reason=None,
+    def test_reverting_whole_selection_stalls(self) -> None:
+        # T8c: a cure that reverts every selected key makes no progress.
+        state = _reviewed_state((DIGEST,))
+        next_state, verdict = remediation.decide_cure(
+            state,
+            _artifact("cure-1"),
+            (DIGEST,),
+            (),
+            (),
+            (),
+            new_gate_failures=False,
+            reverted_finding_keys=(DIGEST,),
         )
-        return _state(
-            cursor=RemediationCursor.AWAITING_CURE,
-            locked_selection=selection,
-            receipts=(receipt,),
-        )
+        assert verdict["action"] == "remediate"
+        assert verdict["reason"] == "all selected findings were reverted"
+        assert next_state.disposition is RemediationDisposition.STALLED
+        assert next_state.receipts[-1].applied_finding_keys == ()
+        assert next_state.receipts[-1].deferred_finding_keys == (DIGEST,)
+
+    def test_reverted_key_outside_selection_raises(self) -> None:
+        state = _reviewed_state((DIGEST,))
+        with pytest.raises(ValueError, match="subset of locked_selection"):
+            _ = remediation.decide_cure(
+                state,
+                _artifact("cure-1"),
+                (DIGEST,),
+                (),
+                (),
+                (),
+                new_gate_failures=False,
+                reverted_finding_keys=(OTHER_DIGEST,),
+            )
 
     def test_zero_applied_stops_immediately(self) -> None:
         # AC-5 / regression scenario 3

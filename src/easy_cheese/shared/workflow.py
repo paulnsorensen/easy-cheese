@@ -25,6 +25,7 @@ from easy_cheese_schemas.contracts import (
     CurdPlan,
     CurdResult,
     CurdResultWriterView,
+    RemediationCureWriterView,
     DeliverableWriterView,
     DiagnosisDisposition,
     DiagnosisRequest,
@@ -75,7 +76,6 @@ PlannerDispatch = Callable[[PlannerRequest], object]
 WriterDispatch = Callable[[Mapping[str, object]], object]
 ReviewDispatch = Callable[[ReviewRequest], object]
 DiagnosisDispatch = Callable[[DiagnosisRequest], object]
-PressDispatch = Callable[[object, int], Sequence[EvidenceRef]]
 BranchResult = ReviewResult | DiagnosisResult
 ExecutionResults = tuple[tuple[BranchResult, ...], tuple[CurdResult, ...]]
 WorkflowResults = tuple[PlannerResult, tuple[BranchResult, ...], tuple[CurdResult, ...]]
@@ -161,6 +161,8 @@ def _canonical_value(value: object) -> object:
     if isinstance(value, (tuple, list)):
         sequence = cast(tuple[object, ...] | list[object], value)
         return [_canonical_value(item) for item in sequence]
+    if isinstance(value, bytes):
+        return {"__bytes__": value.hex()}
     return value
 
 
@@ -686,6 +688,13 @@ def _writer_view(output: object) -> CurdResultWriterView:
         "writer dispatch must return a curd result writer view"
     )
 
+def _cure_writer_view(output: object) -> RemediationCureWriterView:
+    if isinstance(output, RemediationCureWriterView):
+        return output
+    raise ContractValidationError(
+        "Cure writer dispatch must return a remediation Cure writer view"
+    )
+
 
 def _blocked_rows(
     criteria: tuple[Criterion, ...], reason: str
@@ -955,7 +964,8 @@ class CurdWriterExecution:
     deliverables: Mapping[str, ArtifactRef]
     subject: ArtifactRef
     result: CurdResult
-
+    cure_reconciliation: RemediationCureWriterView | None = None
+    writer_context_digest: str = ""
 
 def execute_curd_writer(
     plan: CurdPlan,
@@ -986,6 +996,7 @@ def execute_curd_writer(
         phase=phase,
     )
     writer_context = context if extra_context is None else {**context, **extra_context}
+    writer_context_digest = _canonical_digest(writer_context)
     writer_result_id = result_id or f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
     try:
         output = dispatch_writer(writer_context)
@@ -1013,8 +1024,15 @@ def execute_curd_writer(
             deliverables=deliverables,
             subject=_subject_artifact(result_id, provisional, artifact_directory),
             result=provisional.value,
+            cure_reconciliation=None,
+            writer_context_digest=writer_context_digest,
         )
-    writer_view = _writer_view(output)
+    cure_reconciliation = None
+    if phase == "cure":
+        cure_reconciliation = _cure_writer_view(output)
+        writer_view = cure_reconciliation.result
+    else:
+        writer_view = _writer_view(output)
     result_id = writer_result_id
     provisional, deliverables = _finalize_view(
         plan,
@@ -1045,6 +1063,8 @@ def execute_curd_writer(
         deliverables=deliverables,
         subject=subject,
         result=final.value,
+        cure_reconciliation=cure_reconciliation,
+        writer_context_digest=writer_context_digest,
     )
 
 
@@ -1582,12 +1602,38 @@ def run_workflow(
     return planner_result, branches, results
 
 
+
+# Public phase seams consumed by the Cook fan adapter.
+resolve_plan_context = _resolve_plan_context
+blocked_result = _blocked_result
+blocked_writer_view = _blocked_writer_view
+contract_version = _version
+diagnosis = _diagnosis
+evidence_values = _evidence_values
+failure_reason = _failure_reason
+review = _review
+reviewed_result_view = _reviewed_result_view
+result_invocation = _result_invocation
+normalize = _normalize
+subject_artifact = _subject_artifact
 __all__ = [
     "CureDiagnosisBinding",
     "CureDiagnosisBindings",
     "CurdWriterExecution",
     "WriterBudgetExceeded",
     "WriterCheckpoint",
+    "blocked_result",
+    "blocked_writer_view",
+    "contract_version",
+    "diagnosis",
+    "evidence_values",
+    "failure_reason",
+    "resolve_plan_context",
+    "review",
+    "reviewed_result_view",
+    "result_invocation",
+    "normalize",
+    "subject_artifact",
     "bind_diagnosis",
     "cook",
     "cure",

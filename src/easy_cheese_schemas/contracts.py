@@ -6,7 +6,7 @@ import re
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
-from typing import ClassVar, Protocol, TypeVar, cast
+from typing import ClassVar, Protocol, TypeVar, cast, override
 
 import attrs
 from attrs import define, field, validators
@@ -237,7 +237,12 @@ class ReviewSeverity(str, Enum):
 
 class FixCostNow(str, Enum):
     CONTAINED = "contained"
+    MODERATE = "moderate"
     SPRAWLING = "sprawling"
+
+    @override
+    def __str__(self) -> str:
+        return self.value
 
 
 class CoverageDisposition(str, Enum):
@@ -320,6 +325,13 @@ def _optional_string(
         _bounded_string(instance, attribute, value)
 
 
+
+
+def _optional_event_identity(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    if value is not None and not isinstance(value, RemediationEventIdentity):
+        raise TypeError(f"{attribute.name} must be a RemediationEventIdentity")
 @schema_constraints(pattern=_ID_RE.pattern, minLength=1, maxLength=128)
 def _identifier(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _ID_RE.fullmatch(value) is None:
@@ -398,7 +410,14 @@ def _media_type(_instance: object, attribute: _NamedAttribute, value: object) ->
         raise ValueError(f"{attribute.name} must be a valid media type")
 
 
-@schema_constraints(_constraints_of(_bounded_string))
+_REPOSITORY_RELATIVE_PATH_PATTERN = (
+    r"^(?!/)(?!\.{1,2}$)(?!.*(?:^|/)\.\.(?:/|$))[\s\S]+$"
+)
+
+
+@schema_constraints(
+    _constraints_of(_bounded_string), pattern=_REPOSITORY_RELATIVE_PATH_PATTERN
+)
 def _scope_path(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     _bounded_string(_instance, attribute, value)
     assert isinstance(value, str)
@@ -1410,6 +1429,9 @@ class ReviewResult:
         converter=_tuple_sequence, validator=_list_of(ReviewCoverage)
     )
     reason: str | None = field(default=None, validator=_optional_string)
+    event_identity: RemediationEventIdentity | None = field(
+        default=None, validator=_optional_event_identity
+    )
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_disposition(
@@ -1495,6 +1517,25 @@ class RemediationScopeKey:
             raise ValueError("postmerge scope_id must be the literal 'postmerge'")
 
 
+
+@define(frozen=True)
+class RemediationEventIdentity:
+    """Host-owned binding for one review or Cure event."""
+
+    run_id: str = field(validator=_identifier)
+    plan_id: str = field(validator=_identifier)
+    plan_revision: int = field(validator=_positive_integer)
+    plan_digest: str = field(validator=_digest)
+    scope_kind: RemediationScopeKind = field(
+        validator=validators.instance_of(RemediationScopeKind)
+    )
+    scope_id: str = field(validator=_identifier)
+    state_id: str = field(validator=_identifier)
+    cursor: RemediationCursor = field(validator=validators.instance_of(RemediationCursor))
+    expected_request: str = field(validator=_digest)
+    round_number: int = field(validator=_positive_integer)
+
+
 @define(frozen=True)
 class ReviewDebt:
     critical: int = field(validator=_non_negative_integer)
@@ -1552,6 +1593,11 @@ class ProgressReceipt:
         validator=validators.optional(validators.instance_of(ArtifactRef)),
     )
     stop_reason: str | None = field(default=None, validator=_optional_string)
+    cure_result_ref: ArtifactRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ArtifactRef)),
+    )
+
 
 
 @contract("remediation-state")
@@ -1585,6 +1631,49 @@ class RemediationState:
     receipts: tuple[ProgressReceipt, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_list_of(ProgressReceipt)
     )
+    @receipts.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_relations(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
+        if self.cursor is RemediationCursor.AWAITING_CURE:
+            if self.disposition is not RemediationDisposition.ACTIVE:
+                raise ValueError("awaiting_cure state must be active")
+            if not self.locked_selection:
+                raise ValueError("awaiting_cure state requires a locked selection")
+            if not self.receipts:
+                raise ValueError("awaiting_cure state requires a latest review receipt")
+            latest = self.receipts[-1]
+            if set(latest.selected_finding_keys) != set(self.locked_selection):
+                raise ValueError("latest review receipt selection must match locked_selection")
+            if latest.cure_result_ref is not None:
+                raise ValueError("awaiting_cure state cannot have a completed Cure receipt")
+        if self.cursor is RemediationCursor.AWAITING_REVIEW and self.disposition is not RemediationDisposition.ACTIVE:
+            raise ValueError("awaiting_review state must be active")
+        if self.cursor is RemediationCursor.TERMINAL:
+            if self.disposition is RemediationDisposition.ACTIVE:
+                raise ValueError("terminal state must have a terminal disposition")
+            if self.pending_cure_result_ref is not None:
+                raise ValueError("terminal state must not have a pending cure result")
+        if self.pending_cure_result_ref is not None:
+            if self.cursor is not RemediationCursor.AWAITING_REVIEW or not self.receipts:
+                raise ValueError("pending cure result requires an awaiting_review state with a receipt")
+            if self.receipts[-1].cure_result_ref != self.pending_cure_result_ref:
+                raise ValueError("pending cure result must match the latest receipt")
+        for index, receipt in enumerate(self.receipts, start=1):
+            if receipt.round_number != index:
+                raise ValueError("receipt round numbers must be sequential")
+            if index == 1 and receipt.preceding_cure_result_ref is not None:
+                raise ValueError("first receipt must not reference a preceding Cure")
+            if index > 1 and receipt.preceding_cure_result_ref is None:
+                raise ValueError("later receipts must reference a preceding Cure")
+            selected = set(receipt.selected_finding_keys)
+            applied = set(receipt.applied_finding_keys)
+            deferred = set(receipt.deferred_finding_keys)
+            if receipt.cure_result_ref is None:
+                if applied:
+                    raise ValueError("review receipt must not report Cure results")
+            elif applied & deferred or applied | deferred != selected:
+                raise ValueError("Cure receipt keys must partition its selection")
 
 
 @contract("remediation-cure-observation")
@@ -1617,6 +1706,13 @@ class RemediationCureObservation:
     new_gate_failures: tuple[str, ...] = field(
         converter=_tuple_sequence, validator=_identifier_list()
     )
+    reverted_finding_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    event_identity: RemediationEventIdentity | None = field(
+        default=None, validator=_optional_event_identity
+    )
+
 
 
 @contract("diagnosis-request")
@@ -2427,6 +2523,32 @@ class CurdResultWriterView:
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
 
+
+@define(frozen=True)
+class RemediationCureWriterView:
+    """Agent-authored Cure result and explicit finding reconciliation."""
+
+    result: CurdResultWriterView = field(
+        validator=validators.instance_of(CurdResultWriterView)
+    )
+    applied_finding_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    deferred_finding_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    reverted_finding_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+
+    def __attrs_post_init__(self) -> None:
+        applied = set(self.applied_finding_keys)
+        deferred = set(self.deferred_finding_keys)
+        reverted = set(self.reverted_finding_keys)
+        if applied & deferred:
+            raise ValueError("applied and deferred finding keys must be disjoint")
+        if not reverted <= applied:
+            raise ValueError("reverted finding keys must be applied finding keys")
 
 WriterPayload = (
     CurdPlanWriterView
@@ -3974,6 +4096,7 @@ __all__ = [
     "CrossFieldRule",
     "CurdResult",
     "CurdResultWriterView",
+    "RemediationCureWriterView",
     "DeliverableWriterView",
     "DiagnosisCause",
     "DiagnosisCauseWriterView",
@@ -3985,6 +4108,7 @@ __all__ = [
     "DiagnosisResultWriterView",
     "EvidenceKind",
     "EvidenceRef",
+    "FixCostNow",
     "GateApplicability",
     "GateApplicabilityDisposition",
     "GroundingOutcome",
@@ -4011,10 +4135,19 @@ __all__ = [
     "PlannerResultWriterView",
     "PlannerUncertainty",
     "PlannerUncertaintyWriterView",
+    "ProgressReceipt",
+    "RemediationCureObservation",
+    "RemediationCursor",
+    "RemediationDisposition",
+    "RemediationEventIdentity",
+    "RemediationScopeKey",
+    "RemediationScopeKind",
+    "RemediationState",
     "Reproduction",
     "ReproductionDisposition",
     "ReproductionWriterView",
     "ReviewCoverage",
+    "ReviewDebt",
     "ReviewDisposition",
     "ReviewDimension",
     "ReviewFinding",

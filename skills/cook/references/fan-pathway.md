@@ -307,6 +307,9 @@ Count the global Press only after every curd passes.
 Exclude wiring dispatches.
 
 Wiring rows exist in the manifest, not the curd block.
+
+## Recovery and aggregate gates
+
 - **Worker exhaustion.**
   A worker can run out of context or turns.
   The worker writes a partial typed handoff with `status: needs-context: <gap>`.

@@ -145,7 +145,7 @@ enum CriterionDisposition = "passed" | "failed" | "blocked" | "skipped"
 
 enum DiagnosisDisposition = "confirmed" | "inconclusive" | "not_reproduced" | "blocked" | "invalid" | "executor_failure"
 
-enum FixCostNow = "contained" | "sprawling"
+enum FixCostNow = "contained" | "moderate" | "sprawling"
 
 enum HypothesisDisposition = "confirmed" | "rejected" | "unresolved"
 

@@ -23,7 +23,7 @@ def _verdict(stdout: str) -> Verdict:
 
 class TestTableShapes:
     def test_linear_table_shape(self) -> None:
-        # AC1 guard: linear mode retains the fixed seven-phase chain.
+        # AC-16 guard: linear mode retains the fixed seven-phase chain.
         assert phase_decision.LINEAR_TABLE == [
             "cook",
             "press",
@@ -61,7 +61,6 @@ class TestTableShapes:
         assert phase_decision.decide(6, "ok", "done")["action"] == "stop"
 
 
-
 class TestNotApplicableTables:
     def test_linear_cook_spawns_age(self) -> None:
         result = phase_decision.decide(
@@ -89,7 +88,6 @@ class TestNotApplicableTables:
         assert result["next_phase"] == "cure"
 
 
-
 class TestCliTableFlag:
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -97,7 +95,6 @@ class TestCliTableFlag:
             capture_output=True,
             text=True,
         )
-
 
     def test_not_applicable_table_skips_press(self) -> None:
         result = self._run(
@@ -121,3 +118,17 @@ class TestCliTableFlag:
             "--phase-index", "0", "--status", "ok", "--table", "bogus"
         )
         assert result.returncode == 2
+
+    def test_not_applicable_curd_clean_completes(self) -> None:
+        result = self._run(
+            "--table",
+            "not-applicable-curd",
+            "--phase-index",
+            "1",
+            "--status",
+            "ok",
+            "--next",
+            "done",
+        )
+        assert result.returncode == 0
+        assert _verdict(result.stdout)["action"] == "clean_complete"
