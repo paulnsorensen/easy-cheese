@@ -4,6 +4,9 @@
 
 | Command | Purpose | Subcommands |
 | --- | --- | --- |
+| `gh-stack-preflight` | Validate the gh-stack trunk and origin branch before mutation |  |
+| `gh-stack-run` | Run one gh-stack mutation and reject warning-only success |  |
+| `gh-stack-verify` | Verify exact gh-stack PR and remote stack publication state |  |
 | `stack-tools` | Detect supported stacked-PR providers without mutating the repository |  |
 | `validate-publication` | Validate terminal publication evidence |  |
 | `wheypoint-resolve` | Resolve a phase slug through the shared Wheypoint kernel (JSON out) |  |
