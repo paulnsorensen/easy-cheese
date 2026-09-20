@@ -330,6 +330,10 @@ def _stream_regular(path: Path) -> tuple[os.stat_result, str]:
     return metadata, digest.hexdigest()
 
 
+def _display_path(name: str) -> str:
+    return os.fsencode(name).decode("utf-8", "backslashreplace")
+
+
 def _evidence_identity(path: Path) -> str:
     try:
         metadata = os.lstat(path)
@@ -377,7 +381,7 @@ def _evidence_files(root: Path, slug: str) -> dict[str, str]:
         try:
             files[name] = _evidence_identity(path)
         except OSError as exc:
-            display = os.fsencode(name).decode("utf-8", "backslashreplace")
+            display = _display_path(name)
             raise cli.CliError(f"cannot hash review input {display!r}: {exc}") from exc
     return files
 
@@ -521,7 +525,7 @@ def verify(*, root: Path, slug: str) -> None:
         )
         raise cli.CliError(
             f"review evidence changed after {slug!r}'s review lock, and the source tree "
-            + f"did not: {', '.join(moved) or 'unknown file'}. Write the packet and every "
+            + f"did not: {', '.join(_display_path(name) for name in moved) or 'unknown file'}. Write the packet and every "
             + "other .cheese/ input before the lock. To continue this review, run "
             + f"`{_LOCK_COMMAND} {slug} --refresh-evidence`, then write the report again."
         )
@@ -570,9 +574,7 @@ def refresh_evidence(*, root: Path, slug: str) -> Path:
     unexpected = sorted(set(candidate_files) - set(locked_files) - {packet_name})
     if moved or unexpected:
         changed = [*moved, *unexpected]
-        display = ", ".join(
-            os.fsencode(name).decode("utf-8", "backslashreplace") for name in changed
-        )
+        display = ", ".join(_display_path(name) for name in changed)
         raise cli.CliError(
             f"review evidence changed after {slug!r}'s review lock, so the evidence "
             + f"refresh is refused: {display}. Require a fresh review."

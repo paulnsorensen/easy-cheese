@@ -8,9 +8,12 @@ artifact that does or does not land on disk.
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
+import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -578,3 +581,37 @@ def test_non_utf8_evidence_path_is_named_without_loss(repo: Path, capsys: pytest
     _ = evidence.write_text("changed\n", encoding="utf-8")
     assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
     assert "\\xff" in capsys.readouterr().err
+
+
+def test_surrogate_path_diagnostic_is_safe_for_strict_utf8(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_name = os.fsdecode(b".cheese/age/demo-\xff-packet.md")
+    @dataclass(frozen=True)
+    class StubLock:
+        digest: str
+        source_digest: str
+        evidence_files: dict[str, str]
+
+    lock = StubLock("locked", "source", {raw_name: "old"})
+
+    def read_lock(_target: Path, _slug: str) -> StubLock:
+        return lock
+
+    def tree_digest(_root: Path, slug: str, evidence: bool = True) -> str:
+        _ = slug
+        return "current" if evidence else "source"
+
+    def evidence_files(_root: Path, _slug: str) -> dict[str, str]:
+        return {raw_name: "new"}
+
+    monkeypatch.setattr(review_lock, "_read_lock", read_lock)
+    monkeypatch.setattr(review_lock, "tree_digest", tree_digest)
+    monkeypatch.setattr(review_lock, "_evidence_files", evidence_files)
+    output = io.BytesIO()
+    stderr = io.TextIOWrapper(output, encoding="utf-8", errors="strict")
+    monkeypatch.setattr(sys, "stderr", stderr)
+
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    stderr.flush()
+    assert b"\\xff" in output.getvalue()
