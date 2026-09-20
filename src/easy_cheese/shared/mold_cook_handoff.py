@@ -19,6 +19,7 @@ import attrs
 from easy_cheese_schemas import SCHEMA_ROOT
 from easy_cheese_schemas.contracts import (
     ArtifactRef,
+    ContractVersion,
     CurdPlan,
     Landing,
     MAX_CONTRACT_BYTES,
@@ -36,6 +37,7 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookApproval,
     MoldCookApprovalDecision,
     MoldCookApprovalKind,
+    MoldCookApprovalSource,
     MoldCookCoverage,
     MoldCookHandoff,
     MoldCookMode,
@@ -83,13 +85,16 @@ __all__ = [
     "SetupEvidence",
     "SetupEvidenceExecutionError",
     "accept_mold_cook_handoff",
+    "bind_mold_cook_approval",
     "canonical_mold_cook_proposal",
     "dialogue_authorizes_execution",
     "evaluate_mold_cook_spec",
+    "host_scope_coverage",
     "materialize_artifact_ref",
     "publish_mold_cook_handoff",
     "resolve_contract",
     "resolve_contract_value",
+    "response_is_affirmative",
     "validate_mold_cook_approval",
     "validate_mold_cook_handoff",
     "validate_mold_cook_setup_evidence",
@@ -537,13 +542,90 @@ def _validate_proposal(
 
 
 _AFFIRMATIVE_RESPONSES = frozenset(
-    {"approved", "approve", "yes", "y", "ok", "lgtm", "confirmed"}
+    {
+        "approved",
+        "approve",
+        "yes",
+        "y",
+        "ok",
+        "lgtm",
+        "confirmed",
+        # The Mold handshake names these two verbs as its explicit approval.
+        "curdle",
+        "ship it",
+    }
 )
 
 
-def _response_is_affirmative(response_text: str) -> bool:
+def response_is_affirmative(response_text: str) -> bool:
     normalized = response_text.strip().casefold().rstrip(" \t.!,;:")
     return normalized in _AFFIRMATIVE_RESPONSES
+
+
+def bind_mold_cook_approval(
+    *,
+    request_id: str,
+    kind: MoldCookApprovalKind,
+    decision: MoldCookApprovalDecision,
+    source: MoldCookApprovalSource,
+    spec_digest: str,
+    proposal_ref: ArtifactRef,
+    response_ref: ArtifactRef,
+    response_text: str,
+    response_source: str,
+    coverage: MoldCookCoverage,
+    plan_digest: str | None = None,
+    setup_authorization: CookSetupAuthorization | None = None,
+) -> MoldCookApproval:
+    """Bind explicit response evidence to stable proposal and response refs."""
+
+    version = ContractVersion(
+        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
+        major="1",
+        minor="0",
+    )
+    return MoldCookApproval(
+        contract_version=version,
+        request_id=request_id,
+        kind=kind,
+        decision=decision,
+        source=source,
+        spec_digest=spec_digest,
+        proposal_ref=proposal_ref,
+        proposal_digest=proposal_ref.digest,
+        response_ref=response_ref,
+        response_digest=response_ref.digest,
+        response_text=response_text,
+        response_source=response_source,
+        coverage=coverage,
+        plan_digest=plan_digest,
+        setup_authorization=setup_authorization,
+    )
+
+
+def host_scope_coverage(
+    readiness: MoldCookSpecReadiness | None,
+    planner_value: PlannerResult | None,
+) -> MoldCookCoverage | None:
+    """Return the coverage Cook proposes for scope, never the approval's own.
+
+    A materialized plan is the strongest declaration of the work in hand; a
+    spec that declares landing layers names its full coverage instead. A spec
+    that declares neither leaves Cook with no coverage of its own to propose.
+    """
+
+    if planner_value is not None and planner_value.plan is not None:
+        return MoldCookCoverage(
+            curd_ids=tuple(curd.curd_id for curd in planner_value.plan.curds),
+            unresolved_work=planner_value.unresolved_work,
+        )
+    if readiness is not None and readiness.landing is not None:
+        declared = tuple(
+            curd_id for layer in readiness.landing.layers for curd_id in layer
+        )
+        if declared:
+            return MoldCookCoverage(curd_ids=declared)
+    return None
 
 
 def dialogue_authorizes_execution(dialogue: Mapping[str, object]) -> bool:
@@ -569,7 +651,7 @@ def _validate_response(approval: MoldCookApproval, artifact_root: str | Path) ->
         raise ContractValidationError(
             f"{approval.kind.value} approval carries {approval.decision.value} response"
         )
-    if not _response_is_affirmative(approval.response_text):
+    if not response_is_affirmative(approval.response_text):
         raise ContractValidationError("approval response is negative or unresolved")
 
     if approval.response_ref.role == "response":

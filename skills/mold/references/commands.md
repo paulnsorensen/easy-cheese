@@ -4,6 +4,7 @@
 
 | Command | Purpose |
 | --- | --- |
+| `approve` | Record the user's literal approval response as a retained MoldCookApproval |
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |
 | `curd-count` | Count candidate curds in a spec and recommend the next skill |
 | `domain-model-target` | Resolve the domain-model store from explicit Hallouminate probe results |

@@ -17,6 +17,7 @@ from easy_cheese_schemas.mold_cook import (
 from easy_cheese.shared.mold_cook_handoff import (
     canonical_mold_cook_proposal,
     evaluate_mold_cook_spec,
+    host_scope_coverage,
 )
 
 from ._types import (
@@ -30,7 +31,6 @@ from .approval import (
     approval_value,
     check_approval,
     check_previous_proposal,
-    host_scope_coverage,
     persist_proposal,
 )
 from .evidence import resolve_ref
