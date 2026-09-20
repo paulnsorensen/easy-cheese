@@ -81,7 +81,6 @@ def _opened_fd(
 @contextlib.contextmanager
 def _parent_directory(root: Path, parts: tuple[str, ...]):
     with contextlib.ExitStack() as stack:
-        current_fd = -1
         try:
             current_fd = stack.enter_context(_opened_fd(root, _DIRECTORY_FLAGS))
             for part in parts[:-1]:
