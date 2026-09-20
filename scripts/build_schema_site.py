@@ -79,10 +79,23 @@ def render_index(paths: dict[str, str]) -> str:
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>easy-cheese contract schemas</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text x=%228%22 y=%2213%22 font-size=%2213%22 text-anchor=%22middle%22>%F0%9F%A7%80</text></svg>">
     <style>
-      body {{ font-family: system-ui, sans-serif; margin: 0 auto; max-width: 46rem;
-             padding: 2rem 1rem; line-height: 1.6; }}
-      code {{ font-size: 0.95rem; }}
+      /* Token values follow the Easy Cheese Design System (tokens.json). */
+      :root {{ --field: #f8f7f3; --field-sunk: #f0eee6; --text: #191512;
+               --accent: #965300; --accent-low: #f9e4d0; --accent-high: #7a4c19; }}
+      @media (prefers-color-scheme: dark) {{
+        :root {{ --field: #140f0b; --field-sunk: #110c08; --text: #ecdfd3;
+                 --accent: #dd8c33; --accent-low: #3a230c; --accent-high: #f8bd86; }}
+      }}
+      body {{ font-family: ui-sans-serif, system-ui, sans-serif; margin: 0 auto; max-width: 46rem;
+             padding: 2rem 1rem; line-height: 1.6; background: var(--field); color: var(--text); }}
+      h1 {{ font: 560 2.625rem/1.1 Fraunces, Georgia, serif; letter-spacing: -0.035em; }}
+      a {{ color: var(--accent); text-underline-offset: 3px; }}
+      code {{ font: 0.9em/1.4 "IBM Plex Mono", ui-monospace, monospace; padding: .15em .4em;
+             border-radius: 4px; background: var(--field-sunk); }}
+      a > code {{ background: var(--accent-low); color: var(--accent-high); }}
+      :focus-visible {{ outline: 2px solid var(--accent); outline-offset: 3px; }}
       ul {{ padding-left: 1.2rem; }}
     </style>
   </head>

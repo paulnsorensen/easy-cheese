@@ -68,10 +68,11 @@ Leave transient artifact removal to normal `.cheese/` cleanup.
 ## Late evidence
 
 The report write can fail with `review evidence changed`. The error names each moved `.cheese/` file.
-This error means that the source tree still matches the lock. Only review evidence moved, for example a late packet.
+This error means that the source tree still matches the lock. Only a new late packet for this slug may be added.
 Run `python3 skills/age/scripts/age.pyz review-lock --slug <slug> --refresh-evidence`. Then write the report again.
-The refresh refuses when a source file moved.
-Record the refresh and the named files under `## Agent resolution` in the report.
+The refresh captures one candidate snapshot and compares its source digest before replacing the lock.
+It refuses source changes and every change or deletion of previously locked evidence. Require a fresh review.
+Record an accepted late packet and its named path under `## Agent resolution` in the report.
 Every other lock failure stays final. Do not take a new lock to force the write.
 
 ## Evidence tools and fallbacks

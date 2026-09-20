@@ -1,0 +1,58 @@
+/* easy-cheese design tokens for the review canvas.
+   Names and values agree with the Easy Cheese Design System (tokens.json).
+   The --cl-* primitives come from @cheeselord/design, so a flavor release moves this sheet too.
+   light-dark() follows color-scheme: the system decides unless <html data-theme> forces a theme. */
+@import '@cheeselord/design/styles/fonts.css';
+@import '@cheeselord/design/styles/flavors/easy-cheese.css';
+
+:root {
+  color-scheme: light dark;
+
+  --field: light-dark(var(--cl-paper), var(--cl-ink));
+  --field-sunk: light-dark(var(--cl-warm-paper), oklch(from var(--cl-ink) calc(l - 0.015) c h));
+  --panel: light-dark(oklch(from var(--cl-paper) 99.2% 0.003 h), var(--cl-panel));
+  --text: light-dark(oklch(from var(--cl-ink) 20% 0.008 h), var(--cl-bone));
+  --text-dim: light-dark(oklch(from var(--cl-ink) 47% 0.014 h), var(--cl-dim));
+  --text-disabled: light-dark(oklch(from var(--cl-ink) 62% 0.01 h), oklch(from var(--cl-ink) 50% 0.015 h));
+  --hairline: light-dark(oklch(from var(--cl-ink) l c h / 14%), oklch(from var(--cl-bone) l c h / 13%));
+  --edge: light-dark(oklch(from var(--cl-ink) 58% 0.014 h), oklch(from var(--cl-ink) 52% 0.018 h));
+  --accent: light-dark(oklch(from var(--cl-amber) 51% calc(c * 0.9) h), var(--cl-amber));
+  --accent-hover: light-dark(oklch(from var(--cl-amber) 44% calc(c * 0.9) h), oklch(from var(--cl-amber) calc(l - 0.07) c h));
+  --accent-wash: light-dark(oklch(from var(--cl-amber) 51% calc(c * 0.9) h / 8%), oklch(from var(--cl-amber) l c h / 8%));
+  --accent-low: light-dark(oklch(from var(--cl-amber) 93% calc(c * 0.25) h), oklch(from var(--cl-amber) 28% calc(c * 0.35) h));
+  --accent-high: light-dark(var(--cl-rind), oklch(from var(--cl-amber) 84% calc(c * 0.7) h));
+  --on-accent: light-dark(var(--cl-paper), var(--cl-ink));
+  --sev-blocker: #b91c1c;
+  --sev-high: #c2410c;
+  --sev-medium: #a16207;
+  --sev-low: #4b5563;
+  --on-sev: #ffffff;
+
+  --font-serif: Fraunces, Georgia, serif;
+  --font-mono: var(--mono);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 88px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --shadow-float: 0 22px 48px light-dark(oklch(from var(--cl-ink) l c h / 7%), oklch(0% 0 0 / 40%));
+  --border-hairline: 1px;
+  --focus-width: 2px;
+  --focus-offset: 3px;
+  --width-canvas: 1440px;
+  --duration-fast: 150ms;
+}
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }

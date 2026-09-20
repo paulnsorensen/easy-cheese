@@ -302,6 +302,9 @@ def _cmd_dispatch(args: argparse.Namespace) -> None:
     cli.emit({"skill": skill, "args": dispatch_args}, stdout=cast("TextIO", args.stdout))
 
 
+LEAVES = ("render", "parse", "dispatch")
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Render, parse, and dispatch handoff preambles."
     sub = parser.add_subparsers(dest="cmd", required=True)

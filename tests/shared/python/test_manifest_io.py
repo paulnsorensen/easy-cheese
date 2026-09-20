@@ -186,3 +186,25 @@ class TestJsonCommandHelp:
         captured = capsys.readouterr()
         assert captured.out == "usage: prog [<req>]\n"
         assert captured.err == ""
+
+
+class TestFlagIsNotAManifestPath:
+    def test_a_flag_argument_raises_the_usage_error(
+        self, manifest_io: _ManifestIoModule
+    ) -> None:
+        with pytest.raises(manifest_io.ManifestLoadError, match="usage: prog"):
+            _ = manifest_io.read_mapping_arg_or_stdin(["--json"], "usage: prog [<req>]")
+
+    def test_json_command_reports_usage_for_a_flag(
+        self,
+        manifest_io: _ManifestIoModule,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def explode(**payload: object) -> object:
+            raise AssertionError(f"handler ran with {payload!r}")
+
+        main = manifest_io.json_command(explode, "usage: prog [<req>]")
+        assert main(["--json"]) == 2
+        err = capsys.readouterr().err
+        assert err.strip() == "ERROR: usage: prog [<req>]"
+        assert "manifest not found" not in err

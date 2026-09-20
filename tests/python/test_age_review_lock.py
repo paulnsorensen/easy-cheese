@@ -9,6 +9,7 @@ artifact that does or does not land on disk.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import cast
@@ -21,6 +22,12 @@ from easy_cheese.skills.age import review_lock
 def _git(repo: Path, *args: str) -> None:
     result = git_utils.run_git(list(args), cwd=repo)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.fixture(autouse=True)
+def isolated_corpus_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep wheypoint revisions out of the shared durable store; parallel tests race on one slug there."""
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path_factory.mktemp("corpus-home")))
 
 
 @pytest.fixture
@@ -477,3 +484,97 @@ def test_a_symlinked_lock_directory_is_refused(repo: Path, tmp_path: Path) -> No
         _ = review_lock.lock_path(root=repo, slug="demo")
     assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 2
     assert not (outside / f"demo{review_lock.LOCK_SUFFIX}").exists()
+
+
+def test_a_slug_inside_quoted_free_text_never_reaches_the_writer(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The gate and the writer read one argv. Free text is never split, so a slug
+    # inside `--orientation` cannot name a report that the gate did not check.
+    args = [
+        token
+        for token in _write_args(repo, "demo")
+        if token not in ("--slug", "demo", "reviewed the diff")
+    ]
+    args.insert(args.index("--orientation") + 1, "done --slug demo")
+    with pytest.raises(SystemExit) as raised:
+        _ = review_lock.gated_write_handoff_artifact(args)
+    assert raised.value.code == 2
+    assert "--slug" in capsys.readouterr().err
+    assert not _report(repo, "demo").exists()
+
+
+def test_refresh_rejects_changed_prior_evidence(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    packet = repo / ".cheese" / "age" / "demo-packet.md"
+    packet.parent.mkdir(parents=True, exist_ok=True)
+    _ = packet.write_text("original\n", encoding="utf-8")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    locked = review_lock.lock_path(root=repo, slug="demo").read_text(encoding="utf-8")
+
+    _ = packet.write_text("changed\n", encoding="utf-8")
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 2
+    assert "refresh is refused" in capsys.readouterr().err
+    assert review_lock.lock_path(root=repo, slug="demo").read_text(encoding="utf-8") == locked
+
+
+def test_refresh_rejects_an_unexpected_new_evidence_file(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    unexpected = repo / ".cheese" / "age" / "other-packet.md"
+    unexpected.parent.mkdir(parents=True, exist_ok=True)
+    _ = unexpected.write_text("not the current packet\n", encoding="utf-8")
+    refresh = ["--slug", "demo", "--root", str(repo), "--refresh-evidence"]
+    assert review_lock.main(refresh) == 2
+    assert ".cheese/age/other-packet.md" in capsys.readouterr().err
+
+
+def test_source_digest_ignores_evidence_only_commit(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    before = review_lock.tree_digest(repo, slug="demo", evidence=False)
+    evidence = repo / ".cheese" / "age" / "committed.md"
+    _ = evidence.write_text("committed evidence\n", encoding="utf-8")
+    _git(repo, "add", "-f", str(evidence.relative_to(repo)))
+    _git(repo, "commit", "-m", "evidence")
+    assert review_lock.tree_digest(repo, slug="demo", evidence=False) == before
+    _ = capsys.readouterr()
+
+
+def test_lock_parser_rejects_invalid_optional_fields(repo: Path) -> None:
+    lock = review_lock.lock_path(root=repo, slug="demo")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    _ = lock.write_text(json.dumps({"slug": "demo", "digest": "0" * 64, "source_digest": 3}), encoding="utf-8")
+    with pytest.raises(cli.CliError, match="invalid source_digest"):
+        review_lock.verify(root=repo, slug="demo")
+
+
+def test_evidence_mode_change_is_named(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    packet = repo / ".cheese" / "age" / "demo-packet.md"
+    packet.parent.mkdir(parents=True, exist_ok=True)
+    _ = packet.write_text("packet\n", encoding="utf-8")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+    packet.chmod(0o755)
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    stderr = capsys.readouterr().err
+    assert "review evidence changed" in stderr
+    assert ".cheese/age/demo-packet.md" in stderr
+
+
+def test_non_utf8_evidence_path_is_named_without_loss(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    packet = repo / ".cheese" / "age"
+    packet.mkdir(parents=True, exist_ok=True)
+    raw_name = os.fsdecode(b"demo-\xff-packet.md")
+    evidence = packet / raw_name
+    try:
+        _ = evidence.write_text("packet\n", encoding="utf-8")
+    except OSError as exc:
+        pytest.skip(f"filesystem rejects non-UTF-8 names: {exc}")
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+    _ = evidence.write_text("changed\n", encoding="utf-8")
+    assert review_lock.gated_write_handoff_artifact(_write_args(repo, "demo")) == 2
+    assert "\\xff" in capsys.readouterr().err

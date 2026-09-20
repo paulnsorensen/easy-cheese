@@ -41,6 +41,9 @@ def _from_task(args: argparse.Namespace) -> None:
     )
 
 
+LEAVES = ("from-task",)
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Derive a slug + .cheese/specs/<slug>.md path from task text."
     sub = parser.add_subparsers(dest="cmd")

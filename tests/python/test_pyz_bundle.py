@@ -357,6 +357,22 @@ def test_plate_bundle_reports_stack_tools_without_source_imports(
     }
 
 
+def test_plate_bundle_rejects_remote_tracking_trunk_without_source_imports(
+    bundles: Path, tmp_path: Path
+) -> None:
+    result = _run(
+        bundles / "plate.pyz",
+        "gh-stack-preflight",
+        "--cwd",
+        str(tmp_path),
+        "--trunk",
+        "origin/main",
+    )
+
+    assert result.returncode == 1
+    assert "remote-tracking name" in result.stderr
+
+
 def test_bundle_carries_only_its_own_skill_package(bundles: Path) -> None:
     """Internal wheel metadata includes shared code without other skill apps."""
     melt = _bundle_members(bundles / "melt.pyz")

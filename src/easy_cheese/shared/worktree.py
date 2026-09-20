@@ -147,6 +147,9 @@ def _cmd_teardown(args: argparse.Namespace) -> None:
     )
 
 
+LEAVES = ("create", "harvest", "teardown")
+
+
 def _setup(parser: argparse.ArgumentParser) -> None:
     parser.description = "Create, harvest, or tear down a curd worktree."
     sub = parser.add_subparsers(dest="action", required=True)

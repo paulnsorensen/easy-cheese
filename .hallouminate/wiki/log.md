@@ -84,3 +84,10 @@
 - 2026-09-10 · session-analytics:fan-out · new-page · research/subagent-model-selection-portability.md · per-harness model-selection bindings (Claude Code, Cursor, Copilot, Codex, OMP); Agent Skills spec has no model field; bind `cheap|default|powerful` once in routing-policy.md.
 - 2026-09-10 · session-analytics:fan-out · new-page · analytics/fanout-patterns-2026-09-10.md · no parallel fan-out, coder chains are continuations, age absorbs cure (67 coders), reviewer mode gate never fires, taste-test fix-rate parity → `reviewer (taste-test)` and `gate-runner` tier rows; time-ordered attribution gotcha.
 
+
+- 2026-09-19 · pr-702-forgiving-cli · new-page · architecture/bundle-command-dispatch.md · runtime dispatch of `.pyz` bundles: top-level help, exact-name and close-match guidance with the `_` alias, the `--json`/`--full`-only hoist rule, the quote-repair rule and its `cli.run` boundary, one argv for the age gate, `LEAVES`, and the generated `bundle_command_index`.
+
+
+
+- 2026-09-20 · 4045ae852414459a · merged · gotchas/age-review-lock-invariants.md · record source/evidence identity separation, narrow late-packet refresh, stable snapshots, and streaming no-follow evidence hashing.
+

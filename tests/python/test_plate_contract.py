@@ -240,14 +240,16 @@ def test_plate_stack_references_preserve_absorbed_behavior_and_safety() -> None:
 
     gh_stack = bodies["gh-stack"]
     for behavior in (
-        "--prefix",
-        "--numbered",
-        "--remote",
+        "--remote origin",
         "submit --auto",
-        "Generic error",
+        "gh-stack-verify",
+        "GitHub API failure",
         "Invalid arguments",
     ):
         assert behavior in gh_stack
+    for stale_flag in ("`init --prefix", "`init --numbered"):
+        assert stale_flag not in gh_stack
+    assert "deprecated hidden `init --adopt`" in gh_stack
 
 
 def test_gh_stack_enablement_is_preflighted_not_discovered_on_mutation() -> None:
@@ -266,12 +268,38 @@ def test_gh_stack_enablement_is_preflighted_not_discovered_on_mutation() -> None
     ):
         assert status in gh_stack
         assert verdict in gh_stack
-    # Exit code 4 survives as the race/late-failure fallback, not the primary
-    # enablement signal.
-    assert "fallback for races and later remote failures" in flat
-    assert "exit code 4 stays the fallback" in flat
-    assert "| 4 | API/preview unavailable |" in gh_stack
+    assert "Proceed only with `available`" in flat
+    assert "| 4 | GitHub API failure |" in gh_stack
+    assert "| 9 | Stacked PRs unavailable |" in gh_stack
     assert "`not-enabled` (preflight `404`)" in stacks
+
+
+def test_gh_stack_publication_rejects_wrong_trunk_and_false_success() -> None:
+    gh_stack = read("skills/plate/references/gh-stack.md")
+    flat = " ".join(gh_stack.split())
+
+    assert "gh-stack-preflight" in gh_stack
+    assert "remote-tracking value such as `origin/main`" in flat
+    assert "warning, HTTP failure, or non-zero exit fails publication" in flat
+    assert "gh-stack-run" in gh_stack
+    assert "gh-stack-verify" in gh_stack
+    for field in ("base", "head", "state", "ordered PR numbers", "head refs"):
+        assert field in gh_stack
+
+
+def test_gh_stack_wrong_trunk_recovery_preserves_pr_identity_or_halts() -> None:
+    recovery = (
+        read("skills/plate/references/gh-stack.md")
+        .split("## Wrong-trunk recovery", maxsplit=1)[1]
+        .split("\n## ", maxsplit=1)[0]
+    )
+    flat = " ".join(recovery.split())
+
+    for sensitive in ("merged", "queued", "auto-merge", "not open"):
+        assert sensitive in flat
+    assert "same number and head" in flat
+    assert "same branches, bottom to top" in flat
+    assert "Do not create replacement PRs automatically" in flat
 
 
 def test_plate_stack_flow_is_per_layer_and_metadata_is_resolved() -> None:

@@ -22,8 +22,26 @@ A gate that compares only a recorded `HEAD` SHA accepts a changed-but-uncommitte
 
 The digest hashes every untracked file under `.cheese` except this slug's own `<slug>-body.md`, `<slug>.md`, HTML copy, and lock (`review_lock.py:98-119`). A fan-out orchestrator that writes reconciliation scratch there (`<slug>-candidates.md`, verifier verdicts) after `review-lock` gets `the production tree changed after '<slug>'s review lock` from `write-handoff-artifact` even though `git status` is clean. Keep post-lock scratch outside `.cheese` (for example `.context/`), or write it before the lock like the packet. Observed on the PR #667/#669 review, 2026-09-13.
 
+## Evidence refresh preserves review authority
+
+The lock stores separate source and evidence identities.
+The source digest covers committed source entries, staged changes, worktree changes, and untracked source.
+It excludes `.cheese` and the commit identifier, so an evidence-only commit does not count as a source change.[^refresh]
+
+Refresh permits only a new `.cheese/age/<slug>-packet.md`.
+It refuses changed or deleted prior evidence, other new evidence, and source changes.
+A stable candidate must match the original source digest before publication.
+A refusal preserves the existing lock bytes.[^refresh]
+
+Evidence hashing streams regular files through no-follow descriptors.
+Evidence identities preserve filesystem path bytes and permission modes.
+A symlink contributes its target text, not the target file contents.[^hashing]
+
 ## Age has no pass counter
 
 Age starts a fresh context on every pass and cannot observe earlier passes. The two-pass cure cap is owned by the Cook phase table (`skills/cook/references/auto-mode.md:59-81`), not by Age or Cure; see [skill-review-round-r014](../decisions/skill-review-round-r014.md).
 
-_Source: r014 skill-review round notes (ingest hash 499c49c7b67d5eb6), verified against `review_lock.py` on 2026-09-04 · Updated: 2026-09-04_
+[^refresh]: src/easy_cheese/skills/age/review_lock.py:257-317,430-459,536-582; tests/python/test_age_review_lock.py:507-543.
+[^hashing]: src/easy_cheese/skills/age/review_lock.py:162-204,320-382; tests/python/test_age_review_lock.py:554-580.
+
+_Source: r014 review invariants and PR #703 cure · Updated: 2026-09-20_
