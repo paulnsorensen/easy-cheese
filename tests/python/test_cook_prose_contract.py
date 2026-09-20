@@ -154,7 +154,11 @@ def test_the_cook_contract_admits_the_mold_route() -> None:
     skill = _read(SKILL)
 
     assert "handoff(next = press | age | mold)" in skill
-    assert "Cook returns `next: mold` only for a specification failure." in skill
+    assert "Cook returns `next: mold` for a specification failure." in skill
+    assert (
+        "A fan run also returns `next: mold` for a stalled remediation scope, "
+        + "a curd that does not pass, or partial coverage."
+    ) in skill
 
 
 def test_cook_declares_the_wiki_hits_context_payload() -> None:
