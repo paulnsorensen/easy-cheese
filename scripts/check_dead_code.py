@@ -322,7 +322,7 @@ def _accepted_reason(finding: _Finding, module: ast.Module, imports: dict[str, s
                         for arg in _function_args(item)
                     ):
                         return "Protocol method parameter"
-        if finding.typ == "variable" and schema_owned:
+        if finding.typ == "variable":
             for item in node.body:
                 target_line = None
                 if isinstance(item, ast.Assign) and len(item.targets) == 1 and isinstance(item.targets[0], ast.Name) and item.targets[0].id == finding.name:
@@ -330,6 +330,8 @@ def _accepted_reason(finding: _Finding, module: ast.Module, imports: dict[str, s
                 elif isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name) and item.target.id == finding.name:
                     target_line = item.lineno
                 if target_line != finding.first_line:
+                    continue
+                if not schema_owned:
                     continue
                 is_enum = any(_is_enum_base(_resolve_base(b, imports, node.lineno)) for b in node.bases)
                 if is_enum or _is_attrs_decorated(node, imports):

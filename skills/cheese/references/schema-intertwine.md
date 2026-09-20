@@ -33,6 +33,8 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | planner-request | PlannerRequest | mold | cook |
 | planner-result | PlannerResult | — | — |
 | pr-plan | PrPlan | — | — |
+| remediation-cure-observation | RemediationCureObservation | — | — |
+| remediation-state | RemediationState | — | — |
 | review-request | ReviewRequest | — | — |
 | review-result | ReviewResult | — | — |
 | wheypoint-record | WheypointRecord | — | — |

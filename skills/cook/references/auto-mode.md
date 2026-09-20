@@ -49,11 +49,12 @@ Cook cannot weaken or bypass existing tests.
    Never dispatch `/age --scope <touched-paths> --auto` without the slug.
    The call also forwards `--hard` when the user supplied it.
 
-5. The age → cure cycle has a maximum of **two cure passes total**.
+5. In the linear chain, the age → cure cycle has a maximum of **two cure passes total**.
    Pass 1 fixes the initial findings.
    Pass 2 fixes all findings that the second age pass identifies.
    After pass 2, the chain stops and writes a final summary.
    The chain stops even if new findings remain.
+   This fixed two-Cure behavior does not change.
 
 6. In the linear chain, `/cook` never invokes `/plate`.
    At the chain terminal, `/cure` dispatches `/plate` for an existing pull request.
@@ -121,6 +122,7 @@ By default, each phase's existing `--auto` contract chains forward in the same s
 When `/cook` runs as its fan-pathway orchestrator, `fan-pathway.md` overrides this default.
 
 The override applies to every per-curd or post-merge dispatch.
+Fan remediation uses the progress-aware state machine. Incomplete work never emits `next: press`; stalls route to Mold remediation planning.
 
 Each phase sub-agent runs only its own phase.
 
@@ -130,7 +132,7 @@ It never chains forward to the next phase, although its own `--auto` contract do
 
 The fan-pathway orchestrator loop decides and dispatches the next phase.
 
-`fan-pathway.md`'s `## Deterministic phase loop` defines this loop.
+`fan-pathway.md`'s `## Phase-chain topology` defines this loop.
 
 The retired `/ultracook` orchestrator previously owned the same responsibility.
 

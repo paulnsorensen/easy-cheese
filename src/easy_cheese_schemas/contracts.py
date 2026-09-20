@@ -6,7 +6,7 @@ import re
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from enum import Enum
-from typing import ClassVar, Protocol, TypeVar, cast
+from typing import ClassVar, Protocol, TypeVar, cast, override
 
 import attrs
 from attrs import define, field, validators
@@ -234,6 +234,17 @@ class ReviewSeverity(str, Enum):
     MEDIUM = "medium"
     LOW = "low"
 
+
+class FixCostNow(str, Enum):
+    CONTAINED = "contained"
+    MODERATE = "moderate"
+    SPRAWLING = "sprawling"
+
+    @override
+    def __str__(self) -> str:
+        return self.value
+
+
 class CoverageDisposition(str, Enum):
     COVERED = "covered"
     NOT_COVERED = "not_covered"
@@ -314,6 +325,13 @@ def _optional_string(
         _bounded_string(instance, attribute, value)
 
 
+
+
+def _optional_event_identity(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    if value is not None and not isinstance(value, RemediationEventIdentity):
+        raise TypeError(f"{attribute.name} must be a RemediationEventIdentity")
 @schema_constraints(pattern=_ID_RE.pattern, minLength=1, maxLength=128)
 def _identifier(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _ID_RE.fullmatch(value) is None:
@@ -392,7 +410,14 @@ def _media_type(_instance: object, attribute: _NamedAttribute, value: object) ->
         raise ValueError(f"{attribute.name} must be a valid media type")
 
 
-@schema_constraints(_constraints_of(_bounded_string))
+_REPOSITORY_RELATIVE_PATH_PATTERN = (
+    r"^(?!/)(?!\.{1,2}$)(?!.*(?:^|/)\.\.(?:/|$))[\s\S]+$"
+)
+
+
+@schema_constraints(
+    _constraints_of(_bounded_string), pattern=_REPOSITORY_RELATIVE_PATH_PATTERN
+)
 def _scope_path(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     _bounded_string(_instance, attribute, value)
     assert isinstance(value, str)
@@ -1339,6 +1364,7 @@ class ReviewFinding:
         converter=_tuple_sequence,
         validator=_list_of(EvidenceRef, non_empty=True),
     )
+    fix_cost_now: FixCostNow = field(validator=validators.instance_of(FixCostNow))
     location: SourceLocation | None = field(
         default=None,
         validator=validators.optional(validators.instance_of(SourceLocation)),
@@ -1403,6 +1429,9 @@ class ReviewResult:
         converter=_tuple_sequence, validator=_list_of(ReviewCoverage)
     )
     reason: str | None = field(default=None, validator=_optional_string)
+    event_identity: RemediationEventIdentity | None = field(
+        default=None, validator=_optional_event_identity
+    )
 
     @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
     def _validate_disposition(
@@ -1448,6 +1477,242 @@ class ReviewResult:
             raise ValueError(
                 f"{self.disposition.value} review result must include a reason"
             )
+
+
+class RemediationScopeKind(str, Enum):
+    CURD = "curd"
+    POSTMERGE = "postmerge"
+
+
+class RemediationCursor(str, Enum):
+    AWAITING_REVIEW = "awaiting_review"
+    AWAITING_CURE = "awaiting_cure"
+    TERMINAL = "terminal"
+
+
+class RemediationDisposition(str, Enum):
+    ACTIVE = "active"
+    CLEAN = "clean"
+    STALLED = "stalled"
+    BLOCKED = "blocked"
+
+
+@define(frozen=True)
+class RemediationScopeKey:
+    run_id: str = field(validator=_identifier)
+    source_plan_ref: SourcePlanRef = field(
+        validator=validators.instance_of(SourcePlanRef)
+    )
+    scope_kind: RemediationScopeKind = field(
+        validator=validators.instance_of(RemediationScopeKind)
+    )
+    scope_id: str = field(validator=_identifier)
+
+    @scope_id.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_scope_id(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+        if (
+            self.scope_kind is RemediationScopeKind.POSTMERGE
+            and self.scope_id != "postmerge"
+        ):
+            raise ValueError("postmerge scope_id must be the literal 'postmerge'")
+
+
+
+@define(frozen=True)
+class RemediationEventIdentity:
+    """Host-owned binding for one review or Cure event."""
+
+    run_id: str = field(validator=_identifier)
+    plan_id: str = field(validator=_identifier)
+    plan_revision: int = field(validator=_positive_integer)
+    plan_digest: str = field(validator=_digest)
+    scope_kind: RemediationScopeKind = field(
+        validator=validators.instance_of(RemediationScopeKind)
+    )
+    scope_id: str = field(validator=_identifier)
+    state_id: str = field(validator=_identifier)
+    cursor: RemediationCursor = field(validator=validators.instance_of(RemediationCursor))
+    expected_request: str = field(validator=_digest)
+    round_number: int = field(validator=_positive_integer)
+
+
+@define(frozen=True)
+class ReviewDebt:
+    critical: int = field(validator=_non_negative_integer)
+    high: int = field(validator=_non_negative_integer)
+    medium: int = field(validator=_non_negative_integer)
+    contained_low: int = field(validator=_non_negative_integer)
+    score: int = field(validator=_non_negative_integer)
+
+    @score.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_score(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
+        expected = (
+            16 * self.critical + 8 * self.high + 4 * self.medium + self.contained_low
+        )
+        if self.score != expected:
+            raise ValueError(
+                f"score must equal 16*critical + 8*high + 4*medium + contained_low ({expected}), got {self.score}"
+            )
+
+    @classmethod
+    def compute(
+        cls, *, critical: int, high: int, medium: int, contained_low: int
+    ) -> "ReviewDebt":
+        return cls(
+            critical=critical,
+            high=high,
+            medium=medium,
+            contained_low=contained_low,
+            score=16 * critical + 8 * high + 4 * medium + contained_low,
+        )
+
+
+@define(frozen=True)
+class ProgressReceipt:
+    round_number: int = field(validator=_positive_integer)
+    review_ref: ArtifactRef = field(validator=validators.instance_of(ArtifactRef))
+    selected_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    applied_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    deferred_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    debt: ReviewDebt = field(validator=validators.instance_of(ReviewDebt))
+    gate_evidence: tuple[EvidenceRef, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(EvidenceRef)
+    )
+    touched_paths: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(path=True)
+    )
+    progress: bool = field(validator=validators.instance_of(bool))
+    preceding_cure_result_ref: ArtifactRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ArtifactRef)),
+    )
+    stop_reason: str | None = field(default=None, validator=_optional_string)
+    cure_result_ref: ArtifactRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ArtifactRef)),
+    )
+
+
+
+@contract("remediation-state")
+@define(frozen=True)
+class RemediationState:
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    state_id: str = field(validator=_identifier)
+    scope: RemediationScopeKey = field(
+        validator=validators.instance_of(RemediationScopeKey)
+    )
+    cursor: RemediationCursor = field(
+        validator=validators.instance_of(RemediationCursor)
+    )
+    disposition: RemediationDisposition = field(
+        validator=validators.instance_of(RemediationDisposition)
+    )
+    locked_selection: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    pending_cure_result_ref: ArtifactRef | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ArtifactRef)),
+    )
+    best_debt: ReviewDebt | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(ReviewDebt)),
+    )
+    stagnation_count: int = field(default=0, validator=_non_negative_integer)
+    receipts: tuple[ProgressReceipt, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_list_of(ProgressReceipt)
+    )
+    @receipts.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
+    def _validate_relations(
+        self, _attribute: _NamedAttribute, _value: object
+    ) -> None:  # noqa: V103
+        if self.cursor is RemediationCursor.AWAITING_CURE:
+            if self.disposition is not RemediationDisposition.ACTIVE:
+                raise ValueError("awaiting_cure state must be active")
+            if not self.locked_selection:
+                raise ValueError("awaiting_cure state requires a locked selection")
+            if not self.receipts:
+                raise ValueError("awaiting_cure state requires a latest review receipt")
+            latest = self.receipts[-1]
+            if set(latest.selected_finding_keys) != set(self.locked_selection):
+                raise ValueError("latest review receipt selection must match locked_selection")
+            if latest.cure_result_ref is not None:
+                raise ValueError("awaiting_cure state cannot have a completed Cure receipt")
+        if self.cursor is RemediationCursor.AWAITING_REVIEW and self.disposition is not RemediationDisposition.ACTIVE:
+            raise ValueError("awaiting_review state must be active")
+        if self.cursor is RemediationCursor.TERMINAL:
+            if self.disposition is RemediationDisposition.ACTIVE:
+                raise ValueError("terminal state must have a terminal disposition")
+            if self.pending_cure_result_ref is not None:
+                raise ValueError("terminal state must not have a pending cure result")
+        if self.pending_cure_result_ref is not None:
+            if self.cursor is not RemediationCursor.AWAITING_REVIEW or not self.receipts:
+                raise ValueError("pending cure result requires an awaiting_review state with a receipt")
+            if self.receipts[-1].cure_result_ref != self.pending_cure_result_ref:
+                raise ValueError("pending cure result must match the latest receipt")
+        for index, receipt in enumerate(self.receipts, start=1):
+            if receipt.round_number != index:
+                raise ValueError("receipt round numbers must be sequential")
+            if index == 1 and receipt.preceding_cure_result_ref is not None:
+                raise ValueError("first receipt must not reference a preceding Cure")
+            if index > 1 and receipt.preceding_cure_result_ref is None:
+                raise ValueError("later receipts must reference a preceding Cure")
+            selected = set(receipt.selected_finding_keys)
+            applied = set(receipt.applied_finding_keys)
+            deferred = set(receipt.deferred_finding_keys)
+            if receipt.cure_result_ref is None:
+                if applied:
+                    raise ValueError("review receipt must not report Cure results")
+            elif applied & deferred or applied | deferred != selected:
+                raise ValueError("Cure receipt keys must partition its selection")
+
+
+@contract("remediation-cure-observation")
+@define(frozen=True)
+class RemediationCureObservation:
+    """Agent-authored Cure observation the host validates before scoring.
+
+    Cure operates on the immutable ``locked_selection`` (finding keys) the host
+    published in the current ``RemediationState``. It reports which selected
+    keys it applied and which it deferred, the paths it touched, the gate
+    evidence it produced, and any new or changed failing project gates. The
+    host derives the progress decision; this contract carries only observations.
+    """
+
+    contract_version: ContractVersion = field(
+        validator=validators.instance_of(ContractVersion)
+    )
+    applied_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    deferred_finding_keys: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    touched_paths: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_string_list(path=True)
+    )
+    gate_evidence: tuple[EvidenceRef, ...] = field(
+        converter=_tuple_sequence, validator=_list_of(EvidenceRef)
+    )
+    new_gate_failures: tuple[str, ...] = field(
+        converter=_tuple_sequence, validator=_identifier_list()
+    )
+    reverted_finding_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    event_identity: RemediationEventIdentity | None = field(
+        default=None, validator=_optional_event_identity
+    )
+
 
 
 @contract("diagnosis-request")
@@ -1998,6 +2263,7 @@ class ReviewFindingWriterView:
     evidence_keys: tuple[str, ...] = field(
         converter=_tuple_sequence, validator=_identifier_list(non_empty=True)
     )
+    fix_cost_now: FixCostNow = field(validator=validators.instance_of(FixCostNow))
     location: SourceLocationWriterView | None = field(
         default=None,
         validator=validators.optional(validators.instance_of(SourceLocationWriterView)),
@@ -2257,6 +2523,32 @@ class CurdResultWriterView:
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
 
+
+@define(frozen=True)
+class RemediationCureWriterView:
+    """Agent-authored Cure result and explicit finding reconciliation."""
+
+    result: CurdResultWriterView = field(
+        validator=validators.instance_of(CurdResultWriterView)
+    )
+    applied_finding_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    deferred_finding_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+    reverted_finding_keys: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list(item_validator=_digest)
+    )
+
+    def __attrs_post_init__(self) -> None:
+        applied = set(self.applied_finding_keys)
+        deferred = set(self.deferred_finding_keys)
+        reverted = set(self.reverted_finding_keys)
+        if applied & deferred:
+            raise ValueError("applied and deferred finding keys must be disjoint")
+        if not reverted <= applied:
+            raise ValueError("reverted finding keys must be applied finding keys")
 
 WriterPayload = (
     CurdPlanWriterView
@@ -3804,6 +4096,7 @@ __all__ = [
     "CrossFieldRule",
     "CurdResult",
     "CurdResultWriterView",
+    "RemediationCureWriterView",
     "DeliverableWriterView",
     "DiagnosisCause",
     "DiagnosisCauseWriterView",
@@ -3815,6 +4108,7 @@ __all__ = [
     "DiagnosisResultWriterView",
     "EvidenceKind",
     "EvidenceRef",
+    "FixCostNow",
     "GateApplicability",
     "GateApplicabilityDisposition",
     "GroundingOutcome",
@@ -3841,10 +4135,19 @@ __all__ = [
     "PlannerResultWriterView",
     "PlannerUncertainty",
     "PlannerUncertaintyWriterView",
+    "ProgressReceipt",
+    "RemediationCureObservation",
+    "RemediationCursor",
+    "RemediationDisposition",
+    "RemediationEventIdentity",
+    "RemediationScopeKey",
+    "RemediationScopeKind",
+    "RemediationState",
     "Reproduction",
     "ReproductionDisposition",
     "ReproductionWriterView",
     "ReviewCoverage",
+    "ReviewDebt",
     "ReviewDisposition",
     "ReviewDimension",
     "ReviewFinding",

@@ -460,6 +460,16 @@ def test_lambda_local_walrus_does_not_shadow_import() -> None:
     assert _accepted_reason(checker, finding, tree, imports) == "enum member or attrs field owned by easy_cheese_schemas"
 
 
+def test_attrs_field_exemption_requires_schema_ownership() -> None:
+    checker = _checker_module()
+    tree = ast.parse("import attrs\n@attrs.define\nclass Record:\n    unread: int = 0\n")
+    imports = _import_map(checker, tree)
+    field = next(n for n in ast.walk(tree) if isinstance(n, ast.AnnAssign))
+    for path, expected in [("src/easy_cheese_schemas/sample.py", True), ("src/easy_cheese/shared/sample.py", False)]:
+        finding = _make_finding(checker, Path(path), field.lineno, "unread", "variable", "")
+        assert bool(_accepted_reason(checker, finding, tree, imports)) is expected
+
+
 def test_definition_noqa_requires_exact_header_comment(tmp_path: Path) -> None:
     checker = _checker_module()
     cases = [

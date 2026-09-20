@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TypeAlias
+from typing import TypeAlias, cast
 
 import attrs
 
@@ -37,6 +37,7 @@ from easy_cheese_schemas.validate import (
     require_str,
 )
 from easy_cheese.shared import workflow
+from easy_cheese.shared.fanout.run_fan import ScopeRemediationSummary
 from easy_cheese.shared.mold_cook_handoff import MoldCookSpecReadiness
 
 
@@ -179,6 +180,14 @@ class CookExecutionOutcome:
     resumable_ref: ArtifactRef
     execution_results: workflow.ExecutionResults = attrs.field(repr=False)
     outcome_ref: ArtifactRef | None = None
+    fan_next_step: str | None = None
+    remediation_state_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
+    stop_evidence_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
+    remediation_request_ref: ArtifactRef | None = None
+    execution_result_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
+    scope_summaries: Mapping[str, ScopeRemediationSummary] = attrs.field(
+        factory=lambda: cast(dict[str, ScopeRemediationSummary], {})
+    )
 
 
 @attrs.define(frozen=True)

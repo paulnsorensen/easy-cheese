@@ -8,11 +8,9 @@ deterministic verdict naming the next phase to spawn (or the reason to stop).
 
 `decide()` walks a **phase table** — an ordered list of phase names. The phase
 that runs after index `i` is `table[i + 1]`; the last entry is terminal
-(terminal `next_phase=None`). Six tables ship: the RED-required linear chain,
-fan per-curd and post-merge chains, plus matching `not-applicable-*` chains.
-Fan per-curd chains never
-include Press; the post-merge chain owns the single global Press after the
-complete receipt has validated GREEN.
+(terminal `next_phase=None`). The linear chain remains fixed. Closed
+not-applicable tables cover the legacy non-behavior paths. Fan remediation
+uses the progress-aware state machine instead of these phase tables.
 
 Routing always reads `status` through the declared handback vocabulary
 (`parse_status_field` / `status_disposition`), never a prefix guess: a prefix
@@ -32,8 +30,7 @@ Inputs:
                             halts or gates.
     --next <name>           Optional. The `next` field from the handoff slug;
                             terminal age always gates publication, while a
-                            nonterminal clean age ends the linear and
-                            parallel-curd tables early (never post-merge).
+                            nonterminal clean age ends the fixed linear table early.
     --table <name>          Which table to walk (default: linear).
     --retry-count <int>     How many needs-context retries this phase has
                             already consumed (default: 0). A second
@@ -103,16 +100,12 @@ class Verdict(TypedDict):
 # A phase table is an ordered list of phase names; the phase that runs after
 # index i is table[i + 1], and the last entry is terminal.
 LINEAR_TABLE: list[str] = ["cook", "press", "age", "cure", "age", "cure", "age"]
-PARALLEL_CURD: list[str] = ["cook", "age", "cure", "age"]
-PARALLEL_POSTMERGE: list[str] = ["press", "age", "cure", "age"]
 NOT_APPLICABLE_LINEAR: list[str] = ["cook", "age", "cure", "age", "cure", "age"]
 NOT_APPLICABLE_CURD: list[str] = ["cook", "age", "cure", "age"]
 NOT_APPLICABLE_POSTMERGE: list[str] = ["age", "cure", "age"]
 
 TABLES: dict[str, list[str]] = {
     "linear": LINEAR_TABLE,
-    "parallel-curd": PARALLEL_CURD,
-    "parallel-postmerge": PARALLEL_POSTMERGE,
     "not-applicable-linear": NOT_APPLICABLE_LINEAR,
     "not-applicable-curd": NOT_APPLICABLE_CURD,
     "not-applicable-postmerge": NOT_APPLICABLE_POSTMERGE,
@@ -228,12 +221,9 @@ def decide(
             "reason": reason,
         }
 
-    # A nonterminal clean age ends the table early everywhere except
-    # post-merge, which is the last review before publication and must run
-    # its complete typed sequence through cure and final age. Linear mode
-    # stops and hands the diff to the user; a parallel curd clean-completes —
-    # its bound review context becomes the final one, and the post-merge
-    # review still re-covers the merged diff.
+    # A nonterminal clean age ends a configured early-stop table. The fixed
+    # linear chain keeps its declared two-Cure sequence. Closed N/A curd
+    # execution can complete after a clean first review.
     if current_phase == "age" and (next_field or "").strip().lower() == "done":
         if allow_early_stop:
             return {
@@ -247,7 +237,7 @@ def decide(
                 "disposition": disposition.value,
                 "reason": reason,
             }
-        if table in (PARALLEL_CURD, NOT_APPLICABLE_CURD):
+        if table is NOT_APPLICABLE_CURD:
             return {
                 "action": "clean_complete",
                 "next_phase": None,
@@ -320,8 +310,8 @@ def _setup(parser: argparse.ArgumentParser) -> None:
         choices=sorted(TABLES),
         default="linear",
         help=(
-            "Which receipt-specific table to walk: linear, fan per-curd "
-            "(without Press), fan post-merge (global Press), or N/A."
+            "Which receipt-specific table to walk: linear or a closed "
+            "not-applicable path. Fan remediation uses its progress-aware state."
         ),
     )
     _ = parser.add_argument(
