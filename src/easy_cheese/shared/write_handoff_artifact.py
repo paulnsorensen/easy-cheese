@@ -384,7 +384,7 @@ def _cmd_write(args: argparse.Namespace) -> None:
     cli.emit(str(target), stdout=a.stdout)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
+def setup_parser(parser: argparse.ArgumentParser) -> None:
     _ = parser.add_argument("--slug", required=True, help="artifact slug (filename stem)")
     _ = parser.add_argument(
         "--status", required=True, help=f"handback status: {status_vocabulary()}"
@@ -449,8 +449,8 @@ def _setup(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(setup_parser, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(cli.run(setup_parser))

@@ -31,6 +31,7 @@ BUILD_SCRIPTS_ROOT = REPO_ROOT / "scripts"
 SCHEMA_CATALOG_SOURCE = SCHEMA_ROOT / "_schema_catalog.py"
 PHASE_REGISTRY_SOURCE = SCHEMA_ROOT / "_compiled_phase_registry.py"
 DOCUMENT_RULES_SOURCE = PACKAGE_ROOT / "shared" / "document_rules.py"
+BUNDLE_COMMAND_INDEX_SOURCE = PACKAGE_ROOT / "shared" / "bundle_command_index.py"
 SOURCE_DATE_EPOCH = "315532800"
 NATIVE_SUFFIXES = {".so", ".pyd", ".dylib"}
 VERSION = cast(
@@ -126,6 +127,42 @@ def compiled_document_rules_source() -> str:
     return render(collect(target))
 
 
+def _bundle_command_index_compiler() -> tuple[
+    Callable[[Sequence[tuple[str, ModuleType]]], tuple[object, object]],
+    Callable[..., str],
+]:
+    compiler = _compiler_module("_bundle_command_index_compiler")
+    return (
+        cast(
+            Callable[[Sequence[tuple[str, ModuleType]]], tuple[object, object]],
+            getattr(compiler, "collect"),
+        ),
+        cast(Callable[..., str], getattr(compiler, "render")),
+    )
+
+
+def _imported_skill_command_modules(
+    skills: Iterable[str],
+) -> tuple[tuple[str, ModuleType], ...]:
+    _ = _import_from(SRC_ROOT, "easy_cheese")
+    return tuple(
+        (
+            skill,
+            _import_from(
+                SRC_ROOT, f"easy_cheese.skills.{skill.replace('-', '_')}.commands"
+            ),
+        )
+        for skill in skills
+    )
+
+
+def _compiled_bundle_command_index_source() -> str:
+    """Compile the cross-bundle command index from every skill's COMMANDS."""
+    collect, render = _bundle_command_index_compiler()
+    command_index, leaf_index = collect(_imported_skill_command_modules(SKILLS))
+    return render(command_index, leaf_index)
+
+
 def _checked_in_generated_file_bytes(
     expected_source: str,
     source: Path,
@@ -153,6 +190,11 @@ GENERATED_RUNTIME_SOURCES: tuple[tuple[Path, str, "Callable[[], str]"], ...] = (
     (PHASE_REGISTRY_SOURCE, "phase registry", _compiled_phase_registry_source),
     (SCHEMA_CATALOG_SOURCE, "schema catalog", _compiled_schema_catalog_source),
     (DOCUMENT_RULES_SOURCE, "document rules", compiled_document_rules_source),
+    (
+        BUNDLE_COMMAND_INDEX_SOURCE,
+        "bundle command index",
+        _compiled_bundle_command_index_source,
+    ),
 )
 
 

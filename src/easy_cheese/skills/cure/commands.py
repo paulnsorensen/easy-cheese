@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 
+from easy_cheese.shared import findings, gates, handoff, paths, slugify
 from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
 
 
@@ -87,7 +88,9 @@ COMMANDS = (
         "Resolve a phase slug through the shared Wheypoint kernel (JSON out)",
     ),
     derive_command(
-        _slugify, "Derive a kebab-case slug and durable spec path from task text"
+        _slugify,
+        "Derive a kebab-case slug and durable spec path from task text",
+        leaves=slugify.LEAVES,
     ),
     derive_command(
         _write_handoff_artifact,
@@ -99,14 +102,23 @@ COMMANDS = (
     derive_command(
         _findings,
         "Render an /age report's selection table or coder brief and resolve selection verbs",
+        leaves=findings.LEAVES,
     ),
     derive_command(
-        _gates, "Map a quality-gate scoreboard's booleans to a readiness verdict"
+        _gates,
+        "Map a quality-gate scoreboard's booleans to a readiness verdict",
+        leaves=gates.LEAVES,
     ),
     derive_command(
-        _paths, "Slugify, validate, resolve, and list .cheese artifact paths"
+        _paths,
+        "Slugify, validate, resolve, and list .cheese artifact paths",
+        leaves=paths.LEAVES,
     ),
-    derive_command(_handoff, "Render, parse, and dispatch-split handoff preambles"),
+    derive_command(
+        _handoff,
+        "Render, parse, and dispatch-split handoff preambles",
+        leaves=handoff.LEAVES,
+    ),
     derive_command(
         _render_html,
         "Render a markdown report into one self-contained offline HTML file",

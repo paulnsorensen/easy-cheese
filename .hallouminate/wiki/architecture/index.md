@@ -3,6 +3,7 @@
 <!-- HALLOUMINATE:INDEX-START -->
 - [age-fanout-router](./age-fanout-router.md) — Age fan-out router
 - [briesearch-mold-research-seam](./briesearch-mold-research-seam.md) — Briesearch and Mold research seam
+- [bundle-command-dispatch](./bundle-command-dispatch.md) — Bundle command dispatch
 - [handoff-preamble-grammar](./handoff-preamble-grammar.md) — Handoff preamble grammar
 - [hard-cheese-gate-contract](./hard-cheese-gate-contract.md) — Hard-cheese gate contract
 - [plate-runtime-contract](./plate-runtime-contract.md) — Plate runtime contract

@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
 
+from tests.shared.python.bucket_cli import bucket_setup as _bucket_setup
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
     from typing import TextIO
@@ -73,7 +75,45 @@ class TestLineBudget:
         # Cap bumped to 90, then to 96 for the shared reject_path_segment helper that
         # single-sources a path-traversal denylist previously duplicated in callers.
         # Cap bumped to 110 for CliError.exit_code + contract_error (r014-phase-contracts #1).
-        assert sum(1 for _ in CLI_PATH.read_text().splitlines()) <= 110
+        # Cap bumped to 126 for cli.repair_argv, the public hook the age
+        # review-lock gate shares with cli.run so both read one repaired argv.
+        assert sum(1 for _ in CLI_PATH.read_text().splitlines()) <= 126
+
+
+class TestQuoteRepair:
+    def test_splits_merged_token_when_only_the_split_form_parses(
+        self, cli: _CliModule, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert cli.run(_bucket_setup, argv=["bucket", "--files", "2 --modules 3"]) == 0
+        captured = capsys.readouterr()
+        assert captured.out.strip() == "2 3"
+        assert "note: split quoted argument '2 --modules 3'" in captured.err
+
+    def test_keeps_free_text_that_mentions_a_flag(
+        self, cli: _CliModule, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        argv = ["bucket", "--files", "2", "--title", "handle --json flag"]
+        assert cli.run(_bucket_setup, argv=argv) == 0
+        captured = capsys.readouterr()
+        assert captured.out.strip() == "2 1 handle --json flag"
+        assert "note:" not in captured.err
+
+    def test_shows_the_original_error_when_the_split_form_also_fails(
+        self, cli: _CliModule, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit) as raised:
+            _ = cli.run(_bucket_setup, argv=["bucket", "--files", "x --modules y"])
+        assert raised.value.code == 2
+        captured = capsys.readouterr()
+        assert "invalid int value: 'x --modules y'" in captured.err
+        assert "note:" not in captured.err
+
+    def test_ignores_a_token_with_unbalanced_quotes(
+        self, cli: _CliModule, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        argv = ["bucket", "--files", "2", "--title", "it's --json here"]
+        assert cli.run(_bucket_setup, argv=argv) == 0
+        assert capsys.readouterr().out.strip() == "2 1 it's --json here"
 
 
 class TestCliError:
@@ -201,11 +241,13 @@ class TestEmitMultilineString:
 def _write_runner(tmp_path: Path, body: str) -> Path:
     """Drop a tiny executable script next to cli.py so the import works."""
     runner = tmp_path / "runner.py"
+    src_root = str(CLI_PATH.parents[2])
     _ = runner.write_text(
         textwrap.dedent(
             f"""
             import sys
             sys.path.insert(0, {str(CLI_PATH.parent)!r})
+            sys.path.insert(0, {src_root!r})
             import cli
             {body}
             """
@@ -310,6 +352,29 @@ class TestRun:
         assert result.returncode == 0
         assert "--full" in result.stdout
         assert "--json" in result.stdout
+
+    def test_quote_repair_works_in_the_bare_module_harness(self, tmp_path: Path) -> None:
+        # `_write_runner` puts only `shared/` on sys.path; the repair path also
+        # imports `easy_cheese.shared.argv_repair` by its full package name.
+        runner = _write_runner(
+            tmp_path,
+            """
+            def _cmd(args): cli.emit({"ok": True}, json_mode=args.json_mode, stdout=args.stdout)
+            def _setup(p):
+                sub = p.add_subparsers(dest="cmd", required=True)
+                q = sub.add_parser("go")
+                q.add_argument("--files", type=int, required=True)
+                q.add_argument("--modules", type=int, default=1)
+                q.set_defaults(func=_cmd)
+            raise SystemExit(cli.run(_setup))
+            """.strip()
+        )
+        result = subprocess.run(
+            [sys.executable, str(runner), "go", "--files", "2 --modules 3", "--json"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == {"ok": True}
 
 
 class TestCliEntrypoint:

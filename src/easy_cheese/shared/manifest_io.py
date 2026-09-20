@@ -31,7 +31,8 @@ def read_mapping_file(path: Path) -> dict[str, object]:
 
 def read_mapping_arg_or_stdin(argv: list[str], usage: str) -> dict[str, object]:
     """Read one optional path argument or stdin, returning a parsed mapping."""
-    if len(argv) > 1:
+    # A flag is never a manifest path.
+    if len(argv) > 1 or (argv and argv[0].startswith("-")):
         raise ManifestLoadError(usage)
     if argv:
         return read_mapping_file(Path(argv[0]))

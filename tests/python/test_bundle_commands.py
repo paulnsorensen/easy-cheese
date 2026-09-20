@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import argparse
 import ast
+import contextlib
 import importlib
 import inspect
+import io
+import re
 import sys
+from pathlib import Path
 from types import ModuleType
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, cast
@@ -13,8 +18,8 @@ from typing import TYPE_CHECKING, Protocol, cast
 import pytest
 
 from easy_cheese.shared import bundle_commands as bc
+from easy_cheese.shared import cli
 from scripts import build_pyz as _build_pyz
-
 
 _CommandHandler = Callable[[list[str]], int]
 _CommandFactory = Callable[[str, str, str], bc.Command]
@@ -280,7 +285,7 @@ def test_render_skill_commands_projects_the_manifest_verbatim(
     module = ModuleType("easy_cheese.skills.fixture_skill.commands")
     module.COMMANDS = (  # pyright: ignore[reportAttributeAccessIssue]
         command("zeta", summary="Run the last step"),
-        command("alpha", summary="Run the first step"),
+        bc.Command("alpha", "test_bundle_target:handler", "Run the first step", ("one", "two")),
     )
     monkeypatch.setitem(sys.modules, module.__name__, module)
 
@@ -294,10 +299,10 @@ def test_render_skill_commands_projects_the_manifest_verbatim(
         " returns an integer exit status. Pass `--help` to a command for its arguments and"
         " output format. Keep worked examples in the skill instructions.\n"
         "\n"
-        "| Command | Purpose |\n"
-        "| --- | --- |\n"
-        "| `alpha` | Run the first step |\n"
-        "| `zeta` | Run the last step |\n"
+        "| Command | Purpose | Subcommands |\n"
+        "| --- | --- | --- |\n"
+        "| `alpha` | Run the first step | `one`, `two` |\n"
+        "| `zeta` | Run the last step |  |\n"
     )
 
 
@@ -317,8 +322,6 @@ def test_rendering_command_docs_never_resolves_targets(
         )
 
 
-
-
 def test_checked_in_command_docs_match_the_manifests() -> None:
     from scripts import build_pyz
     from scripts import render_generated_regions as rgr
@@ -335,3 +338,291 @@ def test_command_doc_slugs_match_the_bundled_skills() -> None:
     from scripts import render_generated_regions as rgr
 
     assert rgr.SKILL_SLUGS == build_pyz.SKILLS
+
+
+def _underscore_long_options(source: str) -> list[str]:
+    """Return each `--flag_name` string literal passed to an `add_argument` call."""
+    found: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute) or node.func.attr != "add_argument":
+            continue
+        for argument in node.args:
+            if not isinstance(argument, ast.Constant) or not isinstance(argument.value, str):
+                continue
+            if argument.value.startswith("--") and "_" in argument.value:
+                found.append(argument.value)
+    return found
+
+
+def test_the_underscore_guard_reads_every_option_string_of_a_call() -> None:
+    source = 'parser.add_argument("-w", "--work_id")\nparser.add_argument("--ok-name")\n'
+    assert _underscore_long_options(source) == ["--work_id"]
+
+
+def test_no_long_option_uses_an_underscore_in_its_flag_name() -> None:
+    root = Path(__file__).resolve().parents[2] / "src" / "easy_cheese"
+    offenders = {
+        str(path): found
+        for path in root.rglob("*.py")
+        if (found := _underscore_long_options(path.read_text(encoding="utf-8")))
+    }
+    assert offenders == {}
+
+
+# argparse prints a subparser group as `{a,b} ...` in the usage text. A `choices=`
+# option or positional has no trailing `...`.
+_SUBPARSER_GROUP_RE = re.compile(r"\{([a-z0-9_,\s-]+)\}\s+\.\.\.")
+
+
+def _subparser_names(handler: _CommandHandler) -> set[str]:
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
+        with contextlib.suppress(SystemExit):
+            _ = handler(["--help"])
+    match = _SUBPARSER_GROUP_RE.search(buffer.getvalue())
+    if match is None:
+        return set()
+    return {name.strip() for name in match.group(1).split(",")}
+
+
+@pytest.mark.parametrize("skill", _build_pyz.SKILLS)
+def test_declared_leaves_match_the_handlers_subparsers(skill: str) -> None:
+    package = skill.replace("-", "_")
+    module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
+    commands = cast("tuple[bc.Command, ...]", module.COMMANDS)
+    for item in commands:
+        handler = bc._handler(item.target)  # pyright: ignore[reportPrivateUsage]
+        assert set(item.leaves) == _subparser_names(handler), (
+            f"{skill}: {item.name}.leaves does not match the subparsers in --help"
+        )
+
+
+_TWO_COMMAND_HELP = (
+    "usage: <pyz> {alpha|beta-long} [args...]\n"
+    "  alpha      Do alpha\n"
+    "  beta-long  Do beta\n"
+    "Run <pyz> <command> --help for the arguments of a command.\n"
+    "references/commands.md in the skill directory lists the commands.\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("argv", "status"), [([], 2), (["-h"], 0), (["--help"], 0), (["help"], 0)]
+)
+def test_dispatch_top_level_help_is_the_same_full_block_for_every_form(
+    argv: list[str], status: int, capsys: pytest.CaptureFixture[str]
+) -> None:
+    commands = (
+        command("alpha", summary="Do alpha"),
+        command("beta-long", summary="Do beta"),
+    )
+    assert bc.dispatch(commands, argv) == status
+    assert capsys.readouterr().out == _TWO_COMMAND_HELP
+
+
+def test_dispatch_help_dispatches_to_a_command_literally_named_help(
+    target_module: tuple[list[list[str]], ModuleType],
+) -> None:
+    calls, _ = target_module
+    commands = (command("help"),)
+    assert bc.dispatch(commands, ["help", "x"]) == 7
+    assert calls == [["x"]]
+
+
+def test_dispatch_unknown_nested_leaf_names_the_owning_parent(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    commands = (
+        bc.Command(
+            "severity", "test_bundle_target:handler", "Severity", ("compute", "bucket")
+        ),
+    )
+    assert bc.dispatch(commands, ["compute"]) == 2
+    err = capsys.readouterr().err
+    assert err.splitlines()[0] == "usage: <pyz> {severity} [args...]"
+    assert "'compute' is a subcommand of 'severity'. Run: <pyz> severity compute ..." in err
+
+
+def test_dispatch_unknown_cross_bundle_command_names_the_owning_bundle(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake_index = ModuleType("easy_cheese.shared.bundle_command_index")
+    fake_index.COMMAND_BUNDLES = {"worktree": ("cook",)}  # pyright: ignore[reportAttributeAccessIssue]
+    fake_index.LEAF_OWNERS = {}  # pyright: ignore[reportAttributeAccessIssue]
+    monkeypatch.setitem(sys.modules, fake_index.__name__, fake_index)
+    commands = (command("go"),)
+    assert bc.dispatch(commands, ["worktree"]) == 2
+    err = capsys.readouterr().err
+    assert "'worktree' is a command of cook.pyz." in err
+
+
+def test_dispatch_unknown_cross_bundle_leaf_names_the_owning_parent_and_bundle(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake_index = ModuleType("easy_cheese.shared.bundle_command_index")
+    fake_index.COMMAND_BUNDLES = {}  # pyright: ignore[reportAttributeAccessIssue]
+    fake_index.LEAF_OWNERS = {  # pyright: ignore[reportAttributeAccessIssue]
+        "create": (("cook", "worktree"),)
+    }
+    monkeypatch.setitem(sys.modules, fake_index.__name__, fake_index)
+    commands = (command("go"),)
+    assert bc.dispatch(commands, ["create"]) == 2
+    err = capsys.readouterr().err
+    assert "'create' is 'worktree create' in cook.pyz." in err
+
+
+def test_dispatch_close_match_suggests_without_running(
+    target_module: tuple[list[list[str]], ModuleType],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls, _ = target_module
+    commands = (command("go"),)
+    assert bc.dispatch(commands, ["goo"]) == 2
+    err = capsys.readouterr().err
+    assert "Did you mean: go?" in err
+    assert calls == []
+
+
+def test_dispatch_never_suggests_the_same_name_twice(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake_index = ModuleType("easy_cheese.shared.bundle_command_index")
+    fake_index.COMMAND_BUNDLES = {"goo": ("cook",)}  # pyright: ignore[reportAttributeAccessIssue]
+    fake_index.LEAF_OWNERS = {}  # pyright: ignore[reportAttributeAccessIssue]
+    monkeypatch.setitem(sys.modules, fake_index.__name__, fake_index)
+    commands = (command("go"),)
+    assert bc.dispatch(commands, ["goo"]) == 2
+    err = capsys.readouterr().err
+    assert "Did you mean" not in err
+
+
+def test_dispatch_hoists_leading_flags_and_notes_it(
+    target_module: tuple[list[list[str]], ModuleType],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls, _ = target_module
+    commands = (command("go"),)
+    assert bc.dispatch(commands, ["--json", "go", "x"]) == 7
+    assert calls == [["--json", "x"]]
+    err = capsys.readouterr().err
+    assert "note: moved --json after 'go'" in err
+
+
+def test_dispatch_gives_unknown_command_guidance_after_a_global_flag(
+    target_module: tuple[list[list[str]], ModuleType],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls, _ = target_module
+    assert bc.dispatch((command("go"),), ["--json", "value", "go"]) == 2
+    err = capsys.readouterr().err
+    assert err.splitlines()[0] == "usage: <pyz> {go} [args...]"
+    assert "note:" not in err
+    assert calls == []
+
+
+def test_dispatch_never_reads_a_flag_value_as_the_command(
+    target_module: tuple[list[list[str]], ModuleType],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls, _ = target_module
+    assert bc.dispatch((command("go"),), ["--slug", "go", "x"]) == 2
+    err = capsys.readouterr().err
+    assert "Put the command first: <pyz> <command> [flags]" in err
+    assert "not --slug." in err
+    assert calls == []
+
+
+def test_dispatch_prints_help_for_a_help_flag_after_a_global_flag(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert bc.dispatch((command("go"),), ["--json", "--help"]) == 0
+    assert capsys.readouterr().out.startswith("usage: <pyz> {go} [args...]")
+
+
+def test_dispatch_applies_the_underscore_alias_to_cross_bundle_guidance(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake_index = ModuleType("easy_cheese.shared.bundle_command_index")
+    fake_index.COMMAND_BUNDLES = {"stack-tools": ("plate",)}  # pyright: ignore[reportAttributeAccessIssue]
+    fake_index.LEAF_OWNERS = {}  # pyright: ignore[reportAttributeAccessIssue]
+    monkeypatch.setitem(sys.modules, fake_index.__name__, fake_index)
+    assert bc.dispatch((command("go"),), ["stack_tools"]) == 2
+    assert "'stack-tools' is a command of plate.pyz." in capsys.readouterr().err
+
+
+def test_dispatch_applies_the_underscore_alias_to_leaf_guidance(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    commands = (
+        bc.Command("findings", "test_bundle_target:handler", "Findings", ("render-table",)),
+    )
+    assert bc.dispatch(commands, ["render_table"]) == 2
+    err = capsys.readouterr().err
+    assert "'render-table' is a subcommand of 'findings'." in err
+
+
+def test_dispatch_standardizes_flag_names_before_the_handler_runs(
+    target_module: tuple[list[list[str]], ModuleType],
+) -> None:
+    calls, _ = target_module
+    commands = (command("go"),)
+    assert bc.dispatch(commands, ["go", "--flag_name=1", "--", "--kept_as_is"]) == 7
+    assert calls == [["--flag-name=1", "--", "--kept_as_is"]]
+
+
+def test_dispatch_hoisted_json_flag_reaches_a_leaf_handler_via_cli_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hoisted `--json` given before the command must survive `cli.run`'s
+    subparser dispatch, not get overwritten by the subparser's own default.
+    """
+    seen: list[bool] = []
+    module = ModuleType("test_bundle_target_json_subparser")
+
+    def record(args: argparse.Namespace) -> None:
+        seen.append(cast(bool, args.json_mode))
+
+    def setup(parser: argparse.ArgumentParser) -> None:
+        sub = parser.add_subparsers()
+        leaf = sub.add_parser("list")
+        leaf.set_defaults(func=record)
+
+    def handler(argv: list[str]) -> int:
+        return cli.run(setup, argv=argv)
+
+    module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    commands = (command("paths", target=f"{module.__name__}:handler"),)
+
+    assert bc.dispatch(commands, ["--json", "paths", "list"]) == 0
+    assert seen == [True]
+
+
+def test_dispatch_hoisted_full_flag_reaches_a_leaf_handler_via_cli_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hoisted `--full` given before the command must survive `cli.run`'s
+    subparser dispatch, not get overwritten by the subparser's own default.
+    """
+    seen: list[bool] = []
+    module = ModuleType("test_bundle_target_full_subparser")
+
+    def record(args: argparse.Namespace) -> None:
+        seen.append(cast(bool, args.full))
+
+    def setup(parser: argparse.ArgumentParser) -> None:
+        sub = parser.add_subparsers()
+        leaf = sub.add_parser("list")
+        leaf.set_defaults(func=record)
+
+    def handler(argv: list[str]) -> int:
+        return cli.run(setup, argv=argv)
+
+    module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    commands = (command("paths", target=f"{module.__name__}:handler"),)
+
+    assert bc.dispatch(commands, ["--full", "paths", "list"]) == 0
+    assert seen == [True]

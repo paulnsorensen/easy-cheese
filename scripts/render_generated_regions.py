@@ -361,11 +361,12 @@ def render_skill_commands(slug: str) -> str:
             + examples
         ),
         "",
-        "| Command | Purpose |",
-        "| --- | --- |",
+        "| Command | Purpose | Subcommands |",
+        "| --- | --- | --- |",
     ]
     lines.extend(
         f"| `{command.name}` | {command.summary} |"
+        + f" {', '.join(f'`{leaf}`' for leaf in command.leaves)} |"
         for command in command_map(skill_commands(slug)).values()
     )
     lines.append("")
