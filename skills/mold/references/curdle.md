@@ -435,22 +435,42 @@ Before this procedure, run the digest-bound fresh-context fork taste test on the
 
 ## Finalization
 
-Finalize the approved spec and plan before the hand-off:
+Finalize the approved spec and plan before the hand-off. The host owns three values and sets each one once:
+
+- `REQUEST_ID` is the `request_id` of the `PlannerRequest`. On a path with no planner, use the spec slug.
+- `ARTIFACT_ROOT` is `.cheese/cook/<slug>-artifacts`. Mold and Cook must use the same directory.
+- The operation id is `<slug>-<ordinal>`. Keep it for an identical retry. Increase the ordinal when an input changes.
+
+Record the handshake verb first. Pass the user's reply word for word; a reply that is not an approval records a rejection:
+
+```bash
+python3 skills/mold/scripts/mold.pyz approve "$SPEC" \
+  --artifact-root "$ARTIFACT_ROOT" \
+  --request-id "$REQUEST_ID" \
+  --kind plan \
+  --response "<the user's literal reply>" \
+  --planner-result "$PLANNER_RESULT_JSON"
+```
+
+Use `--kind partial_plan` for a partial planner disposition. On the Light path, use `--kind scope --curd-id <curd-id>` and omit `--planner-result`. The command prints `approval_path`. Then finalize:
 
 ```bash
 python3 skills/mold/scripts/mold.pyz finalize "$SPEC" \
-  --approval "$APPROVAL_JSON" \
+  --approval "$APPROVAL_PATH" \
   --artifact-root "$ARTIFACT_ROOT" \
   --operation-id "<slug>-<ordinal>" \
   --request-id "$REQUEST_ID" \
   --mode full \
   --planner-result "$PLANNER_RESULT_JSON" \
-  --plan "$CURD_PLAN_JSON"
+  --taste-result "$TASTE_RESULT_JSON" \
+  --ledger "$TASTE_LEDGER_JSON"
 ```
 
-The command validates the complete approved boundary and stores a canonical `HandoffPointer`. Stop on a nonzero status.
+`--taste-result` is the persisted `taste-test` verdict. `--ledger` is the decision ledger as JSON. `--plan` is optional when the `PlannerResult` embeds its plan.
 
-Pass the stored pointer path to `/cook <pointer path>`. Cook must report `ready` before `accept` or feature execution.
+Read `status` in the output, not only the exit status. A nonzero exit status is an input error; stop. `ready` stores a canonical `HandoffPointer` and prints the Cook `command`. `saved-not-ready` exits zero, stores no pointer, and lists each unmet `requirements` entry and hold.
+
+For `ready`, render the ready branch of [`handoff-menus.md`](handoff-menus.md). The printed `command` contains `--auto`; run it only when the user selects an automatic choice. A manual choice uses `/cook <pointer path> --spec "$SPEC"`. For `saved-not-ready`, follow the saved-not-ready branch of the same menu.
 
 ## Hand-off
 
