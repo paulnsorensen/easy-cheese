@@ -86,6 +86,54 @@ def test_guarded_run_rejects_zero_exit_warnings(
         _ = gh_stack.run_guarded(args, tmp_path)
 
 
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "! Warning: could not update PR #3\n",
+        "gh: ⚠ Failed to update stack\n",
+        "[warn] stack not updated\n",
+        "pushed\nstack sync warning: mapping skipped\n",
+    ],
+)
+def test_guarded_run_rejects_decorated_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stderr: str
+) -> None:
+    args = ["gh", "stack", "sync", "--remote", "origin"]
+
+    def run(
+        _args: list[str], _cwd: Path, timeout: float = 10
+    ) -> subprocess.CompletedProcess[str]:
+        _ = timeout
+        return completed(args, stderr=stderr)
+
+    monkeypatch.setattr(gh_stack, "_run", run)
+
+    with pytest.raises(gh_stack.GhStackValidationError, match="warning"):
+        _ = gh_stack.run_guarded(args, tmp_path)
+
+
+def test_guarded_run_returns_the_result_for_a_clean_zero_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = ["gh", "stack", "push", "--remote", "origin"]
+
+    def run(
+        _args: list[str], _cwd: Path, timeout: float = 10
+    ) -> subprocess.CompletedProcess[str]:
+        _ = timeout
+        return completed(args, stdout="Pushed fix-warning-banner to origin\n")
+
+    monkeypatch.setattr(gh_stack, "_run", run)
+
+    assert gh_stack.run_guarded(args, tmp_path) == {
+        "valid": True,
+        "command": args,
+        "exit_status": 0,
+        "stdout": "Pushed fix-warning-banner to origin\n",
+        "stderr": "",
+    }
+
+
 def test_guarded_run_rejects_zero_exit_http_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

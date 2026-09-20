@@ -14,7 +14,11 @@ _TIMEOUT_SECONDS = 30
 _REMOTE_OPERATIONS = {"link", "push", "rebase", "submit", "sync"}
 _MUTATING_OPERATIONS = _REMOTE_OPERATIONS | {"add", "init", "modify", "unstack"}
 _ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x1b]*(?:\x1b\\|\x07))")
-_WARNING = re.compile(r"(?:^|\n)\s*(?:⚠|warning\b)", re.IGNORECASE)
+# The sigil matches anywhere. The word matches after line decoration or before a
+# colon, so a branch name that contains "warning" does not fail publication.
+_WARNING = re.compile(
+    r"⚠|(?:^|\n)[^\w\n]*warn(?:ing)?\b|\bwarn(?:ing)?:", re.IGNORECASE
+)
 _HTTP_FAILURE = re.compile(
     r"\b(?:HTTP(?:/[0-9.]+)?\s+|status(?:\s+code)?\s*[:=]?\s*)[45][0-9]{2}\b",
     re.IGNORECASE,
