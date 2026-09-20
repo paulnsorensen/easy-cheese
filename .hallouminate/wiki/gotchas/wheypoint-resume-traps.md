@@ -27,3 +27,19 @@ The model layer rejects a later revision with no parent. `lineage.walk` (`src/ea
 `checkpoint` is the normal write path with parent binding. `commit` remains for caller-supplied raw deltas and compaction proofs. `checkpoint` refuses every legacy key; `resolve` still reads legacy notes.
 
 _Source: r014 skill-review round notes (ingest hash 499c49c7b67d5eb6), verified against `src/easy_cheese/skills/wheypoint/` on 2026-09-04 · Updated: 2026-09-04 · Supersedes: review-time claims that lineage and compaction ordering were unenforced_
+
+
+## Writer exhaustion needs a non-terminal checkpoint
+
+The September 19, 2026 investigation finds a gap between writer budget handling and authoritative resume.
+A compact worker reply is an observation set, not a Wheypoint record.
+The parent owns checkpoint persistence because the exhausted worker can no longer run the required commands.
+The accepted recovery contract uses one fresh writer after an authoritative resolve returns nonempty `working_context`.[^writer-recovery]
+
+An incomplete Cook must not use the terminal phase writer to advance to Age.
+The shared checkpoint kernel preserves the current phase for recovery.
+The host carries completed work, remaining work, worktree identity, and the resolved source ranges into the retry.
+A missing checkpoint, invalid context, or second exhaustion halts.
+The parent must not implement the remainder automatically.[^writer-recovery]
+
+[^writer-recovery]: `src/easy_cheese/shared/workflow.py` (`WriterCheckpoint`, `WriterBudgetExceeded`, `_execute_curd`); `src/easy_cheese/shared/wheypoint/checkpoint.py`; `src/easy_cheese/shared/fanout/phase_decision.py`. Recovery decision: September 19, 2026. Source verification and release status belong to the implementation PR.

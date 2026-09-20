@@ -149,7 +149,7 @@ Use this schema:
 
 ```markdown
 status: <canonical status field>
-next: mold | cook | press | age | done
+next: mold | press | age | done
 artifact: <path to the upstream artifact this run consumed, or empty>
 taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
@@ -193,7 +193,7 @@ Do not infer the handoff from stdout.
 Set `next:` to the next runnable phase.
 Use `press` after red-required behavior work.
 Use `age` after closed N/A.
-Use `cook` after a blocker.
+Never publish `next: cook`; `needs-context` is a parent-owned same-phase retry.
 Use `mold` after a spec failure.
 Use `done` only at true completion.
 Do not send contractless N/A to Press.
@@ -244,7 +244,6 @@ A spawned phase agent does not chain forward by itself; the orchestrator control
 
 A terminal Age is publishable only with `next: done`.
 `next: cure` or a missing `next` halts the chain.
-The reference also contains the final report template.
 
 ## Rules
 

@@ -218,6 +218,7 @@ def commit(
                     delta,
                     fingerprint=fingerprint,
                     repository=repository_value,
+                    project_key=paths.project_key(digest_root),
                     durability=durability,
                     digest_of=digest_of,
                 ),
@@ -693,6 +694,7 @@ def _genesis(
     *,
     fingerprint: str,
     repository: RepositoryProvenance,
+    project_key: str,
     digest_of: Callable[[str], str | None],
     durability: Durability,
 ) -> PendingRevision:
@@ -702,8 +704,8 @@ def _genesis(
     needs has to be in the request: the semantic context it replaces, and the
     provenance that names when it was captured. `project_key` is the one
     exception -- it identifies the corpus the record is being written into, so
-    it is read from the environment that owns it rather than accepted from a
-    caller who could claim another project's identity.
+    it is derived from the artifact root that owns the transaction rather than
+    accepted from a caller who could claim another project's identity.
     """
     missing = [
         name
@@ -750,7 +752,7 @@ def _genesis(
             slug=store.work_id,
             title=_title(delta.orientation or ""),
             created=created,
-            project_key=paths.project_key(),
+            project_key=project_key,
             revision_id=revision_id,
             revision_number=1,
             revision_digest=_UNPINNED_DIGEST,

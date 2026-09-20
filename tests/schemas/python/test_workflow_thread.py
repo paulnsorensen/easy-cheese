@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
 
@@ -13,6 +13,10 @@ from easy_cheese.shared.artifacts import (
     ResolvedAgentArtifact,
     resolve_artifact,
 )
+from easy_cheese.shared import paths
+from easy_cheese.shared.wheypoint import commit as wheypoint_commit
+from easy_cheese.shared.wheypoint import resolve as wheypoint_resolve
+from easy_cheese.shared.wheypoint import storage
 from easy_cheese.shared.workflow import (
     WriterBudgetExceeded,
     WriterCheckpoint,
@@ -1301,3 +1305,615 @@ def test_budget_overrun_is_reported_apart_from_a_plain_writer_failure(
         "writer callback failed: RuntimeError: "
         + "context budget reached after the first repair",
     )
+
+
+def test_cook_budget_overrun_retries_from_authoritative_wheypoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = source_artifact(tmp_path)
+    grounded_path = tmp_path / "src" / "workflow.py"
+    grounded_path.parent.mkdir()
+    _ = grounded_path.write_text("def repair():\n    pass\n", encoding="utf-8")
+    store_root = tmp_path / "wheypoint"
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    monkeypatch.chdir(caller)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(store_root))
+    monkeypatch.delenv("EASY_CHEESE_PROJECT", raising=False)
+    plan_result = plan(
+        planner_request(),
+        lambda _request: complete_planner(),
+        artifacts={"source": source},
+    )
+    assert plan_result.plan is not None
+    calls: list[Mapping[str, object]] = []
+    attempts = 0
+
+    def dispatch_writer(context: Mapping[str, object]) -> CurdResultWriterView:
+        nonlocal attempts
+        attempts += 1
+        calls.append(context)
+        if attempts == 1:
+            raise WriterBudgetExceeded(
+                WriterCheckpoint(
+                    reason="context budget reached",
+                    remaining=["Apply the second repair"],
+                    grounded=["src/workflow.py#1-2"],
+                )
+            )
+        return CurdResultWriterView(
+            criterion_results=[
+                CriterionResultWriterView(
+                    "workflow-request/plan/curd/1/criterion/1",
+                    CriterionDisposition.PASSED,
+                    evidence_keys=["input-1"],
+                )
+            ]
+        )
+
+    _branches, results = cook(
+        plan_result.plan,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert attempts == 2
+    assert results[0].disposition is CurdDisposition.PASSED
+    assert calls[1]["working_context"] == ("src/workflow.py#1-2",)
+    assert calls[1]["remaining_work"] == ("Apply the second repair",)
+    assert calls[1]["retry_count"] == 1
+    assert calls[1]["scope"] == calls[0]["scope"]
+    assert calls[1]["checkpoint_ref"]
+    project = paths.project_key(tmp_path)
+    assert project != paths.project_key(caller)
+    assert storage.WorkStore.enumerate(store_root / project)
+    resolved = wheypoint_resolve.resolve(
+        next(iter(storage.WorkStore.enumerate(store_root / project))).work_id,
+        corpus_root=store_root / project,
+        workspace_root=tmp_path,
+        project_key=project,
+    )
+    assert resolved.dispatchable
+
+
+def _budget_checkpoint_plan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    overrun: bool = False,
+) -> tuple[CurdPlan, Path]:
+    source = source_artifact(tmp_path)
+    grounded_path = tmp_path / "src" / "workflow.py"
+    grounded_path.parent.mkdir()
+    _ = grounded_path.write_text("def repair():\n    pass\n", encoding="utf-8")
+    store_root = tmp_path / "wheypoint"
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    monkeypatch.chdir(caller)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(store_root))
+    monkeypatch.delenv("EASY_CHEESE_PROJECT", raising=False)
+    result = plan(
+        planner_request(),
+        lambda request: overrun_planner(request) if overrun else complete_planner(),
+        artifacts={"source": source},
+    )
+    assert result.plan is not None
+    return result.plan, store_root
+
+
+def test_cook_budget_recovery_save_failure_stays_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, _store_root = _budget_checkpoint_plan(tmp_path, monkeypatch)
+    attempts = 0
+
+    def dispatch_writer(_context: Mapping[str, object]) -> CurdResultWriterView:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(
+            WriterCheckpoint(
+                reason="context budget reached",
+                remaining=["Apply the second repair"],
+                grounded=["src/workflow.py#1-2"],
+            )
+        )
+
+    def fail_commit(*_args: object, **_kwargs: object) -> object:
+        raise RuntimeError("checkpoint save failed")
+
+    monkeypatch.setattr(wheypoint_commit, "commit", fail_commit)
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert attempts == 1
+    assert results[0].disposition is CurdDisposition.BLOCKED
+    assert "wheypoint recovery failed" in results[0].unresolved_work[0]
+
+
+def test_cook_budget_recovery_empty_resolved_context_stays_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, _store_root = _budget_checkpoint_plan(tmp_path, monkeypatch)
+    attempts = 0
+
+    def dispatch_writer(_context: Mapping[str, object]) -> CurdResultWriterView:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(
+            WriterCheckpoint(
+                reason="context budget reached",
+                remaining=["Apply the second repair"],
+                grounded=["src/workflow.py#1-2"],
+            )
+        )
+
+    original_resolve = wheypoint_resolve.resolve
+
+    def empty_resolve(
+        ref: str,
+        *,
+        corpus_root: Path | str | None = None,
+        project_key: str | None = None,
+        workspace_root: Path | str | None = None,
+        git_object_exists: Callable[[str], bool] | None = None,
+        artifact_digest: Callable[[str], str | None] | None = None,
+    ):
+        resolution = original_resolve(
+            ref,
+            corpus_root=corpus_root,
+            project_key=project_key,
+            workspace_root=workspace_root,
+            git_object_exists=git_object_exists,
+            artifact_digest=artifact_digest,
+        )
+        assert resolution.record is not None
+        return attrs.evolve(
+            resolution,
+            record=attrs.evolve(resolution.record, working_context=[]),
+        )
+
+    monkeypatch.setattr(wheypoint_resolve, "resolve", empty_resolve)
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert attempts == 1
+    assert results[0].disposition is CurdDisposition.BLOCKED
+    assert "wheypoint recovery failed" in results[0].unresolved_work[0]
+
+
+def test_cook_budget_recovery_retries_once_on_second_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, _store_root = _budget_checkpoint_plan(tmp_path, monkeypatch)
+    attempts = 0
+
+    def dispatch_writer(_context: Mapping[str, object]) -> CurdResultWriterView:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(
+            WriterCheckpoint(
+                reason="context budget reached",
+                remaining=["Apply the second repair"],
+                grounded=["src/workflow.py#1-2"],
+            )
+        )
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert attempts == 2
+    assert results[0].disposition is CurdDisposition.BLOCKED
+    assert results[0].unresolved_work[0].startswith(
+        "writer stopped at its budget: WriterBudgetExceeded:"
+    )
+
+
+def test_budget_checkpoint_notes_reject_overflow_before_persistence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, store_root = _budget_checkpoint_plan(tmp_path, monkeypatch, overrun=True)
+    curd = planned.curds[0]
+    prefix = (
+        f"Writer budget checkpoint for {curd.curd_id}. "
+        "Completed: none. Deliverables: none. Remaining: "
+    )
+    remaining = "x" * (4095 - len(prefix))
+    exact = WriterCheckpoint(
+        reason="context budget reached",
+        remaining=[remaining],
+        grounded=["src/workflow.py#1-2"],
+    )
+    assert len(workflow_module._budget_notes(curd, exact)) == 4096  # pyright: ignore[reportPrivateUsage]
+
+    attempts = 0
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(
+            attrs.evolve(exact, remaining=[remaining + "x"])
+        )
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert attempts == 1
+    assert results[0].disposition is CurdDisposition.BLOCKED
+    assert "budget checkpoint notes exceed 4096 characters" in (
+        results[0].unresolved_work[0]
+    )
+    project = paths.project_key(tmp_path)
+    assert not tuple(storage.WorkStore.enumerate(store_root / project))
+    assert not (tmp_path / ".cheese").exists()
+
+
+@pytest.mark.parametrize("retry_failure", ["exception", "invalid"])
+def test_budget_retry_failure_retains_checkpoint_progress(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    retry_failure: str,
+) -> None:
+    planned, _store_root = _budget_checkpoint_plan(
+        tmp_path, monkeypatch, overrun=True
+    )
+    payload = b"first repair landed\n"
+    _ = (tmp_path / "repair.txt").write_bytes(payload)
+    attempts = 0
+    review_calls: list[ReviewRequest] = []
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise WriterBudgetExceeded(
+                WriterCheckpoint(
+                    reason="context budget reached after the first repair",
+                    completed=[
+                        CriterionResultWriterView(
+                            "workflow-request/plan/curd/1/criterion/1",
+                            CriterionDisposition.PASSED,
+                            evidence_keys=["repair.txt"],
+                        )
+                    ],
+                    deliverables=[
+                        DeliverableWriterView("repair", "repair.txt", "text/plain")
+                    ],
+                    remaining=["Apply the second repair"],
+                    grounded=["src/workflow.py#1-2"],
+                )
+            )
+        if retry_failure == "exception":
+            raise RuntimeError("retry writer failed")
+        return object()
+
+    def dispatch_review(request: ReviewRequest) -> ReviewResultWriterView:
+        review_calls.append(request)
+        return clean_review(request)
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=dispatch_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    result = results[0]
+    assert attempts == 2
+    assert review_calls == []
+    assert result.disposition is CurdDisposition.BLOCKED
+    assert result.criterion_results[0].disposition is CriterionDisposition.PASSED
+    assert result.criterion_results[0].evidence[0].artifact.digest == digest(payload)
+    assert result.deliverables[0].digest == digest(payload)
+    assert (
+        "writer callback failed" if retry_failure == "exception" else "writer output invalid"
+    ) in result.unresolved_work[0]
+
+
+def test_second_budget_retry_merges_prior_progress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, _store_root = _budget_checkpoint_plan(
+        tmp_path, monkeypatch, overrun=True
+    )
+    payload = b"first repair landed\n"
+    _ = (tmp_path / "repair.txt").write_bytes(payload)
+    attempts = 0
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        checkpoint = WriterCheckpoint(
+            reason=(
+                "first budget reached"
+                if attempts == 1
+                else "second budget reached"
+            ),
+            completed=(
+                [
+                    CriterionResultWriterView(
+                        "workflow-request/plan/curd/1/criterion/1",
+                        CriterionDisposition.PASSED,
+                        evidence_keys=["repair.txt"],
+                    )
+                ]
+                if attempts == 1
+                else []
+            ),
+            deliverables=(
+                [DeliverableWriterView("repair", "repair.txt", "text/plain")]
+                if attempts == 1
+                else []
+            ),
+            remaining=(
+                ["Apply the second repair"] if attempts == 1 else ["Finish validation"]
+            ),
+            grounded=["src/workflow.py#1-2"] if attempts == 1 else None,
+        )
+        raise WriterBudgetExceeded(checkpoint)
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    result = results[0]
+    assert attempts == 2
+    assert result.disposition is CurdDisposition.BLOCKED
+    assert result.criterion_results[0].disposition is CriterionDisposition.PASSED
+    assert result.deliverables[0].digest == digest(payload)
+    assert result.unresolved_work[-1] == "Finish validation"
+    assert "second budget reached" in result.unresolved_work[0]
+
+
+@pytest.mark.parametrize("invalid_kind", ["duplicate", "unknown"])
+def test_invalid_first_checkpoint_does_not_persist_or_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    invalid_kind: str,
+) -> None:
+    planned, store_root = _budget_checkpoint_plan(
+        tmp_path, monkeypatch, overrun=True
+    )
+    attempts = 0
+    criterion = CriterionResultWriterView(
+        "workflow-request/plan/curd/1/criterion/1",
+        CriterionDisposition.PASSED,
+        evidence_keys=["input-1"],
+    )
+    completed = (
+        [criterion, criterion]
+        if invalid_kind == "duplicate"
+        else [
+            CriterionResultWriterView(
+                "workflow-request/plan/curd/1/criterion/unknown",
+                CriterionDisposition.PASSED,
+                evidence_keys=["input-1"],
+            )
+        ]
+    )
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(
+            WriterCheckpoint(
+                reason="context budget reached",
+                completed=completed,
+                remaining=["Apply the repair"],
+                grounded=["src/workflow.py#1-2"],
+            )
+        )
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert attempts == 1
+    assert results[0].disposition is CurdDisposition.BLOCKED
+    project = paths.project_key(tmp_path)
+    assert not tuple(storage.WorkStore.enumerate(store_root / project))
+
+
+def test_unreadable_first_checkpoint_deliverable_does_not_persist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, store_root = _budget_checkpoint_plan(tmp_path, monkeypatch)
+    attempts = 0
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(
+            WriterCheckpoint(
+                reason="context budget reached",
+                completed=[
+                    CriterionResultWriterView(
+                        "workflow-request/plan/curd/1/criterion/1",
+                        CriterionDisposition.PASSED,
+                        evidence_keys=["missing.txt"],
+                    )
+                ],
+                deliverables=[
+                    DeliverableWriterView("repair", "missing.txt", "text/plain")
+                ],
+                remaining=["Apply the repair"],
+                grounded=["src/workflow.py#1-2"],
+            )
+        )
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=clean_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    assert attempts == 1
+    assert results[0].disposition is CurdDisposition.BLOCKED
+    project = paths.project_key(tmp_path)
+    assert not tuple(storage.WorkStore.enumerate(store_root / project))
+
+
+def test_invalid_second_checkpoint_retains_first_progress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, _store_root = _budget_checkpoint_plan(
+        tmp_path, monkeypatch, overrun=True
+    )
+    payload = b"first repair landed\n"
+    _ = (tmp_path / "repair.txt").write_bytes(payload)
+    attempts = 0
+    review_calls: list[ReviewRequest] = []
+    first = WriterCheckpoint(
+        reason="first budget reached",
+        completed=[
+            CriterionResultWriterView(
+                "workflow-request/plan/curd/1/criterion/1",
+                CriterionDisposition.PASSED,
+                evidence_keys=["repair.txt"],
+            )
+        ],
+        deliverables=[DeliverableWriterView("repair", "repair.txt", "text/plain")],
+        remaining=["Apply the second repair"],
+        grounded=["src/workflow.py#1-2"],
+    )
+    second = WriterCheckpoint(
+        reason="second budget reached",
+        completed=[
+            CriterionResultWriterView(
+                "workflow-request/plan/curd/1/criterion/unknown",
+                CriterionDisposition.PASSED,
+                evidence_keys=["input-1"],
+            )
+        ],
+        remaining=["Finish validation"],
+    )
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(first if attempts == 1 else second)
+
+    def dispatch_review(request: ReviewRequest) -> ReviewResultWriterView:
+        review_calls.append(request)
+        return clean_review(request)
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=dispatch_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    result = results[0]
+    assert attempts == 2
+    assert review_calls == []
+    assert result.disposition is CurdDisposition.BLOCKED
+    assert result.criterion_results[0].disposition is CriterionDisposition.PASSED
+    assert result.deliverables[0].digest == digest(payload)
+    assert "second budget checkpoint invalid" in result.unresolved_work[0]
+
+
+def test_merged_full_coverage_checkpoint_retains_first_progress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    planned, _store_root = _budget_checkpoint_plan(
+        tmp_path, monkeypatch, overrun=True
+    )
+    payload = b"first repair landed\n"
+    _ = (tmp_path / "repair.txt").write_bytes(payload)
+    attempts = 0
+    review_calls: list[ReviewRequest] = []
+    first = WriterCheckpoint(
+        reason="first budget reached",
+        completed=[
+            CriterionResultWriterView(
+                "workflow-request/plan/curd/1/criterion/1",
+                CriterionDisposition.PASSED,
+                evidence_keys=["repair.txt"],
+            )
+        ],
+        deliverables=[DeliverableWriterView("repair", "repair.txt", "text/plain")],
+        remaining=["Apply the second repair"],
+        grounded=["src/workflow.py#1-2"],
+    )
+    second = WriterCheckpoint(
+        reason="second budget reached",
+        completed=[
+            CriterionResultWriterView(
+                "workflow-request/plan/curd/1/criterion/2",
+                CriterionDisposition.PASSED,
+                evidence_keys=["input-1"],
+            )
+        ],
+        remaining=["Finish validation"],
+    )
+
+    def dispatch_writer(_context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        raise WriterBudgetExceeded(first if attempts == 1 else second)
+
+    def dispatch_review(request: ReviewRequest) -> ReviewResultWriterView:
+        review_calls.append(request)
+        return clean_review(request)
+
+    _branches, results = cook(
+        planned,
+        repository_root=tmp_path,
+        artifact_directory=tmp_path / "artifacts",
+        dispatch_writer=dispatch_writer,
+        dispatch_review=dispatch_review,
+        dispatch_diagnosis=unused_diagnosis,
+    )
+
+    result = results[0]
+    assert attempts == 2
+    assert review_calls == []
+    assert result.disposition is CurdDisposition.BLOCKED
+    assert result.criterion_results[0].disposition is CriterionDisposition.PASSED
+    assert result.criterion_results[1].disposition is CriterionDisposition.BLOCKED
+    assert result.deliverables[0].digest == digest(payload)
+    assert "second budget checkpoint invalid" in result.unresolved_work[0]
