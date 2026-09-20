@@ -113,6 +113,7 @@ type ReviewFindingWriterView {
   dimension ReviewDimension
   summary str
   evidence_keys tuple[str, ...]
+  fix_cost_now FixCostNow
   location? SourceLocationWriterView | None = None
 }
 
@@ -143,6 +144,8 @@ type SourceLocationWriterView {
 enum CriterionDisposition = "passed" | "failed" | "blocked" | "skipped"
 
 enum DiagnosisDisposition = "confirmed" | "inconclusive" | "not_reproduced" | "blocked" | "invalid" | "executor_failure"
+
+enum FixCostNow = "contained" | "sprawling"
 
 enum HypothesisDisposition = "confirmed" | "rejected" | "unresolved"
 

@@ -335,6 +335,8 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         f"{SCHEMA_ROOT}/planner-request",
         f"{SCHEMA_ROOT}/planner-result",
         f"{SCHEMA_ROOT}/pr-plan",
+        f"{SCHEMA_ROOT}/remediation-cure-observation",
+        f"{SCHEMA_ROOT}/remediation-state",
         f"{SCHEMA_ROOT}/review-request",
         f"{SCHEMA_ROOT}/review-result",
         f"{SCHEMA_ROOT}/wheypoint-record",

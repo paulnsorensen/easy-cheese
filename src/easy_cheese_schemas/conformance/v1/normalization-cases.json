@@ -138,6 +138,7 @@
               "evidence_keys": [
                 "review-log"
               ],
+              "fix_cost_now": "contained",
               "location": {
                 "path": "src/runtime.py",
                 "start_line": 40,
@@ -211,6 +212,7 @@
                 "summary": "The failing review trace"
               }
             ],
+            "fix_cost_now": "contained",
             "location": {
               "artifact_id": "artifact-review-log",
               "path": "src/runtime.py",

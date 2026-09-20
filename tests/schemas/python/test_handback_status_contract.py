@@ -320,6 +320,8 @@ def test_artifact_writer_accepts_every_registered_status(
     """L17: a stop-disposition status hands off to 'done', matching the
     contract -- a phase does not name a next phase to walk into when it is
     stopping."""
+    grounding = tmp_path / "grounding.md"
+    _ = grounding.write_text("test-owned grounding\n", encoding="utf-8")
     next_skill = "done" if HANDBACK_STATUSES[name].disposition is STOP else "age"
     target = write_handoff_artifact.write_artifact(
         slug="demo",
@@ -330,6 +332,8 @@ def test_artifact_writer_accepts_every_registered_status(
         body=None,
         root=tmp_path,
         phase="cook",
+        grounded=("grounding.md#1-1",),
+        corpus_root=tmp_path / "corpus",
     )
 
     assert target.read_text(encoding="utf-8").splitlines()[0] == f"status: {_field(name)}"

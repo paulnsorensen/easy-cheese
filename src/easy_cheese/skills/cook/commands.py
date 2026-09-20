@@ -41,6 +41,13 @@ def _phase_decision(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("remediation-decision")
+def _remediation_decision(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.remediation_decision import main
+
+    return main(argv)
+
+
 @bundle_command("milknado")
 def _milknado(argv: list[str]) -> int:
     from easy_cheese.shared.fanout.milknado import main
@@ -217,6 +224,10 @@ COMMANDS = (
     derive_command(
         _phase_decision,
         "Decide what the fan-out pathway does after a phase sub-agent returns",
+    ),
+    derive_command(
+        _remediation_decision,
+        "Apply one fan-remediation event and publish the next scope state",
     ),
     derive_command(_milknado, "Probe the milknado engine seam used by parallel mode"),
     derive_command(_mode, "Select the fan-out mode from the canonical size thresholds"),

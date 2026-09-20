@@ -1119,6 +1119,7 @@ def _normalize_finding(
         dimension=item.dimension,
         summary=item.summary,
         evidence=refs,
+        fix_cost_now=item.fix_cost_now,
         location=_source_location(item.location, first.artifact.artifact_id),
     )
 

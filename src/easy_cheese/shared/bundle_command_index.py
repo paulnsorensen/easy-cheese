@@ -55,6 +55,7 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'press-telemetry': ('press',),
     'rank-hunks': ('hard-cheese',),
     'read-handoff-slug': ('age', 'cook', 'cure'),
+    'remediation-decision': ('cook',),
     'render-html': ('age', 'cook', 'cure', 'mold'),
     'repro-rerun': ('pasteurize',),
     'research-layout': ('briesearch',),
