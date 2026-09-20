@@ -8,8 +8,8 @@
     "test": "playwright test"
   },
   "dependencies": {
+    "@cheeselord/design": "0.4.0",
     "@excalidraw/excalidraw": "0.18.1",
-    "@fontsource/inter": "5.2.5",
     "mermaid": "11.17.2",
     "react": "19.1.1",
     "react-dom": "19.1.1"
