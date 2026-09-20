@@ -1,0 +1,22 @@
+{
+  "name": "@easy-cheese/mold-review",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "@fontsource/inter": "5.2.5",
+    "mermaid": "11.17.2",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.3.0"
+  }
+}

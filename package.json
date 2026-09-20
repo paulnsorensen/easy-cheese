@@ -18,9 +18,11 @@
     "typescript": "^5.8.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "sharp",
-      "esbuild"
-    ]
+    "overrides": {
+      "@excalidraw/excalidraw>nanoid": "3.3.19",
+      "@excalidraw/mermaid-to-excalidraw>nanoid": "5.1.16",
+      "lodash-es": "4.18.1"
+    },
+    "onlyBuiltDependencies": ["sharp", "esbuild"]
   }
 }

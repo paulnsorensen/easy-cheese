@@ -1,0 +1,144 @@
+import {test,expect} from '@playwright/test';
+import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {dirname,join,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {spawn,execFileSync} from 'node:child_process';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
+const archive=join(root,'skills/mold/scripts/mold.pyz');
+async function server(){return serverAt(root);}
+async function serverAt(cwd){const state=await mkdtemp(join(tmpdir(),'mold-review-'));const input=join(state,'revision.json');await writeFile(input,JSON.stringify({questions:[{id:'q-layout',prompt:'Pick a layout',selection_mode:'single',recommended_option_id:'frontend',options:[{id:'frontend',label:'Frontend'},{id:'backend',label:'Backend'},{id:'hostile',label:'<script>window.__moldXss=1</script>'}]}]}));execFileSync('python3',[archive,'review','publish','--state-dir',state,'--input',input],{cwd});return start(state,cwd);}
+async function start(state,cwd=root){const child=spawn('python3',[archive,'review','serve','--state-dir',state,'--port','0'],{cwd,env:globalThis.process.env,stdio:['ignore','pipe','inherit']});const line=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('server did not start')),10000);child.stdout.once('data',d=>{clearTimeout(timer);resolve(JSON.parse(d.toString()))});});return {state,child,...line};}
+const question=page=>page.locator('fieldset.question');
+test('renders offline review and switches layouts',async({page})=>{const s=await server();try{await page.goto(`${s.url}`);await expect(page.getByText('Decision questions')).toBeVisible();await expect(page.getByText(/Question ID: q-layout/)).toBeVisible();await expect(page.getByText(/Option ID: frontend/)).toBeVisible();await expect(page.getByText(/Option ID: backend/)).toBeVisible();await expect(page.getByText(/Recommended/)).toBeVisible();await page.getByRole('button',{name:'frontend'}).click();await expect(page.getByRole('heading',{name:'Frontend'})).toBeVisible();await question(page).getByRole('radio').first().check();}finally{s.child.kill();}});
+test('autosaves without submission then sends explicitly',async({page})=>{const s=await server();try{await page.goto(`${s.url}`);await question(page).getByRole('radio').first().check();await expect(page.getByText('Saved')).toBeVisible();expect(execFileSync('python3',['skills/mold/scripts/mold.pyz','review','poll','--state-dir',s.state,'--after','0','--timeout','0'],{cwd:root}).toString().trim()).toBe('null');await page.getByRole('button',{name:'Send to agent'}).click();await expect(page.getByText(/Submitted/)).toBeVisible();}finally{s.child.kill();}});
+test('rejects hostile origin',async({request})=>{const s=await server();try{const r=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{Origin:'https://evil.example',Host:new URL(s.url).host,'X-Mold-Token':s.token}});expect(r.status()).toBe(403);}finally{s.child.kill();}});
+test('AC-1 archive starts without Node or outbound assets',async({page})=>{const isolated=await mkdtemp(join(tmpdir(),'mold-review-cwd-'));const s=await serverAt(isolated);const origins=[];page.on('request',request=>origins.push(new URL(request.url()).origin));try{await page.goto(`${s.url}`);await expect(page.locator('main')).toBeVisible();expect(new Set(origins)).toEqual(new Set([new URL(s.url).origin]));}finally{s.child.kill();}});
+test('AC-2 layout switch preserves selected option and annotations after reload',async({page,request})=>{const s=await server();try{await page.goto(`${s.url}`);await question(page).getByRole('radio').first().check();await page.getByLabel('Annotations').fill('keep this');await page.getByRole('button',{name:'frontend'}).click();await expect.poll(async()=>{const review=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}}).then(response=>response.json());const working=review.working?.[review.revision.number]||{};return {annotations:working.annotations,layout:working.layout,selected:working.answers?.['q-layout']?.selected};}).toEqual({annotations:'keep this',layout:'frontend',selected:['frontend']});await expect(page.getByLabel('Annotations')).toHaveValue('keep this');}finally{s.child.kill();}});
+test('AC-3 Excalidraw mouse edit and Mermaid source render errors retain source',async({page,request})=>{const s=await server();try{await page.goto(`${s.url}`);const canvas=page.locator('.excalidraw canvas.interactive');await expect(canvas).toBeVisible();const rectangle=page.getByTestId('toolbar-rectangle');await rectangle.locator('..').click();await expect(rectangle).toBeChecked();await canvas.scrollIntoViewIfNeeded();await expect(canvas).toBeVisible();const box=await canvas.boundingBox();expect(box).not.toBeNull();await page.mouse.move(box.x+120,box.y+220);await page.mouse.down();await page.mouse.move(box.x+260,box.y+330,{steps:5});await page.mouse.up();await expect.poll(async()=>{const response=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());return response.working?.[response.revision.number]?.scene?.elements?.length||0;},{timeout:10000}).toBeGreaterThan(0);const mermaid=page.getByLabel('Mermaid source');await mermaid.fill('sequenceDiagram\nparticipant User\nparticipant Agent\nUser->>Agent: Review');await expect(page.locator('.diagram svg')).toBeVisible();await expect.poll(async()=>{const response=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());return response.working?.[response.revision.number]?.mermaid_source;}).toContain('User->>Agent: Review');await mermaid.fill('this is not valid Mermaid syntax @@@');await expect(page.getByRole('alert')).toBeVisible();await expect(mermaid).toHaveValue('this is not valid Mermaid syntax @@@');}finally{s.child.kill();}});
+test('AC-4 submission carries exact question and option identifiers plus Other text',async({page})=>{const s=await server();try{await page.goto(`${s.url}`);await question(page).getByRole('radio').first().check();await page.getByPlaceholder('Add your own response').fill('custom');await page.getByRole('button',{name:'Send to agent'}).click();await expect(page.getByText(/Submitted/)).toBeVisible();const submitted=JSON.parse(execFileSync('python3',['skills/mold/scripts/mold.pyz','review','poll','--state-dir',s.state,'--after','0','--timeout','0'],{cwd:root}).toString());expect(submitted.revision).toBe(1);expect(submitted.feedback.answers).toEqual({'q-layout':{selected:['frontend'],other:'custom',selection_mode:'single'}});expect(submitted.feedback.layout).toBe('mixed');expect(submitted.operation_id).toMatch(/^browser-1$/);}finally{s.child.kill();}});
+test('AC-5 autosave does not submit before explicit Send to agent',async({page,request})=>{const s=await server();try{await page.goto(`${s.url}`);await question(page).getByRole('radio').first().check();await page.waitForTimeout(700);const review=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());expect(review.generation['1']).toBe(1);await page.waitForTimeout(700);expect(execFileSync('python3',['skills/mold/scripts/mold.pyz','review','poll','--state-dir',s.state,'--after','0','--timeout','0'],{cwd:root}).toString().trim()).toBe('null');}finally{s.child.kill();}});
+test('AC-6 stale tab keeps dirty work when a new revision arrives',async({browser,request})=>{const s=await server();try{const a=await browser.newPage(),b=await browser.newPage();await a.goto(`${s.url}`);await b.goto(`${s.url}`);await expect(a.getByText(/Revision 1/)).toBeVisible();await expect(b.getByText(/Revision 1/)).toBeVisible();await expect.poll(async()=>{const review=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());return review.generation?.['1']||0;}).toBe(0);const first=await request.post(`${new URL(s.url).origin}/api/submit`,{headers:{'X-Mold-Token':s.token,'Content-Type':'application/json','Origin':new URL(s.url).origin},data:{revision:1,operation_id:'first-revision',feedback:{answers:{},notes:'first'}}});expect(first.ok()).toBeTruthy();await a.getByLabel('Working notes').fill('dirty');await expect(a.getByLabel('Working notes')).toHaveValue('dirty');const input=join(s.state,'revision-2.json');await writeFile(input,JSON.stringify({questions:[{id:'q-new',prompt:'New question',selection_mode:'single',options:[{id:'new',label:'New'}]}]}));execFileSync('python3',[archive,'review','publish','--state-dir',s.state,'--input',input,'--base-revision','1'],{cwd:root});await expect(b.getByRole('button',{name:/New revision available/})).toBeVisible({timeout:5000});await b.getByRole('button',{name:/New revision available/}).click();await expect(b.getByText(/Revision 2/)).toBeVisible();await expect(b.getByRole('button',{name:'Send to agent'})).toBeEnabled();await expect(a.getByLabel('Working notes')).toHaveValue('dirty');await expect(a.getByText(/Revision 1/)).toBeVisible();const stale=await request.post(`${new URL(s.url).origin}/api/autosave`,{headers:{'X-Mold-Token':s.token,'Content-Type':'application/json','Origin':new URL(s.url).origin},data:{revision:1,generation:0,feedback:{notes:'stale'}}});expect(stale.status()).toBe(409);}finally{s.child.kill();}});
+test('failed autosave blocks revision switch until discarded',async({page,request})=>{const s=await server();let failAutosave=false;try{await page.route('**/api/autosave',async route=>{if(failAutosave){await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'unavailable'})});}else{await route.continue();}});await page.goto(`${s.url}`);await expect(page.getByText('Saved')).toBeVisible();await expect.poll(async()=>{const review=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());return review.generation?.['1']||0;}).toBe(0);failAutosave=true;await page.getByLabel('Working notes').fill('dirty');await expect(page.getByText(/Save failed: unavailable/)).toBeVisible({timeout:5000});const input=join(s.state,'revision-2.json');await writeFile(input,JSON.stringify({questions:[{id:'q-new',prompt:'New question',selection_mode:'single',options:[{id:'new',label:'New'}]}]}));execFileSync('python3',[archive,'review','publish','--state-dir',s.state,'--input',input,'--base-revision','1'],{cwd:root});await expect(page.getByRole('button',{name:'Discard unsaved changes'})).toBeVisible();await expect(page.getByRole('button',{name:/New revision available/})).toHaveCount(0);await page.getByRole('button',{name:'Discard unsaved changes'}).click();await expect(page.getByRole('button',{name:/New revision available/})).toBeVisible({timeout:5000});await page.getByRole('button',{name:/New revision available/}).click();await expect(page.getByText(/Revision 2/)).toBeVisible();}finally{s.child.kill();}});
+test('AC-7 restart restores acknowledged submission and idempotent retry',async({request})=>{const s=await server();try{const review=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());const feedback={answers:{'q-layout':{selected:['frontend'],other:''}},notes:'ack',annotations:'',layout:'mixed'};const headers={'X-Mold-Token':s.token,'Content-Type':'application/json','Origin':new URL(s.url).origin};const first=await request.post(`${new URL(s.url).origin}/api/submit`,{headers,data:JSON.stringify({revision:review.revision.number,operation_id:'retry-op',feedback})});expect(first.ok()).toBeTruthy();const original=await first.json();s.child.kill();const restarted=await start(s.state);try{const second=await request.post(`${new URL(restarted.url).origin}/api/submit`,{headers:{'X-Mold-Token':restarted.token,'Content-Type':'application/json','Origin':new URL(restarted.url).origin},data:JSON.stringify({revision:review.revision.number,operation_id:'retry-op',feedback})});expect(second.ok()).toBeTruthy();expect((await second.json()).submission_id).toBe(original.submission_id);}finally{restarted.child.kill();}}finally{s.child.kill();}});
+test('AC-8 rejects hostile origin traversal and external sentinel access',async({request})=>{const s=await server();try{const noToken=await request.get(`${new URL(s.url).origin}/api/review`);expect([401,403]).toContain(noToken.status());const hostile=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{Origin:'https://evil.example',Host:new URL(s.url).host,'X-Mold-Token':s.token}});expect(hostile.status()).toBe(403);const unauthorizedMutation=await request.post(`${new URL(s.url).origin}/api/autosave`,{data:{revision:1,generation:0,feedback:{notes:'intruder'}}});expect(unauthorizedMutation.status()).toBe(403);const oversized=await request.post(`${new URL(s.url).origin}/api/autosave`,{headers:{'X-Mold-Token':s.token,'Content-Type':'application/json','Origin':new URL(s.url).origin},data:JSON.stringify({revision:1,generation:0,feedback:{notes:'x'.repeat(1100000)}})});expect(oversized.status()).toBe(413);await writeFile(join(s.state,'sentinel.txt'),'unchanged');const traversal=await request.get(`${new URL(s.url).origin}/assets/../review.json`,{headers:{Host:new URL(s.url).host,'X-Mold-Token':s.token}});expect(traversal.status()).toBeGreaterThanOrEqual(400);const external=await request.get(`${new URL(s.url).origin}/../../etc/passwd`,{headers:{Host:new URL(s.url).host,'X-Mold-Token':s.token}});expect(external.status()).toBeGreaterThanOrEqual(400);expect(await readFile(join(s.state,'sentinel.txt'),'utf8')).toBe('unchanged');}finally{s.child.kill();}});
+test('AC-9 ordinary feedback does not grant Mold approval',async({page,request})=>{const s=await server();try{await page.goto(`${s.url}`);await expect(page.getByRole('button',{name:'Send to agent'})).toBeVisible();await expect(page.getByText(/approve|approval/i)).toHaveCount(0);const review=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());const response=await request.post(`${new URL(s.url).origin}/api/submit`,{headers:{'X-Mold-Token':s.token,'Content-Type':'application/json','Origin':new URL(s.url).origin},data:{revision:review.revision.number,operation_id:'boundary-op',feedback:{answers:{},notes:'ordinary'}}});expect(response.ok()).toBeTruthy();const submitted=JSON.parse(execFileSync('python3',[archive,'review','poll','--state-dir',s.state,'--after','0','--timeout','0'],{cwd:root}).toString());expect(submitted.feedback).toEqual({answers:{},notes:'ordinary'});for(const authority of ['approved','approval','curdle','taste_gate','typed_plan'])expect(submitted.feedback).not.toHaveProperty(authority);}finally{s.child.kill();}});
+test('AC-10 script-bearing artifacts display inertly without execution',async({page})=>{const s=await server();try{await page.goto(`${s.url}`);await expect(page.getByText('<script>window.__moldXss=1</script>',{exact:true})).toBeVisible();expect(await page.evaluate(()=>window.__moldXss)).toBeUndefined();expect(await page.locator('script').evaluateAll(nodes=>nodes.some(node=>node.textContent.includes('window.__moldXss')))).toBeFalsy();}finally{s.child.kill();}});
+
+
+const seededImageData='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+const declaredSceneFixture={
+  elements:[{
+    id:'seed-image',
+    type:'image',
+    x:100,
+    y:100,
+    width:120,
+    height:80,
+    angle:0,
+    strokeColor:'#000000',
+    backgroundColor:'transparent',
+    fillStyle:'solid',
+    strokeWidth:1,
+    strokeStyle:'solid',
+    roughness:1,
+    opacity:100,
+    groupIds:[],
+    frameId:null,
+    roundness:null,
+    seed:1,
+    version:1,
+    versionNonce:1,
+    isDeleted:false,
+    boundElements:null,
+    updated:1,
+    link:null,
+    locked:false,
+    status:'saved',
+    fileId:'seed-image',
+    scale:[1,1],
+  }],
+  appState:{
+    collaborators:{},
+    viewBackgroundColor:'#fef3c7',
+    gridSize:24,
+    gridStep:6,
+    scrollX:18,
+    scrollY:-12,
+  },
+  files:{
+    'seed-image':{
+      id:'seed-image',
+      dataURL:seededImageData,
+      mimeType:'image/png',
+      created:1,
+      lastRetrieved:1,
+    },
+  },
+};
+
+test('declared artifacts render and reload as editable scenes',async({page,request})=>{
+  const state=await mkdtemp(join(tmpdir(),'mold-review-artifacts-'));
+  const input=join(state,'revision.json');
+  await writeFile(input,JSON.stringify({questions:[],artifacts:[
+    {id:'image',type:'image',title:'Supplied image',src:'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='},
+    {id:'diagram',type:'mermaid',title:'Supplied diagram',source:'graph TD; A-->B'},
+    {id:'contract',type:'contract_table',title:'Contract table',columns:['Name','Value'],rows:[['mode','local']]},
+    {id:'scene',type:'excalidraw',title:'Supplied scene',scene:declaredSceneFixture},
+  ]}));
+  execFileSync('python3',[archive,'review','publish','--state-dir',state,'--input',input],{cwd:root});
+  const s=await start(state,root);
+  const errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  try{
+    await page.goto(`${s.url}`);
+    await expect(page.getByRole('heading',{name:'Supplied image'})).toBeVisible();
+    await expect(page.locator('img[alt="Supplied image"]')).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Supplied diagram'})).toBeVisible();
+    await expect(page.locator('.diagram svg')).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Contract table'})).toBeVisible();
+    await expect(page.getByRole('cell',{name:'local'})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Supplied scene'})).toBeVisible();
+    const canvas=page.locator('.excalidraw canvas.interactive');
+    await expect(canvas).toBeVisible();
+    const sceneSnapshot=async()=>{
+      const response=await request.get(`${new URL(s.url).origin}/api/review`,{headers:{'X-Mold-Token':s.token}});
+      const review=await response.json();
+      return review.working?.[review.revision.number]?.artifacts?.scene?.scene||{};
+    };
+    const sceneCount=async()=>(await sceneSnapshot()).elements?.length||0;
+    const rectangle=page.getByTestId('toolbar-rectangle');
+    await rectangle.locator('..').click();
+    const box=await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box.x+120,box.y+220);
+    await page.mouse.down();
+    await page.mouse.move(box.x+260,box.y+330,{steps:5});
+    await page.mouse.up();
+    await expect.poll(sceneCount,{timeout:10000}).toBeGreaterThan(1);
+    const saved=await sceneSnapshot();
+    expect(saved.elements.some(element=>element.id==='seed-image')).toBeTruthy();
+    expect(saved.files['seed-image']).toMatchObject({dataURL:seededImageData,mimeType:'image/png'});
+    expect(saved.appState).toMatchObject({viewBackgroundColor:'#fef3c7',gridSize:24,gridStep:6});
+    const savedCount=saved.elements.length;
+    await page.reload();
+    await expect(canvas).toBeVisible();
+    const restored=await sceneSnapshot();
+    expect(restored.elements.length).toBe(savedCount);
+    expect(restored.files['seed-image']).toMatchObject({dataURL:seededImageData,mimeType:'image/png'});
+    expect(restored.appState).toMatchObject({viewBackgroundColor:'#fef3c7',gridSize:24,gridStep:6});
+    await rectangle.locator('..').click();
+    const restoredBox=await canvas.boundingBox();
+    expect(restoredBox).not.toBeNull();
+    await page.mouse.move(restoredBox.x+300,restoredBox.y+220);
+    await page.mouse.down();
+    await page.mouse.move(restoredBox.x+400,restoredBox.y+320,{steps:5});
+    await page.mouse.up();
+    await expect.poll(sceneCount,{timeout:10000}).toBeGreaterThan(savedCount);
+    const edited=await sceneSnapshot();
+    expect(edited.files['seed-image']).toMatchObject({dataURL:seededImageData,mimeType:'image/png'});
+    expect(edited.appState).toMatchObject({viewBackgroundColor:'#fef3c7',gridSize:24,gridStep:6});
+    expect(errors).toEqual([]);
+  }finally{s.child.kill();}
+});
+test('reload restores editable Excalidraw scene after autosave',async({page,request})=>{const s=await server();const errors=[];page.on('pageerror',error=>errors.push(error.message));try{await page.goto(s.url);const canvas=page.locator('.excalidraw canvas.interactive');await expect(canvas).toBeVisible();const rectangle=page.getByTestId('toolbar-rectangle');await rectangle.locator('..').click();await canvas.scrollIntoViewIfNeeded();const box=await canvas.boundingBox();expect(box).not.toBeNull();await page.mouse.move(box.x+120,box.y+220);await page.mouse.down();await page.mouse.move(box.x+260,box.y+330,{steps:5});await page.mouse.up();await expect.poll(async()=>{const response=await request.get(new URL(s.url).origin+'/api/review',{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());return response.working?.[response.revision.number]?.scene?.elements?.length||0;},{timeout:10000}).toBeGreaterThan(0);const saved=await request.get(new URL(s.url).origin+'/api/review',{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());const savedCount=saved.working?.[saved.revision.number]?.scene?.elements?.length||0;expect(savedCount).toBeGreaterThan(0);await page.reload();await expect(canvas).toBeVisible();const restored=await request.get(new URL(s.url).origin+'/api/review',{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());const restoredCount=restored.working?.[restored.revision.number]?.scene?.elements?.length||0;expect(restoredCount).toBe(savedCount);await rectangle.locator('..').click();const restoredBox=await canvas.boundingBox();expect(restoredBox).not.toBeNull();await page.mouse.move(restoredBox.x+300,restoredBox.y+220);await page.mouse.down();await page.mouse.move(restoredBox.x+400,restoredBox.y+320,{steps:5});await page.mouse.up();await expect.poll(async()=>{const response=await request.get(new URL(s.url).origin+'/api/review',{headers:{'X-Mold-Token':s.token}}).then(r=>r.json());return response.working?.[response.revision.number]?.scene?.elements?.length||0;},{timeout:10000}).toBeGreaterThan(restoredCount);expect(errors).toEqual([]);}finally{s.child.kill();}});

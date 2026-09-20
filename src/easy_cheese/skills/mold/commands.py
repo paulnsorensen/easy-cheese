@@ -56,6 +56,17 @@ def _normalize_planner(argv: list[str]) -> int:
     return normalize_planner_main(argv)
 
 
+@bundle_command("review")
+def _review(argv: list[str]) -> int:
+    from easy_cheese.skills.mold.review import close_main, poll_main, publish_main, serve_main
+
+    handlers = {"serve": serve_main, "publish": publish_main, "poll": poll_main, "close": close_main}
+    if not argv or argv[0] not in handlers:
+        print("usage: review {serve|publish|poll|close} [args...]", file=sys.stderr)
+        return 2
+    return handlers[argv[0]](argv[1:])
+
+
 @bundle_command("render-html")
 def _render_html(argv: list[str]) -> int:
     from easy_cheese.shared.html_report_cli import main
@@ -78,6 +89,7 @@ def _validate_spec(argv: list[str]) -> int:
 
 
 COMMANDS = (
+    derive_command(_review, "Serve and manage the local Mold review canvas"),
     derive_command(
         _artifact_path,
         "Resolve the durable or transient artifact path for a phase and slug",

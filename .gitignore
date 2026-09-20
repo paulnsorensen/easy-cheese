@@ -37,6 +37,12 @@ __pycache__/
 node_modules/
 tests/fixtures/mold_cook_browser/test-results/
 
+# Browser test artifacts
+/test-results/
+/playwright-report/
+frontend/mold-review/test-results/
+frontend/mold-review/playwright-report/
+
 # OS / editor
 .DS_Store
 *.swp
