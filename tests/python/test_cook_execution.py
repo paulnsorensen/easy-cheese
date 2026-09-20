@@ -54,6 +54,7 @@ from easy_cheese_schemas.contracts import (
     CriterionResultWriterView,
     CurdDisposition,
     CurdResultWriterView,
+    DeliverableWriterView,
     RemediationCureWriterView,
     DiagnosisCauseWriterView,
     DiagnosisRequest,
@@ -1622,6 +1623,180 @@ def test_execute_fan_writer_failure_blocks_without_review_or_diagnosis(tmp_path:
     assert events == []
     assert result.execution_results[1]
     assert all(item.disposition is CurdDisposition.BLOCKED for item in result.execution_results[1])
+
+
+def _fan_recovery_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[_FullFixture, EvidenceRef]:
+    caller = tmp_path / "caller"
+    caller.mkdir()
+    monkeypatch.chdir(caller)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "wheypoint"))
+    monkeypatch.delenv("EASY_CHEESE_PROJECT", raising=False)
+    grounded = tmp_path / "src" / "workflow.py"
+    grounded.parent.mkdir()
+    _ = grounded.write_text("def repair():\n    pass\n", encoding="utf-8")
+    root = attrs.evolve(
+        _curd("root"),
+        criteria=(
+            Criterion("root-first", "The first repair is verified", "pytest first"),
+            Criterion("root-second", "The second repair is verified", "pytest second"),
+        ),
+    )
+    fixture = _full_fixture(
+        tmp_path / "fan-recovery",
+        coverage_ids=("root",),
+        partial=True,
+        curds=(root, _curd("leaf", dependencies=("root",))),
+    )
+    result_artifact = _write_ref(
+        tmp_path,
+        b"verified\n",
+        artifact_id="result",
+        role="evidence",
+        filename="result.txt",
+        media_type="text/plain",
+    )
+    return fixture, EvidenceRef("result.txt", EvidenceKind.SOURCE, result_artifact)
+
+
+def test_execute_accepted_fan_handoff_recovers_writer_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture, evidence = _fan_recovery_fixture(tmp_path, monkeypatch)
+    attempts = 0
+    contexts: list[Mapping[str, object]] = []
+
+    def writer(context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        contexts.append(context)
+        if attempts == 1:
+            _ = (tmp_path / "repair.txt").write_bytes(b"first repair\n")
+            raise workflow.WriterBudgetExceeded(
+                workflow.WriterCheckpoint(
+                    reason="context budget reached",
+                    completed=[
+                        CriterionResultWriterView(
+                            "root-first",
+                            CriterionDisposition.PASSED,
+                            evidence_keys=["repair.txt"],
+                        )
+                    ],
+                    deliverables=[
+                        DeliverableWriterView("repair", "repair.txt", "text/plain")
+                    ],
+                    remaining=["Finish the second repair"],
+                    grounded=["src/workflow.py#1-2"],
+                )
+            )
+        return _writer(context)
+    executions: list[workflow.CurdWriterExecution] = []
+    execute_writer = cast(
+        "Callable[..., workflow.CurdWriterExecution]", workflow.execute_curd_writer
+    )
+
+    def traced_execute(*args: object, **kwargs: object) -> workflow.CurdWriterExecution:
+        execution = execute_writer(*args, **kwargs)
+        executions.append(execution)
+        return execution
+
+    monkeypatch.setattr(workflow, "execute_curd_writer", traced_execute)
+
+    result = execute_accepted_handoff(
+        fixture["pointer"],
+        artifact_root=tmp_path / "fan-recovery",
+        repository_root=tmp_path,
+        dispatch_writer=writer,
+        dispatch_review=_review,
+        dispatch_diagnosis=_diagnosis,
+        evidence={"result.txt": evidence},
+    )
+
+    assert attempts == 2
+    assert contexts[1]["working_context"] == ("src/workflow.py#1-2",)
+    assert contexts[1]["retry_count"] == 1
+    assert len(executions) == 1
+    assert executions[0].writer_context_digest == workflow._canonical_digest(  # pyright: ignore[reportPrivateUsage]
+        contexts[1]
+    )
+    assert executions[0].writer_context_digest != workflow._canonical_digest(  # pyright: ignore[reportPrivateUsage]
+        contexts[0]
+    )
+    assert result.fan_next_step == "mold"
+    assert not result.whole_task_complete
+    assert result.execution_results[1][0].disposition is CurdDisposition.PASSED
+
+
+def test_execute_accepted_fan_handoff_preserves_checkpoint_on_retry_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture, evidence = _fan_recovery_fixture(tmp_path, monkeypatch)
+    attempts = 0
+    contexts: list[Mapping[str, object]] = []
+
+    def writer(context: Mapping[str, object]) -> object:
+        nonlocal attempts
+        attempts += 1
+        contexts.append(context)
+        if attempts == 1:
+            _ = (tmp_path / "repair.txt").write_bytes(b"first repair\n")
+            raise workflow.WriterBudgetExceeded(
+                workflow.WriterCheckpoint(
+                    reason="context budget reached",
+                    completed=[
+                        CriterionResultWriterView(
+                            "root-first",
+                            CriterionDisposition.PASSED,
+                            evidence_keys=["repair.txt"],
+                        )
+                    ],
+                    deliverables=[
+                        DeliverableWriterView("repair", "repair.txt", "text/plain")
+                    ],
+                    remaining=["Finish the second repair"],
+                    grounded=["src/workflow.py#1-2"],
+                )
+            )
+        _ = (tmp_path / "repair.txt").write_bytes(b"overwritten on retry\n")
+        return object()
+
+    executions: list[workflow.CurdWriterExecution] = []
+    execute_writer = cast(
+        "Callable[..., workflow.CurdWriterExecution]", workflow.execute_curd_writer
+    )
+
+    def traced_execute(*args: object, **kwargs: object) -> workflow.CurdWriterExecution:
+        execution = execute_writer(*args, **kwargs)
+        executions.append(execution)
+        return execution
+
+    monkeypatch.setattr(workflow, "execute_curd_writer", traced_execute)
+
+    result = execute_accepted_handoff(
+        fixture["pointer"],
+        artifact_root=tmp_path / "fan-recovery",
+        repository_root=tmp_path,
+        dispatch_writer=writer,
+        dispatch_review=_review,
+        dispatch_diagnosis=_diagnosis,
+        evidence={"result.txt": evidence},
+    )
+
+    curd_result = result.execution_results[1][0]
+    assert attempts == 2
+    assert len(executions) == 1
+    assert executions[0].writer_context_digest == workflow._canonical_digest(  # pyright: ignore[reportPrivateUsage]
+        contexts[0]
+    )
+    assert result.fan_next_step == "mold"
+    assert not result.whole_task_complete
+    assert curd_result.disposition is CurdDisposition.BLOCKED
+    assert curd_result.criterion_results[0].disposition is CriterionDisposition.PASSED
+    assert curd_result.criterion_results[0].evidence[0].artifact.digest == _digest(
+        b"first repair\n"
+    )
+    assert curd_result.deliverables[0].digest == _digest(b"first repair\n")
 
 
 def _passing_press(evidence: EvidenceRef) -> PressDispatcher:

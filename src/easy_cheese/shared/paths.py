@@ -196,17 +196,17 @@ def _slug_from_remote(url: str) -> str:
     return "/".join(segments[-2:])
 
 
-@functools.lru_cache(maxsize=1)
-def _git_identity() -> str | None:
+@functools.lru_cache(maxsize=8)
+def _git_identity(root: Path | None = None) -> str | None:
     """``owner/repo`` from origin, else the git toplevel dir name, else None."""
     try:
         remote: subprocess.CompletedProcess[str] = git_utils.run_git(
-            ["config", "--get", "remote.origin.url"], timeout=5
+            ["config", "--get", "remote.origin.url"], cwd=root, timeout=5
         )
         if remote.returncode == 0 and remote.stdout.strip():
             return _slug_from_remote(remote.stdout.strip())
         top: subprocess.CompletedProcess[str] = git_utils.run_git(
-            ["rev-parse", "--show-toplevel"], timeout=5
+            ["rev-parse", "--show-toplevel"], cwd=root, timeout=5
         )
         if top.returncode == 0 and top.stdout.strip():
             return Path(top.stdout.strip()).name
@@ -215,7 +215,7 @@ def _git_identity() -> str | None:
     return None
 
 
-def project_key() -> str:
+def project_key(root: Path | str | None = None) -> str:
     """Stable per-project corpus key, matching the git repository.
 
     ``$EASY_CHEESE_PROJECT`` wins when set; otherwise the origin ``owner/repo``
@@ -225,10 +225,11 @@ def project_key() -> str:
     override = os.environ.get("EASY_CHEESE_PROJECT", "").strip()
     if override:
         return _sanitize_segment(override)
-    identity = _git_identity()
+    resolved_root = None if root is None else Path(root).resolve()
+    identity = _git_identity(resolved_root)
     if identity:
         return _sanitize_segment(identity.replace("/", "-"))
-    return _sanitize_segment(Path.cwd().name)
+    return _sanitize_segment(Path.cwd().name if resolved_root is None else resolved_root.name)
 
 
 def corpus_home() -> Path:

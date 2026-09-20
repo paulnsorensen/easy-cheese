@@ -108,14 +108,18 @@ def resolve(
 ) -> Resolution:
     """Resolve an authoritative reference, then fall back to one legacy note."""
     root = paths.resolve_repo_root(workspace_root)
+    resolved_project_key = (
+        project_key if project_key is not None else paths.project_key(root)
+    )
+    resolved_corpus_root = (
+        Path(corpus_root)
+        if corpus_root is not None
+        else paths.project_corpus_root(resolved_project_key)
+    )
     checks = _Checks(
         workspace_root=root,
-        corpus_root=(
-            Path(corpus_root)
-            if corpus_root is not None
-            else paths.project_corpus_root()
-        ),
-        project_key=project_key if project_key is not None else paths.project_key(),
+        corpus_root=resolved_corpus_root,
+        project_key=resolved_project_key,
         git_object_exists=(
             git_object_exists or lint_freshness.git_object_exists_in(root)
         ),

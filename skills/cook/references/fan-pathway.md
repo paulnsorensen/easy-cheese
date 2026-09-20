@@ -311,19 +311,24 @@ Wiring rows exist in the manifest, not the curd block.
 ## Recovery and aggregate gates
 
 - **Worker exhaustion.**
-  A worker can run out of context or turns.
-  The worker writes a partial typed handoff with `status: needs-context: <gap>`.
-  The worker keeps the declared Cook transition and writes `--next age`.
-  The compiled registry declares no `cook -> cook` route, so `--next cook` fails.
-  The orchestrator re-dispatches that curd once.
-  That re-dispatch is an orchestrator spawn of the same phase, not a declared phase transition.
-  Fold the gap into the context.
+  Runtime context pressure reaches the host as `WriterBudgetExceeded`, not a raw worker handback.
+  When the host handles that exception, manual orchestration does not persist a duplicate checkpoint.
+  A direct worker returns `status: needs-context: <one-line gap>` with compact observations, about 2,000 tokens maximum.
+  Observations list completed work, remaining work, up to 16 targeted `path#start-end` entries, gates, worktree and base, and locked decisions.
+  The worker does not guess an artifact or next phase, and it does not run checkpoint at the hard limit.
+  The parent delegates checkpoint persistence to the Wheypoint capability as one structured checkpoint task.
+  The task follows Wheypoint's `validate` then `checkpoint` commands; only that skill documents their executable form.
+  Use Cook's `wheypoint-resolve` command for retry resolution.
+  Require resolver outcome `authoritative` with a non-empty, validated `working_context`.
+  The first source read contains only the resolved ranges.
+  Start one fresh writer in the same Cook phase and worktree.
   Set `--retry-count 1`.
-  A second `needs-context` at that phase halts.
-  The router caps the loop itself.
-  The host finalizes the blocked `CurdResult`.
-  The host continues to harvest the other results.
-  The host reports the curd.
+  Missing, invalid, or empty observations; failed save or resolve; or a second `needs-context` halts.
+  The parent never implements the unfinished slice.
+  This is same-phase orchestration, not a Cook→Cook transition.
+  Known-false lead: the compiled registry has no `cook -> cook` route; do not re-investigate or publish `--next cook`.
+  The published `write-handoff-artifact` remains `--phase cook --next age`; the checkpoint is not that terminal phase artifact.
+  The host finalizes the blocked `CurdResult` and continues to harvest the other results.
 
 - **Aggregate-gate conflict.**
   After you harvest all wave results, run the project gates over the merged tree.

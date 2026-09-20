@@ -15,7 +15,9 @@ license: MIT
 
 `/wheypoint` records the state a new agent needs to resume the work.
 
-Use it for culture sessions, for work without a phase slug, and when a phase offers **Checkpoint & stop**.
+Use it for culture sessions, for work without a phase slug, and for a phase's **Checkpoint & stop** option.
+A phase checkpoint is a standalone, non-terminal Wheypoint record, not a terminal phase artifact.
+Workers at a hard limit return observations; the parent, not the worker, runs checkpoint persistence.
 
 ## Inputs
 
@@ -25,7 +27,8 @@ Use it for culture sessions, for work without a phase slug, and when a phase off
 
 ## Runtime commands
 
-Run every command through this skill's archive by its repository path; see [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md).
+Run every command through this skill's archive by its resolved installed bundle path; see [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md).
+When the consumer repository lacks `skills/`, resolve the installed bundle path before execution; never assume the easy-cheese checkout or current working directory.
 
 ```bash
 python3 skills/wheypoint/scripts/wheypoint.pyz turns [--session <id> | --transcript <path>]
@@ -40,10 +43,10 @@ python3 skills/wheypoint/scripts/wheypoint.pyz log --work-id <id>
 ```
 
 `resolve`, `lint`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
-
 `/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
-
-Phase skills run `python3 skills/wheypoint/scripts/wheypoint.pyz resolve --ref <slug>`.
+The parent delegates persistence as one structured checkpoint task to this capability.
+Run `validate` before `checkpoint`; workers never invoke either command at a hard limit.
+Phase skills use their own `wheypoint-resolve --ref <slug>` command for resolution.
 The command returns `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, or `error`.
 Use authoritative `working_context` as the first batched `tilth_read`; follow [`references/delta-contract.md`](references/delta-contract.md) for all outcomes and findings.
 `phase-artifact` is fallback context, and the handoff parser exposes its `phase_slug`.
@@ -94,21 +97,19 @@ artifact: <path, or PR#<n> / URL when next is affinage, else empty>
 ```
 
 For `next: tasks` the projection adds a `mode: parallel` keyed line after `artifact:`; the keyed block after the orientation holds the Wheypoint pins.
-
 The projection body shows gates, open entries, decisions, directives, notes, context, artifacts, the dossier, and tasks.
-
 The projection is never the authority; never edit it and never resume from it by hand.
 
 ## `next:` values
 
 - `mold`, `cut`, `cook`, `press`, `age`, `cure`: the next pipeline phase.
+  `next: cook` on a standalone checkpoint names the phase to resume; it does not publish a Cook→Cook phase artifact.
 - `affinage`: PR review comments or failing CI; `artifact` names the PR.
 - `briesearch`, `culture`: a read-only next move that `/cheese --continue` dispatches.
 - `tasks`: independent moves; see [`references/parallel-handoffs.md`](references/parallel-handoffs.md).
 - `hold`: restore orientation and wait for instructions.
 - `done`: the work is complete; the checkpoint is a record, not a baton.
 - A missing `next:` makes the handoff malformed; use `hold` when no action follows.
-
 Derive `next:` and `status:` from the open questions and blockers, not from expected success.
 
 Use `status: gated:` for every human decision; the resumed agent asks through the shared [handoff gate](../cheese/references/handoff-gate.md) before it dispatches.
@@ -125,5 +126,4 @@ Handwritten notes, their legacy values, and their provenance fields are in [`ref
 ## Handoff
 
 End with the orientation and this link: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
-
 From the repository run `/cheese --continue <slug>`; from elsewhere run `/cheese --continue <absolute-repo-path>/.cheese/notes/<slug>.md`.

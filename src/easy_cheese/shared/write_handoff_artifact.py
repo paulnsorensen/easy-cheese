@@ -322,6 +322,11 @@ def write_artifact(
 
     contents = _build_contents(preamble=preamble, body=body)
 
+    effective_corpus_root = (
+        Path(corpus_root)
+        if corpus_root is not None
+        else paths.project_corpus_root(paths.project_key(root_path))
+    )
     _wheypoint_revision(
         slug=slug,
         phase=phase,
@@ -330,7 +335,7 @@ def write_artifact(
         orientation=orientation,
         grounded=grounded,
         root=root_path,
-        corpus_root=corpus_root,
+        corpus_root=effective_corpus_root,
         write_contents=lambda: _atomic_write(target, contents),
     )
 

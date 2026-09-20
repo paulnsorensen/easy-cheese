@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import tempfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from enum import Enum
@@ -16,7 +17,9 @@ from attrs import Attribute
 
 from easy_cheese_schemas.contracts import (
     AgentWriterView,
+    ArtifactLink,
     ArtifactRef,
+    CheckpointIntent,
     ContractVersion,
     CoverageDisposition,
     Criterion,
@@ -39,6 +42,7 @@ from easy_cheese_schemas.contracts import (
     PlannerRequestKind,
     PlannerResult,
     PlannerResultWriterView,
+    NextMove,
     ReproductionDisposition,
     ReproductionWriterView,
     ReviewCoverage,
@@ -65,12 +69,15 @@ from easy_cheese_schemas.schema_runtime import (
     validate_curd_plan,
 )
 
+from . import git_utils, handoff, paths
 from .artifacts import (
     MAX_ARTIFACT_BYTES,
     read_repository_artifact,
     resolve_artifact,
     resolve_verified_bytes,
 )
+from .wheypoint import grounded as wheypoint_grounded
+from .wheypoint import recovery as wheypoint_recovery
 
 PlannerDispatch = Callable[[PlannerRequest], object]
 WriterDispatch = Callable[[Mapping[str, object]], object]
@@ -79,6 +86,15 @@ DiagnosisDispatch = Callable[[DiagnosisRequest], object]
 BranchResult = ReviewResult | DiagnosisResult
 ExecutionResults = tuple[tuple[BranchResult, ...], tuple[CurdResult, ...]]
 WorkflowResults = tuple[PlannerResult, tuple[BranchResult, ...], tuple[CurdResult, ...]]
+
+
+
+
+def _optional_tuple_sequence(value: object) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    values = cast("list[str] | tuple[str, ...]", value)
+    return _tuple_sequence(values)
 
 
 @attrs.define(frozen=True)
@@ -111,6 +127,12 @@ class WriterCheckpoint:
     # Unfinished work and the exact next action, in the writer's own words.
     remaining: tuple[str, ...] = attrs.field(
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
+    )
+    # Grounded repository ranges the host validates before a recovery retry.
+    grounded: tuple[str, ...] | None = attrs.field(
+        default=None,
+        converter=_optional_tuple_sequence,
+        validator=attrs.validators.optional(_string_list()),
     )
 
 
@@ -761,6 +783,55 @@ def _checkpoint_writer_view(
     )
 
 
+def _merge_checkpoint_items(
+    previous: Sequence[object],
+    latest: Sequence[object],
+    *,
+    label: str,
+    key: Callable[[object], str],
+) -> tuple[object, ...]:
+    merged = list(previous)
+    positions: dict[str, object] = {}
+    for item in previous:
+        marker = key(item)
+        if marker in positions:
+            raise ValueError(f"budget checkpoint {label} must not repeat {marker}")
+        positions[marker] = item
+    for item in latest:
+        marker = key(item)
+        if marker in positions:
+            if positions[marker] != item:
+                raise ValueError(f"budget checkpoint {label} conflicts for {marker}")
+            continue
+        positions[marker] = item
+        merged.append(item)
+    return tuple(merged)
+
+
+def _merge_budget_checkpoints(
+    previous: WriterCheckpoint, latest: WriterCheckpoint
+) -> WriterCheckpoint:
+    completed = _merge_checkpoint_items(
+        previous.completed,
+        latest.completed,
+        label="criterion_id",
+        key=lambda item: cast(CriterionResultWriterView, item).criterion_id,
+    )
+    deliverables = _merge_checkpoint_items(
+        previous.deliverables,
+        latest.deliverables,
+        label="deliverable path",
+        key=lambda item: cast(DeliverableWriterView, item).path,
+    )
+    return attrs.evolve(
+        latest,
+        completed=completed,
+        deliverables=deliverables,
+        remaining=latest.remaining or previous.remaining,
+        grounded=latest.grounded or previous.grounded,
+    )
+
+
 def _result_invocation(
     plan: CurdPlan,
     curd: SemanticCurd,
@@ -885,6 +956,157 @@ def _finalize_view(
     return _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation), deliverables
 
 
+def _budget_target_identity(root: Path) -> str:
+    try:
+        result = git_utils.run_git(
+            ["config", "--get", "remote.origin.url"], cwd=root, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
+        return str(root.resolve())
+    remote = result.stdout.strip() if result.returncode == 0 else ""
+    return remote or str(root.resolve())
+
+
+def _budget_work_id(
+    plan: CurdPlan, curd: SemanticCurd, repository_root: Path | None = None
+) -> str:
+    root = paths.resolve_repo_root(repository_root)
+    target = _budget_target_identity(root)
+    payload = (
+        f"{target}:{plan.plan_id}:{plan.revision}:{plan.digest}:{curd.curd_id}"
+    ).encode()
+    return "cook-" + hashlib.sha256(payload).hexdigest()[:32]
+
+
+def _budget_notes(curd: SemanticCurd, checkpoint: WriterCheckpoint) -> str:
+    completed = ", ".join(item.criterion_id for item in checkpoint.completed) or "none"
+    deliverables = ", ".join(item.path for item in checkpoint.deliverables) or "none"
+    remaining = "; ".join(checkpoint.remaining) or "none"
+    return (
+        f"Writer budget checkpoint for {curd.curd_id}. "
+        f"Completed: {completed}. Deliverables: {deliverables}. Remaining: {remaining}."
+    )
+
+
+def _validate_budget_checkpoint(
+    *,
+    plan: CurdPlan,
+    curd: SemanticCurd,
+    index: int,
+    checkpoint: WriterCheckpoint,
+    repository_root: Path,
+    host_evidence: Mapping[str, EvidenceRef],
+) -> CurdResult:
+    if not checkpoint.remaining:
+        raise ValueError("writer checkpoint remaining work is empty")
+    grounded = tuple(checkpoint.grounded or ())
+    if not grounded:
+        raise ValueError("writer checkpoint grounded context is empty")
+    root = paths.resolve_repo_root(repository_root)
+    _ = wheypoint_grounded.validate_grounded(grounded, root=root)
+    writer_view = _checkpoint_writer_view(curd, checkpoint.reason, checkpoint)
+    with tempfile.TemporaryDirectory(prefix=".budget-checkpoint-") as staging:
+        provisional, _ = _finalize_view(
+            plan,
+            curd,
+            index,
+            writer_view,
+            result_id=f"{plan.plan_id}/revision/{plan.revision}/result/{index}",
+            repository_root=root,
+            artifact_directory=Path(staging),
+            host_evidence=dict(host_evidence),
+            provenance_refs=(),
+        )
+    assert isinstance(provisional.value, CurdResult)
+    return provisional.value
+
+
+def _commit_budget_checkpoint(
+    *,
+    plan: CurdPlan,
+    curd: SemanticCurd,
+    checkpoint: WriterCheckpoint,
+    repository_root: Path,
+) -> tuple[str, tuple[str, ...]]:
+    if checkpoint.grounded is None:
+        raise ValueError("writer checkpoint has no grounded context")
+    grounded = tuple(checkpoint.grounded)
+    if not grounded:
+        raise ValueError("writer checkpoint grounded context is empty")
+    root = paths.resolve_repo_root(repository_root)
+    grounded_entries = wheypoint_grounded.validate_grounded(grounded, root=root)
+    work_id = _budget_work_id(plan, curd, root)
+    orientation = f"Resume cook for {curd.curd_id} from the writer budget checkpoint."
+    notes = _budget_notes(curd, checkpoint)
+    if len(notes) > 4096:
+        raise ValueError("budget checkpoint notes exceed 4096 characters")
+    artifact_slug = f"{work_id}-{hashlib.sha256(notes.encode()).hexdigest()[:12]}"
+    artifact_path = paths.artifact_path("cook", artifact_slug, root=root)
+    artifact = artifact_path.relative_to(root).as_posix()
+    project = paths.project_key(root)
+    corpus_root = paths.project_corpus_root(project)
+    intent = CheckpointIntent(
+        work_id=work_id,
+        orientation=orientation,
+        working_context=list(grounded_entries),
+        notes=notes,
+        next=NextMove.COOK,
+        artifact=artifact,
+        artifact_links=[ArtifactLink(path=artifact)],
+    )
+    payload = (
+        handoff.render_handoff_slug(
+            handoff.HandoffSlug(
+                status="needs-context",
+                reason="writer budget exhausted; resume from the authoritative checkpoint",
+                next_skill="cook",
+                artifact=artifact,
+                orientation=orientation,
+            )
+        )
+        + "\n\n"
+        + notes
+        + "\n"
+    ).encode()
+    recovery = wheypoint_recovery.persist_checkpoint(
+        intent,
+        artifact_path=artifact_path,
+        artifact_payload=payload,
+        repository_root=root,
+        corpus_root=corpus_root,
+        project_key=project,
+    )
+    return recovery.work_id, recovery.working_context
+
+
+def _recovery_context(
+    context: Mapping[str, object],
+    *,
+    plan: CurdPlan,
+    curd: SemanticCurd,
+    checkpoint: WriterCheckpoint,
+    repository_root: Path,
+) -> dict[str, object]:
+    work_id, working_context = _commit_budget_checkpoint(
+        plan=plan,
+        curd=curd,
+        checkpoint=checkpoint,
+        repository_root=repository_root,
+    )
+    recovered = dict(context)
+    recovered.update(
+        {
+            "checkpoint_ref": work_id,
+            "working_context": working_context,
+            "completed": checkpoint.completed,
+            "deliverables": checkpoint.deliverables,
+            "remaining_work": checkpoint.remaining,
+            "retry_count": 1,
+        }
+    )
+    return recovered
+
+
 def _execute_overrun(
     plan: CurdPlan,
     curd: SemanticCurd,
@@ -895,11 +1117,12 @@ def _execute_overrun(
     artifact_directory: Path,
     host_evidence: dict[str, EvidenceRef],
     provenance_refs: tuple[str, ...],
+    failure_reason: str | None = None,
 ) -> CurdResult:
     """Finalize a writer's budget overrun without touching the review branch."""
 
     checkpoint = overrun.checkpoint
-    overrun_reason = _failure_reason("writer stopped at its budget", overrun)
+    overrun_reason = failure_reason or _failure_reason("writer stopped at its budget", overrun)
     result_id = f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
     try:
         writer_view = _checkpoint_writer_view(curd, overrun_reason, checkpoint)
@@ -998,42 +1221,129 @@ def execute_curd_writer(
     writer_context = context if extra_context is None else {**context, **extra_context}
     writer_context_digest = _canonical_digest(writer_context)
     writer_result_id = result_id or f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
-    try:
-        output = dispatch_writer(writer_context)
-    except WriterBudgetExceeded as overrun:
-        result_id = writer_result_id
-        checkpoint_view = _checkpoint_writer_view(
-            curd, _failure_reason("writer stopped at its budget", overrun), overrun.checkpoint
+    outcome = _dispatch_writer_with_recovery(
+        writer_context,
+        host_evidence,
+        plan=plan,
+        curd=curd,
+        index=index,
+        repository_root=repository_root,
+        artifact_directory=artifact_directory,
+        provenance_refs=provenance_refs,
+        allow_budget_recovery=phase == "cook",
+        dispatch_writer=dispatch_writer,
+    )
+    recovery_execution = outcome.recovery_execution
+    outcome_context_digest = _canonical_digest(outcome.context)
+    if outcome.terminal_result is not None:
+        if recovery_execution is not None:
+            return attrs.evolve(
+                recovery_execution,
+                result=outcome.terminal_result,
+                writer_context_digest=writer_context_digest,
+            )
+        reason = outcome.terminal_result.unresolved_work[0]
+        writer_view = _blocked_writer_view(curd, reason)
+        invocation = _result_invocation(
+            plan,
+            curd,
+            index,
+            evidence=outcome.host_evidence,
+            deliverables={},
+            provenance_refs=provenance_refs,
         )
+        canonical = _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation)
+        return CurdWriterExecution(
+            plan=plan,
+            writer_view=writer_view,
+            host_evidence=outcome.host_evidence,
+            deliverables={},
+            subject=_subject_artifact(writer_result_id, canonical, artifact_directory),
+            result=outcome.terminal_result,
+            cure_reconciliation=None,
+            writer_context_digest=writer_context_digest,
+        )
+    output = outcome.output
+    assert output is not None
+    try:
+        cure_reconciliation = None
+        if phase == "cure":
+            cure_reconciliation = _cure_writer_view(output)
+            writer_view = cure_reconciliation.result
+        else:
+            writer_view = _writer_view(output)
         provisional, deliverables = _finalize_view(
             plan,
             curd,
             index,
-            checkpoint_view,
-            result_id=result_id,
+            writer_view,
+            result_id=writer_result_id,
             repository_root=repository_root,
             artifact_directory=artifact_directory,
-            host_evidence=host_evidence,
+            host_evidence=outcome.host_evidence,
             provenance_refs=provenance_refs,
         )
-        assert isinstance(provisional.value, CurdResult)
-        return CurdWriterExecution(
-            plan=plan,
-            writer_view=checkpoint_view,
-            host_evidence=host_evidence,
+        subject = _subject_artifact(writer_result_id, provisional, artifact_directory)
+        invocation = _result_invocation(
+            plan,
+            curd,
+            index,
+            evidence=outcome.host_evidence,
             deliverables=deliverables,
-            subject=_subject_artifact(result_id, provisional, artifact_directory),
-            result=provisional.value,
-            cure_reconciliation=None,
+            provenance_refs=provenance_refs,
+        )
+        final = _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation)
+        assert isinstance(final.value, CurdResult)
+    except Exception as error:
+        if recovery_execution is None:
+            raise
+        reason = _failure_reason("writer retry output invalid", error)
+        rows = tuple(
+            attrs.evolve(row, reason=reason)
+            if row.disposition is CriterionDisposition.BLOCKED
+            else row
+            for row in recovery_execution.result.criterion_results
+        )
+        preserved = attrs.evolve(
+            recovery_execution.result,
+            criterion_results=rows,
+            unresolved_work=(reason, *recovery_execution.result.unresolved_work[1:]),
+        )
+        return attrs.evolve(
+            recovery_execution,
+            result=preserved,
             writer_context_digest=writer_context_digest,
         )
-    cure_reconciliation = None
-    if phase == "cure":
-        cure_reconciliation = _cure_writer_view(output)
-        writer_view = cure_reconciliation.result
-    else:
-        writer_view = _writer_view(output)
-    result_id = writer_result_id
+    return CurdWriterExecution(
+        plan=plan,
+        writer_view=writer_view,
+        host_evidence=outcome.host_evidence,
+        deliverables=deliverables,
+        subject=subject,
+        result=final.value,
+        cure_reconciliation=cure_reconciliation,
+        writer_context_digest=outcome_context_digest,
+    )
+
+
+def _materialize_checkpoint_execution(
+    plan: CurdPlan,
+    curd: SemanticCurd,
+    index: int,
+    checkpoint: WriterCheckpoint,
+    *,
+    repository_root: Path,
+    artifact_directory: Path,
+    host_evidence: dict[str, EvidenceRef],
+    provenance_refs: tuple[str, ...],
+    reason: str | None = None,
+) -> CurdWriterExecution:
+    """Retain validated checkpoint evidence before a recovery retry can mutate files."""
+    writer_reason = reason or _failure_reason(
+        "writer stopped at its budget", WriterBudgetExceeded(checkpoint)
+    )
+    writer_view = _checkpoint_writer_view(curd, writer_reason, checkpoint)
+    result_id = f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
     provisional, deliverables = _finalize_view(
         plan,
         curd,
@@ -1045,27 +1355,279 @@ def execute_curd_writer(
         host_evidence=host_evidence,
         provenance_refs=provenance_refs,
     )
-    subject = _subject_artifact(result_id, provisional, artifact_directory)
-    invocation = _result_invocation(
-        plan,
-        curd,
-        index,
-        evidence=host_evidence,
-        deliverables=deliverables,
-        provenance_refs=provenance_refs,
-    )
-    final = _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation)
-    assert isinstance(final.value, CurdResult)
+    assert isinstance(provisional.value, CurdResult)
     return CurdWriterExecution(
         plan=plan,
         writer_view=writer_view,
         host_evidence=host_evidence,
         deliverables=deliverables,
-        subject=subject,
-        result=final.value,
-        cure_reconciliation=cure_reconciliation,
-        writer_context_digest=writer_context_digest,
+        subject=_subject_artifact(result_id, provisional, artifact_directory),
+        result=provisional.value,
+        cure_reconciliation=None,
     )
+
+
+@attrs.define(frozen=True, slots=True)
+class _WriterRecoveryOutcome:
+    """Result of writer dispatch and its bounded Cook recovery."""
+
+    context: dict[str, object]
+    host_evidence: dict[str, EvidenceRef]
+    output: object | None = None
+    recovery_overrun: WriterBudgetExceeded | None = None
+    recovery_snapshot: CurdResult | None = None
+    terminal_result: CurdResult | None = None
+    recovery_execution: CurdWriterExecution | None = None
+
+
+def _dispatch_writer_with_recovery(
+    context: Mapping[str, object],
+    host_evidence: dict[str, EvidenceRef],
+    *,
+    plan: CurdPlan,
+    curd: SemanticCurd,
+    index: int,
+    repository_root: Path,
+    artifact_directory: Path,
+    provenance_refs: tuple[str, ...],
+    allow_budget_recovery: bool,
+    dispatch_writer: WriterDispatch,
+) -> _WriterRecoveryOutcome:
+    writer_context = dict(context)
+    retried = False
+    recovery_overrun: WriterBudgetExceeded | None = None
+    recovery_snapshot: CurdResult | None = None
+    recovery_execution: CurdWriterExecution | None = None
+
+    def terminal(
+        result: CurdResult,
+        *,
+        refs: tuple[str, ...] = provenance_refs,
+    ) -> _WriterRecoveryOutcome:
+        return _WriterRecoveryOutcome(
+            context=writer_context,
+            host_evidence=host_evidence,
+            recovery_overrun=recovery_overrun,
+            recovery_snapshot=recovery_snapshot,
+            terminal_result=attrs.evolve(result, provenance_refs=refs),
+            recovery_execution=recovery_execution,
+        )
+
+    def failed(
+        label: str,
+        error: Exception,
+        *,
+        refs: tuple[str, ...] = provenance_refs,
+    ) -> _WriterRecoveryOutcome:
+        reason = _failure_reason(label, error)
+        if recovery_overrun is None:
+            return terminal(
+                _blocked_result(
+                    plan,
+                    curd,
+                    index,
+                    reason,
+                    provenance_refs=refs,
+                ),
+                refs=refs,
+            )
+        if recovery_snapshot is not None:
+            rows = tuple(
+                attrs.evolve(row, reason=reason)
+                if row.disposition is CriterionDisposition.BLOCKED
+                else row
+                for row in recovery_snapshot.criterion_results
+            )
+            return terminal(
+                attrs.evolve(
+                    recovery_snapshot,
+                    criterion_results=rows,
+                    unresolved_work=(reason, *recovery_snapshot.unresolved_work[1:]),
+                ),
+                refs=refs,
+            )
+        return terminal(
+            _execute_overrun(
+                plan,
+                curd,
+                index,
+                recovery_overrun,
+                repository_root=repository_root,
+                artifact_directory=artifact_directory,
+                host_evidence=host_evidence,
+                provenance_refs=refs,
+                failure_reason=reason,
+            ),
+            refs=refs,
+        )
+
+    while True:
+        try:
+            output = dispatch_writer(writer_context)
+            return _WriterRecoveryOutcome(
+                context=writer_context,
+                host_evidence=host_evidence,
+                output=output,
+                recovery_overrun=recovery_overrun,
+                recovery_snapshot=recovery_snapshot,
+                recovery_execution=recovery_execution,
+            )
+        except WriterBudgetExceeded as overrun:
+            if not allow_budget_recovery:
+                try:
+                    recovery_execution = _materialize_checkpoint_execution(
+                        plan,
+                        curd,
+                        index,
+                        overrun.checkpoint,
+                        repository_root=repository_root,
+                        artifact_directory=artifact_directory,
+                        host_evidence=host_evidence,
+                        provenance_refs=provenance_refs,
+                    )
+                except Exception:
+                    recovery_execution = None
+                if recovery_execution is not None:
+                    return terminal(recovery_execution.result)
+                return terminal(
+                    _execute_overrun(
+                        plan,
+                        curd,
+                        index,
+                        overrun,
+                        repository_root=repository_root,
+                        artifact_directory=artifact_directory,
+                        host_evidence=host_evidence,
+                        provenance_refs=provenance_refs,
+                    )
+                )
+            if retried:
+                assert recovery_overrun is not None
+                try:
+                    latest = attrs.evolve(
+                        overrun.checkpoint,
+                        grounded=(
+                            overrun.checkpoint.grounded
+                            or recovery_overrun.checkpoint.grounded
+                        ),
+                    )
+                    _ = _validate_budget_checkpoint(
+                        plan=plan,
+                        curd=curd,
+                        index=index,
+                        checkpoint=latest,
+                        repository_root=repository_root,
+                        host_evidence=host_evidence,
+                    )
+                    merged = _merge_budget_checkpoints(
+                        recovery_overrun.checkpoint,
+                        overrun.checkpoint,
+                    )
+                    _ = _checkpoint_writer_view(curd, merged.reason, merged)
+                except Exception as error:
+                    return failed("second budget checkpoint invalid", error)
+                if recovery_snapshot is not None:
+                    merged_reason = _failure_reason(
+                        "writer stopped at its budget", WriterBudgetExceeded(merged)
+                    )
+                    rows = tuple(
+                        attrs.evolve(row, reason=merged_reason)
+                        if row.disposition is CriterionDisposition.BLOCKED
+                        else row
+                        for row in recovery_snapshot.criterion_results
+                    )
+                    return terminal(
+                        attrs.evolve(
+                            recovery_snapshot,
+                            criterion_results=rows,
+                            unresolved_work=(merged_reason, *merged.remaining),
+                        )
+                    )
+                return terminal(
+                    _execute_overrun(
+                        plan,
+                        curd,
+                        index,
+                        WriterBudgetExceeded(merged),
+                        repository_root=repository_root,
+                        artifact_directory=artifact_directory,
+                        host_evidence=host_evidence,
+                        provenance_refs=provenance_refs,
+                    )
+                )
+            if overrun.checkpoint.grounded is None:
+                try:
+                    recovery_execution = _materialize_checkpoint_execution(
+                        plan,
+                        curd,
+                        index,
+                        overrun.checkpoint,
+                        repository_root=repository_root,
+                        artifact_directory=artifact_directory,
+                        host_evidence=host_evidence,
+                        provenance_refs=provenance_refs,
+                    )
+                except Exception:
+                    recovery_execution = None
+                if recovery_execution is not None:
+                    return terminal(recovery_execution.result)
+                return terminal(
+                    _execute_overrun(
+                        plan,
+                        curd,
+                        index,
+                        overrun,
+                        repository_root=repository_root,
+                        artifact_directory=artifact_directory,
+                        host_evidence=host_evidence,
+                        provenance_refs=provenance_refs,
+                    )
+                )
+            try:
+                recovery_snapshot = _validate_budget_checkpoint(
+                    plan=plan,
+                    curd=curd,
+                    index=index,
+                    checkpoint=overrun.checkpoint,
+                    repository_root=repository_root,
+                    host_evidence=host_evidence,
+                )
+                writer_context = _recovery_context(
+                    context,
+                    plan=plan,
+                    curd=curd,
+                    checkpoint=overrun.checkpoint,
+                    repository_root=repository_root,
+                )
+                recovery_execution = _materialize_checkpoint_execution(
+                    plan,
+                    curd,
+                    index,
+                    overrun.checkpoint,
+                    repository_root=repository_root,
+                    artifact_directory=artifact_directory,
+                    host_evidence=host_evidence,
+                    provenance_refs=provenance_refs,
+                )
+                recovery_snapshot = recovery_execution.result
+            except Exception as error:
+                return terminal(
+                    _execute_overrun(
+                        plan,
+                        curd,
+                        index,
+                        overrun,
+                        repository_root=repository_root,
+                        artifact_directory=artifact_directory,
+                        host_evidence=host_evidence,
+                        provenance_refs=provenance_refs,
+                        failure_reason=_failure_reason("wheypoint recovery failed", error),
+                    )
+                )
+            recovery_overrun = overrun
+            retried = True
+        except Exception as error:
+            return failed("writer callback failed", error)
 
 
 def _execute_curd(
@@ -1080,6 +1642,7 @@ def _execute_curd(
     shared_inputs: tuple[object, ...],
     phase: Literal["cook", "cure"],
     provenance_refs: tuple[str, ...],
+    allow_budget_recovery: bool,
     dispatch_writer: WriterDispatch,
     dispatch_review: ReviewDispatch,
     dispatch_diagnosis: DiagnosisDispatch,
@@ -1104,38 +1667,70 @@ def _execute_curd(
             provenance_refs=provenance_refs,
         )
 
-    try:
-        output = dispatch_writer(context)
-    except WriterBudgetExceeded as overrun:
+    outcome = _dispatch_writer_with_recovery(
+        context,
+        host_evidence,
+        plan=plan,
+        curd=curd,
+        index=index,
+        repository_root=repository_root,
+        artifact_directory=artifact_directory,
+        provenance_refs=provenance_refs,
+        allow_budget_recovery=allow_budget_recovery,
+        dispatch_writer=dispatch_writer,
+    )
+    host_evidence = outcome.host_evidence
+    recovery_overrun = outcome.recovery_overrun
+    recovery_snapshot = outcome.recovery_snapshot
+    if outcome.terminal_result is not None:
+        return None, outcome.terminal_result
+    output = outcome.output
+    assert output is not None
+
+    def retry_failure(
+        label: str,
+        error: Exception,
+        *,
+        refs: tuple[str, ...] = provenance_refs,
+    ) -> tuple[BranchResult | None, CurdResult]:
+        reason = _failure_reason(label, error)
+        if recovery_overrun is None:
+            return None, _blocked_result(
+                plan,
+                curd,
+                index,
+                reason,
+                provenance_refs=refs,
+            )
+        if recovery_snapshot is not None:
+            rows = tuple(
+                attrs.evolve(row, reason=reason)
+                if row.disposition is CriterionDisposition.BLOCKED
+                else row
+                for row in recovery_snapshot.criterion_results
+            )
+            return None, attrs.evolve(
+                recovery_snapshot,
+                criterion_results=rows,
+                unresolved_work=(reason, *recovery_snapshot.unresolved_work[1:]),
+                provenance_refs=refs,
+            )
         return None, _execute_overrun(
             plan,
             curd,
             index,
-            overrun,
+            recovery_overrun,
             repository_root=repository_root,
             artifact_directory=artifact_directory,
             host_evidence=host_evidence,
-            provenance_refs=provenance_refs,
-        )
-    except Exception as error:
-        return None, _blocked_result(
-            plan,
-            curd,
-            index,
-            _failure_reason("writer callback failed", error),
-            provenance_refs=provenance_refs,
+            provenance_refs=refs,
+            failure_reason=reason,
         )
 
     try:
         writer_view = _writer_view(output)
     except Exception as error:
-        return None, _blocked_result(
-            plan,
-            curd,
-            index,
-            _failure_reason("writer output invalid", error),
-            provenance_refs=provenance_refs,
-        )
+        return retry_failure("writer output invalid", error)
 
     result_id = f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
     try:
@@ -1156,13 +1751,7 @@ def _execute_curd(
             artifact_directory,
         )
     except Exception as error:
-        return None, _blocked_result(
-            plan,
-            curd,
-            index,
-            _failure_reason("writer output invalid", error),
-            provenance_refs=provenance_refs,
-        )
+        return retry_failure("writer output invalid", error)
 
     subject_evidence = EvidenceRef(
         evidence_id=f"{result_id}/subject-evidence",
@@ -1263,12 +1852,10 @@ def _execute_curd(
     try:
         final = _normalize(writer_view, WriterViewKind.CURD_RESULT, invocation)
     except Exception as error:
-        return None, _blocked_result(
-            plan,
-            curd,
-            index,
-            _failure_reason("result normalization failed", error),
-            provenance_refs=(*provenance_refs, runtime_ref),
+        return retry_failure(
+            "result normalization failed",
+            error,
+            refs=(*provenance_refs, runtime_ref),
         )
     assert isinstance(final.value, CurdResult)
     return branch, final.value
@@ -1415,6 +2002,7 @@ def _execute_plan(
     phase: Literal["cook", "cure"],
     provenance_refs: tuple[str, ...],
     diagnosis_bindings: Mapping[str, CureDiagnosisBinding] | None,
+    allow_budget_recovery: bool,
     dispatch_writer: WriterDispatch,
     dispatch_review: ReviewDispatch,
     dispatch_diagnosis: DiagnosisDispatch,
@@ -1463,6 +2051,7 @@ def _execute_plan(
             shared_inputs=shared_inputs,
             phase=phase,
             provenance_refs=curd_provenance,
+            allow_budget_recovery=allow_budget_recovery,
             dispatch_writer=dispatch_writer,
             dispatch_review=dispatch_review,
             dispatch_diagnosis=dispatch_diagnosis,
@@ -1494,6 +2083,7 @@ def cook(
         phase="cook",
         provenance_refs=(),
         diagnosis_bindings=None,
+        allow_budget_recovery=True,
         dispatch_writer=dispatch_writer,
         dispatch_review=dispatch_review,
         dispatch_diagnosis=dispatch_diagnosis,
@@ -1530,6 +2120,7 @@ def cure(
         phase="cure",
         provenance_refs=(),
         diagnosis_bindings=normalized,
+        allow_budget_recovery=False,
         dispatch_writer=dispatch_writer,
         dispatch_review=dispatch_review,
         dispatch_diagnosis=dispatch_diagnosis,
@@ -1595,6 +2186,7 @@ def run_workflow(
         phase=phase,
         provenance_refs=(),
         diagnosis_bindings=normalized,
+        allow_budget_recovery=False,
         dispatch_writer=dispatch_writer,
         dispatch_review=dispatch_review,
         dispatch_diagnosis=dispatch_diagnosis,

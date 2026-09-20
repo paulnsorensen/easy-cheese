@@ -27,3 +27,43 @@ The model layer rejects a later revision with no parent. `lineage.walk` (`src/ea
 `checkpoint` is the normal write path with parent binding. `commit` remains for caller-supplied raw deltas and compaction proofs. `checkpoint` refuses every legacy key; `resolve` still reads legacy notes.
 
 _Source: r014 skill-review round notes (ingest hash 499c49c7b67d5eb6), verified against `src/easy_cheese/skills/wheypoint/` on 2026-09-04 · Updated: 2026-09-04 · Supersedes: review-time claims that lineage and compaction ordering were unenforced_
+
+
+## Writer exhaustion needs a non-terminal checkpoint
+
+The September 19, 2026 investigation finds a gap between writer budget handling and authoritative resume.
+A compact worker reply is an observation set, not a Wheypoint record.
+The parent owns checkpoint persistence because the exhausted worker can no longer run the required commands.
+The accepted recovery contract uses one fresh writer after an authoritative resolve returns nonempty `working_context`.[^writer-recovery]
+
+An incomplete Cook must not use the terminal phase writer to advance to Age.
+The shared checkpoint kernel preserves the current phase for recovery.
+The host carries completed work, remaining work, worktree identity, and the resolved source ranges into the retry.
+A missing checkpoint, invalid context, or second exhaustion halts.
+The parent must not implement the remainder automatically.[^writer-recovery]
+
+[^writer-recovery]: `src/easy_cheese/shared/workflow.py` (`WriterCheckpoint`, `WriterBudgetExceeded`, `_execute_curd`); `src/easy_cheese/shared/wheypoint/checkpoint.py`; `src/easy_cheese/shared/fanout/phase_decision.py`. Recovery decision: September 19, 2026. Source verification and release status belong to the implementation PR.
+
+
+The Wheypoint recovery boundary owns checkpoint validation, artifact publication, commit, rollback, and authoritative resolve.
+It rejects credential-like intent text before persistence.
+A directory advisory lock serializes the record read, idempotency check, publication, and commit.
+Identical recovery requires matching intent, recorded digest, and stored artifact bytes.
+Cleanup preserves an artifact when a committed record references it or authority cannot be read.[^recovery-publication]
+
+The host validates the first partial result before retry dispatch.
+A failed retry retains that immutable result and its original evidence digests.
+The retry cannot rehash its own edits as proof of earlier completed work.[^recovery-snapshot]
+
+An explicit repository root controls both default project identity and the checkpoint corpus.
+Explicit caller overrides remain authoritative.
+Recovery work identifiers include the full remote identity without changing the global project-key format.[^recovery-root]
+
+[^recovery-publication]: src/easy_cheese/shared/wheypoint/recovery.py:161-333; tests/wheypoint/python/test_recovery.py.
+Linear and fan Cook share one workflow-owned writer dispatch and bounded recovery operation.
+The fan adapter does not own a retry loop. Cure and generic workflows retain their no-retry policy.[^recovery-seam]
+
+[^recovery-snapshot]: src/easy_cheese/shared/workflow.py (`_validate_budget_checkpoint`, `_execute_curd`); tests/schemas/python/test_workflow_thread.py.
+[^recovery-seam]: src/easy_cheese/shared/workflow.py (`_dispatch_writer_with_recovery`, `execute_curd_writer`, `_execute_curd`); tests/python/test_cook_execution.py.
+[^recovery-root]: src/easy_cheese/shared/write_handoff_artifact.py; src/easy_cheese/shared/wheypoint/resolve.py; src/easy_cheese/shared/workflow.py (`_budget_target_identity`, `_budget_work_id`); tests/python/test_cross_root_continuity.py.
+
