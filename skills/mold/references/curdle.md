@@ -470,7 +470,7 @@ python3 skills/mold/scripts/mold.pyz finalize "$SPEC" \
 
 Read `status` in the output, not only the exit status. A nonzero exit status is an input error; stop. `ready` stores a canonical `HandoffPointer` and prints the Cook `command`. `saved-not-ready` exits zero, stores no pointer, and lists each unmet `requirements` entry and hold.
 
-For `ready`, pass the printed command to Cook: `/cook <pointer path> --spec "$SPEC"`. For `saved-not-ready`, follow [`handoff-menus.md`](handoff-menus.md).
+For `ready`, render the ready branch of [`handoff-menus.md`](handoff-menus.md). The printed `command` contains `--auto`; run it only when the user selects an automatic choice. A manual choice uses `/cook <pointer path> --spec "$SPEC"`. For `saved-not-ready`, follow the saved-not-ready branch of the same menu.
 
 ## Hand-off
 
