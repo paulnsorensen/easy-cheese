@@ -62,6 +62,20 @@ checklist. It makes the most consequential lean — narrowing scope via `Non-goa
 — a first-class, testable gate rather than a prose-only check (ADR-002). The
 audit procedure lives in `handshake.md` § Non-goals audit.
 
+## The goal coverage gate
+
+`goal-coverage` (rendered `goal_coverage` in the `.dot`) is the subtraction
+sibling of `non-goals-audit`. The noun audits catch scope the agent added; this
+gate catches scope the agent dropped. The bounds pass splits the pinned goal
+into `G-n` clauses and records them in the ledger as `goal_clauses`. The taste
+pre-check then reads each clause's disposition from the draft alone: `covered`
+when an Acceptance line carries the tag, `non-goal` / `follow-up` / `tbd` when
+the matching section carries it, `uncovered` otherwise. An uncovered clause
+fails `goal-coverage:G-n`. Fewer than half covered fails
+`goal-coverage-cap:<covered>/<total>` and forces a re-pin-or-widen fork.
+`taste-test --coverage` prints the disposition map for the narrowing-delta
+line. Procedure: `handshake.md` § Goal coverage.
+
 ## Fork taste planner gate
 `fork_taste_test_passed` is the only edge into the typed planner stage. Mold
 hashes the exact draft before it accepts a verdict. The strict

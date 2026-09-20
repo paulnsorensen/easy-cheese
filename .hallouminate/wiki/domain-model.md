@@ -217,7 +217,7 @@ _Code_: `GateApplicability` in `src/mold/taste_test.py:180`
 
 ## Mold visual review
 
-These entities belong to the accepted review-canvas design; neither is implemented yet.[^mold-review-canvas]
+The review canvas is implemented as a local, token-protected Mold surface. The aggregate persists immutable revisions, working feedback, and submitted snapshots; the frontend renders declared image, Mermaid, contract-table, and Excalidraw artifacts. It remains separate from approval, workflow continuity, and semantic work authorities.[^mold-review-canvas]
 
 **MoldReview** — the skill-local aggregate for review artifacts, questions, working feedback, and submitted snapshots.
 _Avoid_: WheypointRecord, CurdPlan
@@ -228,7 +228,7 @@ _Avoid_: mutable working copy, submitted feedback snapshot
 _Code_: NEW ENTITY; intended owner `src/easy_cheese/skills/mold/`
 
 Neither entity grants approval or replaces workflow continuity and semantic work authorities.
-Browser-test setup and typed-plan approval remain prerequisites before implementation.
+Browser tests now exercise the local canvas. Typed-plan approval remains a separate prerequisite for workflow authorization.
 
 [^mold-review-canvas]: Approved design spec: /Users/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-review-canvas.md; persistence model and extraction status. [Snapshot decision](./adr/mold-review-canvas-005.md).
 

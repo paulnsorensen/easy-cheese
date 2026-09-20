@@ -18,6 +18,17 @@ CONFLICT_MARKERS = (MARKER_OURS, MARKER_BASE, MARKER_SEP, MARKER_THEIRS)
 # Loose 6-char forms for context scans (match markers anywhere in a line).
 _MARKER_FRAGMENTS = tuple(m[:6] for m in CONFLICT_MARKERS)
 
+# Git classifies a blob as binary when a NUL byte occurs in its first 8000 bytes.
+_BINARY_SNIFF_BYTES = 8000
+_GENERATED_ARCHIVE_SUFFIXES = frozenset({".pyz"})
+_GENERATED_ARCHIVE_GUIDANCE = (
+    "generated archive; resolve the source conflicts and rebuild the archive"
+)
+_BINARY_GUIDANCE = (
+    "binary file; select one side with `git checkout --ours|--theirs -- <path>` "
+    "or regenerate the file"
+)
+
 
 def run_git(
     args: list[str],
@@ -81,6 +92,29 @@ def extract_stages(path: str) -> tuple[str | None, str | None, str | None]:
 
 def get_file_extension(path: str) -> str:
     return Path(path).suffix.lstrip(".")
+
+
+def is_binary_file(path: str | Path) -> bool:
+    """Apply Git's binary heuristic to a working-tree file. An unreadable path is not binary."""
+    try:
+        with Path(path).open("rb") as handle:
+            return b"\0" in handle.read(_BINARY_SNIFF_BYTES)
+    except OSError:
+        return False
+
+
+def binary_conflict_guidance(path: str) -> str | None:
+    """Return resolution guidance when text conflict tools must not touch `path`.
+
+    Every Melt text tool decodes and rewrites a conflicted file as text. That
+    operation corrupts a binary file. A generated archive also has no valid
+    side to select, because its sources define its content.
+    """
+    if Path(path).suffix.lower() in _GENERATED_ARCHIVE_SUFFIXES:
+        return _GENERATED_ARCHIVE_GUIDANCE
+    if is_binary_file(path):
+        return _BINARY_GUIDANCE
+    return None
 
 
 def is_mergiraf_supported(path: str) -> bool:

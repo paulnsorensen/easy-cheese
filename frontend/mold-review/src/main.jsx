@@ -81,7 +81,7 @@ function Question({question, answer, onChange}) {
   );
 }
 
-function MermaidPanel({source, onChange}) {
+function MermaidPanel({source, title = 'Mermaid source', onChange}) {
   const [svg, setSvg] = useState('');
   const [error, setError] = useState('');
 
@@ -101,8 +101,8 @@ function MermaidPanel({source, onChange}) {
 
   return (
     <section className="artifact">
-      <h3>Mermaid source</h3>
-      <textarea aria-label="Mermaid source" value={source} onChange={event => onChange(event.target.value)} />
+      <h3>{title}</h3>
+      <textarea aria-label={title} value={source} onChange={event => onChange(event.target.value)} />
       <div className="diagram" aria-label="Mermaid rendering">
         {error ? <p role="alert">Diagram error: {error}</p> : <div dangerouslySetInnerHTML={{__html: svg}} />}
       </div>
@@ -110,17 +110,19 @@ function MermaidPanel({source, onChange}) {
   );
 }
 
-function ExcalidrawPanel({scene, onChange}) {
+function ExcalidrawPanel({scene, title = 'Editable Excalidraw scene', onChange}) {
   const [exported, setExported] = useState('');
-  const last = useRef('');
   const initial = useMemo(
     () => scene || {elements: [], appState: {viewBackgroundColor: '#ffffff'}, files: {}},
     [scene],
   );
+  const initialKey = JSON.stringify({elements: initial.elements || [], files: initial.files || {}});
+  const last = useRef(initialKey);
+  if (last.current !== initialKey) last.current = initialKey;
 
   const update = useCallback((elements, appState, files) => {
     const next = {elements, appState, files};
-    const key = JSON.stringify({elements, files});
+    const key = JSON.stringify({elements: elements || [], files: files || {}});
     if (key !== last.current) {
       last.current = key;
       onChange(next);
@@ -135,7 +137,7 @@ function ExcalidrawPanel({scene, onChange}) {
 
   return (
     <section className="artifact">
-      <h3>Editable Excalidraw scene</h3>
+      <h3>{title}</h3>
       <div className="excalidraw">
         <Excalidraw
           initialData={initial}
@@ -149,6 +151,57 @@ function ExcalidrawPanel({scene, onChange}) {
   );
 }
 
+function ContractTable({artifact}) {
+  const columns = artifact.columns || artifact.headers || [];
+  const rows = artifact.rows || artifact.data || [];
+  return (
+    <section className="artifact">
+      <h3>{artifact.title || artifact.label || 'Contract table'}</h3>
+      <table>
+        <thead><tr>{columns.map(column => <th key={String(column)}>{String(column)}</th>)}</tr></thead>
+        <tbody>{rows.map((row, index) => (
+          <tr key={index}>{(Array.isArray(row) ? row : columns.map(column => row[column])).map((cell, cellIndex) => (
+            <td key={cellIndex}>{String(cell ?? '')}</td>
+          ))}</tr>
+        ))}</tbody>
+      </table>
+    </section>
+  );
+}
+
+function artifactId(artifact, index) {
+  return String(artifact.id || artifact.artifact_id || `artifact-${index}`);
+}
+
+function artifactType(artifact) {
+  return String(artifact.type || artifact.kind || artifact.format || '').toLowerCase();
+}
+
+function ArtifactCanvas({artifacts, values, onChange}) {
+  return artifacts.map((declared, index) => {
+    const id = artifactId(declared, index);
+    const artifact = values[id] || declared;
+    const type = artifactType(artifact);
+    const changed = value => onChange(id, {...declared, ...artifact, ...value});
+    if (type === 'image' || type === 'picture') {
+      const source = artifact.src || artifact.url || artifact.uri || artifact.data;
+      return <section className="artifact" key={id}><h3>{artifact.title || artifact.alt || 'Image'}</h3><img src={source} alt={artifact.alt || artifact.title || 'Review artifact'} /></section>;
+    }
+    if (type === 'mermaid' || type === 'diagram') {
+      const source = artifact.source || artifact.mermaid || artifact.data?.source || '';
+      return <MermaidPanel key={id} title={artifact.title || 'Mermaid diagram'} source={source} onChange={source => changed({source})} />;
+    }
+    if (type === 'contract_table' || type === 'table') {
+      return <ContractTable key={id} artifact={artifact} />;
+    }
+    if (type === 'excalidraw' || type === 'scene') {
+      const scene = artifact.scene || artifact.data || artifact;
+      return <ExcalidrawPanel key={id} title={artifact.title || 'Editable Excalidraw scene'} scene={scene} onChange={scene => changed({scene})} />;
+    }
+    return <section className="artifact" key={id}><h3>{artifact.title || 'Review artifact'}</h3><pre>{JSON.stringify(artifact, null, 2)}</pre></section>;
+  });
+}
+
 function workingCopy(review) {
   return review.working?.[review.revision?.number] || {};
 }
@@ -159,9 +212,11 @@ function useReviewData() {
   const [notes, setNotes] = useState('');
   const [annotations, setAnnotations] = useState('');
   const [scene, setScene] = useState(null);
+  const [artifactValues, setArtifactValues] = useState({});
   const [layout, setLayout] = useState('mixed');
   const [mermaidSource, setMermaidSource] = useState(defaultMermaid);
   const [status, setStatus] = useState('Loading');
+  const [hydrationVersion, setHydrationVersion] = useState(0);
 
   function hydrate(review) {
     const working = workingCopy(review);
@@ -169,8 +224,10 @@ function useReviewData() {
     setNotes(working.notes || '');
     setAnnotations(working.annotations || '');
     setScene(working.scene || null);
+    setArtifactValues(working.artifacts || {});
     setLayout(working.layout || 'mixed');
     setMermaidSource(working.mermaid_source || defaultMermaid);
+    setHydrationVersion(current => current + 1);
   }
 
   useEffect(() => {
@@ -194,58 +251,103 @@ function useReviewData() {
     setAnnotations,
     scene,
     setScene,
+    artifactValues,
+    setArtifactValues,
     layout,
     setLayout,
     mermaidSource,
     setMermaidSource,
     hydrate,
+    hydrationVersion,
     status,
     setStatus,
   };
 }
 
-function useAutosave({data, feedback, revision, setData, setStatus}) {
-  const autosave = useRef({pending: null, busy: false, generation: {}});
+function useAutosave({data, feedback, revision, hydrationVersion, setData, setStatus}) {
+  const autosave = useRef({pending: null, failed: null, busy: false, generation: {}, timer: null, promise: null});
+  const lastHydrationVersion = useRef(hydrationVersion);
+  const generations = useRef(data.generation || {});
+  generations.current = data.generation || generations.current;
+  const flushRef = useRef(() => Promise.resolve());
+  const [hasFailed, setHasFailed] = useState(false);
 
-  useEffect(() => {
-    if (!revision) return undefined;
-    autosave.current.pending = {revision, feedback};
-
-    async function flush() {
-      if (autosave.current.busy) return;
-      autosave.current.busy = true;
-      while (autosave.current.pending) {
-        const job = autosave.current.pending;
-        autosave.current.pending = null;
-        const generation = autosave.current.generation[job.revision] ?? data.generation?.[job.revision] ?? 0;
+  const flush = useCallback(async () => {
+    if (autosave.current.busy) return autosave.current.promise;
+    autosave.current.busy = true;
+    const run = (async () => {
+      while (autosave.current.failed || autosave.current.pending) {
+        const job = autosave.current.failed || autosave.current.pending;
+        const generation = autosave.current.generation[job.revision] ?? generations.current[job.revision] ?? 0;
         try {
           const result = await api('/api/autosave', {
             method: 'POST',
             body: JSON.stringify({revision: job.revision, generation, feedback: job.feedback}),
           });
+          if (autosave.current.pending === job) autosave.current.pending = null;
+          if (autosave.current.failed === job) autosave.current.failed = null;
           autosave.current.generation[job.revision] = result.generation;
+          setHasFailed(false);
+          generations.current = {...generations.current, [job.revision]: result.generation};
           setData(current => ({
             ...current,
             generation: {...current.generation, [job.revision]: result.generation},
           }));
           setStatus('Saved');
         } catch (error) {
+          autosave.current.failed = job;
+          setHasFailed(true);
           const message = String(error.message);
           if (message.includes('stale')) {
             setStatus('Conflict: durable review changed. Local edits remain unsent.');
           } else {
             setStatus(`Save failed: ${message}`);
           }
+          throw error;
         }
       }
+    })();
+    autosave.current.promise = run;
+    try {
+      await run;
+    } finally {
       autosave.current.busy = false;
-      if (autosave.current.pending) void flush();
+      autosave.current.promise = null;
     }
+    if (autosave.current.failed || autosave.current.pending) void flush();
+  }, [setData, setStatus]);
+  flushRef.current = flush;
 
-    const timer = setTimeout(flush, 400);
-    return () => clearTimeout(timer);
-  }, [data.generation, feedback, revision, setData, setStatus]);
+  useEffect(() => {
+    if (!revision) return undefined;
+    if (lastHydrationVersion.current !== hydrationVersion) {
+      lastHydrationVersion.current = hydrationVersion;
+      return undefined;
+    }
+    const job = {revision, feedback};
+    autosave.current.pending = job;
+    if (autosave.current.failed?.revision === revision) autosave.current.failed = job;
+    if (autosave.current.timer) clearTimeout(autosave.current.timer);
+    autosave.current.timer = setTimeout(() => {
+      void flush().catch(() => {});
+    }, 400);
+    return () => {
+      if (autosave.current.timer) clearTimeout(autosave.current.timer);
+    };
+  }, [feedback, hydrationVersion, revision, flush]);
+
+  const discard = useCallback(() => {
+    if (autosave.current.timer) clearTimeout(autosave.current.timer);
+    autosave.current.timer = null;
+    autosave.current.pending = null;
+    autosave.current.failed = null;
+    setHasFailed(false);
+    setStatus('Unsaved changes discarded');
+  }, [setStatus]);
+
+  return {flush: useCallback(() => flushRef.current(), []), discard, hasFailed};
 }
+
 
 function LayoutCards({layout}) {
   return (
@@ -266,13 +368,14 @@ function LayoutCards({layout}) {
 function App() {
   const {
     data, setData, answers, setAnswers, notes, setNotes, annotations, setAnnotations,
-    scene, setScene, layout, setLayout, mermaidSource, setMermaidSource,
-    hydrate, status, setStatus,
+    scene, setScene, artifactValues, setArtifactValues, layout, setLayout, mermaidSource, setMermaidSource,
+    hydrate, hydrationVersion, status, setStatus,
   } = useReviewData();
   const [submitted, setSubmitted] = useState(false);
   const [newRevision, setNewRevision] = useState(false);
   const revision = data.revision?.number || 0;
   const questions = data.revision?.document?.questions || [];
+  const artifacts = data.revision?.document?.artifacts || [];
   const serializedAnswers = useMemo(
     () => Object.fromEntries(questions.map(question => [
       question.id,
@@ -284,11 +387,11 @@ function App() {
     [answers, questions],
   );
   const feedback = useMemo(
-    () => ({answers: serializedAnswers, notes, annotations, scene, mermaid_source: mermaidSource, layout}),
-    [serializedAnswers, notes, annotations, scene, mermaidSource, layout],
+    () => ({answers: serializedAnswers, notes, annotations, scene, artifacts: artifactValues, mermaid_source: mermaidSource, layout}),
+    [serializedAnswers, notes, annotations, scene, artifactValues, mermaidSource, layout],
   );
 
-  useAutosave({data, feedback, revision, setData, setStatus});
+  const {flush: flushAutosave, discard: discardAutosave, hasFailed} = useAutosave({data, feedback, revision, hydrationVersion, setData, setStatus});
 
   useEffect(() => {
     if (!revision) return undefined;
@@ -305,6 +408,7 @@ function App() {
   async function submit() {
     setStatus('Sending');
     try {
+      await flushAutosave();
       const result = await api('/api/submit', {
         method: 'POST',
         body: JSON.stringify({revision, operation_id: `browser-${revision}`, feedback}),
@@ -317,12 +421,21 @@ function App() {
   }
 
   async function switchRevision() {
-    const review = await api('/api/review');
-    setData(review);
-    hydrate(review);
-    setSubmitted(false);
-    setNewRevision(false);
-    setStatus('Saved');
+    if (hasFailed || status.startsWith('Save failed') || status.startsWith('Conflict')) {
+      setStatus('Switch failed: unsaved changes remain.');
+      return;
+    }
+    try {
+      await flushAutosave();
+      const review = await api('/api/review');
+      setData(review);
+      hydrate(review);
+      setSubmitted(false);
+      setNewRevision(false);
+      setStatus('Saved');
+    } catch (error) {
+      setStatus(`Switch failed: ${error.message}`);
+    }
   }
 
   return (
@@ -331,7 +444,8 @@ function App() {
         <div><p className="eyebrow">MOLD REVIEW CANVAS</p><h1>{data.goal || 'Mold review'}</h1></div>
         <div className="status" role="status">
           Revision {revision} · {status}
-          {newRevision && <button onClick={switchRevision}>New revision available — switch</button>}
+          {hasFailed && <button onClick={discardAutosave}>Discard unsaved changes</button>}
+          {newRevision && !hasFailed && !status.startsWith('Save failed') && !status.startsWith('Conflict') && <button onClick={switchRevision}>New revision available — switch</button>}
         </div>
       </header>
       <nav aria-label="Review layout">
@@ -344,7 +458,7 @@ function App() {
       <section className={`layout ${layout}`}>
         <article className="questions">
           <h2>Decision questions</h2>
-          {(data.revision?.document?.questions || []).map(question => (
+          {questions.map(question => (
             <Question
               key={question.id}
               question={question}
@@ -358,8 +472,10 @@ function App() {
         </article>
         <section className="artifacts">
           <LayoutCards layout={layout} />
-          <MermaidPanel source={mermaidSource} onChange={setMermaidSource} />
-          <ExcalidrawPanel scene={scene} onChange={setScene} />
+          {artifacts.length ? <ArtifactCanvas artifacts={artifacts} values={artifactValues} onChange={(id, value) => setArtifactValues(current => ({...current, [id]: value}))} /> : <>
+            <MermaidPanel source={mermaidSource} onChange={setMermaidSource} />
+            <ExcalidrawPanel scene={scene} onChange={setScene} />
+          </>}
         </section>
       </section>
     </main>

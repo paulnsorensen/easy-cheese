@@ -20,7 +20,7 @@ test:
     {{python}} .github/scripts/validate_skills.py
     {{python}} .github/scripts/validate_wiki.py
     {{python}} scripts/render_generated_regions.py --check
-    {{python}} -m pytest tests/python -q -p xdist -n auto
+    {{python}} -m pytest tests/python -q -p xdist -n auto --ignore=tests/python/test_mold_cook_browser_workflow.py
     {{python}} -m pytest tests/shared/python -q -p xdist -n auto
     {{python}} -m pytest tests/fanout/python -q -p xdist -n auto
     {{python}} -m pytest tests/schemas/python -q -p xdist -n auto
@@ -33,11 +33,22 @@ test:
     uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
     just test-skill-overlap
 
-
 # Build and exercise the development-only Mold review browser harness
 test-mold-review:
-    corepack pnpm run mold-review:build
-    corepack pnpm run mold-review:test
+    corepack pnpm --dir frontend/mold-review run build
+    corepack pnpm --dir frontend/mold-review run test
+
+# Run the real Mold-to-Cook browser workflow in its isolated fixture package.
+# Dependency and Chromium provisioning intentionally stay outside `test`.
+playwright_cache := justfile_directory() + "/.context/playwright"
+browser_fixture := justfile_directory() + "/tests/fixtures/mold_cook_browser"
+
+test-workflow-browser:
+    mkdir -p "{{playwright_cache}}"
+    cp "{{browser_fixture}}/package.json" "{{browser_fixture}}/pnpm-lock.yaml" "{{playwright_cache}}/"
+    corepack pnpm --dir "{{playwright_cache}}" install --frozen-lockfile
+    PLAYWRIGHT_BROWSERS_PATH="{{playwright_cache}}/browsers" corepack pnpm --dir "{{playwright_cache}}" exec playwright install chromium
+    MOLD_COOK_BROWSER=1 MOLD_COOK_BROWSER_NODE_MODULES="{{playwright_cache}}/node_modules" PLAYWRIGHT_BROWSERS_PATH="{{playwright_cache}}/browsers" {{python}} -m pytest tests/python/test_mold_cook_browser_workflow.py -q
 # Run model-free overlap analyzer tests (never fetches model artifacts)
 test-skill-overlap:
     cargo test --manifest-path tools/skill-overlap/Cargo.toml

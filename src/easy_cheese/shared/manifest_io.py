@@ -50,6 +50,9 @@ def json_command(
     """
 
     def main(argv: list[str]) -> int:
+        if argv in (["-h"], ["--help"]):
+            print(usage)
+            return 0
         try:
             payload = read_mapping_arg_or_stdin(argv, usage)
         except ManifestLoadError as exc:

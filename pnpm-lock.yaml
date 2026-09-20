@@ -12,6 +12,24 @@ overrides:
 importers:
 
   .:
+    devDependencies:
+      '@astrojs/starlight':
+        specifier: ^0.41.3
+        version: 0.41.3(astro@7.2.8(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2))(typescript@5.9.3)
+      '@cheeselord/design':
+        specifier: ^0.4.0
+        version: 0.4.0(@astrojs/starlight@0.41.3(astro@7.2.8(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2))(typescript@5.9.3))(astro@7.2.8(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2))
+      astro:
+        specifier: ^7.2.8
+        version: 7.2.8(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2)
+      sharp:
+        specifier: ^0.35.4
+        version: 0.35.4(@types/node@24.13.2)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  frontend/mold-review:
     dependencies:
       '@excalidraw/excalidraw':
         specifier: 0.18.1
@@ -29,27 +47,12 @@ importers:
         specifier: 19.1.1
         version: 19.1.1(react@19.1.1)
     devDependencies:
-      '@astrojs/starlight':
-        specifier: ^0.41.3
-        version: 0.41.3(astro@7.2.8(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2))(typescript@5.9.3)
-      '@cheeselord/design':
-        specifier: ^0.4.0
-        version: 0.4.0(@astrojs/starlight@0.41.3(astro@7.2.8(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2))(typescript@5.9.3))(astro@7.2.8(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2))
       '@playwright/test':
         specifier: 1.63.0
         version: 1.63.0
       '@vitejs/plugin-react':
         specifier: 6.1.1
         version: 6.1.1(vite@8.3.0(@types/node@24.13.2)(esbuild@0.28.2))
-      astro:
-        specifier: ^7.2.8
-        version: 7.2.8(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(@types/node@24.13.2)
-      sharp:
-        specifier: ^0.35.4
-        version: 0.35.4(@types/node@24.13.2)
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
       vite:
         specifier: 8.3.0
         version: 8.3.0(@types/node@24.13.2)(esbuild@0.28.2)
@@ -2994,8 +2997,8 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
-  uuid@11.1.1:
-    resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
+  uuid@14.0.2:
+    resolution: {integrity: sha512-xZe/16rV4aa+HGSOCiY2YeLT1OybRLrrkL/Rqaq7p7GMVXjFh+6wN4oMYgjFmnSnhY8t6Xpdl2l9qmnHYuMHwQ==}
     hasBin: true
 
   vfile-location@5.0.3:
@@ -5589,7 +5592,7 @@ snapshots:
       roughjs: 4.6.6
       stylis: 4.4.0
       ts-dedent: 2.3.0
-      uuid: 11.1.1
+      uuid: 14.0.2
 
   micromark-core-commonmark@2.0.3:
     dependencies:
@@ -6559,7 +6562,7 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
-  uuid@11.1.1: {}
+  uuid@14.0.2: {}
 
   vfile-location@5.0.3:
     dependencies:

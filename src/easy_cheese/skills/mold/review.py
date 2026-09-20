@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 from collections.abc import Generator
 from contextlib import contextmanager, nullcontext
-import fcntl
 import hashlib
 import json
 import secrets
@@ -17,7 +16,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Union, cast
 from typing_extensions import TypeAlias, override
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
+
+from easy_cheese.shared.advisory_lock import advisory_lock
+from easy_cheese.shared.publication import atomic_write
 
 JSONValue: TypeAlias = Union[
     str, int, float, bool, None, list["JSONValue"], dict[str, "JSONValue"]
@@ -38,12 +40,16 @@ ASSET_TYPES = {
 @contextmanager
 def state_transaction(path: Path) -> Generator[None, None, None]:
     lock_path = path.with_name(f".{path.name}.lock")
-    with lock_path.open("a+") as lock:
-        _ = fcntl.flock(lock, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            _ = fcntl.flock(lock, fcntl.LOCK_UN)
+    with advisory_lock(lock_path):
+        yield
+
+
+def _state_signature(path: Path) -> tuple[int, int] | None:
+    try:
+        metadata = path.stat()
+    except FileNotFoundError:
+        return None
+    return metadata.st_mtime_ns, metadata.st_size
 
 
 @dataclass(frozen=True)
@@ -103,9 +109,10 @@ class MoldReview:
 
     def save(self, path: Path) -> None:
         with self._lock:
-            temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
-            temporary.write_text(json.dumps(self._payload(), sort_keys=True), encoding="utf-8")
-            temporary.replace(path)
+            atomic_write(
+                path,
+                json.dumps(self._payload(), sort_keys=True).encode("utf-8"),
+            )
 
     def publish(self, document: JSONObject, base: int | None) -> ReviewRevision:
         with self._lock:
@@ -168,6 +175,7 @@ class MoldReview:
 class _ReviewServer(ThreadingHTTPServer):
     review: MoldReview = cast(MoldReview, object())
     token: str = ""
+    state_signature: tuple[int, int] | None = None
 
     def __init__(self, address: tuple[str, int], handler: type[BaseHTTPRequestHandler]) -> None:
         super().__init__(address, handler)
@@ -183,11 +191,15 @@ class _Handler(BaseHTTPRequestHandler):
         server = cast(_ReviewServer, self.server)
         with server.state_lock:
             review = server.review
-            if review.state_path is not None and review.state_path.exists():
+            if (
+                review.state_path is not None
+                and _state_signature(review.state_path) != server.state_signature
+            ):
                 with state_transaction(review.state_path):
                     refreshed = MoldReview.load(review.state_path)
                 refreshed.state_path = review.state_path
                 server.review = refreshed
+                server.state_signature = _state_signature(review.state_path)
             return server.review
 
     def _send(
@@ -210,6 +222,9 @@ class _Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         host = self.headers.get("Host", "")
         token = self.headers.get("X-Mold-Token")
+        request = urlparse(self.path)
+        if not token and request.path in ("/", "/index.html"):
+            token = parse_qs(request.query).get("token", [""])[0]
         if not token:
             token = next(
                 (
@@ -219,9 +234,6 @@ class _Handler(BaseHTTPRequestHandler):
                 ),
                 "",
             )
-        request = urlparse(self.path)
-        if not token and request.path in ("/", "/index.html"):
-            token = parse_qs(request.query).get("token", [""])[0]
         server = cast(_ReviewServer, self.server)
         loopback = host == f"127.0.0.1:{server.server_port}"
         same_origin = origin == f"http://{host}" if require_origin else origin in (None, "null", f"http://{host}")
@@ -312,6 +324,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": "invalid Content-Length"})
             return None
         if length > MAX_BODY:
+            _ = self.rfile.read(length)
             self._send(413, {"error": "body too large"})
             return None
         try:
@@ -343,13 +356,13 @@ class _Handler(BaseHTTPRequestHandler):
                 review = MoldReview.load(state_path) if state_path else server.review
                 review.state_path = state_path
                 server.review = review
-                path = urlparse(self.path).path
+                request_path = urlparse(self.path).path
                 try:
-                    if path == "/api/autosave":
+                    if request_path == "/api/autosave":
                         result = self._autosave(review, payload)
-                    elif path == "/api/submit":
+                    elif request_path == "/api/submit":
                         result = self._submit(review, payload)
-                    elif path == "/api/close":
+                    elif request_path == "/api/close":
                         result = self._close(review)
                     else:
                         self._send(404, {"error": "not found"})
@@ -357,7 +370,9 @@ class _Handler(BaseHTTPRequestHandler):
                 except (KeyError, TypeError, ValueError) as exc:
                     self._send(409, {"error": str(exc)})
                     return
-                review.save_state()
+                if request_path == "/api/close":
+                    review.save_state()
+                server.state_signature = _state_signature(state_path) if state_path else None
                 self._send(200, result)
 
     @staticmethod
@@ -396,17 +411,18 @@ def serve_main(argv: list[str]) -> int:
     with state_transaction(path):
         review = MoldReview.load(path)
         review.state_path = path
-        if review.closed:
+        if not path.exists() or review.closed:
             review.closed = False
             review.save(path)
     token = secrets.token_urlsafe(32)
     server = _ReviewServer(("127.0.0.1", args.port), _Handler)
     server.review = review
     server.token = token
+    server.state_signature = _state_signature(path)
     print(
         json.dumps(
             {
-                "url": f"http://127.0.0.1:{server.server_port}/",
+                "url": f"http://127.0.0.1:{server.server_port}/?token={quote(token, safe='')}",
                 "token": token,
                 "review_id": review.review_id,
             }
@@ -417,11 +433,20 @@ def serve_main(argv: list[str]) -> int:
     try:
         while True:
             server.handle_request()
-            with state_transaction(path):
-                if MoldReview.load(path).closed:
+            with server.state_lock:
+                if server.review.closed:
+                    break
+                signature = _state_signature(path)
+                if signature != server.state_signature:
+                    with state_transaction(path):
+                        refreshed = MoldReview.load(path)
+                    refreshed.state_path = path
+                    server.review = refreshed
+                    server.state_signature = _state_signature(path)
+                if server.review.closed:
                     break
     except KeyboardInterrupt:
-        pass
+        return 0
     finally:
         server.server_close()
     return 0
@@ -439,6 +464,7 @@ def publish_main(argv: list[str]) -> int:
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--base-revision", type=int, default=None)
     args = parser.parse_args(argv)
+    args.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     path = args.state_dir / "review.json"
     try:
         with state_transaction(path):

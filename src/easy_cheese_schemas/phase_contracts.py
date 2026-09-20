@@ -18,6 +18,7 @@ from ._compiled_phase_registry import PHASE_REGISTRY_DATA
 from ._schema_catalog import (
     CURD_PLAN_SCHEMA_URI,
     CURD_RESULT_SCHEMA_URI,
+    MOLD_COOK_HANDOFF_SCHEMA_URI,
     NORMALIZATION_RECEIPT_SCHEMA_URI,
     PHASE_CONTRACT_SCHEMA_URI,
     PLANNER_REQUEST_SCHEMA_URI,
@@ -185,7 +186,6 @@ def _resolve_transition(
         if payload_schema_uri is not None:
             raise TransitionError("terminal transition cannot carry a payload schema")
         return None
-
     phase = COMPILED_TRANSITION_REGISTRY.phase(source)
     if phase is None:
         raise TransitionError(f"unknown source phase {source!r}")
@@ -261,6 +261,7 @@ __all__ = [
     "DISPOSITIONS",
     "HANDBACK_STATUSES",
     "MAX_REASON_LENGTH",
+    "MOLD_COOK_HANDOFF_SCHEMA_URI",
     "NORMALIZATION_RECEIPT_SCHEMA_URI",
     "PHASE_CONTRACT_SCHEMA_URI",
     "PLANNER_REQUEST_SCHEMA_URI",

@@ -18,10 +18,18 @@ class _ContractModule(Protocol):
     def registered_contracts(self) -> tuple[tuple[str, type], ...]: ...
 
 
-def collect(module: _ContractModule) -> tuple[tuple[str, str], ...]:
-    """Project marked contract classes into ``(slug, class name)`` pairs."""
-    entries = module.registered_contracts()
-    return tuple((slug, contract.__name__) for slug, contract in entries)
+def collect(modules: Sequence[_ContractModule]) -> tuple[tuple[str, str], ...]:
+    """Project marked contract classes across ``modules`` into ``(slug, class name)`` pairs."""
+    pairs = [
+        (slug, contract.__name__)
+        for module in modules
+        for slug, contract in module.registered_contracts()
+    ]
+    slugs = [slug for slug, _ in pairs]
+    duplicates = sorted({slug for slug in slugs if slugs.count(slug) > 1})
+    if duplicates:
+        raise ValueError(f"duplicate contract marker(s) across modules: {duplicates}")
+    return tuple(sorted(pairs))
 
 
 def _constant_name(slug: str) -> str:

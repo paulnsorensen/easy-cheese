@@ -15,3 +15,12 @@ Mold records `gate_applicability` from an explicit `work_class`. Behavioral work
 ## Consequences
 
 Applicability is reviewable and deterministic rather than inferred. Functional UI changes cannot hide behind an appearance label. Projects without a suitable runner fail explicitly instead of silently installing or hand-rolling a framework.
+
+## Mold-to-Cook consequence (2026-09-17)
+
+The boundary's browser regression is an explicit separate gate:
+`just test-workflow-browser`. Its Playwright package and browser setup live
+under `tests/fixtures/mold_cook_browser`; runtime skill bundles do not gain a
+browser dependency. The hermetic Python suite exercises frozen traces and
+does not claim browser or live-agent evidence. A missing browser prerequisite
+fails the browser gate rather than being reported as a skipped pass.

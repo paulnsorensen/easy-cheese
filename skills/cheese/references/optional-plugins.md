@@ -55,6 +55,27 @@ Treat any prefix as a match.
 Call the tool by the exact name that the host exposes.
 If the capability is present, it is available. If absent, skip and note once.
 
+## Domain-model probe transport
+
+Mold and Cure pass Hallouminate results to their `domain-model-target` commands.
+Run this procedure before either command:
+
+1. When `list_corpora` is absent or fails, pass `--probe unavailable`.
+2. Derive the repository name from its configured origin remote.
+   Use the host-reported repository root name only when no origin exists.
+3. Match `repo:<repository-name>:wiki` exactly against the returned corpus names.
+4. Pass `--probe no-match` when the successful result contains no exact match.
+5. Pass `--probe unavailable` when the successful result contains multiple exact matches.
+6. Use the one exact match as the corpus.
+7. Call `list_files` for that corpus.
+8. Set the model state to `present` when the result contains `domain-model.md` or a path below `domain-model/`.
+9. Set the model state to `absent` when the successful result contains neither path.
+10. Set the model state to `unknown` when `list_files` is absent or fails.
+11. Pass `--probe match --corpus <name> --model <state>`.
+
+The topic-search outcomes `hit`, `miss`, and `unavailable` do not supply these states.
+They describe search results, not corpus discovery or domain-model presence.
+
 ## Install
 
 See `scripts/install.sh --help` and `README.md § Optional tools` for install instructions for each MCP. Both are opt-in — they are not in `EC_DEFAULT_MCP`.

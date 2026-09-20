@@ -1,6 +1,6 @@
 # ADR: Keep the local review transport bounded
 
-Status: accepted design (2026-09-16); implementation pending.
+Status: implemented (2026-09-19); the bounded local review transport and Mold canvas are available through `mold.pyz`. Remaining prerequisites are typed-plan approval and the existing project quality gates.
 
 ## Context
 

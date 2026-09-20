@@ -1,15 +1,18 @@
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import {cpSync, mkdirSync, readdirSync, rmSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {dirname, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 
-const runtimeAssets = resolve(process.cwd(), 'src/easy_cheese/skills/mold/assets');
+const frontendRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(frontendRoot, '../..');
+const runtimeAssets = resolve(repoRoot, 'src/easy_cheese/skills/mold/assets');
 
 function embedAssets() {
   return {
     name: 'embed-mold-review-assets',
     closeBundle() {
-      const dist = resolve(process.cwd(), 'frontend/mold-review/dist');
+      const dist = resolve(frontendRoot, 'dist');
       rmSync(runtimeAssets, {recursive: true, force: true});
       mkdirSync(runtimeAssets, {recursive: true});
       cpSync(resolve(dist, 'index.html'), resolve(runtimeAssets, 'index.html'));
@@ -23,7 +26,7 @@ function embedAssets() {
 }
 
 export default defineConfig({
-  root: 'frontend/mold-review',
+  root: frontendRoot,
   plugins: [react(), embedAssets()],
-  build: {outDir: 'dist', emptyOutDir: true},
+  build: {outDir: resolve(frontendRoot, 'dist'), emptyOutDir: true},
 });

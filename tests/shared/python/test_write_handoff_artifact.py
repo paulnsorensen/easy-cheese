@@ -1200,6 +1200,30 @@ class TestGroundedRejectedOnNonChainPhase:
         assert excinfo.value.exit_code == 2
         assert not (tmp_path / ".cheese").exists()
 
+    def test_invalid_transition_outranks_the_grounded_rule(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        # This argv trips both rules: `mold -> age` is not a declared
+        # transition, and `mold` is not a chain phase. The contract error must
+        # win, because the transition is the stronger diagnosis.
+        with pytest.raises(
+            writer.cli.CliError, match="transition mold -> age is not declared"
+        ) as excinfo:
+            _ = writer.write_artifact(
+                slug="both-rules",
+                status="ok",
+                phase="mold",
+                next_skill="age",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert excinfo.value.exit_code == 3
+        assert "only valid for chain phases" not in str(excinfo.value)
+        assert not (tmp_path / ".cheese").exists()
+
 
 class TestSuccessTelemetry:
     def test_success_reports_the_landed_revision(

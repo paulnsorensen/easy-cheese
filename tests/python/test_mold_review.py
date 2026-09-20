@@ -117,7 +117,7 @@ def test_concurrent_publish_and_autosave_preserve_both_updates(tmp_path: Path) -
 
 
 def test_close_cli_stops_running_review_server(tmp_path: Path) -> None:
-    path = Path("skills/mold/scripts/mold.pyz")
+    path = Path(__file__).resolve().parents[2] / "skills/mold/scripts/mold.pyz"
     process = subprocess.Popen(
         ["python3", str(path), "review", "serve", "--state-dir", str(tmp_path), "--port", "0"],
         stdout=subprocess.PIPE,
@@ -139,6 +139,41 @@ def test_close_cli_stops_running_review_server(tmp_path: Path) -> None:
         if process.poll() is None:
             process.kill()
 
+
+
+def test_serve_persists_initial_review_and_returns_tokenized_url(tmp_path: Path) -> None:
+    archive = Path(__file__).resolve().parents[2] / "skills/mold/scripts/mold.pyz"
+    process = subprocess.Popen(
+        ["python3", str(archive), "review", "serve", "--state-dir", str(tmp_path), "--port", "0"],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        launch = json.loads(process.stdout.readline())
+        assert "?token=" in launch["url"]
+        restored = MoldReview.load(tmp_path / "review.json")
+        assert restored.review_id == launch["review_id"]
+        subprocess.run(
+            ["python3", str(archive), "review", "close", "--state-dir", str(tmp_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert process.wait(timeout=3) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+
+
+def test_publish_creates_nested_state_directory(tmp_path: Path) -> None:
+    from easy_cheese.skills.mold.review import publish_main
+
+    input_path = tmp_path / "revision.json"
+    input_path.write_text(json.dumps({"questions": []}), encoding="utf-8")
+    state_dir = tmp_path / "nested" / "review-state"
+    assert publish_main(["--state-dir", str(state_dir), "--input", str(input_path)]) == 0
+    assert (state_dir / "review.json").is_file()
 
 def test_poll_observes_submission_saved_after_poll_starts(tmp_path: Path) -> None:
     path = tmp_path / "review.json"

@@ -24,31 +24,51 @@ Runtime consumers depend on schemas; schemas must not depend on runtime consumer
 | Repository benchmarks and build compilers | `scripts/` |
 
 Import runtime functions from their owning module.
+
 The schema package does not provide compatibility re-exports.
 Runtime callback records and exceptions stay with their runtime module.
 Persisted semantic contracts stay in schemas.
+
+## Mold-to-Cook boundary contracts
+
+The phase-specific boundary uses three versioned schemas:
+
+| Schema URI | Model | Authority |
+| --- | --- | --- |
+| `https://schemas.easy-cheese.dev/mold-cook-handoff` | `MoldCookHandoff` | A ready, consumer-validated handoff. Full mode binds the planner result and `CurdPlan`; Light mode names exactly one curd and carries no planner artifacts. |
+| `https://schemas.easy-cheese.dev/mold-cook-approval` | `MoldCookApproval` | Exact scope, plan, partial-plan, or runner evidence. The proposal and response digests must match the referenced bytes; only an approved response can authorize the matching coverage. |
+| `https://schemas.easy-cheese.dev/cook-preparation-result` | `CookPreparationResult` | A closed preparation outcome. Only `ready` carries a handoff; planning, approval, setup, blocker, and validation outcomes carry no execution authority. |
+
+These contracts contain references rather than copied plans or evidence. The
+producer and consumer resolve and validate every reference before publication
+or execution. `CookSetupAuthorization` is limited to its named prerequisite
+curd, approved paths, and approved commands; setup evidence does not clear
+unrelated holds. Partial coverage preserves the acknowledged unresolved work
+until it is completed or explicitly disposed.
 
 ## What this is, and what it is not
 
 It is the artifact vocabulary: the types an external producer or consumer needs to write or read an easy-cheese document without reimplementing its field rules.
 
-It is not the enforcement path — not yet. In v0.1 the types are **derived from** easy-cheese's existing hand-rolled validators (`src/easy_cheese/shared/fanout/validate_*.py`), which still run unchanged inside the repo. A conformance suite pins the two together: every fixture the validators accept must structure cleanly through these types, and every fixture they reject must fail to structure. Until the validators are migrated onto these types, treat that suite as the reason to trust them, and expect the derived-types arrangement to be retired rather than extended.
+The schema package is the canonical enforcement path for the structural and collection invariants listed above. `load` and `validate_contract` structure and validate versioned values before a producer or consumer can treat them as contracts. Runtime modules still own checks that require artifact resolution, execution context, or phase state; those remain listed below. A successful `Loaded` is necessary but does not by itself grant execution authority.
+
+These are versioned canonical models, not derivatives of older hand-rolled validators. The package has no compatibility re-exports; callers use explicit runtime boundary validators when artifact or phase evidence is required.
 
 Also not published: easy-cheese's corpus and layout assumptions (`paths.py`) and the findings report grammar. Those are repo-internal and stay unversioned on purpose.
 
-## Not enforced in v0.1
+## Runtime-owned checks
 
-The types check field shape and the collection invariants below, but a document that satisfies them can still be rejected by `src/easy_cheese/shared/fanout/validate_*.py`, which enforces cross-field rules these types do not yet carry. Structuring cleanly is therefore necessary, not sufficient. Do not read a clean `Loaded` as "easy-cheese will accept this".
+The types check field shape and the collection invariants below, while runtime validators retain checks that need resolved evidence or current phase state.
 
 Enforced here: required fields and their types, enum membership, curd file-disjointness, wiring DAG acyclicity and unknown `W<n>` references, wave size and curd surface floors, and the PR-plan shape rules.
 
-Not enforced here, and checked only by the validators:
+Not enforced here, and checked only by the runtime validators:
 
 - **`agent_resolution` consistency** — exactly one accepted attempt; the resolved agent matching that attempt; attempt and resolved power meeting the request's `minimum_power`; prompt-only permission enforcement implying `degraded` and a read-only request; an unknown resolved power implying `degraded`; a preferred-exact acceptance carrying a null `fallback_reason` (and a non-preferred one carrying a reason).
 - **Phase-dependent requirements** — `phase` of `post_review_complete` or `pr_publish_complete` requiring `current_review` / `post_review`.
 - **Curd lifecycle** — a curd with `status: completed` requiring `review_context`.
 
-These are the accepted derivation gap described above, not oversights, and they are retired when the validators migrate onto these types.
+These checks intentionally remain with runtime modules because they require resolved evidence or current phase state; they are not a temporary migration gap.
 
 ## Usage
 

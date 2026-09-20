@@ -448,7 +448,9 @@ def resolve_slug(
     return {"matches": [], "fallback_roots": sorted(set(searched_roots))}
 
 
-def list_artifacts(phase: str, *, repo_root: Path | str | None = None) -> list[dict[str, str]]:
+def list_artifacts(
+    phase: str, *, repo_root: Path | str | None = None
+) -> list[dict[str, str]]:
     """Return ``[{"slug": stem, "path": abs_path}, ...]`` for a phase's artifacts.
 
     Reuses ``_phase_entries``/``phase_dirpath`` (also driving ``resolve_slug``) so
@@ -576,7 +578,68 @@ def domain_model_target(
     )
 
 
-# ---- CLI: slugify, validate, existing, resolve, list ----
+def _cmd_domain_model_target(args: argparse.Namespace) -> None:
+    probe = cast(str, args.probe)
+    corpus = cast("str | None", args.corpus)
+    model = cast("str | None", args.model)
+
+    if probe in {"unavailable", "no-match"}:
+        if corpus is not None or model is not None:
+            raise cli.CliError("--corpus and --model require --probe match")
+        if probe == "unavailable":
+            list_corpora: Callable[[], list[str]] | None = None
+        else:
+
+            def no_corpora() -> list[str]:
+                return []
+
+            list_corpora = no_corpora
+        wiki_has_model: Callable[[str], bool] | None = None
+    else:
+        if corpus is None:
+            raise cli.CliError("--corpus is required when --probe is match")
+        if model is None:
+            raise cli.CliError("--model is required when --probe is match")
+        if not corpus.startswith("repo:") or not corpus.endswith(":wiki"):
+            raise cli.CliError("--corpus must match repo:<name>:wiki")
+
+        def matched_corpus() -> list[str]:
+            return [corpus]
+
+        list_corpora = matched_corpus
+        if model == "present":
+
+            def model_present(_corpus: str) -> bool:
+                return True
+
+            wiki_has_model = model_present
+        elif model == "absent":
+
+            def model_absent(_corpus: str) -> bool:
+                return False
+
+            wiki_has_model = model_absent
+        else:
+            wiki_has_model = None
+
+    target = domain_model_target(
+        repo_root=cast("str | None", args.repo_root),
+        project=cast("str | None", args.project),
+        list_corpora=list_corpora,
+        wiki_has_model=wiki_has_model,
+    )
+    cli.emit(
+        {
+            "backend": target.backend,
+            "location": str(target.location),
+            "wiki_reachable": target.wiki_reachable,
+        },
+        json_mode=True,
+        stdout=cast(TextIO, args.stdout),
+    )
+
+
+# ---- CLI: slugify, validate, existing, resolve, list, domain-model-target ----
 def _cmd_slugify(args: argparse.Namespace) -> None:
     text = cast(str, args.text)
     if not text:
@@ -584,7 +647,9 @@ def _cmd_slugify(args: argparse.Namespace) -> None:
     slug = slugify(text)
     if not slug:
         raise cli.CliError(f"slugify produced an empty slug from {text!r}")
-    cli.emit(slug, json_mode=cast(bool, args.json_mode), stdout=cast(TextIO, args.stdout))
+    cli.emit(
+        slug, json_mode=cast(bool, args.json_mode), stdout=cast(TextIO, args.stdout)
+    )
 
 
 def _cmd_validate(args: argparse.Namespace) -> None:
@@ -600,9 +665,7 @@ def _cmd_existing(args: argparse.Namespace) -> None:
     if err is not None:
         raise cli.CliError(err)
     if phase not in PHASES:
-        raise cli.CliError(
-            f"unknown phase {phase!r}; expected one of {sorted(PHASES)}"
-        )
+        raise cli.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
     found = existing_artifacts(
         slug, root=cast("str | None", args.root), phases=(phase,)
     )
@@ -619,9 +682,7 @@ def _cmd_existing(args: argparse.Namespace) -> None:
 def _cmd_list(args: argparse.Namespace) -> None:
     phase = cast(str, args.phase)
     if phase not in PHASES:
-        raise cli.CliError(
-            f"unknown phase {phase!r}; expected one of {sorted(PHASES)}"
-        )
+        raise cli.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
     try:
         entries = list_artifacts(phase, repo_root=cast("str | None", args.repo_root))
     except ValueError as exc:
@@ -707,6 +768,39 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     )
     _ = list_cmd.add_argument("--limit", type=int, default=None, help="cap list length")
     list_cmd.set_defaults(func=_cmd_list)
+    target = sub.add_parser(
+        "domain-model-target",
+        help="resolve the domain-model store from explicit Hallouminate probe results",
+    )
+    _ = target.add_argument(
+        "--probe",
+        required=True,
+        choices=("unavailable", "no-match", "match"),
+        help="Hallouminate probe result",
+    )
+    _ = target.add_argument(
+        "--corpus",
+        default=None,
+        help="matching repo:<name>:wiki corpus (required with --probe match)",
+    )
+    _ = target.add_argument(
+        "--model",
+        default=None,
+        choices=("present", "absent", "unknown"),
+        help="model status in the matching corpus (required with --probe match)",
+    )
+    _ = target.add_argument(
+        "--repo-root",
+        dest="repo_root",
+        default=None,
+        help="repo root for docs/domain-model.md (default: git toplevel or cwd)",
+    )
+    _ = target.add_argument(
+        "--project",
+        default=None,
+        help="XDG corpus project key (default: environment or repository identity)",
+    )
+    target.set_defaults(func=_cmd_domain_model_target)
 
 
 def main(argv: list[str]) -> int:
