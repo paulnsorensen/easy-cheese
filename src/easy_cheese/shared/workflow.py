@@ -25,6 +25,8 @@ from easy_cheese_schemas.contracts import (
     CurdPlan,
     CurdResult,
     CurdResultWriterView,
+    RemediationCureWriterView,
+    RemediationScopeKey,
     DeliverableWriterView,
     DiagnosisDisposition,
     DiagnosisRequest,
@@ -54,6 +56,7 @@ from easy_cheese_schemas.contracts import (
     _string_list,  # pyright: ignore[reportPrivateUsage]
     _tuple_sequence,  # pyright: ignore[reportPrivateUsage]
 )
+from easy_cheese.shared.fanout.remediation import PressGateResult
 from easy_cheese_schemas.planner import materialize_planner_result
 from easy_cheese_schemas.schema_runtime import (
     CanonicalArtifact,
@@ -75,7 +78,7 @@ PlannerDispatch = Callable[[PlannerRequest], object]
 WriterDispatch = Callable[[Mapping[str, object]], object]
 ReviewDispatch = Callable[[ReviewRequest], object]
 DiagnosisDispatch = Callable[[DiagnosisRequest], object]
-PressDispatch = Callable[[object, int], Sequence[EvidenceRef]]
+PressDispatch = Callable[[RemediationScopeKey, int], PressGateResult]
 BranchResult = ReviewResult | DiagnosisResult
 ExecutionResults = tuple[tuple[BranchResult, ...], tuple[CurdResult, ...]]
 WorkflowResults = tuple[PlannerResult, tuple[BranchResult, ...], tuple[CurdResult, ...]]
@@ -161,6 +164,8 @@ def _canonical_value(value: object) -> object:
     if isinstance(value, (tuple, list)):
         sequence = cast(tuple[object, ...] | list[object], value)
         return [_canonical_value(item) for item in sequence]
+    if isinstance(value, bytes):
+        return {"__bytes__": value.hex()}
     return value
 
 
@@ -686,6 +691,13 @@ def _writer_view(output: object) -> CurdResultWriterView:
         "writer dispatch must return a curd result writer view"
     )
 
+def _cure_writer_view(output: object) -> RemediationCureWriterView:
+    if isinstance(output, RemediationCureWriterView):
+        return output
+    raise ContractValidationError(
+        "Cure writer dispatch must return a remediation Cure writer view"
+    )
+
 
 def _blocked_rows(
     criteria: tuple[Criterion, ...], reason: str
@@ -955,7 +967,8 @@ class CurdWriterExecution:
     deliverables: Mapping[str, ArtifactRef]
     subject: ArtifactRef
     result: CurdResult
-
+    cure_reconciliation: RemediationCureWriterView | None = None
+    writer_context_digest: str = ""
 
 def execute_curd_writer(
     plan: CurdPlan,
@@ -986,6 +999,7 @@ def execute_curd_writer(
         phase=phase,
     )
     writer_context = context if extra_context is None else {**context, **extra_context}
+    writer_context_digest = _canonical_digest(writer_context)
     writer_result_id = result_id or f"{plan.plan_id}/revision/{plan.revision}/result/{index}"
     try:
         output = dispatch_writer(writer_context)
@@ -1013,8 +1027,15 @@ def execute_curd_writer(
             deliverables=deliverables,
             subject=_subject_artifact(result_id, provisional, artifact_directory),
             result=provisional.value,
+            cure_reconciliation=None,
+            writer_context_digest=writer_context_digest,
         )
-    writer_view = _writer_view(output)
+    cure_reconciliation = None
+    if phase == "cure":
+        cure_reconciliation = _cure_writer_view(output)
+        writer_view = cure_reconciliation.result
+    else:
+        writer_view = _writer_view(output)
     result_id = writer_result_id
     provisional, deliverables = _finalize_view(
         plan,
@@ -1045,6 +1066,8 @@ def execute_curd_writer(
         deliverables=deliverables,
         subject=subject,
         result=final.value,
+        cure_reconciliation=cure_reconciliation,
+        writer_context_digest=writer_context_digest,
     )
 
 

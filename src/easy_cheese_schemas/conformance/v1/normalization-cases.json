@@ -189,6 +189,7 @@
         },
         "review_id": "review-normalized",
         "disposition": "findings",
+        "event_identity": null,
         "findings": [
           {
             "finding_id": "review-normalized/finding/1",

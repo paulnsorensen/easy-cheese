@@ -51,7 +51,14 @@ from easy_cheese.shared.fanout.remediation_store import (
     publish_state,
     scope_state_path,
 )
-from easy_cheese.shared.fanout.run_fan import FanContext, run_fan
+from easy_cheese.shared.fanout.remediation import PressGateResult
+from easy_cheese.shared.fanout.run_fan import (
+    CureDispatchOutcome,
+    FanContext,
+    RemediationEventContext,
+    ReviewDispatchOutcome,
+    run_fan,
+)
 from easy_cheese.shared.fanout.run_fan import (  # private helpers under test
     _curd_scope,  # pyright: ignore[reportPrivateUsage]
     _drive_scope,  # pyright: ignore[reportPrivateUsage]
@@ -163,6 +170,21 @@ def _findings_review(summary: str) -> ReviewResult:
     )
 
 
+def _findings_review_with_summaries(*summaries: str) -> ReviewResult:
+    return ReviewResult(
+        contract_version=ContractVersion(schema_uri=REVIEW_SCHEMA, major="1", minor="0"),
+        review_id=f"review-{len(summaries)}-findings",
+        disposition=ReviewDisposition.FINDINGS,
+        findings=tuple(
+            attrs.evolve(_finding(summary), finding_id=f"f{index}")
+            for index, summary in enumerate(summaries, start=1)
+        ),
+        coverage=(
+            ReviewCoverage(target="src/x.py", disposition=CoverageDisposition.COVERED),
+        ),
+    )
+
+
 def _apply_all(
     _scope: RemediationScopeKey, locked_selection: tuple[str, ...], _cure_round: int
 ) -> RemediationCureObservation:
@@ -179,27 +201,38 @@ def _apply_all(
 AgeScript = Callable[[RemediationScopeKey, int], ReviewResult]
 
 
-PressScript = Callable[[RemediationScopeKey, int], tuple[EvidenceRef, ...]]
+PressScript = Callable[[RemediationScopeKey, int], PressGateResult]
 
 
-def _press(_scope: RemediationScopeKey, _round: int) -> tuple[EvidenceRef, ...]:
-    return (_evidence(),)
+def _press(_scope: RemediationScopeKey, _round: int) -> PressGateResult:
+    return PressGateResult(True, "baseline-1", evidence=(_evidence(),))
 
 
 def _context(
     tmp_path: Path,
     age: AgeScript,
     *,
-    cure: object = _apply_all,
-    cook: object = _passed_cook,
+    cure: Callable[[RemediationScopeKey, tuple[str, ...], int], RemediationCureObservation] = _apply_all,
+    cook: Callable[[SemanticCurd], CurdResult] = _passed_cook,
     press: PressScript | None = _press,
 ) -> FanContext:
+    def age_adapter(event: RemediationEventContext) -> ReviewDispatchOutcome:
+        return ReviewDispatchOutcome(
+            result=age(event.scope, event.round_number), request_digest=DIGEST
+        )
+
+    def cure_adapter(event: RemediationEventContext) -> CureDispatchOutcome:
+        return CureDispatchOutcome(
+            observation=cure(event.scope, event.locked_selection, event.round_number),
+            request_digest=DIGEST,
+        )
+
     return FanContext(
         run_id="run-1",
         artifact_directory=tmp_path,
-        cook=cook,  # pyright: ignore[reportArgumentType]
-        age=age,
-        cure=cure,  # pyright: ignore[reportArgumentType]
+        cook=cook,
+        age=age_adapter,
+        cure=cure_adapter,
         press=press,
     )
 
@@ -228,6 +261,72 @@ class TestHappyPath:
         assert outcome.next_step == "done"
         assert outcome.results[0].disposition is CurdDisposition.PASSED
 
+
+    def test_third_productive_cure_round_reaches_clean(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+        cure_calls: list[tuple[int, tuple[str, ...]]] = []
+
+        def age(scope: RemediationScopeKey, review_round: int) -> ReviewResult:
+            if scope.scope_id == "postmerge":
+                return _clean_review()
+            reviews = {
+                1: _findings_review_with_summaries("first", "second", "third"),
+                2: _findings_review_with_summaries("first", "second"),
+                3: _findings_review_with_summaries("first"),
+            }
+            return reviews.get(review_round, _clean_review())
+
+        def cure(
+            _scope: RemediationScopeKey, locked: tuple[str, ...], cure_round: int
+        ) -> RemediationCureObservation:
+            cure_calls.append((cure_round, locked))
+            return _apply_all(_scope, locked, cure_round)
+
+        outcome = run_fan(plan, _context(tmp_path, age, cure=cure))
+        state = outcome.scope_states["a"]
+        assert len(cure_calls) == 3
+        assert [round_number for round_number, _ in cure_calls] == [2, 3, 4]
+        assert [receipt.round_number for receipt in state.receipts] == [1, 2, 3, 4]
+        assert [receipt.debt.score for receipt in state.receipts] == [12, 8, 4, 0]
+        assert all(receipt.progress for receipt in state.receipts)
+        assert state.stagnation_count == 0
+        assert state.disposition is RemediationDisposition.CLEAN
+        assert state.cursor is RemediationCursor.TERMINAL
+        assert outcome.next_step == "done"
+
+    def test_independent_curds_different_round_counts(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("one"), _curd("two"))
+        cure_calls: dict[str, list[int]] = {"one": [], "two": []}
+
+        def age(scope: RemediationScopeKey, review_round: int) -> ReviewResult:
+            if scope.scope_id == "postmerge":
+                return _clean_review()
+            if scope.scope_id == "one":
+                return _findings_review("one defect") if review_round == 1 else _clean_review()
+            if review_round == 1:
+                return _findings_review_with_summaries("two first", "two second")
+            if review_round == 2:
+                return _findings_review("two first")
+            return _clean_review()
+
+        def cure(
+            scope: RemediationScopeKey, locked: tuple[str, ...], cure_round: int
+        ) -> RemediationCureObservation:
+            cure_calls[scope.scope_id].append(cure_round)
+            return _apply_all(scope, locked, cure_round)
+
+        outcome = run_fan(plan, _context(tmp_path, age, cure=cure))
+        assert cure_calls == {"one": [2], "two": [2, 3]}
+        one = outcome.scope_states["one"]
+        two = outcome.scope_states["two"]
+        assert [receipt.round_number for receipt in one.receipts] == [1, 2]
+        assert [receipt.round_number for receipt in two.receipts] == [1, 2, 3]
+        assert [receipt.debt.score for receipt in one.receipts] == [4, 0]
+        assert [receipt.debt.score for receipt in two.receipts] == [8, 4, 0]
+        assert one.scope.scope_id == "one"
+        assert two.scope.scope_id == "two"
+        assert one.stagnation_count == two.stagnation_count == 0
+        assert outcome.next_step == "done"
 
 class TestStall:
     def test_two_non_improving_reviews_stall_to_mold(self, tmp_path: Path) -> None:
@@ -285,13 +384,10 @@ class TestIncomplete:
         assert dispositions["a"] is CurdDisposition.FAILED
         assert dispositions["b"] is CurdDisposition.BLOCKED
 
-    def test_recorded_seven_curd_trace_with_independent_branch(
-        self, tmp_path: Path
-    ) -> None:
-        # AC-8 and AC-12: the seven-curd trace adds one independent branch.
+    def test_recorded_seven_curd_trace(self, tmp_path: Path) -> None:
+        # AC-8 and AC-12: the trace contains one root and six dependent curds.
         curds = [_curd("root")]
         curds.extend(_curd(chr(code), ("root",)) for code in range(ord("b"), ord("h")))
-        curds.append(_curd("independent"))
         plan = _plan(*curds)
         cook_calls: list[str] = []
 
@@ -327,10 +423,35 @@ class TestIncomplete:
         dispositions = {r.source_curd_ref.curd_id: r.disposition for r in outcome.results}
         assert dispositions["root"] is CurdDisposition.FAILED
         assert all(dispositions[curd_id] is CurdDisposition.BLOCKED for curd_id in "bcdefg")
-        assert dispositions["independent"] is CurdDisposition.PASSED
-        assert cook_calls == ["root", "independent"]
+        assert cook_calls == ["root"]
         assert outcome.next_step == "mold"
         assert outcome.next_step != "press"
+
+    def test_independent_branch_runs_after_failed_root(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("root"), _curd("independent"))
+        cook_calls: list[str] = []
+
+        def cook(curd: SemanticCurd) -> CurdResult:
+            cook_calls.append(curd.curd_id)
+            result = _passed_cook(curd)
+            if curd.curd_id != "root":
+                return result
+            return attrs.evolve(
+                result,
+                disposition=CurdDisposition.FAILED,
+                criterion_results=(attrs.evolve(result.criterion_results[0], disposition=CriterionDisposition.FAILED),),
+                unresolved_work=("root failed",),
+            )
+
+        outcome = run_fan(
+            plan,
+            _context(tmp_path, lambda _scope, _round: _clean_review(), cook=cook),
+        )
+        assert cook_calls == ["root", "independent"]
+        dispositions = {item.source_curd_ref.curd_id: item.disposition for item in outcome.results}
+        assert dispositions["root"] is CurdDisposition.FAILED
+        assert dispositions["independent"] is CurdDisposition.PASSED
+        assert outcome.next_step == "mold"
 
     def test_dirty_postmerge_refuses_done(self, tmp_path: Path) -> None:
         # AC-10: a non-clean terminal post-merge review refuses publication.
@@ -455,7 +576,7 @@ class TestCallbackFailures:
             ),
         )
         state = outcome.scope_states["a"]
-        assert state.disposition is RemediationDisposition.BLOCKED
+        assert state.disposition is RemediationDisposition.STALLED
         assert state.cursor is RemediationCursor.TERMINAL
         assert outcome.next_step == "mold"
 
@@ -465,9 +586,9 @@ class TestPostmergePress:
         plan = _plan(_curd("a"))
         events: list[str] = []
 
-        def press(scope: RemediationScopeKey, _round: int) -> tuple[EvidenceRef, ...]:
+        def press(scope: RemediationScopeKey, _round: int) -> PressGateResult:
             events.append(f"press:{scope.scope_id}")
-            return (_evidence(),)
+            return PressGateResult(True, "baseline-1", evidence=(_evidence(),))
 
         def age(scope: RemediationScopeKey, _round: int) -> ReviewResult:
             events.append(f"age:{scope.scope_id}")
@@ -487,13 +608,15 @@ class TestPostmergePress:
         assert outcome.next_step == "mold"
         assert outcome.postmerge_state is not None
         assert outcome.postmerge_state.disposition is RemediationDisposition.BLOCKED
+        assert len(outcome.stop_evidence_refs) == 1
+        assert outcome.stop_evidence_refs[0].role == "press-stop"
 
 
     def test_postmerge_cure_receipt_keeps_both_gate_runs(self, tmp_path: Path) -> None:
         plan = _plan(_curd("a"))
 
-        def press(_scope: RemediationScopeKey, gate_round: int) -> tuple[EvidenceRef, ...]:
-            return (attrs.evolve(_evidence(), evidence_id=f"gate-{gate_round}"),)
+        def press(_scope: RemediationScopeKey, gate_round: int) -> PressGateResult:
+            return PressGateResult(True, "baseline-1", evidence=(attrs.evolve(_evidence(), evidence_id=f"gate-{gate_round}"),))
 
         def age(scope: RemediationScopeKey, review_round: int) -> ReviewResult:
             if scope.scope_id == "postmerge" and review_round == 1:
@@ -508,6 +631,36 @@ class TestPostmergePress:
         }
         assert {"gate-1", "gate-2"} <= gate_ids
 
+
+    def test_fresh_postmerge_debt_gets_own_cure_receipt(self, tmp_path: Path) -> None:
+        plan = _plan(_curd("a"))
+        age_calls: list[str] = []
+        cure_calls: list[str] = []
+
+        def age(scope: RemediationScopeKey, review_round: int) -> ReviewResult:
+            age_calls.append(scope.scope_id)
+            if scope.scope_id == "postmerge" and review_round == 1:
+                return _findings_review("fresh merge defect")
+            return _clean_review()
+
+        def cure(
+            scope: RemediationScopeKey, locked: tuple[str, ...], cure_round: int
+        ) -> RemediationCureObservation:
+            cure_calls.append(scope.scope_id)
+            return _apply_all(scope, locked, cure_round)
+
+        outcome = run_fan(plan, _context(tmp_path, age, cure=cure))
+        assert age_calls == ["a", "postmerge", "postmerge"]
+        assert cure_calls == ["postmerge"]
+        assert outcome.postmerge_state is not None
+        postmerge = outcome.postmerge_state
+        assert len(postmerge.receipts) == 2
+        assert postmerge.receipts[0].cure_result_ref is not None
+        assert postmerge.receipts[0].selected_finding_keys
+        assert postmerge.receipts[1].selected_finding_keys == ()
+        assert len(outcome.scope_states["a"].receipts) == 1
+        assert outcome.scope_states["a"].receipts[0].cure_result_ref is None
+        assert outcome.next_step == "done"
 
 class TestRecordedResume:
     def test_recorded_passed_curd_resumes_age_without_cook(self, tmp_path: Path) -> None:

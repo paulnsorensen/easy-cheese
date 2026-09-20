@@ -62,6 +62,23 @@ def schedule_wave(
     """
     curds = {curd.curd_id: curd for curd in plan.curds}
     scope = set(curds) if selected is None else set(selected)
+    if selected is not None:
+        unknown = scope - set(curds)
+        if unknown:
+            raise ValueError(
+                "selected contains unknown curd ids: " + ", ".join(sorted(unknown))
+            )
+        missing = {
+            dependency
+            for curd_id in scope
+            for dependency in curds[curd_id].dependencies
+            if dependency not in scope
+        }
+        if missing:
+            raise ValueError(
+                "selected must be dependency-closed; missing: "
+                + ", ".join(sorted(missing))
+            )
     order = [curd.curd_id for curd in plan.curds if curd.curd_id in scope]
     done = {curd_id for curd_id in results if curd_id in scope}
 

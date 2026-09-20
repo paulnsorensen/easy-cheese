@@ -1164,6 +1164,7 @@ def test_writer_views_expose_only_agent_authored_fields() -> None:
         "DiagnosisResultWriterView",
         "PlannerResultWriterView",
         "PlannerUncertaintyWriterView",
+        "RemediationCureWriterView",
         "ReproductionWriterView",
         "ReviewFindingWriterView",
         "ReviewResultWriterView",

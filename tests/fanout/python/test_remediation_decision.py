@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from typing import cast
 
+from easy_cheese.shared.fanout.remediation_store import load_state
 from easy_cheese_schemas import (
     ArtifactRef,
     ContractVersion,
@@ -92,9 +93,12 @@ def _finding(
 
 
 def _review(
+    state: RemediationState,
     findings: list[ReviewFinding] | None,
     disposition: ReviewDisposition,
 ) -> ReviewResult:
+    from easy_cheese.shared.fanout.remediation import bind_event_identity
+
     return ReviewResult(
         contract_version=ContractVersion(schema_uri=REVIEW_SCHEMA, major="1", minor="0"),
         review_id="review-1",
@@ -106,7 +110,10 @@ def _review(
             )
         ],
         reason=None,
+        event_identity=bind_event_identity(state, DIGEST, event="review"),
     )
+
+
 
 
 def _state(
@@ -130,8 +137,12 @@ def _state(
 
 
 def _cure_observation(
-    applied: tuple[str, ...], deferred: tuple[str, ...]
+    state: RemediationState,
+    applied: tuple[str, ...],
+    deferred: tuple[str, ...],
 ) -> RemediationCureObservation:
+    from easy_cheese.shared.fanout.remediation import bind_event_identity
+
     return RemediationCureObservation(
         contract_version=ContractVersion(schema_uri=CURE_SCHEMA, major="1", minor="0"),
         applied_finding_keys=applied,
@@ -139,15 +150,17 @@ def _cure_observation(
         touched_paths=("src/parser.py",),
         gate_evidence=(),
         new_gate_failures=(),
+        event_identity=bind_event_identity(state, DIGEST, event="cure"),
     )
 
 
 class TestReviewEvent:
     def test_findings_review_routes_to_cure_and_publishes(self, tmp_path: Path) -> None:
-        state = _write(tmp_path / "state.json", _state())
+        state_value = _state()
+        state = _write(tmp_path / "state.json", state_value)
         review = _write(
             tmp_path / "review.json",
-            _review([_finding()], ReviewDisposition.FINDINGS),
+            _review(state_value, [_finding()], ReviewDisposition.FINDINGS),
         )
         result = _run_cli("--state", str(state), "--event", "review", "--review", str(review))
         assert result.returncode == 0, result.stderr
@@ -161,9 +174,10 @@ class TestReviewEvent:
         assert len(cast("list[str]", republished["locked_selection"])) == 1
 
     def test_clean_review_completes_without_cure(self, tmp_path: Path) -> None:
-        state = _write(tmp_path / "state.json", _state())
+        state_value = _state()
+        state = _write(tmp_path / "state.json", state_value)
         review = _write(
-            tmp_path / "review.json", _review(None, ReviewDisposition.CLEAN)
+            tmp_path / "review.json", _review(state_value, None, ReviewDisposition.CLEAN)
         )
         result = _run_cli("--state", str(state), "--event", "review", "--review", str(review))
         assert result.returncode == 0, result.stderr
@@ -175,10 +189,11 @@ class TestReviewEvent:
 
 class TestCureEvent:
     def _review_then_state(self, tmp_path: Path) -> tuple[Path, list[str]]:
-        state = _write(tmp_path / "state.json", _state())
+        state_value = _state()
+        state = _write(tmp_path / "state.json", state_value)
         review = _write(
             tmp_path / "review.json",
-            _review([_finding()], ReviewDisposition.FINDINGS),
+            _review(state_value, [_finding()], ReviewDisposition.FINDINGS),
         )
         result = _run_cli("--state", str(state), "--event", "review", "--review", str(review))
         assert result.returncode == 0, result.stderr
@@ -187,8 +202,9 @@ class TestCureEvent:
 
     def test_cure_applies_selection_and_returns_to_age(self, tmp_path: Path) -> None:
         state, selection = self._review_then_state(tmp_path)
+        cure_state = load_state(state)
         cure = _write(
-            tmp_path / "cure.json", _cure_observation(tuple(selection), ())
+            tmp_path / "cure.json", _cure_observation(cure_state, tuple(selection), ())
         )
         result = _run_cli(
             "--state", str(state), "--event", "cure", "--cure-result", str(cure)
@@ -201,8 +217,9 @@ class TestCureEvent:
 
     def test_zero_applied_cure_remediates(self, tmp_path: Path) -> None:
         state, selection = self._review_then_state(tmp_path)
+        cure_state = load_state(state)
         cure = _write(
-            tmp_path / "cure.json", _cure_observation((), tuple(selection))
+            tmp_path / "cure.json", _cure_observation(cure_state, (), tuple(selection))
         )
         result = _run_cli(
             "--state", str(state), "--event", "cure", "--cure-result", str(cure)
@@ -222,16 +239,14 @@ class TestFailClosed:
         assert "--review" in result.stderr
 
     def test_cure_event_without_cure_result_exits_2(self, tmp_path: Path) -> None:
-        state = _write(
-            tmp_path / "state.json", _state(cursor=RemediationCursor.AWAITING_CURE)
-        )
+        state = _write(tmp_path / "state.json", _state())
         result = _run_cli("--state", str(state), "--event", "cure")
         assert result.returncode == 2
 
     def test_missing_state_file_exits_2(self, tmp_path: Path) -> None:
         review = _write(
             tmp_path / "review.json",
-            _review([_finding()], ReviewDisposition.FINDINGS),
+            _review(_state(), [_finding()], ReviewDisposition.FINDINGS),
         )
         result = _run_cli(
             "--state", str(tmp_path / "absent.json"), "--event", "review",
@@ -245,7 +260,7 @@ class TestFailClosed:
         _ = state.write_bytes(b'{"not": "a remediation state"}')
         review = _write(
             tmp_path / "review.json",
-            _review([_finding()], ReviewDisposition.FINDINGS),
+            _review(_state(), [_finding()], ReviewDisposition.FINDINGS),
         )
         result = _run_cli(
             "--state", str(state), "--event", "review", "--review", str(review)

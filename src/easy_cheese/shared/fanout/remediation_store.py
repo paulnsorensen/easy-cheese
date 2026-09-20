@@ -13,6 +13,7 @@ same artifact the previous run published.
 """
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import cast
 
@@ -42,14 +43,29 @@ def _state_version() -> ContractVersion:
     return version
 
 
+def _path_component(value: str) -> str:
+    """Encode opaque identifiers before using them as path components."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _contained(root: Path, target: Path) -> Path:
+    resolved_root = root.resolve()
+    resolved_target = target.resolve()
+    try:
+        _ = resolved_target.relative_to(resolved_root)
+    except ValueError as error:
+        raise StateStoreError(f"remediation path escapes artifact root: {target}") from error
+    return resolved_target
+
+
 def scope_state_path(root: str | Path, scope: RemediationScopeKey) -> Path:
-    """Return the canonical on-disk path for one scope's state artifact."""
-    return (
-        Path(root)
-        / "remediation"
-        / scope.run_id
-        / f"{scope.scope_kind.value}-{scope.scope_id}.json"
+    """Return a deterministic, root-contained path for one scope state artifact."""
+    base = Path(root).resolve()
+    target = base / "remediation" / _path_component(scope.run_id) / (
+        f"{_path_component(scope.scope_kind.value)}-"
+        f"{_path_component(scope.scope_id)}.json"
     )
+    return _contained(base, target)
 
 
 def initial_state(scope: RemediationScopeKey, *, state_id: str) -> RemediationState:

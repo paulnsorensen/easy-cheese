@@ -184,3 +184,17 @@ class TestCompletion:
         decision = schedule_wave(_plan(), {}, selected=("a", "b"))
         assert decision.ready == ("a",)
         assert decision.remaining == ("b",)
+
+
+class TestSelectedValidation:
+    def test_unknown_selected_curd_is_rejected(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="unknown curd"):
+            _ = schedule_wave(_plan(), {}, selected=("missing",))
+
+    def test_non_dependency_closed_selection_is_rejected(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="dependency-closed"):
+            _ = schedule_wave(_plan(), {}, selected=("b",))
