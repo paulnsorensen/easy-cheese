@@ -87,7 +87,7 @@
 
 - 2026-09-19 · pr-702-forgiving-cli · new-page · architecture/bundle-command-dispatch.md · runtime dispatch of `.pyz` bundles: top-level help, exact-name and close-match guidance with the `_` alias, the `--json`/`--full`-only hoist rule, the quote-repair rule and its `cli.run` boundary, one argv for the age gate, `LEAVES`, and the generated `bundle_command_index`.
 
-
+- 2026-09-20 · 4045ae852414459a · merged · gotchas/age-review-lock-invariants.md · record source/evidence identity separation, narrow late-packet refresh, stable snapshots, and streaming no-follow evidence hashing.
 
 - 2026-09-20 · 4a9b7570d7f195e2 · merged · architecture/ultracook-agent-topology.md · replace legacy fan ordering and manifest authority with progress-aware scope identity, OS run locking, completed-observation replay, and contained-low selection.
 
