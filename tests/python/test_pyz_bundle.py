@@ -71,8 +71,17 @@ REQUIRED_WORKFLOW_MODULES = (
 
 
 @pytest.fixture(scope="module")
-def bundles(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def bundles(
+    tmp_path_factory: pytest.TempPathFactory, prebuilt_bundle_dir: Path | None
+) -> Path:
+    # Tests write scratch files (.cheese, local evidence) into this directory,
+    # so each worker needs its own writable copy. When a pre-built set exists,
+    # copy the archives in (near-instant) instead of rebuilding.
     out = tmp_path_factory.mktemp("pyz")
+    if prebuilt_bundle_dir is not None:
+        for pyz in prebuilt_bundle_dir.glob("*.pyz"):
+            _ = shutil.copy2(pyz, out / pyz.name)
+        return out
     result = subprocess.run(
         [sys.executable, str(BUILD), "--out-dir", str(out)],
         cwd=str(REPO_ROOT),

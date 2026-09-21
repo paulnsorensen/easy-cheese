@@ -51,13 +51,21 @@ def _build_bundle(skill: str, target: Path) -> Path:
 
 
 @pytest.fixture(scope="module")
-def ultracook_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def ultracook_pyz(
+    tmp_path_factory: pytest.TempPathFactory, prebuilt_bundle_dir: Path | None
+) -> Path:
+    if prebuilt_bundle_dir is not None:
+        return prebuilt_bundle_dir / "cook.pyz"
     out = tmp_path_factory.mktemp("tree-staging")
     return _build_bundle("cook", out / "cook.pyz")
 
 
 @pytest.fixture(scope="module")
-def press_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def press_pyz(
+    tmp_path_factory: pytest.TempPathFactory, prebuilt_bundle_dir: Path | None
+) -> Path:
+    if prebuilt_bundle_dir is not None:
+        return prebuilt_bundle_dir / "press.pyz"
     out = tmp_path_factory.mktemp("tree-staging-press")
     return _build_bundle("press", out / "press.pyz")
 
@@ -198,7 +206,11 @@ def test_attrs_version_resolves_from_bundled_dist_info(ultracook_pyz: Path) -> N
 
 
 @pytest.fixture(scope="module")
-def wheypoint_pyz(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def wheypoint_pyz(
+    tmp_path_factory: pytest.TempPathFactory, prebuilt_bundle_dir: Path | None
+) -> Path:
+    if prebuilt_bundle_dir is not None:
+        return prebuilt_bundle_dir / "wheypoint.pyz"
     out = tmp_path_factory.mktemp("tree-staging-wheypoint")
     return _build_bundle("wheypoint", out / "wheypoint.pyz")
 
@@ -424,7 +436,13 @@ def test_shiv_bundle_has_no_loose_source_or_vendor_roots(ultracook_pyz: Path) ->
 
 
 @pytest.fixture(scope="module")
-def all_bundles_pyz(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+def all_bundles_pyz(
+    tmp_path_factory: pytest.TempPathFactory, prebuilt_bundle_dir: Path | None
+) -> dict[str, Path]:
+    if prebuilt_bundle_dir is not None:
+        return {
+            skill: prebuilt_bundle_dir / f"{skill}.pyz" for skill in build_pyz.SKILLS
+        }
     out = tmp_path_factory.mktemp("all-bundles")
     return build_pyz.build_bundles(
         {skill: out / f"{skill}.pyz" for skill in build_pyz.SKILLS}

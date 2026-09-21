@@ -3,6 +3,11 @@ set dotenv-load := true
 # bundle integration seam instead of skipping it.
 python := "uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
 
+# Worker count for the xdist pytest suites. Default "auto" (one per core) stays
+# safe on CI's small runners; bump locally (e.g. PYTEST_WORKERS=24) to exploit
+# idle cores on the latency-bound bundle-subprocess tests.
+pytest_workers := env_var_or_default("PYTEST_WORKERS", "auto")
+
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
 # third-party pytest plugins happen to be globally installed. Without this a
 # stray global plugin (e.g. pytest-httpx) can crash collection on a missing
@@ -15,23 +20,43 @@ export PYTEST_DISABLE_PLUGIN_AUTOLOAD := "1"
 
 # Run all tests (skill validators + melt + shared + fan-out + wheypoint suites + bash + JS)
 test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Cheap validators first so an obvious break fails fast.
     {{python}} .github/scripts/test_validate_skills.py -v
     {{python}} .github/scripts/test_validate_wiki.py
     {{python}} .github/scripts/validate_skills.py
     {{python}} .github/scripts/validate_wiki.py
     {{python}} scripts/render_generated_regions.py --check
-    {{python}} -m pytest tests/python -q -p xdist -n auto --ignore=tests/python/test_mold_cook_browser_workflow.py
-    {{python}} -m pytest tests/shared/python -q -p xdist -n auto
-    {{python}} -m pytest tests/fanout/python -q -p xdist -n auto
-    {{python}} -m pytest tests/schemas/python -q -p xdist -n auto
+
+    # Build every bundle once; the xdist workers reuse it instead of each
+    # rebuilding the whole set (see tests/python/conftest.py prebuilt_bundle_dir).
+    export EASY_CHEESE_PREBUILT_PYZ="$(mktemp -d)"
+    {{python}} scripts/build_pyz.py --out-dir "$EASY_CHEESE_PREBUILT_PYZ"
+
+    # The pytest suites are latency-bound (subprocess-heavy) and leave cores
+    # idle, so run the CPU-bound independent checks (pnpm build, cargo) alongside
+    # them. Failures still fail the recipe via the waited exit codes below.
+    just test-mold-review &
+    mold_review_pid=$!
+    just test-skill-overlap &
+    skill_overlap_pid=$!
+
+    {{python}} -m pytest tests/python -q -p xdist -n {{pytest_workers}} --ignore=tests/python/test_mold_cook_browser_workflow.py
+    {{python}} -m pytest tests/shared/python -q -p xdist -n {{pytest_workers}}
+    {{python}} -m pytest tests/fanout/python -q -p xdist -n {{pytest_workers}}
+    {{python}} -m pytest tests/schemas/python -q -p xdist -n {{pytest_workers}}
     {{python}} -m pytest tests/hard-cheese/python -q
-    {{python}} -m pytest tests/pasteurize/python -q -p xdist -n auto
-    {{python}} -m pytest tests/wheypoint/python -q -p xdist -n auto
+    {{python}} -m pytest tests/pasteurize/python -q -p xdist -n {{pytest_workers}}
+    {{python}} -m pytest tests/wheypoint/python -q -p xdist -n {{pytest_workers}}
     node --test 'tests/js/**/*.test.mjs'
-    just test-mold-review
     bats tests/bash/test_install.bats
     uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
-    just test-skill-overlap
+
+    # Surface any failure from the concurrent checks.
+    wait "$mold_review_pid"
+    wait "$skill_overlap_pid"
 
 # Build and exercise the development-only Mold review browser harness
 test-mold-review:
