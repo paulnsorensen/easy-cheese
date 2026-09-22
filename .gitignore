@@ -1,3 +1,9 @@
+# Local dotenv. `set dotenv-load := true` in the justfile makes this file an
+# environment source for every recipe, so it must never be committed.
+.env
+.env.*
+!.env.example
+
 # Easy-cheese runtime scratch (research notes, age sidecars, mold state, etc.)
 .cheese/
 

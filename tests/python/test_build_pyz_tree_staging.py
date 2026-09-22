@@ -111,6 +111,26 @@ def test_press_bundle_is_byte_deterministic(tmp_path: Path) -> None:
     assert first.read_bytes() == second.read_bytes()
 
 
+@_needs_build_tooling
+def test_concurrent_bundle_build_is_byte_deterministic(tmp_path: Path) -> None:
+    """A multi-skill build runs the threaded path; single-skill builds do not.
+
+    `build_pyz._parallel_map` runs items serially when only one exists, so a
+    one-skill determinism test never reaches the ThreadPoolExecutor branch that
+    the concurrent build depends on.
+    """
+    skills = ("press", "cure")
+    first = build_pyz.build_bundles(
+        {skill: tmp_path / "a" / f"{skill}.pyz" for skill in skills}
+    )
+    second = build_pyz.build_bundles(
+        {skill: tmp_path / "b" / f"{skill}.pyz" for skill in skills}
+    )
+    assert sorted(first) == sorted(skills)
+    for skill in skills:
+        assert first[skill].read_bytes() == second[skill].read_bytes()
+
+
 def _run_isolated(pyz: Path, code: str) -> subprocess.CompletedProcess[str]:
     """Extract Shiv's site-packages payload and run only against those members."""
     with tempfile.TemporaryDirectory(prefix="easy-cheese-site-packages-") as root:

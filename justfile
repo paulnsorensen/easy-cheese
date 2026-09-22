@@ -3,17 +3,16 @@ set dotenv-load := true
 # bundle integration seam instead of skipping it.
 python := "uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
 
-# Worker count for the xdist pytest suites. Default "auto" is one worker per
-# core, which stays safe on CI's small runners. Set PYTEST_WORKERS above the
-# core count to oversubscribe the latency-bound bundle-subprocess tests; a
-# value at or below the core count only repeats what "auto" already picks.
-pytest_workers := env_var_or_default("PYTEST_WORKERS", "auto")
-
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
 # third-party pytest plugins happen to be globally installed. Without this a
 # stray global plugin (e.g. pytest-httpx) can crash collection on a missing
 # transitive dep. CI installs a clean env so it is unaffected either way.
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD := "1"
+
+# Corepack prompts before it fetches a pinned pnpm. The `test` recipe backgrounds
+# its corepack checks, and a background job in a non-interactive shell has no
+# stdin, so an unanswerable prompt would fail the run instead of provisioning.
+export COREPACK_ENABLE_DOWNLOAD_PROMPT := "0"
 
 # List all available commands
 @default:
@@ -23,6 +22,19 @@ export PYTEST_DISABLE_PLUGIN_AUTOLOAD := "1"
 test:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Job control puts each background job in its own process group, so cleanup
+    # can signal the whole tree rather than only the `just` child.
+    set -m
+
+    # Read the worker count as a value, never as recipe text. `set dotenv-load`
+    # makes a repo-local dotenv file an environment source, and a just
+    # interpolation would splice that value into this script as shell code.
+    pytest_workers="${PYTEST_WORKERS:-auto}"
+    if [[ ! $pytest_workers =~ ^(auto|logical|[0-9]+)$ ]]; then
+        printf 'PYTEST_WORKERS must be auto, logical, or a worker count; got %q\n' \
+            "$pytest_workers" >&2
+        exit 2
+    fi
 
     # Cheap validators first so an obvious break fails fast.
     {{python}} .github/scripts/test_validate_skills.py -v
@@ -43,7 +55,7 @@ test:
     cleanup() {
         local pid
         for pid in ${background_pids[@]+"${background_pids[@]}"}; do
-            kill "$pid" 2>/dev/null || true
+            kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
         done
         rm -rf "$prebuilt_pyz_dir"
@@ -62,13 +74,13 @@ test:
     skill_overlap_pid=$!
     background_pids+=("$skill_overlap_pid")
 
-    {{python}} -m pytest tests/python -q -p xdist -n {{pytest_workers}} --ignore=tests/python/test_mold_cook_browser_workflow.py
-    {{python}} -m pytest tests/shared/python -q -p xdist -n {{pytest_workers}}
-    {{python}} -m pytest tests/fanout/python -q -p xdist -n {{pytest_workers}}
-    {{python}} -m pytest tests/schemas/python -q -p xdist -n {{pytest_workers}}
+    {{python}} -m pytest tests/python -q -p xdist -n "$pytest_workers" --ignore=tests/python/test_mold_cook_browser_workflow.py
+    {{python}} -m pytest tests/shared/python -q -p xdist -n "$pytest_workers"
+    {{python}} -m pytest tests/fanout/python -q -p xdist -n "$pytest_workers"
+    {{python}} -m pytest tests/schemas/python -q -p xdist -n "$pytest_workers"
     {{python}} -m pytest tests/hard-cheese/python -q
-    {{python}} -m pytest tests/pasteurize/python -q -p xdist -n {{pytest_workers}}
-    {{python}} -m pytest tests/wheypoint/python -q -p xdist -n {{pytest_workers}}
+    {{python}} -m pytest tests/pasteurize/python -q -p xdist -n "$pytest_workers"
+    {{python}} -m pytest tests/wheypoint/python -q -p xdist -n "$pytest_workers"
     node --test 'tests/js/**/*.test.mjs'
     bats tests/bash/test_install.bats
     uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats

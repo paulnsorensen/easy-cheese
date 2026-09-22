@@ -12,10 +12,15 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import build_pyz  # noqa: E402
-
 PREBUILT_PYZ_ENV = "EASY_CHEESE_PREBUILT_PYZ"
+
+
+def _skill_names() -> tuple[str, ...]:
+    """Import build_pyz lazily so a break there cannot fail whole-suite collection."""
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import build_pyz
+
+    return build_pyz.SKILLS
 
 
 @pytest.fixture(scope="session")
@@ -25,7 +30,9 @@ def prebuilt_bundle_dir() -> Path | None:
     The ``test`` recipe builds every bundle once and exports
     ``EASY_CHEESE_PREBUILT_PYZ`` so xdist workers reuse one build instead of
     each rebuilding the whole set. A direct pytest run without the variable
-    builds fresh, so coverage is unchanged.
+    builds fresh, so coverage is unchanged. This fixture lives in
+    ``tests/python``; suites outside it still build their own bundles even
+    while the variable is set.
 
     A present but unusable value is a configuration error, not a reason to
     rebuild silently: a typo would otherwise cost every worker a full build
@@ -42,7 +49,7 @@ def prebuilt_bundle_dir() -> Path | None:
         )
     missing = sorted(
         f"{skill}.pyz"
-        for skill in build_pyz.SKILLS
+        for skill in _skill_names()
         if not (candidate / f"{skill}.pyz").is_file()
     )
     if missing:
