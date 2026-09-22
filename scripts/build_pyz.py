@@ -16,10 +16,11 @@ import tempfile
 import tomllib
 import zipfile
 from collections.abc import Callable, Iterable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from email.parser import Parser
 from pathlib import Path
 from types import ModuleType
-from typing import cast
+from typing import TypeVar, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
@@ -330,28 +331,37 @@ def _normalize_internal_wheel(wheel: Path) -> Path:
 
 def _build_project(project: Path, wheelhouse: Path) -> Path:
     _require_build_frontend()
-    before = set(wheelhouse.glob("*.whl"))
-    _ = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "build",
-            "--wheel",
-            "--no-isolation",
-            "--outdir",
-            str(wheelhouse),
-            str(project),
-        ],
-        cwd=REPO_ROOT,
-        env=_build_environment(),
-        check=True,
-    )
-    built = set(wheelhouse.glob("*.whl")) - before
-    if len(built) != 1:
-        raise RuntimeError(f"PEP 517 build produced {len(built)} wheels for {project}")
-    wheel = _normalize_internal_wheel(built.pop())
-    validate_pure_wheel(wheel)
-    return wheel
+    # Build into a private outdir so concurrent builds never race on a shared
+    # before/after glob of the wheelhouse, then move the single wheel in.
+    with tempfile.TemporaryDirectory(
+        prefix="ec-wheel-", dir=wheelhouse.parent
+    ) as outdir_name:
+        outdir = Path(outdir_name)
+        _ = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "build",
+                "--wheel",
+                "--no-isolation",
+                "--outdir",
+                str(outdir),
+                str(project),
+            ],
+            cwd=REPO_ROOT,
+            env=_build_environment(),
+            check=True,
+        )
+        built = list(outdir.glob("*.whl"))
+        if len(built) != 1:
+            raise RuntimeError(
+                f"PEP 517 build produced {len(built)} wheels for {project}"
+            )
+        wheel = _normalize_internal_wheel(built[0])
+        validate_pure_wheel(wheel)
+        final = wheelhouse / wheel.name
+        _ = shutil.move(wheel, final)
+        return final
 
 
 def _build_schema_wheel(wheelhouse: Path) -> Path:
@@ -468,6 +478,24 @@ def validate_command_surfaces(skills: Iterable[str]) -> None:
             raise ValueError(f"{skill}: {exc}") from exc
 
 
+_T = TypeVar("_T")
+_R = TypeVar("_R")
+
+
+def _parallel_map(func: Callable[[_T], _R], items: Sequence[_T]) -> list[_R]:
+    """Apply func across items concurrently; keep input order, first error wins.
+
+    Each build step shells out, so worker threads release the GIL across the
+    subprocess and give real parallelism. One build on all cores replaces the
+    former serial loop that left most cores idle.
+    """
+    if len(items) <= 1:
+        return [func(item) for item in items]
+    workers = min(len(items), os.cpu_count() or 4)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(func, items))
+
+
 def build_wheelhouse(
     wheelhouse: Path,
     skills: Iterable[str] | None = None,
@@ -485,8 +513,10 @@ def build_wheelhouse(
         _ = _download_runtime_wheels(wheelhouse)
         _ = _build_schema_wheel(wheelhouse)
         _ = _build_shared_wheel(projects, wheelhouse)
-        for skill in selected:
-            _ = _build_skill_wheel(skill, projects, wheelhouse)
+        _ = _parallel_map(
+            lambda skill: _build_skill_wheel(skill, projects, wheelhouse),
+            selected,
+        )
 
 
 def _resolved_requirements(skill: str, wheelhouse: Path) -> str:
@@ -641,12 +671,19 @@ def build_bundles(
     with tempfile.TemporaryDirectory(prefix="easy-cheese-build-") as temporary:
         wheelhouse = Path(temporary) / "wheelhouse"
         build_wheelhouse(wheelhouse, destinations)
-        built: dict[str, Path] = {}
-        for skill, target in destinations.items():
+        temp_root = Path(temporary)
+
+        def _stage(item: tuple[str, Path]) -> tuple[str, Path, Path]:
+            skill, target = item
             staged = _build_from_wheelhouse(
-                skill, Path(temporary) / f"{skill}.pyz", wheelhouse
+                skill, temp_root / f"{skill}.pyz", wheelhouse
             )
             _verify_built_archive(skill, staged)
+            return skill, target, staged
+
+        staged_results = _parallel_map(_stage, list(destinations.items()))
+        built: dict[str, Path] = {}
+        for skill, target, staged in staged_results:
             target.parent.mkdir(parents=True, exist_ok=True)
             _ = shutil.move(staged, target)
             built[skill] = target
