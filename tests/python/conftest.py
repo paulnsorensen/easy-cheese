@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import importlib
 import os
+import sys
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import build_pyz  # noqa: E402
+
+PREBUILT_PYZ_ENV = "EASY_CHEESE_PREBUILT_PYZ"
 
 
 @pytest.fixture(scope="session")
@@ -20,12 +26,31 @@ def prebuilt_bundle_dir() -> Path | None:
     ``EASY_CHEESE_PREBUILT_PYZ`` so xdist workers reuse one build instead of
     each rebuilding the whole set. A direct pytest run without the variable
     builds fresh, so coverage is unchanged.
+
+    A present but unusable value is a configuration error, not a reason to
+    rebuild silently: a typo would otherwise cost every worker a full build
+    while the run still reported success.
     """
-    value = os.environ.get("EASY_CHEESE_PREBUILT_PYZ")
+    value = os.environ.get(PREBUILT_PYZ_ENV)
     if not value:
         return None
     candidate = Path(value)
-    return candidate if candidate.is_dir() else None
+    hint = "rebuild the set, or unset the variable to build bundles fresh"
+    if not candidate.is_dir():
+        raise pytest.UsageError(
+            f"{PREBUILT_PYZ_ENV}={value!r} is not a directory; {hint}"
+        )
+    missing = sorted(
+        f"{skill}.pyz"
+        for skill in build_pyz.SKILLS
+        if not (candidate / f"{skill}.pyz").is_file()
+    )
+    if missing:
+        names = ", ".join(missing)
+        raise pytest.UsageError(
+            f"{PREBUILT_PYZ_ENV}={value!r} is missing bundles ({names}); {hint}"
+        )
+    return candidate
 
 
 @pytest.fixture(scope="session")

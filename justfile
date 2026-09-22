@@ -32,7 +32,23 @@ test:
 
     # Build every bundle once; the xdist workers reuse it instead of each
     # rebuilding the whole set (see tests/python/conftest.py prebuilt_bundle_dir).
-    export EASY_CHEESE_PREBUILT_PYZ="$(mktemp -d)"
+    prebuilt_pyz_dir="$(mktemp -d)"
+    export EASY_CHEESE_PREBUILT_PYZ="$prebuilt_pyz_dir"
+
+    background_pids=()
+    # Reap every background check on every exit path, including an early `set -e`
+    # exit from a foreground suite, so no orphan survives the recipe. The trap
+    # only reaps; the explicit `wait` calls below own failure propagation.
+    cleanup() {
+        local pid
+        for pid in ${background_pids[@]+"${background_pids[@]}"}; do
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        done
+        rm -rf "$prebuilt_pyz_dir"
+    }
+    trap cleanup EXIT
+
     {{python}} scripts/build_pyz.py --out-dir "$EASY_CHEESE_PREBUILT_PYZ"
 
     # The pytest suites are latency-bound (subprocess-heavy) and leave cores
@@ -40,8 +56,10 @@ test:
     # them. Failures still fail the recipe via the waited exit codes below.
     just test-mold-review &
     mold_review_pid=$!
+    background_pids+=("$mold_review_pid")
     just test-skill-overlap &
     skill_overlap_pid=$!
+    background_pids+=("$skill_overlap_pid")
 
     {{python}} -m pytest tests/python -q -p xdist -n {{pytest_workers}} --ignore=tests/python/test_mold_cook_browser_workflow.py
     {{python}} -m pytest tests/shared/python -q -p xdist -n {{pytest_workers}}
@@ -54,9 +72,18 @@ test:
     bats tests/bash/test_install.bats
     uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
 
-    # Surface any failure from the concurrent checks.
-    wait "$mold_review_pid"
-    wait "$skill_overlap_pid"
+    # Surface any failure from the concurrent checks. Wait for both before
+    # failing so a second failure is not masked by an early exit.
+    mold_review_status=0
+    wait "$mold_review_pid" || mold_review_status=$?
+    skill_overlap_status=0
+    wait "$skill_overlap_pid" || skill_overlap_status=$?
+    background_pids=()
+    if [[ $mold_review_status -ne 0 || $skill_overlap_status -ne 0 ]]; then
+        printf 'test-mold-review exited %d; test-skill-overlap exited %d\n' \
+            "$mold_review_status" "$skill_overlap_status" >&2
+        exit 1
+    fi
 
 # Build and exercise the development-only Mold review browser harness
 test-mold-review:
