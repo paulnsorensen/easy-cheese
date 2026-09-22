@@ -3,9 +3,10 @@ set dotenv-load := true
 # bundle integration seam instead of skipping it.
 python := "uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
 
-# Worker count for the xdist pytest suites. Default "auto" (one per core) stays
-# safe on CI's small runners; bump locally (e.g. PYTEST_WORKERS=24) to exploit
-# idle cores on the latency-bound bundle-subprocess tests.
+# Worker count for the xdist pytest suites. Default "auto" is one worker per
+# core, which stays safe on CI's small runners. Set PYTEST_WORKERS above the
+# core count to oversubscribe the latency-bound bundle-subprocess tests; a
+# value at or below the core count only repeats what "auto" already picks.
 pytest_workers := env_var_or_default("PYTEST_WORKERS", "auto")
 
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
