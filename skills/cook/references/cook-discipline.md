@@ -8,6 +8,8 @@ The RED step requires you to write a failing test.
 The RED step is mandatory.  
 Do not perform the RED step "right after" implementation.  
 If the test does not exist and does not fail, the Cook loop has not started.
+Prototype-mode spike code is the one scoped exception.
+Its stabilize step must prove each test fails without the prototype behavior; see `prototype-mode.md` § Stabilize.
 
 ---
 

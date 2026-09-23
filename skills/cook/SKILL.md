@@ -6,6 +6,7 @@ description: >-
   Use it for `/cook .cheese/specs/<slug>.md`.
   Also use it when the user says "go" or "ship it" with clear acceptance criteria.
   Run it alone for an unambiguous task.
+  Use `--prototype` when the user says "prototype this", "go prototype it", or "spike this out" and wants to refine the result round by round.
   A spec helps but is not required.
   Do not use it for fuzzy planning (`/mold`).
   Do not use it for no-write discussion (`/culture`) or review-only work (`/age`).
@@ -47,6 +48,7 @@ A Mold handoff pointer, a spec path, and a slug enter through § Mold-to-Cook in
 Flags:
 
 - `--auto` chains `/press → /age → /cure`.
+- `--prototype` runs a plan → spike → check loop, then stabilizes; read [`references/prototype-mode.md`](references/prototype-mode.md).
 - `--hard` propagates through `/plate`.
 - `--open-pr` lets terminal `/plate` publish. Auto mode never adds this flag.
 - `--resume <slug>` resumes a typed fan handoff and its referenced artifacts.

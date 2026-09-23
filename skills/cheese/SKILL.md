@@ -207,6 +207,7 @@ Default targets per intent:
   Safe-mode alternatives are `/cook <slug-or-path>` and `/mold first`.
   Use `/mold first` when scope is borderline.
   A large or decomposable specification starts cook's fan pathway automatically.
+- **prototype** — `/cook --prototype <idea>` (recommended). No auto variant.
 - **ultracook (retired)** — `/ultracook <slug-or-path>` resolves to `/cook <slug-or-path>`, carrying forward `--open-pr`/`--resume`/`--auto`/`--hard`.
 - **plate** — `/plate` handles commits, ordinary pull requests, and pull request stacks.
   New pull requests infer an obviously cohesive single change.
