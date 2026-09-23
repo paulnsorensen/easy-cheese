@@ -27,12 +27,14 @@ dispatch context, not block it.
 """
 from __future__ import annotations
 
-import argparse
 import contextlib
 import os
+import sys
 import tempfile
 from pathlib import Path
-from typing import Callable, Protocol, TextIO, cast
+from types import SimpleNamespace
+from typing import Annotated, Callable, Protocol, TextIO, cast
+from cyclopts import App, Parameter
 
 try:
     import fcntl  # POSIX advisory file locks
@@ -391,13 +393,41 @@ def cmd_check_files(args: _CheckFilesArgs) -> None:
         )
 
 
-# ----- argparse wiring -----------------------------------------------------
+# ----- command wiring ------------------------------------------------------
 
 
 LEAVES = ("set-phase", "set-curd-status", "set-post-review", "set-wiring-status", "check-files")
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
+def _set_phase(*, manifest: str, phase: str) -> None:
+    cmd_set_phase(cast(_SetPhaseArgs, cast(object, SimpleNamespace(manifest=manifest, phase=phase, stdout=sys.stdout))))
+
+
+def _set_curd_status(*, manifest: str, curd: int, status: str, commit_sha: str | None = None, base_commit: str | None = None, reviewed_tree_oid: str | None = None, diff_hash: str | None = None, scope: list[str] | None = None) -> None:
+    cmd_set_curd_status(cast(_SetCurdStatusArgs, cast(object, SimpleNamespace(manifest=manifest, curd=curd, status=status, commit_sha=commit_sha, base_commit=base_commit, reviewed_tree_oid=reviewed_tree_oid, diff_hash=diff_hash, scope=scope, stdout=sys.stdout))))
+
+
+def _set_post_review(*, manifest: str, base_commit: str, reviewed_tree_oid: str, diff_hash: str, scope: list[str], press_slug: str | None = None, age_slug: str | None = None, cure_slug: str | None = None, findings_applied: int | None = None, findings_deferred: int | None = None) -> None:
+    cmd_set_post_review(cast(_SetPostReviewArgs, cast(object, SimpleNamespace(manifest=manifest, base_commit=base_commit, reviewed_tree_oid=reviewed_tree_oid, diff_hash=diff_hash, scope=scope, press_slug=press_slug, age_slug=age_slug, cure_slug=cure_slug, findings_applied=findings_applied, findings_deferred=findings_deferred, stdout=sys.stdout))))
+
+
+def _set_wiring_status(*, manifest: str, wiring: str, status: str, commit_sha: str | None = None) -> None:
+    cmd_set_wiring_status(cast(_SetWiringStatusArgs, cast(object, SimpleNamespace(manifest=manifest, wiring=wiring, status=status, commit_sha=commit_sha, stdout=sys.stdout))))
+
+
+def _check_files(*, manifest: str, root: str | None = None, json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
+    cmd_check_files(cast(_CheckFilesArgs, cast(object, SimpleNamespace(manifest=manifest, root=root, json_mode=json_mode, stdout=sys.stdout))))
+
+
+app = App(name="manifest-update")
+_ = app.command(_set_phase, name="set-phase")
+_ = app.command(_set_curd_status, name="set-curd-status")
+_ = app.command(_set_post_review, name="set-post-review")
+_ = app.command(_set_wiring_status, name="set-wiring-status")
+_ = app.command(_check_files, name="check-files")
+
+
+''' Legacy setup removed; Cyclopts app above is the sole dispatcher.
     subs = parser.add_subparsers(dest="cmd")
 
     sp = subs.add_parser("set-phase", help="update top-level phase")
@@ -444,11 +474,12 @@ def _setup(parser: argparse.ArgumentParser) -> None:
     _ = scf.add_argument("--manifest", required=True)
     _ = scf.add_argument("--root", default=None, help="repo root to resolve relative paths against (default: cwd)")
     scf.set_defaults(func=cmd_check_files)
+'''
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

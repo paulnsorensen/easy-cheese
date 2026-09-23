@@ -10,15 +10,13 @@ subtree). The repo root is resolved via parents[N] from this file.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
-from io import StringIO
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+from typing import Protocol, cast
 
 import pytest
 
@@ -28,17 +26,16 @@ BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-
 class _CliNamespace(Protocol):
     def run(
         self,
-        setup: Callable[[argparse.ArgumentParser], None],
+        app: object,
         *,
         argv: Sequence[str] | None = ...,
-        stdout: TextIO | None = ...,
     ) -> int: ...
 
 
 class _FreshnessCheckModule(Protocol):
     cli: _CliNamespace
 
-    def _setup(self, parser: argparse.ArgumentParser) -> None: ...
+    app: object
     def last_pass_attempt(self, log_path: Path) -> dict[str, object] | None: ...
     def decide(
         self,
@@ -189,15 +186,12 @@ class TestStateStale:
         self, repo: Path, freshness_check: _FreshnessCheckModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
         _ = _write_log(repo, "feat-e", _table_log("feat-e", "abc123" * 7))
-        output = StringIO()
         status = freshness_check.cli.run(
-            freshness_check._setup,  # pyright: ignore[reportPrivateUsage]
+            freshness_check.app,
             argv=("--slug", "feat-e", "--cheese-root", str(repo / ".cheese"), "--repo-root", str(repo)),
-            stdout=output,
         )
         assert status == 2
-        assert output.getvalue() == "stale\n"
-        assert capsys.readouterr().out == ""
+        assert capsys.readouterr().out == "stale\n"
 
 
 class TestAppendAttemptIntegration:

@@ -21,13 +21,13 @@ Deterministic: no timestamps, no randomness. Stdlib-only.
 
 from __future__ import annotations
 
-import argparse
+from cyclopts import App
 import json
 import os
 import re
 import subprocess
 from pathlib import Path
-from typing import TextIO, TypedDict, cast
+from typing import TypedDict, cast
 
 from easy_cheese.shared import cli
 
@@ -369,57 +369,36 @@ def rank_hunks(base: str, head: str, *, cwd: Path | None = None) -> list[Hunk]:
 
 
 def _git_ref(value: str) -> str:
-    if value.startswith("-"):
-        raise argparse.ArgumentTypeError("ref must not start with '-'")
-    if any(ord(char) < 32 or ord(char) == 127 for char in value):
-        raise argparse.ArgumentTypeError("ref must not contain control characters")
+    if value.startswith("-") or any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise cli.CliError("ref must not start with '-' or contain control characters")
     return value
 
 
-def _positive_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("--top must be an integer >= 1") from exc
-    if parsed < 1:
-        raise argparse.ArgumentTypeError("--top must be an integer >= 1")
-    return parsed
+def _positive_int(value: int) -> int:
+    if value < 1:
+        raise cli.CliError("--top must be an integer >= 1")
+    return value
 
 
-def _cmd_rank(args: argparse.Namespace) -> int:
-    base = cast(str, args.base)
-    head = cast(str, args.head)
-    top = cast(int, args.top)
-    cwd_arg = cast("str | None", args.cwd)
-    cwd = Path(cwd_arg) if cwd_arg else None
-    if cwd is not None and not cwd.is_dir():
-        raise cli.CliError(f"--cwd {cwd} is not a directory")
-    stdout = cast(TextIO, args.stdout)
-    hunks = rank_hunks(base, head, cwd=cwd)
-    print(json.dumps(hunks[:top], indent=None, sort_keys=True), file=stdout)
+def _cmd_rank(base: str, head: str, top: int = 3, cwd: str | None = None) -> int:
+    base = _git_ref(base)
+    head = _git_ref(head)
+    top = _positive_int(top)
+    path = Path(cwd) if cwd else None
+    if path is not None and not path.is_dir():
+        raise cli.CliError(f"--cwd {path} is not a directory")
+    hunks = rank_hunks(base, head, cwd=path)
+    print(json.dumps(hunks[:top], indent=None, sort_keys=True))
     return 0
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Rank git diff hunks between two refs by risk score."
-    _ = parser.add_argument("--base", required=True, type=_git_ref, help="base git ref")
-    _ = parser.add_argument("--head", required=True, type=_git_ref, help="head git ref")
-    _ = parser.add_argument(
-        "--top", type=_positive_int, default=3, help="max hunks to emit (default: 3)"
-    )
-    _ = parser.add_argument(
-        "--cwd", default=None, help="git working directory (default: cwd). Test hook."
-    )
-    parser.set_defaults(func=_cmd_rank)
+app = App(name="rank-hunks")
+_ = app.default(_cmd_rank)
 
 
 def main(argv: list[str] | None = None) -> int:
-    def setup(parser: argparse.ArgumentParser) -> None:
-        parser.prog = "rank-hunks"  # noqa: V101
-        _setup(parser)
-
-    return cli.run(setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

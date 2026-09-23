@@ -6,7 +6,9 @@ The canonical ``MoldSpecDocument`` validates Mold frontmatter and test contracts
 
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes a dynamically typed invocation surface.
+# pyright: reportAny=false, reportUnusedCallResult=false
+
 import copy
 import hashlib
 import json
@@ -19,7 +21,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, NoReturn, Protocol, cast
+from typing import Annotated
 
+from cyclopts import App, Parameter
+
+from easy_cheese.shared import cli
 from easy_cheese_schemas.contracts import (
     GateApplicability as MoldGateApplicability,
     GateApplicabilityDisposition,
@@ -1463,37 +1469,30 @@ def _load_json(path: Path) -> object:
     return cast(object, json.loads(path.read_text(encoding="utf-8")))
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__.splitlines()[0] if __doc__ else "Mold taste gate"
-    )
-    _ = parser.add_argument("--draft", type=Path, required=True)
-    _ = parser.add_argument("--ledger", type=Path, required=True)
-    _ = parser.add_argument("--correction-round", type=int, default=0)
-    mode = parser.add_mutually_exclusive_group(required=True)
-    _ = mode.add_argument("--verdict", type=Path, help="fresh-context verdict JSON")
-    _ = mode.add_argument(
-        "--precheck",
-        action="store_true",
-        help="run the lexical pre-check on the draft alone; no verdict, no round",
-    )
-    _ = mode.add_argument(
-        "--coverage",
-        action="store_true",
-        help="print each G-n goal clause's disposition for the narrowing-delta line",
-    )
-    args = parser.parse_args(argv)
+def _command(
+    *,
+    draft: Annotated[Path, Parameter(name="--draft")],
+    ledger: Annotated[Path, Parameter(name="--ledger")],
+    correction_round: Annotated[int, Parameter(name="--correction-round")] = 0,
+    verdict: Annotated[Path | None, Parameter(name="--verdict")] = None,
+    precheck: Annotated[bool, Parameter(name="--precheck")] = False,
+    coverage: Annotated[bool, Parameter(name="--coverage")] = False,
+) -> int:
+    if int(verdict is not None) + precheck + coverage != 1:
+        print(
+            "ERROR: exactly one of --verdict, --precheck, or --coverage is required",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
     try:
-        draft_path = cast(Path, args.draft)
-        ledger_path = cast(Path, args.ledger)
-        draft = draft_path.read_bytes()
-        ledger = _load_json(ledger_path)
-        if cast(bool, args.precheck):
-            gaps = lexical_precheck(draft, ledger)
+        draft_bytes = draft.read_bytes()
+        ledger_value = _load_json(ledger)
+        if precheck:
+            gaps = lexical_precheck(draft_bytes, ledger_value)
             print(json.dumps({"gaps": list(gaps)}, sort_keys=True))
             return 0 if not gaps else 1
-        if cast(bool, args.coverage):
-            dispositions = goal_coverage(draft, ledger)
+        if coverage:
+            dispositions = goal_coverage(draft_bytes, ledger_value)
             covered = sum(1 for value in dispositions.values() if value == "covered")
             print(
                 json.dumps(
@@ -1506,13 +1505,12 @@ def main(argv: list[str]) -> int:
                 )
             )
             return 0
-        verdict_path = cast(Path, args.verdict)
-        correction_round = cast(int, args.correction_round)
-        verdict = _load_json(verdict_path)
+        assert verdict is not None
+        verdict_value = _load_json(verdict)
         result = taste_test(
-            draft,
-            ledger,
-            cast("Mapping[str, object] | ForkTasteVerdict", verdict),
+            draft_bytes,
+            ledger_value,
+            cast("Mapping[str, object] | ForkTasteVerdict", verdict_value),
             correction_round=correction_round,
         )
         print(json.dumps(result.to_dict(), sort_keys=True))
@@ -1521,6 +1519,20 @@ def main(argv: list[str]) -> int:
     except (OSError, json.JSONDecodeError, TasteTestError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+
+
+app = App(name="taste-test")
+app.default(_command)
+
+
+def main(argv: list[str]) -> int:
+    try:
+        canonical = cli.repair_argv(app, argv)
+        result = app(canonical, print_error=False, exit_on_error=False, help_on_error=False, result_action="return_value")
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return 0 if result is None else int(result)
 
 
 if __name__ == "__main__":

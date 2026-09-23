@@ -7,11 +7,12 @@ infers consent: a response outside the affirmative set records a rejection.
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
-from typing import cast
+from typing import Annotated
 
+from cyclopts import App, Parameter
+from easy_cheese.shared import cli
 from easy_cheese_schemas import (
     ArtifactRef,
     ContractValidationError,
@@ -158,66 +159,24 @@ def approve(
     return approval, _retained_path(artifact_root, record.digest)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="approve",
-        description="Record the user's literal approval response for one spec.",
-    )
-    _ = parser.add_argument("spec", type=Path)
-    _ = parser.add_argument("--artifact-root", required=True, type=Path)
-    _ = parser.add_argument("--request-id", required=True)
-    _ = parser.add_argument(
-        "--kind",
-        required=True,
-        choices=[MoldCookApprovalKind.SCOPE.value, *sorted(k.value for k in _PLAN_KINDS)],
-    )
-    _ = parser.add_argument(
-        "--response", required=True, help="the user's reply, word for word"
-    )
-    _ = parser.add_argument("--planner-result", type=Path)
-    _ = parser.add_argument(
-        "--curd-id",
-        action="append",
-        default=[],
-        help="a curd the response covers; the default is the full plan or landing",
-    )
-    args = parser.parse_args(argv)
-    planner_path = cast("Path | None", args.planner_result)
-    curd_ids = tuple(cast("list[str]", args.curd_id))
+
+
+def _command(spec: Path, *, artifact_root: Annotated[Path, Parameter(name="--artifact-root")], request_id: Annotated[str, Parameter(name="--request-id")], kind: Annotated[str, Parameter(name="--kind")], response: Annotated[str, Parameter(name="--response")], planner_result: Annotated[Path | None, Parameter(name="--planner-result")] = None, curd_id: Annotated[list[str] | None, Parameter(name="--curd-id")] = None) -> int:
+    planner = None if planner_result is None else resolve_contract_value(planner_result, PlannerResult, Path())
+    curd_ids = tuple(curd_id or ())
     try:
-        planner = (
-            None
-            if planner_path is None
-            else resolve_contract_value(planner_path, PlannerResult, Path())
-        )
-        approval, path = approve(
-            cast(Path, args.spec),
-            artifact_root=cast(Path, args.artifact_root),
-            request_id=cast(str, args.request_id),
-            kind=MoldCookApprovalKind(cast(str, args.kind)),
-            response_text=cast(str, args.response),
-            planner_result=planner,
-            coverage=(
-                MoldCookCoverage(
-                    curd_ids=curd_ids,
-                    unresolved_work=() if planner is None else planner.unresolved_work,
-                )
-                if curd_ids
-                else None
-            ),
-        )
+        approval, path = approve(spec, artifact_root=artifact_root, request_id=request_id, kind=MoldCookApprovalKind(kind), response_text=response, planner_result=planner, coverage=MoldCookCoverage(curd_ids=curd_ids, unresolved_work=() if planner is None else planner.unresolved_work) if curd_ids else None)
     except (ContractValidationError, OSError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-    _ = sys.stdout.buffer.write(
-        canonical_bytes(
-            {
-                "approval_path": str(path),
-                "decision": approval.decision.value,
-                "kind": approval.kind.value,
-                "proposal_digest": approval.proposal_digest,
-                "request_id": approval.request_id,
-            }
-        )
-    )
+    _ = sys.stdout.buffer.write(canonical_bytes({"approval_path": str(path), "decision": approval.decision.value, "kind": approval.kind.value, "proposal_digest": approval.proposal_digest, "request_id": approval.request_id}))
     return 0
+
+app = App(name="approve")
+_ = app.default(_command)
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
+
+if __name__ == "__main__":
+    raise SystemExit(main())

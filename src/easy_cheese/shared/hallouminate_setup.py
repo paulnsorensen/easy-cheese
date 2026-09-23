@@ -9,14 +9,17 @@ manipulation only -- no toml dependency.
 
 from __future__ import annotations
 
-import argparse
+from typing import Annotated
+
+from cyclopts import App, Parameter
+from easy_cheese.shared import cli
 import os
 import re
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import TypedDict
 
 from easy_cheese.shared import paths
 
@@ -299,6 +302,13 @@ def _report(change: Change) -> str:
     return f"[{change.leg}] {change.action}: {change.target_path} -- {change.detail}"
 
 
+
+
+_current_leg = "global"
+
+def _leg_command(*, apply: Annotated[bool, Parameter(name="--apply")] = False, migrate_legacy: Annotated[bool, Parameter(name="--migrate-legacy")] = False) -> int:
+    return _run_leg(_current_leg, apply, migrate_legacy)
+
 def _run_leg(leg: str, do_apply: bool, migrate: bool = False) -> int:
     if leg in ("global", "doctor"):
         print(_report(apply_global(apply=do_apply)))
@@ -312,50 +322,33 @@ def _run_leg(leg: str, do_apply: bool, migrate: bool = False) -> int:
 
 
 def _leg_main(leg: str, argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog=leg)
-    _ = parser.add_argument("--apply", action="store_true")
-    _ = parser.add_argument("--migrate-legacy", action="store_true")
-    args = parser.parse_args(argv)
-    do_apply = cast(bool, args.apply)
-    migrate = cast(bool, args.migrate_legacy)
-    if migrate and leg != "global":
-        parser.error("--migrate-legacy is only valid for global")
-    return _run_leg(leg, do_apply, migrate)
+    global _current_leg
+    _current_leg = leg
+    app = App(name=leg)
+    _ = app.default(_leg_command)
+    if leg != "global" and "--migrate-legacy" in argv:
+        print("error: --migrate-legacy is only valid for global", file=sys.stderr)
+        return 2
+    return cli.run(app, argv=argv)
 
-
-def global_main(argv: list[str]) -> int:  # noqa: V103
+def global_main(argv: list[str]) -> int:
     return _leg_main("global", argv)
 
-
-def local_main(argv: list[str]) -> int:  # noqa: V103
+def local_main(argv: list[str]) -> int:
     return _leg_main("local", argv)
 
-
-def doctor_main(argv: list[str]) -> int:  # noqa: V103
+def doctor_main(argv: list[str]) -> int:
     return _leg_main("doctor", argv)
 
-
 def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv if argv is None else argv
-    legs = {"global", "local", "doctor"}
-    prog0 = Path(argv[0]).name
-    if prog0 in legs:
-        leg, rest = prog0, argv[1:]
-    elif len(argv) >= 2 and argv[1] in legs:
-        leg, rest = argv[1], argv[2:]
-    else:
-        _ = sys.stderr.write("usage: hallouminate_setup.py {global|local|doctor} [--apply]\n")
-        return 2
-    parser = argparse.ArgumentParser(prog=leg)
-    _ = parser.add_argument("--apply", action="store_true")
-    _ = parser.add_argument("--migrate-legacy", action="store_true")
-    args = parser.parse_args(rest)
-    do_apply = cast(bool, args.apply)
-    migrate = cast(bool, args.migrate_legacy)
-    if migrate and leg != "global":
-        parser.error("--migrate-legacy is only valid for global")
-    return _run_leg(leg, do_apply, migrate)
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) >= 2 and Path(args[0]).name == "hallouminate_setup.py":
+        args = args[1:]
+    if args and args[0] in {"global", "local", "doctor"}:
+        return _leg_main(args[0], args[1:])
+    print("usage: hallouminate_setup.py {global|local|doctor} [--apply]", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

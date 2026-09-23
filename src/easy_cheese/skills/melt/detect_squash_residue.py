@@ -29,14 +29,17 @@ copy-paste blocks; the user picks and runs.
 
 from __future__ import annotations
 
-import argparse
+from cyclopts import App
 import json
+import json as json_module
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, TypedDict, cast
+
+from easy_cheese.shared import cli
 
 # Safe git ref name characters: alphanumeric, slash, dot, dash, underscore.
 # Used to prevent shell metacharacters from being interpolated into the printed
@@ -104,12 +107,6 @@ class _DetectResult(TypedDict):
     unique_commits: list[_Commit]
     remedies: list[_Remedy]
     warnings: list[str]
-
-
-class _Args(Protocol):
-    base: str
-    branch: str | None
-    json: bool
 
 
 def _current_branch() -> str | None:
@@ -586,60 +583,46 @@ def format_terse(d: _DetectResult) -> str:
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Detect squash-merge residue and emit the remedy."
-    )
-    _ = parser.add_argument(
-        "--base",
-        default="origin/main",
-        help="Base ref to compare against (default: origin/main).",
-    )
-    _ = parser.add_argument("--branch", help="Branch to check (default: current).")
-    _ = parser.add_argument("--json", action="store_true", help="Output as JSON.")
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
-
-    if not _SAFE_REF.match(args.base):
-        msg = f"error: --base {args.base!r} contains unsafe characters"
-        if args.json:
-            print(json.dumps({"verdict": "error", "error": msg}))
+def _command(base: str = "origin/main", branch: str | None = None, json: bool = False) -> int:
+    if not _SAFE_REF.match(base):
+        msg = f"error: --base {base!r} contains unsafe characters"
+        if json:
+            print(json_module.dumps({"verdict": "error", "error": msg}))
         else:
             print(msg, file=sys.stderr)
         return 1
-
-    branch = args.branch or _current_branch() or _branch_during_rebase()
+    branch = branch or _current_branch() or _branch_during_rebase()
     if not branch:
         msg = "error: cannot determine current branch — pass --branch <name>"
-        if args.json:
-            print(json.dumps({"verdict": "error", "error": msg}))
+        if json:
+            print(json_module.dumps({"verdict": "error", "error": msg}))
         else:
             print(msg, file=sys.stderr)
         return 1
-
     if not _SAFE_REF.match(branch):
         msg = f"error: branch {branch!r} contains unsafe characters"
-        if args.json:
-            print(json.dumps({"verdict": "error", "error": msg}))
+        if json:
+            print(json_module.dumps({"verdict": "error", "error": msg}))
         else:
             print(msg, file=sys.stderr)
         return 1
-
-    base_short = args.base.split("/")[-1]
+    base_short = base.split("/")[-1]
     if branch == base_short or branch in ("main", "master", "develop"):
         msg = f"not-applicable: on base branch {branch}"
-        if args.json:
-            print(json.dumps({"verdict": "not-applicable", "reason": msg}))
+        if json:
+            print(json_module.dumps({"verdict": "not-applicable", "reason": msg}))
         else:
             print(msg)
         return 0
-
-    result = detect(branch, args.base)
-    if args.json:
-        print(json.dumps(result, indent=2))
-    else:
-        print(format_terse(result))
+    result = detect(branch, base)
+    print(json_module.dumps(result, indent=2) if json else format_terse(result))
     return 0
 
+app = App(name="detect-squash-residue")
+_ = app.default(_command)
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

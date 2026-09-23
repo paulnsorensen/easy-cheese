@@ -71,10 +71,8 @@ The HTML groups findings by severity into the shared HTML shell.
 The output is offline and uses no CDN or JS.
 
 Read [`../cheese/references/harness-portability.md`](../cheese/references/harness-portability.md) for helper resolution, sub-agent dispatch, GitHub operations, and handoff transitions.
-Prefer the bundled or repo-local helper.
-Treat `${CLAUDE_SKILL_DIR}` as an optional host-provided fallback.
-The handoff blocks below define the portable contract.
-Remember: slash commands are host renderings, not the control model.
+See [`references/installed-bundle-invocation.md`](references/installed-bundle-invocation.md) for `/age` fallback.
+Slash commands are host renderings, not the control model.
 
 ## Review effort and scope
 

@@ -44,18 +44,49 @@ failing solely on those exits 0 and they become Needs-investigation.
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import subprocess
 import sys
+from contextvars import ContextVar
 from typing import TypedDict, cast
+
+from cyclopts import App
+from easy_cheese.shared import cli
+from urllib.parse import unquote, urlsplit
 
 FAILURE_TAIL_LINES = 10
 
 # Exit code for "failing build, but no failing check produced any groundable
 # log evidence" — see the module docstring.
 EXIT_LOGS_EXPIRED = 3
+_REQUEST_REPO: ContextVar[str | None] = ContextVar("request_repo", default=None)
+
+
+def _parse_pr_reference(value: str) -> tuple[int, str | None]:
+    """Return PR number and optional explicit ``HOST/OWNER/REPO`` target."""
+    if value.isdigit():
+        number = int(value)
+        if number <= 0:
+            raise ValueError("PR number must be positive")
+        return number, None
+    parsed = urlsplit(value)
+    if parsed.scheme != "https" or parsed.username or parsed.password or not parsed.hostname:
+        raise ValueError("PR URL must use HTTPS without credentials")
+    if unquote(parsed.path) != parsed.path:
+        raise ValueError("PR URL must not contain encoded path separators")
+    parts = parsed.path.strip("/").split("/")
+    if len(parts) != 4 or parts[2] != "pull" or not parts[0] or not parts[1] or not parts[3].isdigit():
+        raise ValueError("PR URL must match https://HOST/OWNER/REPO/pull/N")
+    number = int(parts[3])
+    if number <= 0:
+        raise ValueError("PR number must be positive")
+    return number, f"{parsed.hostname}/{parts[0]}/{parts[1]}"
+
+
+def _repo_args() -> list[str]:
+    repo = _REQUEST_REPO.get()
+    return [] if repo is None else ["--repo", repo]
 
 
 class _EnrichedCheck(TypedDict):
@@ -99,7 +130,7 @@ def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
     """Run gh, returning the completed process. Exits 2 if gh is not installed."""
     try:
         return subprocess.run(
-            ["gh", *args],
+            ["gh", *args, *_repo_args()],
             capture_output=True,
             text=True,
             check=False,
@@ -229,11 +260,25 @@ def fetch_merge_state(pr: int) -> _MergeInfo:
 
 
 def extract_run_id(link: str) -> str | None:
-    """Parse a github actions URL to extract the run id."""
+    """Parse a GitHub Actions run URL and return its run id."""
     if not link:
         return None
-    match = re.search(r"/runs/(\d+)", link)
-    return match.group(1) if match else None
+    parsed = urlsplit(link)
+    parts = parsed.path.strip("/").split("/")
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname is None
+        or len(parts) < 5
+        or parts[2:4] != ["actions", "runs"]
+        or not parts[0]
+        or not parts[1]
+        or not parts[4].isdigit()
+    ):
+        return None
+    repo = _REQUEST_REPO.get()
+    if repo is not None and f"{parsed.hostname}/{parts[0]}/{parts[1]}" != repo:
+        return None
+    return parts[4]
 
 
 def extract_failed_tests(log: str) -> list[str]:
@@ -353,25 +398,36 @@ def all_failures_ungroundable(output: _Output) -> bool:
     return all(not c["failure_summary"] for c in fetchable)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Fetch PR status (build + merge) for /affinage grading.",
-    )
-    _ = parser.add_argument("pr", type=int, help="PR number")
-    args = parser.parse_args(argv)
-    pr = cast(int, args.pr)
+def _command(pr: str) -> int:
+    try:
+        pr_number, repo = _parse_pr_reference(pr)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
-    output = build_output(pr)
-    json.dump(output, sys.stdout, indent=2)
-    _ = sys.stdout.write("\n")
-    if all_failures_ungroundable(output):
-        _ = sys.stderr.write(
-            "pr-status.py: build is failing but no failing check produced any "
-            + "log evidence (logs likely expired); exiting "
-            + f"{EXIT_LOGS_EXPIRED} so the caller can halt\n"
-        )
-        return EXIT_LOGS_EXPIRED
-    return 0
+    token = _REQUEST_REPO.set(repo)
+    try:
+        output = build_output(pr_number)
+        json.dump(output, sys.stdout, indent=2)
+        _ = sys.stdout.write("\n")
+        if all_failures_ungroundable(output):
+            _ = sys.stderr.write(
+                "pr-status.py: build is failing but no failing check produced any "
+                + "log evidence (logs likely expired); exiting "
+                + f"{EXIT_LOGS_EXPIRED} so the caller can halt\n"
+            )
+            return EXIT_LOGS_EXPIRED
+        return 0
+    finally:
+        _REQUEST_REPO.reset(token)
+
+
+app = App(name="pr-status")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":

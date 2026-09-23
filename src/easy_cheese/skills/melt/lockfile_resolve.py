@@ -6,11 +6,13 @@ Takes one side and regenerates the lockfile from the manifest.
 
 from __future__ import annotations
 
-import argparse
 import subprocess
-import sys
+
+from cyclopts import App
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
+from typing import TypedDict
+
+from easy_cheese.shared import cli
 
 from easy_cheese.shared.git_utils import (
     detect_lockfile_type,
@@ -167,35 +169,9 @@ def _collect_lockfiles(files: list[str]) -> list[str]:
     return [f for f in get_conflicted_files() if detect_lockfile_type(f)]
 
 
-class _Args(Protocol):
-    strategy: str
-    dry_run: bool
-    files: list[str]
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Resolve lockfile conflicts by taking a side and regenerating"
-    )
-    _ = parser.add_argument(
-        "--strategy",
-        choices=["ours", "theirs", "regen"],
-        default="theirs",
-        help="Strategy: take ours, theirs, or just regenerate (default: theirs)",
-    )
-    _ = parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without making changes",
-    )
-    _ = parser.add_argument(
-        "files",
-        nargs="*",
-        help="Specific lockfiles to resolve (default: auto-detect)",
-    )
-
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
-    lockfiles = _collect_lockfiles(args.files)
+def _command(strategy: str = "theirs", dry_run: bool = False, files: list[str] | None = None) -> int:
+    files = files or []
+    lockfiles = _collect_lockfiles(files)
 
     if not lockfiles:
         print("no conflicted lockfiles")
@@ -203,17 +179,25 @@ def main(argv: list[str] | None = None) -> int:
 
     results: list[_LockfileResult] = []
     for path in lockfiles:
-        result = resolve_lockfile(path, args.strategy, args.dry_run)
+        result = resolve_lockfile(path, strategy, dry_run)
         results.append(result)
         status = "ok" if result["resolved"] else "--"
         print(f"{status} {result['path']}: {result['message']}")
 
     resolved = sum(1 for r in results if r["resolved"])
-    mode = "dry-run" if args.dry_run else "apply"
+    mode = "dry-run" if dry_run else "apply"
     print(f"{resolved}/{len(results)} resolved ({mode})")
 
     return 0 if resolved == len(results) else 1
 
 
+app = App(name="lockfile-resolve")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

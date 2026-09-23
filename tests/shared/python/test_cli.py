@@ -1,26 +1,39 @@
-"""Tests for shared/scripts/cli.py: argparse runner, CliError, emit, --full/--json injection."""
+"""Tests for shared CLI parsing, output, and Cyclopts dispatch."""
 
 from __future__ import annotations
 
-import argparse
 import json
+import io
+from cyclopts import App
 import subprocess
 import sys
-import textwrap
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol
 
 import pytest
 
-from tests.shared.python.bucket_cli import bucket_setup as _bucket_setup
-
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Sequence
     from typing import TextIO
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CLI_PATH = REPO_ROOT / "src" / "easy_cheese" / "shared" / "cli.py"
+
+
+def _bucket_app() -> App:
+    app = App(name="test")
+
+    def bucket(
+        files: int,
+        modules: int = 1,
+        title: str = "",
+        json_mode: bool = False,
+    ) -> None:
+        del json_mode
+        print(files, modules, title)
+
+    _ = app.command(bucket, name="bucket")
+    return app
 
 
 class _CliError(Exception):
@@ -36,8 +49,6 @@ class _CliModule(Protocol):
 
     def contract_error(self, exc: Exception, *, context: str) -> _CliError: ...
 
-    def _inject_global_flags(self, parser: argparse.ArgumentParser) -> None: ...
-
     def emit(
         self,
         value: object,
@@ -48,9 +59,11 @@ class _CliModule(Protocol):
         stdout: TextIO | None = ...,
     ) -> None: ...
 
+    def repair_argv(self, app: object, argv: Sequence[str]) -> list[str]: ...
+
     def run(
         self,
-        setup: Callable[[argparse.ArgumentParser], None],
+        app: object,
         *,
         argv: Sequence[str] | None = ...,
         stdout: TextIO | None = ...,
@@ -84,7 +97,7 @@ class TestQuoteRepair:
     def test_splits_merged_token_when_only_the_split_form_parses(
         self, cli: _CliModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        assert cli.run(_bucket_setup, argv=["bucket", "--files", "2 --modules 3"]) == 0
+        assert cli.run(_bucket_app(), argv=["bucket", "--files", "2 --modules 3"]) == 0
         captured = capsys.readouterr()
         assert captured.out.strip() == "2 3"
         assert "note: split quoted argument '2 --modules 3'" in captured.err
@@ -93,7 +106,7 @@ class TestQuoteRepair:
         self, cli: _CliModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
         argv = ["bucket", "--files", "2", "--title", "handle --json flag"]
-        assert cli.run(_bucket_setup, argv=argv) == 0
+        assert cli.run(_bucket_app(), argv=argv) == 0
         captured = capsys.readouterr()
         assert captured.out.strip() == "2 1 handle --json flag"
         assert "note:" not in captured.err
@@ -101,18 +114,17 @@ class TestQuoteRepair:
     def test_shows_the_original_error_when_the_split_form_also_fails(
         self, cli: _CliModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        with pytest.raises(SystemExit) as raised:
-            _ = cli.run(_bucket_setup, argv=["bucket", "--files", "x --modules y"])
-        assert raised.value.code == 2
+        status = cli.run(_bucket_app(), argv=["bucket", "--files", "x --modules y"])
+        assert status == 2
         captured = capsys.readouterr()
-        assert "invalid int value: 'x --modules y'" in captured.err
+        assert 'x --modules y' in captured.err
         assert "note:" not in captured.err
 
     def test_ignores_a_token_with_unbalanced_quotes(
         self, cli: _CliModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
         argv = ["bucket", "--files", "2", "--title", "it's --json here"]
-        assert cli.run(_bucket_setup, argv=argv) == 0
+        assert cli.run(_bucket_app(), argv=argv) == 0
         assert capsys.readouterr().out.strip() == "2 1 it's --json here"
 
 
@@ -133,31 +145,6 @@ class TestContractError:
         assert str(wrapped) == "--status: nope"
         assert wrapped.exit_code == 3
 
-
-class TestInjectGlobalFlags:
-    def test_injects_full_and_json(self, cli: _CliModule) -> None:
-        parser = argparse.ArgumentParser()
-        cli._inject_global_flags(parser)  # pyright: ignore[reportPrivateUsage]
-        args = parser.parse_args(["--full", "--json"])
-        assert cast(bool, args.full) is True
-        assert cast(bool, args.json_mode) is True
-
-    def test_injection_recurses_into_subparsers(self, cli: _CliModule) -> None:
-        parser = argparse.ArgumentParser()
-        sub = parser.add_subparsers(dest="cmd")
-        _ = sub.add_parser("do")
-        cli._inject_global_flags(parser)  # pyright: ignore[reportPrivateUsage]
-        args = parser.parse_args(["do", "--full", "--json"])
-        assert cast(bool, args.full) is True
-        assert cast(bool, args.json_mode) is True
-
-    def test_does_not_double_register(self, cli: _CliModule) -> None:
-        parser = argparse.ArgumentParser()
-        _ = parser.add_argument("--full", action="store_true")
-        # Must not raise argparse.ArgumentError for duplicate option.
-        cli._inject_global_flags(parser)  # pyright: ignore[reportPrivateUsage]
-        args = parser.parse_args(["--full"])
-        assert cast(bool, args.full) is True
 
 
 class TestEmitScalar:
@@ -231,153 +218,121 @@ class TestEmitMultilineString:
         out = capsys.readouterr().out
         lines = out.splitlines()
         assert lines[:2] == ["line1", "line2"]
-        assert lines[2] == "... showing 2 of 3; pass --full for the rest (limit=2)"
+        assert lines == ["line1", "line2", "... showing 2 of 3; pass --full for the rest (limit=2)"]
 
     def test_string_without_limit_prints_as_is(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
         cli.emit("line1\nline2")
         assert capsys.readouterr().out == "line1\nline2\n"
 
+    def test_string_with_limit_emits_footer(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
+        cli.emit("line1\nline2\nline3", limit=2)
+        assert capsys.readouterr().out.splitlines() == [
+            "line1", "line2", "... showing 2 of 3; pass --full for the rest (limit=2)"
+        ]
 
-def _write_runner(tmp_path: Path, body: str) -> Path:
-    """Drop a tiny executable script next to cli.py so the import works."""
-    runner = tmp_path / "runner.py"
-    src_root = str(CLI_PATH.parents[2])
-    _ = runner.write_text(
-        textwrap.dedent(
-            f"""
-            import sys
-            sys.path.insert(0, {str(CLI_PATH.parent)!r})
-            sys.path.insert(0, {src_root!r})
-            import cli
-            {body}
-            """
-        ).strip()
-        + "\n"
-    )
-    return runner
+
 
 
 class TestRun:
-    def test_dispatch_to_func(self, tmp_path: Path) -> None:
-        runner = _write_runner(
-            tmp_path,
-            """
-            def _cmd(args): cli.emit({"ok": True}, json_mode=args.json_mode, stdout=args.stdout)
-            def _setup(p):
-                sub = p.add_subparsers(dest="cmd", required=True)
-                q = sub.add_parser("go")
-                q.set_defaults(func=_cmd)
-            raise SystemExit(cli.run(_setup))
-            """.strip()
-        )
-        result = subprocess.run([sys.executable, str(runner), "go", "--json"], capture_output=True, text=True)
-        assert result.returncode == 0
-        assert json.loads(result.stdout) == {"ok": True}
+    def test_dispatch_to_func(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
+        app = App(name="test")
 
-    def test_injects_argv_and_stdout(self, cli: _CliModule) -> None:
-        from io import StringIO
+        def go(json_mode: bool = False) -> None:
+            cli.emit({"ok": True}, json_mode=json_mode)
 
-        output = StringIO()
+        _ = app.command(go, name="go")
+        assert cli.run(app, argv=["go", "--json-mode"]) == 0
+        assert json.loads(capsys.readouterr().out) == {"ok": True}
 
-        def _cmd(args: argparse.Namespace) -> int:
-            cli.emit({"ok": True}, json_mode=cast(bool, args.json_mode), stdout=cast("TextIO", args.stdout))
+
+    def test_stdout_stream_is_used(self, cli: _CliModule) -> None:
+        app = App(name="test")
+        _ = app.command(lambda: print("ok"), name="go")
+        output = io.StringIO()
+        assert cli.run(app, argv=["go"], stdout=output) == 0
+        assert output.getvalue() == "ok\n"
+    def test_returns_status_and_invokes_once(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
+        app = App(name="test")
+        calls: list[int] = []
+
+        def go() -> int:
+            calls.append(1)
+            print("done")
             return 7
 
-        def _setup(parser: argparse.ArgumentParser) -> None:
-            sub = parser.add_subparsers(dest="cmd", required=True)
-            sub.add_parser("go").set_defaults(func=_cmd)
+        _ = app.command(go, name="go")
+        assert cli.run(app, argv=["go"]) == 7
+        assert calls == [1]
+        assert capsys.readouterr().out == "done\n"
 
-        status = cli.run(_setup, argv=("go", "--json"), stdout=output)
-        assert status == 7
-        assert json.loads(output.getvalue()) == {"ok": True}
+    def test_cli_error_exits_two_with_stderr(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
+        app = App(name="test")
 
-    def test_cli_error_exits_two_with_stderr(self, tmp_path: Path) -> None:
-        runner = _write_runner(
-            tmp_path,
-            """
-            def _cmd(args): raise cli.CliError("bad input")
-            def _setup(p):
-                sub = p.add_subparsers(dest="cmd", required=True)
-                q = sub.add_parser("go")
-                q.set_defaults(func=_cmd)
-            raise SystemExit(cli.run(_setup))
-            """.strip()
-        )
-        result = subprocess.run([sys.executable, str(runner), "go"], capture_output=True, text=True)
-        assert result.returncode == 2
-        assert result.stderr.strip() == "ERROR: bad input"
-        assert result.stdout == ""
+        def go() -> None:
+            raise cli.CliError("bad input")
 
-    def test_uncaught_exception_propagates(self, tmp_path: Path) -> None:
-        runner = _write_runner(
-            tmp_path,
-            """
-            def _cmd(args): raise RuntimeError("boom")
-            def _setup(p):
-                sub = p.add_subparsers(dest="cmd", required=True)
-                q = sub.add_parser("go")
-                q.set_defaults(func=_cmd)
-            raise SystemExit(cli.run(_setup))
-            """.strip()
-        )
-        result = subprocess.run([sys.executable, str(runner), "go"], capture_output=True, text=True)
-        assert result.returncode != 0
-        assert result.returncode != 2
-        assert "RuntimeError" in result.stderr
-        assert "boom" in result.stderr
+        _ = app.command(go, name="go")
+        assert cli.run(app, argv=["go"]) == 2
+        assert capsys.readouterr().err.strip() == "ERROR: bad input"
 
-    def test_missing_subcommand_prints_help_and_exits_two(self, tmp_path: Path) -> None:
-        runner = _write_runner(
-            tmp_path,
-            """
-            def _setup(p):
-                p.add_subparsers(dest="cmd")
-            raise SystemExit(cli.run(_setup))
-            """.strip()
-        )
-        result = subprocess.run([sys.executable, str(runner)], capture_output=True, text=True)
-        assert result.returncode == 2
-        assert "usage:" in result.stderr.lower()
+    def test_uncaught_exception_propagates(self, cli: _CliModule) -> None:
+        app = App(name="test")
 
-    def test_help_flag_exits_zero(self, tmp_path: Path) -> None:
-        runner = _write_runner(
-            tmp_path,
-            """
-            def _setup(p):
-                p.add_subparsers(dest="cmd")
-            raise SystemExit(cli.run(_setup))
-            """.strip()
-        )
-        result = subprocess.run([sys.executable, str(runner), "--help"], capture_output=True, text=True)
-        assert result.returncode == 0
-        assert "--full" in result.stdout
-        assert "--json" in result.stdout
+        def go() -> None:
+            raise RuntimeError("boom")
 
-    def test_quote_repair_works_in_the_bare_module_harness(self, tmp_path: Path) -> None:
-        # `_write_runner` puts only `shared/` on sys.path; the repair path also
-        # imports `easy_cheese.shared.argv_repair` by its full package name.
-        runner = _write_runner(
-            tmp_path,
-            """
-            def _cmd(args): cli.emit({"ok": True}, json_mode=args.json_mode, stdout=args.stdout)
-            def _setup(p):
-                sub = p.add_subparsers(dest="cmd", required=True)
-                q = sub.add_parser("go")
-                q.add_argument("--files", type=int, required=True)
-                q.add_argument("--modules", type=int, default=1)
-                q.set_defaults(func=_cmd)
-            raise SystemExit(cli.run(_setup))
-            """.strip()
-        )
-        result = subprocess.run(
-            [sys.executable, str(runner), "go", "--files", "2 --modules 3", "--json"],
-            capture_output=True, text=True,
-        )
-        assert result.returncode == 0
-        assert json.loads(result.stdout) == {"ok": True}
+        _ = app.command(go, name="go")
+        with pytest.raises(RuntimeError, match="boom"):
+            _ = cli.run(app, argv=["go"])
 
+    def test_missing_subcommand_returns_two_with_error(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
+        app = App(name="test")
+        _ = app.command(lambda: None, name="go")
+        assert cli.run(app, argv=[]) == 2
+        assert "command required" in capsys.readouterr().err
 
+    def test_zero_arg_default_command_runs(self, cli: _CliModule) -> None:
+        app = App(name="test")
+        calls: list[str] = []
+
+        def run() -> None:
+            calls.append("ran")
+
+        _ = app.default(run)
+        assert cli.run(app, argv=[]) == 0
+        assert calls == ["ran"]
+
+    def test_help_flag_returns_zero(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
+        app = App(name="test")
+        _ = app.command(lambda: None, name="go")
+        assert cli.run(app, argv=["--help"]) == 0
+        assert "Usage:" in capsys.readouterr().out
+
+    def test_quote_repair_works_with_cyclopts(self, cli: _CliModule, capsys: pytest.CaptureFixture[str]) -> None:
+        app = App(name="test")
+
+        def go(files: int, modules: int = 1) -> None:
+            print(files, modules)
+
+        _ = app.command(go, name="go")
+        assert cli.run(app, argv=["go", "--files", "2 --modules 3"]) == 0
+        assert capsys.readouterr().out.strip() == "2 3"
 class TestCliEntrypoint:
     def test_help_directly_on_cli_py(self) -> None:
         result = subprocess.run([sys.executable, str(CLI_PATH), "--help"], capture_output=True, text=True)
         assert result.returncode == 0
+
+
+def test_quote_repair_preserves_free_text_option_values(
+    cli: _CliModule, capsys: pytest.CaptureFixture[str]
+) -> None:
+    app = App(name="test")
+    calls: list[tuple[int, str]] = []
+
+    def go(files: int, path: str) -> None:
+        calls.append((files, path))
+
+    _ = app.command(go, name="go")
+    assert cli.run(app, argv=["go", "--path", "safe --files 2"]) == 2
+    assert calls == []
+    assert "note:" not in capsys.readouterr().err

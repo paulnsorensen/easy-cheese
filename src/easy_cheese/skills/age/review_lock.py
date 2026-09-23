@@ -38,7 +38,10 @@ the silent path: skipping the lock now fails the write with an instruction.
 
 from __future__ import annotations
 
-import argparse
+# Cyclopts' runtime app type is broader than the shared CLI protocol.
+# pyright: reportAny=false, reportExplicitAny=false
+
+from cyclopts import App, CycloptsError
 import contextlib
 import hashlib
 import json
@@ -50,7 +53,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import BinaryIO, Callable, Protocol, TextIO, cast
+from typing import Any, BinaryIO, Callable, Protocol, cast
 
 from easy_cheese.shared import cli, git_utils, write_handoff_artifact
 
@@ -584,58 +587,52 @@ def refresh_evidence(*, root: Path, slug: str) -> Path:
     return target
 
 
-def _cmd_lock(args: argparse.Namespace) -> None:
-    root = Path(cast("str | None", args.root) or Path.cwd())
-    slug = cast(str, args.slug)
-    if cast(bool, args.refresh_evidence):
-        target = refresh_evidence(root=root, slug=slug)
-    else:
-        target = capture(root=root, slug=slug)
-    cli.emit(str(target), stdout=cast(TextIO, args.stdout))
+def _command(slug: str, root: str | None = None, repo: str | None = None, refresh_evidence: bool = False) -> int:
+    if root is not None and repo is not None:
+        raise cli.CliError("--root and --repo are equivalent; provide only one")
+    target_root = Path(repo or root or Path.cwd())
+    target = refresh_evidence_fn(root=target_root, slug=slug) if refresh_evidence else capture(root=target_root, slug=slug)
+    cli.emit(str(target))
+    return 0
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument(
-        "--slug", required=True, help="review slug (lock filename stem)"
-    )
-    _ = parser.add_argument(
-        "--root",
-        default=None,
-        help="repo root (default: cwd); the lock lands under .cheese/age/",
-    )
-    _ = parser.add_argument(
-        "--refresh-evidence",
-        action="store_true",
-        help=(
-            "capture the lock again after a file under .cheese/ moved; "
-            "refused when the source tree differs from the existing lock"
-        ),
-    )
-    parser.set_defaults(func=_cmd_lock)
+refresh_evidence_fn = refresh_evidence
+app = App(name="review-lock")
+_ = app.default(_command)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(cast(Any, app), argv=argv)
 
 
 def _peek(argv: list[str]) -> tuple[str | None, str | None, Path]:
-    """Read --slug/--phase/--root without consuming the writer's own parse."""
-    parser = argparse.ArgumentParser(add_help=False)
-    _ = parser.add_argument("--slug")
-    _ = parser.add_argument("--phase")
-    _ = parser.add_argument("--root")
+    """Read gate fields from the writer's Cyclopts binding without invoking it."""
     try:
-        known, _rest = parser.parse_known_args(argv)
-    except SystemExit:
+        _func, bound, _ = write_handoff_artifact.app.parse_args(
+            argv,
+            print_error=False,
+            exit_on_error=False,
+            help_on_error=False,
+        )
+    except CycloptsError:
         return None, None, Path.cwd()
-    root = Path(cast("str | None", known.root) or Path.cwd())
-    return cast("str | None", known.slug), cast("str | None", known.phase), root
+    values = bound.arguments
+    slug = values.get("slug")
+    phase = values.get("phase")
+    root = values.get("root")
+    return (
+        slug if isinstance(slug, str) else None,
+        phase if isinstance(phase, str) else None,
+        Path(root) if isinstance(root, str) and root else Path.cwd(),
+    )
 
 
 def gated_write_handoff_artifact(argv: list[str]) -> int:
     """`write-handoff-artifact`, refusing an age report written over inline fixes."""
     # The gate and the writer must read one argv, so repair it before the gate.
-    argv = cli.repair_argv(write_handoff_artifact.setup_parser, argv)
+    # The gate and writer perform side-effect-free parses of one canonical argv;
+    # only the writer invokes its handler after the gate approves.
+    argv = cli.repair_argv(cast(Any, write_handoff_artifact.app), argv)
     slug, phase, root = _peek(argv)
     if phase == PHASE and slug:
         try:
@@ -647,4 +644,4 @@ def gated_write_handoff_artifact(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

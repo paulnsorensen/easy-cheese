@@ -21,10 +21,11 @@ mold hint) call to turn a curd count into a mode name.
 """
 from __future__ import annotations
 
-import argparse
 import math
+import sys
 from collections.abc import Sized
-from typing import Protocol, TextIO, cast
+from typing import Annotated
+from cyclopts import App, Parameter
 
 from easy_cheese.shared import cli
 
@@ -54,51 +55,29 @@ def select_mode_from_score(score: float) -> str:
     )
 
 
-class _Args(Protocol):
-    count: int | None
-    score: float
-    json_mode: bool
-    stdout: TextIO
-
-
-def _cmd_select(args: argparse.Namespace) -> None:
-    a = cast(_Args, cast(object, args))
+def _cmd_select(*, count: int | None = None, score: float | None = None, json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
     # The decomposer knows the curd count; the count is all select_mode reads.
-    if a.count is not None:
-        if a.count < 0:
-            raise cli.CliError(f"invalid --count {a.count}: must be zero or greater")
-        cli.emit(select_mode(range(a.count)), json_mode=a.json_mode, stdout=a.stdout)
+    if count is not None and score is not None:
+        raise cli.CliError("--count and --score are mutually exclusive")
+    if count is not None:
+        if count < 0:
+            raise cli.CliError(f"invalid --count {count}: must be zero or greater")
+        cli.emit(select_mode(range(count)), json_mode=json_mode)
         return
-    score = a.score
+    if score is None:
+        raise cli.CliError("one of --count or --score is required")
     if not math.isfinite(score) or score < 0:
         raise cli.CliError(f"invalid --score {score}: must be zero or greater and finite")
-    cli.emit(select_mode_from_score(score), json_mode=a.json_mode, stdout=a.stdout)
+    cli.emit(select_mode_from_score(score), json_mode=json_mode)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = (
-        "Pick /ultracook's mode (linear|parallel|decompose-first) from a "
-        "curd count (curd block present) or a score (no curd block)."
-    )
-    group = parser.add_mutually_exclusive_group(required=True)
-    _ = group.add_argument(
-        "--count",
-        type=int,
-        default=None,
-        help="Number of curds in the decomposition.",
-    )
-    _ = group.add_argument(
-        "--score",
-        type=float,
-        default=None,
-        help="Fan-out score for the no-curd-block fallback.",
-    )
-    parser.set_defaults(func=_cmd_select)
+app = App(name="mode")
+_ = app.default(_cmd_select)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

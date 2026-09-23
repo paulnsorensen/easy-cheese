@@ -8,7 +8,7 @@ Bundle command dispatch changed after session analytics over 2,286 bundle calls.
 
 ## Top-level help and unknown-command guidance
 
-Bundle command dispatch prints one help block for `--help`, `-h`, `help`, and no arguments (`src/easy_cheese/shared/bundle_commands.py:152`). The block has the usage line, one `name  summary` line per command, and pointers to `<command> --help` and `references/commands.md`. No arguments returns 2; the other forms return 0. A real command named `help` wins over the alias.
+Bundle command dispatch prints one help block for `--help`, `-h`, `help`, and no arguments (`src/easy_cheese/shared/bundle_commands.py:258`). The block has the usage line, one `name  summary` line per command, and pointers to `<command> --help` and `references/commands.md`. No arguments returns 2; the other forms return 0. A real command named `help` wins over the alias. Top-level `--version` reads installed `easy-cheese-shared` metadata and returns 0 without running a command (`src/easy_cheese/shared/bundle_commands.py:267`).
 
 For an unknown name, `_unknown_command_message` (`src/easy_cheese/shared/bundle_commands.py:179`) adds guidance below the usage line, on stderr, with exit 2:
 
@@ -21,7 +21,7 @@ One helper, `_lookup` (`src/easy_cheese/shared/bundle_commands.py:163`), accepts
 
 ## Leading-flag hoist rule
 
-Bundle command dispatch reads `argv[0]` as the command, so a flag before the command is a caller mistake. `_hoisted_leading_flags` (`src/easy_cheese/shared/bundle_commands.py:219`) moves only `--json` and `--full` after the command and prints `note: moved --json after 'severity'`. `cli.run` injects these two flags into every parser, and they take no value.
+Bundle command dispatch reads `argv[0]` as the command, so a flag before the command is a caller mistake. `_hoisted_leading_flags` (`src/easy_cheese/shared/bundle_commands.py:219`) moves only `--json` and `--full` after the command and prints `note: moved --json after 'severity'`. Each Cyclopts command declares the supported flags; dispatch moves only these two valueless flag names.
 
 Any other leading flag exits 2 with `Put the command first` and names the flag. The reason is a security one: the value of a flag can equal a command name. An earlier rule hoisted every dash token, and `age.pyz --slug handoff review-lock` then ran `handoff` with shifted arguments. A help flag among the leading flags prints the top-level help.
 
@@ -29,17 +29,11 @@ Any other leading flag exits 2 with `Put the command first` and names the flag. 
 
 ## Quote repair rule
 
-Quote repair fixes one bundle call shape: `--files '2 --modules 2'` arrives as one token. `repair_split_quotes` (`src/easy_cheese/shared/argv_repair.py:84`) splits a token only when all of these hold:
+`cli.run` accepts a Cyclopts `App`. It probes parsing before invocation, then invokes the selected handler once (`src/easy_cheese/shared/cli.py:52`). Parse errors return 2. The shipped parser path has no argparse compatibility layer.
 
-- The token is the value of an option that cannot hold free text: the option has `choices`, or a `type` other than `str` (`src/easy_cheese/shared/argv_repair.py:38`). The previous token names the option, or the token uses the `--opt=` form.
-- One piece is a declared option string.
-- The original argv fails to parse, and the split argv parses.
+Quote repair handles a token such as `--files '2 --modules 2'`. It uses Cyclopts argument metadata to select only declared scalar, non-free-text option values. It then uses `shlex` if the token contains whitespace and one piece resembles an option (`src/easy_cheese/shared/argv_repair.py:65-94`). It keeps the original argv when it parses, when help appears, or when no unique split candidate parses. It stops before a bare `--` and prints a note for one accepted repair (`src/easy_cheese/shared/argv_repair.py:97-125`). Probe parsing never runs handlers.
 
-The repair never splits a positional token or the value of a plain string option. An earlier rule split free text, and it could write a shortened `orientation` into a durable handoff. The repair stops at a bare `--`. It returns the original argv when a split frees `-h` or `--help`, because the probe parse would print a help page to stdout and corrupt a `--json` consumer. The note prints the pieces.
-
-**Boundary.** `cli.run` and the age review-lock gate `gated_write_handoff_artifact` both call the public `cli.repair_argv` (`src/easy_cheese/shared/cli.py:70`). A handler that builds its own parser gets flag standardization from `dispatch`, but no quote repair.
-
-**One argv for a gate.** A gate that peeks at argv before a `cli.run` handler must repair first. The age review-lock gate calls `cli.repair_argv(write_handoff_artifact.setup_parser, argv)` and passes that one list to the peek and to the writer (`src/easy_cheese/skills/age/review_lock.py:382`). Otherwise the gate and the writer can read different `--slug` values.
+**One argv for a gate.** The age review-lock gate repairs with the writer's Cyclopts app before it peeks at `--slug`, `--phase`, and `--root`. It passes that same canonical argv to the writer (`src/easy_cheese/skills/age/review_lock.py:614`). The gate denies an age report over inline fixes before the writer runs.
 
 `read_mapping_arg_or_stdin` rejects an `argv[0]` that starts with `-` with the handler's usage error (`src/easy_cheese/shared/manifest_io.py:35`). A hoisted `--json` therefore never becomes a manifest path.
 
@@ -47,9 +41,9 @@ The repair never splits a positional token or the value of a plain string option
 
 Bundle command dispatch needs two static tables for its guidance, because a bundle cannot import another skill.
 
-- **Leaves.** Each shared parser module exports a `LEAVES` tuple beside its `add_subparsers` call (for example `src/easy_cheese/shared/severity.py:160`). Each skill `commands.py` passes it as `derive_command(..., leaves=<module>.LEAVES)`. A drift test compares every command of every skill with the `{a,b} ...` subparser group in its real `--help` output, with no allowlist (`tests/python/test_bundle_commands.py:389`). A new command with subparsers and no leaves fails the test.
+- **Leaves.** Each shared parser module exports a `LEAVES` tuple beside its Cyclopts commands (for example `src/easy_cheese/shared/severity.py:132`). Each skill `commands.py` passes it as `derive_command(..., leaves=<module>.LEAVES)`. A drift test compares declared leaves with each command's real Cyclopts `--help` output (`tests/python/test_bundle_commands.py:380`). A new nested command without declared leaves fails the test.
 - **Index.** `scripts/_bundle_command_index_compiler.py` projects every skill's `COMMANDS` into `src/easy_cheese/shared/bundle_command_index.py` (`COMMAND_BUNDLES` and `LEAF_OWNERS`). `just update-generated` writes the file, and the build checks that it is current (`scripts/build_pyz.py:159`). The dispatcher reads both tables directly, and it survives a missing index module.
 
 `references/commands.md` lists the leaves of each command in a last `Subcommands` column. The column is last because `tests/python/test_easy_cheese_setup_contract.py` pins the `| name | summary |` prefix of each row.
 
-_Source: PR #702 (forgiving bundle CLI), its /age review, and session analytics of `.pyz` calls · Updated: 2026-09-19_
+_Source: PR #702, its /age review, session analytics of `.pyz` calls, and the Cyclopts migration · Updated: 2026-09-23_

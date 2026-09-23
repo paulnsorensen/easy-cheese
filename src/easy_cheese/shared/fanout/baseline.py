@@ -26,10 +26,10 @@ Output (JSON):
 """
 from __future__ import annotations
 
-import argparse
 import json
 import sys
-from typing import Protocol, TextIO, TypedDict, cast
+from typing import TypedDict, cast
+from cyclopts import App
 
 # cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
@@ -104,11 +104,7 @@ def _validate_records(value: object, field: str) -> list[FailureRecord]:
     return cast(list[FailureRecord], items)
 
 
-class _Args(Protocol):
-    stdout: TextIO
-
-
-def _cmd_classify(args: _Args) -> None:
+def _cmd_classify() -> None:
     try:
         payload = cast(object, json.load(sys.stdin))
         if not isinstance(payload, dict):
@@ -119,17 +115,16 @@ def _cmd_classify(args: _Args) -> None:
     except json.JSONDecodeError as exc:
         raise cli.CliError("expected a JSON object with baseline/current on stdin") from exc
     result = classify(baseline_arg, current_arg)
-    cli.emit(result, json_mode=True, stdout=args.stdout)
+    cli.emit(result, json_mode=True)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Classify current failures against a stored baseline (reads JSON from stdin)."
-    parser.set_defaults(func=_cmd_classify)
+app = App(name="baseline")
+_ = app.default(_cmd_classify)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

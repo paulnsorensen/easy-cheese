@@ -45,11 +45,13 @@ phase (raises, never emits a soft-fail verdict).
 """
 from __future__ import annotations
 
-import argparse
 import re
+import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+from types import SimpleNamespace
+from typing import Annotated, Protocol, cast
+from cyclopts import App, Parameter
 
 from easy_cheese_schemas import (
     ArtifactRef,
@@ -269,54 +271,21 @@ class _Args(Protocol):
     review: Path | None
     cure_result: Path | None
     gate_evidence: list[Path] | None
-    stdout: TextIO
 
 
-def _cmd_decide(args: _Args) -> None:
-    verdict = _decide(args)
-    cli.emit(verdict, json_mode=True, stdout=args.stdout)
+def _cmd_decide(*, state: Path, event: str, request_digest: Annotated[str | None, Parameter(name="--request-digest")] = None, review: Path | None = None, cure_result: Annotated[Path | None, Parameter(name="--cure-result")] = None, gate_evidence: Annotated[list[Path] | None, Parameter(name="--gate-evidence")] = None) -> None:
+    args = SimpleNamespace(state=state, event=event, request_digest=request_digest, review=review, cure_result=cure_result, gate_evidence=gate_evidence)
+    verdict = _decide(cast(_Args, cast(object, args)))
+    cli.emit(verdict, json_mode=True)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = (
-        "Apply one fan-remediation event and publish the next state (JSON out)."
-    )
-    _ = parser.add_argument(
-        "--state", required=True, type=Path, help="current RemediationState artifact"
-    )
-    _ = parser.add_argument(
-        "--event", required=True, choices=("review", "cure"), help="event to apply"
-    )
-    _ = parser.add_argument(
-        "--request-digest",
-        dest="request_digest",
-        default=None,
-        help="required sha256:<hex> digest of the host request that produced the event",
-    )
-    _ = parser.add_argument(
-        "--review", type=Path, default=None, help="ReviewResult for a review event"
-    )
-    _ = parser.add_argument(
-        "--cure-result",
-        dest="cure_result",
-        type=Path,
-        default=None,
-        help="RemediationCureObservation for a cure event",
-    )
-    _ = parser.add_argument(
-        "--gate-evidence",
-        dest="gate_evidence",
-        type=Path,
-        action="append",
-        default=None,
-        help="optional, repeatable gate-evidence file for a host digest cross-check",
-    )
-    parser.set_defaults(func=_cmd_decide)
+app = App(name="remediation-decision")
+_ = app.default(_cmd_decide)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

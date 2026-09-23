@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import importlib
+import importlib.metadata
 import itertools
 import re
 import sys
@@ -264,6 +265,14 @@ def dispatch(commands: Sequence[Command], argv: Sequence[str]) -> int:
         print(_help_text(mapping))
         return 0
     if first.startswith("-"):
+        if first == "--version":
+            try:
+                version = importlib.metadata.version("easy-cheese-shared")
+            except importlib.metadata.PackageNotFoundError:
+                print("easy-cheese-shared distribution metadata is unavailable", file=sys.stderr)
+                return 2
+            print(version)
+            return 0
         leading = list(itertools.takewhile(lambda token: token.startswith("-"), argv))
         if _HELP_FLAGS.intersection(leading):
             print(_help_text(mapping))

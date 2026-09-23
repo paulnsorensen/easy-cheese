@@ -8,14 +8,12 @@ skipping — against synthetic trees only. No conftest; load the module by path.
 
 from __future__ import annotations
 
-import argparse
 import json
 import subprocess
 import sys
-from collections.abc import Callable, Iterable, Sequence
-from io import StringIO
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Protocol, TextIO, TypedDict, cast
+from typing import Protocol, TypedDict, cast
 
 import pytest
 
@@ -26,10 +24,9 @@ BUNDLE = Path(__file__).resolve().parents[3] / "skills/pasteurize/scripts/pasteu
 class _CliNamespace(Protocol):
     def run(
         self,
-        setup: Callable[[argparse.ArgumentParser], None],
+        app: object,
         *,
         argv: Sequence[str] | None = ...,
-        stdout: TextIO | None = ...,
     ) -> int: ...
 
 
@@ -41,7 +38,7 @@ class _SweepResult(TypedDict):
 class _DebugTagSweepModule(Protocol):
     cli: _CliNamespace
 
-    def _setup(self, parser: argparse.ArgumentParser) -> None: ...
+    app: object
     def main(self, argv: list[str] | None = None) -> int: ...
     def session_tags(self, sessions: Iterable[str]) -> tuple[str, ...]: ...
     def changed_files(self, root: Path) -> list[Path]: ...
@@ -79,15 +76,12 @@ class TestExitCodes:
         self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         _ = (tmp_path / "bug.py").write_text("needle\n")
-        output = StringIO()
         status = debug_tag_sweep.cli.run(
-            debug_tag_sweep._setup,  # pyright: ignore[reportPrivateUsage]
+            debug_tag_sweep.app,
             argv=("--root", str(tmp_path), "--tags", "needle"),
-            stdout=output,
         )
         assert status == 1
-        assert output.getvalue() == "bug.py\ntotal: 1\n"
-        assert capsys.readouterr().out == ""
+        assert capsys.readouterr().out == "bug.py\ntotal: 1\n"
 
     def test_missing_root_exits_two(self) -> None:
         result = _run("--root", "/nonexistent/path/xyz-q-9-z")

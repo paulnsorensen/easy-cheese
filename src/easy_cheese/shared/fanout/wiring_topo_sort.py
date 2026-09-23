@@ -8,9 +8,10 @@ can dispatch each wave in parallel.
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+import sys
+from typing import Annotated, cast
+from cyclopts import App, Parameter
 
 
 from easy_cheese.shared import cli
@@ -47,37 +48,29 @@ def _extract_wiring(manifest: dict[str, object]) -> list[dict[str, object]]:
     return out
 
 
-class _Args(Protocol):
-    manifest: str
-    json_mode: bool
-    stdout: TextIO
-
-
-def _run(args: argparse.Namespace) -> None:
-    a = cast(_Args, cast(object, args))
-    manifest = _load_manifest(Path(a.manifest))
-    wiring = _extract_wiring(manifest)
+def _run(*, manifest: str, json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
+    manifest_data = _load_manifest(Path(manifest))
+    wiring = _extract_wiring(manifest_data)
     try:
         waves = compute_waves(
             (str(item["id"]), cast("list[str]", item.get("depends_on", []))) for item in wiring
         )
     except WiringCycleError as exc:
         raise cli.CliError(f"cycle detected: {', '.join(exc.cycle_ids)}") from exc
-    if a.json_mode:
-        cli.emit({"waves": waves}, json_mode=True, stdout=a.stdout)
+    if json_mode:
+        cli.emit({"waves": waves}, json_mode=True)
         return
     for index, wave in enumerate(waves, start=1):
-        print(f"wave {index}: {', '.join(wave)}", file=a.stdout)
+        print(f"wave {index}: {', '.join(wave)}")
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--manifest", required=True, help="path to manifest.yaml or .json")
-    parser.set_defaults(func=_run)
+app = App(name="wiring-topo-sort")
+_ = app.default(_run)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

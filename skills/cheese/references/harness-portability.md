@@ -18,6 +18,15 @@ Codex receives the literal variable and fails.
 
 Name the behavior that a helper provides.
 Do not imply that one absolute path is the only valid transport.
+When a checkout lacks the archive, resolve the installed skill by its exact name.
+Use the published archive path `<skill-dir>/scripts/<skill>.pyz`.
+Reject zero or multiple matches and a missing archive before execution.
+Keep the archive and each argument separate.
+Pass repeated cases as separate calls.
+Do not evaluate one scalar command string or split an unquoted case specification.
+
+Skill-specific shell examples belong to the owning skill reference.
+For the concrete `/age` Bash and zsh resolver, see [`installed-bundle-invocation.md`](../../age/references/installed-bundle-invocation.md).
 
 ## Read, search, edit, inspect
 

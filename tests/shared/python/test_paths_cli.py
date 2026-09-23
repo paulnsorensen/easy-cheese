@@ -13,18 +13,18 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, cast
 
+from cyclopts import App
+
 import pytest
 
 if TYPE_CHECKING:
-    import argparse
     import re
-    from collections.abc import Callable
 
 
 class _PathsCliModule(Protocol):
     KEBAB_SLUG: re.Pattern[str]
     PHASES: frozenset[str]
-    _setup: Callable[[argparse.ArgumentParser], None]
+    app: App
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -347,9 +347,9 @@ class TestResolve:
 
 
 class TestModuleImport:
-    def test_setup_callable_present(self, paths_cli_mod: _PathsCliModule) -> None:
-        # Sanity: the module exports the argparse setup hook cli.run consumes.
-        assert callable(paths_cli_mod._setup)  # pyright: ignore[reportPrivateUsage]
+    def test_cyclopts_app_present(self, paths_cli_mod: _PathsCliModule) -> None:
+        # Sanity: the module exports the Cyclopts app used by the CLI entrypoint.
+        assert isinstance(paths_cli_mod.app, App)
 
     def test_cli_shares_the_slug_rules(self, paths_cli_mod: _PathsCliModule) -> None:
         # One module owns the regex and phase list the CLI validates against.

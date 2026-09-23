@@ -91,8 +91,7 @@ def test_subcommand_help_names_the_command(command: str) -> None:
     assert result.returncode == 0
     assert result.stderr == ""
     usage = result.stdout.splitlines()[0]
-    assert usage.startswith("usage: ")
-    assert f" {command} [" in usage
+    assert usage.lower().startswith(f"usage: {command} ")
 
 
 def _read_rows(artifact: Path) -> list[str]:

@@ -63,8 +63,9 @@ returns `action: "halt"` while `disposition` stays `"retry"`. Branch on
 """
 from __future__ import annotations
 
-import argparse
-from typing import Literal, Protocol, TextIO, TypedDict
+import sys
+from typing import Annotated, Literal, TypedDict
+from cyclopts import App, Parameter
 
 # cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
@@ -110,13 +111,6 @@ TABLES: dict[str, list[str]] = {
     "not-applicable-curd": NOT_APPLICABLE_CURD,
     "not-applicable-postmerge": NOT_APPLICABLE_POSTMERGE,
 }
-
-
-def _non_negative_int(raw: str) -> int:
-    value = int(raw)
-    if value < 0:
-        raise argparse.ArgumentTypeError("retry count cannot be negative")
-    return value
 
 
 def decide(
@@ -264,69 +258,28 @@ def decide(
     }
 
 
-class _Args(Protocol):
-    table: str
-    phase_index: int
-    status: str
-    next: str | None
-    retry_count: int
-    stdout: TextIO
-
-
-def _cmd_decide(args: _Args) -> None:
-    table = TABLES[args.table]
+def _cmd_decide(*, table: str = "linear", phase_index: Annotated[int, Parameter(name="--phase-index")], status: str, next: str | None = None, retry_count: Annotated[int, Parameter(name="--retry-count")] = 0) -> None:
+    if table not in TABLES:
+        raise cli.CliError(f"invalid table {table!r}; expected one of {sorted(TABLES)}")
+    table_value = TABLES[table]
     verdict = decide(
-        args.phase_index,
-        args.status,
-        args.next,
-        table=table,
-        allow_early_stop=table in (LINEAR_TABLE, NOT_APPLICABLE_LINEAR),
-        retry_count=args.retry_count,
+        phase_index,
+        status,
+        next,
+        table=table_value,
+        allow_early_stop=table_value in (LINEAR_TABLE, NOT_APPLICABLE_LINEAR),
+        retry_count=retry_count,
     )
-    cli.emit(verdict, json_mode=True, stdout=args.stdout)
+    cli.emit(verdict, json_mode=True)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Decide /ultracook's next action from a phase handoff."
-    _ = parser.add_argument(
-        "--phase-index",
-        type=int,
-        required=True,
-        dest="phase_index",
-        help="0-indexed phase that just returned.",
-    )
-    _ = parser.add_argument(
-        "--status",
-        required=True,
-        help="`status` field from the handoff slug; see the handback vocabulary.",
-    )
-    _ = parser.add_argument(
-        "--next",
-        default=None,
-        help="`next` field from the handoff slug (e.g. press, cure, done).",
-    )
-    _ = parser.add_argument(
-        "--table",
-        choices=sorted(TABLES),
-        default="linear",
-        help=(
-            "Which receipt-specific table to walk: linear or a closed "
-            "not-applicable path. Fan remediation uses its progress-aware state."
-        ),
-    )
-    _ = parser.add_argument(
-        "--retry-count",
-        type=_non_negative_int,
-        default=0,
-        dest="retry_count",
-        help="needs-context retries already consumed by this phase (default 0).",
-    )
-    parser.set_defaults(func=_cmd_decide)
+app = App(name="phase-decision")
+_ = app.default(_cmd_decide)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

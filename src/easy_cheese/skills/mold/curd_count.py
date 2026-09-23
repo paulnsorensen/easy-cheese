@@ -21,14 +21,20 @@ confirms file-disjointness before parallel fan-out runs.
 """
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes its application result as Any at the invocation boundary.
+# pyright: reportAny=false, reportUnusedCallResult=false
+
 import json
+
+from cyclopts import App, Parameter
+from cyclopts.exceptions import CycloptsError
 import re
 import sys
 from pathlib import Path
-from typing import cast
+from typing import Annotated
 
 from easy_cheese.shared.fanout.mode import PARALLEL_THRESHOLD
+from easy_cheese.shared import cli
 from easy_cheese.shared.taste_test import (
     ApplicabilityError,
     TasteTestError,
@@ -171,23 +177,12 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
     }
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description=(__doc__ or "").splitlines()[0],
-    )
-    _ = parser.add_argument(
-        "spec_path",
-        type=Path,
-        help="Path to the spec markdown file (typically .cheese/specs/<slug>.md).",
-    )
-    _ = parser.add_argument(
-        "--blast-radius",
-        choices=["low", "medium", "high"],
-        help="Verdict from mold's shape-check; drives the recommendation when curds < threshold.",
-    )
-    args = parser.parse_args(argv)
-    spec_path = cast(Path, args.spec_path)
-    blast_radius = cast("str | None", args.blast_radius)
+def _command(
+    spec_path: Path,
+    blast_radius: Annotated[
+        str | None, Parameter(name="--blast-radius", choices=("low", "medium", "high"))
+    ] = None,
+) -> int:
 
     if not spec_path.exists():
         print(f"error: spec not found: {spec_path}", file=sys.stderr)
@@ -206,5 +201,26 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+app = App(name="curd-count")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    try:
+        canonical = cli.repair_argv(app, tokens)
+        result = app(
+            canonical,
+            print_error=False,
+            exit_on_error=False,
+            help_on_error=False,
+            result_action="return_value",
+        )
+    except CycloptsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    return 0 if result is None else int(result)
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main(sys.argv[1:]))

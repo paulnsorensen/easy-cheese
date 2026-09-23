@@ -19,7 +19,10 @@ an intentionally readable form; JSON is the default.
 
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes its application result as Any at the invocation boundary.
+# pyright: reportAny=false, reportUnusedCallResult=false
+
+from cyclopts import App
 import hashlib
 import json
 import os
@@ -30,6 +33,7 @@ from pathlib import Path, PurePosixPath
 from typing import Literal, NoReturn, cast
 
 from easy_cheese.shared.manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
+from easy_cheese.shared import cli
 from easy_cheese_schemas.validate import require_exact_keys
 
 RULE_FILENAMES: tuple[str, ...] = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md")
@@ -627,30 +631,17 @@ def _request(payload: Mapping[str, object]) -> dict[str, object]:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def _command(request: str | None = None, *, text: bool = False) -> int:
     """Run the JSON-in/JSON-out helper, or its readable ``--text`` mode."""
-    parser = argparse.ArgumentParser(
-        description="Collect deterministic candidate review instruction sources."
-    )
-    _ = parser.add_argument(
-        "--text", action="store_true", help="render readable source text"
-    )
-    _ = parser.add_argument(
-        "request", nargs="?", help="JSON request path; otherwise read stdin"
-    )
-    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
-    request = cast(str | None, args.request)
     request_args = [request] if request is not None else []
     try:
-        payload = read_mapping_arg_or_stdin(
-            request_args, "usage: review-instructions [--text] [<request.json>]"
-        )
+        payload = read_mapping_arg_or_stdin(request_args, "usage: review-instructions [--text] [<request.json>]")
     except (ManifestLoadError, OSError, UnicodeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     try:
         result = _request(payload)
-        if cast(bool, args.text):
+        if text:
             _ = sys.stdout.write(render_text(result))
         else:
             json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
@@ -659,6 +650,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     return 0
+
+
+app = App(name="review-instructions")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":

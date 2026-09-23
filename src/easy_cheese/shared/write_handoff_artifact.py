@@ -24,15 +24,17 @@ phase where the chain should go, but does not influence where this artifact
 lands.
 """
 
-import argparse
 import contextlib
+# pyright: reportAny=false, reportUnusedCallResult=false
 import os
 import sys
 import tempfile
 import traceback
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+from typing import Annotated
+
+from cyclopts import App, Parameter
 
 from easy_cheese.shared import cli, handoff, paths
 
@@ -41,7 +43,6 @@ from easy_cheese_schemas.phase_contracts import (
     StatusError,
     TransitionError,
     parse_status_field,
-    status_vocabulary,
     validate_transition,
 )
 
@@ -342,120 +343,33 @@ def write_artifact(
     return target
 
 
-class _Args(Protocol):
-    slug: str
-    status: str
-    next: str
-    artifact: str
-    orientation: str
-    taste_test: str | None
-    durable_flags: str | None
-    baseline: str | None
-    body_file: str | None
-    grounded: list[str]
-    phase: str
-    payload_schema: str | None
-    root: str | None
-    corpus_root: str | None
-    stdout: TextIO
-
-
-def _cmd_write(args: argparse.Namespace) -> None:
-    a = cast(_Args, cast(object, args))
-    body: str | None = None
-    if a.body_file is not None:
-        body_path = Path(a.body_file)
+def _cmd_write(*, slug: str, status: str, next_skill: Annotated[str, Parameter(name="--next")], artifact: str, orientation: str, phase: str, body_file: str | None = None, taste_test: str | None = None, durable_flags: str | None = None, baseline: str | None = None, grounded: list[str] | None = None, payload_schema: str | None = None, root: str | None = None, corpus_root: str | None = None) -> None:
+    body = None
+    if body_file is not None:
+        body_path = Path(body_file)
         if not body_path.is_file():
             raise cli.CliError(f"--body-file not found: {body_path}")
         body = body_path.read_text(encoding="utf-8")
-
-    root = paths.resolve_repo_root(a.root)
-    target = write_artifact(
-        slug=a.slug,
-        status=a.status,
-        next_skill=a.next,
-        artifact=a.artifact,
-        orientation=a.orientation,
-        body=body,
-        root=root,
-        phase=a.phase,
-        payload_schema_uri=a.payload_schema,
-        taste_test=a.taste_test,
-        durable_flags=a.durable_flags,
-        baseline=a.baseline,
-        grounded=a.grounded,
-        corpus_root=a.corpus_root,
-    )
-    cli.emit(str(target), stdout=a.stdout)
+    target = write_artifact(slug=slug, status=status, next_skill=next_skill, artifact=artifact, orientation=orientation, body=body, root=paths.resolve_repo_root(root), phase=phase, payload_schema_uri=payload_schema, taste_test=taste_test, durable_flags=durable_flags, baseline=baseline, grounded=grounded or [], corpus_root=corpus_root)
+    print(target)
 
 
-def setup_parser(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--slug", required=True, help="artifact slug (filename stem)")
-    _ = parser.add_argument(
-        "--status", required=True, help=f"handback status: {status_vocabulary()}"
-    )
-    _ = parser.add_argument("--next", required=True, help="next skill name or 'done'")
-    _ = parser.add_argument(
-        "--artifact", required=True, help="path to prior artifact (may be empty)"
-    )
-    _ = parser.add_argument("--orientation", required=True, help="one-line orientation")
-    _ = parser.add_argument(
-        "--taste-test",
-        default=None,
-        help="optional taste_test: keyed preamble line (omitted when absent)",
-    )
-    _ = parser.add_argument(
-        "--durable-flags",
-        default=None,
-        help="optional durable_flags: keyed preamble line (omitted when absent)",
-    )
-    _ = parser.add_argument(
-        "--baseline",
-        default=None,
-        help="optional baseline: keyed preamble line (omitted when absent)",
-    )
-    _ = parser.add_argument(
-        "--body-file", default=None, help="optional path to body content"
-    )
-    _ = parser.add_argument(
-        "--grounded",
-        action="append",
-        default=[],
-        metavar="PATH[#START-END]",
-        help=(
-            "grounded file path, optionally pinned to a positive line range; "
-            "repeatable; chain phases only"
-        ),
-    )
-    _ = parser.add_argument(
-        "--phase",
-        required=True,
-        help="name of THIS phase's own directory under .cheese/ (path authority)",
-    )
-    _ = parser.add_argument(
-        "--payload-schema",
-        default=None,
-        help="payload schema URI for transition validation",
-    )
-    _ = parser.add_argument(
-        "--root",
-        default=None,
-        help=(
-            "repo root (default: the git toplevel, else cwd); "
-            ".cheese/<phase>/<slug>.md is written under this"
-        ),
-    )
-    _ = parser.add_argument(
-        "--corpus-root",
-        default=None,
-        help="wheypoint corpus root override (default: the per-project XDG corpus)",
-    )
-    parser.set_defaults(func=_cmd_write)
+app = App(name="write-handoff-artifact")
+app.default(_cmd_write)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(setup_parser, argv=argv)
+    try:
+        canonical = cli.repair_argv(app, argv)
+        result = app(canonical, print_error=False, exit_on_error=False, help_on_error=False, result_action="return_value")
+    except cli.CliError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return exc.exit_code
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    return 0 if result is None else int(result)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(setup_parser))
+    raise SystemExit(main(sys.argv[1:]))

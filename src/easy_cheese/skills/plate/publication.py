@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-import argparse
 import copy
+
+from cyclopts import App
 import json
 import re
 import sys
 from pathlib import Path
 from typing import cast
+
+from easy_cheese.shared import cli
 from urllib.parse import urlparse
 
 from easy_cheese.shared.publication import BoundedReadOverflow, read_bounded
@@ -226,11 +229,7 @@ def validate_publication(data: object) -> dict[str, object]:
     return {"valid": True, **normalized}
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    _ = parser.add_argument("state", type=Path)
-    args = parser.parse_args(argv)
-    state_path = cast(Path, args.state)
+def _command(state_path: Path) -> int:
     try:
         data = cast(object, json.loads(_read_state_text(state_path)))
         result = validate_publication(data)
@@ -243,6 +242,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
+
+
+app = App(name="validate-publication")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":

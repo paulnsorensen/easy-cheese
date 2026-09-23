@@ -11,12 +11,17 @@ a second serialization would be a knob nothing asked for.
 
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes its application result as Any at the invocation boundary.
+# pyright: reportAny=false, reportUnusedCallResult=false
+
 import json
 import sys
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import TypedDict
 
+from cyclopts import App
+
+from easy_cheese.shared import cli
 from easy_cheese.shared.paths import project_corpus_root, validate_slug
 
 RESEARCH_RAW_DIRNAME = "raw"
@@ -78,20 +83,22 @@ def research_layout(slug: str, *, root: Path | str | None = None) -> ResearchLay
     }
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "slug",
-        help=f"Kebab-case research slug ({MIN_SLUG_WORDS}-{MAX_SLUG_WORDS} words).",
-    )
-    args = parser.parse_args(argv)
+def _command(slug: str) -> int:
     try:
-        layout = research_layout(cast(str, args.slug))
+        layout = research_layout(slug)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(layout, indent=2))
     return 0
+
+
+app = App(name="research-layout")
+_ = app.default(_command)
+
+
+def main(argv: list[str]) -> int:
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":

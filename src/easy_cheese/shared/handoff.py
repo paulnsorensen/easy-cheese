@@ -20,11 +20,15 @@ The block sits at the top of every findings report so downstream skills
 
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes a dynamically typed invocation surface.
+# pyright: reportAny=false, reportUnusedCallResult=false, reportUnusedParameter=false
+
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Annotated
+
+from cyclopts import App, Parameter
 
 from easy_cheese.shared import cli
 
@@ -34,7 +38,6 @@ from easy_cheese_schemas.phase_contracts import (
     parse_status_field,
     render_status_field,
     status_disposition,
-    status_vocabulary,
 )
 
 # Flag propagation rules — see skills/cheese/references/handoff-gate.md § Flag propagation.
@@ -251,32 +254,40 @@ def propagate_flags(source_flags: list[str], *, in_auto_chain: bool) -> list[str
 # ----- CLI: render / parse / dispatch --------------------------------------
 
 
-def _cmd_render(args: argparse.Namespace) -> None:
+def _cmd_render(
+    *,
+    status: Annotated[str, Parameter(name="--status")],
+    next_skill: Annotated[str, Parameter(name="--next")],
+    artifact: Annotated[str, Parameter(name="--artifact")] = "",
+    orientation: Annotated[str, Parameter(name="--orientation")] = "",
+    taste_test: Annotated[str | None, Parameter(name="--taste-test")] = None,
+    durable_flags: Annotated[str | None, Parameter(name="--durable-flags")] = None,
+    mode: Annotated[str | None, Parameter(name="--mode")] = None,
+    baseline: Annotated[str | None, Parameter(name="--baseline")] = None,
+) -> None:
     try:
-        status, reason = parse_status_field(cast(str, args.status))
+        status, reason = parse_status_field(status)
     except StatusError as exc:
         raise cli.contract_error(exc, context="--status") from exc
-    next_skill = cast(str, args.next_skill)
-    artifact = cast(str, args.artifact)
     slug = HandoffSlug(
         status=status,
         reason=reason,
         next_skill=next_skill.lstrip("/"),
         artifact=artifact or None,
-        orientation=cast(str, args.orientation),
-        taste_test=cast("str | None", args.taste_test),
-        durable_flags=cast("str | None", args.durable_flags),
-        mode=cast("str | None", args.mode),
-        baseline=cast("str | None", args.baseline),
+        orientation=orientation,
+        taste_test=taste_test,
+        durable_flags=durable_flags,
+        mode=mode,
+        baseline=baseline,
     )
     try:
-        print(render_handoff_slug(slug), file=cast("TextIO", args.stdout))
+        print(render_handoff_slug(slug))
     except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
 
 
-def _cmd_parse(args: argparse.Namespace) -> None:
-    file_arg = cast(str, args.file)
+def _cmd_parse(*, file: Annotated[str, Parameter(name="--file")], json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
+    file_arg = file
     path = Path(file_arg)
     if not path.is_file():
         raise cli.CliError(f"file not found: {file_arg}")
@@ -290,50 +301,42 @@ def _cmd_parse(args: argparse.Namespace) -> None:
         raise cli.contract_error(exc, context=f"--file {file_arg}") from exc
     cli.emit(
         {**slug_payload(slug), "next_skill": slug.next_skill, "disposition": disposition},
-        stdout=cast("TextIO", args.stdout),
+        stdout=None,
     )
 
 
-def _cmd_dispatch(args: argparse.Namespace) -> None:
+def _cmd_dispatch(command: str, *, json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
     try:
-        skill, dispatch_args = parse_skill_dispatch(cast(str, args.command))
+        skill, dispatch_args = parse_skill_dispatch(command)
     except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit({"skill": skill, "args": dispatch_args}, stdout=cast("TextIO", args.stdout))
+    cli.emit({"skill": skill, "args": dispatch_args})
 
 
 LEAVES = ("render", "parse", "dispatch")
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Render, parse, and dispatch handoff preambles."
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    render = sub.add_parser("render", help="render a 4-line handoff preamble")
-    _ = render.add_argument(
-        "--status", required=True, help=f"handback status: {status_vocabulary()}"
-    )
-    _ = render.add_argument("--next", dest="next_skill", required=True, help="next skill name (or 'done')")
-    _ = render.add_argument("--artifact", default="", help="path to prior report; empty if none")
-    _ = render.add_argument("--orientation", required=True, help="one-line orientation")
-    _ = render.add_argument("--taste-test", default=None, help="optional taste_test: keyed line")
-    _ = render.add_argument("--durable-flags", default=None, help="optional durable_flags: keyed line")
-    _ = render.add_argument("--mode", default=None, help="optional mode: keyed line (e.g. parallel)")
-    _ = render.add_argument("--baseline", default=None, help="optional baseline: keyed line")
-    render.set_defaults(func=_cmd_render)
-
-    parse = sub.add_parser("parse", help="parse a handoff preamble from a file")
-    _ = parse.add_argument("--file", required=True, help="path to file containing the preamble")
-    parse.set_defaults(func=_cmd_parse)
-
-    dispatch = sub.add_parser("dispatch", help="split a '/skill arg --flag' command")
-    _ = dispatch.add_argument("command", help="full dispatch string, e.g. '/age slug --hard'")
-    dispatch.set_defaults(func=_cmd_dispatch)
+app = App(name="handoff")
+app.command(_cmd_render, name="render")
+app.command(_cmd_parse, name="parse")
+app.command(_cmd_dispatch, name="dispatch")
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    if not argv:
+        return 2
+    try:
+        canonical = cli.repair_argv(app, argv)
+        result = app(canonical, print_error=False, exit_on_error=False, help_on_error=False, result_action="return_value")
+    except cli.CliError as exc:
+        print(f"ERROR: {exc}", file=__import__("sys").stderr)
+        return exc.exit_code
+    except Exception as exc:
+        message = str(exc).replace("requires an argument", "required argument")
+        print(f"ERROR: {message}", file=__import__("sys").stderr)
+        return 2
+    return 0 if result is None else int(result)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(__import__("sys").argv[1:]))
