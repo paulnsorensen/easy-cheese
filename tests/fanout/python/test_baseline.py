@@ -7,7 +7,6 @@ bound-fix or halt on it. These tests import the shared module directly.
 """
 from __future__ import annotations
 
-import argparse
 import io
 import json
 import sys
@@ -23,7 +22,6 @@ sys.path.insert(0, str(REPO_ROOT / "src" / "fanout"))
 from easy_cheese.shared import cli  # noqa: E402
 from easy_cheese.shared.fanout import baseline  # noqa: E402
 from easy_cheese.shared.fanout.baseline import (  # noqa: E402
-    _Args,  # pyright: ignore[reportPrivateUsage]
     _cmd_classify,  # pyright: ignore[reportPrivateUsage]
 )
 
@@ -31,9 +29,6 @@ from easy_cheese.shared.fanout.baseline import (  # noqa: E402
 def _record(suite: str, test_id: str, signature: str) -> baseline.FailureRecord:
     return {"suite": suite, "test_id": test_id, "signature": signature}
 
-
-def _args() -> _Args:
-    return cast(_Args, cast(object, argparse.Namespace(stdout=sys.stdout)))
 
 
 class TestUnchangedBaselineContinues:
@@ -224,7 +219,7 @@ class TestCmdClassify:
             "current": [_record("unit", "test_a", "AssertionError: boom")],
         }
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
-        _cmd_classify(_args())
+        _cmd_classify()
         emitted = cast(object, json.loads(capsys.readouterr().out))
         assert emitted == baseline.classify(payload["baseline"], payload["current"])
 
@@ -232,7 +227,7 @@ class TestCmdClassify:
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         monkeypatch.setattr(sys, "stdin", io.StringIO("{}"))
-        _cmd_classify(_args())
+        _cmd_classify()
         emitted = cast(object, json.loads(capsys.readouterr().out))
         assert emitted == {"identical": [], "new": [], "changed": [], "resolved": []}
 
@@ -241,14 +236,14 @@ class TestCmdClassify:
         # other seam honours, not a raw traceback.
         monkeypatch.setattr(sys, "stdin", io.StringIO("not json"))
         with pytest.raises(cli.CliError, match="expected a JSON object"):
-            _cmd_classify(_args())
+            _cmd_classify()
 
     def test_non_object_stdin_raises_cli_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A top-level list/scalar parses as valid JSON but has no .get --
         # must still surface as CliError, not an AttributeError traceback.
         monkeypatch.setattr(sys, "stdin", io.StringIO("[1, 2, 3]"))
         with pytest.raises(cli.CliError, match="expected a JSON object"):
-            _cmd_classify(_args())
+            _cmd_classify()
 
     def test_wrong_typed_baseline_raises_cli_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A well-formed JSON object whose "baseline" value is the wrong type
@@ -257,14 +252,14 @@ class TestCmdClassify:
             sys, "stdin", io.StringIO(json.dumps({"baseline": "notalist", "current": []}))
         )
         with pytest.raises(cli.CliError, match="baseline must be a list"):
-            _cmd_classify(_args())
+            _cmd_classify()
 
     def test_wrong_typed_current_raises_cli_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             sys, "stdin", io.StringIO(json.dumps({"baseline": [], "current": "notalist"}))
         )
         with pytest.raises(cli.CliError, match="current must be a list"):
-            _cmd_classify(_args())
+            _cmd_classify()
 
     def test_malformed_record_missing_keys_raises_cli_error(
         self, monkeypatch: pytest.MonkeyPatch
@@ -275,4 +270,4 @@ class TestCmdClassify:
             sys, "stdin", io.StringIO(json.dumps({"baseline": [{"foo": 1}], "current": []}))
         )
         with pytest.raises(cli.CliError, match=r"baseline\[0\] missing required key"):
-            _cmd_classify(_args())
+            _cmd_classify()

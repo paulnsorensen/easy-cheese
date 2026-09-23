@@ -185,6 +185,6 @@ class TestEmptySlugRejected:
 
 class TestModuleApi:
     def test_module_loads(self, slugify_mod: ModuleType) -> None:
-        # Smoke test: module exposes _from_task + _setup, and importing did not blow up.
+        # Smoke test: module exposes the command and Cyclopts app.
         assert hasattr(slugify_mod, "_from_task")
-        assert hasattr(slugify_mod, "_setup")
+        assert hasattr(slugify_mod, "app")

@@ -7,10 +7,12 @@ root-resolution math live there as the single source of truth. See
 
 from __future__ import annotations
 
-import argparse
 import sys
+from typing import Annotated
+
+from cyclopts import App, Parameter
 from pathlib import Path
-from typing import cast
+from easy_cheese.shared import cli
 
 from easy_cheese.shared import paths
 
@@ -28,20 +30,39 @@ def artifact_path(phase: str, slug: str) -> Path:
     return paths.artifact_path(phase, slug)
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser()
-    _ = parser.add_argument("phase")
-    _ = parser.add_argument("slug")
-    args = parser.parse_args(argv)
-    phase = cast(str, args.phase)
-    slug = cast(str, args.slug)
+def _command(
+    phase: str | None = None,
+    slug: str | None = None,
+    *,
+    named_phase: Annotated[str | None, Parameter(name="--phase")] = None,
+    named_slug: Annotated[str | None, Parameter(name="--slug")] = None,
+) -> int:
+    if named_phase is not None and phase is not None:
+        print("error: phase supplied more than once", file=sys.stderr)
+        return 2
+    if named_slug is not None and slug is not None:
+        print("error: slug supplied more than once", file=sys.stderr)
+        return 2
+    resolved_phase = named_phase if named_phase is not None else phase
+    resolved_slug = named_slug if named_slug is not None else slug
+    if resolved_phase is None or resolved_slug is None:
+        print("error: phase and slug are required", file=sys.stderr)
+        return 2
     try:
-        resolved = artifact_path(phase, slug)
+        resolved = artifact_path(resolved_phase, resolved_slug)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(resolved)
     return 0
+
+
+app = App(name="artifact-path")
+_ = app.default(_command)
+
+
+def main(argv: list[str]) -> int:
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":

@@ -1,36 +1,43 @@
-"""CLI helper for shared/scripts: argparse + --full/--json injection + emit.
+"""Shared Cyclopts dispatch and output helpers."""
 
-Public API:
-    CliError       -- one-line message with `exit_code` (default 2); cli.run
-                      reports 'ERROR: <msg>' and returns that code.
-    contract_error -- convert a contract violation to exit 3.
-    repair_argv    -- split a quoted token that merges arguments; cli.run calls it.
-    cli.run        -- dispatch and return integer statuses for normal,
-                      missing-handler, and CliError paths; argparse
-                      help/errors retain SystemExit.
-    cli.emit       -- print scalar/dict/list; truncation footer fires when limit is set.
-"""
 from __future__ import annotations
 
-import argparse
 import json
 import sys
-from collections.abc import Callable, Iterable, Sequence
-from typing import TextIO, cast
+from contextlib import nullcontext, redirect_stdout
+from collections.abc import Callable, Sequence
+from inspect import BoundArguments
+from typing import Protocol, TextIO
+from typing import cast
 
+from cyclopts import CycloptsError
+from easy_cheese.shared.argv_repair import repair_cyclopts_argv
 
+class _CycloptsApp(Protocol):
+    def parse_args(
+        self,
+        tokens: Sequence[str],
+        *,
+        print_error: bool,
+        exit_on_error: bool,
+        help_on_error: bool,
+    ) -> tuple[Callable[..., object], BoundArguments, dict[str, object]]:
+        ...
+
+class _DefaultCommandApp(Protocol):
+    default_command: object | None
+def _has_default_command(app: object) -> bool:
+    return cast(_DefaultCommandApp, app).default_command is not None
 class CliError(Exception):
-    """One-line error; cli.run reports it on stderr and returns `exit_code`."""
+    """One-line error; cli.run reports it on stderr and returns exit_code."""
 
     def __init__(self, message: str, *, exit_code: int = 2) -> None:
         super().__init__(message)
         self.exit_code: int = exit_code
 
-
 def contract_error(exc: Exception, *, context: str) -> CliError:
     """Wrap a contract-violation exception as a CliError that exits 3."""
     return CliError(f"{context}: {exc}", exit_code=3)
-
 
 def reject_path_segment(field: str, value: str) -> None:
     """Reject path-traversal segments and Windows drive/path designators."""
@@ -38,73 +45,60 @@ def reject_path_segment(field: str, value: str) -> None:
         raise CliError(f"{field} rejects path traversal: {value!r}")
 
 
-def _iter_parsers(parser: argparse.ArgumentParser) -> Iterable[argparse.ArgumentParser]:
-    yield parser
-    for action in parser._actions:
-        if isinstance(action, argparse._SubParsersAction):  # pyright: ignore[reportPrivateUsage]
-            for sub in cast("dict[str, argparse.ArgumentParser]", action.choices).values():
-                yield from _iter_parsers(sub)
-
-
-def _inject_global_flags(parser: argparse.ArgumentParser) -> None:
-    # Subparser copies default to SUPPRESS so a root-set flag value survives.
-    for index, p in enumerate(_iter_parsers(parser)):
-        default = False if index == 0 else argparse.SUPPRESS
-        opts = {tuple(a.option_strings) for a in p._actions}
-        if ("--full",) not in opts:
-            _ = p.add_argument("--full", action="store_true", default=default, help="emit full output, overriding default limit")
-        if ("--json",) not in opts:
-            _ = p.add_argument("--json", dest="json_mode", action="store_true", default=default, help="emit JSON instead of plain text")
-
-
-def _build(
-    setup: Callable[[argparse.ArgumentParser], None],
-    parser_class: type[argparse.ArgumentParser] = argparse.ArgumentParser,
-) -> argparse.ArgumentParser:
-    parser = parser_class()
-    setup(parser)
-    _inject_global_flags(parser)
-    return parser
-
-
-def repair_argv(setup: Callable[[argparse.ArgumentParser], None], argv: Sequence[str]) -> list[str]:
-    """Return `argv` after quote repair against the parser that `setup` builds."""
-    arguments = list(argv)
-    if any(character.isspace() for token in arguments for character in token):
-        from easy_cheese.shared.argv_repair import QuietParser, repair_split_quotes
-        arguments = repair_split_quotes(arguments, _iter_parsers(_build(setup)), lambda: _build(setup, QuietParser))
-    return arguments
+def repair_argv(app: _CycloptsApp, argv: Sequence[str]) -> list[str]:
+    """Return one verified canonical argv for a Cyclopts application."""
+    return repair_cyclopts_argv(app, argv)
 
 
 def run(
-    setup: Callable[[argparse.ArgumentParser], None], *,
+    app: _CycloptsApp,
+    *,
     argv: Sequence[str] | None = None,
     stdout: TextIO | None = None,
 ) -> int:
-    """Dispatch and return a status; argparse help/errors retain SystemExit."""
-    parser = _build(setup)
-    args = parser.parse_args(repair_argv(setup, sys.argv[1:] if argv is None else argv))
-    args.stdout = stdout if stdout is not None else sys.stdout
-    func: Callable[[argparse.Namespace], int | None] | None = getattr(args, "func", None)
-    if func is None:
-        parser.print_help(sys.stderr)
+    """Parse and invoke a Cyclopts application exactly once."""
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    if not tokens and not _has_default_command(app):
+        print("ERROR: command required", file=sys.stderr)
         return 2
+    canonical = repair_argv(app, tokens)
+    context = redirect_stdout(stdout) if stdout is not None else nullcontext()
     try:
-        status = func(args)
+        with context:
+            func, bound, _ = app.parse_args(
+                canonical,
+                print_error=False,
+                exit_on_error=False,
+                help_on_error=False,
+            )
+            status = func(*bound.args, **bound.kwargs)
     except CliError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return exc.exit_code
-    return 0 if status is None else status
+    except CycloptsError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    if status is None:
+        return 0
+    if not isinstance(status, int):
+        raise TypeError(f"command returned non-integer status: {status!r}")
+    return status
 
-
-def emit(value: object, *, limit: int | None = None, full: bool = False, json_mode: bool = False, stdout: TextIO | None = None) -> None:
-    """Print scalar/dict/list per spec emit rules; footer only fires when limit is set."""
+def emit(
+    value: object,
+    *,
+    limit: int | None = None,
+    full: bool = False,
+    json_mode: bool = False,
+    stdout: TextIO | None = None,
+) -> None:
+    """Print scalar, mapping, or sequence output using the shared format."""
     stream = stdout if stdout is not None else sys.stdout
     if json_mode or isinstance(value, dict):
         print(json.dumps(value, indent=2, default=str), file=stream)
         return
     if isinstance(value, list):
-        _emit_list(cast("list[object]", value), limit=limit, full=full, stdout=stream)
+        _emit_list(cast(list[object], value), limit=limit, full=full, stdout=stream)
         return
     if isinstance(value, str) and limit is not None and "\n" in value:
         _emit_list(value.splitlines(), limit=limit, full=full, stdout=stream)
@@ -112,7 +106,13 @@ def emit(value: object, *, limit: int | None = None, full: bool = False, json_mo
     print(value, file=stream)
 
 
-def _emit_list(items: Sequence[object], *, limit: int | None, full: bool, stdout: TextIO) -> None:
+def _emit_list(
+    items: Sequence[object],
+    *,
+    limit: int | None,
+    full: bool,
+    stdout: TextIO,
+) -> None:
     total = len(items)
     if limit is None:
         for item in items:

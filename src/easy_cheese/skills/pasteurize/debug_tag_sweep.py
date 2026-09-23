@@ -19,16 +19,17 @@ never enter the scan.
 """
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import subprocess
 import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import TextIO, TypedDict, cast
+from typing import Annotated, Protocol, TextIO, TypedDict, cast
 
-from easy_cheese.shared import cli  # noqa: E402
+from cyclopts import App, Parameter
+
+from easy_cheese.shared import cli
 
 DEFAULT_TAGS = (
     "[DEBUG-",
@@ -72,6 +73,17 @@ _SESSION_TAG_RE = re.compile(r"\A[A-Za-z0-9_-]{1,32}\Z")
 class _SweepResult(TypedDict):
     files: list[str]
     total: int
+
+
+class _Args(Protocol):
+    root: Path
+    session_tag: str | None
+    tags: str | None
+    changed_only: bool
+    limit: int
+    full: bool
+    json_mode: bool
+    stdout: TextIO
 
 
 def session_tags(sessions: Iterable[str]) -> tuple[str, ...]:
@@ -170,9 +182,9 @@ def sweep(
     return {"files": hits, "total": total}
 
 
-def _resolve_tags(args: argparse.Namespace) -> tuple[str, ...]:
-    session_arg = cast("str | None", args.session_tag)
-    tags_arg = cast("str | None", args.tags)
+def _resolve_tags(args: _Args) -> tuple[str, ...]:
+    session_arg = args.session_tag
+    tags_arg = args.tags
     if session_arg and tags_arg:
         raise cli.CliError("pass --session-tag or --tags, not both")
     if session_arg:
@@ -186,8 +198,8 @@ def _resolve_tags(args: argparse.Namespace) -> tuple[str, ...]:
     return tags
 
 
-def _run(args: argparse.Namespace) -> int:
-    root_arg = cast(Path, args.root)
+def _run(args: _Args) -> int:
+    root_arg = args.root
     root = root_arg.resolve()
     if not root.exists():
         raise cli.CliError(f"root does not exist: {root_arg}")
@@ -197,45 +209,72 @@ def _run(args: argparse.Namespace) -> int:
     tags = _resolve_tags(args)
 
     files: list[Path] | None = None
-    if cast(bool, args.changed_only):
+    if args.changed_only:
         try:
             files = changed_files(root)
         except (OSError, RuntimeError) as exc:
             raise cli.CliError(f"--changed-only needs a Git worktree: {exc}") from exc
 
     result = sweep(root, tags, files=files)
-    stdout = cast(TextIO, args.stdout)
+    stdout = args.stdout
 
-    if cast(bool, args.json_mode):
+    if args.json_mode:
         cli.emit(result, json_mode=True, stdout=stdout)
     else:
-        cli.emit(
-            result["files"] or ["(clean)"],
-            limit=cast(int, args.limit),
-            full=cast(bool, args.full),
-            stdout=stdout,
-        )
+        cli.emit(result["files"] or ["(clean)"], limit=args.limit, full=args.full, stdout=stdout)
         print(f"total: {result['total']}", file=stdout)
 
     return 1 if result["total"] else 0
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--root", type=Path, default=Path.cwd(),
-                        help="Directory to scan (default: cwd).")
-    _ = parser.add_argument("--session-tag", default=None,
-                        help="Comma-separated /pasteurize session tags (e.g. a4f2); matches the exact token [DEBUG-<tag>].")
-    _ = parser.add_argument("--tags", default=None,
-                        help="Comma-separated tag tokens to scan for (default: pasteurize set).")
-    _ = parser.add_argument("--changed-only", action="store_true",
-                        help="Scan only the files that this Git worktree changed.")
-    _ = parser.add_argument("--limit", type=int, default=50,
-                        help="Max files to list in plain output (default: 50).")
-    parser.set_defaults(func=_run)
+class _ArgsNamespace:
+    root: Path
+    session_tag: str | None
+    tags: str | None
+    changed_only: bool
+    limit: int
+    full: bool
+    json_mode: bool
+    stdout: TextIO
+
+    def __init__(self, *, root: Path, session_tag: str | None, tags: str | None, changed_only: bool, limit: int, full: bool, json_mode: bool, stdout: TextIO) -> None:
+        self.root = root
+        self.session_tag = session_tag
+        self.tags = tags
+        self.changed_only = changed_only
+        self.limit = limit
+        self.full = full
+        self.json_mode = json_mode
+        self.stdout = stdout
+
+
+def _command(
+    root: Path | None = None,
+    session_tag: str | None = None,
+    tags: str | None = None,
+    changed_only: bool = False,
+    limit: int = 50,
+    full: bool = False,
+    json_mode: Annotated[bool, Parameter(name="--json")] = False,
+) -> int:
+    return _run(_ArgsNamespace(root=root or Path.cwd(), session_tag=session_tag, tags=tags, changed_only=changed_only, limit=limit, full=full, json_mode=json_mode, stdout=sys.stdout))
+
+
+app = App(name="debug-tag-sweep")
+_ = app.default(_command)
 
 
 def main(argv: list[str] | None = None) -> int:
-    return cli.run(_setup, argv=argv)
+    try:
+        tokens = cli.repair_argv(app, argv or [])
+        result = cast(int | None, app(tokens, print_error=False, exit_on_error=False, help_on_error=False, result_action="return_value"))
+    except cli.CliError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return exc.exit_code
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return 0 if result is None else int(result)
 
 
 if __name__ == "__main__":

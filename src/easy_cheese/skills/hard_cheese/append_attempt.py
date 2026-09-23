@@ -23,15 +23,16 @@ itself is atomic via tmpfile + `os.replace`.
 """
 from __future__ import annotations
 
-import argparse
 import contextlib
+import sys
+
+from cyclopts import App
 import datetime as _dt
 import os
 import subprocess
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO, cast
 
 try:
     import fcntl  # POSIX advisory file locks
@@ -137,15 +138,9 @@ def _with_flock(lock_path: Path, fn: Callable[[], None]) -> None:
             os.close(fd)
 
 
-def _cmd_append(args: argparse.Namespace) -> None:
-    status = cast(str, args.status)
-    score = cast(str, args.score)
-    feedback = cast(str, args.feedback)
-    explanation = cast(str, args.explanation)
-    json_mode = cast(bool, args.json_mode)
-    stdout = cast("TextIO | None", args.stdout)
-
-    slug = _validate_slug(cast(str, args.slug))
+def _command(slug: str, status: str, score: str, feedback: str, explanation: str, json_mode: bool = False) -> int:
+    stdout = sys.stdout
+    slug = _validate_slug(slug)
     artifact_dir = _artifact_dir()
     target = artifact_dir / f"{slug}.md"
     lock = artifact_dir / f".{slug}.lock"
@@ -158,24 +153,16 @@ def _cmd_append(args: argparse.Namespace) -> None:
     except ValueError:
         artifact_str = str(target)
     cli.emit({"slug": slug, "artifact": artifact_str, "appended": True}, json_mode=json_mode, stdout=stdout)
+    return 0
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--slug", required=True, help="artifact slug (no slashes, no '..')")
-    _ = parser.add_argument("--status", required=True, help="PASS | FAIL | ERROR | LOGGED | FAILED")
-    _ = parser.add_argument("--score", required=True, help="SOLO level 1-5 (or '-' when status=LOGGED)")
-    _ = parser.add_argument("--feedback", required=True, help="one-line judge feedback")
-    _ = parser.add_argument("--explanation", required=True, help="user explanation verbatim")
-    parser.set_defaults(func=_cmd_append)
+app = App(name="append-attempt")
+_ = app.default(_command)
 
 
 def main(argv: list[str] | None = None) -> int:
-    def setup(parser: argparse.ArgumentParser) -> None:
-        parser.prog = "append-attempt"  # noqa: V101
-        _setup(parser)
-
-    return cli.run(setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

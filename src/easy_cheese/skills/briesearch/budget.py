@@ -39,12 +39,16 @@ is found at the given path.
 
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes its application result as Any at the invocation boundary.
+# pyright: reportAny=false, reportUnusedCallResult=false
+
 import json
+
+from cyclopts import App
+from easy_cheese.shared import cli
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 from easy_cheese.skills.briesearch.ledger import (
     CALL_KINDS,
@@ -216,15 +220,8 @@ def _find_manifest(target: Path) -> Path | None:
     return target if target.is_file() else None
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "path",
-        help=f"Research directory holding {MANIFEST_NAME}, or the manifest file.",
-    )
-    args = parser.parse_args(argv)
-
-    target = Path(cast(str, args.path))
+def _command(path: str) -> int:
+    target = Path(path)
     manifest = _find_manifest(target)
     if manifest is None:
         print(f"error: no {MANIFEST_NAME} found at {target}", file=sys.stderr)
@@ -249,5 +246,13 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+app = App(name="budget-check")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main(sys.argv[1:]))

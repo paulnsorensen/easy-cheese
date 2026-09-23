@@ -19,7 +19,12 @@ prose checklist in lockstep through one stable key.
 """
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes its application result as Any at the invocation boundary.
+# pyright: reportAny=false, reportUnusedCallResult=false
+
+from cyclopts import App, Parameter
+from cyclopts.exceptions import CycloptsError
+from easy_cheese.shared import cli
 import json
 import re
 import shutil
@@ -27,7 +32,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Annotated, cast
 
 RENDER_TARGETS = ("dot", "svg", "png", "mermaid")
 BINARY_TARGETS = {"svg", "png"}
@@ -238,35 +243,13 @@ def _load_state(path: Path) -> dict[str, object]:
     return cast(dict[str, object], obj)
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "--state",
-        type=Path,
-        help=(
-            "Optional mold state.json (reserved for per-session annotation; "
-            "the gate model itself is static)."
-        ),
-    )
-    _ = parser.add_argument(
-        "--render",
-        choices=RENDER_TARGETS,
-        default="dot",
-        help="Render target. svg/png need Graphviz `dot`; absent it degrades to mermaid.",
-    )
-    _ = parser.add_argument(
-        "--out",
-        type=Path,
-        help=(
-            "Write to this path instead of stdout (required when the effective "
-            "output is binary — svg/png with Graphviz present)."
-        ),
-    )
-    args = parser.parse_args(argv)
-    state = cast("Path | None", args.state)
-    render_target = cast(str, args.render)
-    out = cast("Path | None", args.out)
-
+def _command(
+    state: Path | None = None,
+    render_target: Annotated[
+        str, Parameter(name="--render", choices=RENDER_TARGETS)
+    ] = "dot",
+    out: Path | None = None,
+) -> int:
     if state is not None:
         try:
             _ = _load_state(state)  # validated for shape; model stays static
@@ -303,6 +286,27 @@ def main(argv: list[str]) -> int:
         return 2
     _ = sys.stdout.write(payload.decode("utf-8"))
     return 0
+
+
+app = App(name="gate-graph")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    try:
+        canonical = cli.repair_argv(app, tokens)
+        result = app(
+            canonical,
+            print_error=False,
+            exit_on_error=False,
+            help_on_error=False,
+            result_action="return_value",
+        )
+    except CycloptsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    return 0 if result is None else int(result)
 
 
 if __name__ == "__main__":

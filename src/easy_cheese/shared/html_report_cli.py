@@ -14,39 +14,36 @@ are rejected. Phase/slug-agnostic: path math and slug are the caller's concern,
 not this helper's.
 """
 from __future__ import annotations
+import sys
 
-import argparse
 import tempfile
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Annotated
+
+from cyclopts import App, Parameter
 
 from easy_cheese.shared import cli, html_report
 
 
-def _cmd_render(args: argparse.Namespace) -> None:
-    out_name = cast(str, args.out_name)
-    in_path = cast(str, args.in_path)
+def _command(*, in_path: Annotated[str, Parameter(name="--in")], title: str, out_name: Annotated[str, Parameter(name="--out-name")]) -> int:
     cli.reject_path_segment("--out-name", out_name)
     src = Path(in_path)
     if not src.is_file():
         raise cli.CliError(f"--in not found: {in_path}")
-    document = html_report.render(src.read_text(encoding="utf-8"), title=cast(str, args.title))
+    document = html_report.render(src.read_text(encoding="utf-8"), title=title)
     out_path = Path(tempfile.gettempdir()) / f"{out_name}.html"
     _ = out_path.write_text(document, encoding="utf-8")
-    cli.emit(str(out_path), stdout=cast("TextIO", args.stdout))
+    print(out_path)
+    return 0
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Render a Markdown report artifact into a self-contained HTML file."
-    _ = parser.add_argument("--in", dest="in_path", required=True, help="source markdown artifact")
-    _ = parser.add_argument("--title", required=True, help="document title")
-    _ = parser.add_argument("--out-name", dest="out_name", required=True, help="output filename stem")
-    parser.set_defaults(func=_cmd_render)
+app = App(name="render-html")
+_ = app.default(_command)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

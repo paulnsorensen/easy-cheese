@@ -8,10 +8,15 @@ the bundled .pyz alongside this module).
 """
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes a dynamically typed invocation surface.
+# pyright: reportAny=false, reportUnusedCallResult=false, reportUnusedFunction=false
+
 import math
+import sys
 import tomllib
-from typing import Protocol, TextIO, cast
+from typing import Annotated, Protocol, TextIO, cast
+
+from cyclopts import App, Parameter
 
 from easy_cheese.shared import cli, git_utils
 
@@ -111,37 +116,44 @@ class _Args(Protocol):
     stdout: TextIO
 
 
-def _cmd_score(args: _Args) -> None:
+def _score(repo: str, config: str | None, diff_args: list[str], stdout: TextIO) -> None:
     weights = None
     weights_source = "defaults"
-    if args.config:
-        weights = _load_weight_override(args.config)
+    if config:
+        weights = _load_weight_override(config)
         if weights is not None:
-            weights_source = args.config
-    rows = _numstat_rows(args.repo, args.diff_args)
+            weights_source = config
+    rows = _numstat_rows(repo, diff_args)
     result: ReviewScore = score(rows, weights=weights, weights_source=weights_source)
-    cli.emit(result, json_mode=True, stdout=args.stdout)
+    cli.emit(result, json_mode=True, stdout=stdout)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Score a git diff's review surface via review_surface.score()."
-    _ = parser.add_argument("--repo", default=".", help="path to the git repository")
-    _ = parser.add_argument(
-        "--config",
-        help="optional TOML file with a [review_surface] weights override",
-    )
-    _ = parser.add_argument(
-        "diff_args",
-        nargs="*",
-        default=["HEAD"],
-        help="git diff --numstat arguments (e.g. HEAD~1 HEAD, or HEAD~1..HEAD); defaults to HEAD",
-    )
-    parser.set_defaults(func=_cmd_score)
+def _cmd_score(args: _Args) -> None:
+    diff_args = args.diff_args
+    named_range = getattr(args, "range", None)
+    if named_range is not None:
+        if diff_args != ["HEAD"]:
+            raise cli.CliError("--range cannot be combined with positional diff arguments")
+        diff_args = [named_range]
+    _score(args.repo, args.config, diff_args, args.stdout)
+
+
+def _command(*, repo: str = ".", config: str | None = None, diff_args: list[str] | None = None, named_range: Annotated[str | None, Parameter(name="--range")] = None) -> None:
+    args = diff_args or ["HEAD"]
+    if named_range is not None:
+        if args != ["HEAD"]:
+            raise cli.CliError("--range cannot be combined with positional diff arguments")
+        args = [named_range]
+    _score(repo, config, args, sys.stdout)
+
+
+app = App(name="review-surface")
+app.default(_command)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

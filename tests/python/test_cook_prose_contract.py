@@ -5,7 +5,6 @@ Each test locks one blocker or high finding from `review-cook.md` or an
 """
 from __future__ import annotations
 
-import argparse
 import re
 from pathlib import Path
 from typing import cast
@@ -92,7 +91,7 @@ def test_the_overlap_rule_defines_its_calculation() -> None:
     assert "Count a binary file as one changed file and 50 changed lines." in gates
 
 
-def test_the_documented_handoff_reader_command_parses() -> None:
+def test_the_documented_handoff_reader_command_parses(capsys: pytest.CaptureFixture[str]) -> None:
     """`read-handoff-slug` requires --phase and --slug, not a positional path."""
     from easy_cheese.shared import read_handoff_slug
 
@@ -100,16 +99,12 @@ def test_the_documented_handoff_reader_command_parses() -> None:
     assert "read-handoff-slug --phase <phase> --slug <slug>" in fan
     assert "cook.pyz read-handoff-slug <path>" not in fan
 
-    parser = argparse.ArgumentParser()
-    read_handoff_slug._setup(parser)  # pyright: ignore[reportPrivateUsage]
-    flags = {
-        action.option_strings[0]
-        for action in parser._actions
-        if action.option_strings
-    }
-    assert {"--phase", "--slug"} <= flags
-    with pytest.raises(SystemExit):
-        _ = parser.parse_args([".cheese/cook/demo.md"])
+    assert read_handoff_slug.main(["--help"]) == 0
+    help_text = capsys.readouterr().out
+    assert "--phase" in help_text
+    assert "--slug" in help_text
+    assert read_handoff_slug.main([".cheese/cook/demo.md"]) == 2
+    assert "artifact not found" not in capsys.readouterr().err
 
 
 def test_the_handoff_writer_call_keeps_the_report_body() -> None:

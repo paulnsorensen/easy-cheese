@@ -159,6 +159,32 @@ def test_editing_a_tracked_file_after_the_lock_blocks_the_report_and_names_cure(
     assert not _report(repo, "demo").exists()
 
 
+def test_equals_form_cannot_bypass_age_lock_gate(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+    _ = (repo / "app.py").write_text("# inline fix\n", encoding="utf-8")
+    args = _write_args(repo, "demo")
+    args[args.index("--slug") : args.index("--slug") + 2] = ["--slug=demo"]
+    args[args.index("--phase") : args.index("--phase") + 2] = ["--phase=age"]
+    args[args.index("--root") : args.index("--root") + 2] = [f"--root={repo}"]
+    assert review_lock.gated_write_handoff_artifact(args) == 2
+    assert not _report(repo, "demo").exists()
+
+
+def test_mixed_option_forms_cannot_bypass_age_lock_gate(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 0
+    _ = capsys.readouterr()
+    _ = (repo / "app.py").write_text("# inline fix\n", encoding="utf-8")
+    args = _write_args(repo, "demo")
+    args[args.index("--slug") : args.index("--slug") + 2] = ["--slug=demo"]
+    assert review_lock.gated_write_handoff_artifact(args) == 2
+    assert not _report(repo, "demo").exists()
+
+
 def _write_late_packet(repo: Path) -> None:
     packet = repo / ".cheese" / "age" / "demo-packet.md"
     packet.parent.mkdir(parents=True, exist_ok=True)
@@ -500,9 +526,8 @@ def test_a_slug_inside_quoted_free_text_never_reaches_the_writer(
         if token not in ("--slug", "demo", "reviewed the diff")
     ]
     args.insert(args.index("--orientation") + 1, "done --slug demo")
-    with pytest.raises(SystemExit) as raised:
-        _ = review_lock.gated_write_handoff_artifact(args)
-    assert raised.value.code == 2
+    status = review_lock.gated_write_handoff_artifact(args)
+    assert status == 2
     assert "--slug" in capsys.readouterr().err
     assert not _report(repo, "demo").exists()
 

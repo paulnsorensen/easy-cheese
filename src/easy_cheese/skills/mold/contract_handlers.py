@@ -8,7 +8,7 @@ normalization decision stays in :mod:`easy_cheese.skills.mold.producer`.
 
 from __future__ import annotations
 
-import argparse
+from cyclopts import App
 import json
 import sys
 from collections.abc import Mapping
@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TypeVar, cast
 
 from easy_cheese_schemas.contracts import CurdPlan
+from easy_cheese.shared import cli
 from easy_cheese_schemas.mold_cook import MoldCookInputKind, MoldCookMode
 from easy_cheese.shared.taste_test import ForkTasteVerdict
 
@@ -49,23 +50,14 @@ def _write_json_output(value: object, output: Path | None) -> None:
         _ = sys.stdout.write(text)
 
 
-def normalize_planner_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        prog="normalize-planner",
-        description="Materialize a planner writer envelope into a canonical PlannerResult.",
-    )
-    _ = parser.add_argument("writer", type=Path)
-    _ = parser.add_argument("--request", required=True, type=Path)
-    _ = parser.add_argument("--invocation", required=True, type=Path)
-    _ = parser.add_argument("--output", type=Path)
-    args = parser.parse_args(argv)
+def _normalize_planner(writer: Path, request: Path, invocation: Path, output: Path | None = None) -> int:
     try:
-        writer_raw = read_json_artifact(cast(Path, args.writer))
-        request_raw = read_json_artifact(cast(Path, args.request))
-        invocation = read_json_artifact(cast(Path, args.invocation))
-        if not isinstance(invocation, Mapping):
+        writer_raw = read_json_artifact(writer)
+        request_raw = read_json_artifact(request)
+        invocation_data = read_json_artifact(invocation)
+        if not isinstance(invocation_data, Mapping):
             raise FinalizationError("invocation must be a JSON object")
-        invocation_mapping = cast(Mapping[str, object], invocation)
+        invocation_mapping = cast(Mapping[str, object], invocation_data)
         host_raw = invocation_mapping.get("planner", invocation_mapping)
         if not isinstance(host_raw, Mapping):
             raise FinalizationError("invocation.planner must be a JSON object")
@@ -94,7 +86,7 @@ def normalize_planner_main(argv: list[str]) -> int:
                 host.get("source_plan"),
             ),
         )
-        _write_json_output(canonical_output(result), cast(Path | None, args.output))
+        _write_json_output(canonical_output(result), output)
         return 0
     except (
         FinalizationError,
@@ -114,52 +106,39 @@ def _parse_enum(value: str, enum: type[_EnumT], label: str) -> _EnumT:
         raise FinalizationError(f"invalid {label}: {value!r}") from exc
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        prog="finalize",
-        description="Finalize a Mold spec and publish only a consumer-valid handoff.",
-    )
-    _ = parser.add_argument("spec", type=Path)
-    _ = parser.add_argument("--approval", type=Path)
-    _ = parser.add_argument("--artifact-root", required=True, type=Path)
-    _ = parser.add_argument("--operation-id", required=True)
-    _ = parser.add_argument("--request-id", required=True)
-    _ = parser.add_argument("--input-kind", default=MoldCookInputKind.DIRECT_SPEC.value)
-    _ = parser.add_argument("--mode", default=MoldCookMode.FULL.value)
-    _ = parser.add_argument("--planner-result", type=Path)
-    _ = parser.add_argument("--plan", type=Path)
-    _ = parser.add_argument("--coverage", type=Path)
-    _ = parser.add_argument("--taste-result", type=Path)
-    _ = parser.add_argument("--ledger", type=Path)
-    _ = parser.add_argument("--curdle-anyway", action="store_true")
-    args = parser.parse_args(argv)
+def _finalize(spec: Path, artifact_root: Path, operation_id: str, request_id: str,
+              approval: Path | None = None, input_kind: str = MoldCookInputKind.DIRECT_SPEC.value,
+              mode: str = MoldCookMode.FULL.value, planner_result: Path | None = None,
+              plan: Path | None = None, coverage: Path | None = None,
+              taste_result: Path | None = None, ledger: Path | None = None,
+              curdle_anyway: bool = False) -> int:
     try:
-        taste_path = cast(Path | None, args.taste_result)
-        ledger_path = cast(Path | None, args.ledger)
+        taste_path = taste_result
+        ledger_path = ledger
         taste: object | None = (
             None if taste_path is None else read_json_artifact(taste_path)
         )
-        ledger: object | None = (
+        ledger_data: object | None = (
             None if ledger_path is None else read_json_artifact(ledger_path)
         )
         outcome = finalize_mold(
-            cast(Path, args.spec),
-            artifact_root=cast(Path, args.artifact_root),
-            operation_id=cast(str, args.operation_id),
-            request_id=cast(str, args.request_id),
+            spec,
+            artifact_root=artifact_root,
+            operation_id=operation_id,
+            request_id=request_id,
             input_kind=_parse_enum(
-                cast(str, args.input_kind), MoldCookInputKind, "input kind"
+                input_kind, MoldCookInputKind, "input kind"
             ),
-            mode=_parse_enum(cast(str, args.mode), MoldCookMode, "mode"),
-            approval=cast(Path | None, args.approval),
-            planner_result=cast(Path | None, args.planner_result),
-            plan=cast(Path | None, args.plan),
-            proposed_coverage=cast(Path | None, args.coverage),
+            mode=_parse_enum(mode, MoldCookMode, "mode"),
+            approval=approval,
+            planner_result=planner_result,
+            plan=plan,
+            proposed_coverage=coverage,
             taste_result=cast(
                 ForkTasteVerdict | Mapping[str, object] | Path | None, taste
             ),
-            decision_ledger=ledger,
-            curdle_anyway=cast(bool, args.curdle_anyway),
+            decision_ledger=ledger_data,
+            curdle_anyway=curdle_anyway,
         )
         _write_json_output(outcome.to_dict(), None)
         return 0
@@ -173,6 +152,17 @@ def main(argv: list[str]) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
+
+normalize_app = App(name="normalize-planner")
+_ = normalize_app.default(_normalize_planner)
+finalize_app = App(name="finalize")
+_ = finalize_app.default(_finalize)
+
+def normalize_planner_main(argv: list[str]) -> int:
+    return cli.run(normalize_app, argv=argv)
+
+def main(argv: list[str]) -> int:
+    return cli.run(finalize_app, argv=argv)
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

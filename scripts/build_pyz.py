@@ -397,7 +397,7 @@ def _build_shared_wheel(project_root: Path, wheelhouse: Path) -> Path:
     _ = (project / "pyproject.toml").write_text(
         _project_toml(
             "easy-cheese-shared",
-            dependencies=(f"easy-cheese-schemas=={VERSION}",),
+            dependencies=(f"easy-cheese-schemas=={VERSION}", "cyclopts==4.25.3"),
         ),
         encoding="utf-8",
     )

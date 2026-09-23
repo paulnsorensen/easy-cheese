@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import argparse
 import json
+
+from cyclopts import App
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import cast
+
+from easy_cheese.shared import cli
 
 _TIMEOUT_SECONDS = 5
 _REMOTE_TIMEOUT_SECONDS = 10
@@ -172,16 +175,21 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
     return {"providers": providers, "recommended": recommended}
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    _ = parser.add_argument("--cwd", type=Path, default=Path.cwd())
-    args = parser.parse_args(argv)
-    cwd = cast(Path, args.cwd)
+def _command(cwd: Path | None = None) -> int:
+    cwd = cwd or Path.cwd()
     if not cwd.is_dir():
         print(f"ERROR: not a directory: {cwd}", file=sys.stderr)
         return 1
     print(json.dumps(detect_stack_tools(cwd.resolve()), indent=2, sort_keys=True))
     return 0
+
+
+app = App(name="stack-tools")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":

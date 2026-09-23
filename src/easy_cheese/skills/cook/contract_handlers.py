@@ -8,12 +8,15 @@ without dispatching agents or inventing approval evidence.
 
 from __future__ import annotations
 
-import argparse
+from cyclopts import App
+from types import SimpleNamespace
 import hashlib
 import json
 import sys
 from pathlib import Path
 from typing import cast
+
+from easy_cheese.shared import cli
 
 from easy_cheese_schemas import (
     SCHEMA_ROOT,
@@ -66,13 +69,8 @@ def _validate_against(raw: bytes | str, schema: str | type) -> None:
     _ = validate_contract(raw, schema, supported_version_for(schema))
 
 
-def normalize_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="normalize.py")
-    _ = parser.add_argument("document", type=Path)
-    _ = parser.add_argument("--invocation", required=True, type=Path)
-    args = parser.parse_args(argv)
-    document = cast(Path, args.document)
-    invocation_path = cast(Path, args.invocation)
+def _normalize(document: Path, invocation: Path) -> int:
+    invocation_path = invocation
     # Read bytes, not text: the schema runtime converts a decode failure into a
     # ContractValidationError, while read_text would raise UnicodeDecodeError.
     try:
@@ -86,14 +84,14 @@ def normalize_main(argv: list[str]) -> int:
         print(f"ERROR: cannot read {invocation_path}: {exc}", file=sys.stderr)
         return 1
     try:
-        invocation = cast(object, json.loads(invocation_raw))
+        invocation_data = cast(object, json.loads(invocation_raw))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         print(f"ERROR: invalid invocation JSON: {exc}", file=sys.stderr)
         return 1
-    if not isinstance(invocation, dict):
+    if not isinstance(invocation_data, dict):
         print("ERROR: invocation must be a JSON object", file=sys.stderr)
         return 1
-    invocation_payload = cast("dict[str, object]", invocation)
+    invocation_payload = cast("dict[str, object]", invocation_data)
     try:
         artifact = normalize_agent_output(document_raw, invocation_payload)
         _validate_against(artifact.canonical_bytes, type(artifact.value))
@@ -109,13 +107,7 @@ def normalize_main(argv: list[str]) -> int:
     return 0
 
 
-def validate_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="validate.py")
-    _ = parser.add_argument("payload", type=Path)
-    _ = parser.add_argument("--schema", required=True)
-    args = parser.parse_args(argv)
-    payload = cast(Path, args.payload)
-    schema = cast(str, args.schema)
+def _validate(payload: Path, schema: str) -> int:
     try:
         raw = payload.read_bytes()
     except OSError as exc:
@@ -134,16 +126,9 @@ def validate_main(argv: list[str]) -> int:
     return 0
 
 
-def _source_options(parser: argparse.ArgumentParser) -> None:
-    group = parser.add_mutually_exclusive_group()
-    _ = group.add_argument("--spec", type=Path)
-    _ = group.add_argument("--pointer", type=Path)
-    _ = group.add_argument("--slug")
-    _ = group.add_argument("--task")
-    _ = group.add_argument("--continuation")
 
 
-def _source_from_args(args: argparse.Namespace) -> tuple[str | Path, str | None]:
+def _source_from_args(args: SimpleNamespace) -> tuple[str | Path, str | None]:
     positional = cast("str | None", getattr(args, "source", None))
     selected: tuple[tuple[str, str | Path | None], ...] = (
         ("spec", cast("Path | None", getattr(args, "spec", None))),
@@ -167,11 +152,11 @@ def _source_from_args(args: argparse.Namespace) -> tuple[str | Path, str | None]
     return positional, None
 
 
-def _path_option(args: argparse.Namespace, name: str) -> Path | None:
+def _path_option(args: SimpleNamespace, name: str) -> Path | None:
     return cast("Path | None", getattr(args, name, None))
 
 
-def _hold_clearances(args: argparse.Namespace) -> tuple[CookHoldClearance, ...]:
+def _hold_clearances(args: SimpleNamespace) -> tuple[CookHoldClearance, ...]:
     clearances: list[CookHoldClearance] = []
     for value in cast("list[str]", getattr(args, "clear_hold", ())):
         hold_id, separator, raw_path = value.partition("=")
@@ -207,7 +192,7 @@ def _hold_clearances(args: argparse.Namespace) -> tuple[CookHoldClearance, ...]:
 
 
 def _evidence_from_args(
-    args: argparse.Namespace,
+    args: SimpleNamespace,
     *,
     clearances: tuple[CookHoldClearance, ...] = (),
 ) -> PreparationEvidence:
@@ -225,7 +210,7 @@ def _evidence_from_args(
     )
 
 
-def _prepare_from_args(args: argparse.Namespace) -> CookPreparationResult:
+def _prepare_from_args(args: SimpleNamespace) -> CookPreparationResult:
     source, explicit_kind = _source_from_args(args)
     return prepare(
         source,
@@ -248,107 +233,76 @@ def _emit_preparation(result: object) -> int:
     return 0
 
 
-def prepare_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="prepare.py")
-    _ = parser.add_argument("source", nargs="?")
-    _source_options(parser)
-    _ = parser.add_argument("--request-id")
-    _ = parser.add_argument("--repository-root", default=".")
-    _ = parser.add_argument("--artifact-root", default=".cheese/cook")
-    _ = parser.add_argument("--mode", choices=("full", "light"), default="full")
-    _ = parser.add_argument("--scope-approval", type=Path)
-    _ = parser.add_argument("--plan-approval", type=Path)
-    _ = parser.add_argument("--runner-approval", type=Path)
-    _ = parser.add_argument("--planner-result", type=Path)
-    _ = parser.add_argument("--setup-authorization", type=Path)
-    _ = parser.add_argument("--setup-evidence", type=Path)
-    _ = parser.add_argument("--bound-spec", type=Path)
+def _prepare(source: str | None = None, spec: Path | None = None, pointer: Path | None = None,
+             slug: str | None = None, task: str | None = None, continuation: str | None = None,
+             request_id: str | None = None, repository_root: str = ".", artifact_root: str = ".cheese/cook",
+             mode: str = "full", scope_approval: Path | None = None, plan_approval: Path | None = None,
+             runner_approval: Path | None = None, planner_result: Path | None = None,
+             setup_authorization: Path | None = None, setup_evidence: Path | None = None,
+             bound_spec: Path | None = None) -> int:
+    args = SimpleNamespace(source=source, spec=spec, pointer=pointer, slug=slug, task=task,
+        continuation=continuation, request_id=request_id, repository_root=repository_root,
+        artifact_root=artifact_root, mode=mode, scope_approval=scope_approval,
+        plan_approval=plan_approval, runner_approval=runner_approval, planner_result=planner_result,
+        setup_authorization=setup_authorization, setup_evidence=setup_evidence, bound_spec=bound_spec,
+        clear_hold=[])
     try:
-        result = _prepare_from_args(parser.parse_args(argv))
+        result = _prepare_from_args(args)
     except (ValueError, OSError, TypeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     return _emit_preparation(result)
 
 
-def resubmit_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="resubmit.py")
-    _ = parser.add_argument("previous", type=Path)
-    _ = parser.add_argument("--source")
-    _ = parser.add_argument("--repository-root", default=None)
-    _ = parser.add_argument("--artifact-root", default=None)
-    _ = parser.add_argument("--mode", choices=("full", "light"), default=None)
-    _ = parser.add_argument("--scope-approval", type=Path)
-    _ = parser.add_argument("--plan-approval", type=Path)
-    _ = parser.add_argument("--runner-approval", type=Path)
-    _ = parser.add_argument("--planner-result", type=Path)
-    _ = parser.add_argument("--setup-authorization", type=Path)
-    _ = parser.add_argument("--setup-evidence", type=Path)
-    _ = parser.add_argument("--bound-spec", type=Path)
-    _ = parser.add_argument(
-        "--clear-hold",
-        action="append",
-        default=[],
-        metavar="HOLD_ID=DIALOGUE_JSON",
-    )
-    args = parser.parse_args(argv)
-    previous_path = cast(Path, args.previous)
-    mode = cast("str | None", args.mode)
+def _resubmit(previous: Path, source: str | None = None, repository_root: str | None = None,
+              artifact_root: str | None = None, mode: str | None = None,
+              scope_approval: Path | None = None, plan_approval: Path | None = None,
+              runner_approval: Path | None = None, planner_result: Path | None = None,
+              setup_authorization: Path | None = None, setup_evidence: Path | None = None,
+              bound_spec: Path | None = None, clear_hold: list[str] | None = None) -> int:
+    args = SimpleNamespace(source=source, repository_root=repository_root, artifact_root=artifact_root,
+        mode=mode, scope_approval=scope_approval, plan_approval=plan_approval, runner_approval=runner_approval,
+        planner_result=planner_result, setup_authorization=setup_authorization, setup_evidence=setup_evidence,
+        bound_spec=bound_spec, clear_hold=clear_hold or [])
     try:
-        previous = load_preparation_result(previous_path)
-        result = resubmit(
-            previous,
-            source=cast("str | None", args.source),
-            repository_root=cast(str, args.repository_root),
-            artifact_root=cast(str, args.artifact_root),
-            mode=None if mode is None else MoldCookMode(mode),
-            evidence=_evidence_from_args(args, clearances=_hold_clearances(args)),
-        )
+        result = resubmit(load_preparation_result(previous), source=source, repository_root=repository_root,
+            artifact_root=artifact_root, mode=None if mode is None else MoldCookMode(mode),
+            evidence=_evidence_from_args(args, clearances=_hold_clearances(args)))
     except (ContractValidationError, ValueError, OSError, TypeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     return _emit_preparation(result)
 
 
-def accept_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="accept.py")
-    _ = parser.add_argument("pointer")
-    _ = parser.add_argument(
-        "--spec",
-        type=Path,
-        default=None,
-        help="optional identity assertion; it cannot replace the handoff binding",
-    )
-    _ = parser.add_argument("--artifact-root", type=Path, default=None)
-    args = parser.parse_args(argv)
-    pointer_source = cast(str, args.pointer)
-    spec_path = cast("Path | None", args.spec)
-    artifact_root = cast("Path | None", args.artifact_root)
+def _accept(pointer: str, spec: Path | None = None, artifact_root: Path | None = None) -> int:
     try:
-        accepted = accept_mold_cook_handoff(
-            pointer_source,
-            artifact_root=artifact_root,
-        )
+        accepted = accept_mold_cook_handoff(pointer, artifact_root=artifact_root)
         handoff = cast(MoldCookHandoff, accepted.canonical.value)
-        if spec_path is not None:
-            spec_raw = read_spec_text(spec_path).encode("utf-8")
-            if _digest_of(spec_raw) != handoff.spec_ref.digest:
-                raise ContractValidationError(
-                    "--spec does not match the handoff's bound spec"
-                )
-    except (
-        ContractValidationError,
-        PublicationError,
-        TransitionError,
-        OSError,
-        UnicodeDecodeError,
-    ) as exc:
+        if spec is not None and _digest_of(read_spec_text(spec).encode("utf-8")) != handoff.spec_ref.digest:
+            raise ContractValidationError("--spec does not match the handoff's bound spec")
+    except (ContractValidationError, PublicationError, TransitionError, OSError, UnicodeDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-    wrapper = {
-        "value": handoff,
-        "digest": _digest_of(accepted.canonical.canonical_bytes),
-        "normalization_receipt": accepted.normalization_receipt,
-    }
-    _ = sys.stdout.buffer.write(canonical_bytes(wrapper))
+    _ = sys.stdout.buffer.write(canonical_bytes({"value": handoff, "digest": _digest_of(accepted.canonical.canonical_bytes), "normalization_receipt": accepted.normalization_receipt}))
     return 0
+
+
+normalize_app = App(name="normalize")
+_ = normalize_app.default(_normalize)
+validate_app = App(name="validate")
+_ = validate_app.default(_validate)
+prepare_app = App(name="prepare")
+_ = prepare_app.default(_prepare)
+resubmit_app = App(name="resubmit")
+_ = resubmit_app.default(_resubmit)
+accept_app = App(name="accept")
+_ = accept_app.default(_accept)
+
+def _run(app: App, argv: list[str]) -> int:
+    return cli.run(app, argv=argv)
+
+def normalize_main(argv: list[str]) -> int: return _run(normalize_app, argv)
+def validate_main(argv: list[str]) -> int: return _run(validate_app, argv)
+def prepare_main(argv: list[str]) -> int: return _run(prepare_app, argv)
+def resubmit_main(argv: list[str]) -> int: return _run(resubmit_app, argv)
+def accept_main(argv: list[str]) -> int: return _run(accept_app, argv)

@@ -16,16 +16,17 @@ emits.
 
 from __future__ import annotations
 
-import argparse
 import json
+from typing import Annotated
+
+from cyclopts import App, Parameter
 import sys
 import traceback
 from collections.abc import Mapping, Sequence
-from typing import NoReturn, TextIO, cast
+from typing import TextIO, cast
 
 from attrs import AttrsInstance
-from typing_extensions import override
-from easy_cheese.shared import handoff
+from easy_cheese.shared import cli, handoff
 from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
@@ -37,30 +38,20 @@ EXIT_USAGE = 2
 EXIT_INTERNAL = 3
 
 
-class BadUsage(Exception):
-    """argparse's complaint, raised instead of printed so it can be JSON."""
+def _resolve_app() -> App:
+    app = App(name=COMMAND)
+
+    def command(
+        ref: Annotated[str, Parameter(name="--ref", help="an absolute projection path, a work id, or a slug")],
+        corpus_root: Annotated[str | None, Parameter(name="--corpus-root")] = None,
+    ) -> tuple[str, str | None]:
+        return ref, corpus_root
+
+    _ = app.default(command)
+    return app
 
 
-class Parser(argparse.ArgumentParser):
-    @override
-    def error(self, message: str) -> NoReturn:
-        raise BadUsage(message)
-
-
-def _parser() -> Parser:
-    parser = Parser(prog=COMMAND)
-    _ = parser.add_argument(
-        "--ref",
-        required=True,
-        help="an absolute projection path, a work id, or a slug",
-    )
-    _ = parser.add_argument(
-        "--corpus-root",
-        dest="corpus_root",
-        default=None,
-        help="the corpus to resolve in; defaults to this project's XDG corpus",
-    )
-    return parser
+resolve_app = _resolve_app()
 
 
 def findings_payload(
@@ -146,12 +137,23 @@ def main(
     argv2 = list(sys.argv[1:] if argv is None else argv)
     stdout2 = sys.stdout if stdout is None else stdout
     try:
-        args = _parser().parse_args(argv2)
-    except BadUsage as exc:
+        canonical = cli.repair_argv(resolve_app, argv2)
+        raw_result: object = cast(
+            object,
+            resolve_app(
+                canonical,
+                print_error=False,
+                exit_on_error=False,
+                help_on_error=False,
+                result_action="return_value",
+            ),
+        )
+        if raw_result is None:
+            return EXIT_OK
+        ref, corpus_root = cast(tuple[str, str | None], raw_result)
+    except Exception as exc:
         return refuse(stdout2, COMMAND, "usage", str(exc), EXIT_USAGE)
     try:
-        ref = cast(str, args.ref)
-        corpus_root = cast("str | None", args.corpus_root)
         payload = resolve_payload(
             resolve_mod.resolve(ref, corpus_root=corpus_root), ref
         )

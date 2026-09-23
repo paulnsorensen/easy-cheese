@@ -8,16 +8,13 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import Protocol, cast
 
 import pytest
 
-if TYPE_CHECKING:
-    import argparse
-
 
 class _GatesCliModule(Protocol):
-    def _cmd_classify(self, ns: argparse.Namespace) -> None: ...
+    def main(self, argv: list[str]) -> int: ...
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
@@ -99,18 +96,9 @@ class TestInProcessClassify:
     def test_classify_helper_emits_dict(
         self, gates_cli: _GatesCliModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        import argparse
-
-        ns = argparse.Namespace(
-            press_status="ready-for-age",
-            hard_floor_met=True,
-            has_open_level_1_or_2=False,
-            has_open_level_3=False,
-            has_open_level_4_or_5=False,
-            any_spinning=False,
-            json_mode=True,
-            stdout=sys.stdout,
-        )
-        gates_cli._cmd_classify(ns)  # pyright: ignore[reportPrivateUsage]
+        status = gates_cli.main([
+            "classify", "--press-status", "ready-for-age", "--hard-floor-met", "--json"
+        ])
+        assert status == 0
         payload = cast(dict[str, object], json.loads(capsys.readouterr().out))
         assert payload == {"press_status": "ready-for-age", "readiness": "ready for /age"}

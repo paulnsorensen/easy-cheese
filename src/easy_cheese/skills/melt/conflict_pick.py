@@ -5,13 +5,17 @@ For file types not handled by mergiraf (shell scripts, config files, etc.).
 """
 
 from __future__ import annotations
+# pyright: reportAny=false, reportArgumentType=false
 
-import argparse
 import re
+
+from cyclopts import App
+from types import SimpleNamespace
 import subprocess
 import sys
 from pathlib import Path
-from typing import Protocol, cast
+
+from easy_cheese.shared import cli
 
 from easy_cheese.shared.git_utils import (
     MARKER_BASE,
@@ -79,30 +83,8 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: str | None = None) 
     return "\n".join(result)
 
 
-class _Args(Protocol):
-    file: str
-    ours: bool
-    theirs: bool
-    grep: str | None
-    dry_run: bool
-
-
-def _parse_args(argv: list[str] | None = None) -> _Args:
-    parser = argparse.ArgumentParser(description="Pick ours or theirs for conflict hunks")
-    _ = parser.add_argument("file", help="File to resolve")
-    _ = parser.add_argument("--ours", action="store_true", help="Take our changes for matching hunks")
-    _ = parser.add_argument(
-        "--theirs", action="store_true", help="Take their changes for matching hunks"
-    )
-    _ = parser.add_argument("--grep", metavar="PATTERN", help="Only resolve hunks matching this regex")
-    _ = parser.add_argument(
-        "--dry-run", action="store_true", help="Print resolved content without writing"
-    )
-    return cast(_Args, cast(object, parser.parse_args(argv)))
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
+def _command(file: str, ours: bool = False, theirs: bool = False, grep: str | None = None, dry_run: bool = False) -> int:
+    args = SimpleNamespace(file=file, ours=ours, theirs=theirs, grep=grep, dry_run=dry_run)
 
     if args.ours and args.theirs:
         print("Error: Cannot use both --ours and --theirs", file=sys.stderr)
@@ -153,5 +135,13 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+app = App(name="conflict-pick")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

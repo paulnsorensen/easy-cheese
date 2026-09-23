@@ -23,11 +23,13 @@ when `--json` is passed. Stdlib-only.
 """
 from __future__ import annotations
 
-import argparse
 import re
+import sys
 import subprocess
+
+from cyclopts import App, Parameter
 from pathlib import Path
-from typing import TextIO, TypedDict, cast
+from typing import Annotated, TypedDict, cast
 
 from easy_cheese.shared import cli
 
@@ -182,22 +184,20 @@ def _sha_matches(recorded: str, diff_head: str) -> bool:
     return diff_head.startswith(recorded) or recorded.startswith(diff_head)
 
 
-def _cmd_check(args: argparse.Namespace) -> int:
-    slug = (cast("str | None", args.slug) or "").strip()
+def _command(slug: str, passing_score: int = 3, cheese_root: str | None = None, repo_root: str | None = None, json_mode: Annotated[bool, Parameter(name="--json")] = False) -> int:
+    slug = slug.strip()
+    if not MIN_PASSING_SCORE <= passing_score <= MAX_PASSING_SCORE:
+        raise cli.CliError("--passing-score must be between 1 and 5")
     if not slug:
         raise cli.CliError("--slug must not be empty")
-    cheese_root_arg = cast("str | None", args.cheese_root)
-    repo_root_arg = cast("str | None", args.repo_root)
-    passing_score = cast(int, args.passing_score)
-    json_mode = cast(bool, args.json_mode)
-    stdout = cast("TextIO | None", args.stdout)
+    stdout = sys.stdout
 
-    cheese_root = Path(cheese_root_arg) if cheese_root_arg else Path(".cheese")
-    repo_root = Path(repo_root_arg) if repo_root_arg else None
+    cheese_root_path = Path(cheese_root) if cheese_root else Path(".cheese")
+    repo_root_path = Path(repo_root) if repo_root else None
     result = decide(
         slug,
-        cheese_root=cheese_root,
-        repo_root=repo_root,
+        cheese_root=cheese_root_path,
+        repo_root=repo_root_path,
         passing_score=passing_score,
     )
     if json_mode:
@@ -207,45 +207,13 @@ def _cmd_check(args: argparse.Namespace) -> int:
     return EXIT_FOR_STATE[result["state"]]
 
 
-def _passing_score(value: str) -> int:
-    try:
-        score = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("--passing-score must be an integer 1-5") from exc
-    if score < MIN_PASSING_SCORE or score > MAX_PASSING_SCORE:
-        raise argparse.ArgumentTypeError("--passing-score must be between 1 and 5")
-    return score
-
-
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Decide /hard-cheese freshness for <slug>."
-    _ = parser.add_argument("--slug", required=True, help="hard-cheese slug to check")
-    _ = parser.add_argument(
-        "--passing-score",
-        type=_passing_score,
-        default=3,
-        help="minimum SOLO score that counts as a fresh pass (default: 3)",
-    )
-    _ = parser.add_argument(
-        "--cheese-root",
-        default=None,
-        help="override .cheese directory (default: ./.cheese). Test hook.",
-    )
-    _ = parser.add_argument(
-        "--repo-root",
-        default=None,
-        help="override git cwd for rev-parse (default: cwd). Test hook.",
-    )
-    parser.set_defaults(func=_cmd_check)
+app = App(name="freshness-check")
+_ = app.default(_command)
 
 
 def main(argv: list[str] | None = None) -> int:
-    def setup(parser: argparse.ArgumentParser) -> None:
-        parser.prog = "freshness-check"  # noqa: V101
-        _setup(parser)
-
-    return cli.run(setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-import argparse
 import json
+
+from cyclopts import App
+from easy_cheese.shared import cli
 import re
 import subprocess
 import sys
@@ -408,23 +410,9 @@ def verify_publication(
     }
 
 
-def _common_parser(description: str) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=description)
-    _ = parser.add_argument("--cwd", type=Path, default=Path.cwd())
-    return parser
-
-
-def preflight_main(argv: list[str] | None = None) -> int:
-    parser = _common_parser("Validate gh-stack trunk and remote before mutation")
-    _ = parser.add_argument("--trunk", required=True)
-    _ = parser.add_argument("--remote", default="origin")
-    args = parser.parse_args(argv)
+def _preflight(cwd: Path | None = None, trunk: str = "", remote: str = "origin") -> int:
     try:
-        result = preflight(
-            cast(Path, args.cwd).resolve(),
-            cast(str, args.trunk),
-            cast(str, args.remote),
-        )
+        result = preflight((cwd or Path.cwd()).resolve(), trunk, remote)
     except GhStackValidationError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
@@ -432,15 +420,11 @@ def preflight_main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def run_main(argv: list[str] | None = None) -> int:
-    parser = _common_parser("Run one guarded gh-stack mutation")
-    _ = parser.add_argument("command", nargs=argparse.REMAINDER)
-    args = parser.parse_args(argv)
-    command = cast("list[str]", args.command)
+def _run_command(command: list[str], cwd: Path | None = None) -> int:
     if command[:1] == ["--"]:
         command = command[1:]
     try:
-        result = run_guarded(command, cast(Path, args.cwd).resolve())
+        result = run_guarded(command, (cwd or Path.cwd()).resolve())
     except GhStackValidationError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
@@ -450,33 +434,39 @@ def run_main(argv: list[str] | None = None) -> int:
         print(stdout, end="")
     if stderr:
         print(stderr, end="", file=sys.stderr)
-    print(
-        json.dumps(
-            {
-                key: value
-                for key, value in result.items()
-                if key not in {"stdout", "stderr"}
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    print(json.dumps({key: value for key, value in result.items() if key not in {"stdout", "stderr"}}, indent=2, sort_keys=True))
     return 0
 
 
-def verify_main(argv: list[str] | None = None) -> int:
-    parser = _common_parser("Verify exact gh-stack publication state")
-    _ = parser.add_argument("--trunk", required=True)
-    _ = parser.add_argument("--remote", default="origin")
-    args = parser.parse_args(argv)
+def _verify(cwd: Path | None = None, trunk: str = "", remote: str = "origin") -> int:
     try:
-        result = verify_publication(
-            cast(Path, args.cwd).resolve(),
-            cast(str, args.trunk),
-            cast(str, args.remote),
-        )
+        result = verify_publication((cwd or Path.cwd()).resolve(), trunk, remote)
     except GhStackValidationError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
+
+
+_preflight_app = App(name="gh-stack-preflight")
+_ = _preflight_app.default(_preflight)
+_run_app = App(name="gh-stack-run")
+_ = _run_app.default(_run_command)
+_verify_app = App(name="gh-stack-verify")
+_ = _verify_app.default(_verify)
+
+
+def _invoke(app: App, argv: list[str] | None) -> int:
+    return cli.run(app, argv=argv)
+
+
+def preflight_main(argv: list[str] | None = None) -> int:
+    return _invoke(_preflight_app, argv)
+
+
+def run_main(argv: list[str] | None = None) -> int:
+    return _invoke(_run_app, argv)
+
+
+def verify_main(argv: list[str] | None = None) -> int:
+    return _invoke(_verify_app, argv)

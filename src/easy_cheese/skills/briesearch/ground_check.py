@@ -45,8 +45,13 @@ report carries no evidence table, 2 on bad args / unreadable file.
 
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes its application result as Any at the invocation boundary.
+# pyright: reportAny=false, reportUnusedCallResult=false
+
 import re
+
+from cyclopts import App
+from easy_cheese.shared import cli
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -693,14 +698,7 @@ def check_report(
     return violations, tables_checked
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "report", help="Path to the synthesis report markdown file."
-    )
-    args = parser.parse_args(argv)
-
-    report = cast(str, args.report)
+def _command(report: str) -> int:
     path = Path(report)
     try:
         text = path.read_text(encoding="utf-8")
@@ -741,5 +739,13 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+app = App(name="ground-check")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main(sys.argv[1:]))

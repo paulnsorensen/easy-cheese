@@ -15,10 +15,13 @@ CLI:
 """
 
 from __future__ import annotations
+import sys
 
-import argparse
+from typing import Annotated
+
+from cyclopts import App, Parameter
 from enum import IntEnum
-from typing import Self, TextIO, cast
+from typing import Self
 
 from typing_extensions import override
 
@@ -126,58 +129,31 @@ def bucket_fix_cost_now(*, file_count: int, module_count: int = 1) -> FixCostNow
     return FixCostNow.CONTAINED
 
 
-def _cmd_compute(args: argparse.Namespace) -> None:
-    try:
-        result = compute_severity(
-            dimension=cast(str, args.dimension),
-            base=cast(str, args.base),
-            location=cast(str, args.location),
-            fix_cost_later=cast(str, args.fix_cost_later),
-        )
-    except RubricError as exc:
-        raise cli.CliError(str(exc)) from exc
-    cli.emit(result, stdout=cast("TextIO", args.stdout))
-
-
-def _cmd_bucket(args: argparse.Namespace) -> None:
-    try:
-        result = bucket_fix_cost_now(
-            file_count=cast(int, args.files), module_count=cast(int, args.modules)
-        )
-    except RubricError as exc:
-        raise cli.CliError(str(exc)) from exc
-    cli.emit(result, stdout=cast("TextIO", args.stdout))
-
-
 LEAVES = ("compute", "bucket")
 
+def _compute_command(*, dimension: str, base: str, location: str, fix_cost_later: Annotated[str, Parameter(name="--fix-cost-later")]) -> int:
+    try:
+        result = compute_severity(dimension=dimension, base=base, location=location, fix_cost_later=fix_cost_later)
+    except RubricError as exc:
+        raise cli.CliError(str(exc)) from exc
+    cli.emit(result)
+    return 0
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Compute /age rubric severity and fix-cost buckets."
-    sub = parser.add_subparsers(dest="cmd", required=True)
+def _bucket_command(*, files: Annotated[int, Parameter(name="--files")], modules: Annotated[int, Parameter(name="--modules")] = 1) -> int:
+    try:
+        result = bucket_fix_cost_now(file_count=files, module_count=modules)
+    except RubricError as exc:
+        raise cli.CliError(str(exc)) from exc
+    cli.emit(result)
+    return 0
 
-    compute = sub.add_parser("compute", help="compute severity from rubric inputs")
-    _ = compute.add_argument("--dimension", required=True)
-    _ = compute.add_argument("--base", required=True)
-    _ = compute.add_argument("--location", required=True)
-    _ = compute.add_argument("--fix-cost-later", required=True)
-    compute.set_defaults(func=_cmd_compute)
-
-    bucket = sub.add_parser(
-        "bucket", help="bucket fix-cost-now from blast-radius counts"
-    )
-    _ = bucket.add_argument(
-        "--files", type=int, required=True, help="file count from tilth_deps"
-    )
-    _ = bucket.add_argument(
-        "--modules", type=int, default=1, help="distinct module count (default 1)"
-    )
-    bucket.set_defaults(func=_cmd_bucket)
-
+app = App(name="severity")
+_ = app.command(_compute_command, name="compute")
+_ = app.command(_bucket_command, name="bucket")
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

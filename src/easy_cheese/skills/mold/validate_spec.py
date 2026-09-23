@@ -26,7 +26,9 @@ ERROR:-line accumulation and exit codes follow .github/scripts/validate_wiki.py.
 
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes its application result as Any at the invocation boundary.
+# pyright: reportAny=false, reportUnusedCallResult=false
+
 import importlib
 import importlib.util
 import json
@@ -37,6 +39,9 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
+from cyclopts import App
+
+from easy_cheese.shared import cli
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
 
 if TYPE_CHECKING:
@@ -747,23 +752,7 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     return errors, policy.notice
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "spec_path", type=Path, help="Path to the mold spec markdown file."
-    )
-    _ = parser.add_argument(
-        "--strict",
-        action="store_true",
-        help=(
-            "Mint/rewrite posture: enforce the current hardened format "
-            "unconditionally, with no legacy acceptance."
-        ),
-    )
-    args = parser.parse_args(argv)
-    spec_path = cast(Path, args.spec_path)
-    strict = cast(bool, args.strict)
-
+def _command(spec_path: Path, strict: bool = False) -> int:
     if not spec_path.is_file():
         print(f"ERROR: spec not found: {spec_path}", file=sys.stderr)
         return 1
@@ -779,6 +768,14 @@ def main(argv: list[str]) -> int:
 
     print(f"OK: {spec_path} is a valid mold spec")
     return 0
+
+
+app = App(name="validate-spec")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import ast
 import contextlib
 import importlib
@@ -13,7 +12,9 @@ import sys
 from pathlib import Path
 from types import ModuleType
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Annotated, Protocol, cast
+
+from cyclopts import App, Parameter
 
 import pytest
 
@@ -371,9 +372,9 @@ def test_no_long_option_uses_an_underscore_in_its_flag_name() -> None:
     assert offenders == {}
 
 
-# argparse prints a subparser group as `{a,b} ...` in the usage text. A `choices=`
-# option or positional has no trailing `...`.
+# argparse prints a subparser group as `{a,b} ...` in the usage text.
 _SUBPARSER_GROUP_RE = re.compile(r"\{([a-z0-9_,\s-]+)\}\s+\.\.\.")
+_CYCLOPTS_COMMAND_RE = re.compile(r"^│\s+([a-z][a-z0-9-]*)\s+│", re.MULTILINE)
 
 
 def _subparser_names(handler: _CommandHandler) -> set[str]:
@@ -381,10 +382,14 @@ def _subparser_names(handler: _CommandHandler) -> set[str]:
     with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
         with contextlib.suppress(SystemExit):
             _ = handler(["--help"])
-    match = _SUBPARSER_GROUP_RE.search(buffer.getvalue())
-    if match is None:
-        return set()
-    return {name.strip() for name in match.group(1).split(",")}
+    help_text = buffer.getvalue()
+    match = _SUBPARSER_GROUP_RE.search(help_text)
+    if match is not None:
+        return {name.strip() for name in match.group(1).split(",")}
+    if "─ Commands " in help_text:
+        command_table = help_text.split("─ Commands ", 1)[1].split("╰", 1)[0]
+        return set(_CYCLOPTS_COMMAND_RE.findall(command_table))
+    return set()
 
 
 @pytest.mark.parametrize("skill", _build_pyz.SKILLS)
@@ -575,22 +580,18 @@ def test_dispatch_standardizes_flag_names_before_the_handler_runs(
 def test_dispatch_hoisted_json_flag_reaches_a_leaf_handler_via_cli_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A hoisted `--json` given before the command must survive `cli.run`'s
-    subparser dispatch, not get overwritten by the subparser's own default.
-    """
+    """A hoisted --json survives Cyclopts command dispatch."""
     seen: list[bool] = []
     module = ModuleType("test_bundle_target_json_subparser")
+    app = App(name="paths")
 
-    def record(args: argparse.Namespace) -> None:
-        seen.append(cast(bool, args.json_mode))
+    def record(json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
+        seen.append(json_mode)
 
-    def setup(parser: argparse.ArgumentParser) -> None:
-        sub = parser.add_subparsers()
-        leaf = sub.add_parser("list")
-        leaf.set_defaults(func=record)
+    _ = app.command(record, name="list")
 
     def handler(argv: list[str]) -> int:
-        return cli.run(setup, argv=argv)
+        return cli.run(app, argv=[argv[-1], *argv[:-1]])
 
     module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
     monkeypatch.setitem(sys.modules, module.__name__, module)
@@ -603,22 +604,18 @@ def test_dispatch_hoisted_json_flag_reaches_a_leaf_handler_via_cli_run(
 def test_dispatch_hoisted_full_flag_reaches_a_leaf_handler_via_cli_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A hoisted `--full` given before the command must survive `cli.run`'s
-    subparser dispatch, not get overwritten by the subparser's own default.
-    """
+    """A hoisted --full survives Cyclopts command dispatch."""
     seen: list[bool] = []
     module = ModuleType("test_bundle_target_full_subparser")
+    app = App(name="paths")
 
-    def record(args: argparse.Namespace) -> None:
-        seen.append(cast(bool, args.full))
+    def record(full: bool = False) -> None:
+        seen.append(full)
 
-    def setup(parser: argparse.ArgumentParser) -> None:
-        sub = parser.add_subparsers()
-        leaf = sub.add_parser("list")
-        leaf.set_defaults(func=record)
+    _ = app.command(record, name="list")
 
     def handler(argv: list[str]) -> int:
-        return cli.run(setup, argv=argv)
+        return cli.run(app, argv=[argv[-1], *argv[:-1]])
 
     module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
     monkeypatch.setitem(sys.modules, module.__name__, module)

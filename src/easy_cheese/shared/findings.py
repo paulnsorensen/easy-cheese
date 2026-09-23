@@ -20,13 +20,13 @@ in lockstep.
 
 from __future__ import annotations
 
-import argparse
 import re
+from typing import Annotated
+
+from cyclopts import App, Parameter
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO, cast
-
 from easy_cheese.shared import cli
 
 SEVERITIES: tuple[str, ...] = ("blocker", "high", "medium", "low")
@@ -409,6 +409,8 @@ def _split_composed_verb(verb: str) -> list[str]:
     return [piece.strip() for piece in verb.split(",") if piece.strip()]
 
 
+LEAVES = ("render-table", "parse-selection", "render-brief")
+
 # ---- CLI: render-table, parse-selection, render-brief ----
 def _load_findings(report_path: str) -> list[Finding]:
     path = Path(report_path)
@@ -417,81 +419,40 @@ def _load_findings(report_path: str) -> list[Finding]:
     return parse_findings_report(path.read_text(encoding="utf-8"))
 
 
-def _cmd_render_table(args: argparse.Namespace) -> None:
-    items = _load_findings(cast(str, args.report))
-    table = render_selection_table(items)
-    cli.emit(
-        table,
-        full=cast(bool, args.full),
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast("TextIO", args.stdout),
-    )
+def _render_table_command(*, report: str, json_mode: Annotated[bool, Parameter(name="--json")] = False, full: Annotated[bool, Parameter(name="--full")] = False) -> int:
+    items = _load_findings(report)
+    cli.emit(render_selection_table(items), full=full, json_mode=json_mode)
+    return 0
 
-
-def _resolve_ids(args: argparse.Namespace) -> tuple[list[Finding], list[int]]:
-    items = _load_findings(cast(str, args.report))
+def _selection_command(*, report: str, selection: str, json_mode: Annotated[bool, Parameter(name="--json")] = False, full: Annotated[bool, Parameter(name="--full")] = False) -> int:
+    items = _load_findings(report)
     try:
-        ids = parse_selection(cast(str, args.selection), items)
+        ids = parse_selection(selection, items)
     except SelectionError as exc:
         raise cli.CliError(str(exc)) from exc
-    return items, ids
+    cli.emit(ids, full=full, json_mode=json_mode)
+    return 0
 
+def _brief_command(*, report: str, selection: str, json_mode: Annotated[bool, Parameter(name="--json")] = False, full: Annotated[bool, Parameter(name="--full")] = False) -> int:
+    items = _load_findings(report)
+    try:
+        ids = parse_selection(selection, items)
+    except SelectionError as exc:
+        raise cli.CliError(str(exc)) from exc
+    cli.emit("(no findings selected)" if not ids else render_brief(items, ids, report_path=report), full=full, json_mode=json_mode)
+    return 0
 
-def _cmd_parse_selection(args: argparse.Namespace) -> None:
-    _, ids = _resolve_ids(args)
-    cli.emit(
-        ids,
-        full=cast(bool, args.full),
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast("TextIO", args.stdout),
-    )
-
-
-def _cmd_render_brief(args: argparse.Namespace) -> None:
-    items, ids = _resolve_ids(args)
-    if not ids:
-        cli.emit(
-            "(no findings selected)",
-            full=cast(bool, args.full),
-            json_mode=cast(bool, args.json_mode),
-            stdout=cast("TextIO", args.stdout),
-        )
-        return
-    cli.emit(
-        render_brief(items, ids, report_path=cast(str, args.report)),
-        full=cast(bool, args.full),
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast("TextIO", args.stdout),
-    )
-
-
-LEAVES = ("render-table", "parse-selection", "render-brief")
-
-
-def _setup(parser: argparse.ArgumentParser) -> None:
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    render = sub.add_parser("render-table", help="render selection table from an /age report")
-    _ = render.add_argument("--report", required=True, help="path to /age findings report")
-    render.set_defaults(func=_cmd_render_table)
-
-    select = sub.add_parser("parse-selection", help="resolve a selection verb to finding ids")
-    _ = select.add_argument("--report", required=True, help="path to /age findings report")
-    _ = select.add_argument("--selection", required=True, help="selection verb (e.g. 'all-high', '1,3', 'skip 2')")
-    select.set_defaults(func=_cmd_parse_selection)
-
-    brief = sub.add_parser(
-        "render-brief",
-        help="render the coder brief (claim, locked recommendation, invariants) for selected findings",
-    )
-    _ = brief.add_argument("--report", required=True, help="path to /age findings report")
-    _ = brief.add_argument("--selection", required=True, help="selection verb or ids (e.g. '1,3', 'all-high')")
-    brief.set_defaults(func=_cmd_render_brief)
-
+app = App(name="findings")
+_ = app.command(_render_table_command, name="render-table")
+_ = app.command(_selection_command, name="parse-selection")
+_ = app.command(_brief_command, name="render-brief")
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    if not argv:
+        print("ERROR: command required", file=sys.stderr)
+        return 2
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

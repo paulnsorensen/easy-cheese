@@ -10,7 +10,9 @@ slug accepted by one validator is accepted by all.
 
 from __future__ import annotations
 
-import argparse
+# Cyclopts exposes a dynamically typed invocation surface.
+# pyright: reportAny=false, reportUnusedCallResult=false, reportUnknownLambdaType=false
+
 import difflib
 import functools
 import os
@@ -18,7 +20,9 @@ import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal, NamedTuple, TextIO, TypedDict, cast
+from typing import Annotated, Literal, NamedTuple, TypedDict
+
+from cyclopts import App, Parameter
 
 from easy_cheese.shared import cli, git_utils
 
@@ -579,237 +583,108 @@ def domain_model_target(
     )
 
 
-def _cmd_domain_model_target(args: argparse.Namespace) -> None:
-    probe = cast(str, args.probe)
-    corpus = cast("str | None", args.corpus)
-    model = cast("str | None", args.model)
-
+def _cmd_domain_model_target(*, probe: str, corpus: str | None = None, model: str | None = None, repo_root: str | None = None, project: str | None = None) -> None:
     if probe in {"unavailable", "no-match"}:
         if corpus is not None or model is not None:
             raise cli.CliError("--corpus and --model require --probe match")
-        if probe == "unavailable":
-            list_corpora: Callable[[], list[str]] | None = None
-        else:
-
-            def no_corpora() -> list[str]:
-                return []
-
-            list_corpora = no_corpora
-        wiki_has_model: Callable[[str], bool] | None = None
+        list_corpora = None if probe == "unavailable" else (lambda: [])
+        wiki_has_model = None
     else:
-        if corpus is None:
-            raise cli.CliError("--corpus is required when --probe is match")
-        if model is None:
-            raise cli.CliError("--model is required when --probe is match")
+        if corpus is None or model is None:
+            raise cli.CliError("--corpus and --model are required when --probe is match")
         if not corpus.startswith("repo:") or not corpus.endswith(":wiki"):
             raise cli.CliError("--corpus must match repo:<name>:wiki")
+        assert corpus is not None
 
-        def matched_corpus() -> list[str]:
+        def matched_corpora() -> list[str]:
             return [corpus]
 
-        list_corpora = matched_corpus
+        list_corpora = matched_corpora
         if model == "present":
-
             def model_present(_corpus: str) -> bool:
                 return True
-
             wiki_has_model = model_present
         elif model == "absent":
-
             def model_absent(_corpus: str) -> bool:
                 return False
-
             wiki_has_model = model_absent
         else:
             wiki_has_model = None
-
-    target = domain_model_target(
-        repo_root=cast("str | None", args.repo_root),
-        project=cast("str | None", args.project),
-        list_corpora=list_corpora,
-        wiki_has_model=wiki_has_model,
-    )
-    cli.emit(
-        {
-            "backend": target.backend,
-            "location": str(target.location),
-            "wiki_reachable": target.wiki_reachable,
-        },
-        json_mode=True,
-        stdout=cast(TextIO, args.stdout),
-    )
+    target = domain_model_target(repo_root=repo_root, project=project, list_corpora=list_corpora, wiki_has_model=wiki_has_model)
+    cli.emit({"backend": target.backend, "location": str(target.location), "wiki_reachable": target.wiki_reachable}, json_mode=True)
 
 
-# ---- CLI: slugify, validate, existing, resolve, list, domain-model-target ----
-def _cmd_slugify(args: argparse.Namespace) -> None:
-    text = cast(str, args.text)
+def _cmd_slugify(*, text: Annotated[str, Parameter(name="--text")], json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
     if not text:
         raise cli.CliError("slugify requires non-empty --text")
     slug = slugify(text)
     if not slug:
         raise cli.CliError(f"slugify produced an empty slug from {text!r}")
-    cli.emit(
-        slug, json_mode=cast(bool, args.json_mode), stdout=cast(TextIO, args.stdout)
-    )
+    cli.emit(slug, json_mode=json_mode)
 
 
-def _cmd_validate(args: argparse.Namespace) -> None:
-    err = validate_slug(cast(str, args.slug))
+def _cmd_validate(*, slug: str) -> None:
+    err = validate_slug(slug)
     if err is not None:
         raise cli.CliError(err)
 
 
-def _cmd_existing(args: argparse.Namespace) -> None:
-    slug = cast(str, args.slug)
-    phase = cast(str, args.phase)
+def _cmd_existing(*, slug: Annotated[str, Parameter(name="--slug")], phase: Annotated[str, Parameter(name="--phase")], root: Annotated[str | None, Parameter(name="--root")] = None, limit: Annotated[int | None, Parameter(name="--limit")] = None, full: Annotated[bool, Parameter(name="--full")] = False, json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
     err = validate_slug(slug)
     if err is not None:
         raise cli.CliError(err)
     if phase not in PHASES:
         raise cli.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
-    found = existing_artifacts(
-        slug, root=cast("str | None", args.root), phases=(phase,)
-    )
-    items = [str(p) for p in found.values()]
-    cli.emit(
-        items,
-        limit=cast("int | None", args.limit),
-        full=cast(bool, args.full),
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast(TextIO, args.stdout),
-    )
+    cli.emit([str(p) for p in existing_artifacts(slug, root=root, phases=(phase,)).values()], limit=limit, full=full, json_mode=json_mode)
 
 
-def _cmd_list(args: argparse.Namespace) -> None:
-    phase = cast(str, args.phase)
+def _cmd_list(*, phase: Annotated[str, Parameter(name="--phase")], repo_root: Annotated[str | None, Parameter(name="--repo-root")] = None, limit: Annotated[int | None, Parameter(name="--limit")] = None, full: Annotated[bool, Parameter(name="--full")] = False, json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
     if phase not in PHASES:
         raise cli.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
     try:
-        entries = list_artifacts(phase, repo_root=cast("str | None", args.repo_root))
+        entries = list_artifacts(phase, repo_root=repo_root)
     except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
-    json_mode = cast(bool, args.json_mode)
-    limit = cast("int | None", args.limit)
-    full = cast(bool, args.full)
-    stdout = cast(TextIO, args.stdout)
     if json_mode:
-        shown = entries if (full or limit is None) else entries[:limit]
-        cli.emit(shown, json_mode=True, stdout=stdout)
+        cli.emit(entries if (full or limit is None) else entries[:limit], json_mode=True)
     else:
-        cli.emit([e["slug"] for e in entries], limit=limit, full=full, stdout=stdout)
+        cli.emit([e["slug"] for e in entries], limit=limit, full=full)
 
 
-def _cmd_resolve(args: argparse.Namespace) -> None:
-    slug = cast(str, args.slug)
+def _cmd_resolve(*, slug: str, phase: str | None = None, repo_root: str | None = None) -> None:
     err = validate_slug(slug)
     if err is not None:
         raise cli.CliError(err)
     try:
-        result = resolve_slug(
-            slug,
-            phase_hint=cast("str | None", args.phase),
-            repo_root=cast("str | None", args.repo_root),
-        )
+        result = resolve_slug(slug, phase_hint=phase, repo_root=repo_root)
     except ValueError as exc:
         raise cli.CliError(str(exc)) from exc
-    cli.emit(result, json_mode=True, stdout=cast(TextIO, args.stdout))
+    cli.emit(result, json_mode=True)
 
 
 LEAVES = ("slugify", "validate", "existing", "resolve", "list", "domain-model-target")
 
-
-def _setup(parser: argparse.ArgumentParser) -> None:
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    slugify = sub.add_parser("slugify", help="kebab-slug arbitrary text")
-    _ = slugify.add_argument("--text", required=True, help="source text to slugify")
-    slugify.set_defaults(func=_cmd_slugify)
-
-    validate = sub.add_parser("validate", help="exit 0 if slug is valid kebab-case")
-    _ = validate.add_argument("--slug", required=True)
-    validate.set_defaults(func=_cmd_validate)
-
-    existing = sub.add_parser(
-        "existing",
-        help="list .cheese/<phase>/<slug>.md artifacts present on disk",
-    )
-    _ = existing.add_argument("--slug", required=True)
-    _ = existing.add_argument("--phase", required=True, help=f"one of {sorted(PHASES)}")
-    _ = existing.add_argument(
-        "--root",
-        default=None,
-        help="artifact root override (default: phase-appropriate -- XDG corpus for durable phases, .cheese/ otherwise)",
-    )
-    _ = existing.add_argument("--limit", type=int, default=None, help="cap list length")
-    existing.set_defaults(func=_cmd_existing)
-
-    resolve = sub.add_parser(
-        "resolve",
-        help="resolve a slug to absolute artifact path(s) across all phases",
-    )
-    _ = resolve.add_argument("--slug", required=True)
-    _ = resolve.add_argument(
-        "--phase", default=None, help="restrict the search to this phase/aux token"
-    )
-    _ = resolve.add_argument(
-        "--repo-root",
-        dest="repo_root",
-        default=None,
-        help="repo root for .cheese/ (default: git toplevel or cwd)",
-    )
-    resolve.set_defaults(func=_cmd_resolve)
-
-    list_cmd = sub.add_parser(
-        "list",
-        help="enumerate slugs (and paths) for a phase's artifacts on disk",
-    )
-    _ = list_cmd.add_argument("--phase", required=True, help=f"one of {sorted(PHASES)}")
-    _ = list_cmd.add_argument(
-        "--repo-root",
-        dest="repo_root",
-        default=None,
-        help="repo root for .cheese/ (default: git toplevel or cwd)",
-    )
-    _ = list_cmd.add_argument("--limit", type=int, default=None, help="cap list length")
-    list_cmd.set_defaults(func=_cmd_list)
-    target = sub.add_parser(
-        "domain-model-target",
-        help="resolve the domain-model store from explicit Hallouminate probe results",
-    )
-    _ = target.add_argument(
-        "--probe",
-        required=True,
-        choices=("unavailable", "no-match", "match"),
-        help="Hallouminate probe result",
-    )
-    _ = target.add_argument(
-        "--corpus",
-        default=None,
-        help="matching repo:<name>:wiki corpus (required with --probe match)",
-    )
-    _ = target.add_argument(
-        "--model",
-        default=None,
-        choices=("present", "absent", "unknown"),
-        help="model status in the matching corpus (required with --probe match)",
-    )
-    _ = target.add_argument(
-        "--repo-root",
-        dest="repo_root",
-        default=None,
-        help="repo root for docs/domain-model.md (default: git toplevel or cwd)",
-    )
-    _ = target.add_argument(
-        "--project",
-        default=None,
-        help="XDG corpus project key (default: environment or repository identity)",
-    )
-    target.set_defaults(func=_cmd_domain_model_target)
+app = App(name="paths")
+app.command(_cmd_slugify, name="slugify")
+app.command(_cmd_validate, name="validate")
+app.command(_cmd_existing, name="existing")
+app.command(_cmd_resolve, name="resolve")
+app.command(_cmd_list, name="list")
+app.command(_cmd_domain_model_target, name="domain-model-target")
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    try:
+        canonical = cli.repair_argv(app, argv)
+        result = app(canonical, print_error=False, exit_on_error=False, help_on_error=False, result_action="return_value")
+    except cli.CliError as exc:
+        print(f"ERROR: {exc}", file=__import__("sys").stderr)
+        return exc.exit_code
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=__import__("sys").stderr)
+        return 2
+    return 0 if result is None else int(result)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(__import__("sys").argv[1:]))

@@ -2,38 +2,46 @@
 
 Emits JSON with keys: status, next, artifact, orientation, halt_reason,
 taste_test, durable_flags, baseline.
-
-    python3 shared/scripts/read_handoff_slug.py --phase age --slug foo
-    -> {"status": "ok", "next": "cure", ...}
 """
 from __future__ import annotations
 
-import argparse
-from typing import TextIO, cast
+from typing import Annotated
+import sys
+
+from cyclopts import App, Parameter
 
 from easy_cheese.shared import cli, handoff, paths
 
 
-def _cmd(args: argparse.Namespace) -> None:
-    artifact = paths.artifact_path(cast(str, args.phase), cast(str, args.slug))
+def _command(
+    *,
+    phase: Annotated[str | None, Parameter(name="--phase")] = None,
+    slug: Annotated[str | None, Parameter(name="--slug")] = None,
+) -> int:
+    if phase is None or slug is None:
+        print("error: --phase and --slug are required", file=sys.stderr)
+        return 2
+    if phase not in paths.PHASES:
+        print(f"error: invalid phase: {phase}", file=sys.stderr)
+        return 2
+    artifact = paths.artifact_path(phase, slug)
     if not artifact.is_file():
         raise cli.CliError(f"artifact not found: {artifact}")
     try:
-        slug = handoff.parse_handoff_slug(artifact.read_text(encoding="utf-8"))
+        payload = handoff.parse_handoff_slug(artifact.read_text(encoding="utf-8"))
     except handoff.HandoffParseError as exc:
         raise cli.CliError(f"malformed handoff preamble in {artifact}: {exc}") from exc
-    cli.emit(handoff.slug_payload(slug), json_mode=True, stdout=cast(TextIO, args.stdout))
+    cli.emit(handoff.slug_payload(payload), json_mode=True)
+    return 0
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--phase", required=True, choices=sorted(paths.PHASES))
-    _ = parser.add_argument("--slug", required=True)
-    parser.set_defaults(func=_cmd)
+app = App(name="read-handoff-slug")
+_ = app.default(_command)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

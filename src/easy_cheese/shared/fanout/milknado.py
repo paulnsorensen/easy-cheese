@@ -20,10 +20,11 @@ fan-out, so milknado is never a hard dependency.
 """
 from __future__ import annotations
 
-import argparse
 import os
+import sys
 from collections.abc import Iterable
-from typing import Protocol, TextIO
+from typing import Annotated
+from cyclopts import App, Parameter
 
 # cli is co-staged in the bundled .pyz alongside this module
 from easy_cheese.shared import cli
@@ -62,34 +63,19 @@ def probe(tools: Iterable[str] | None = None) -> str | None:
     return None
 
 
-class _Args(Protocol):
-    tools: str | None
-    json_mode: bool
-    stdout: TextIO
+def _cmd_probe(*, tools: str | None = None, json_mode: Annotated[bool, Parameter(name="--json")] = False) -> None:
+    parsed_tools = _split(tools) if tools is not None else None
+    role = probe(parsed_tools)
+    cli.emit("none" if role is None else role, json_mode=json_mode)
 
 
-def _cmd_probe(args: _Args) -> None:
-    tools = _split(args.tools) if args.tools is not None else None
-    role = probe(tools)
-    cli.emit("none" if role is None else role, json_mode=args.json_mode, stdout=args.stdout)
-
-
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Probe the milknado seam (engine | tracker | none)."
-    _ = parser.add_argument(
-        "--tools",
-        default=None,
-        help=(
-            "Comma/space-separated available tool names. When omitted, read "
-            f"from the {TOOLS_ENV} env var (empty → none)."
-        ),
-    )
-    parser.set_defaults(func=_cmd_probe)
+app = App(name="milknado")
+_ = app.default(_cmd_probe)
 
 
 def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+    return cli.run(app, argv=argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main(sys.argv[1:]))

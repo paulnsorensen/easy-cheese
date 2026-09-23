@@ -30,7 +30,6 @@ subcommand name -- so the command is read from `argv[0]` first, and from
 
 from __future__ import annotations
 
-import argparse
 import contextlib
 import datetime as _dt
 import json
@@ -38,9 +37,11 @@ import sys
 import traceback
 from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Annotated, TextIO, cast
+from types import SimpleNamespace
 
 from attrs import define, evolve
+from cyclopts import App, Parameter
 
 from easy_cheese_schemas import (
     CheckpointIntent,
@@ -51,7 +52,7 @@ from easy_cheese_schemas import (
 )
 from easy_cheese_schemas import schema_runtime
 
-from easy_cheese.shared import paths
+from easy_cheese.shared import cli, paths
 from easy_cheese.shared.wheypoint import canonical
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
 from easy_cheese.shared.wheypoint import commit as commit_mod
@@ -67,8 +68,6 @@ from easy_cheese.shared.wheypoint.resolve_cli import (
     EXIT_OK,
     EXIT_REFUSED,
     EXIT_USAGE,
-    BadUsage,
-    Parser,
     emit,
     findings_payload,
     maybe_payload,
@@ -111,84 +110,78 @@ class _PendingMirror:
     target: str
 
 
-def _parser(command: str) -> Parser:
-    parser = Parser(prog=f"wheypoint.pyz {command}")
+def _parse_command(command: str, argv: list[str]) -> SimpleNamespace | None:
+    app = App(name=f"wheypoint.pyz {command}")
+
     if command == "checkpoint":
-        _ = parser.add_argument(
-            "--compacted",
-            dest="compacted",
-            default=None,
-            metavar="PROOF_JSON",
-            help=(
-                "path to a caller-authored CompactionRecord proving the session "
-                + "rehydrated from the current revision before writing"
-            ),
-        )
-        _ = parser.add_argument(
-            "--note-dir",
-            dest="note_dir",
-            default=None,
-            help=(
-                "directory the readable projection is mirrored into "
-                + f"(default: <git toplevel>/{'/'.join(legacy_mod.NOTES_DIR_PARTS)})"
-            ),
-        )
-        _ = parser.add_argument(
-            "--no-note",
-            dest="no_note",
-            action="store_true",
-            help="write no mirror; the checkpoint stays canonical-local",
-        )
+        def bind_checkpoint(
+            compacted: Annotated[str | None, Parameter(name="--compacted")] = None,
+            note_dir: Annotated[str | None, Parameter(name="--note-dir")] = None,
+            no_note: Annotated[bool, Parameter(name="--no-note")] = False,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(compacted=compacted, note_dir=note_dir, no_note=no_note)
+        bind = bind_checkpoint
     elif command == "schema":
-        _ = parser.add_argument(
-            "slug", help="a registered contract slug, e.g. checkpoint-intent"
-        )
-    elif command in ("list", "log"):
-        _ = parser.add_argument(
-            "--corpus-root",
-            dest="corpus_root",
-            default=None,
-            help="the per-project corpus root (default: the project's own corpus)",
-        )
-        if command == "log":
-            _ = parser.add_argument("--work-id", required=True, dest="work_id")
+        def bind_schema(slug: str) -> SimpleNamespace:
+            return SimpleNamespace(slug=slug)
+        bind = bind_schema
+    elif command == "list":
+        def bind_list(corpus_root: Annotated[str | None, Parameter(name="--corpus-root")] = None) -> SimpleNamespace:
+            return SimpleNamespace(corpus_root=corpus_root)
+        bind = bind_list
+    elif command == "log":
+        def bind_log(
+            work_id: Annotated[str, Parameter(name="--work-id")],
+            corpus_root: Annotated[str | None, Parameter(name="--corpus-root")] = None,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(work_id=work_id, corpus_root=corpus_root)
+        bind = bind_log
     elif command == "turns":
-        _ = parser.add_argument(
-            "--transcript", default=None, help="path to a session .jsonl transcript"
-        )
-        _ = parser.add_argument(
-            "--session",
-            default=None,
-            help="session id under the derived projects directory",
-        )
+        def bind_turns(
+            transcript: Annotated[str | None, Parameter(name="--transcript")] = None,
+            session: Annotated[str | None, Parameter(name="--session")] = None,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(transcript=transcript, session=session)
+        bind = bind_turns
     elif command == "resolve":
-        _ = parser.add_argument(
-            "--ref",
-            required=True,
-            help="an absolute projection path, a work id, or a slug",
-        )
-        # A legacy note lives beside the repository, not in a corpus, so a
-        # corpus root given with --legacy would be silently dropped.
-        where = parser.add_mutually_exclusive_group()
-        _ = where.add_argument(
-            "--legacy",
-            action="store_true",
-            help="resolve a pre-kernel .cheese/notes/<slug>.md instead",
-        )
-        _ = where.add_argument(
-            "--corpus-root",
-            dest="corpus_root",
-            default=None,
-            help="the corpus to resolve in; defaults to this project's XDG corpus",
-        )
+        def bind_resolve(
+            ref: Annotated[str, Parameter(name="--ref")],
+            legacy: Annotated[bool, Parameter(name="--legacy")] = False,
+            corpus_root: Annotated[str | None, Parameter(name="--corpus-root")] = None,
+        ) -> SimpleNamespace:
+            if legacy and corpus_root is not None:
+                raise ValueError("--legacy and --corpus-root are mutually exclusive")
+            return SimpleNamespace(ref=ref, legacy=legacy, corpus_root=corpus_root)
+        bind = bind_resolve
     elif command == "show":
-        _ = parser.add_argument("--work-id", required=True, dest="work_id")
+        def bind_show(work_id: Annotated[str, Parameter(name="--work-id")]) -> SimpleNamespace:
+            return SimpleNamespace(work_id=work_id)
+        bind = bind_show
     elif command == "lint":
-        _ = parser.add_argument("path", help="path to a rendered projection document")
-    return parser
+        def bind_lint(path: str) -> SimpleNamespace:
+            return SimpleNamespace(path=path)
+        bind = bind_lint
+    else:
+        def bind_empty() -> SimpleNamespace:
+            return SimpleNamespace()
+        bind = bind_empty
+
+    _ = app.default(bind)
+    canonical = cli.repair_argv(app, argv)
+    raw_result: object = cast(
+        object,
+        app(
+            canonical,
+            print_error=False,
+            exit_on_error=False,
+            help_on_error=False,
+            result_action="return_value",
+        ),
+    )
+    return None if raw_result is None else cast(SimpleNamespace, raw_result)
 
 
-def _note_dir(args: argparse.Namespace) -> Path | None:
+def _note_dir(args: SimpleNamespace) -> Path | None:
     """Where the readable mirror goes, or None when none is to be written.
 
     `--no-note` refuses one outright; an explicit `--note-dir` is taken as
@@ -220,7 +213,7 @@ def _open(work_id: str, *, corpus_root: Path | None = None) -> storage.WorkStore
         raise _Refused("storage-error", str(exc)) from exc
 
 
-def _run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
+def _run_checkpoint(args: SimpleNamespace, stdin: TextIO) -> dict[str, object]:
     """A semantic intent, bound to the current record and committed.
 
     The binding is a read outside the lock, so it settles nothing: `commit`
@@ -288,7 +281,7 @@ def request_identity_for(
     )
 
 
-def _compaction_proof(args: argparse.Namespace) -> CompactionRecord | None:
+def _compaction_proof(args: SimpleNamespace) -> CompactionRecord | None:
     """The `--compacted` proof, validated before it can touch a delta."""
     path_arg = cast("str | None", args.compacted)
     if path_arg is None:
@@ -322,7 +315,7 @@ def _refusal_for(exc: Exception) -> _Refused:
 def _promote(
     delta: WheypointDelta,
     store: storage.WorkStore,
-    args: argparse.Namespace,
+    args: SimpleNamespace,
     *,
     request_identity: str,
 ) -> dict[str, object]:
@@ -534,7 +527,7 @@ def _result_payload(
     }
 
 
-def _run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def _run_show(args: SimpleNamespace, _stdin: TextIO) -> dict[str, object]:
     work_id = cast(str, args.work_id)
     store = _open(work_id)
     try:
@@ -555,7 +548,7 @@ def _run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     }
 
 
-def _run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def _run_resolve(args: SimpleNamespace, _stdin: TextIO) -> dict[str, object]:
     ref = cast(str, args.ref)
     legacy_flag = cast(bool, args.legacy)
     corpus_root = cast("str | None", args.corpus_root)
@@ -567,7 +560,7 @@ def _run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     return resolve_cli.resolve_payload(resolution, ref)
 
 
-def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def _run_lint(args: SimpleNamespace, _stdin: TextIO) -> dict[str, object]:
     path = cast(str, args.path)
     report = lint_mod.lint_projection_file(path)
     return {
@@ -578,7 +571,7 @@ def _run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     }
 
 
-def _run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
+def _run_validate(args: SimpleNamespace, stdin: TextIO) -> dict[str, object]:
     """Schema-only dry run: every problem, no store opened (AC-11)."""
     _ = args
     payload = _payload(stdin)
@@ -630,7 +623,7 @@ def _run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
     return {"valid": True, "work_id": loaded.value.work_id if loaded.value else None}
 
 
-def _run_schema(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def _run_schema(args: SimpleNamespace, _stdin: TextIO) -> dict[str, object]:
     """The JSON Schema for one registered contract, so no one unzips the bundle (AC-12)."""
     slug = cast(str, args.slug)
     table = dict(schema_runtime.contract_registry())
@@ -646,7 +639,7 @@ def _run_schema(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     return {"slug": slug, "schema": document}
 
 
-def _corpus_root(args: argparse.Namespace) -> Path:
+def _corpus_root(args: SimpleNamespace) -> Path:
     root_arg = cast("str | None", args.corpus_root)
     return Path(root_arg) if root_arg is not None else paths.project_corpus_root()
 
@@ -667,7 +660,7 @@ def _tsv_lines(
     return lines
 
 
-def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def _run_list(args: SimpleNamespace, _stdin: TextIO) -> dict[str, object]:
     """One line per work item under the corpus root (AC-13)."""
     root = _corpus_root(args)
     items: list[dict[str, object]] = []
@@ -704,7 +697,7 @@ def _run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     return {"corpus_root": str(root), "items": items, "lines": lines}
 
 
-def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def _run_log(args: SimpleNamespace, _stdin: TextIO) -> dict[str, object]:
     """One line per complete revision, oldest first (AC-14)."""
     work_id = cast(str, args.work_id)
     store = _open(work_id, corpus_root=_corpus_root(args))
@@ -767,7 +760,7 @@ def _run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     }
 
 
-def _run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def _run_turns(args: SimpleNamespace, _stdin: TextIO) -> dict[str, object]:
     """The user's own turns from a session transcript (AC-27, AC-28)."""
     transcript_arg = cast("str | None", args.transcript)
     session = cast("str | None", args.session)
@@ -879,8 +872,10 @@ def main(
             EXIT_USAGE,
         )
     try:
-        args = _parser(command).parse_args(rest)
-    except BadUsage as exc:
+        args = _parse_command(command, rest)
+        if args is None:
+            return EXIT_OK
+    except Exception as exc:
         return refuse(stdout2, command, "usage", str(exc), EXIT_USAGE)
     try:
         payload = _RUNNERS[command](args, stdin2)

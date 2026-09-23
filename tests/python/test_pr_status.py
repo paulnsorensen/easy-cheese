@@ -982,3 +982,80 @@ def test_failing_state_with_cancelled_bucket_fail_enriches(
     # bucket==fail triggers enrichment for non-failure states too — the cure #4 fix.
     assert "tests/cancel.py::test_x" in check["failed_tests"]
     assert "cancelled by user" in check["failure_summary"]
+
+
+def test_pr_url_scopes_every_gh_request(
+    pr_status: _PrStatusModule,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A URL selects its repository for checks, merge state, and run logs."""
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], **_kwargs: object) -> _FakeCompletedProcess:
+        calls.append(list(cmd))
+        if cmd[:3] == ["gh", "pr", "checks"]:
+            return _FakeCompletedProcess(stdout=json.dumps([{
+                "name": "ci", "state": "FAILURE", "bucket": "fail",
+                "link": "https://github.example/owner/B/actions/runs/77/job/1",
+            }]))
+        if cmd[:3] == ["gh", "pr", "view"]:
+            return _FakeCompletedProcess(stdout=json.dumps({
+                "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN",
+            }))
+        if cmd[:3] == ["gh", "run", "view"]:
+            return _FakeCompletedProcess(stdout="FAILED tests/ci.py::test_one\n")
+        raise AssertionError(f"unexpected gh call: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", runner)
+    assert pr_status.main(["https://github.example/owner/B/pull/42?tab=checks"]) == 0
+    assert json.loads(capsys.readouterr().out)["pr"] == 42
+    assert len(calls) == 3
+    assert all(call[-2:] == ["--repo", "github.example/owner/B"] for call in calls)
+
+    calls.clear()
+    assert pr_status.main(["42"]) == 0
+    _ = capsys.readouterr()
+    assert len(calls) == 3
+    assert all("--repo" not in call for call in calls)
+
+
+def test_pr_url_rejects_non_actions_log_link(
+    pr_status: _PrStatusModule,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A matching repository alone cannot authorize an unrelated run URL."""
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], **_kwargs: object) -> _FakeCompletedProcess:
+        calls.append(list(cmd))
+        if cmd[:3] == ["gh", "pr", "checks"]:
+            return _FakeCompletedProcess(stdout=json.dumps([{
+                "name": "ci", "state": "FAILURE", "bucket": "fail",
+                "link": "https://github.example/owner/B/other/runs/77",
+            }]))
+        if cmd[:3] == ["gh", "pr", "view"]:
+            return _FakeCompletedProcess(stdout=json.dumps({
+                "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN",
+            }))
+        raise AssertionError(f"unexpected gh call: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", runner)
+    assert pr_status.main(["https://github.example/owner/B/pull/42"]) == 0
+    output = cast(dict[str, dict[str, list[dict[str, str]]]], json.loads(capsys.readouterr().out))
+    assert output["build"]["checks"][0]["failure_summary"] == ""
+    assert len(calls) == 2
+
+
+def test_invalid_pr_url_rejects_before_gh(
+    pr_status: _PrStatusModule,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def runner(_cmd: list[str], **_kwargs: object) -> _FakeCompletedProcess:
+        raise AssertionError("invalid URL reached gh")
+
+    monkeypatch.setattr(subprocess, "run", runner)
+    assert pr_status.main(["http://github.example/owner/B/pull/42"]) == 2
+    assert "HTTPS" in capsys.readouterr().err

@@ -8,11 +8,13 @@ markdown-formatted human view, or --json for structured output.
 
 from __future__ import annotations
 
-import argparse
 import json
-import sys
+
+from cyclopts import App
 from pathlib import Path
-from typing import NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, TypedDict, cast
+
+from easy_cheese.shared import cli
 
 from easy_cheese.shared.git_utils import (
     binary_conflict_guidance,
@@ -224,42 +226,23 @@ def format_verbose_output(summaries: list[_Summary | _ErrorSummary]) -> str:
     return "\n".join(lines)
 
 
-class _Args(Protocol):
-    json: bool
-    verbose: bool
-    context: int
-    files: list[str]
+def _command(json_mode: bool = False, verbose: bool = False, context: int = 3, files: list[str] | None = None) -> int:
+    files = files or []
 
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Summarize merge conflicts. Default output is terse for LLMs."
-    )
-    _ = parser.add_argument("--json", action="store_true", help="Output as JSON.")
-    _ = parser.add_argument(
-        "--verbose", action="store_true", help="Emit markdown-formatted human view."
-    )
-    _ = parser.add_argument(
-        "--context", type=int, default=3, help="Lines of context to show (default: 3)."
-    )
-    _ = parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
-
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
-
-    files = args.files if args.files else get_conflicted_files()
+    files = files if files else get_conflicted_files()
 
     if not files:
-        if args.json:
+        if json_mode:
             print(json.dumps({"files": []}))
         else:
             print("no conflicts")
         return 0
 
-    summaries = [summarize_file(f, args.context) for f in files]
+    summaries = [summarize_file(f, context) for f in files]
 
-    if args.json:
+    if json_mode:
         print(json.dumps({"files": summaries}, indent=2))
-    elif args.verbose:
+    elif verbose:
         print(format_verbose_output(summaries))
     else:
         print(format_terse_output(summaries))
@@ -267,5 +250,13 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+app = App(name="conflict-summary")
+_ = app.default(_command)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return cli.run(app, argv=argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Never, NotRequired, TypedDict, cast
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import attrs
@@ -1229,7 +1229,7 @@ def test_hold_clearance_ref_uses_the_shared_digest_helper(tmp_path: Path) -> Non
     _ = dialogue.write_bytes(content)
 
     clearances = contract_handlers._hold_clearances(  # pyright: ignore[reportPrivateUsage]
-        argparse.Namespace(clear_hold=[f"user-hold={dialogue}"])
+        SimpleNamespace(clear_hold=[f"user-hold={dialogue}"])
     )
 
     digest = contract_handlers._digest_of(content)  # pyright: ignore[reportPrivateUsage]
