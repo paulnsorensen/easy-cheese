@@ -69,6 +69,24 @@ def read_payload(stdin: TextIO) -> object:
         raise Refused("invalid-json", f"stdin is not one JSON value: {exc}") from exc
 
 
+def read_intent(args: argparse.Namespace, stdin: TextIO) -> object:
+    """The JSON intent from a path argument, `-`, or stdin when neither (G6)."""
+    intent_arg = cast("str | None", getattr(args, "intent", None))
+    if intent_arg is None or intent_arg == "-":
+        return read_payload(stdin)
+    path = Path(intent_arg)
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise Refused("intent-unreadable", f"{intent_arg}: {exc}") from exc
+    try:
+        return cast(object, json.loads(raw))
+    except ValueError as exc:
+        raise Refused(
+            "invalid-json", f"{intent_arg} is not one JSON value: {exc}"
+        ) from exc
+
+
 def open_store(work_id: str, *, corpus_root: Path | None = None) -> storage.WorkStore:
     try:
         return storage.WorkStore.open(work_id, corpus_root=corpus_root)
@@ -83,7 +101,7 @@ def run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]
     re-checks the parent under the lock and refuses a delta whose record has
     moved on. This command shortens the authoring, not the checking.
     """
-    payload = read_payload(stdin)
+    payload = read_intent(args, stdin)
     reserved = checkpoint_mod.commit_only_fields(payload)
     if reserved:
         raise Refused(

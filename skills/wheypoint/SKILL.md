@@ -32,14 +32,14 @@ When the consumer repository lacks `skills/`, resolve the installed bundle path 
 
 ```bash
 python3 skills/wheypoint/scripts/wheypoint.pyz turns [--session <id> | --transcript <path>]
-python3 skills/wheypoint/scripts/wheypoint.pyz show --work-id <id>
-python3 skills/wheypoint/scripts/wheypoint.pyz validate < intent.json
-python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [--compacted <proof.json>] < intent.json
+python3 skills/wheypoint/scripts/wheypoint.pyz show <work-id> [--project <key>]
+python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json]
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [--compacted <proof.json>] [intent.json]
 python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
-python3 skills/wheypoint/scripts/wheypoint.pyz resolve --ref <absolute-path | work-id | slug>
+python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>]
 python3 skills/wheypoint/scripts/wheypoint.pyz lint <projection-path>
-python3 skills/wheypoint/scripts/wheypoint.pyz list
-python3 skills/wheypoint/scripts/wheypoint.pyz log --work-id <id>
+python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>] [--project <key>]
+python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
 ```
 
 `resolve`, `lint`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
@@ -126,4 +126,4 @@ Handwritten notes, their legacy values, and their provenance fields are in [`ref
 ## Handoff
 
 End with the orientation and this link: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
-From the repository run `/cheese --continue <slug>`; from elsewhere run `/cheese --continue <absolute-repo-path>/.cheese/notes/<slug>.md`.
+From the repository run `/cheese --continue <slug>`; from another worktree or project, find the hit with `list --scope machine --grep <text>` and pass its `resume` path to `/cheese --continue`.

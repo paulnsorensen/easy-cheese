@@ -7,7 +7,7 @@
 | `checkpoint` | Checkpoint a semantic intent onto the current record |  |
 | `handoff` | Render, parse, and dispatch-split handoff preambles | `render`, `parse`, `dispatch` |
 | `lint` | Lint a generated projection against the record |  |
-| `list` | List every work item under the corpus root |  |
+| `list` | List and search work items and notes across worktrees |  |
 | `log` | Walk the revisions of one work id, oldest first |  |
 | `resolve` | Resolve a slug, work id, or path to the current record |  |
 | `schema` | Print the JSON Schema for a registered contract slug |  |

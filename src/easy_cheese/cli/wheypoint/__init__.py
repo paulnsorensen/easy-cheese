@@ -51,7 +51,7 @@ from easy_cheese.cli.wheypoint.checkpoint import (
     request_identity_for as request_identity_for,
     run_checkpoint,
 )
-from easy_cheese.cli.wheypoint.parser import parser_for
+from easy_cheese.cli.wheypoint.parser import normalize_positional_ref, parser_for
 from easy_cheese.cli.wheypoint.queries import (
     run_lint,
     run_list,
@@ -126,6 +126,7 @@ def main(
         )
     try:
         args = parser_for(command).parse_args(rest)
+        normalize_positional_ref(command, args)
     except BadUsage as exc:
         return refuse(stdout2, command, "usage", str(exc), EXIT_USAGE)
     try:
