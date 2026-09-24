@@ -1,7 +1,6 @@
 # Handoff branch menus
 
-Read this when rendering `/mold`'s post-Curdle handoff. The `curd-count` digest
-is advisory sizing; finalization owns readiness and execution authority.
+Read this when the user selects Cook after Mold saves a draft. A saved draft alone renders no Cook command. The `curd-count` digest is advisory sizing; finalization owns readiness and execution authority.
 
 - A `ready` finalization result carries a consumer-valid pointer. A
   `saved-not-ready` result carries only durable preparation requirements and
@@ -9,7 +8,7 @@ is advisory sizing; finalization owns readiness and execution authority.
   requirement and hold. Cook does not read these saved requirements, so offer
   **Let Cook prepare the spec** — `/cook --spec "$SPEC"` only when the result
   has no hold and every requirement `kind` is `approval`, `scope`, or `plan`.
-  Cook preparation then asks for each missing plan and approval. For any other
+  Cook preparation then asks for each missing plan and approval. Offer this only after the user selects Cook. For any other
   requirement, such as a failed taste verdict, render no Cook choice.
 - For a ready result, a non-null `handoff` means `red-required`; a null
   `handoff` means closed `not-applicable` or legacy input. Both route to Cook
@@ -17,7 +16,7 @@ is advisory sizing; finalization owns readiness and execution authority.
   `/cook --auto <pointer-path> --spec "$SPEC"` and manual choices use
   `/cook <pointer-path> --spec "$SPEC"`.
 
-Then render the branch selected by `mode`:
+Only after explicit Cook selection, render the branch selected by `mode`:
 
 **Decomposable specs (`decomposable: true`, `candidate_curds ≥ 2`, `mode: parallel`):**
 

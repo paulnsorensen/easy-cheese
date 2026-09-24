@@ -565,5 +565,5 @@ def test_landing_block_answers_the_layout_question() -> None:
     assert "landing:\n  shape: single | orthogonal_flat | stacked_linear | diamond_stack" in mini_spec
     assert "Mini-spec mode writes `shape: single`" in mini_spec
     assert "landing:\n  shape: single | orthogonal_flat | stacked_linear | diamond_stack" in curdle
-    assert "ask the landing shape once" in curdle
+    assert "settle landing shape and curd independence before execution" in curdle
     assert '/cook --auto <pointer path> --spec "$SPEC"' in curdle

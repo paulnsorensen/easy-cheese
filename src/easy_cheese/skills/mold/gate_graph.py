@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render mold's gate state machine from one in-memory model.
 
-`GATE_MODEL` is the single source of truth for mold's gate flow: the six modes,
-the curdle terminal, and the coherence-checklist gates that guard the two-key
-handshake. Both render targets derive from it, so they cannot drift:
+`GATE_MODEL` models Mold's runnable handoff gate: the six modes,
+the Cook handoff terminal, and the coherence-checklist gates that guard the two-key
+execution handshake. Draft spec writes can occur before this gate. Both render targets derive from it, so they cannot drift:
 
   - `to_dot()` emits a canonical Graphviz `.dot` document.
   - `to_mermaid()` emits a GitHub/markdown-native `flowchart` block (no binary).
@@ -108,7 +108,7 @@ MODES: tuple[Node, ...] = (
 
 HANDSHAKE = Node("handshake", "Two-key handshake", "handshake")
 TYPED_PLANNER = Node("typed-planner-stage", "Typed planner stage", "planner")
-CURDLE = Node("curdle", "Curdle (extract spec)", "terminal")
+CURDLE = Node("curdle", "Cook handoff (finalize)", "terminal")
 
 
 def _build_model() -> GateModel:

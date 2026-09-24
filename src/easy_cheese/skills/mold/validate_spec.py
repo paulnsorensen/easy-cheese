@@ -403,6 +403,40 @@ def _acceptance_ids(content_lines: list[str]) -> list[str]:
     return ids
 
 
+def _parent_link_error(lines: list[str], child_slug: object) -> str | None:
+    """Validate the bounded parent link on an early curd mini-spec."""
+    expected = {"Spec", "Goals", "Depends on", "Frozen decisions"}
+    values: dict[str, str] = {}
+    for line in lines:
+        if not line.strip():
+            continue
+        match = re.fullmatch(r"- ([A-Za-z ]+): (.+)", line.strip())
+        if match is None or match.group(1) not in expected:
+            return "Parent must contain only the four named link fields"
+        name, value = match.groups()
+        if name in values:
+            return f"Parent field {name!r} appears more than once"
+        values[name] = value.strip()
+    if values.keys() != expected:
+        return f"Parent fields must be {sorted(expected)!r}"
+    slug = r"[a-z0-9]+(?:-[a-z0-9]+)*"
+    if not re.fullmatch(slug, values["Spec"]) or values["Spec"] == child_slug:
+        return "Parent Spec must be a distinct kebab-case slug"
+    if not re.fullmatch(r"G-\d+(?:,\s*G-\d+)*", values["Goals"]):
+        return "Parent Goals must name one or more G-n clauses"
+    if values["Depends on"] != "none" and not re.fullmatch(
+        rf"{slug}(?:,\s*{slug})*", values["Depends on"]
+    ):
+        return "Parent Depends on must be none or child slugs"
+    if values["Frozen decisions"] != "none" and not re.fullmatch(
+        r"F-\d+(?:,\s*F-\d+)*", values["Frozen decisions"]
+    ):
+        return "Parent Frozen decisions must be none or F-n forks"
+    return None
+
+
+
+
 def _schema_module() -> _SchemaModule:
     try:
         module = importlib.import_module("easy_cheese_schemas.contracts")
@@ -692,6 +726,17 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
                 f"ERROR: missing-required-section '{name}' section not "
                 + f"found in {path}"
             )
+
+    if source == "mold-curd-mini-spec":
+        parent = found_sections.get(_canonical_heading("Parent"))
+        if parent is None:
+            errors.append(
+                f"ERROR: missing-required-section 'Parent' section not found in {path}"
+            )
+        else:
+            problem = _parent_link_error(parent, frontmatter.get("slug"))
+            if problem is not None:
+                errors.append(f"ERROR: parent-link-invalid {problem} in {path}")
 
     test_contracts_lines = found_sections.get(_canonical_heading("Test Contracts"))
     test_rows: list[list[str]] = []

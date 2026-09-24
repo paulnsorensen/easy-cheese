@@ -98,6 +98,24 @@ def _write(tmp_path: Path, name: str, text: str) -> Path:
     return path
 
 
+def test_early_curd_mini_spec_is_hardened_and_requires_parent(tmp_path: Path) -> None:
+    spec = MINI_SPEC.replace("source: agent-mini-spec", "source: mold-curd-mini-spec")
+    path = _write(tmp_path, "curd.md", spec)
+    result = _run_direct(path, "--strict")
+    assert any("missing-required-section" in line and "Parent" in line for line in _error_lines(result))
+
+    linked = spec + (
+        "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+        "- Depends on: none\n- Frozen decisions: F-1\n"
+    )
+    path = _write(tmp_path, "curd.md", linked)
+    result = _run_direct(path, "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    path = _write(tmp_path, "curd.md", linked.replace("G-1", "unknown"))
+    result = _run_direct(path, "--strict")
+    assert any("parent-link-invalid" in line for line in _error_lines(result))
+
 # --- lenient syntax-repair classes (AC-1 half) ---------------------------
 
 

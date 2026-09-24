@@ -1,6 +1,6 @@
 # Curdle — artifact extraction
 
-Curdle is the terminal state of mold. It runs only after the two-key handshake (see `handshake.md`).
+Curdle saves a validated draft and may run while Mold continues shaping its parent. Spec writing needs no user approval. A runnable Cook handoff still needs the two-key execution gate (see `handshake.md`). For a bounded early curd, read [`early-curds.md`](early-curds.md).
 
 ## Artifact types
 
@@ -152,7 +152,7 @@ arrows:           <dependency directions added, or none>
 - <runnable command>: <expected result>
 
 ## Curds
-<the host-validated typed CurdPlan approved at the two-key handshake>
+<the host-validated typed CurdPlan when present; list each linked early mini-spec with slug, resolved path, covered G-n clauses, dependencies, and state. Keep unresolved parent work here.>
 
 ## Reproduction (Diagnose only)
 <failing test, curl, replay command, etc.>
@@ -161,7 +161,7 @@ arrows:           <dependency directions added, or none>
 <one footnote definition per cited source; include only when out-of-scope evidence was cited above per `../../cheese/references/formatting.md` § Citations>
 ```
 
-`source: mold-handshake` marks the strict Mold production path. Every new
+`source: mold-handshake` marks the strict full-spec path. `source: mold-curd-mini-spec` marks a strict early curd with a required `## Parent` section. Every new
 behavior declaration must set `ui_surface` to `browser` or `non-browser`;
 closed non-behavior declarations, including `appearance-only`, set it to
 `not-applicable`. A browser declaration is valid only when every Test Contract
@@ -425,13 +425,13 @@ This is the runtime home of the **Durable writes** coherence gate (`handshake.md
 
 ## Pre-approval typed planner dispatch
 
-Before this procedure, run the digest-bound fresh-context fork taste test on the dialogue-state draft. It must pass; failures reopen only named forks, with two correction rounds. Then run the procedure on the draft before the two-key handshake. It prepares the typed plan that the handshake approves; Curdle later persists the host-validated artifacts.
+Before this procedure, run the digest-bound fresh-context fork taste test on the dialogue-state draft. It must pass for a runnable handoff; failures reopen only named forks, with two correction rounds. A blocked draft may still be saved with named holds. Prepare the typed plan before the user chooses Cook so the selection binds exact coverage.
 
 1. **Dispatch** a fresh-context planner on a `PlannerRequest` built from the current draft spec text. The planner returns a `PlannerResultWriterView`; it does not own contract versions, identifiers, digests, lineage, or evidence references.
 2. **Validate and normalize** the writer view on the host. The normal selected path is the typed `PlannerResult` containing a typed `CurdPlan`; reject malformed or wrong-kind output before approval.
-3. **Still invalid after one retry** — stop before the two-key handshake. Do not approve or persist an invalid plan.
-4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` with the final approval request. The typed plan is part of what both handshake keys approve. When candidate curds are two or more, ask the landing shape once in that same approval request, alongside the curd-independence confirmation.
-5. Persist the approved spec, typed `PlannerResult`, and typed `CurdPlan`. Do not regenerate or mutate them after approval.
+3. **Still invalid after one retry** — save the draft with a plan hold. Do not approve, publish, or dispatch an invalid plan.
+4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` before any Cook choice. The user's Cook selection binds this exact plan. When candidate curds are two or more, settle landing shape and curd independence before execution.
+5. Persist the draft spec and host-validated `PlannerResult` and `CurdPlan`. Do not mutate an approved execution plan; a change requires a new user Cook selection.
 
 ## Finalization
 
@@ -441,7 +441,7 @@ Finalize the approved spec and plan before the hand-off. The host owns three val
 - `ARTIFACT_ROOT` is `.cheese/cook/<slug>-artifacts`. Mold and Cook must use the same directory.
 - The operation id is `<slug>-<ordinal>`. Keep it for an identical retry. Increase the ordinal when an input changes.
 
-Record the handshake verb first. Pass the user's reply word for word; a reply that is not an approval records a rejection:
+After the user selects Cook for the displayed scope or plan, record the literal response. Update only that selected spec's lifecycle to `approved`, then bind the response to its exact bytes. A response that is not affirmative records a rejection:
 
 ```bash
 python3 skills/mold/scripts/mold.pyz approve "$SPEC" \

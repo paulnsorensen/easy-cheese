@@ -1,10 +1,7 @@
-"""The four handshake audits ask once, through one table with defaults.
+"""Scope audits display draft defaults without granting Cook consent.
 
-Agent-introduced scope, the non-goals audit, entity-referent binding, and
-follow-up disposition each demanded per-row approval, so question volume
-scaled with noun count rather than with stakes. The grep and search that
-populate the rows still run; only leverage rows and unresolved bindings
-keep their own approval turn.
+The audit runs before a draft save. Leverage rows and unresolved bindings
+still block execution until the user settles them.
 """
 
 from __future__ import annotations
@@ -27,13 +24,10 @@ def _section(body: str, heading: str) -> str:
 
 
 class TestOneTableOneConfirm:
-    def test_table_is_presented_once_before_the_handshake(self) -> None:
+    def test_table_is_presented_once_before_execution(self) -> None:
         section = _section(_text(HANDSHAKE), "## Scope audit table")
-        assert "one table, presented once, before the handshake" in section
-        assert (
-            "One confirm of the table approves every default except the rows marked `needs your verb`."
-            in section
-        )
+        assert "one table, presented once, before execution" in section
+        assert "Mold may save the displayed defaults without a confirm" in section
         for kind in ("| scope |", "| non-goal |", "| entity |", "| follow-up |"):
             assert kind in section, kind
 
@@ -47,13 +41,13 @@ class TestOneTableOneConfirm:
         section = _section(_text(HANDSHAKE), "## Scope audit table")
         assert "| needs your verb | contract |" in section
         assert "| needs your verb (ALIAS <referent>) | — |" in section
-        assert "Rows marked `needs your verb` block until you name a verb for each." in section
+        assert "Rows marked `needs your verb` block execution until you name a verb for each." in section
         assert "Confirm the table, or name the rows to change." not in section
         assert "would itself fire one of the eight ids if kept" in section
 
-    def test_confirmed_drop_default_still_writes_a_rejection_record(self) -> None:
+    def test_unchallenged_drop_default_still_writes_a_rejection_record(self) -> None:
         body = _text(HANDSHAKE)
-        assert "whether the user typed the verb or confirmed a `drop` default" in body
+        assert "whether the user typed the verb or left a displayed `drop` default unchallenged" in body
 
     def test_agent_decided_non_goals_enter_the_table(self) -> None:
         body = _text(HANDSHAKE)
@@ -76,19 +70,19 @@ class TestOneTableOneConfirm:
     def test_follow_up_default_is_non_goal_only(self) -> None:
         section = _section(_text(HANDSHAKE), "## Follow-up disposition")
         assert "The default destination is **non-goal only**" in section
-        assert "by confirming the table's defaults or editing the rows" in section
+        assert "every other destination is a user edit on the row" in section
         assert "Each unit is one `follow-up` row whose cell lists its members" in section
         assert "A semantic match is surfaced on the row as a recommended `link #<id>`" in section
         assert "the default destination stays non-goal only" in section
-        assert "approves the destination by confirming the row's default or editing it" in section
+        assert "needs no approval to save" in section
 
     def test_curdle_anyway_accepts_the_defaults(self) -> None:
         body = _text(HANDSHAKE)
         assert "It accepts every other default." in body
         assert "explicit per-term approval" not in body
 
-    def test_skill_approval_gate_names_the_table(self) -> None:
-        approval = _section(_text(MOLD), "## Approval gate")
-        assert "present the **scope audit table** once" in approval
-        assert "One confirm approves the defaults" in approval
-        assert "Require explicit approval for each term" not in approval
+    def test_skill_execution_gate_names_the_table(self) -> None:
+        gate = _section(_text(MOLD), "## Execution gate")
+        assert "scope audit table before presenting any Cook option" in gate
+        assert "save a validated parent spec or early curd mini-spec without an approval turn" in gate
+        assert "Require explicit approval for each term" not in gate

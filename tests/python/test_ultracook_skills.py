@@ -305,7 +305,7 @@ class TestMoldHighBlastHandoff:
     def test_routes_high_blast_by_gate_disposition(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_high_blast_handoff_menu()
-        assert "/cook --auto <spec-path>" in body
+        assert "/cook --auto <pointer-path>" in body
         assert "fresh-context isolation" in menu.lower()
         assert "Red-required behavior continues" in menu
         assert "closed N/A skips Press" in menu

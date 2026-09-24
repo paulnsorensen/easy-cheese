@@ -6,14 +6,14 @@ Read this when `/mold` uses agent-invoked mini-spec mode. This mode is the tier-
    Check the leverage triggers in `../../cheese/references/routing-policy.md` first. A mini-spec always carries `leverage: []`. When any trigger fires, refuse the mint, name the trigger ids, and return the ask to `/cheese` for `/mold`'s user mode.
 2. **Write the resolver-owned `<spec-path>`** with the mini-spec schema below. Resolve it via `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>`. Never hardcode a repo-local spec path: the resolver anchors it at the durable corpus, matching the Curdle step.
 3. **Validate the minted spec** with `python3 skills/mold/scripts/mold.pyz validate-spec --strict <spec-path>`. Stop on a nonzero exit; no malformed or legacy-compatible artifact advances to Cook.
-4. **Return the resolved spec path** to `/cheese`: every disposition dispatches `/cook --auto <spec-path>`. Return the full resolver path, never a bare slug.
-5. **Append `--hard`** to that command when the user passed the flag. Every disposition carries it. Plate alone runs the gate.
+4. **Return the resolved spec path** to `/cheese`. A saved draft is not a Cook command. When the original user request explicitly asked to Cook, bind that request to the exact scope, finalize, and return only a ready pointer. Otherwise offer Cook or keep shaping without dispatch.
+5. **Append `--hard`** to a selected Cook command when the user passed the flag. Plate alone runs the gate.
 
-The two-key handshake does not fire in this mode. The agent-introduced-scope check still runs implicitly. Every distinguishing noun in the mini-spec must come from the user's input or the tier-2 `/culture` or `/briesearch` synthesis. Record that synthesis in `## Provenance`. Never add any other noun. The mini-spec records only the user's request. It never records the agent's interpretation.
+The full coherence checklist does not fire in this mode. Saving the mini-spec needs no user approval; Cook still needs the user's request. The agent-introduced-scope check still runs implicitly. Every distinguishing noun in the mini-spec must come from the user's input or the tier-2 `/culture` or `/briesearch` synthesis. Record that synthesis in `## Provenance`. Never add any other noun. The mini-spec records only the user's request. It never records the agent's interpretation.
 
 ## Mini-spec schema
 
-Mini-spec mode always writes `shape: single`, so `landing.layers` stays `[]`. Do not add an inline `#` comment inside the `landing` block. The front-matter reader keeps the comment as part of the value.
+Mini-spec mode always writes `shape: single`, so `landing.layers` stays `[]`. Do not add an inline `#` comment inside the `landing` block. The front-matter reader keeps the comment as part of the value. An early in-dialogue curd uses the same body shape but `source: mold-curd-mini-spec`, a required `## Parent` section, and the procedure in [`early-curds.md`](early-curds.md).
 
 ```markdown
 ---

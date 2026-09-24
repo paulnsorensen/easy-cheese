@@ -72,11 +72,12 @@ def test_three_tiers_each_name_entry_runs_skips_and_handoff() -> None:
     assert "Standalone fast-path" in quick[1], "Quick reuses Cook's clarity check"
     assert "mini-spec" in quick[4] and "canonical `HandoffPointer`" in quick[4]
     assert "validate-spec --strict" in quick[4], "Quick still validates its spec"
-    assert "two-key handshake" in light[2] and "fork taste test" in light[2], (
-        "Light skips dialogue, not the coherence gates"
+    assert "agent coherence check" in light[2] and "fork taste test" in light[2], (
+        "Light skips dialogue, not coherence checks"
     )
+    assert "after a user Cook request" in light[4]
     assert "typed planner" in light[3], "a single curd needs no CurdPlan"
-    assert full[2] == "The whole Flow" and full[3] == "Nothing"
+    assert full[2].startswith("The whole Flow") and full[3] == "Nothing"
 
 
 def test_no_tier_skips_the_invariant_gates() -> None:
@@ -90,23 +91,23 @@ def test_no_tier_skips_the_invariant_gates() -> None:
         assert gate in section, f"{gate!r} left the never-skip list"
 
 
-def test_quick_tier_reuses_mini_spec_mode_with_one_confirm() -> None:
+def test_quick_tier_saves_without_write_approval_but_does_not_start_cook() -> None:
     mini = _section(SKILL.read_text(encoding="utf-8"), "Agent-invoked mini-spec mode")
-    assert "Quick tier" in mini and "one confirm" in mini
+    assert "Quick tier" in mini and "without a write-approval turn" in mini
+    assert "entry already requested Cook" in mini
     tiers = TIERS.read_text(encoding="utf-8")
     assert "[`mini-spec-mode.md`](mini-spec-mode.md)" in tiers
     assert MINI_SPEC.exists()
-    assert "one confirm" in _section(tiers, "Relationship to `/cheese`")
+    assert "without a separate approval turn" in _section(tiers, "Relationship to `/cheese`")
 
 
-def test_light_single_curd_skips_the_planner_not_the_handshake() -> None:
+def test_light_single_curd_skips_the_planner_not_execution_consent() -> None:
     step5 = _flow_step(5)
     assert "Light with one expected curd" in step5 and "no planner" in step5
-    assert "mold.pyz finalize" in step5 and "canonical `HandoffPointer`" in step5
-    assert "taste-test" in step5.split("Light with one expected curd")[0], (
-        "the taste test runs before the Light shortcut, so Light cannot skip it"
-    )
-    assert "6. **Two-key handshake**" in _flow_step(6)
+    assert "taste-test" in step5.split("Light with one expected curd")[0]
+    assert "6. **Readiness check**" in _flow_step(6)
+    assert "Before Cook, require an explicit user selection" in _flow_step(6)
+    assert "Dispatch only a ready pointer" in _flow_step(8)
 
 
 def test_upgrade_rules_and_user_knobs() -> None:

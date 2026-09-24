@@ -23,7 +23,9 @@ from dataclasses import dataclass
 
 # Frontmatter ``source`` values that mark a spec as minted by a hardened Mold
 # production path. Anything else — including an absent marker — reads as v0.13.
-_HARDENED_SOURCES = frozenset({"agent-mini-spec", "mold-handshake"})
+_HARDENED_SOURCES = frozenset(
+    {"agent-mini-spec", "mold-curd-mini-spec", "mold-handshake"}
+)
 
 # The parts of the document the hardened format added after v0.13. Their
 # *presence* is waived for a legacy spec; their *content*, when a legacy spec
@@ -57,6 +59,8 @@ class SpecFormatPolicy:
         self, section_name: str, *, default_required: bool
     ) -> bool:
         """Whether a missing ``section_name`` heading is an error."""
+        if self._source == "mold-curd-mini-spec":
+            return section_name in _MINI_SPEC_REQUIRED_SECTIONS | {"Parent"}
         if self._source == "agent-mini-spec":
             return section_name in _MINI_SPEC_REQUIRED_SECTIONS
         required = default_required or section_name == "Test Contracts"

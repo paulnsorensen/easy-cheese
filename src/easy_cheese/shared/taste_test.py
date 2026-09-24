@@ -111,7 +111,9 @@ NON_BEHAVIOR_CLASSES = frozenset(WORK_CLASSES - {"behavior"})
 CONTRACT_MODES = frozenset({"tracer", "contract-matrix", "guard"})
 EXECUTABLE_CONTRACT_MODES = frozenset({"tracer", "contract-matrix"})
 RED_REQUIRED_EXECUTABLE_PROBLEM = "red-required-needs-executable-test-contracts"
-NEW_MOLD_SOURCES = frozenset({"agent-mini-spec", "mold-handshake"})
+NEW_MOLD_SOURCES = frozenset(
+    {"agent-mini-spec", "mold-curd-mini-spec", "mold-handshake"}
+)
 BROWSER_MARKER = re.compile(
     r"\b(?:browser|e2e|end[- ]to[- ]end|playwright|cypress|selenium|webdriver|puppeteer)\b",
     re.I,

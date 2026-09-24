@@ -179,7 +179,7 @@ def test_documented_finalize_flow_reaches_cook_accept(
             "--kind",
             "plan",
             "--response",
-            "ship it",
+            "cook it",
             "--planner-result",
             str(planner_path),
         ],

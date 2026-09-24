@@ -550,9 +550,9 @@ _AFFIRMATIVE_RESPONSES = frozenset(
         "ok",
         "lgtm",
         "confirmed",
-        # The Mold handshake names these two verbs as its explicit approval.
-        "curdle",
-        "ship it",
+        # Bind a direct Cook request to the displayed scope or plan.
+        "cook it",
+        "cook this",
     }
 )
 

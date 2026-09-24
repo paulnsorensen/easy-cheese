@@ -66,7 +66,9 @@ ROUTED_FILES = {
     "skills/culture/SKILL.md",
     "skills/cure/SKILL.md",
     "skills/melt/SKILL.md",
+    "skills/mold/references/early-curds.md",
     "skills/mold/references/evals.md",
+    "skills/mold/references/gate-graph.md",
     "skills/mold/SKILL.md",
     "skills/pasteurize/SKILL.md",
     "skills/plate/SKILL.md",  # the gate-`ERROR` ask before publication
@@ -185,8 +187,7 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
     ),
     (
         "skills/mold/references/handshake.md",
-        "An edited destination also names the action: **create/link now** or "
-        + "**leave prepared**",
+        "The user must select any external **create/link now** action.",
         "mechanical fast-path: create/link-now vs leave-prepared is the "
         + "operational disposition of an already-approved follow-up unit, "
         + "intelligible without prior-session context",

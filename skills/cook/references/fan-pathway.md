@@ -466,6 +466,8 @@ spec independently checks matching continuity.  A missing continuation is a
 cold start, while a hold, blocker, ambiguity, scope conflict, or integrity
 failure remains a hold even when a direct spec is also supplied.
 
+A saved parent or early curd mini-spec is not execution authority. Enter Cook only on the user's request. Require a bound approval and ready pointer before any writer dispatch.
+
 ## Preparation transitions
 
 Preparation is a pure orchestration boundary around host evidence.  It may

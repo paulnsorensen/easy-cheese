@@ -26,6 +26,16 @@ Keep forgiving ingress separate from strict execution authority. Do not treat a 
 
 The typed handoff, approval binding, and Cook preparation paths are now implemented in the repository. The remaining gap is the external harness wiring that turns a protected response event into the approval reference; this ADR does not claim end-to-end completion without that evidence.
 
+
+
+Mold may save a validated draft parent spec or a concrete child mini-spec without a separate write-approval turn.[^draft] A child records its parent slug, covered goal clauses, dependencies, and frozen decisions. The parent tracks each child under `## Curds`.[^child]
+
+Saving does not grant execution authority. The user must select the exact scope and Cook route before Mold binds approval and publishes a runnable pointer. Mold can instead give a child-spec command for another worktree while parent shaping continues. A changed child contract requires a new execution decision.[^execution]
+
+[^draft]: skills/mold/SKILL.md:103-107; skills/mold/references/tiers.md
+[^child]: skills/mold/references/early-curds.md:11-25
+[^execution]: skills/mold/references/early-curds.md:27-37; skills/mold/references/handshake.md:5-9
+
 ## Implementation status
 
 - Contract and shared validation: `src/easy_cheese_schemas/mold_cook.py` and `src/easy_cheese/shared/mold_cook_handoff.py` define and validate the versioned approval and handoff records.
