@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "provenance": "Anonymized adaptations of prompt chains from 2026-09-10 through 2026-09-23; no private logs.",
+  "cases": [
+    {"id":"train-iterative","family":"iterative","split":"train","fields":{"full_spec_required":"boolean","prototype_authorized":"boolean","publication_authorized":"boolean"},"turns":[
+      {"user":"Sketch a short approach for a disposable local prototype. Do not build yet or open a PR; no full specification.","expect":{"full_spec_required":false,"prototype_authorized":false,"publication_authorized":false},"hard":["prototype_authorized","publication_authorized"]},
+      {"user":"Build the first cut now. Keep it local; no PR.","expect":{"full_spec_required":false,"prototype_authorized":true,"publication_authorized":false},"hard":["prototype_authorized","publication_authorized"]},
+      {"user":"That works. Keep this prototype approach and open a PR.","expect":{"full_spec_required":false,"prototype_authorized":true,"publication_authorized":true},"hard":["publication_authorized"]}
+    ]},
+    {"id":"train-override","family":"override","split":"train","fields":{"remove_scout":"boolean","remove_parser":"boolean"},"turns":[
+      {"user":"Inventory says scout and parser are unused. Remove unused tools, but hold both scout and parser for now.","expect":{"remove_scout":false,"remove_parser":false},"hard":["remove_scout","remove_parser"]},
+      {"user":"They remain unused. Keep the earlier exceptions while you explain their purpose.","expect":{"remove_scout":false,"remove_parser":false},"hard":["remove_scout","remove_parser"]},
+      {"user":"Now remove scout only. Keep parser.","expect":{"remove_scout":true,"remove_parser":false},"hard":["remove_parser"]}
+    ]},
+    {"id":"validation-relation","family":"relation","split":"validation","fields":{"category_relation":"boolean","dependency_relation":"boolean"},"turns":[
+      {"user":"Group projects Alpha and Beta under their existing categories.","expect":{"category_relation":true,"dependency_relation":false}},
+      {"user":"For this link, switch from categories to dependency semantics between Alpha and Beta.","expect":{"category_relation":false,"dependency_relation":true}},
+      {"user":"The link blocks Beta; it does not mean Alpha belongs under Beta.","expect":{"category_relation":false,"dependency_relation":true}}
+    ]},
+    {"id":"validation-revision","family":"revision","split":"validation","fields":{"head_revision":"string","review_revision":"string","ci_revision":"string","evidence_ready_to_merge":"boolean"},"turns":[
+      {"user":"Merge readiness requires green CI and review evidence for the current head. Head r1 has green CI and review evidence from r1.","expect":{"head_revision":"r1","review_revision":"r1","ci_revision":"r1","evidence_ready_to_merge":true},"hard":["evidence_ready_to_merge"]},
+      {"user":"Head advances to r2 while CI is pending; the old review is still for r1.","expect":{"head_revision":"r2","review_revision":"r1","ci_revision":"pending","evidence_ready_to_merge":false},"hard":["evidence_ready_to_merge"]},
+      {"user":"CI for r2 is green, but review evidence is still for r1.","expect":{"head_revision":"r2","review_revision":"r1","ci_revision":"r2","evidence_ready_to_merge":false},"hard":["evidence_ready_to_merge"]}
+    ]},
+    {"id":"holdout-deferral","family":"deferral","split":"holdout","fields":{"deferred":"boolean","active_a":"boolean","active_b":"boolean","audit_required":"boolean"},"turns":[
+      {"user":"A saved audit verifies active items A, B, and C.","expect":{"deferred":false,"active_a":true,"active_b":true,"audit_required":false}},
+      {"user":"Do not re-audit the unchanged checkpoint; move item B to its owning team.","expect":{"deferred":false,"active_a":true,"active_b":true,"audit_required":false}},
+      {"user":"Defer item C explicitly and keep A and B active without another audit.","expect":{"deferred":true,"active_a":true,"active_b":true,"audit_required":false}}
+    ]},
+    {"id":"holdout-investigation","family":"investigation","split":"holdout","fields":{"cross_repo_ownership":"boolean","harness_neutral":"boolean","evidence_based":"boolean"},"turns":[
+      {"user":"Investigate the behavior in its owning repository and record source evidence.","expect":{"cross_repo_ownership":false,"harness_neutral":true,"evidence_based":true}},
+      {"user":"Compare the related repository and keep the investigation neutral about harness choice.","expect":{"cross_repo_ownership":true,"harness_neutral":true,"evidence_based":true}},
+      {"user":"Retain evidence-based findings without selecting a tool or harness.","expect":{"cross_repo_ownership":true,"harness_neutral":true,"evidence_based":true}}
+    ]}
+  ]
+}
