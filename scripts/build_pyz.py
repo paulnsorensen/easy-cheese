@@ -394,6 +394,7 @@ def _build_shared_wheel(project_root: Path, wheelhouse: Path) -> Path:
     project = project_root / "shared"
     package = _copy_package_scaffold(project)
     _ = shutil.copytree(PACKAGE_ROOT / "shared", package / "shared")
+    _ = shutil.copytree(PACKAGE_ROOT / "cli", package / "cli")
     _ = (project / "pyproject.toml").write_text(
         _project_toml(
             "easy-cheese-shared",

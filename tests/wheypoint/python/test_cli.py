@@ -19,7 +19,7 @@ import pytest
 
 from easy_cheese_schemas import CheckpointIntent
 from easy_cheese.shared.wheypoint import commit, records, resolve_cli, storage
-from easy_cheese.skills.wheypoint import wheypoint
+from easy_cheese.cli import wheypoint
 
 from conftest import WORK_ID, Promotion
 
@@ -1554,13 +1554,15 @@ def test_cure_a_resumed_promotion_never_reuses_a_prior_note_dir(
     prior = tmp_path / "prior-notes"
     body = _first_intent()
 
-    real_clear = wheypoint._clear_pending  # pyright: ignore[reportPrivateUsage]
+    from easy_cheese.cli.wheypoint import checkpoint as checkpoint_mod
+
+    real_clear = checkpoint_mod._clear_pending  # pyright: ignore[reportPrivateUsage]
 
     def crash_once(_store: storage.WorkStore, _request_identity: str) -> None:
-        monkeypatch.setattr(wheypoint, "_clear_pending", real_clear)
+        monkeypatch.setattr(checkpoint_mod, "_clear_pending", real_clear)
         raise RuntimeError("simulated crash before the ledger entry is cleared")
 
-    monkeypatch.setattr(wheypoint, "_clear_pending", crash_once)
+    monkeypatch.setattr(checkpoint_mod, "_clear_pending", crash_once)
     interrupted_status, _interrupted = _run(
         "checkpoint", "--note-dir", str(prior), stdin=body
     )
@@ -1612,3 +1614,9 @@ def test_resolve_reads_only_the_corpus_root_it_is_given(
     assert scoped_payload["work_id"] == WORK_ID
     projection = cast(dict[str, object], scoped_payload["projection"])
     assert projection["revision_id"] == promotion.revision.revision_id
+
+
+def test_ac11_the_old_skills_module_path_is_gone() -> None:
+    """AC-11: the CLI lives under `easy_cheese.cli`, not the retired skills path."""
+    with pytest.raises(ImportError):
+        import easy_cheese.skills.wheypoint.wheypoint  # noqa: F401  # pyright: ignore[reportMissingImports]

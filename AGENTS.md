@@ -38,8 +38,11 @@ them while enforcement is implemented separately.
   `scripts/`.
 - Published schemas live in `src/easy_cheese_schemas/`. All non-published
   runtime code lives under `src/easy_cheese/`, split between
-  `skills/<python_skill_name>/` and `shared/`. Skill slugs remain kebab-case;
-  Python package segments use underscores.
+  `skills/<python_skill_name>/`, `shared/`, and `cli/`. Skill slugs remain
+  kebab-case; Python package segments use underscores.
+- `cli/` holds command surfaces and the JSON reply envelope; it may import
+  `shared/` and schemas. `shared/` code must not import `cli/`, except
+  `resolve_cli`'s re-export of the envelope names.
 - Bundles may contain Python modules, bytecode, and immutable package resources.
   Dependencies must be pure Python and zip-importable. Native extensions,
   platform-specific libraries, required external executables, runtime

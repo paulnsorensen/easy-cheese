@@ -18,7 +18,7 @@ from easy_cheese.shared.handoff import (
     render_handoff_slug,
 )
 from easy_cheese.shared.wheypoint import projection, storage
-from easy_cheese.skills.wheypoint import wheypoint
+from easy_cheese.cli import wheypoint
 
 
 def _run(command: str, *args: str, **fields: object) -> tuple[int, dict[str, object]]:
