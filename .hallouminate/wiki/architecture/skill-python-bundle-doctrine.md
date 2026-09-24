@@ -19,18 +19,20 @@ Runtime Python uses two import packages:
 src/
 ├── easy_cheese/
 │   ├── shared/
+│   ├── cli/
 │   └── skills/
 │       └── <python_skill_name>/
 └── easy_cheese_schemas/
 ```
 
 - `easy_cheese_schemas` is the independently published distribution.
-- `easy-cheese-shared` is a repository-internal distribution containing the cohesive shared runtime package.
+- `easy-cheese-shared` is a repository-internal distribution containing the cohesive shared runtime package and the `cli` presentation layer.
 - Each Python skill is a separate internal application distribution named `easy-cheese-<skill>`.
 - Skill slugs stay kebab-case; Python package segments use underscores.
 - Skill-owned code lives in `src/easy_cheese/skills/<python_skill_name>/`; its `commands.py` declares the console surface as an immutable tuple of `Command(name, "module:callable")` values.[^8]
 - Every command target accepts only its command arguments as `list[str]`, writes result text to stdout or diagnostics to stderr, and returns an integer process status. Dispatch resolves the target lazily and calls it directly; it does not mutate `sys.argv`, execute a module through `runpy`, or depend on decorator registration.[^9]
 - Shared code lives in `src/easy_cheese/shared/`.
+- `src/easy_cheese/cli/` holds command surfaces and the JSON reply envelope. It may import `shared` and schemas. `shared` code must not import `cli`, except `resolve_cli`'s re-export of the envelope names.
 - Tests stay under `tests/`; build, release, generation, and maintenance programs may live under `scripts/`.[^3]
 
 Distribution dependencies carry the runtime relationship: each application depends on `easy-cheese-shared`, and shared depends on `easy-cheese-schemas`. Pip resolves that graph inside a private wheelhouse; no hand-maintained source closure map remains.[^4]
@@ -54,7 +56,7 @@ Shiv's transparent cache extraction is part of the archive runtime contract, not
 Each bundle contains:
 
 1. one skill application distribution;
-2. the cohesive internal shared distribution;
+2. the cohesive internal shared distribution, which carries `easy_cheese.shared` and `easy_cheese.cli`;
 3. the schema distribution;
 4. approved pure-Python third-party distributions.
 
@@ -95,4 +97,4 @@ This doctrine supersedes the split runtime roots under `src/<skill>/` and `share
 [^8]: src/easy_cheese/shared/bundle_commands.py:`Command`; src/easy_cheese/skills/*/commands.py
 [^9]: src/easy_cheese/shared/bundle_commands.py:`dispatch`; tests/python/test_bundle_commands.py
 
-_Source: implemented repository architecture; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for the command-discovery section · Updated: 2026-09-04 · Supersedes: committed internal-wheel hashes, split runtime roots, custom closure inference, vendored trees, shared common archives, and literal `Command(...)` discovery in `check_bundles.py`_
+_Source: implemented repository architecture; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for the command-discovery section · Updated: 2026-09-24 · Supersedes: committed internal-wheel hashes, split runtime roots, custom closure inference, vendored trees, shared common archives, and literal `Command(...)` discovery in `check_bundles.py`_

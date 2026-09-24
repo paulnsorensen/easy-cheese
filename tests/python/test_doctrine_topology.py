@@ -84,7 +84,7 @@ def test_check_pyz_references_flags_cross_skill_source_copying(
 
 
 def test_source_tree_has_no_flat_runtime_roots() -> None:
-    """Every runtime source lives under src/easy_cheese/{skills,shared} or
+    """Every runtime source lives under src/easy_cheese/{skills,shared,cli} or
     src/easy_cheese_schemas; nothing else may sit at the src/ or
     src/easy_cheese root (the doctrine this bundle-currency gate exists to
     keep honest).
@@ -99,4 +99,4 @@ def test_source_tree_has_no_flat_runtime_roots() -> None:
         for path in (src_root / "easy_cheese").iterdir()
         if path.name not in ignored
     }
-    assert easy_cheese_children <= {"__init__.py", "skills", "shared"}
+    assert easy_cheese_children <= {"__init__.py", "skills", "shared", "cli"}

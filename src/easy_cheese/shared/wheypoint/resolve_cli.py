@@ -16,35 +16,28 @@ emits.
 
 from __future__ import annotations
 
-import argparse
-import json
 import sys
 import traceback
 from collections.abc import Mapping, Sequence
-from typing import NoReturn, TextIO, cast
+from typing import TextIO, cast
 
 from attrs import AttrsInstance
-from typing_extensions import override
+from easy_cheese.cli import (
+    EXIT_OK,
+    EXIT_REFUSED,
+    EXIT_USAGE,
+    BadUsage,
+    Parser,
+    emit,
+    refuse,
+)
+from easy_cheese.cli import EXIT_INTERNAL as EXIT_INTERNAL
 from easy_cheese.shared import handoff
 from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
 
 COMMAND = "wheypoint-resolve"
-EXIT_OK = 0
-EXIT_REFUSED = 1
-EXIT_USAGE = 2
-EXIT_INTERNAL = 3
-
-
-class BadUsage(Exception):
-    """argparse's complaint, raised instead of printed so it can be JSON."""
-
-
-class Parser(argparse.ArgumentParser):
-    @override
-    def error(self, message: str) -> NoReturn:
-        raise BadUsage(message)
 
 
 def _parser() -> Parser:
@@ -112,29 +105,6 @@ def resolve_status(payload: Mapping[str, object]) -> int:
     if payload.get("outcome") == resolve_mod.ResolutionOutcome.ERROR.value:
         return EXIT_REFUSED
     return EXIT_OK
-
-
-def emit(stdout: TextIO, payload: dict[str, object]) -> None:
-    _ = stdout.write(json.dumps(payload, sort_keys=True) + "\n")
-
-
-def refuse(
-    stdout: TextIO,
-    command: str,
-    code: str,
-    message: str,
-    status: int,
-    extra: dict[str, object] | None = None,
-) -> int:
-    emit(
-        stdout,
-        {
-            "ok": False,
-            "command": command,
-            "error": {"code": code, "message": message, **(extra or {})},
-        },
-    )
-    return status
 
 
 def main(

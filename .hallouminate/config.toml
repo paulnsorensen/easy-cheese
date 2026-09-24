@@ -14,3 +14,14 @@ name = "easy-cheese"
 path = "."
 corpus_paths = ["skills"]
 corpus_globs = ["**/*.md"]
+
+# Durable cheese artifacts for this repo (specs, research, handoffs under
+# work/). This is paths.project_corpus_root() with the default XDG data home:
+# $XDG_DATA_HOME/cheese/<git-owner>-<git-repo>. `~` passes through unresolved
+# against the repo root. Flat corpus name: it must not collide with the
+# derived repo:easy-cheese:* names or a global `cheese-durable` block.
+[[corpus]]
+name = "easy-cheese-durable"
+paths = ["~/.local/share/cheese/paulnsorensen-easy-cheese"]
+globs = ["**/*.md"]
+exclude = ["**/.git/**"]
