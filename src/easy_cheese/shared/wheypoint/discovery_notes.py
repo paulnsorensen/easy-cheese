@@ -12,6 +12,8 @@ import shutil
 import subprocess
 import time
 from collections.abc import Sequence
+from typing import Protocol
+from dataclasses import dataclass
 from pathlib import Path
 
 from easy_cheese.shared import paths
@@ -25,7 +27,18 @@ _PRUNE_DIRS = frozenset(
     {".git", "node_modules", ".venv", "venv", "__pycache__", ".cache", "target", "dist"}
 )
 _NOTE_GLOB = "**/.cheese/notes/*.md"
+_CHEESE_ARTIFACT_GLOB = "**/.cheese/**/*.md"
 _SEARCH_ROOTS_ENV = "EASY_CHEESE_SEARCH_ROOTS"
+
+
+@dataclass(frozen=True)
+class CheeseDirScan:
+    """Every `.cheese` directory discovered on the machine, plus how."""
+
+    dirs: tuple[Path, ...]
+    backend: str
+    errors: tuple[str, ...]
+
 
 _project_key_cache: dict[Path, str] = {}
 
@@ -67,7 +80,22 @@ def _walk_notes(root: Path, *, deadline: float) -> list[Path] | None:
     return found
 
 
-def _rg_notes(roots: list[Path]) -> list[Path] | None:
+def _walk_cheese_artifacts(root: Path, *, deadline: float) -> list[Path] | None:
+    """Every ``*.md`` beneath a ``.cheese`` directory under `root`."""
+    found: list[Path] = []
+    if not root.is_dir():
+        return found
+    for dirpath, dirnames, filenames in os.walk(root):
+        if time.monotonic() >= deadline:
+            return None
+        dirnames[:] = [name for name in dirnames if name not in _PRUNE_DIRS]
+        current = Path(dirpath)
+        if ".cheese" in current.parts:
+            found.extend(current / name for name in filenames if name.endswith(".md"))
+    return found
+
+
+def _rg_files(roots: list[Path], glob: str) -> list[Path] | None:
     existing = [str(root) for root in roots if root.exists()]
     if not existing:
         return []
@@ -83,7 +111,7 @@ def _rg_notes(roots: list[Path]) -> list[Path] | None:
                 "--hidden",
                 "--no-ignore",
                 "-g",
-                _NOTE_GLOB,
+                glob,
                 *prune_globs,
                 *existing,
             ],
@@ -98,22 +126,68 @@ def _rg_notes(roots: list[Path]) -> list[Path] | None:
     return [Path(line) for line in completed.stdout.splitlines() if line]
 
 
-def _find_notes(roots: list[Path]) -> tuple[list[Path], str, list[str]]:
+class _Walker(Protocol):
+    def __call__(self, root: Path, *, deadline: float) -> list[Path] | None: ...
+
+
+def _find_paths(
+    roots: list[Path], glob: str, walker: _Walker
+) -> tuple[list[Path], str, list[str]]:
+    """Shared rg-with-walk-fallback backend used by both notes and `.cheese`
+    directory discovery."""
     errors: list[str] = []
     if shutil.which("rg") is not None:
-        found = _rg_notes(roots)
+        found = _rg_files(roots, glob)
         if found is not None:
             return found, "rg", errors
         errors.append("rg failed or timed out; fell back to a directory walk")
     walked: list[Path] = []
     deadline = time.monotonic() + _WALK_TIMEOUT_SECONDS
     for root in roots:
-        found = _walk_notes(root, deadline=deadline)
+        found = walker(root, deadline=deadline)
         if found is None:
             errors.append("directory walk timed out; partial results discarded")
             return [], "walk", errors
         walked.extend(found)
     return walked, "walk", errors
+
+
+def _find_notes(roots: list[Path]) -> tuple[list[Path], str, list[str]]:
+    return _find_paths(roots, _NOTE_GLOB, _walk_notes)
+
+
+def _outermost_cheese_dir(md_path: Path) -> Path | None:
+    """The topmost ``.cheese`` ancestor of `md_path`, or None.
+
+    A `.cheese` dir nested inside another `.cheese` dir is not its own
+    corpus root -- the outer dir's recursive glob already covers it.
+    """
+    candidates = [parent for parent in md_path.parents if parent.name == ".cheese"]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda parent: len(parent.parts))
+
+
+def find_cheese_dirs(roots: Sequence[Path | str] = ()) -> CheeseDirScan:
+    """Every `.cheese` directory under the machine search roots that holds
+    at least one `*.md` file anywhere beneath it.
+
+    Searches `$EASY_CHEESE_SEARCH_ROOTS` (default `~`) plus any caller-given
+    `roots`. A `.cheese` dir nested inside another `.cheese` dir is skipped;
+    its markdown still counts toward the outer dir.
+    """
+    search_roots = _machine_scope_roots(roots)
+    found, backend, errors = _find_paths(
+        search_roots, _CHEESE_ARTIFACT_GLOB, _walk_cheese_artifacts
+    )
+    dirs: set[Path] = set()
+    for md_path in found:
+        cheese_dir = _outermost_cheese_dir(md_path)
+        if cheese_dir is not None:
+            dirs.add(cheese_dir.resolve())
+    return CheeseDirScan(
+        dirs=tuple(sorted(dirs)), backend=backend, errors=tuple(errors)
+    )
 
 
 def _cached_project_key(root: Path) -> str:
