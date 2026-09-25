@@ -61,3 +61,23 @@ This is an explicit proxy, not a tool or harness execution. It replays each scen
 | Cross-repo investigation | holdout | Retains evidence-based findings while staying cross-repository and harness-neutral. |
 
 These cases test a small sequential proxy. They do not measure a general agent outcome or tool execution quality.
+
+## Agent laboratory
+
+`scripts/agent_lab.py` is the outcome-graded counterpart. It runs headless `claude -p` once per task inside a disposable copy of a fixture repository, injects the task's bug first, and grades the resulting tree with the task's own test command. The candidate Markdown is appended to the agent's system prompt. The agent, its tools, and its file edits are real; the tasks are small.
+
+Tasks use the tilth benchmark shape: a prompt, one or more `original` to `mutated` string mutations, a `test_command` that fails while the bug is present, and optional required or forbidden reply strings. The committed fixture has one task per split against `tests/fixtures/prompt_lab/repo`.
+
+```bash
+python3 scripts/agent_lab.py validate tests/fixtures/prompt_lab/agent_tasks.json
+uv run --no-project --with-requirements requirements/prompt-lab.txt python scripts/agent_lab.py evaluate \
+  --tasks tests/fixtures/prompt_lab/agent_tasks.json --prompt baseline --split validation \
+  --model claude-haiku-4-5-20251001 --output-dir .context/agent-lab/eval-01 --max-budget-usd 0.25
+uv run --no-project --with-requirements requirements/prompt-lab.txt python scripts/agent_lab.py optimize \
+  --tasks tests/fixtures/prompt_lab/agent_tasks.json --seed-prompt current \
+  --model claude-haiku-4-5-20251001 --output-dir .context/agent-lab/opt-01 --max-runs 40 --max-metric-calls 8
+```
+
+`--prompt current` reads `skills/cook/SKILL.md`. `--max-runs` caps agent runs plus reflection calls; `--max-budget-usd` caps each single run through the CLI's own budget flag; `--timeout-seconds` bounds each run and each test command. Optimization evaluates the seed on train plus validation first and exports `best_candidate.md` only when the best candidate scores strictly higher. A run budget that ends early still writes `result.json` with the records so far. Pass `--keep-workspaces` to retain every agent workspace under the output directory for inspection.
+
+The runner uses the session's Claude Code authentication and drops user and project settings, hooks, and MCP servers for each run. It passes `--dangerously-skip-permissions` because the workspace is disposable; never point it at a real checkout. Reflection also runs through `claude -p`, so no OpenAI key is needed for this path. Three synthetic tasks are a harness smoke test, not a quality claim; a real suite needs pinned external repositories like the tilth benchmark's fix tasks.

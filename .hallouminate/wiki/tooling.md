@@ -107,10 +107,17 @@ Training and optimizer-visible validation use separate scenario families.
 A third holdout remains outside optimization and requires an explicit evaluation run.
 Generated candidates require human review and never update installed prompts automatically.[^prompt-lab-code]
 
+The agent laboratory is the outcome-graded sibling of the same GEPA wiring.
+It runs headless Claude Code in a disposable copy of a fixture repository per task.
+Each task injects a bug with string mutations and grades with its own test command, which is the tilth benchmark task shape.[^agent-lab-code]
+Reflection also runs through headless Claude Code, so this path needs no OpenAI key.
+It exports a candidate only when the best candidate strictly beats the seed on train plus validation.
+
 [^prompt-lab-fit]: https://github.com/gepa-ai/optimize-anything-artifact; https://github.com/stanfordnlp/dspy/blob/main/docs/docs/diving-deeper/gepa-in-depth.md (checked 2026-09-24).
 [^prompt-lab-code]: scripts/prompt_lab.py; requirements/prompt-lab.txt; tests/fixtures/prompt_lab/dataset.json; docs/prompt-lab.md.
+[^agent-lab-code]: scripts/agent_lab.py; tests/fixtures/prompt_lab/agent_tasks.json; tests/python/test_agent_lab.py; docs/prompt-lab.md.
 
-_Source: research-informed prototype contract, 2026-09-24. Updated: 2026-09-24. No prior runtime policy is superseded._
+_Source: research-informed prototype contract, 2026-09-24. Updated: 2026-09-25. No prior runtime policy is superseded._
 
 ## `.pyz` bundles
 

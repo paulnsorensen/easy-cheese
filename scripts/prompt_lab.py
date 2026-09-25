@@ -132,13 +132,13 @@ class Provider(Protocol):
     ) -> ProviderReply: ...
 
 
-def _mapping(value: object, label: str) -> JsonObject:
+def require_mapping(value: object, label: str) -> JsonObject:
     if not isinstance(value, dict):
         raise PromptLabError(f"{label} must be an object")
     return cast(JsonObject, value)
 
 
-def _text(value: object, label: str) -> str:
+def require_text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise PromptLabError(f"{label} must be a non-empty string")
     return value
@@ -155,7 +155,7 @@ def load_dataset(path: Path) -> Dataset:
         raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError) as error:
         raise PromptLabError(f"cannot read dataset: {path}") from error
-    root = _mapping(raw, "dataset")
+    root = require_mapping(raw, "dataset")
     if root.get("version") != 1:
         raise PromptLabError("dataset version must be 1")
     cases_raw = root.get("cases")
@@ -163,13 +163,13 @@ def load_dataset(path: Path) -> Dataset:
         raise PromptLabError("dataset cases must be a non-empty list")
     cases: list[Case] = []
     for index, case_raw in enumerate(cast(list[object], cases_raw)):
-        case = _mapping(case_raw, f"cases[{index}]")
-        identifier = _text(case.get("id"), f"cases[{index}].id")
-        family = _text(case.get("family"), f"{identifier}.family")
-        split = _text(case.get("split"), f"{identifier}.split")
+        case = require_mapping(case_raw, f"cases[{index}]")
+        identifier = require_text(case.get("id"), f"cases[{index}].id")
+        family = require_text(case.get("family"), f"{identifier}.family")
+        split = require_text(case.get("split"), f"{identifier}.split")
         if split not in SPLITS:
             raise PromptLabError(f"{identifier}.split is invalid")
-        fields_raw = _mapping(case.get("fields"), f"{identifier}.fields")
+        fields_raw = require_mapping(case.get("fields"), f"{identifier}.fields")
         if not fields_raw:
             raise PromptLabError(f"{identifier}.fields must not be empty")
         fields = {name: _json_type(kind, f"{identifier}.fields.{name}") for name, kind in fields_raw.items()}
@@ -178,8 +178,8 @@ def load_dataset(path: Path) -> Dataset:
             raise PromptLabError(f"{identifier}.turns must be non-empty")
         turns: list[Turn] = []
         for turn_index, turn_raw in enumerate(cast(list[object], turns_raw)):
-            turn = _mapping(turn_raw, f"{identifier}.turns[{turn_index}]")
-            expected = _mapping(turn.get("expect"), f"{identifier}.turns[{turn_index}].expect")
+            turn = require_mapping(turn_raw, f"{identifier}.turns[{turn_index}]")
+            expected = require_mapping(turn.get("expect"), f"{identifier}.turns[{turn_index}].expect")
             if set(expected) != set(fields):
                 raise PromptLabError(f"{identifier} expectation fields do not match contract")
             hard_raw = turn.get("hard", list(fields))
@@ -189,9 +189,9 @@ def load_dataset(path: Path) -> Dataset:
             hard_names = [cast(str, item) for item in hard_items]
             if not set(hard_names) <= set(fields):
                 raise PromptLabError(f"{identifier}.hard names an unknown field")
-            turns.append(Turn(_text(turn.get("user"), f"{identifier}.user"), fields, expected, frozenset(hard_names)))
+            turns.append(Turn(require_text(turn.get("user"), f"{identifier}.user"), fields, expected, frozenset(hard_names)))
         cases.append(Case(identifier, family, split, tuple(turns)))
-    dataset = Dataset(tuple(cases), _text(root.get("provenance"), "dataset.provenance"))
+    dataset = Dataset(tuple(cases), require_text(root.get("provenance"), "dataset.provenance"))
     validate_dataset(dataset)
     return dataset
 
@@ -411,7 +411,7 @@ def evaluate_candidate(
     }
 
 
-def _sha256(data: bytes) -> str:
+def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
@@ -428,13 +428,13 @@ def _read_prompt(value: str, root: Path) -> str:
     return text
 
 
-def _new_output_dir(path: Path) -> None:
+def new_output_dir(path: Path) -> None:
     if path.exists():
         raise PromptLabError(f"output directory already exists: {path}")
     path.mkdir(parents=True)
 
 
-def _write_json(path: Path, value: object) -> None:
+def write_json(path: Path, value: object) -> None:
     encoded = json.dumps(value, indent=2, sort_keys=True)
     if len(encoded) > 2_000_000:
         raise PromptLabError("artifact exceeds output size limit")
@@ -476,7 +476,7 @@ def _run_evaluate(args: RunArgs, root: Path) -> int:
     cases = cast(tuple[Case, ...], getattr(dataset, args.split))
     candidate = _read_prompt(args.prompt, root)
     output_dir = Path(args.output_dir)
-    _new_output_dir(output_dir)
+    new_output_dir(output_dir)
     provider = _provider(args)
     result = evaluate_candidate(
         candidate,
@@ -487,11 +487,11 @@ def _run_evaluate(args: RunArgs, root: Path) -> int:
         max_calls=args.max_calls,
         max_output_tokens=args.max_output_tokens,
     )
-    _ = _write_json(
+    _ = write_json(
         output_dir / "result.json",
         {
-            "dataset_sha256": _sha256(dataset_path.read_bytes()),
-            "prompt_sha256": _sha256(candidate.encode()),
+            "dataset_sha256": sha256_hex(dataset_path.read_bytes()),
+            "prompt_sha256": sha256_hex(candidate.encode()),
             "model": args.model,
             "split": args.split,
             "repeats": args.repeats,
@@ -509,7 +509,7 @@ def _run_optimize(args: RunArgs, root: Path) -> int:
     dataset = load_dataset(dataset_path)
     seed = _read_prompt(args.seed_prompt, root)
     output_dir = Path(args.output_dir)
-    _new_output_dir(output_dir)
+    new_output_dir(output_dir)
     provider = _provider(args)
     reflection_model = args.reflection_model or args.model
     try:
@@ -538,7 +538,7 @@ def _run_optimize(args: RunArgs, root: Path) -> int:
             "failures": cast(list[str], case_result["failures"])[:20],
             "checkpoints": cast(list[JsonObject], case_result["checkpoints"])[:20],
         }
-        evaluation_records.append({"candidate_sha256": _sha256(candidate.encode()), **side_info})
+        evaluation_records.append({"candidate_sha256": sha256_hex(candidate.encode()), **side_info})
         return float(cast(float, result["aggregate_score"])), side_info
 
     def reflection(messages: str | list[Message]) -> str:
@@ -567,12 +567,12 @@ def _run_optimize(args: RunArgs, root: Path) -> int:
     )
     if cast(bool, best_result["eligible"]):
         _ = (output_dir / "best_candidate.md").write_text(best, encoding="utf-8")
-    _ = _write_json(
+    _ = write_json(
         output_dir / "result.json",
         {
-            "dataset_sha256": _sha256(dataset_path.read_bytes()),
-            "seed_prompt_sha256": _sha256(seed.encode()),
-            "best_prompt_sha256": _sha256(best.encode()),
+            "dataset_sha256": sha256_hex(dataset_path.read_bytes()),
+            "seed_prompt_sha256": sha256_hex(seed.encode()),
+            "best_prompt_sha256": sha256_hex(best.encode()),
             "model": args.model,
             "reflection_model": reflection_model,
             "timeout_seconds": 60,
