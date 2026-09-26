@@ -64,10 +64,18 @@ def run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
         if corpus_root_path is not None
         else cast("str | None", args.corpus_root)
     )
+    workspace_root = cast("str | None", getattr(args, "workspace_root", None))
+    project_key = cast("str | None", getattr(args, "project", None))
     resolution = (
         resolve_mod.resolve_legacy(ref, start=Path.cwd())
         if legacy_flag
-        else resolve_mod.resolve(ref, corpus_root=corpus_root)
+        else resolve_mod.resolve(
+            ref,
+            corpus_root=corpus_root,
+            project_key=project_key,
+            workspace_root=workspace_root,
+            require_workspace=project_key is not None,
+        )
     )
     payload = resolve_cli.resolve_payload(resolution, ref)
     if resolution.outcome == resolve_mod.ResolutionOutcome.NOT_FOUND:

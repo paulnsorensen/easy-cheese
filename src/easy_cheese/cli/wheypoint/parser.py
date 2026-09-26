@@ -235,6 +235,12 @@ def parser_for(command: str) -> Parser:
             type=_project_key,
             help="resolve in another project's corpus (corpus_home()/KEY)",
         )
+        _ = parser.add_argument(
+            "--workspace-root",
+            dest="workspace_root",
+            default=None,
+            help="the owning repository checkout for cross-project continuation",
+        )
     elif command == "show":
         _ = parser.add_argument(
             "work_id_pos",

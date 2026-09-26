@@ -29,6 +29,7 @@ non-authoritative context and never become dispatchable.
 from __future__ import annotations
 
 import re
+import subprocess
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
@@ -41,7 +42,7 @@ from easy_cheese_schemas import (
     phase_contracts,
 )
 
-from easy_cheese.shared import handoff, paths
+from easy_cheese.shared import git_utils, handoff, paths
 
 from . import checkpoint as checkpoint_mod
 from . import legacy as legacy_mod
@@ -97,6 +98,57 @@ def _is_path_ref(ref: str) -> bool:
     return "/" in ref or ref.startswith("~")
 
 
+def _corpus_address(ref: str) -> tuple[Path, str] | None:
+    """Infer a project corpus only from its canonical projection layout."""
+    path = Path(ref).expanduser().resolve()
+    try:
+        relative = path.relative_to(paths.corpus_home().resolve())
+    except ValueError:
+        return None
+    parts = relative.parts
+    if (
+        len(parts) != 5
+        or parts[1] != storage.WORK_DIRNAME
+        or parts[3] != storage.PROJECTIONS_DIRNAME
+        or not path.is_file()
+    ):
+        return None
+    project = parts[0]
+    work_id = parts[2]
+    try:
+        _ = storage.WorkStore.open(work_id, corpus_root=paths.corpus_home() / project)
+    except storage.StorageError:
+        return None
+    projection = lint.lint_projection_file(path).projection
+    if projection is None or projection.work_id != work_id:
+        return None
+    return paths.corpus_home() / project, project
+
+
+def _git_project_key(root: Path) -> str | None:
+    """Read the Git-derived project key without ambient corpus overrides."""
+    try:
+        return paths.git_project_key(root)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _is_git_checkout(root: Path) -> bool:
+    """Require an explicit foreign workspace to be a real checkout."""
+    try:
+        result = git_utils.run_git(
+            ["rev-parse", "--show-toplevel"], cwd=root, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if result.returncode != 0 or not result.stdout.strip():
+        return False
+    try:
+        return Path(result.stdout.strip()).resolve() == root
+    except OSError:
+        return False
+
+
 def resolve(
     ref: str,
     *,
@@ -104,9 +156,13 @@ def resolve(
     project_key: str | None = None,
     workspace_root: Path | str | None = None,
     git_object_exists: Callable[[str], bool] | None = None,
+    require_workspace: bool = False,
     artifact_digest: Callable[[str], str | None] | None = None,
 ) -> Resolution:
     """Resolve an authoritative reference, then fall back to one legacy note."""
+    if not ref.strip():
+        return Resolution(ResolutionOutcome.ERROR, detail="reference is empty")
+
     root = paths.resolve_repo_root(workspace_root)
     resolved_project_key = (
         project_key if project_key is not None else paths.project_key(root)
@@ -116,6 +172,47 @@ def resolve(
         if corpus_root is not None
         else paths.project_corpus_root(resolved_project_key)
     )
+    if _is_path_ref(ref) and corpus_root is None and project_key is None:
+        addressed = _corpus_address(ref)
+        if addressed is not None:
+            resolved_corpus_root, resolved_project_key = addressed
+            require_workspace = True
+
+    context_findings: tuple[lint_types.LintFinding, ...] = ()
+    git_workspace_key = _git_project_key(root)
+    workspace_project_key = git_workspace_key or paths.project_key(root)
+    missing_checkout = (
+        require_workspace and workspace_root is not None and not _is_git_checkout(root)
+    )
+    alias_binding = (
+        require_workspace
+        and workspace_root is not None
+        and project_key is not None
+        and paths.project_key(root) == resolved_project_key
+        and not missing_checkout
+        and git_workspace_key != resolved_project_key
+    )
+    workspace_mismatch = require_workspace and (
+        (git_workspace_key is None or resolved_project_key != git_workspace_key)
+        and not alias_binding
+    )
+    if workspace_mismatch or missing_checkout:
+        code = (
+            lint_types.LintCode.WORKSPACE_MISMATCH
+            if workspace_root is not None
+            else lint_types.LintCode.WORKSPACE_REQUIRED
+        )
+        if missing_checkout:
+            detail = f"workspace {root} is not an owning Git checkout"
+        else:
+            detail = (
+                f"record belongs to project {resolved_project_key!r}, but workspace "
+                + f"{root} identifies as {workspace_project_key!r}"
+            )
+        if workspace_root is None:
+            detail += "; pass --workspace-root PATH for the owning checkout"
+        context_findings = (lint_types.LintFinding(code, detail),)
+
     checks = _Checks(
         workspace_root=root,
         corpus_root=resolved_corpus_root,
@@ -124,10 +221,9 @@ def resolve(
             git_object_exists or lint_freshness.git_object_exists_in(root)
         ),
         artifact_digest=artifact_digest or lint_freshness.artifact_digest_in(root),
+        alias_binding=alias_binding,
+        context_findings=context_findings,
     )
-
-    if not ref.strip():
-        return Resolution(ResolutionOutcome.ERROR, detail="reference is empty")
     if _is_path_ref(ref):
         authoritative = _resolve_path(ref, checks)
         if authoritative.outcome not in {
@@ -178,6 +274,8 @@ class _Checks:
     project_key: str
     git_object_exists: Callable[[str], bool]
     artifact_digest: Callable[[str], str | None]
+    alias_binding: bool = False
+    context_findings: tuple[lint_types.LintFinding, ...] = ()
 
     @property
     def work_root(self) -> Path:
@@ -201,6 +299,17 @@ def _resolve_path(ref: str, checks: _Checks) -> Resolution:
             searched=(str(path),),
         )
     report = lint.lint_projection_file(path)
+    try:
+        path = path.resolve()
+        inside_corpus = path.is_relative_to(checks.corpus_root.resolve())
+    except OSError:
+        inside_corpus = False
+    if not inside_corpus and report.projection is not None:
+        return Resolution(
+            ResolutionOutcome.NOT_FOUND,
+            source=ResolutionSource.PATH,
+            searched=(str(path),),
+        )
     if report.projection is None:
         return Resolution(
             ResolutionOutcome.ERROR,
@@ -324,6 +433,98 @@ def _validate(
         return Resolution(
             ResolutionOutcome.ERROR, source=source, searched=searched, detail=str(exc)
         )
+    if checks.context_findings:
+        try:
+            record = store.read_record()
+        except (records.RecordError, ValueError, OSError) as exc:
+            return Resolution(
+                ResolutionOutcome.ERROR, source=source, work_id=work_id, detail=str(exc)
+            )
+        if record is None:
+            return Resolution(
+                ResolutionOutcome.ERROR,
+                source=source,
+                work_id=work_id,
+                findings=(*document_findings, *checks.context_findings),
+                searched=searched,
+                detail=f"work {work_id!r} has no readable record",
+            )
+        findings = [*document_findings]
+        if record.project_key != checks.project_key:
+            findings.append(
+                lint_types.LintFinding(
+                    lint_types.LintCode.PROJECT_MISMATCH,
+                    f"record belongs to project {record.project_key!r}, not "
+                    + f"{checks.project_key!r}",
+                )
+            )
+        findings.extend(checks.context_findings)
+        return _gate(
+            Resolution(
+                ResolutionOutcome.AUTHORITATIVE,
+                source=source,
+                work_id=work_id,
+                record=record,
+                findings=tuple(findings),
+                searched=searched,
+            ),
+            "workspace binding is required before repository validation",
+        )
+    if checks.alias_binding:
+        try:
+            record = store.read_record()
+            revision = (
+                None
+                if record is None
+                else store.read_revision(record.revision_number, record.revision_id)
+            )
+        except (records.RecordError, ValueError, OSError) as exc:
+            return Resolution(
+                ResolutionOutcome.ERROR, source=source, work_id=work_id, detail=str(exc)
+            )
+        commit = None if revision is None else revision.repository.commit
+        if record is not None and not commit:
+            return _gate(
+                Resolution(
+                    ResolutionOutcome.AUTHORITATIVE,
+                    source=source,
+                    work_id=work_id,
+                    record=record,
+                    findings=(
+                        *document_findings,
+                        lint_types.LintFinding(
+                            lint_types.LintCode.GIT_OBJECT_MISSING,
+                            "alias project binding requires a pinned repository commit",
+                        ),
+                    ),
+                    searched=searched,
+                ),
+                "alias project binding requires a pinned repository commit",
+            )
+        if (
+            record is not None
+            and revision is not None
+            and commit is not None
+            and not checks.git_object_exists(commit)
+        ):
+            return _gate(
+                Resolution(
+                    ResolutionOutcome.AUTHORITATIVE,
+                    source=source,
+                    work_id=work_id,
+                    record=record,
+                    findings=(
+                        *document_findings,
+                        lint_types.LintFinding(
+                            lint_types.LintCode.GIT_OBJECT_MISSING,
+                            f"revision {revision.revision_id!r} cites commit {commit}, "
+                            + "which does not resolve in this repository",
+                        ),
+                    ),
+                    searched=searched,
+                ),
+                "alias project binding requires the pinned commit in this checkout",
+            )
     try:
         report = lint.lint_work(
             store,
@@ -337,7 +538,7 @@ def _validate(
             ResolutionOutcome.ERROR, source=source, work_id=work_id, detail=str(exc)
         )
 
-    findings = (*document_findings, *report.findings)
+    findings = (*document_findings, *report.findings, *checks.context_findings)
     if report.record is None:
         return Resolution(
             ResolutionOutcome.ERROR,

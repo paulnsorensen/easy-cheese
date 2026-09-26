@@ -77,7 +77,7 @@ def read_intent(args: argparse.Namespace, stdin: TextIO) -> object:
     path = Path(intent_arg)
     try:
         raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         raise Refused("intent-unreadable", f"{intent_arg}: {exc}") from exc
     try:
         return cast(object, json.loads(raw))

@@ -36,7 +36,7 @@ python3 skills/wheypoint/scripts/wheypoint.pyz show <work-id> [--project <key>]
 python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json]
 python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [--compacted <proof.json>] [intent.json]
 python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
-python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>]
+python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
 python3 skills/wheypoint/scripts/wheypoint.pyz lint <projection-path>
 python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>] [--project <key>]
 python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
@@ -44,6 +44,7 @@ python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
 
 `resolve`, `lint`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
 `/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
+Foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
 The parent delegates persistence as one structured checkpoint task to this capability.
 Run `validate` before `checkpoint`; workers never invoke either command at a hard limit.
 Phase skills use their own `wheypoint-resolve --ref <slug>` command for resolution.
@@ -126,4 +127,4 @@ Handwritten notes, their legacy values, and their provenance fields are in [`ref
 ## Handoff
 
 End with the orientation and this link: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
-From the repository run `/cheese --continue <slug>`; from another worktree or project, find the hit with `list --scope machine --grep <text>` and pass its `resume` path to `/cheese --continue`.
+For foreign continuation, follow [the owning-checkout resume protocol](../cheese/references/continue-resume.md).

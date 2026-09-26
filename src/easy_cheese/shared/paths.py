@@ -215,6 +215,14 @@ def _git_identity(root: Path | None = None) -> str | None:
     return None
 
 
+def git_project_key(root: Path | None = None) -> str | None:
+    """Return the Git-derived project key without ambient corpus overrides."""
+    identity = _git_identity(root)
+    if not identity:
+        return None
+    return _sanitize_segment(identity.replace("/", "-"))
+
+
 def project_key(root: Path | str | None = None) -> str:
     """Stable per-project corpus key, matching the git repository.
 
@@ -226,10 +234,12 @@ def project_key(root: Path | str | None = None) -> str:
     if override:
         return _sanitize_segment(override)
     resolved_root = None if root is None else Path(root).resolve()
-    identity = _git_identity(resolved_root)
+    identity = git_project_key(resolved_root)
     if identity:
-        return _sanitize_segment(identity.replace("/", "-"))
-    return _sanitize_segment(Path.cwd().name if resolved_root is None else resolved_root.name)
+        return identity
+    return _sanitize_segment(
+        Path.cwd().name if resolved_root is None else resolved_root.name
+    )
 
 
 def corpus_home() -> Path:

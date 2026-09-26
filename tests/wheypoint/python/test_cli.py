@@ -377,6 +377,124 @@ def test_resolve_reports_a_committed_work_id_as_dispatchable() -> None:
     assert payload["findings"] == []
 
 
+def test_resolve_foreign_project_requires_and_accepts_workspace_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "cheese"
+    same_workspace = tmp_path / "same-checkout"
+    same_workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=same_workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/project/a.git",
+        ],
+        cwd=same_workspace,
+        check=True,
+    )
+    monkeypatch.chdir(same_workspace)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "project-a")
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    created_record = cast(dict[str, object], created["record"])
+    record_slug = cast(str, created_record["slug"])
+
+    ambient_status, ambient = _run(
+        "resolve", "--ref", WORK_ID, "--project", "project-a"
+    )
+    assert ambient_status == 0
+    assert ambient["outcome"] == "authoritative"
+    assert ambient["dispatchable"] is True
+
+    foreign_workspace = tmp_path / "foreign-checkout"
+    foreign_workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=foreign_workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/project/b.git",
+        ],
+        cwd=foreign_workspace,
+        check=True,
+    )
+    monkeypatch.chdir(foreign_workspace)
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "project-b")
+    gated_status, gated = _run("resolve", "--ref", WORK_ID, "--project", "project-a")
+    assert gated_status == 0
+    assert gated["outcome"] == "gated"
+    assert "workspace-required" in [
+        cast(dict[str, object], finding)["code"]
+        for finding in cast("list[object]", gated["findings"])
+    ]
+
+    wrong_status, wrong = _run(
+        "resolve",
+        "--ref",
+        WORK_ID,
+        "--project",
+        "project-a",
+        "--workspace-root",
+        str(foreign_workspace),
+    )
+    assert wrong_status == 0
+    assert wrong["outcome"] == "gated"
+    assert "workspace-mismatch" in [
+        cast(dict[str, object], finding)["code"]
+        for finding in cast("list[object]", wrong["findings"])
+    ]
+
+    monkeypatch.delenv("EASY_CHEESE_PROJECT")
+    status, payload = _run(
+        "resolve",
+        "--ref",
+        WORK_ID,
+        "--project",
+        "project-a",
+        "--workspace-root",
+        str(same_workspace),
+    )
+    assert status == 0
+    assert payload["outcome"] == "authoritative"
+    assert payload["dispatchable"] is True
+
+    out = io.StringIO()
+    adapter_status = resolve_cli.main(
+        [
+            "--ref",
+            WORK_ID,
+            "--project",
+            "project-a",
+            "--workspace-root",
+            str(same_workspace),
+        ],
+        stdout=out,
+    )
+    adapter_payload = cast(
+        dict[str, object], json.loads(out.getvalue().splitlines()[0])
+    )
+    assert adapter_status == 0
+    assert adapter_payload["outcome"] == "authoritative"
+    assert adapter_payload["dispatchable"] is True
+    monkeypatch.chdir(same_workspace)
+    phase_out = io.StringIO()
+    phase_status = resolve_cli.main(
+        ["--ref", record_slug],
+        stdout=phase_out,
+    )
+    phase_payload = cast(
+        dict[str, object], json.loads(phase_out.getvalue().splitlines()[0])
+    )
+    assert phase_status == 0
+    assert phase_payload["outcome"] == "authoritative"
+    assert phase_payload["dispatchable"] is True
+
+
 @pytest.mark.usefixtures("corpus_root")
 def test_resolve_answers_not_found_without_calling_it_a_failure() -> None:
     status, payload = _run("resolve", "--ref", "work-9999")
@@ -1690,6 +1808,17 @@ def test_checkpoint_and_validate_refuse_a_missing_intent_path() -> None:
 
 
 @pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_and_validate_refuse_invalid_utf8_intent(tmp_path: Path) -> None:
+    """AC-2: an intent file with invalid UTF-8 is unreadable, not internal."""
+    intent_path = tmp_path / "invalid.json"
+    _ = intent_path.write_bytes(b"\xff")
+
+    for command in ("checkpoint", "validate"):
+        status, payload = _run(command, str(intent_path))
+        assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+
+
+@pytest.mark.usefixtures("corpus_root")
 def test_no_command_accepts_a_format_flag() -> None:
     """AC-4: every command refuses --format as a usage error."""
     for command, extra in (
@@ -1730,6 +1859,7 @@ def test_list_grep_next_source_and_limit_combine_with_and() -> None:
     assert payload["items"] == []
 
 
+@pytest.mark.usefixtures("corpus_root")
 def test_list_status_and_since_filter() -> None:
     """AC-7: --status and --since filter; a future --since removes every hit."""
     _ = _run("checkpoint", stdin=_first_intent(orientation="Alpha work.\nMore."))

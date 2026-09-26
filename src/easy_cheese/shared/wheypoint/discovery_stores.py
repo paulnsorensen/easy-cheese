@@ -10,13 +10,15 @@ from . import records, storage
 from .discovery_types import Candidate, Hit
 
 
-def _store_candidate(store: storage.WorkStore, project: str) -> Candidate | None:
+def _store_candidate(
+    store: storage.WorkStore, project: str
+) -> tuple[Candidate | None, str | None]:
     try:
         record = store.read_record()
-    except (storage.StorageError, ValueError, OSError):
-        return None
+    except (storage.StorageError, ValueError, OSError) as exc:
+        return None, f"{store.record_path}: {exc}"
     if record is None:
-        return None
+        return None, None
     try:
         updated = store.record_path.stat().st_mtime
     except OSError:
@@ -46,7 +48,7 @@ def _store_candidate(store: storage.WorkStore, project: str) -> Candidate | None
         resume=resume.resolve(),
         revision_number=record.revision_number,
     )
-    return Candidate(hit=hit, slug=record.slug, haystack=haystack)
+    return Candidate(hit=hit, slug=record.slug, haystack=haystack), None
 
 
 def discover(
@@ -70,6 +72,8 @@ def discover(
                 (path for path in home.iterdir() if path.is_dir()),
                 key=lambda p: p.name,
             )
+        except FileNotFoundError:
+            roots = []
         except OSError as exc:
             errors.append(f"{home}: {exc}")
     else:
@@ -88,7 +92,9 @@ def discover(
             errors.append(f"{root}: {exc}")
             continue
         for store in stores:
-            candidate = _store_candidate(store, project)
+            candidate, error = _store_candidate(store, project)
             if candidate is not None:
                 candidates.append(candidate)
+            if error is not None:
+                errors.append(error)
     return candidates, searched, errors

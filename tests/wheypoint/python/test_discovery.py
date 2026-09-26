@@ -10,7 +10,8 @@ import datetime as _dt
 import os
 import shutil
 import subprocess
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Callable, Protocol, TypedDict
 
@@ -18,7 +19,7 @@ import pytest
 from easy_cheese_schemas import NextAction, NextMove, WheypointRecord, WheypointRevision
 from typing_extensions import Unpack
 
-from easy_cheese.shared.wheypoint import discovery, legacy, storage
+from easy_cheese.shared.wheypoint import discovery, discovery_notes, legacy, storage
 
 _GIT_ENV = {
     **os.environ,
@@ -156,6 +157,36 @@ def test_machine_scope_finds_stores_across_two_projects(
     )
 
 
+@pytest.mark.usefixtures("isolated_home")
+def test_unreadable_store_record_reports_path(
+    tmp_path: Path,
+) -> None:
+    """An unreadable enumerated record remains visible as a discovery error."""
+    corpus = tmp_path / "corpus"
+    store = storage.WorkStore.open("work-0001", corpus_root=corpus)
+    store.root.mkdir(parents=True)
+    _ = store.record_path.write_bytes(b"not-json")
+
+    result = discovery.discover(scope="project", start=tmp_path, corpus_root=corpus)
+
+    assert result.hits == ()
+    assert any(str(store.record_path) in error for error in result.errors)
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_missing_machine_corpus_home_is_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A first-run machine search treats a missing corpus home as empty."""
+    home = tmp_path / "missing-cheese"
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+
+    result = discovery.discover(scope="machine", start=tmp_path)
+
+    assert result.hits == ()
+    assert result.errors == ()
+
+
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 @pytest.mark.usefixtures("isolated_home")
 def test_project_scope_finds_a_note_in_a_sibling_worktree(tmp_path: Path) -> None:
@@ -214,6 +245,33 @@ def test_machine_root_flag_backends_agree_on_notes(
     assert any(s.startswith("rg:") for s in rg_result.searched)
     rg_paths = {str(hit.path) for hit in rg_result.hits if hit.source == "note"}
     assert rg_paths == walk_paths
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_fallback_walk_discards_partial_results_on_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An interrupted fallback walk reports no partial hits as complete."""
+    root = tmp_path / "repo"
+    notes = root / ".cheese" / "notes"
+    first = notes / "first.md"
+    root.mkdir()
+    clock = iter((0.0, 0.0, 1.0))
+
+    def fake_walk(_root: Path) -> Iterator[tuple[str, list[str], list[str]]]:
+        yield str(notes), [], [first.name]
+        yield str(root), [], []
+
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "empty-cheese"))
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(os, "walk", fake_walk)
+    monkeypatch.setattr(discovery_notes, "_WALK_TIMEOUT_SECONDS", 1.0)
+    monkeypatch.setattr(time, "monotonic", lambda: next(clock))
+
+    result = discovery.discover(scope="machine", start=tmp_path, roots=[root])
+
+    assert result.hits == ()
+    assert any("directory walk timed out" in error for error in result.errors)
 
 
 @pytest.mark.usefixtures("isolated_home")

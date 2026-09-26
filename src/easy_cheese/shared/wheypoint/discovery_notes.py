@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from . import legacy as legacy_mod
 from .discovery_types import Candidate, Hit
 
 _RG_TIMEOUT_SECONDS = 20
+_WALK_TIMEOUT_SECONDS = 20
 _PRUNE_DIRS = frozenset(
     {".git", "node_modules", ".venv", "venv", "__pycache__", ".cache", "target", "dist"}
 )
@@ -49,13 +51,15 @@ def _machine_scope_roots(extra_roots: Sequence[Path | str]) -> list[Path]:
     return list(seen)
 
 
-def _walk_notes(root: Path) -> list[Path]:
+def _walk_notes(root: Path, *, deadline: float) -> list[Path] | None:
     found: list[Path] = []
     if root.is_file():
         return found
     if not root.is_dir():
         return found
     for dirpath, dirnames, filenames in os.walk(root):
+        if time.monotonic() >= deadline:
+            return None
         dirnames[:] = [name for name in dirnames if name not in _PRUNE_DIRS]
         current = Path(dirpath)
         if current.name == "notes" and current.parent.name == ".cheese":
@@ -102,8 +106,13 @@ def _find_notes(roots: list[Path]) -> tuple[list[Path], str, list[str]]:
             return found, "rg", errors
         errors.append("rg failed or timed out; fell back to a directory walk")
     walked: list[Path] = []
+    deadline = time.monotonic() + _WALK_TIMEOUT_SECONDS
     for root in roots:
-        walked.extend(_walk_notes(root))
+        found = _walk_notes(root, deadline=deadline)
+        if found is None:
+            errors.append("directory walk timed out; partial results discarded")
+            return [], "walk", errors
+        walked.extend(found)
     return walked, "walk", errors
 
 
