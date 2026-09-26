@@ -35,16 +35,14 @@ CLI:
 """
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import signal
 import subprocess
-import sys
 import time
-from typing import TextIO, TypedDict, cast
+from typing import TypedDict
 
-from easy_cheese.shared import cli  # noqa: E402
+import fromargs
 
 DEFAULT_RUNS = 3
 # skills/pasteurize/SKILL.md requires a feedback loop under 30 seconds.
@@ -170,88 +168,75 @@ def rerun(
     }
 
 
-def _cmd(args: argparse.Namespace) -> None:
-    cmd = cast("str | None", args.cmd)
+def rerun_cmd(
+    *,
+    cmd: str | None = None,
+    runs: int = DEFAULT_RUNS,
+    expect_exit: int | None = None,
+    expect_output: str | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+    max_seconds: float | None = None,
+    threshold: float = DEFAULT_THRESHOLD,
+) -> _RerunVerdict:
+    """Re-run a reproduction command and report the aggregated verdict.
+
+    Parameters
+    ----------
+    cmd
+        Shell expression to re-run.
+    runs
+        Number of times to execute --cmd (default 3).
+    expect_exit
+        Exit code that shows the expected failure (default: any non-zero).
+    expect_output
+        Regex that the combined stdout and stderr must contain.
+    timeout
+        Per-run timeout in seconds (default 30.0).
+    max_seconds
+        Overall time limit in seconds (default: --timeout times --runs).
+    threshold
+        Required match rate between 0 and 1 (default 0.5).
+    """
     if not cmd:
-        raise cli.CliError("--cmd is required")
-    runs = cast(int, args.runs)
+        raise fromargs.CliError("--cmd is required")
     if runs < 1:
-        raise cli.CliError(f"--runs must be >= 1, got {runs}")
-    timeout = cast(float, args.timeout)
+        raise fromargs.CliError(f"--runs must be >= 1, got {runs}")
     if timeout <= 0:
-        raise cli.CliError(f"--timeout must be > 0, got {timeout}")
-    max_seconds = cast("float | None", args.max_seconds)
+        raise fromargs.CliError(f"--timeout must be > 0, got {timeout}")
     if max_seconds is not None and max_seconds <= 0:
-        raise cli.CliError(f"--max-seconds must be > 0, got {max_seconds}")
-    threshold = cast(float, args.threshold)
+        raise fromargs.CliError(f"--max-seconds must be > 0, got {max_seconds}")
     if not 0.0 <= threshold <= 1.0:
-        raise cli.CliError(f"--threshold must be between 0 and 1, got {threshold}")
-    expect_output = cast("str | None", args.expect_output)
+        raise fromargs.CliError(f"--threshold must be between 0 and 1, got {threshold}")
     if expect_output:
         try:
             _ = re.compile(expect_output)
         except re.error as exc:
-            raise cli.CliError(f"--expect-output is not a valid regex: {exc}") from exc
+            raise fromargs.CliError(f"--expect-output is not a valid regex: {exc}") from exc
 
-    verdict = rerun(
+    return rerun(
         cmd,
         runs,
-        expect_exit=cast("int | None", args.expect_exit),
+        expect_exit=expect_exit,
         expect_output=expect_output,
         timeout=timeout,
         max_seconds=max_seconds,
         threshold=threshold,
     )
-    cli.emit(
-        verdict,
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast(TextIO, args.stdout),
-    )
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--cmd", help="shell expression to re-run")
-    _ = parser.add_argument(
-        "--runs",
-        type=int,
-        default=DEFAULT_RUNS,
-        help=f"number of times to execute --cmd (default {DEFAULT_RUNS})",
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "repro-rerun",
+        help="Re-run a reproduction command N times and emit a structured verdict.",
+        help_formatter="plain",
+        default_command=rerun_cmd,
     )
-    _ = parser.add_argument(
-        "--expect-exit",
-        type=int,
-        default=None,
-        help="exit code that shows the expected failure (default: any non-zero)",
-    )
-    _ = parser.add_argument(
-        "--expect-output",
-        default=None,
-        help="regex that the combined stdout and stderr must contain",
-    )
-    _ = parser.add_argument(
-        "--timeout",
-        type=float,
-        default=DEFAULT_TIMEOUT,
-        help=f"per-run timeout in seconds (default {DEFAULT_TIMEOUT})",
-    )
-    _ = parser.add_argument(
-        "--max-seconds",
-        type=float,
-        default=None,
-        help="overall time limit in seconds (default: --timeout times --runs)",
-    )
-    _ = parser.add_argument(
-        "--threshold",
-        type=float,
-        default=DEFAULT_THRESHOLD,
-        help=f"required match rate between 0 and 1 (default {DEFAULT_THRESHOLD})",
-    )
-    parser.set_defaults(func=_cmd)
+    return app
 
 
 def main(argv: list[str] | None = None) -> int:
-    return cli.run(_setup, argv=argv)
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())

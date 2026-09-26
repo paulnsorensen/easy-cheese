@@ -45,6 +45,8 @@ just bundle
 `just bundle` resolves each application from PEP 517 wheels in a private wheelhouse.
 It writes the complete external and internal hash-locked closure to a temporary requirements file beside that wheelhouse.
 Then it invokes Shiv. The external runtime pins in `requirements/runtime.txt` are the only committed hash lock.
+`fromargs`, the CLI library, and its Cyclopts closure are PyPI releases hash-locked in that file.
+To bump `fromargs`, update its version and hash in `requirements/runtime.txt` and `requirements/typing.txt`, then rebuild the bundles.
 
 Each Python skill declares its public subcommands in `commands.py`.
 Declare each handler with the `@bundle_command("<name>")` decorator at its definition site.
@@ -54,7 +56,10 @@ Collect the results in an immutable `COMMANDS` tuple.
 `validate_command_surface` rejects a declared name that `COMMANDS` omits.
 It also rejects a `COMMANDS` entry that no decorator declares.
 Make each handler accept `list[str]`.
-Write result text to stdout. Write diagnostics to stderr. Return an integer process status.
+Build the command surface with `fromargs.App` and return `build_app().run(argv)`.
+A `fromargs` handler returns data; `fromargs` prints it as one JSON document on stdout.
+Raise `fromargs.CliError` for a refusal; `fromargs` writes one JSON line, `{"error", "exit_code"}`, to stderr.
+Write diagnostics to stderr. Return an integer process status.
 Do not modify `sys.argv`. Do not run the target through `runpy`.
 See `src/easy_cheese/skills/affinage/commands.py` for a complete manifest.
 

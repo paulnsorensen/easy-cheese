@@ -317,7 +317,8 @@ class TestMainCli:
     ) -> None:
         code, _, err = self._run(repro_rerun, capsys, *args)
         assert code == 2
-        assert err.startswith("ERROR:")
+        error = cast("dict[str, object]", json.loads(err))
+        assert error["exit_code"] == 2
 
 
 def _invoke(*args: str) -> subprocess.CompletedProcess[str]:
@@ -366,18 +367,21 @@ class TestBundleCli:
     def test_missing_cmd_exits_two(self) -> None:
         result = _invoke()
         assert result.returncode == 2
-        assert result.stderr.startswith("ERROR:")
-        assert "--cmd" in result.stderr
+        error = cast("dict[str, object]", json.loads(result.stderr))
+        assert error["exit_code"] == 2
+        assert "--cmd" in str(error["error"])
 
     def test_empty_cmd_exits_two(self) -> None:
         result = _invoke("--cmd", "")
         assert result.returncode == 2
-        assert result.stderr.startswith("ERROR:")
+        error = cast("dict[str, object]", json.loads(result.stderr))
+        assert error["exit_code"] == 2
 
     def test_zero_runs_rejected(self) -> None:
         result = _invoke("--cmd", "true", "--runs", "0")
         assert result.returncode == 2
-        assert result.stderr.startswith("ERROR:")
+        error = cast("dict[str, object]", json.loads(result.stderr))
+        assert error["exit_code"] == 2
 
     def test_help_exits_zero(self) -> None:
         result = _invoke("--help")

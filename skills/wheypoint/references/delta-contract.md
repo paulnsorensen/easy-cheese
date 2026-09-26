@@ -44,7 +44,7 @@ Exit `2` is caller usage: a bad `--grounded` entry or a first revision without o
 Exit `4` is a kernel failure before the artifact write; nothing is written.
 Exit `5` means the artifact was written but the revision failed; stderr carries `wheypoint: artifact-orphaned <path>` and the next resolve gates on `stale-artifact-link`.
 Every `wheypoint:`-tagged line on stderr is one plain-ASCII line, identical on every host.
-A refusal, exit `2` or exit `4`, is reported by the shared CLI as `ERROR: <message>` instead.
+A refusal, exit `2` or exit `4`, is reported as one stderr JSON line, `{"error": <message>, "exit_code": <n>}`, instead.
 A successful write prints `wheypoint: revision work_id=<id> revision_id=<id> revision_number=<n> retried=<bool>`.
 A stale-parent retry prints one `wheypoint: retry ...` line and one `wheypoint: retry outcome=...` line.
 An unexpected failure always prints a traceback to stderr; set `EASY_CHEESE_DEBUG` or `CHEESE_DEBUG` to add one to deliberate refusals as well.

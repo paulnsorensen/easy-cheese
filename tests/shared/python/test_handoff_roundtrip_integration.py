@@ -87,7 +87,7 @@ class TestSlugifyToWriterRoundTrip:
         )
         assert write_proc.returncode == 0, write_proc.stderr
         # Writer prints the final path on stdout.
-        written = Path(write_proc.stdout.strip())
+        written = Path(cast(str, json.loads(write_proc.stdout)))
         assert written.name == f"{slug}.md"
         assert written.parent.name == "cook"
 

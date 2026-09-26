@@ -25,8 +25,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PyYAML
-        run: pip install --no-cache-dir pyyaml==6.0.2
+      # validate_skills.py imports easy_cheese.shared.paths, which needs fromargs.
+      - name: Install PyYAML and runtime deps
+        run: |
+          pip install --no-cache-dir pyyaml==6.0.2
+          pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
 
       - name: Test SKILL.md validator
         run: python3 .github/scripts/test_validate_skills.py -v
@@ -46,8 +49,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PyYAML
-        run: pip install --no-cache-dir pyyaml==6.0.2
+      # validate_skills.py imports easy_cheese.shared.paths, which needs fromargs.
+      - name: Install PyYAML and runtime deps
+        run: |
+          pip install --no-cache-dir pyyaml==6.0.2
+          pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
 
       - name: Validate SKILL.md frontmatter
         run: python3 .github/scripts/validate_skills.py --checks frontmatter

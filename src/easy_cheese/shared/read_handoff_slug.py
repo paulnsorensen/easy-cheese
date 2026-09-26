@@ -8,32 +8,47 @@ taste_test, durable_flags, baseline.
 """
 from __future__ import annotations
 
-import argparse
-from typing import TextIO, cast
+import fromargs
 
-from easy_cheese.shared import cli, handoff, paths
+from easy_cheese.shared import handoff, paths
 
 
-def _cmd(args: argparse.Namespace) -> None:
-    artifact = paths.artifact_path(cast(str, args.phase), cast(str, args.slug))
+def read_handoff_slug(*, phase: str, slug: str) -> dict[str, object]:
+    """Read the handoff preamble from a .cheese/<phase>/<slug>.md artifact.
+
+    Parameters
+    ----------
+    phase
+        Pipeline phase directory name.
+    slug
+        Artifact slug.
+    """
+    if phase not in paths.PHASES:
+        raise fromargs.CliError(
+            f"unknown phase {phase!r}; expected one of {sorted(paths.PHASES)}"
+        )
+    artifact = paths.artifact_path(phase, slug)
     if not artifact.is_file():
-        raise cli.CliError(f"artifact not found: {artifact}")
+        raise fromargs.CliError(f"artifact not found: {artifact}")
     try:
-        slug = handoff.parse_handoff_slug(artifact.read_text(encoding="utf-8"))
+        parsed = handoff.parse_handoff_slug(artifact.read_text(encoding="utf-8"))
     except handoff.HandoffParseError as exc:
-        raise cli.CliError(f"malformed handoff preamble in {artifact}: {exc}") from exc
-    cli.emit(handoff.slug_payload(slug), json_mode=True, stdout=cast(TextIO, args.stdout))
+        raise fromargs.CliError(f"malformed handoff preamble in {artifact}: {exc}") from exc
+    return handoff.slug_payload(parsed)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--phase", required=True, choices=sorted(paths.PHASES))
-    _ = parser.add_argument("--slug", required=True)
-    parser.set_defaults(func=_cmd)
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "read-handoff-slug",
+        help="Read the handoff preamble from a .cheese/<phase>/<slug>.md artifact.",
+        help_formatter="plain",
+        default_command=read_handoff_slug,
+    )
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

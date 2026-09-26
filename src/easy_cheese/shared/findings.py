@@ -20,14 +20,12 @@ in lockstep.
 
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO, cast
 
-from easy_cheese.shared import cli
+import fromargs
 
 SEVERITIES: tuple[str, ...] = ("blocker", "high", "medium", "low")
 SEVERITY_ORDER = {sev: i for i, sev in enumerate(SEVERITIES)}
@@ -413,85 +411,79 @@ def _split_composed_verb(verb: str) -> list[str]:
 def _load_findings(report_path: str) -> list[Finding]:
     path = Path(report_path)
     if not path.is_file():
-        raise cli.CliError(f"report not found: {report_path}")
+        raise fromargs.CliError(f"report not found: {report_path}")
     return parse_findings_report(path.read_text(encoding="utf-8"))
 
 
-def _cmd_render_table(args: argparse.Namespace) -> None:
-    items = _load_findings(cast(str, args.report))
-    table = render_selection_table(items)
-    cli.emit(
-        table,
-        full=cast(bool, args.full),
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast("TextIO", args.stdout),
-    )
+def render_table(*, report: str) -> str:
+    """Render selection table from an /age report.
+
+    Parameters
+    ----------
+    report
+        Path to /age findings report.
+    """
+    items = _load_findings(report)
+    return render_selection_table(items)
 
 
-def _resolve_ids(args: argparse.Namespace) -> tuple[list[Finding], list[int]]:
-    items = _load_findings(cast(str, args.report))
+def _resolve_ids(*, report: str, selection: str) -> tuple[list[Finding], list[int]]:
+    items = _load_findings(report)
     try:
-        ids = parse_selection(cast(str, args.selection), items)
+        ids = parse_selection(selection, items)
     except SelectionError as exc:
-        raise cli.CliError(str(exc)) from exc
+        raise fromargs.CliError(str(exc)) from exc
     return items, ids
 
 
-def _cmd_parse_selection(args: argparse.Namespace) -> None:
-    _, ids = _resolve_ids(args)
-    cli.emit(
-        ids,
-        full=cast(bool, args.full),
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast("TextIO", args.stdout),
-    )
+def parse_selection_cmd(*, report: str, selection: str) -> list[int]:
+    """Resolve a selection verb to finding ids.
+
+    Parameters
+    ----------
+    report
+        Path to /age findings report.
+    selection
+        Selection verb (e.g. 'all-high', '1,3', 'skip 2').
+    """
+    _, ids = _resolve_ids(report=report, selection=selection)
+    return ids
 
 
-def _cmd_render_brief(args: argparse.Namespace) -> None:
-    items, ids = _resolve_ids(args)
+def render_brief_cmd(*, report: str, selection: str) -> str:
+    """Render the coder brief (claim, locked recommendation, invariants) for selected findings.
+
+    Parameters
+    ----------
+    report
+        Path to /age findings report.
+    selection
+        Selection verb or ids (e.g. '1,3', 'all-high').
+    """
+    items, ids = _resolve_ids(report=report, selection=selection)
     if not ids:
-        cli.emit(
-            "(no findings selected)",
-            full=cast(bool, args.full),
-            json_mode=cast(bool, args.json_mode),
-            stdout=cast("TextIO", args.stdout),
-        )
-        return
-    cli.emit(
-        render_brief(items, ids, report_path=cast(str, args.report)),
-        full=cast(bool, args.full),
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast("TextIO", args.stdout),
-    )
+        return "(no findings selected)"
+    return render_brief(items, ids, report_path=report)
 
 
 LEAVES = ("render-table", "parse-selection", "render-brief")
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    render = sub.add_parser("render-table", help="render selection table from an /age report")
-    _ = render.add_argument("--report", required=True, help="path to /age findings report")
-    render.set_defaults(func=_cmd_render_table)
-
-    select = sub.add_parser("parse-selection", help="resolve a selection verb to finding ids")
-    _ = select.add_argument("--report", required=True, help="path to /age findings report")
-    _ = select.add_argument("--selection", required=True, help="selection verb (e.g. 'all-high', '1,3', 'skip 2')")
-    select.set_defaults(func=_cmd_parse_selection)
-
-    brief = sub.add_parser(
-        "render-brief",
-        help="render the coder brief (claim, locked recommendation, invariants) for selected findings",
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "findings",
+        help="Parse, group, and render review findings for /age and /cure.",
+        help_formatter="plain",
     )
-    _ = brief.add_argument("--report", required=True, help="path to /age findings report")
-    _ = brief.add_argument("--selection", required=True, help="selection verb or ids (e.g. '1,3', 'all-high')")
-    brief.set_defaults(func=_cmd_render_brief)
+    _ = app.command(render_table, name="render-table")
+    _ = app.command(parse_selection_cmd, name="parse-selection")
+    _ = app.command(render_brief_cmd, name="render-brief")
+    return app
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

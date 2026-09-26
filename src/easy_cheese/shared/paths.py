@@ -10,7 +10,6 @@ slug accepted by one validator is accepted by all.
 
 from __future__ import annotations
 
-import argparse
 import difflib
 import functools
 import os
@@ -18,9 +17,11 @@ import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal, NamedTuple, TextIO, TypedDict, cast
+from typing import Literal, NamedTuple, TypedDict
 
-from easy_cheese.shared import cli, git_utils
+import fromargs
+
+from easy_cheese.shared import git_utils
 
 # Source of truth: skills/ultracook/references/manifest-schema.json.
 # Kebab-case, no leading/trailing hyphen, no double hyphens, 1-64 chars.
@@ -105,6 +106,12 @@ def validate_slug(slug: object) -> str | None:
             "no leading/trailing hyphen, no double hyphens"
         )
     return None
+
+
+def reject_path_segment(field: str, value: str) -> None:
+    """Reject path-traversal segments and Windows drive/path designators."""
+    if ".." in value or "/" in value or "\\" in value or ":" in value:
+        raise fromargs.CliError(f"{field} rejects path traversal: {value!r}")
 
 
 _STOPWORDS = frozenset(
@@ -589,14 +596,32 @@ def domain_model_target(
     )
 
 
-def _cmd_domain_model_target(args: argparse.Namespace) -> None:
-    probe = cast(str, args.probe)
-    corpus = cast("str | None", args.corpus)
-    model = cast("str | None", args.model)
+def domain_model_target_cmd(
+    *,
+    probe: Literal["unavailable", "no-match", "match"],
+    corpus: str | None = None,
+    model: Literal["present", "absent", "unknown"] | None = None,
+    repo_root: str | None = None,
+    project: str | None = None,
+) -> dict[str, object]:
+    """Resolve the domain-model store from explicit Hallouminate probe results.
 
+    Parameters
+    ----------
+    probe
+        Hallouminate probe result.
+    corpus
+        Matching repo:<name>:wiki corpus (required with --probe match).
+    model
+        Model status in the matching corpus (required with --probe match).
+    repo_root
+        Repo root for docs/domain-model.md (default: git toplevel or cwd).
+    project
+        XDG corpus project key (default: environment or repository identity).
+    """
     if probe in {"unavailable", "no-match"}:
         if corpus is not None or model is not None:
-            raise cli.CliError("--corpus and --model require --probe match")
+            raise fromargs.CliError("--corpus and --model require --probe match")
         if probe == "unavailable":
             list_corpora: Callable[[], list[str]] | None = None
         else:
@@ -608,11 +633,11 @@ def _cmd_domain_model_target(args: argparse.Namespace) -> None:
         wiki_has_model: Callable[[str], bool] | None = None
     else:
         if corpus is None:
-            raise cli.CliError("--corpus is required when --probe is match")
+            raise fromargs.CliError("--corpus is required when --probe is match")
         if model is None:
-            raise cli.CliError("--model is required when --probe is match")
+            raise fromargs.CliError("--model is required when --probe is match")
         if not corpus.startswith("repo:") or not corpus.endswith(":wiki"):
-            raise cli.CliError("--corpus must match repo:<name>:wiki")
+            raise fromargs.CliError("--corpus must match repo:<name>:wiki")
 
         def matched_corpus() -> list[str]:
             return [corpus]
@@ -634,192 +659,141 @@ def _cmd_domain_model_target(args: argparse.Namespace) -> None:
             wiki_has_model = None
 
     target = domain_model_target(
-        repo_root=cast("str | None", args.repo_root),
-        project=cast("str | None", args.project),
+        repo_root=repo_root,
+        project=project,
         list_corpora=list_corpora,
         wiki_has_model=wiki_has_model,
     )
-    cli.emit(
-        {
-            "backend": target.backend,
-            "location": str(target.location),
-            "wiki_reachable": target.wiki_reachable,
-        },
-        json_mode=True,
-        stdout=cast(TextIO, args.stdout),
-    )
+    return {
+        "backend": target.backend,
+        "location": str(target.location),
+        "wiki_reachable": target.wiki_reachable,
+    }
 
 
-# ---- CLI: slugify, validate, existing, resolve, list, domain-model-target ----
-def _cmd_slugify(args: argparse.Namespace) -> None:
-    text = cast(str, args.text)
+def slugify_cmd(*, text: str) -> str:
+    """Kebab-slug arbitrary text.
+
+    Parameters
+    ----------
+    text
+        Source text to slugify.
+    """
     if not text:
-        raise cli.CliError("slugify requires non-empty --text")
+        raise fromargs.CliError("slugify requires non-empty --text")
     slug = slugify(text)
     if not slug:
-        raise cli.CliError(f"slugify produced an empty slug from {text!r}")
-    cli.emit(
-        slug, json_mode=cast(bool, args.json_mode), stdout=cast(TextIO, args.stdout)
-    )
+        raise fromargs.CliError(f"slugify produced an empty slug from {text!r}")
+    return slug
 
 
-def _cmd_validate(args: argparse.Namespace) -> None:
-    err = validate_slug(cast(str, args.slug))
-    if err is not None:
-        raise cli.CliError(err)
+def validate_cmd(*, slug: str) -> None:
+    """Exit 0 if slug is valid kebab-case.
 
-
-def _cmd_existing(args: argparse.Namespace) -> None:
-    slug = cast(str, args.slug)
-    phase = cast(str, args.phase)
+    Parameters
+    ----------
+    slug
+        Candidate slug.
+    """
     err = validate_slug(slug)
     if err is not None:
-        raise cli.CliError(err)
+        raise fromargs.CliError(err)
+
+
+def existing_cmd(
+    *, slug: str, phase: str, root: str | None = None, limit: int | None = None
+) -> list[str]:
+    """List .cheese/<phase>/<slug>.md artifacts present on disk.
+
+    Parameters
+    ----------
+    slug
+        Candidate slug.
+    phase
+        One of the known phases.
+    root
+        Artifact root override (default: phase-appropriate -- XDG corpus for
+        durable phases, .cheese/ otherwise).
+    limit
+        Cap list length.
+    """
+    err = validate_slug(slug)
+    if err is not None:
+        raise fromargs.CliError(err)
     if phase not in PHASES:
-        raise cli.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
-    found = existing_artifacts(
-        slug, root=cast("str | None", args.root), phases=(phase,)
-    )
+        raise fromargs.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
+    found = existing_artifacts(slug, root=root, phases=(phase,))
     items = [str(p) for p in found.values()]
-    cli.emit(
-        items,
-        limit=cast("int | None", args.limit),
-        full=cast(bool, args.full),
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast(TextIO, args.stdout),
-    )
+    return items if limit is None else items[:limit]
 
 
-def _cmd_list(args: argparse.Namespace) -> None:
-    phase = cast(str, args.phase)
+def list_cmd(
+    *, phase: str, repo_root: str | None = None, limit: int | None = None
+) -> list[dict[str, str]]:
+    """Enumerate slugs (and paths) for a phase's artifacts on disk.
+
+    Parameters
+    ----------
+    phase
+        One of the known phases.
+    repo_root
+        Repo root for .cheese/ (default: git toplevel or cwd).
+    limit
+        Cap list length.
+    """
     if phase not in PHASES:
-        raise cli.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
+        raise fromargs.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
     try:
-        entries = list_artifacts(phase, repo_root=cast("str | None", args.repo_root))
+        entries = list_artifacts(phase, repo_root=repo_root)
     except ValueError as exc:
-        raise cli.CliError(str(exc)) from exc
-    json_mode = cast(bool, args.json_mode)
-    limit = cast("int | None", args.limit)
-    full = cast(bool, args.full)
-    stdout = cast(TextIO, args.stdout)
-    if json_mode:
-        shown = entries if (full or limit is None) else entries[:limit]
-        cli.emit(shown, json_mode=True, stdout=stdout)
-    else:
-        cli.emit([e["slug"] for e in entries], limit=limit, full=full, stdout=stdout)
+        raise fromargs.CliError(str(exc)) from exc
+    return entries if limit is None else entries[:limit]
 
 
-def _cmd_resolve(args: argparse.Namespace) -> None:
-    slug = cast(str, args.slug)
+def resolve_cmd(
+    *, slug: str, phase: str | None = None, repo_root: str | None = None
+) -> ResolveSlugResult:
+    """Resolve a slug to absolute artifact path(s) across all phases.
+
+    Parameters
+    ----------
+    slug
+        Candidate slug.
+    phase
+        Restrict the search to this phase/aux token.
+    repo_root
+        Repo root for .cheese/ (default: git toplevel or cwd).
+    """
     err = validate_slug(slug)
     if err is not None:
-        raise cli.CliError(err)
+        raise fromargs.CliError(err)
     try:
-        result = resolve_slug(
-            slug,
-            phase_hint=cast("str | None", args.phase),
-            repo_root=cast("str | None", args.repo_root),
-        )
+        return resolve_slug(slug, phase_hint=phase, repo_root=repo_root)
     except ValueError as exc:
-        raise cli.CliError(str(exc)) from exc
-    cli.emit(result, json_mode=True, stdout=cast(TextIO, args.stdout))
+        raise fromargs.CliError(str(exc)) from exc
 
 
 LEAVES = ("slugify", "validate", "existing", "resolve", "list", "domain-model-target")
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    slugify = sub.add_parser("slugify", help="kebab-slug arbitrary text")
-    _ = slugify.add_argument("--text", required=True, help="source text to slugify")
-    slugify.set_defaults(func=_cmd_slugify)
-
-    validate = sub.add_parser("validate", help="exit 0 if slug is valid kebab-case")
-    _ = validate.add_argument("--slug", required=True)
-    validate.set_defaults(func=_cmd_validate)
-
-    existing = sub.add_parser(
-        "existing",
-        help="list .cheese/<phase>/<slug>.md artifacts present on disk",
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "paths",
+        help="Slugify, validate, resolve, and list .cheese artifact paths.",
+        help_formatter="plain",
     )
-    _ = existing.add_argument("--slug", required=True)
-    _ = existing.add_argument("--phase", required=True, help=f"one of {sorted(PHASES)}")
-    _ = existing.add_argument(
-        "--root",
-        default=None,
-        help="artifact root override (default: phase-appropriate -- XDG corpus for durable phases, .cheese/ otherwise)",
-    )
-    _ = existing.add_argument("--limit", type=int, default=None, help="cap list length")
-    existing.set_defaults(func=_cmd_existing)
-
-    resolve = sub.add_parser(
-        "resolve",
-        help="resolve a slug to absolute artifact path(s) across all phases",
-    )
-    _ = resolve.add_argument("--slug", required=True)
-    _ = resolve.add_argument(
-        "--phase", default=None, help="restrict the search to this phase/aux token"
-    )
-    _ = resolve.add_argument(
-        "--repo-root",
-        dest="repo_root",
-        default=None,
-        help="repo root for .cheese/ (default: git toplevel or cwd)",
-    )
-    resolve.set_defaults(func=_cmd_resolve)
-
-    list_cmd = sub.add_parser(
-        "list",
-        help="enumerate slugs (and paths) for a phase's artifacts on disk",
-    )
-    _ = list_cmd.add_argument("--phase", required=True, help=f"one of {sorted(PHASES)}")
-    _ = list_cmd.add_argument(
-        "--repo-root",
-        dest="repo_root",
-        default=None,
-        help="repo root for .cheese/ (default: git toplevel or cwd)",
-    )
-    _ = list_cmd.add_argument("--limit", type=int, default=None, help="cap list length")
-    list_cmd.set_defaults(func=_cmd_list)
-    target = sub.add_parser(
-        "domain-model-target",
-        help="resolve the domain-model store from explicit Hallouminate probe results",
-    )
-    _ = target.add_argument(
-        "--probe",
-        required=True,
-        choices=("unavailable", "no-match", "match"),
-        help="Hallouminate probe result",
-    )
-    _ = target.add_argument(
-        "--corpus",
-        default=None,
-        help="matching repo:<name>:wiki corpus (required with --probe match)",
-    )
-    _ = target.add_argument(
-        "--model",
-        default=None,
-        choices=("present", "absent", "unknown"),
-        help="model status in the matching corpus (required with --probe match)",
-    )
-    _ = target.add_argument(
-        "--repo-root",
-        dest="repo_root",
-        default=None,
-        help="repo root for docs/domain-model.md (default: git toplevel or cwd)",
-    )
-    _ = target.add_argument(
-        "--project",
-        default=None,
-        help="XDG corpus project key (default: environment or repository identity)",
-    )
-    target.set_defaults(func=_cmd_domain_model_target)
+    _ = app.command(slugify_cmd, name="slugify")
+    _ = app.command(validate_cmd, name="validate")
+    _ = app.command(existing_cmd, name="existing")
+    _ = app.command(resolve_cmd, name="resolve")
+    _ = app.command(list_cmd, name="list")
+    _ = app.command(domain_model_target_cmd, name="domain-model-target")
+    return app
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

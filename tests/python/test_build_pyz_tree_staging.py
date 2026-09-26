@@ -344,11 +344,15 @@ def test_builder_does_not_expose_a_custom_wheel_writer() -> None:
 
 
 @_needs_build_tooling
-def test_members_are_stored(ultracook_pyz: Path) -> None:
-    """Shiv's --uncompressed mode stores all members for deterministic startup."""
+def test_members_are_deflated(ultracook_pyz: Path) -> None:
+    """Shiv's --compressed mode deflates members to keep committed archives small.
+
+    Raw bytes then depend on the host zlib, so the staleness gate compares
+    member content, not archive bytes.
+    """
     with zipfile.ZipFile(ultracook_pyz) as archive:
-        kinds = {info.compress_type for info in archive.infolist()}
-    assert kinds == {zipfile.ZIP_STORED}
+        kinds = {info.compress_type for info in archive.infolist() if info.file_size}
+    assert kinds == {zipfile.ZIP_DEFLATED}
 
 
 @_needs_build_tooling
@@ -360,7 +364,7 @@ def test_shiv_command_uses_a_local_hash_locked_wheelhouse(tmp_path: Path) -> Non
     )
     for flag in (
         "--reproducible",
-        "--uncompressed",
+        "--compressed",
         "--no-index",
         "--only-binary=:all:",
         "--require-hashes",

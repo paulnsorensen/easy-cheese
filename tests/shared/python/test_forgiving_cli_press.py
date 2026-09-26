@@ -1,17 +1,25 @@
-"""Adversarial tests for the forgiving bundle CLI (dispatch and cli.run)."""
+"""Adversarial tests for the forgiving bundle CLI (dispatch and fromargs apps)."""
 
 from __future__ import annotations
 
-import argparse
+import json
 import sys
 from types import ModuleType
-from typing import cast
 
+import fromargs
 import pytest
 
 from easy_cheese.shared import bundle_commands as bc
-from easy_cheese.shared import cli
-from tests.shared.python.bucket_cli import bucket_setup as _setup
+from tests.shared.python.bucket_cli import bucket_app
+
+
+def _run(argv: list[str] | None = None) -> int:
+    return bucket_app().run(argv)
+
+
+def _error_lines(err: str) -> list[dict[str, object]]:
+    """The fromargs JSON error lines on stderr, without `note:` lines."""
+    return [json.loads(line) for line in err.splitlines() if line.startswith("{")]
 
 _INDEX_MODULE = "easy_cheese.shared.bundle_command_index"
 
@@ -127,9 +135,9 @@ def test_flag_standardization_changes_only_long_flag_names(
 
 
 def test_repair_handles_the_equals_form(capsys: pytest.CaptureFixture[str]) -> None:
-    assert cli.run(_setup, argv=["bucket", "--files=2 --modules=3"]) == 0
+    assert _run(["bucket", "--files=2 --modules=3"]) == 0
     captured = capsys.readouterr()
-    assert captured.out.strip() == "2 3"
+    assert json.loads(captured.out) == [2, 3, ""]
     assert "note: split quoted argument" in captured.err
 
 
@@ -137,50 +145,46 @@ def test_repair_reads_sys_argv_when_argv_is_none(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(sys, "argv", ["prog", "bucket", "--files", "4 --modules 5"])
-    assert cli.run(_setup) == 0
-    assert capsys.readouterr().out.strip() == "4 5"
+    assert _run() == 0
+    assert json.loads(capsys.readouterr().out) == [4, 5, ""]
 
 
 def test_probe_failure_prints_nothing_before_the_real_error(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    with pytest.raises(SystemExit):
-        _ = cli.run(_setup, argv=["bucket", "--files", "x --modules y"])
+    assert _run(["bucket", "--files", "x --modules y"]) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err.count("error:") == 1
+    errors = _error_lines(captured.err)
+    assert len(errors) == 1
+    assert errors[0]["exit_code"] == 2
 
 
 def test_whitespace_value_without_a_declared_flag_is_untouched(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     argv = ["bucket", "--files", "2", "--title", "two words --unknown here"]
-    assert cli.run(_setup, argv=argv) == 0
+    assert _run(argv) == 0
     captured = capsys.readouterr()
-    assert captured.out.strip() == "2 1 two words --unknown here"
+    assert json.loads(captured.out) == [2, 1, "two words --unknown here"]
     assert captured.err == ""
 
 
 def test_handler_runs_once_when_repair_applies() -> None:
     runs: list[int] = []
 
-    def record(args: argparse.Namespace) -> None:
-        runs.append(cast(int, args.files))
+    def record(*, files: int, modules: int = 1) -> None:
+        del modules
+        runs.append(files)
 
-    def setup(parser: argparse.ArgumentParser) -> None:
-        _ = parser.add_argument("--files", type=int, required=True)
-        _ = parser.add_argument("--modules", type=int, default=1)
-        parser.set_defaults(func=record)
-
-    assert cli.run(setup, argv=["--files", "2 --modules 3"]) == 0
+    app = fromargs.App("record", default_command=record)
+    assert app.run(["--files", "2 --modules 3"]) == 0
     assert runs == [2]
 
 
 @pytest.mark.parametrize("flag", ["-h", "--help"])
 def test_help_wins_over_repair(flag: str, capsys: pytest.CaptureFixture[str]) -> None:
-    with pytest.raises(SystemExit) as raised:
-        _ = cli.run(_setup, argv=["bucket", flag, "--files", "2 --modules 3"])
-    assert raised.value.code == 0
+    assert _run(["bucket", flag, "--files", "2 --modules 3"]) == 0
     captured = capsys.readouterr()
     assert "--modules" in captured.out
     assert "note:" not in captured.err
@@ -190,23 +194,19 @@ def test_help_wins_over_repair(flag: str, capsys: pytest.CaptureFixture[str]) ->
 def test_a_split_that_frees_help_prints_nothing_on_stdout(
     flag: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    with pytest.raises(SystemExit) as raised:
-        _ = cli.run(_setup, argv=["bucket", "--files", "2", "--modules", f"1 {flag} x"])
-    assert raised.value.code == 2
+    assert _run(["bucket", "--files", "2", "--modules", f"1 {flag} x"]) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err.count("error:") == 1
+    assert len(_error_lines(captured.err)) == 1
 
 
 def test_free_text_that_names_a_missing_required_flag_is_not_split(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    with pytest.raises(SystemExit) as raised:
-        _ = cli.run(_setup, argv=["bucket", "--title", "ran --files 9 on the diff"])
-    assert raised.value.code == 2
+    assert _run(["bucket", "--title", "ran --files 9 on the diff"]) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "--files" in captured.err
+    assert "--files" in str(_error_lines(captured.err)[0]["error"])
     assert "note:" not in captured.err
 
 
@@ -214,50 +214,35 @@ def test_free_text_stays_whole_beside_a_valid_call(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     argv = ["bucket", "--files", "2", "--title", "ran --modules 9 on the diff"]
-    assert cli.run(_setup, argv=argv) == 0
+    assert _run(argv) == 0
     captured = capsys.readouterr()
-    assert captured.out.strip() == "2 1 ran --modules 9 on the diff"
+    assert json.loads(captured.out) == [2, 1, "ran --modules 9 on the diff"]
     assert captured.err == ""
 
 
 def test_positional_free_text_is_not_split() -> None:
     seen: list[str] = []
 
-    def record(args: argparse.Namespace) -> None:
-        seen.append(cast(str, args.text))
+    def record(text: str, *, files: int) -> None:
+        del files
+        seen.append(text)
 
-    def setup(parser: argparse.ArgumentParser) -> None:
-        _ = parser.add_argument("text")
-        _ = parser.add_argument("--files", type=int, required=True)
-        parser.set_defaults(func=record)
-
-    with pytest.raises(SystemExit):
-        _ = cli.run(setup, argv=["see --files 2"])
+    app = fromargs.App("record", default_command=record)
+    assert app.run(["see --files 2"]) == 2
     assert seen == []
 
 
 def test_repair_stops_at_the_option_terminator(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    with pytest.raises(SystemExit):
-        _ = cli.run(_setup, argv=["bucket", "--", "--files", "2 --modules 3"])
+    assert _run(["bucket", "--", "--files", "2 --modules 3"]) != 0
     assert "note:" not in capsys.readouterr().err
 
 
 def test_the_repair_note_prints_the_pieces(capsys: pytest.CaptureFixture[str]) -> None:
-    assert cli.run(_setup, argv=["bucket", "--files", "2 --modules 3"]) == 0
+    assert _run(["bucket", "--files", "2 --modules 3"]) == 0
     expected = "note: split quoted argument '2 --modules 3' into ['2', '--modules', '3']"
     assert expected in capsys.readouterr().err
-
-
-def test_repair_argv_exposes_the_argv_that_the_parser_reads() -> None:
-    def setup(parser: argparse.ArgumentParser) -> None:
-        _ = parser.add_argument("--count", type=int, required=True)
-        _ = parser.add_argument("--slug", required=True)
-
-    repaired = cli.repair_argv(setup, ["--count", "2 --slug victim"])
-    assert repaired == ["--count", "2", "--slug", "victim"]
-
 
 @pytest.mark.parametrize("flag", ["--slug", "--phase", "-x"])
 def test_a_leading_value_flag_is_rejected_and_never_guessed(

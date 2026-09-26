@@ -7,11 +7,9 @@
 
 from __future__ import annotations
 
-import argparse
 from enum import Enum
-from typing import TextIO, cast
 
-from easy_cheese.shared import cli
+import fromargs
 
 
 class Readiness(str, Enum):
@@ -41,43 +39,61 @@ def classify_readiness(
 
 
 # ---- CLI: classify ----
-def _cmd_classify(args: argparse.Namespace) -> None:
+def classify(
+    *,
+    press_status: str,
+    hard_floor_met: bool = False,
+    has_open_level_1_or_2: bool = False,
+    has_open_level_3: bool = False,
+    has_open_level_4_or_5: bool = False,
+    any_spinning: bool = False,
+) -> dict[str, str]:
+    """Map scoreboard booleans to a readiness verdict.
+
+    Parameters
+    ----------
+    press_status
+        Press-status label (echoed in output).
+    hard_floor_met
+        Whether the hard floor gate is met.
+    has_open_level_1_or_2
+        Whether an open level-1 or level-2 gap remains.
+    has_open_level_3
+        Whether an open level-3 gap remains.
+    has_open_level_4_or_5
+        Whether an open level-4 or level-5 gap remains.
+    any_spinning
+        Whether any gate is spinning wheels.
+    """
     try:
         verdict = classify_readiness(
-            hard_floor_met=cast(bool, args.hard_floor_met),
-            has_open_level_1_or_2=cast(bool, args.has_open_level_1_or_2),
-            has_open_level_3=cast(bool, args.has_open_level_3),
-            has_open_level_4_or_5=cast(bool, args.has_open_level_4_or_5),
-            any_spinning=cast(bool, args.any_spinning),
+            hard_floor_met=hard_floor_met,
+            has_open_level_1_or_2=has_open_level_1_or_2,
+            has_open_level_3=has_open_level_3,
+            has_open_level_4_or_5=has_open_level_4_or_5,
+            any_spinning=any_spinning,
         )
     except (ValueError, TypeError) as exc:
-        raise cli.CliError(str(exc)) from exc
-    cli.emit(
-        {"press_status": cast(str, args.press_status), "readiness": verdict.value},
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast("TextIO", args.stdout),
-    )
+        raise fromargs.CliError(str(exc)) from exc
+    return {"press_status": press_status, "readiness": verdict.value}
 
 
 LEAVES = ("classify",)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    classify = sub.add_parser("classify", help="map scoreboard booleans to a readiness verdict")
-    _ = classify.add_argument("--press-status", required=True, help="press-status label (echoed in output)")
-    _ = classify.add_argument("--hard-floor-met", action="store_true")
-    _ = classify.add_argument("--has-open-level-1-or-2", action="store_true")
-    _ = classify.add_argument("--has-open-level-3", action="store_true")
-    _ = classify.add_argument("--has-open-level-4-or-5", action="store_true")
-    _ = classify.add_argument("--any-spinning", action="store_true")
-    classify.set_defaults(func=_cmd_classify)
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "gates",
+        help="Compute /press readiness verdicts.",
+        help_formatter="plain",
+    )
+    _ = app.command(classify, name="classify")
+    return app
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

@@ -13,7 +13,7 @@ from typing import Callable, cast
 import pytest
 import yaml
 
-from easy_cheese.shared.cli import CliError
+from fromargs import CliError
 
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
@@ -103,6 +103,10 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _err(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
+    return _d(cast(object, json.loads(result.stderr)))
+
+
 def _validate(path: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(BUNDLE), "validate_manifest", str(path)],
@@ -127,7 +131,10 @@ class TestSetPhase:
         original = path.read_bytes()
         result = _run_cli("set-phase", "--manifest", str(path), "--phase", "bogus_phase")
         assert result.returncode == 2
-        assert "invalid phase" in result.stderr
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "invalid phase" in cast(str, error["error"])
+        assert result.stdout == ""
         # Original file untouched on validation gate failure.
         assert path.read_bytes() == original
 
@@ -135,7 +142,9 @@ class TestSetPhase:
         path = tmp_path / "does-not-exist.yaml"
         result = _run_cli("set-phase", "--manifest", str(path), "--phase", "seed_complete")
         assert result.returncode == 2
-        assert "manifest not found" in result.stderr
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "manifest not found" in cast(str, error["error"])
 
     def test_preserves_top_level_field_order(self, tmp_path: Path) -> None:
         path = _write_fixture(tmp_path)
@@ -196,7 +205,9 @@ class TestSetCurdStatus:
             "deadbeef",
         )
         assert result.returncode == 2
-        assert "review_context is required" in result.stderr
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "review_context is required" in cast(str, error["error"])
         assert path.read_bytes() == original
 
     def test_other_curds_untouched(self, tmp_path: Path) -> None:
@@ -212,7 +223,9 @@ class TestSetCurdStatus:
             "set-curd-status", "--manifest", str(path), "--curd", "1", "--status", "ok"
         )
         assert result.returncode == 2
-        assert "invalid status" in result.stderr
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "invalid status" in cast(str, error["error"])
 
     def test_missing_curd_id_exits_2(self, tmp_path: Path) -> None:
         path = _write_fixture(tmp_path)
@@ -220,7 +233,9 @@ class TestSetCurdStatus:
             "set-curd-status", "--manifest", str(path), "--curd", "999", "--status", "running"
         )
         assert result.returncode == 2
-        assert "curd id 999 not found" in result.stderr
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "curd id 999 not found" in cast(str, error["error"])
 
 
 class TestSetPostReview:
@@ -307,7 +322,9 @@ class TestSetWiringStatus:
             "set-wiring-status", "--manifest", str(path), "--wiring", "W99", "--status", "running"
         )
         assert result.returncode == 2
-        assert "wiring id 'W99' not found" in result.stderr
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "wiring id 'W99' not found" in cast(str, error["error"])
 
 
 class TestAtomicity:
@@ -346,15 +363,16 @@ class TestCheckFiles:
         _ = path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
         result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
         assert result.returncode == 0, result.stderr
-        assert "all curd files present" in result.stdout
+        report = _d(cast(object, json.loads(result.stdout)))
+        assert report == {}
 
     def test_missing_files_reported_per_curd_without_failing(self, tmp_path: Path) -> None:
         path = _write_fixture(tmp_path)
         # Fixture files are never created on disk, so every curd is "missing".
         result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
         assert result.returncode == 0, result.stderr
-        assert "curd 1" in result.stdout
-        assert "src/feature_0.ts" in result.stdout
+        report = _d(cast(object, json.loads(result.stdout)))
+        assert report["1"] == ["src/feature_0.ts"]
 
     def test_json_mode_reports_missing_per_curd_id(self, tmp_path: Path) -> None:
         manifest = _manifest()
@@ -362,7 +380,7 @@ class TestCheckFiles:
         _ = (tmp_path / "src" / "feature_0.ts").write_text("", encoding="utf-8")
         path = tmp_path / "manifest.yaml"
         _ = path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
-        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path), "--json")
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
         assert result.returncode == 0, result.stderr
         report = _d(cast(object, json.loads(result.stdout)))
         assert "1" not in report
@@ -372,14 +390,18 @@ class TestCheckFiles:
         path = tmp_path / "does-not-exist.yaml"
         result = _run_cli("check-files", "--manifest", str(path))
         assert result.returncode == 2
-        assert "manifest not found" in result.stderr
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "manifest not found" in cast(str, error["error"])
 
     def test_invalid_root_exits_2(self, tmp_path: Path) -> None:
         path = _write_fixture(tmp_path)
         missing_root = tmp_path / "no-such-dir"
         result = _run_cli("check-files", "--manifest", str(path), "--root", str(missing_root))
         assert result.returncode == 2
-        assert "root is not a directory" in result.stderr
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "root is not a directory" in cast(str, error["error"])
 
     def test_directory_where_file_expected_reported_missing(self, tmp_path: Path) -> None:
         path = _write_fixture(tmp_path)
@@ -387,7 +409,7 @@ class TestCheckFiles:
         # must report it missing, unlike the looser exists() check.
         target = tmp_path / "src" / "feature_0.ts"
         target.mkdir(parents=True)
-        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path), "--json")
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
         assert result.returncode == 0, result.stderr
         report = _d(cast(object, json.loads(result.stdout)))
         assert report["1"] == ["src/feature_0.ts"]

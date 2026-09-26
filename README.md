@@ -155,7 +155,7 @@ just bundle
 
 `just bundle` builds each application from PEP 517 wheels in a private wheelhouse and resolves the complete external and internal dependency closure into an ephemeral hash-locked requirements file beside that wheelhouse. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The bundle resolves a selected target lazily and calls it with only that command's arguments.
 
-The external runtime pins in `requirements/runtime.txt` are the sole committed hash lock. `just check` validates the repository but does not rebuild the archives. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
+The external runtime pins in `requirements/runtime.txt` are the sole committed hash lock. That lock includes the `fromargs` CLI library, installed from its PyPI release. `just check` validates the repository but does not rebuild the archives. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
 
 ## Optional tools
 

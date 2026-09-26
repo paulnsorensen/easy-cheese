@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Protocol, TypedDict
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
+import fromargs
 import pytest
 
 from easy_cheese.shared.wheypoint import commit as commit_module
@@ -22,7 +24,6 @@ from easy_cheese_schemas.contracts import CheckpointIntent, NextMove, WheypointD
 from easy_cheese.shared.wheypoint import checkpoint
 
 if TYPE_CHECKING:
-    from easy_cheese.shared.cli import CliError
     from easy_cheese.shared.handoff import HandoffParseError, HandoffSlug
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -42,13 +43,7 @@ def _isolated_writer_environment(  # pyright: ignore[reportUnusedFunction]
     _ = (tmp_path / "context.md").write_text("grounded\n", encoding="utf-8")
 
 
-class _CliModule(Protocol):
-    CliError: type[CliError]
-
-
 class _WriterModule(Protocol):
-    cli: _CliModule
-
     def write_artifact(
         self,
         *,
@@ -100,10 +95,9 @@ def _load(name: str, path: Path) -> ModuleType:
 
 @pytest.fixture(scope="module")
 def writer() -> ModuleType:
-    # cli + handoff first so write_handoff_artifact's `import cli` / `import handoff` resolve.
+    # handoff first so write_handoff_artifact's `import handoff` resolves.
     if str(SHARED_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SHARED_SCRIPTS))
-    _ = _load("cli", SHARED_SCRIPTS / "cli.py")
     _ = _load("handoff", SHARED_SCRIPTS / "handoff.py")
     return _load("write_handoff_artifact", WRITER_CLI)
 
@@ -165,7 +159,7 @@ class TestPathTraversalRejected:
     def test_traversal_slug_rejected(
         self, writer: _WriterModule, tmp_path: Path, bad_slug: str
     ) -> None:
-        with pytest.raises(writer.cli.CliError):
+        with pytest.raises(fromargs.CliError):
             _ = writer.write_artifact(
                 slug=bad_slug,
                 status="ok",
@@ -180,7 +174,7 @@ class TestPathTraversalRejected:
     def test_traversal_phase_rejected(
         self, writer: _WriterModule, tmp_path: Path
     ) -> None:
-        with pytest.raises(writer.cli.CliError):
+        with pytest.raises(fromargs.CliError):
             _ = writer.write_artifact(
                 slug="ok-slug",
                 status="ok",
@@ -196,7 +190,7 @@ class TestPathTraversalRejected:
         self, writer: _WriterModule, tmp_path: Path
     ) -> None:
         with pytest.raises(
-            writer.cli.CliError,
+            fromargs.CliError,
             match="a genesis phase write requires at least one --grounded entry",
         ) as excinfo:
             _ = writer.write_artifact(
@@ -516,7 +510,7 @@ class TestBodyFile:
         )
         target = tmp_path / ".cheese" / "age" / "with-body.md"
         assert target.exists()
-        assert result.stdout.strip().endswith("with-body.md")
+        assert cast(str, json.loads(result.stdout)).endswith("with-body.md")
 
         content = target.read_text(encoding="utf-8")
         lines = content.splitlines()
@@ -683,7 +677,7 @@ class TestPhaseFlag:
         )
         target = tmp_path / ".cheese" / "age" / "phase-flag.md"
         assert target.exists()
-        assert result.stdout.strip().endswith(str(target))
+        assert cast(str, json.loads(result.stdout)).endswith(str(target))
         slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
         assert slug.next_skill == "cure"
         assert slug.artifact == ".cheese/press/phase-flag.md"
@@ -691,7 +685,7 @@ class TestPhaseFlag:
     def test_phase_is_required_for_direct_call(
         self, writer: _WriterModule, tmp_path: Path
     ) -> None:
-        with pytest.raises(writer.cli.CliError, match="--phase must be non-empty"):
+        with pytest.raises(fromargs.CliError, match="--phase must be non-empty"):
             _ = writer.write_artifact(
                 slug="legacy",
                 status="ok",
@@ -720,7 +714,7 @@ class TestAtomicRename:
 
         target_dir = tmp_path / ".cheese" / "age"
         target = target_dir / "never.md"
-        with pytest.raises(writer.cli.CliError) as excinfo:
+        with pytest.raises(fromargs.CliError) as excinfo:
             _ = writer.write_artifact(
                 slug="never",
                 status="ok",
@@ -894,7 +888,7 @@ class TestGroundedValidation:
         entry: str,
         message: str,
     ) -> None:
-        with pytest.raises(writer.cli.CliError, match=message):
+        with pytest.raises(fromargs.CliError, match=message):
             _ = writer.write_artifact(
                 slug="invalid-grounded",
                 status="ok",
@@ -912,7 +906,7 @@ class TestGroundedValidation:
         self, writer: _WriterModule, tmp_path: Path
     ) -> None:
         entries = tuple("context.md#1-1" for _ in range(17))
-        with pytest.raises(writer.cli.CliError, match="at most 16"):
+        with pytest.raises(fromargs.CliError, match="at most 16"):
             _ = writer.write_artifact(
                 slug="over-cap",
                 status="ok",
@@ -937,7 +931,7 @@ class TestGroundedValidation:
         _ = outside.write_text("secret\n", encoding="utf-8")
         link = tmp_path / "linked.md"
         link.symlink_to(outside)
-        with pytest.raises(writer.cli.CliError, match="escapes the repository root"):
+        with pytest.raises(fromargs.CliError, match="escapes the repository root"):
             _ = writer.write_artifact(
                 slug="symlink-escape",
                 status="ok",
@@ -978,7 +972,7 @@ class TestWheypointCommitFailure:
             raise commit_module.CommitError("corpus unavailable")
 
         monkeypatch.setattr(commit_module, "commit", fail)
-        with pytest.raises(writer.cli.CliError) as excinfo:
+        with pytest.raises(fromargs.CliError) as excinfo:
             _ = writer.write_artifact(
                 slug="commit-failed",
                 status="ok",
@@ -1017,7 +1011,7 @@ class TestWheypointCommitFailure:
         work_dir.mkdir(parents=True)
         work_dir.chmod(0o500)
         try:
-            with pytest.raises(writer.cli.CliError) as excinfo:
+            with pytest.raises(fromargs.CliError) as excinfo:
                 _ = writer.write_artifact(
                     slug="read-only",
                     status="ok",
@@ -1051,7 +1045,7 @@ class TestWheypointCommitFailure:
             raise KeyError("missing")
 
         monkeypatch.setattr(commit_module, "commit", fail)
-        with pytest.raises(writer.cli.CliError) as excinfo:
+        with pytest.raises(fromargs.CliError) as excinfo:
             _ = writer.write_artifact(
                 slug="commit-failed-keyerror",
                 status="ok",
@@ -1073,7 +1067,7 @@ class TestWheypointCommitFailure:
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        with pytest.raises(writer.cli.CliError, match="at least one --grounded") as e:
+        with pytest.raises(fromargs.CliError, match="at least one --grounded") as e:
             _ = writer.write_artifact(
                 slug="ungrounded",
                 status="ok",
@@ -1094,7 +1088,7 @@ class TestWheypointCommitFailure:
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        with pytest.raises(writer.cli.CliError, match="kebab-case") as excinfo:
+        with pytest.raises(fromargs.CliError, match="kebab-case") as excinfo:
             _ = writer.write_artifact(
                 slug="my_slug",
                 status="ok",
@@ -1140,7 +1134,7 @@ class TestWheypointCommitFailure:
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        with pytest.raises(writer.cli.CliError, match="orientation") as excinfo:
+        with pytest.raises(fromargs.CliError, match="orientation") as excinfo:
             _ = writer.write_artifact(
                 slug="too-long",
                 status="ok",
@@ -1164,7 +1158,7 @@ class TestWheypointCommitFailure:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         monkeypatch.setenv("CHEESE_DEBUG", "1")
-        with pytest.raises(writer.cli.CliError) as excinfo:
+        with pytest.raises(fromargs.CliError) as excinfo:
             _ = writer.write_artifact(
                 slug="ungrounded-debug",
                 status="ok",
@@ -1184,7 +1178,7 @@ class TestGroundedRejectedOnNonChainPhase:
         self, writer: _WriterModule, tmp_path: Path
     ) -> None:
         with pytest.raises(
-            writer.cli.CliError, match="only valid for chain phases"
+            fromargs.CliError, match="only valid for chain phases"
         ) as excinfo:
             _ = writer.write_artifact(
                 slug="non-chain",
@@ -1207,7 +1201,7 @@ class TestGroundedRejectedOnNonChainPhase:
         # transition, and `mold` is not a chain phase. The contract error must
         # win, because the transition is the stronger diagnosis.
         with pytest.raises(
-            writer.cli.CliError, match="transition mold -> age is not declared"
+            fromargs.CliError, match="transition mold -> age is not declared"
         ) as excinfo:
             _ = writer.write_artifact(
                 slug="both-rules",

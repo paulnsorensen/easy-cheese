@@ -7,6 +7,7 @@ findings contract without depending on repo-local state.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -147,7 +148,7 @@ def _run_html_report(tmp_path: Path, report_body: str, slug: str = "demo") -> tu
     )
     assert result.returncode == 0, result.stderr
     html_path = out_dir / f"age-{slug}.html"
-    assert result.stdout.strip() == str(html_path)
+    assert json.loads(result.stdout) == str(html_path)
     assert html_path.exists(), f"missing HTML output: {html_path}"
     return html_path, html_path.read_text(encoding="utf-8")
 

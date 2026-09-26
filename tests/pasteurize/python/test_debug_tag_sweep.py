@@ -8,29 +8,19 @@ skipping — against synthetic trees only. No conftest; load the module by path.
 
 from __future__ import annotations
 
-import argparse
 import json
 import subprocess
 import sys
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from io import StringIO
 from pathlib import Path
-from typing import Protocol, TextIO, TypedDict, cast
+from typing import Protocol, TypedDict, cast
 
+import fromargs
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/pasteurize/scripts/pasteurize.pyz"
-
-
-class _CliNamespace(Protocol):
-    def run(
-        self,
-        setup: Callable[[argparse.ArgumentParser], None],
-        *,
-        argv: Sequence[str] | None = ...,
-        stdout: TextIO | None = ...,
-    ) -> int: ...
 
 
 class _SweepResult(TypedDict):
@@ -39,9 +29,7 @@ class _SweepResult(TypedDict):
 
 
 class _DebugTagSweepModule(Protocol):
-    cli: _CliNamespace
-
-    def _setup(self, parser: argparse.ArgumentParser) -> None: ...
+    def build_app(self) -> fromargs.App: ...
     def main(self, argv: list[str] | None = None) -> int: ...
     def session_tags(self, sessions: Iterable[str]) -> tuple[str, ...]: ...
     def changed_files(self, root: Path) -> list[Path]: ...
@@ -67,45 +55,48 @@ class TestExitCodes:
         _ = (tmp_path / "ok.py").write_text("x = 1\n")
         result = _run("--root", str(tmp_path))
         assert result.returncode == 0, result.stderr
-        assert "total: 0" in result.stdout
+        payload = cast(dict[str, object], json.loads(result.stdout))
+        assert payload["total"] == 0
 
-    def test_dirty_tree_exits_one(self, tmp_path: Path) -> None:
+    def test_dirty_tree_exits_zero(self, tmp_path: Path) -> None:
         _ = (tmp_path / "bug.py").write_text("x = 1  # DEBUG marker\n")
         result = _run("--root", str(tmp_path))
-        assert result.returncode == 1
-        assert "bug.py" in result.stdout
+        assert result.returncode == 0, result.stderr
+        payload = cast(dict[str, object], json.loads(result.stdout))
+        assert payload["files"] == ["bug.py"]
 
     def test_in_process_returns_status_and_injected_output(
         self, debug_tag_sweep: _DebugTagSweepModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         _ = (tmp_path / "bug.py").write_text("needle\n")
         output = StringIO()
-        status = debug_tag_sweep.cli.run(
-            debug_tag_sweep._setup,  # pyright: ignore[reportPrivateUsage]
-            argv=("--root", str(tmp_path), "--tags", "needle"),
+        status = debug_tag_sweep.build_app().run(
+            ("--root", str(tmp_path), "--tags", "needle"),
             stdout=output,
         )
-        assert status == 1
-        assert output.getvalue() == "bug.py\ntotal: 1\n"
+        assert status == 0
+        assert json.loads(output.getvalue()) == {"files": ["bug.py"], "total": 1}
         assert capsys.readouterr().out == ""
 
     def test_missing_root_exits_two(self) -> None:
         result = _run("--root", "/nonexistent/path/xyz-q-9-z")
         assert result.returncode == 2
-        assert "does not exist" in result.stderr
+        error = cast("dict[str, object]", json.loads(result.stderr))
+        assert "does not exist" in str(error["error"])
 
     def test_root_is_file_exits_two(self, tmp_path: Path) -> None:
         f = tmp_path / "not-a-dir.txt"
         _ = f.write_text("hi")
         result = _run("--root", str(f))
         assert result.returncode == 2
-        assert "not a directory" in result.stderr
+        error = cast("dict[str, object]", json.loads(result.stderr))
+        assert "not a directory" in str(error["error"])
 
 
 class TestJsonShape:
     def test_clean_tree_json(self, tmp_path: Path) -> None:
         _ = (tmp_path / "ok.py").write_text("x = 1\n")
-        result = _run("--root", str(tmp_path), "--json")
+        result = _run("--root", str(tmp_path))
         assert result.returncode == 0
         payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload == {"files": [], "total": 0}
@@ -114,8 +105,8 @@ class TestJsonShape:
         _ = (tmp_path / "a.py").write_text("# DEBUG one\n# DEBUG two\n")
         _ = (tmp_path / "b.py").write_text("// TEMP\n")
         _ = (tmp_path / "clean.py").write_text("x = 1\n")
-        result = _run("--root", str(tmp_path), "--json")
-        assert result.returncode == 1
+        result = _run("--root", str(tmp_path))
+        assert result.returncode == 0
         payload = cast(dict[str, object], json.loads(result.stdout))
         assert set(cast("list[str]", payload["files"])) == {"a.py", "b.py"}
         # a.py contributes 2 hits (# DEBUG matches twice), b.py contributes 1.
@@ -125,15 +116,15 @@ class TestJsonShape:
 class TestTagsOverride:
     def test_custom_tag_finds_match(self, tmp_path: Path) -> None:
         _ = (tmp_path / "f.py").write_text("XYZZY-marker here\n")
-        result = _run("--root", str(tmp_path), "--tags", "XYZZY-marker", "--json")
-        assert result.returncode == 1
+        result = _run("--root", str(tmp_path), "--tags", "XYZZY-marker")
+        assert result.returncode == 0
         payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload["files"] == ["f.py"]
 
     def test_custom_tag_ignores_default_tokens(self, tmp_path: Path) -> None:
         # File has a default token (DEBUG:) but custom tags exclude it.
         _ = (tmp_path / "f.py").write_text("DEBUG: something\n")
-        result = _run("--root", str(tmp_path), "--tags", "ONLY-CUSTOM", "--json")
+        result = _run("--root", str(tmp_path), "--tags", "ONLY-CUSTOM")
         assert result.returncode == 0
         payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload == {"files": [], "total": 0}
@@ -141,8 +132,8 @@ class TestTagsOverride:
     def test_multiple_custom_tags(self, tmp_path: Path) -> None:
         _ = (tmp_path / "a.py").write_text("FOO-thing\n")
         _ = (tmp_path / "b.py").write_text("BAR-thing\n")
-        result = _run("--root", str(tmp_path), "--tags", "FOO-thing,BAR-thing", "--json")
-        assert result.returncode == 1
+        result = _run("--root", str(tmp_path), "--tags", "FOO-thing,BAR-thing")
+        assert result.returncode == 0
         payload = cast(dict[str, object], json.loads(result.stdout))
         assert set(cast("list[str]", payload["files"])) == {"a.py", "b.py"}
         assert payload["total"] == 2
@@ -156,7 +147,7 @@ class TestRootScope:
         outside.mkdir()
         _ = (inside / "ok.py").write_text("x = 1\n")
         _ = (outside / "bug.py").write_text("# DEBUG bad\n")
-        result = _run("--root", str(inside), "--json")
+        result = _run("--root", str(inside))
         assert result.returncode == 0
         payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload == {"files": [], "total": 0}
@@ -167,7 +158,7 @@ class TestRootScope:
         (tmp_path / "node_modules").mkdir()
         _ = (tmp_path / "node_modules" / "pkg.js").write_text("// TEMP\n")
         _ = (tmp_path / "ok.py").write_text("x = 1\n")
-        result = _run("--root", str(tmp_path), "--json")
+        result = _run("--root", str(tmp_path))
         assert result.returncode == 0
         payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload == {"files": [], "total": 0}
@@ -178,7 +169,7 @@ class TestBinaryFiles:
         # NUL byte in first 4KB makes the sniffer treat it as binary, even
         # though "DEBUG:" appears later.
         _ = (tmp_path / "blob.bin").write_bytes(b"\x00" * 16 + b"DEBUG: leaked\n")
-        result = _run("--root", str(tmp_path), "--json")
+        result = _run("--root", str(tmp_path))
         assert result.returncode == 0
         payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload == {"files": [], "total": 0}
@@ -198,8 +189,8 @@ class TestDefaultTags:
     )
     def test_each_default_tag_triggers(self, tmp_path: Path, line: str) -> None:
         _ = (tmp_path / "f.txt").write_text(line)
-        result = _run("--root", str(tmp_path), "--json")
-        assert result.returncode == 1, f"default tag missed in: {line!r}"
+        result = _run("--root", str(tmp_path))
+        assert result.returncode == 0, f"default tag missed in: {line!r}"
         payload = cast(dict[str, object], json.loads(result.stdout))
         assert payload["files"] == ["f.txt"]
         assert cast(int, payload["total"]) >= 1
@@ -276,7 +267,8 @@ class TestSessionTags:
             ["--root", str(tmp_path), "--session-tag", "a4f2", "--tags", "X"]
         )
         assert status == 2
-        assert "not both" in capsys.readouterr().err
+        error = cast("dict[str, object]", json.loads(capsys.readouterr().err))
+        assert "not both" in str(error["error"])
 
     def test_cli_session_tag_scopes_the_verdict(
         self,
@@ -388,7 +380,7 @@ class TestChangedOnly:
                 "--json",
             ]
         )
-        assert status == 1
+        assert status == 0
         assert json.loads(capsys.readouterr().out) == {
             "files": ["new.py"],
             "total": 1,
@@ -404,4 +396,5 @@ class TestChangedOnly:
             ["--root", str(tmp_path), "--session-tag", "a4f2", "--changed-only"]
         )
         assert status == 2
-        assert "Git worktree" in capsys.readouterr().err
+        error = cast("dict[str, object]", json.loads(capsys.readouterr().err))
+        assert "Git worktree" in str(error["error"])

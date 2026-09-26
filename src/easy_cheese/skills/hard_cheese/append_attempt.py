@@ -23,7 +23,6 @@ itself is atomic via tmpfile + `os.replace`.
 """
 from __future__ import annotations
 
-import argparse
 import contextlib
 import datetime as _dt
 import os
@@ -31,7 +30,8 @@ import subprocess
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO, cast
+
+import fromargs
 
 try:
     import fcntl  # POSIX advisory file locks
@@ -42,8 +42,6 @@ try:
     import msvcrt  # Windows advisory file locks
 except ImportError:  # pragma: no cover - exercised only on POSIX
     msvcrt = None
-
-from easy_cheese.shared import cli
 
 REPO_ROOT = Path.cwd()
 
@@ -70,9 +68,9 @@ HEADER = (
 
 def _validate_slug(slug: str) -> str:
     if not slug:
-        raise cli.CliError("--slug must not be empty")
+        raise fromargs.CliError("--slug must not be empty")
     if ".." in slug or "/" in slug or "\\" in slug:
-        raise cli.CliError(f"--slug rejects path traversal: {slug!r}")
+        raise fromargs.CliError(f"--slug rejects path traversal: {slug!r}")
     return slug
 
 
@@ -137,15 +135,25 @@ def _with_flock(lock_path: Path, fn: Callable[[], None]) -> None:
             os.close(fd)
 
 
-def _cmd_append(args: argparse.Namespace) -> None:
-    status = cast(str, args.status)
-    score = cast(str, args.score)
-    feedback = cast(str, args.feedback)
-    explanation = cast(str, args.explanation)
-    json_mode = cast(bool, args.json_mode)
-    stdout = cast("TextIO | None", args.stdout)
+def append_attempt(
+    *, slug: str, status: str, score: str, feedback: str, explanation: str
+) -> dict[str, object]:
+    """Atomically append an attempt row to .cheese/hard-cheese/<slug>.md.
 
-    slug = _validate_slug(cast(str, args.slug))
+    Parameters
+    ----------
+    slug
+        artifact slug (no slashes, no '..')
+    status
+        PASS | FAIL | ERROR | LOGGED | FAILED
+    score
+        SOLO level 1-5 (or '-' when status=LOGGED)
+    feedback
+        one-line judge feedback
+    explanation
+        user explanation verbatim
+    """
+    slug = _validate_slug(slug)
     artifact_dir = _artifact_dir()
     target = artifact_dir / f"{slug}.md"
     lock = artifact_dir / f".{slug}.lock"
@@ -157,25 +165,22 @@ def _cmd_append(args: argparse.Namespace) -> None:
         artifact_str = str(rel)
     except ValueError:
         artifact_str = str(target)
-    cli.emit({"slug": slug, "artifact": artifact_str, "appended": True}, json_mode=json_mode, stdout=stdout)
+    return {"slug": slug, "artifact": artifact_str, "appended": True}
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--slug", required=True, help="artifact slug (no slashes, no '..')")
-    _ = parser.add_argument("--status", required=True, help="PASS | FAIL | ERROR | LOGGED | FAILED")
-    _ = parser.add_argument("--score", required=True, help="SOLO level 1-5 (or '-' when status=LOGGED)")
-    _ = parser.add_argument("--feedback", required=True, help="one-line judge feedback")
-    _ = parser.add_argument("--explanation", required=True, help="user explanation verbatim")
-    parser.set_defaults(func=_cmd_append)
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "append-attempt",
+        help="Atomically append an attempt row to .cheese/hard-cheese/<slug>.md.",
+        help_formatter="plain",
+        default_command=append_attempt,
+    )
+    return app
 
 
 def main(argv: list[str] | None = None) -> int:
-    def setup(parser: argparse.ArgumentParser) -> None:
-        parser.prog = "append-attempt"  # noqa: V101
-        _setup(parser)
-
-    return cli.run(setup, argv=argv)
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

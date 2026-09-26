@@ -104,6 +104,15 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _error(result: subprocess.CompletedProcess[str]) -> str:
+    """The message of the one fromargs JSON error line on stderr."""
+    lines = [line for line in result.stderr.splitlines() if line.startswith("{")]
+    assert len(lines) == 1, result.stderr
+    payload = cast(dict[str, object], json.loads(lines[0]))
+    assert payload["exit_code"] == result.returncode
+    return cast(str, payload["error"])
+
+
 class TestRenderTable:
     def test_matches_library_output(
         self, report_path: Path, findings_lib: ModuleType
@@ -112,7 +121,7 @@ class TestRenderTable:
         assert result.returncode == 0, result.stderr
         lib = _typed(findings_lib)
         expected = lib.render_selection_table(lib.parse_findings_report(SAMPLE_REPORT))
-        assert result.stdout.rstrip("\n") == expected.rstrip("\n")
+        assert cast(str, json.loads(result.stdout)) == expected
 
     def test_json_mode_dumps_string(
         self, report_path: Path, findings_lib: ModuleType
@@ -158,8 +167,7 @@ class TestParseSelection:
         expected_ids = lib.parse_selection(
             "all-high", lib.parse_findings_report(SAMPLE_REPORT)
         )
-        printed = [int(line) for line in result.stdout.splitlines() if line.strip()]
-        assert printed == expected_ids
+        assert json.loads(result.stdout) == expected_ids
 
     def test_all_high_ids_literal_pin(self, report_path: Path) -> None:
         # SAMPLE_REPORT has blocker id=1, high id=2; all-high must return exactly [1, 2].
@@ -227,7 +235,7 @@ class TestParseSelection:
             "nuke-it-all",
         )
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "nuke-it-all" in _error(result)
 
 
 class TestMissingFile:
@@ -235,14 +243,15 @@ class TestMissingFile:
         missing = tmp_path / "nope.md"
         result = _run("render-table", "--report", str(missing))
         assert result.returncode == 2
-        assert "report not found" in result.stderr
-        assert str(missing) in result.stderr
+        message = _error(result)
+        assert "report not found" in message
+        assert str(missing) in message
 
     def test_parse_selection_missing_file_exits_two(self, tmp_path: Path) -> None:
         missing = tmp_path / "nope.md"
         result = _run("parse-selection", "--report", str(missing), "--selection", "all")
         assert result.returncode == 2
-        assert "report not found" in result.stderr
+        assert "report not found" in _error(result)
 
 
 class TestConfidenceParsing:
@@ -374,11 +383,12 @@ class TestRenderBrief:
             f"# Coder brief — report: {report_path}; selection: 1, 3\n\n"
             f"{_FINDING_1_BLOCK}\n\n{_FINDING_3_BLOCK}"
         )
-        assert result.stdout.rstrip("\n") == expected
+        brief = cast(str, json.loads(result.stdout))
+        assert brief == expected
         # Unselected findings never leak into the brief.
-        assert "Finding 2" not in result.stdout
-        assert "Finding 4" not in result.stdout
-        assert "src/handler.ts" not in result.stdout
+        assert "Finding 2" not in brief
+        assert "Finding 4" not in brief
+        assert "src/handler.ts" not in brief
 
     def test_cli_output_matches_library_wiring(
         self, report_path: Path, findings_lib: ModuleType
@@ -390,8 +400,9 @@ class TestRenderBrief:
         expected = lib.render_brief(
             lib.parse_findings_report(SAMPLE_REPORT), [1, 4], report_path=str(report_path)
         )
-        assert result.stdout.rstrip("\n") == expected.rstrip("\n")
-        assert result.stdout.index("Finding 1") < result.stdout.index("Finding 4")
+        brief = cast(str, json.loads(result.stdout))
+        assert brief == expected
+        assert brief.index("Finding 1") < brief.index("Finding 4")
 
     def test_json_mode_dumps_the_exact_fenced_brief(self, report_path: Path) -> None:
         result = _run("render-brief", "--report", str(report_path), "--selection", "all-high", "--json")
@@ -412,18 +423,18 @@ class TestRenderBrief:
     def test_empty_selection_exits_zero_with_an_explicit_line(self, report_path: Path) -> None:
         result = _run("render-brief", "--report", str(report_path), "--selection", "none")
         assert result.returncode == 0, result.stderr
-        assert result.stdout.rstrip("\n") == "(no findings selected)"
+        assert json.loads(result.stdout) == "(no findings selected)"
 
     def test_unknown_verb_exits_two(self, report_path: Path) -> None:
         result = _run("render-brief", "--report", str(report_path), "--selection", "nuke-it-all")
         assert result.returncode == 2
-        assert "unrecognized selection verb" in result.stderr
+        assert "unrecognized selection verb" in _error(result)
 
     def test_missing_file_exits_two(self, tmp_path: Path) -> None:
         missing = tmp_path / "nope.md"
         result = _run("render-brief", "--report", str(missing), "--selection", "all")
         assert result.returncode == 2
-        assert "report not found" in result.stderr
+        assert "report not found" in _error(result)
 
     def test_missing_recommendation_is_marked_and_warned(
         self, findings_lib: ModuleType, capsys: pytest.CaptureFixture[str]
@@ -453,12 +464,12 @@ class TestArgparseFailures:
     def test_missing_report_arg_exits_two(self) -> None:
         result = _run("render-table")
         assert result.returncode == 2
-        assert "report" in result.stderr.lower()
+        assert "report" in _error(result).lower()
 
     def test_missing_selection_arg_exits_two(self, report_path: Path) -> None:
         result = _run("parse-selection", "--report", str(report_path))
         assert result.returncode == 2
-        assert "selection" in result.stderr.lower()
+        assert "selection" in _error(result).lower()
 
     def test_missing_subcommand_exits_two(self) -> None:
         result = _run()

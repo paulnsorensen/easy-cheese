@@ -398,7 +398,7 @@ def _build_shared_wheel(project_root: Path, wheelhouse: Path) -> Path:
     _ = (project / "pyproject.toml").write_text(
         _project_toml(
             "easy-cheese-shared",
-            dependencies=(f"easy-cheese-schemas=={VERSION}",),
+            dependencies=(f"easy-cheese-schemas=={VERSION}", "fromargs"),
         ),
         encoding="utf-8",
     )
@@ -603,7 +603,7 @@ def _shiv_command(
         "--python",
         "/usr/bin/env python3",
         "--reproducible",
-        "--uncompressed",
+        "--compressed",
         "--no-index",
         "--find-links",
         str(wheelhouse),

@@ -48,6 +48,9 @@ class TestSelectMode:
 
 
 class TestCli:
+    """Drives the checked-in cook.pyz bundle; pending-rebuild until the
+    orchestrator regenerates bundles with the fromargs-based mode.py."""
+
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(BUNDLE), "mode", *args],
@@ -58,12 +61,12 @@ class TestCli:
     def test_count_1_prints_linear(self) -> None:
         result = self._run("--count", "1")
         assert result.returncode == 0
-        assert result.stdout.strip() == "linear"
+        assert json.loads(result.stdout) == "linear"
 
     def test_count_2_prints_parallel(self) -> None:
         result = self._run("--count", "2")
         assert result.returncode == 0
-        assert result.stdout.strip() == "parallel"
+        assert json.loads(result.stdout) == "parallel"
 
     def test_missing_count_exits_2(self) -> None:
         result = self._run()
@@ -85,19 +88,19 @@ class TestCli:
     def test_score_below_threshold_prints_linear(self) -> None:
         result = self._run("--score", str(_mode_module.DECOMPOSE_FIRST_THRESHOLD - 1))
         assert result.returncode == 0
-        assert result.stdout.strip() == "linear"
+        assert json.loads(result.stdout) == "linear"
 
     def test_score_above_threshold_prints_decompose_first(self) -> None:
         result = self._run("--score", str(_mode_module.DECOMPOSE_FIRST_THRESHOLD + 1))
         assert result.returncode == 0
-        assert result.stdout.strip() == "decompose-first"
+        assert json.loads(result.stdout) == "decompose-first"
 
     def test_score_at_threshold_prints_linear(self) -> None:
         # select_mode_from_score uses strict >, so the threshold itself is
         # still "linear" -- pin the boundary against the named constant.
         result = self._run("--score", str(_mode_module.DECOMPOSE_FIRST_THRESHOLD))
         assert result.returncode == 0
-        assert result.stdout.strip() == "linear"
+        assert json.loads(result.stdout) == "linear"
 
     def test_negative_score_fails_loud(self) -> None:
         result = self._run("--score", "-1")
