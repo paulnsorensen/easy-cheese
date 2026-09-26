@@ -209,6 +209,18 @@ def test_taste_gate_requires_applicability_for_agent_mini_spec_source(
     )
 
 
+def test_taste_gate_requires_applicability_for_mold_curd_mini_spec_source(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = "---\nsource: mold-curd-mini-spec\n---\n" + DRAFT
+    result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
+    assert not result.passed
+    assert (
+        "gate-applicability:gate-applicability-declaration-required"
+        in result.acceptance_gaps
+    )
+
+
 def test_taste_gate_keeps_missing_applicability_compatibility_for_legacy_spec(
     taste: _MoldTasteTestModule,
 ) -> None:

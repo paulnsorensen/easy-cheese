@@ -60,7 +60,7 @@ class SpecFormatPolicy:
     ) -> bool:
         """Whether a missing ``section_name`` heading is an error."""
         if self._source == "mold-curd-mini-spec":
-            return section_name in _MINI_SPEC_REQUIRED_SECTIONS | {"Parent"}
+            return section_name in _MINI_SPEC_REQUIRED_SECTIONS
         if self._source == "agent-mini-spec":
             return section_name in _MINI_SPEC_REQUIRED_SECTIONS
         required = default_required or section_name == "Test Contracts"

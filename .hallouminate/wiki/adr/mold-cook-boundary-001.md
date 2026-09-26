@@ -1,6 +1,6 @@
 # ADR: Cook prepares missing plans but preserves plan approval
 
-Status: implemented for the repository boundary; external harness integration remains (2026-09-18).
+Status: implemented for the repository boundary; external harness integration remains (2026-09-26).
 
 Cook may generate a missing Full-tier plan from approved scope. It must request approval of the generated plan before execution.
 
@@ -26,15 +26,19 @@ Keep forgiving ingress separate from strict execution authority. Do not treat a 
 
 The typed handoff, approval binding, and Cook preparation paths are now implemented in the repository. The remaining gap is the external harness wiring that turns a protected response event into the approval reference; this ADR does not claim end-to-end completion without that evidence.
 
-
+## Amendment: draft saves before Cook
 
 Mold may save a validated draft parent spec or a concrete child mini-spec without a separate write-approval turn.[^draft] A child records its parent slug, covered goal clauses, dependencies, and frozen decisions. The parent tracks each child under `## Curds`.[^child]
 
 Saving does not grant execution authority. The user must select the exact scope and Cook route before Mold binds approval and publishes a runnable pointer. Mold can instead give a child-spec command for another worktree while parent shaping continues. A changed child contract requires a new execution decision.[^execution]
 
+A saved draft records each unresolved hold in its `execution_holds:` frontmatter list. Finalize and Cook's direct-spec path both hold while that list is non-empty, and one shared reader parses it at save, finalize, and Cook time.[^holds] Cook consent binds only the user's literal affirmative reply to a direct Cook question; an original entry request or a route choice is not consent.[^consent]
+
 [^draft]: skills/mold/SKILL.md:103-107; skills/mold/references/tiers.md
 [^child]: skills/mold/references/early-curds.md:11-25
 [^execution]: skills/mold/references/early-curds.md:27-37; skills/mold/references/handshake.md:5-9
+[^holds]: src/easy_cheese/shared/frontmatter_lists.py; src/easy_cheese/skills/mold/producer.py `_gate_execution_holds`; src/easy_cheese/shared/mold_cook_handoff.py `evaluate_mold_cook_spec` (PR 717 review)
+[^consent]: skills/mold/references/handshake.md § User key; src/easy_cheese/shared/mold_cook_handoff.py `response_is_affirmative`
 
 ## Implementation status
 

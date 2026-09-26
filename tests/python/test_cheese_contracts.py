@@ -324,10 +324,11 @@ class TestMoldOwnsItsSpecificationPath:
         body = _text(REFERENCES / "escalation.md")
         assert "`artifact-path specs <slug>`" in body
 
-    def test_escalation_still_forwards_the_returned_path(self) -> None:
+    def test_escalation_forwards_the_command_finalize_prints(self) -> None:
         body = _text(REFERENCES / "escalation.md")
-        assert "Use the explicit path that `/mold` returns." in body
-        assert "Do not reduce it to a bare slug." in body
+        assert "Dispatch the exact `command` that finalize prints." in body
+        assert "Do not rebuild it from the spec path or a bare slug." in body
+        assert "Dispatch `/cook --auto <spec-path>`" not in body
 
 
 class TestHandbackClaimMatchesThePhaseRegistry:

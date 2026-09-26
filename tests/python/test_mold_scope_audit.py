@@ -45,9 +45,11 @@ class TestOneTableOneConfirm:
         assert "Confirm the table, or name the rows to change." not in section
         assert "would itself fire one of the eight ids if kept" in section
 
-    def test_unchallenged_drop_default_still_writes_a_rejection_record(self) -> None:
+    def test_only_an_explicit_drop_writes_a_rejection_record(self) -> None:
         body = _text(HANDSHAKE)
-        assert "whether the user typed the verb or left a displayed `drop` default unchallenged" in body
+        assert "only when the user typed `drop` or explicitly confirmed a displayed `drop` default" in body
+        assert "Do not write one for an unchallenged default." in body
+        assert "left a displayed `drop` default unchallenged" not in body
 
     def test_agent_decided_non_goals_enter_the_table(self) -> None:
         body = _text(HANDSHAKE)

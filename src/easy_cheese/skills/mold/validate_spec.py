@@ -38,6 +38,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
+from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
 
 if TYPE_CHECKING:
     from easy_cheese_schemas.contracts import (
@@ -424,17 +425,17 @@ def _parent_link_error(lines: list[str], child_slug: object) -> str | None:
         return "Parent Spec must be a distinct kebab-case slug"
     if not re.fullmatch(r"G-\d+(?:,\s*G-\d+)*", values["Goals"]):
         return "Parent Goals must name one or more G-n clauses"
-    if values["Depends on"] != "none" and not re.fullmatch(
-        rf"{slug}(?:,\s*{slug})*", values["Depends on"]
-    ):
-        return "Parent Depends on must be none or child slugs"
+    if values["Depends on"] != "none":
+        if not re.fullmatch(rf"{slug}(?:,\s*{slug})*", values["Depends on"]):
+            return "Parent Depends on must be none or child slugs"
+        depends_on = [item.strip() for item in values["Depends on"].split(",")]
+        if child_slug in depends_on or values["Spec"] in depends_on:
+            return "Parent Depends on must not name the child or parent slug"
     if values["Frozen decisions"] != "none" and not re.fullmatch(
         r"F-\d+(?:,\s*F-\d+)*", values["Frozen decisions"]
     ):
         return "Parent Frozen decisions must be none or F-n forks"
     return None
-
-
 
 
 def _schema_module() -> _SchemaModule:
@@ -551,6 +552,9 @@ def _typed_frontmatter(
             entity_referent_bindings=cast(
                 tuple[Mapping[str, object], ...],
                 frontmatter.get("entity_referent_bindings", ()),
+            ),
+            execution_holds=cast(
+                tuple[str, ...], frontmatter.get("execution_holds", ())
             ),
             landing=landing,
         )
@@ -685,6 +689,16 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     errors: list[str] = []
     text = path.read_text(encoding="utf-8")
     frontmatter, body = _split_frontmatter(text)
+    if "execution_holds" in frontmatter:
+        # The subset YAML reader drops block lists and mangles quoted flow
+        # items; read the hold list with the reader finalize and Cook share.
+        try:
+            frontmatter["execution_holds"] = frontmatter_string_list(
+                text, "execution_holds"
+            )
+        except ValueError as error:
+            errors.append(f"ERROR: {error} in {path}")
+            frontmatter["execution_holds"] = ()
     policy = spec_format_policy(frontmatter, strict=strict)
     found_sections, duplicate_headings = _find_sections(body)
     source = frontmatter.get("source")

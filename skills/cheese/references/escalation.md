@@ -15,9 +15,11 @@ A fired trigger dispatches `/mold`'s user mode with the trigger ids in the hando
 When zero triggers fire, invoke `/mold`'s agent mode to write a mini-specification.
 `/mold` owns that write target and resolves it through `artifact-path specs <slug>`.
 Never name a literal specification path for `/mold`.
-Then dispatch `/cook --auto <spec-path>` in the same turn.
-Use the explicit path that `/mold` returns.
-Do not reduce it to a bare slug.
+Return the spec; do not dispatch Cook yet.
+Dispatch Cook only after the user gives Cook consent per [`../../mold/references/handshake.md`](../../mold/references/handshake.md) § User key.
+Dispatch Cook only when finalize returns a ready pointer.
+Dispatch the exact `command` that finalize prints.
+Do not rebuild it from the spec path or a bare slug.
 When the input names a specification path, use it directly.
 Do not scan or write another specification.
 
@@ -37,7 +39,7 @@ Otherwise, continue with tier 3.
 
 **Tier 3: still borderline.** Ask one targeted host-routed question that closes the failed check.
 Classify the answer again.
-This is the only user prompt in the default autonomous path.
+This question and the tier-1 Cook consent question are the only user prompts in the default autonomous path.
 
 `--safe` does not skip escalation.
 For `--safe`, it inserts a handoff gate before the final dispatch.

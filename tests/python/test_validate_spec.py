@@ -116,6 +116,57 @@ def test_early_curd_mini_spec_is_hardened_and_requires_parent(tmp_path: Path) ->
     result = _run_direct(path, "--strict")
     assert any("parent-link-invalid" in line for line in _error_lines(result))
 
+
+@pytest.mark.parametrize(
+    ("case", "parent_block"),
+    [
+        (
+            "spec-equals-child-slug",
+            "\n## Parent\n- Spec: docs-only-mini-spec\n- Goals: G-1\n"
+            + "- Depends on: none\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "bad-depends-on",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: NOT_A_SLUG!\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "depends-on-names-child-slug",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: docs-only-mini-spec\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "depends-on-names-parent-slug",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: parent-design\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "bad-frozen-decisions",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: none\n- Frozen decisions: nope\n",
+        ),
+        (
+            "duplicate-field",
+            "\n## Parent\n- Spec: parent-design\n- Spec: other-design\n"
+            + "- Goals: G-1\n- Depends on: none\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "extra-field",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: none\n- Frozen decisions: F-1\n- Extra: nope\n",
+        ),
+    ],
+)
+def test_parent_link_error_branches_are_rejected(
+    tmp_path: Path, case: str, parent_block: str
+) -> None:
+    spec = MINI_SPEC.replace("source: agent-mini-spec", "source: mold-curd-mini-spec")
+    path = _write(tmp_path, f"{case}.md", spec + parent_block)
+    result = _run_direct(path, "--strict")
+    assert any("parent-link-invalid" in line for line in _error_lines(result)), (
+        result.stdout + result.stderr
+    )
+
 # --- lenient syntax-repair classes (AC-1 half) ---------------------------
 
 

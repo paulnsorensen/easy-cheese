@@ -22,13 +22,16 @@ Prototype mode keeps the code and grows it.
 ## Setup
 
 1. Derive a kebab-case slug from the ask.
-2. If the current branch is the default branch, create a branch before the first edit.
-3. Run the leverage-trigger check in [`../../cheese/references/routing-policy.md`](../../cheese/references/routing-policy.md) § Leverage triggers.
+2. If the working tree is dirty, stop and ask the user to commit or stash first.
+3. Record the base commit and the original branch.
+   Stabilize uses the base commit to prove new tests fail without the prototype.
+4. If the current branch is the default branch, create a branch before the first edit.
+   Record that Setup created it.
+   Otherwise, record the current branch as the original branch and that Setup made no new branch.
+5. Run the leverage-trigger check in [`../../cheese/references/routing-policy.md`](../../cheese/references/routing-policy.md) § Leverage triggers.
    Announce each fired id.
    A fired trigger does not stop the loop, but it changes the stabilize route.
-4. Record the base commit.
-   Stabilize uses it to prove new tests fail without the prototype.
-5. Start the prototype log in `.cheese/cook/<slug>.md` under `## Prototype log`.
+6. Start the prototype log in `.cheese/cook/<slug>.md` under `## Prototype log`.
    Do not create a second file.
 
 ## The round
@@ -46,12 +49,13 @@ Keep each round small enough for the user to check in one read.
    Use an existing test, the app, a command, or a script.
    The Iron Law RED step does not apply to spike code; stabilize closes that gap.
 3. **Check** — Report what changed, the evidence that it works, and each open question.
-   Append one entry to the prototype log: the plan, the files, the evidence, and the user's reply.
+   Append one entry to the prototype log: the plan, the files, and the evidence.
    Then offer this menu and wait:
    - **Refine** — the user gives feedback; start the next round.
    - **Stabilize** — the shape is right; go to § Stabilize.
    - **Discard** — delete the prototype; see § Discard.
    - **Checkpoint & stop** — `/wheypoint`.
+   Append the user's reply to that entry before the next round, Stabilize, or Discard.
 
 Run the leverage-trigger check again in each Plan step.
 Announce a newly fired id before the Spike step.
@@ -72,8 +76,10 @@ Stabilize converts the prototype into normal Cook work.
 1. Draft the acceptance criteria from the behavior the user accepted in the prototype log.
    Each criterion traces to a log entry.
 2. Route by the leverage triggers:
-   - **No fired trigger** — mint a mini-spec through [`../../mold/references/mini-spec-mode.md`](../../mold/references/mini-spec-mode.md).
+   - **No fired trigger** — invoke `/mold` in agent-invoked mini-spec mode ([`../../mold/references/mini-spec-mode.md`](../../mold/references/mini-spec-mode.md)) as a visible handoff.
      Record the prototype log path in `## Provenance`.
+     If the user declines Cook consent, keep the prototype branch and the saved draft.
+     Then stop Stabilize and return to the prototype menu.
    - **A fired trigger** — stop and route to `/mold` at Light tier.
      Pass the prototype log and the branch as prior evidence.
      Mold confirms each consequential fork before Cook continues.
@@ -85,11 +91,15 @@ Stabilize converts the prototype into normal Cook work.
 5. Remove spike debris that no criterion needs, such as debug output and unused paths.
 6. Continue with **Validate**, **Taste-test**, and **Hand off** as the Flow defines.
    The handoff slug `artifact:` names the minted spec.
+   Pass `--body-file` with a body that keeps the full `## Prototype log` section.
 
 ## Discard
 
 Show the files and branch that the discard removes.
 Ask for an explicit yes.
-After the yes, restore the working tree to the base commit and delete the prototype branch.
+After the yes, restore the working tree to the base commit.
+Check out the original branch.
+Delete the prototype branch only when Setup created it.
 Keep the prototype log; it records what the loop learned.
 Write the handoff slug with `next: done` and a one-line orientation that names the discard.
+Pass `--body-file` with a body that keeps the full `## Prototype log` section.

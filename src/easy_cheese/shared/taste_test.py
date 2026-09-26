@@ -36,6 +36,11 @@ from easy_cheese_schemas.contracts import (
     WorkClass,
     parse_landing_mapping,
 )
+from easy_cheese_schemas.spec_format import (
+    _HARDENED_SOURCES,  # pyright: ignore[reportPrivateUsage]
+)
+
+from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
 
 
 class _GroundingRowFactory(Protocol):
@@ -82,6 +87,7 @@ class _FrontmatterFactory(Protocol):
         gates_overridden: tuple[str, ...],
         agent_introduced_scope: tuple[str, ...],
         entity_referent_bindings: tuple[Mapping[str, object], ...],
+        execution_holds: tuple[str, ...],
         landing: Landing | None,
     ) -> MoldSpecFrontmatter: ...
 
@@ -111,9 +117,7 @@ NON_BEHAVIOR_CLASSES = frozenset(WORK_CLASSES - {"behavior"})
 CONTRACT_MODES = frozenset({"tracer", "contract-matrix", "guard"})
 EXECUTABLE_CONTRACT_MODES = frozenset({"tracer", "contract-matrix"})
 RED_REQUIRED_EXECUTABLE_PROBLEM = "red-required-needs-executable-test-contracts"
-NEW_MOLD_SOURCES = frozenset(
-    {"agent-mini-spec", "mold-curd-mini-spec", "mold-handshake"}
-)
+NEW_MOLD_SOURCES = _HARDENED_SOURCES
 BROWSER_MARKER = re.compile(
     r"\b(?:browser|e2e|end[- ]to[- ]end|playwright|cypress|selenium|webdriver|puppeteer)\b",
     re.I,
@@ -868,6 +872,11 @@ def _typed_mold_document(
                 entity_referent_bindings=cast(
                     tuple[Mapping[str, object], ...],
                     merged.get("entity_referent_bindings", ()),
+                ),
+                execution_holds=(
+                    cast(tuple[str, ...], raw_spec["execution_holds"])
+                    if "execution_holds" in raw_spec
+                    else frontmatter_string_list(text, "execution_holds")
                 ),
                 landing=landing,
             ),

@@ -26,7 +26,7 @@ def test_mini_spec_mode_in_skill_appends_hard() -> None:
     line = next(
         line
         for line in _read("SKILL.md").splitlines()
-        if "If the user's entry already requested Cook" in line
+        if "On that consent, finalize and dispatch only a ready pointer" in line
     )
     assert HARD_RULE.search(line), line
 

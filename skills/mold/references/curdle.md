@@ -49,6 +49,7 @@ created: <YYYY-MM-DD>
 confidence: <low | medium | high>
 leverage: []   # fired trigger ids per `../../cheese/references/routing-policy.md` § Leverage triggers; copied from the handoff packet, extended when a later mode fires one
 gates_overridden: []   # list of unchecked handshake items if `curdle anyway` was used
+execution_holds: []   # unresolved named holds (scope-audit row, needs-your-verb, ALIAS/NEW ENTITY, coherence) written at save and removed when resolved; finalize and Cook stay held while it is non-empty
 agent_introduced_scope: []   # terms in the spec the user did not type — approved through the scope audit table per `handshake.md` § Scope audit table (audit trail; downstream skills trust this list)
 goal_coverage: {}   # G-n -> covered | non-goal | follow-up | tbd, the final disposition map printed as the narrowing delta per `handshake.md` § Goal coverage (audit trail; downstream skills trust this map)
 entity_referent_bindings: []   # list of binding records {noun, verdict, referent, citation, note} for identity/ownership-role nouns bound to code referents or marked NEW ENTITY — each resolved per `handshake.md` § Entity-referent binding (audit trail; downstream skills trust this list)
@@ -253,6 +254,7 @@ type MoldSpecFrontmatter {
   gates_overridden? tuple[str, ...] = ()
   agent_introduced_scope? tuple[str, ...] = ()
   entity_referent_bindings? tuple[Mapping[str, object], ...] = ()
+  execution_holds? tuple[str, ...] = ()
   landing? Landing | None = None
 }
 
@@ -441,7 +443,7 @@ Finalize the approved spec and plan before the hand-off. The host owns three val
 - `ARTIFACT_ROOT` is `.cheese/cook/<slug>-artifacts`. Mold and Cook must use the same directory.
 - The operation id is `<slug>-<ordinal>`. Keep it for an identical retry. Increase the ordinal when an input changes.
 
-After the user selects Cook for the displayed scope or plan, record the literal response. Update only that selected spec's lifecycle to `approved`, then bind the response to its exact bytes. A response that is not affirmative records a rejection:
+After the user selects Cook for the displayed scope or plan, record the literal response. Only for an affirmative response, set the selected spec's lifecycle to `approved`, then bind the response to its exact bytes. For any other response, keep `status: draft` and bind the response as a rejection:
 
 ```bash
 python3 skills/mold/scripts/mold.pyz approve "$SPEC" \

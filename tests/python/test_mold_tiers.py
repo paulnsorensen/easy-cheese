@@ -94,7 +94,7 @@ def test_no_tier_skips_the_invariant_gates() -> None:
 def test_quick_tier_saves_without_write_approval_but_does_not_start_cook() -> None:
     mini = _section(SKILL.read_text(encoding="utf-8"), "Agent-invoked mini-spec mode")
     assert "Quick tier" in mini and "without a write-approval turn" in mini
-    assert "entry already requested Cook" in mini
+    assert "ask one direct Cook question" in mini
     tiers = TIERS.read_text(encoding="utf-8")
     assert "[`mini-spec-mode.md`](mini-spec-mode.md)" in tiers
     assert MINI_SPEC.exists()

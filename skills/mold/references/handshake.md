@@ -4,13 +4,15 @@ Mold may save a draft spec without either key. A runnable Cook handoff requires 
 
 ## User key
 
-The user key shows intent to Cook the displayed scope or plan. A direct `cook it` or `cook this` turns it when the selected curd is unambiguous. An explicit `/cook` selection also counts. A general approval of the design, `curdle`, `ship it`, or silence authorizes saving only, not execution.
+The user key shows intent to Cook the displayed scope or plan. Route selection is separate from Cook consent; picking a worktree or coder never grants execution on its own.
+
+Accept a literal reply of `approved`, `approve`, `yes`, `y`, `ok`, `lgtm`, `confirmed`, `cook it`, or `cook this` (case-insensitive, punctuation-trimmed). See `response_is_affirmative` in `src/easy_cheese/shared/mold_cook_handoff.py` for the exact set. A general approval of the design, `curdle`, `ship it`, silence, the user's original entry request, or a route label such as "Cook here in isolation" authorizes saving or a route choice only, not execution.
 
 Judge the key by intent and its displayed proposal. Do not infer execution consent from unrelated or ambiguous approval. Ask when the selected scope or Cook route is unclear. The approval record binds the user's literal response to the exact proposal.
 
 ## Agent key — coherence self-check
 
-Print this checklist before a runnable handoff. Save a draft with named holds when a box is unresolved. `curdle anyway` can save, but cannot waive execution readiness:
+Print this checklist before a runnable handoff. Save a draft with named holds when a box is unresolved; write each unresolved hold into the spec's `execution_holds:` frontmatter list and remove it only when it is resolved. `curdle anyway` can save, but cannot waive execution readiness:
 
 ```
 Coherence self-check before Cook handoff:
@@ -80,7 +82,7 @@ Scope audit:
 Review the defaults; Mold may save the draft. Rows marked `needs your verb` block execution until you name a verb for each.
 ```
 
-Finalization runs the table as the execution backstop. It remains the chokepoint that downstream skills trust (RC3).
+Finalization runs the table as the execution backstop: every `needs your verb` row and unresolved coherence box is a named entry in `execution_holds:`, and `mold.pyz finalize` blocks ready while the list is non-empty. It remains the chokepoint that downstream skills trust (RC3).
 
 ## Agent-introduced scope
 
@@ -93,7 +95,7 @@ Procedure:
 3. **Any noun with zero hits is agent-introduced.** Mark it `[AGENT-INTRODUCED]` inline in the draft and add a `scope` row to the scope audit table. Default `keep` when the noun restates the user's ask or binds to a code referent, `follow-up` when it names new work, `drop` otherwise.
 
 4. **Saving the displayed defaults needs no confirm.** A row that fires a leverage trigger needs its own verb before execution: "keep <term>", "drop <term>", or "make <term> a follow-up". "Make <term> a follow-up" records a candidate within `Decided`. This choice does not create an issue or other artifact.
-5. **When a direction is dropped**, whether the user typed the verb or left a displayed `drop` default unchallenged, write a rejection record to `.cheese/.out-of-scope/<slug>-NNN.md`. A direction can be an approach, design knob, or named feature that the user declines. Use the format in `curdle.md` § Rejected-directions store. Do not make a rejected direction a follow-up candidate. Add explicit deferrals to the follow-up candidate set instead.
+5. **When a direction is dropped**, write a rejection record only when the user typed `drop` or explicitly confirmed a displayed `drop` default. Do not write one for an unchallenged default. Write it to `.cheese/.out-of-scope/<slug>-NNN.md`. A direction can be an approach, design knob, or named feature that the user declines. Use the format in `curdle.md` § Rejected-directions store. Do not make a rejected direction a follow-up candidate. Add explicit deferrals to the follow-up candidate set instead.
 6. Do not silently promote a flagged term from a research citation into a design knob. This applies to briesearch sub-agent citations, fetched docs, and MCP results. The citation is evidence, not a mandate. See `skills/briesearch/references/synthesis.md` § Alternatives are open questions.
 
 This gate exists because research sub-agents have historically over-synthesised. For example, a Tavily snippet mentioning "X or Y" became a shipped `[setting].knob = "x" | "y"` flag. The flag passed through curdle → cook although the user never typed the distinguishing noun. The grep heuristic detects this type of drift early.
@@ -134,7 +136,7 @@ This gate exists because the agent-introduced-scope and non-goals audits ask *di
 
 Before a runnable handoff, dispose of every follow-up candidate in one batch: the `follow-up` rows of the scope audit table. This process extends the existing `Non-goals audit` gate. It does not add or rename a gate. The default destination is **non-goal only**; every other destination is a user edit on the row.
 
-1. Group related candidates into independently deliverable units. Each unit is one `follow-up` row whose cell lists its members; the displayed grouping is a draft default, and the user splits or merges by editing the row.
+1. Group related candidates into independently deliverable units. Each unit is one `follow-up` row whose cell lists its members. The displayed grouping is a draft default. The user splits or merges units by editing the row.
 2. Search GitHub Issues and Hallouminate roadmap goals when discovery is available. A semantic match is surfaced on the row as a recommended `link #<id>`, not adopted as the default: the default destination stays non-goal only, and the user adopts the link by editing the row.
 3. Recommend one destination per unit:
    - **non-goal only** — keep the scope boundary, create no follow-up artifact, and offer no action choice;

@@ -73,6 +73,7 @@ from easy_cheese.shared.artifacts import (
     resolve_verified_bytes,
 )
 from easy_cheese.shared.bounded_read import BoundedReadOverflow, read_bounded_file
+from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
 from easy_cheese.shared.mold_cook_handoff import (
     canonical_mold_cook_proposal,
     evaluate_mold_cook_spec,
@@ -149,6 +150,7 @@ class _Frontmatter:
     status: str
     gates_overridden: tuple[str, ...]
     request_directive: str | None
+    execution_holds: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -395,86 +397,12 @@ def _persist(
     return _Persisted(reference, value)
 
 
-def _flow_items(body: str) -> list[str]:
-    """Split one YAML flow sequence body on the commas outside quoted items."""
-
-    items: list[str] = []
-    current: list[str] = []
-    quote: str | None = None
-    for char in body:
-        if quote is not None:
-            if char != quote:
-                current.append(char)
-            else:
-                quote = None
-        elif char in "'\"":
-            quote = char
-        elif char == ",":
-            items.append("".join(current))
-            current = []
-        else:
-            current.append(char)
-    if quote is not None:
-        raise FinalizationError("gates_overridden is malformed: unbalanced quote")
-    items.append("".join(current))
-    return items
-
-
-def _gate_item(raw: str) -> str:
-    item = raw.strip().strip("'\"").strip()
-    if not item:
-        raise FinalizationError("gates_overridden must be a list of strings")
-    return item
-
-
-def _gates_overridden(text: str) -> tuple[str, ...]:
-    """Read ``gates_overridden`` as a YAML block list, flow list, or scalar.
-
-    The shared frontmatter reader keeps only scalars, so a declared override
-    list reaches this module as an empty mapping or as raw text.  A malformed
-    declaration is a caller error, never a silently dropped safety hold.
-    """
-    lines = text.splitlines()
+def _string_list_field(text: str, key: str) -> tuple[str, ...]:
+    """Read frontmatter ``key`` as a list; a malformed list is a caller error."""
     try:
-        end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
-    except StopIteration:
-        raise FinalizationError("spec frontmatter is not terminated") from None
-    for index in range(1, end):
-        match = re.match(r"^gates_overridden:\s*(.*)$", lines[index])
-        if match is None:
-            continue
-        inline = match.group(1).strip()
-        if inline in {"null", "~"}:
-            return ()
-        if not inline:
-            key_indent = len(lines[index]) - len(lines[index].lstrip())
-            items: list[str] = []
-            for entry in lines[index + 1 : end]:
-                stripped = entry.strip()
-                if not stripped or stripped.startswith("#"):
-                    continue
-                # A block sequence may sit at the key's own indentation, so the
-                # item pattern must not require a deeper indent.
-                item = re.match(r"^\s*-\s*(.*)$", entry)
-                if item is None:
-                    if len(entry) - len(entry.lstrip()) > key_indent:
-                        # A nested value that is not a sequence item is a
-                        # malformed declaration, never an absent override.
-                        raise FinalizationError(
-                            "gates_overridden must be a list of strings"
-                        )
-                    break
-                items.append(_gate_item(item.group(1)))
-            return tuple(items)
-        if inline.startswith("["):
-            if not inline.endswith("]"):
-                raise FinalizationError("gates_overridden must be a list of strings")
-            body = inline[1:-1].strip()
-            if not body:
-                return ()
-            return tuple(_gate_item(part) for part in _flow_items(body))
-        return (_gate_item(inline),)
-    return ()
+        return frontmatter_string_list(text, key)
+    except ValueError as exc:
+        raise FinalizationError(str(exc)) from exc
 
 
 def _frontmatter(text: str) -> _Frontmatter:
@@ -486,7 +414,8 @@ def _frontmatter(text: str) -> _Frontmatter:
         raise FinalizationError(
             f"unsupported spec lifecycle {status_value!r}; expected one of {sorted(_ALLOWED_LIFECYCLES)}"
         )
-    overrides = _gates_overridden(text)
+    overrides = _string_list_field(text, "gates_overridden")
+    holds = _string_list_field(text, "execution_holds")
     directive = next(
         (
             parsed
@@ -501,6 +430,7 @@ def _frontmatter(text: str) -> _Frontmatter:
         status_value,
         overrides,
         directive,
+        holds,
     )
 
 
@@ -763,6 +693,36 @@ def _gate_gate_override(ledger: _GateLedger, frontmatter: _Frontmatter) -> None:
                 "handshake-coherence",
                 CookRequirementKind.EVIDENCE,
                 "unchecked handshake items require explicit follow-up before execution",
+            ),
+        )
+
+
+def _gate_execution_holds(ledger: _GateLedger, frontmatter: _Frontmatter) -> None:
+    """Hold work that carries an unresolved named execution hold.
+
+    Mold may save a draft with a named hold from the scope audit table, an
+    unresolved ALIAS or NEW ENTITY binding, or an unchecked coherence box.
+    Finalization is the chokepoint that runs that table: it blocks while any
+    ``execution_holds`` entry remains, so it never returns ready for a draft
+    that still carries one.
+    """
+    requirements = ledger.requirements
+    holds = ledger.holds
+    for index, entry in enumerate(frontmatter.execution_holds, start=1):
+        _append_hold(
+            holds,
+            _hold(
+                f"execution-hold-{index}",
+                CookHoldKind.PREPARATION,
+                f"unresolved execution hold: {entry}",
+            ),
+        )
+        _append_requirement(
+            requirements,
+            _requirement(
+                f"execution-hold-{index}",
+                CookRequirementKind.EVIDENCE,
+                f"execution hold {entry!r} must be resolved before publication",
             ),
         )
 
@@ -1528,6 +1488,7 @@ def finalize_mold(
     _gate_spec_validation(ledger, snapshot)
     _gate_lifecycle(ledger, frontmatter)
     _gate_gate_override(ledger, frontmatter)
+    _gate_execution_holds(ledger, frontmatter)
     _gate_curdle_anyway(ledger, curdle_anyway=curdle_anyway)
     _gate_user_directive(ledger, frontmatter)
     approval_evidence = _gate_approval_evidence(

@@ -34,7 +34,7 @@ Show the child contract, dependencies, changed files or intended footprint, and 
 
 A direct `cook it` or `cook this` selection is execution consent only when the displayed child and route are unambiguous. The approval envelope binds the scope or plan, not the dispatch route. Record the selected route beside the child in the parent `## Curds` section. Execute only that route. A route change needs a new user selection, even when the scope and plan stay unchanged.
 
-For **Cook here in isolation**, mark only that child's lifecycle `approved`. Bind the literal response to the canonical scope or plan proposal with `mold.pyz approve`, then run `mold.pyz finalize`. Dispatch only a `ready` consumer-valid pointer. If finalization returns `saved-not-ready`, show its holds and do not dispatch. A new plan or changed scope needs a new Cook selection.
+For **Cook here in isolation**, mark only that child's lifecycle `approved`. Follow [`curdle.md`](curdle.md) § Finalization for the approve-then-finalize sequence. Bind the literal response with `mold.pyz approve --kind scope --curd-id <curd-id>`. Then run `mold.pyz finalize --mode light`, passing `--taste-result` and `--ledger`. Dispatch only a `ready` consumer-valid pointer. If finalization returns `saved-not-ready`, show its holds. Do not dispatch when a hold remains. A new plan or changed scope needs a new Cook selection.
 
 For **Cook in another worktree**, provide the validated spec and command without starting local Cook or publishing a local execution pointer. The destination binds the user's Cook request to its own proposal before execution. `--auto` may chain phases after Cook begins; it never starts Cook by itself.
 

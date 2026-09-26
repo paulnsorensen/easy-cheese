@@ -504,7 +504,7 @@ used.
 
 | `outcome` | Action | New evidence flag |
 | --- | --- | --- |
-| `needs-approval` | Show the retained `proposal_ref` content. Ask the user once through the [question transport](../../cheese/references/ask-user-question.md). Run `cook.pyz approve` with the literal reply. | `--scope-approval` or `--plan-approval`, as `approval_kind` names |
+| `needs-approval` | Show the retained `proposal_ref` content. Ask the user once through the [question transport](../../cheese/references/ask-user-question.md). Run `cook.pyz approve` with the literal reply. Accept the reply forms named in [`handshake.md`](../../mold/references/handshake.md) § User key. | `--scope-approval` or `--plan-approval`, as `approval_kind` names |
 | `needs-planning` | Dispatch a fresh-context planner on `planner_request`. Normalize its writer view on the host. | `--planner-result` |
 | `needs-preparation` | Follow the setup authorization rules below. The host records the runner approval; `approve` does not. | `--runner-approval`, `--setup-authorization`, `--setup-evidence` |
 | `blocked` | Show each hold. Only a fresh user dialogue clears a hold. | `--clear-hold HOLD_ID=DIALOGUE_JSON` |

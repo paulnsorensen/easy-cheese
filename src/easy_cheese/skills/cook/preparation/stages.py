@@ -88,6 +88,10 @@ def stage_spec_binding(
             raw=spec_raw,
         )
     if readiness is not None:
+        if readiness.holds:
+            return validate_preparation_result(
+                hold_result(request, classified, refs, readiness.holds)
+            )
         continuity = continuity_hold(
             processing_source,
             ctx.root,

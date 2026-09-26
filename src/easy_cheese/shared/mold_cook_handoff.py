@@ -33,6 +33,7 @@ from easy_cheese_schemas.mold_cook import (
     MOLD_COOK_APPROVAL_SCHEMA_URI,
     MOLD_COOK_HANDOFF_SCHEMA_URI,
     CookExecutionHold,
+    CookHoldKind,
     CookSetupAuthorization,
     MoldCookApproval,
     MoldCookApprovalDecision,
@@ -296,6 +297,18 @@ def evaluate_mold_cook_spec(
             raise ContractValidationError(
                 "spec landing does not match plan: " + "; ".join(errors)
             )
+    # A Mold draft records each unresolved scope-audit row, ALIAS/NEW ENTITY
+    # binding, or coherence gap as a frontmatter `execution_holds` entry.
+    # The direct-spec Cook path reads this snapshot itself, so the hold must
+    # come from the frontmatter here, not only from the caller.
+    declared_holds = tuple(
+        CookExecutionHold(
+            hold_id=f"execution-hold-{index}",
+            kind=CookHoldKind.PREPARATION,
+            reason=f"unresolved execution hold: {entry}",
+        )
+        for index, entry in enumerate(document.frontmatter.execution_holds, start=1)
+    )
     return MoldCookSpecReadiness(
         spec_ref=spec_ref,
         spec_slug=document.frontmatter.slug,
@@ -303,7 +316,7 @@ def evaluate_mold_cook_spec(
         lifecycle=parsed_lifecycle,
         taste_verdict_ref=taste_verdict_ref,
         taste_ledger_ref=taste_ledger_ref,
-        holds=tuple(holds),
+        holds=(*tuple(holds), *declared_holds),
     )
 
 

@@ -69,6 +69,7 @@ ROUTED_FILES = {
     "skills/mold/references/early-curds.md",
     "skills/mold/references/evals.md",
     "skills/mold/references/gate-graph.md",
+    "skills/mold/references/mini-spec-mode.md",  # direct Cook consent question
     "skills/mold/SKILL.md",
     "skills/pasteurize/SKILL.md",
     "skills/plate/SKILL.md",  # the gate-`ERROR` ask before publication
@@ -91,6 +92,12 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         "When unsure, ask the user before sending the query.",
         "mechanical yes/no privacy gate — qualifies for the freshness "
         + "policy's mechanical fast-path, no design tradeoff to discuss first",
+    ),
+    (
+        "skills/cook/references/prototype-mode.md",
+        "If the working tree is dirty, stop and ask the user to commit or stash first.",
+        "mechanical stop/ask gate before setup runs, no design tradeoff to "
+        + "discuss first",
     ),
     (
         "skills/briesearch/references/unavailable.md",

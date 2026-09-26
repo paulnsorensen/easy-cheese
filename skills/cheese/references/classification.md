@@ -208,7 +208,7 @@ When two intents are plausible, apply in order:
 | `$ARGUMENTS` | Intent | Reason |
 | --- | --- | --- |
 | `.cheese/specs/dark-mode.md` | cook | spec path resolves; fast-path obvious |
-| `add dark mode to the web client` | cook | feature scope, zero triggers fire; tier 1 mints a mini-spec, then `/cook --auto` |
+| `add dark mode to the web client` | cook | feature scope, zero triggers fire; tier 1 mints a mini-spec, then dispatches Cook after the user's consent |
 | `add SSO login to the web client` | mold | `auth` fires; user steers the design |
 | `here's an idea for a tag filter, go prototype it` | prototype | prototype verb; the user refines the build round by round |
 | `PR#142` | age | PR reference, no fix verb |

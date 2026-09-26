@@ -4,7 +4,7 @@ description: >-
   Implement an approved spec or focused task through stale-safe source edits.
   Use this skill when the user says "implement this", "cook this spec", or "fix this bug".
   Use it for `/cook .cheese/specs/<slug>.md`.
-  Also use it when the user says "go" or "ship it" with clear acceptance criteria.
+  Also use it when the user says "go" with clear acceptance criteria.
   Run it alone for an unambiguous task.
   Use `--prototype` when the user says "prototype this", "go prototype it", or "spike this out" and wants to refine the result round by round.
   A spec helps but is not required.
