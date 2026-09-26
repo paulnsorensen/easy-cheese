@@ -94,6 +94,31 @@ gate.
   operation, and report the precision loss.
 - **Workflow skills stay portable.** There is no repo-wide MCP requirement.
 
+## Development-only prompt optimization
+
+The prompt laboratory is an experimental repository tool, not an installed skill.
+It uses direct GEPA to optimize Markdown through a custom evaluator.
+DSPy is not required because the candidate is text, not a DSPy program.[^prompt-lab-fit]
+The scripts and optional development dependencies stay outside every skill bundle.[^prompt-lab-code]
+
+The evaluator checks decision-state preservation across anonymized conversation turns.
+It is a behavioral proxy, not proof that an installed agent executes tools correctly.
+Training and optimizer-visible validation use separate scenario families.
+A third holdout remains outside optimization and requires an explicit evaluation run.
+Generated candidates require human review and never update installed prompts automatically.[^prompt-lab-code]
+
+The agent laboratory is the outcome-graded sibling of the same GEPA wiring.
+It runs headless Claude Code in a disposable copy of a fixture repository per task.
+Each task injects a bug with string mutations and grades with its own test command, which is the tilth benchmark task shape.[^agent-lab-code]
+Reflection also runs through headless Claude Code, so this path needs no OpenAI key.
+It exports a candidate only when the best candidate strictly beats the seed on train plus validation.
+
+[^prompt-lab-fit]: https://github.com/gepa-ai/optimize-anything-artifact; https://github.com/stanfordnlp/dspy/blob/main/docs/docs/diving-deeper/gepa-in-depth.md (checked 2026-09-24).
+[^prompt-lab-code]: scripts/prompt_lab.py; requirements/prompt-lab.txt; tests/fixtures/prompt_lab/dataset.json; docs/prompt-lab.md.
+[^agent-lab-code]: scripts/agent_lab.py; tests/fixtures/prompt_lab/agent_tasks.json; tests/python/test_agent_lab.py; docs/prompt-lab.md.
+
+_Source: research-informed prototype contract, 2026-09-24. Updated: 2026-09-25. No prior runtime policy is superseded._
+
 ## `.pyz` bundles
 
 Every Python-backed skill ships exactly one same-named Shiv archive at
