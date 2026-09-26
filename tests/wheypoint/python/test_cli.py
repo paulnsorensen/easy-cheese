@@ -1815,6 +1815,37 @@ def test_list_grep_next_source_and_limit_combine_with_and() -> None:
 
 
 @pytest.mark.usefixtures("corpus_root")
+def test_list_repeated_grep_searches_every_term_in_one_call() -> None:
+    """A repeated --grep keeps a hit matching any term, so no caller loops."""
+    _ = _run("checkpoint", stdin=_first_intent(orientation="Alpha work.\nMore."))
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(work_id="other-work", orientation="Beta work.\nMore."),
+    )
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(work_id="third-work", orientation="Gamma work.\nMore."),
+    )
+
+    def refs(*argv: str) -> set[object]:
+        status, payload = _run("list", *argv)
+        assert status == 0, payload
+        return {
+            cast(dict[str, object], item)["ref"]
+            for item in cast("list[object]", payload["items"])
+        }
+
+    assert refs("--grep", "alpha", "--grep", "BETA") == {WORK_ID, "other-work"}
+    assert refs("--grep", "alpha", "--grep", "missing") == {WORK_ID}
+    assert refs("--grep", "alpha", "--grep", "beta", "--next", "press") == set()
+    assert refs("--status", "gated", "--status", "ok") == {
+        WORK_ID,
+        "other-work",
+        "third-work",
+    }
+
+
+@pytest.mark.usefixtures("corpus_root")
 def test_list_status_and_since_filter() -> None:
     """AC-7: --status and --since filter; a future --since removes every hit."""
     _ = _run("checkpoint", stdin=_first_intent(orientation="Alpha work.\nMore."))

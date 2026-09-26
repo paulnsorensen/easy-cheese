@@ -38,9 +38,9 @@ class _PromotionLike(Protocol):
 
 
 class _Filters(TypedDict, total=False):
-    grep: str
-    status: str
-    next: str
+    grep: Sequence[str]
+    status: Sequence[str]
+    next: Sequence[str]
     source: str
     projects: Sequence[str]
     since: str
@@ -333,14 +333,22 @@ def test_filters_combine_with_and(
             ).hits
         }
 
-    assert refs(grep="curd") == {"work-aaaa", "work-bbbb"}
-    assert refs(status="gated") == {"work-bbbb"}
-    assert refs(next="press") == {"work-cccc"}
+    assert refs(grep=["curd"]) == {"work-aaaa", "work-bbbb"}
+    assert refs(grep=["CURD"]) == {"work-aaaa", "work-bbbb"}
+    assert refs(status=["gated"]) == {"work-bbbb"}
+    assert refs(next=["press"]) == {"work-cccc"}
     assert refs(source="store") == {"work-aaaa", "work-bbbb", "work-cccc"}
     assert refs(projects=["proj-b"]) == {"work-cccc"}
     assert refs(since="2025-01-01") == {"work-aaaa", "work-cccc"}
     assert len(discovery.discover(scope="machine", start=tmp_path, limit=1).hits) == 1
-    assert refs(grep="curd", status="ok") == {"work-aaaa"}
+    assert refs(grep=["curd"], status=["ok"]) == {"work-aaaa"}
+    # The terms of one repeatable filter combine with OR.
+    assert refs(grep=["batch one", "unrelated"]) == {"work-aaaa", "work-cccc"}
+    assert refs(grep=["no-such-term", "batch two"]) == {"work-bbbb"}
+    assert refs(status=["ok", "gated"]) == {"work-aaaa", "work-bbbb", "work-cccc"}
+    assert refs(next=["press", "no-such-move"]) == {"work-cccc"}
+    # Distinct filters still combine with AND.
+    assert refs(grep=["batch one", "unrelated"], next=["press"]) == {"work-cccc"}
 
 
 @pytest.mark.usefixtures("isolated_home")
