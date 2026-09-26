@@ -654,7 +654,7 @@ def _shiv_command(
         "--python",
         "/usr/bin/env python3",
         "--reproducible",
-        "--uncompressed",
+        "--compressed",
         "--no-index",
         "--find-links",
         str(wheelhouse),
