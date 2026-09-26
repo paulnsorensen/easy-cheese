@@ -2943,6 +2943,9 @@ class MoldSpecFrontmatter:
     entity_referent_bindings: tuple[Mapping[str, object], ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_list_of(Mapping)
     )
+    execution_holds: tuple[str, ...] = field(
+        factory=tuple, converter=_tuple_sequence, validator=_string_list()
+    )
     landing: Landing | None = field(
         default=None, validator=validators.optional(validators.instance_of(Landing))
     )

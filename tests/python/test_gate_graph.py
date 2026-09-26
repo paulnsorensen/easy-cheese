@@ -194,7 +194,7 @@ class TestGateProseSync:
     def _checklist_labels(self) -> list[str]:
         body = HANDSHAKE.read_text(encoding="utf-8")
         block = re.search(
-            r"```\nCoherence self-check before curdle:\n(.*?)```",
+            r"```\nCoherence self-check before Cook handoff:\n(.*?)```",
             body,
             re.DOTALL,
         )
@@ -562,7 +562,7 @@ class TestNonGoalsGatePresence:
         # label in handshake.md must slug to non-goals-audit.
         body = HANDSHAKE.read_text(encoding="utf-8")
         block = re.search(
-            r"```\nCoherence self-check before curdle:\n(.*?)```", body, re.DOTALL
+            r"```\nCoherence self-check before Cook handoff:\n(.*?)```", body, re.DOTALL
         )
         assert block, "coherence self-check block not found in handshake.md"
         labels = cast(list[str], re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE))
@@ -623,7 +623,7 @@ class TestDurableWritesGatePresence:
     def test_checklist_carries_the_durable_writes_item(self, gate_graph: _GateGraphModule) -> None:
         body = HANDSHAKE.read_text(encoding="utf-8")
         block = re.search(
-            r"```\nCoherence self-check before curdle:\n(.*?)```", body, re.DOTALL
+            r"```\nCoherence self-check before Cook handoff:\n(.*?)```", body, re.DOTALL
         )
         assert block, "coherence self-check block not found in handshake.md"
         labels = cast(list[str], re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE))
@@ -687,7 +687,7 @@ class TestSpecFormatValidGatePresence:
     def test_checklist_carries_the_spec_format_item(self, gate_graph: _GateGraphModule) -> None:
         body = HANDSHAKE.read_text(encoding="utf-8")
         block = re.search(
-            r"```\nCoherence self-check before curdle:\n(.*?)```", body, re.DOTALL
+            r"```\nCoherence self-check before Cook handoff:\n(.*?)```", body, re.DOTALL
         )
         assert block, "coherence self-check block not found in handshake.md"
         labels = cast(list[str], re.findall(r"^- \[ \] (.+?)\s*$", block.group(1), re.MULTILINE))

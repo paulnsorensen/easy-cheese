@@ -1,10 +1,10 @@
 # The gate graph
 
 `GATE_MODEL` in `src/easy_cheese/skills/mold/gate_graph.py` holds the one
-canonical model of Mold's gate state machine. `mold.pyz` bundles it as the
+canonical model of Mold's runnable Cook handoff gate. Draft spec writes happen before this gate. `mold.pyz` bundles it as the
 `gate-graph` subcommand. Both render targets derive from that one model, so
 they cannot drift. See ADR-001. The model is also the gate-prose-sync source.
-One test asserts that the handshake coherence-checklist items equal the model's
+Question transport stays in [`ask-user-question.md`](../../cheese/references/ask-user-question.md). One test asserts that the handshake coherence-checklist items equal the model's
 gate nodes. No gate can therefore disappear from the prose without a failure.
 
 ## Subcommand
@@ -26,7 +26,7 @@ python3 skills/mold/scripts/mold.pyz gate-graph \
 ## When to use it
 
 - Onboarding a contributor to mold's flow — one picture of modes → gates →
-  handshake → curdle.
+  execution handshake → Cook handoff.
 - Auditing that the prose checklist and the enforced gates still agree (the
   gate-prose-sync test is the automated form; the rendered graph is the human
   form).
@@ -89,6 +89,6 @@ The required reflection set depends on the disposition. A `red-required` draft r
 
 The lexical pre-check (`taste-test --precheck`) runs the deterministic sub-checks (section presence, fork-id or decision-text mention, goal drift, applicability) against the draft alone. It runs before the reviewer dispatch. It does not count toward the two correction rounds. The full `taste-test` with `--verdict` repeats the same checks on the digest-bound verdict.
 
-A third failure stops typed planning and the two-key handshake.
+A third failure stops typed planning and a runnable Cook handoff. Mold may retain the blocked draft.
 
-The automatic handoff is `/cook --auto <pointer path>`. It passes the published pointer and the approved metadata without changes. This metadata includes applicability, contract, and taste data.
+Only a user-selected automatic route uses `/cook --auto <pointer path>`. It passes the published pointer and bound metadata without changes. This metadata includes applicability, contract, and taste data.

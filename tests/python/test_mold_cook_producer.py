@@ -58,6 +58,7 @@ def make_spec(
     landing_id: str | None = None,
     do_not_implement: bool = False,
     gates_overridden: str | None = None,
+    execution_holds: str | None = None,
 ) -> Path:
     text = FIXTURE.read_text(encoding="utf-8")
     if landing_id is not None:
@@ -75,6 +76,12 @@ def make_spec(
         )
     if gates_overridden is not None:
         text = text.replace("gates_overridden: []\n", gates_overridden, 1)
+    if execution_holds is not None:
+        text = text.replace(
+            "agent_introduced_scope: []\n",
+            execution_holds + "agent_introduced_scope: []\n",
+            1,
+        )
     path = tmp_path / "spec.md"
     _ = path.write_text(text, encoding="utf-8")
     return path
@@ -427,6 +434,62 @@ def test_unparsable_gate_override_list_is_a_caller_error(tmp_path: Path) -> None
 
     with pytest.raises(FinalizationError, match="gates_overridden"):
         _ = finalize_fixture(tmp_path, spec_path=spec)
+
+
+def _requirement_ids(outcome: FinalizationOutcome) -> set[str]:
+    rows = cast(
+        Sequence[Mapping[str, object]], outcome.payload.get("requirements", [])
+    )
+    return {str(row["requirement_id"]) for row in rows}
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "execution_holds:\n  - scope-audit-row-5-needs-your-verb\n",
+        "execution_holds:\n- scope-audit-row-5-needs-your-verb\n",
+        'execution_holds: ["scope-audit-row-5-needs-your-verb"]\n',
+        "execution_holds: [scope-audit-row-5-needs-your-verb]\n",
+    ],
+    ids=["indented-block", "flush-block", "quoted-flow", "bare-flow"],
+)
+def test_a_non_empty_execution_holds_list_blocks_ready(
+    tmp_path: Path, declaration: str
+) -> None:
+    spec = make_spec(tmp_path, execution_holds=declaration)
+    outcome = finalize_fixture(tmp_path, spec_path=spec)
+
+    assert outcome.status == "saved-not-ready"
+    assert outcome.ready is False
+    assert "spec-validation" not in _requirement_ids(outcome)
+    holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
+    assert holds["execution-hold-1"].endswith("scope-audit-row-5-needs-your-verb")
+
+
+def test_an_execution_hold_with_an_apostrophe_is_kept_verbatim(tmp_path: Path) -> None:
+    spec = make_spec(
+        tmp_path,
+        execution_holds='execution_holds: ["row 5 needs the user\'s verb"]\n',
+    )
+    outcome = finalize_fixture(tmp_path, spec_path=spec)
+
+    assert "spec-validation" not in _requirement_ids(outcome)
+    holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
+    assert holds["execution-hold-1"].endswith("row 5 needs the user's verb")
+
+
+def test_an_empty_execution_holds_list_does_not_block_ready(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path, execution_holds="execution_holds: []\n")
+    outcome = finalize_fixture(tmp_path, spec_path=spec)
+
+    assert outcome.status == "ready"
+    assert "spec-validation" not in _requirement_ids(outcome)
+
+
+def test_an_absent_execution_holds_list_does_not_block_ready(tmp_path: Path) -> None:
+    outcome = finalize_fixture(tmp_path)
+
+    assert outcome.status == "ready"
 
 
 def test_publication_failure_saves_a_validated_blocked_result(

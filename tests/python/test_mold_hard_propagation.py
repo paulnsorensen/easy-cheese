@@ -22,20 +22,20 @@ def _read(relative: str) -> str:
 
 
 def test_mini_spec_mode_in_skill_appends_hard() -> None:
-    """The tier-1 route dispatches Cook, so it must carry the flag."""
+    """An explicit Cook route from tier 1 carries the flag."""
     line = next(
         line
         for line in _read("SKILL.md").splitlines()
-        if "return its canonical `HandoffPointer` to Cook" in line
+        if "On that consent, finalize and dispatch only a ready pointer" in line
     )
     assert HARD_RULE.search(line), line
 
 
 def test_mini_spec_reference_appends_hard() -> None:
-    """Every mini-spec disposition carries the flag, not only `red-required`."""
+    """A selected mini-spec Cook command carries the flag."""
     body = _read("references/mini-spec-mode.md")
     assert "**Append `--hard`**" in body
-    assert "Every disposition carries it." in body
+    assert "selected Cook command" in body
 
 
 def test_full_mode_handoff_appends_hard() -> None:

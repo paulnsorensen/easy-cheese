@@ -38,6 +38,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
+from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
 
 if TYPE_CHECKING:
     from easy_cheese_schemas.contracts import (
@@ -403,6 +404,40 @@ def _acceptance_ids(content_lines: list[str]) -> list[str]:
     return ids
 
 
+def _parent_link_error(lines: list[str], child_slug: object) -> str | None:
+    """Validate the bounded parent link on an early curd mini-spec."""
+    expected = {"Spec", "Goals", "Depends on", "Frozen decisions"}
+    values: dict[str, str] = {}
+    for line in lines:
+        if not line.strip():
+            continue
+        match = re.fullmatch(r"- ([A-Za-z ]+): (.+)", line.strip())
+        if match is None or match.group(1) not in expected:
+            return "Parent must contain only the four named link fields"
+        name, value = match.groups()
+        if name in values:
+            return f"Parent field {name!r} appears more than once"
+        values[name] = value.strip()
+    if values.keys() != expected:
+        return f"Parent fields must be {sorted(expected)!r}"
+    slug = r"[a-z0-9]+(?:-[a-z0-9]+)*"
+    if not re.fullmatch(slug, values["Spec"]) or values["Spec"] == child_slug:
+        return "Parent Spec must be a distinct kebab-case slug"
+    if not re.fullmatch(r"G-\d+(?:,\s*G-\d+)*", values["Goals"]):
+        return "Parent Goals must name one or more G-n clauses"
+    if values["Depends on"] != "none":
+        if not re.fullmatch(rf"{slug}(?:,\s*{slug})*", values["Depends on"]):
+            return "Parent Depends on must be none or child slugs"
+        depends_on = [item.strip() for item in values["Depends on"].split(",")]
+        if child_slug in depends_on or values["Spec"] in depends_on:
+            return "Parent Depends on must not name the child or parent slug"
+    if values["Frozen decisions"] != "none" and not re.fullmatch(
+        r"F-\d+(?:,\s*F-\d+)*", values["Frozen decisions"]
+    ):
+        return "Parent Frozen decisions must be none or F-n forks"
+    return None
+
+
 def _schema_module() -> _SchemaModule:
     try:
         module = importlib.import_module("easy_cheese_schemas.contracts")
@@ -517,6 +552,9 @@ def _typed_frontmatter(
             entity_referent_bindings=cast(
                 tuple[Mapping[str, object], ...],
                 frontmatter.get("entity_referent_bindings", ()),
+            ),
+            execution_holds=cast(
+                tuple[str, ...], frontmatter.get("execution_holds", ())
             ),
             landing=landing,
         )
@@ -651,6 +689,16 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     errors: list[str] = []
     text = path.read_text(encoding="utf-8")
     frontmatter, body = _split_frontmatter(text)
+    if "execution_holds" in frontmatter:
+        # The subset YAML reader drops block lists and mangles quoted flow
+        # items; read the hold list with the reader finalize and Cook share.
+        try:
+            frontmatter["execution_holds"] = frontmatter_string_list(
+                text, "execution_holds"
+            )
+        except ValueError as error:
+            errors.append(f"ERROR: {error} in {path}")
+            frontmatter["execution_holds"] = ()
     policy = spec_format_policy(frontmatter, strict=strict)
     found_sections, duplicate_headings = _find_sections(body)
     source = frontmatter.get("source")
@@ -692,6 +740,17 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
                 f"ERROR: missing-required-section '{name}' section not "
                 + f"found in {path}"
             )
+
+    if source == "mold-curd-mini-spec":
+        parent = found_sections.get(_canonical_heading("Parent"))
+        if parent is None:
+            errors.append(
+                f"ERROR: missing-required-section 'Parent' section not found in {path}"
+            )
+        else:
+            problem = _parent_link_error(parent, frontmatter.get("slug"))
+            if problem is not None:
+                errors.append(f"ERROR: parent-link-invalid {problem} in {path}")
 
     test_contracts_lines = found_sections.get(_canonical_heading("Test Contracts"))
     test_rows: list[list[str]] = []

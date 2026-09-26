@@ -171,6 +171,56 @@ def test_slug_input_resolves_its_stored_spec_instead_of_blocking(
     assert "spec" in {reference.role for reference in result.references}
 
 
+def test_direct_spec_without_execution_holds_still_needs_approval(
+    tmp_path: Path,
+) -> None:
+    """An absent `execution_holds` list must not gain a spurious hold."""
+    spec_path = tmp_path / f"{_SPEC_SLUG}.md"
+    _ = spec_path.write_text(_SPEC_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+
+    result = prepare(
+        spec_path,
+        request_id="direct-spec-no-holds",
+        repository_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        explicit_kind=MoldCookInputKind.DIRECT_SPEC,
+    )
+
+    assert result.outcome is CookPreparationOutcome.NEEDS_APPROVAL
+    assert result.holds == ()
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "execution_holds:\n  - scope-audit-row-3-needs-a-verb\n",
+        'execution_holds: ["scope-audit-row-3-needs-a-verb"]\n',
+    ],
+    ids=["block", "flow"],
+)
+def test_direct_spec_execution_holds_block_before_scope_approval(
+    tmp_path: Path, declaration: str
+) -> None:
+    """A Mold draft's unresolved holds must survive the direct `/cook <spec>` path."""
+    fixture = _SPEC_FIXTURE.read_text(encoding="utf-8")
+    assert "gate_applicability:\n" in fixture
+    spec_path = tmp_path / f"{_SPEC_SLUG}.md"
+    _ = spec_path.write_text(
+        fixture.replace("gate_applicability:\n", declaration + "gate_applicability:\n", 1),
+        encoding="utf-8",
+    )
+
+    result = prepare(
+        spec_path,
+        request_id="direct-spec-held",
+        repository_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        explicit_kind=MoldCookInputKind.DIRECT_SPEC,
+    )
+
+    assert result.outcome is CookPreparationOutcome.BLOCKED
+    assert [hold.hold_id for hold in result.holds] == ["execution-hold-1"]
+
 def test_canonical_pointer_outside_the_artifact_root_is_refused(
     tmp_path: Path,
 ) -> None:

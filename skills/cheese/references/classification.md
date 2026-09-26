@@ -14,6 +14,7 @@ Also use it when intent confidence stays below `medium` after the silent Culture
 
 Every other intent bypasses the clarity check and dispatches directly.
 The `ultracook` compatibility invocation resolves to `/cook` without the clarity check.
+A `prototype` intent also bypasses the clarity check, because its loop settles the shape with the user.
 
 ## Shape index
 
@@ -24,6 +25,7 @@ The `ultracook` compatibility invocation resolves to `/cook` without the clarity
 | rubber-duck | — | `/culture` (only when the user explicitly opted out of writes) |
 | mold | optional `/briesearch` | `/mold` → `/cook` |
 | cook | — | `/cook --auto` (default — propagates through `/press → /age → /cure`) |
+| prototype | — | `/cook --prototype` (steered loop; stabilize resumes the normal chain) |
 | debug | — | `/pasteurize --auto` (default) → `/cook --auto` |
 | affinage | — | `/affinage` |
 | age | — | `/age` |
@@ -106,7 +108,20 @@ Downgrade to `mold` only when a leverage trigger fires. A borderline check with 
 Before a tier-1 `cook` dispatch, run the specification discovery check in `skills/cheese/references/escalation.md`.
 Reuse a matching specification instead of writing a duplicate.
 
-### debug (`/pasteurize --auto` → `/cook --auto`)
+### prototype (`/cook --prototype`)
+
+The user has an idea and wants a working first cut to refine round by round.
+The user wants to steer by checking real code, not by writing a spec first.
+
+| Signal | Example |
+| --- | --- |
+| "prototype" / "spike" / "hack up" verb on an idea | "here's this idea, can you go prototype it for me?" |
+| Asks for a rough version to iterate on | "build a rough version and we'll keep refining it" |
+| "Try it and see" framing | "let's just try a CLI flag for this and see how it feels" |
+
+A fired leverage trigger does not block this intent.
+The loop announces the trigger and stabilize routes to `/mold` before any review or publication.
+Route an explicit spec or design ask to `mold`, even with a prototype verb.
 
 Symptom-driven work with no confirmed cause. The user expects a code-level fix.
 
@@ -173,7 +188,7 @@ Use for staging and committing, opening or updating an ordinary PR, or creating,
 
 When two intents are plausible, apply in order:
 
-1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Commit", "publish", or "stack PRs" → `plate`. "Respond to comments" or "fix the build" on a pull request → `affinage`.
+1. **Explicit verb wins.** "Review" → `age`. "Fix" → `cook` or `cure`. "Design" → `mold`. "Prototype" or "spike" → `prototype`. "Commit", "publish", or "stack PRs" → `plate`. "Respond to comments" or "fix the build" on a pull request → `affinage`.
 2. **Strongest signal wins.** A spec path beats free text. A stack trace beats a feature description. A PR URL beats a path glob.
 3. **Lowest leverage wins.** Prefer `cook` over `mold` unless a leverage trigger fires. Missing acceptance criteria is a mini-spec, not a mold. Only prefer `culture` over `mold` when the user has explicitly opted out of writes.
 4. **If still tied, clarify.** Ask one question; do not guess.
@@ -193,8 +208,9 @@ When two intents are plausible, apply in order:
 | `$ARGUMENTS` | Intent | Reason |
 | --- | --- | --- |
 | `.cheese/specs/dark-mode.md` | cook | spec path resolves; fast-path obvious |
-| `add dark mode to the web client` | cook | feature scope, zero triggers fire; tier 1 mints a mini-spec, then `/cook --auto` |
+| `add dark mode to the web client` | cook | feature scope, zero triggers fire; tier 1 mints a mini-spec, then dispatches Cook after the user's consent |
 | `add SSO login to the web client` | mold | `auth` fires; user steers the design |
+| `here's an idea for a tag filter, go prototype it` | prototype | prototype verb; the user refines the build round by round |
 | `PR#142` | age | PR reference, no fix verb |
 | `respond to the review comments on PR#142` | affinage | review-feedback verb on a pull request |
 | `fix the failing build on PR#142` | affinage | failing checks on an open pull request |

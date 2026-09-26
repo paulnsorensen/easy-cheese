@@ -97,6 +97,7 @@ See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth
    ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook --auto  ──►  /press  ──►  /age  ──►  /cure
    ├─ high-blast-radius spec          ──►  /mold        ──►  /cook --auto  (fresh-context fan pathway)
    ├─ clear, scoped ask               ──►  /cook --auto                                                ──►  /press  ──►  /age  ──►  /cure
+   ├─ "go prototype this idea"        ──►  /cook --prototype  (plan → spike → check, repeat)  ──► stabilize ──►  /press  ──►  /age  ──►  /cure
    ├─ debugging task                  ──►  /pasteurize --auto ──►  /cook --auto                        ──►  /press  ──►  /age  ──►  /cure
    ├─ PR comments / CI failures       ──►  /affinage    ──►  /cure
    ├─ running low on context          ──►  /wheypoint  ──►  /cheese --continue <slug>   (fresh session)

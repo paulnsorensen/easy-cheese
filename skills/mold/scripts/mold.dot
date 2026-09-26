@@ -27,7 +27,7 @@ digraph mold_gates {
   spec_format_valid [label="Spec format valid: validate-spec --strict exits 0 on the draft", kind="gate"];
   typed_planner_stage [label="Typed planner stage", kind="planner"];
   handshake [label="Two-key handshake", kind="handshake"];
-  curdle [label="Curdle (extract spec)", kind="terminal"];
+  curdle [label="Cook handoff (finalize)", kind="terminal"];
   explore -> ground;
   ground -> shape;
   shape -> sketch;

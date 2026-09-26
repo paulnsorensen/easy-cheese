@@ -128,7 +128,9 @@ def test_validation_refuses_a_remote_artifact_scheme(tmp_path: Path) -> None:
         _ = validate_mold_cook_approval(approval, tmp_path)
 
 
-@pytest.mark.parametrize("response_text", ["nope", "not yet", "hold off", "No."])
+@pytest.mark.parametrize(
+    "response_text", ["nope", "not yet", "hold off", "No.", "curdle", "ship it"]
+)
 def test_unrecognized_response_text_is_not_consent(
     tmp_path: Path, response_text: str
 ) -> None:
@@ -150,7 +152,7 @@ def test_unrecognized_response_text_is_not_consent(
         _ = validate_mold_cook_approval(approval, tmp_path)
 
 
-@pytest.mark.parametrize("affirmative", ["Approve", "approved", "yes", "LGTM."])
+@pytest.mark.parametrize("affirmative", ["Approve", "approved", "yes", "LGTM.", "cook it", "cook this"])
 def test_recognized_affirmative_response_still_validates(
     tmp_path: Path, affirmative: str
 ) -> None:
