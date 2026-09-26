@@ -93,7 +93,7 @@ Run the summary command.
 python3 skills/melt/scripts/melt.pyz conflict-summary
 ```
 
-The default output contains one metadata line for each file and a small frame around each conflict.
+The default output is one JSON object with a `files` array. Each file includes its path, hunk line ranges, bounded `ours`, `theirs`, and optional `base` arrays, context lines, omitted-line counts, and a resolution recommendation.
 
 Flags:
 

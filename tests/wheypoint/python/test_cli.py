@@ -1753,6 +1753,16 @@ def test_checkpoint_and_validate_refuse_a_missing_intent_path() -> None:
 
 
 @pytest.mark.usefixtures("corpus_root")
+@pytest.mark.parametrize("command", ["checkpoint", "validate"])
+def test_intent_dash_is_read_from_stdin(command: str) -> None:
+    for args in (("-",), ("--intent", "-")):
+        status, payload = _run(command, *args, stdin=_first_intent())
+        assert status == 0, payload
+        if command == "validate":
+            assert payload["valid"] is True
+
+
+@pytest.mark.usefixtures("corpus_root")
 def test_checkpoint_and_validate_refuse_invalid_utf8_intent(tmp_path: Path) -> None:
     """AC-2: an intent file with invalid UTF-8 is unreadable, not internal."""
     intent_path = tmp_path / "invalid.json"

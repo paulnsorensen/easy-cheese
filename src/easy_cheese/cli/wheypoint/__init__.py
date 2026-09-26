@@ -25,7 +25,7 @@ answers by the same rule.
 from __future__ import annotations
 
 import sys
-from typing import Literal, TextIO
+from typing import Annotated, Literal, TextIO
 
 import fromargs
 
@@ -60,7 +60,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
     )
 
     def checkpoint(
-        intent: str | None = None,
+        intent: Annotated[
+            str | None, fromargs.Parameter(allow_leading_hyphen=True)
+        ] = None,
         *,
         compacted: str | None = None,
         note_dir: str | None = None,
@@ -92,7 +94,11 @@ def build_app(stdin: TextIO) -> fromargs.App:
             ),
         )
 
-    def validate(intent: str | None = None) -> dict[str, object]:
+    def validate(
+        intent: Annotated[
+            str | None, fromargs.Parameter(allow_leading_hyphen=True)
+        ] = None,
+    ) -> dict[str, object]:
         """Validate an intent against its schema without opening the store.
 
         Parameters

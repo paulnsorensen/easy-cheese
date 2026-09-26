@@ -94,6 +94,40 @@ class TestSummarizeFileJsonShape:
         assert "theirs" in encoded
 
 
+
+    def test_caps_side_lines_and_reports_omitted_counts(
+        self, conflict_summary: _ConflictSummaryModule, tmp_path: Path
+    ) -> None:
+        ours = "".join(f"ours-{i}\n" for i in range(8))
+        theirs = "".join(f"theirs-{i}\n" for i in range(7))
+        base = "".join(f"base-{i}\n" for i in range(5))
+        f = tmp_path / "long.py"
+        _ = f.write_text(f"<<<<<<< HEAD\n{ours}||||||| base\n{base}=======\n{theirs}>>>>>>> branch\n")
+        summary = cast(_Summary, conflict_summary.summarize_file(str(f)))
+        hunk = cast(dict[str, object], summary["hunks"][0])
+        assert cast(list[str], hunk["ours"]) == [f"ours-{i}" for i in range(5)]
+        assert cast(list[str], hunk["theirs"]) == [f"theirs-{i}" for i in range(5)]
+        assert cast(list[str], hunk["base"]) == [f"base-{i}" for i in range(3)]
+        assert hunk["ours_omitted_lines"] == 3
+        assert hunk["theirs_omitted_lines"] == 2
+        assert hunk["base_omitted_lines"] == 2
+
+
+    def test_short_hunk_keeps_all_lines_and_omits_no_base(
+        self, conflict_summary: _ConflictSummaryModule, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "short.py"
+        _ = f.write_text(CONFLICT)
+        summary = cast(_Summary, conflict_summary.summarize_file(str(f)))
+        hunk = cast(dict[str, object], summary["hunks"][0])
+        assert hunk["ours"] == ["ours-line"]
+        assert hunk["theirs"] == ["theirs-line"]
+        assert hunk["has_base"] is False
+        assert "base" not in hunk
+        assert hunk["ours_omitted_lines"] == 0
+        assert hunk["theirs_omitted_lines"] == 0
+        assert hunk["base_omitted_lines"] == 0
+
 class TestBinaryFiles:
     def test_binary_content_recommends_side_selection_without_decoding(
         self, conflict_summary: _ConflictSummaryModule, tmp_path: Path

@@ -38,6 +38,9 @@ class _HunkSummary(TypedDict):
     context_before: list[str]
     context_after: list[str]
     base: NotRequired[list[str]]
+    ours_omitted_lines: int
+    theirs_omitted_lines: int
+    base_omitted_lines: int
 
 
 class _Summary(TypedDict):
@@ -57,9 +60,6 @@ class _ErrorSummary(TypedDict):
 _OURS_CAP = 5
 _THEIRS_CAP = 5
 _BASE_CAP = 3
-_VERBOSE_OURS_CAP = 10
-_VERBOSE_THEIRS_CAP = 10
-_VERBOSE_BASE_CAP = 5
 
 
 def _recommendation(path: str, ext: str, hunk_count: int, mergiraf_ok: bool) -> str:
@@ -100,15 +100,18 @@ def summarize_file(path: str, context_lines: int = 3) -> _Summary | _ErrorSummar
         hunk_summary: _HunkSummary = {
             "hunk_number": i,
             "lines": f"{hunk['start_line']}-{hunk['end_line']}",
-            "ours": hunk["ours"],
-            "theirs": hunk["theirs"],
+            "ours": hunk["ours"][:_OURS_CAP],
+            "theirs": hunk["theirs"][:_THEIRS_CAP],
+            "ours_omitted_lines": max(0, len(hunk["ours"]) - _OURS_CAP),
+            "theirs_omitted_lines": max(0, len(hunk["theirs"]) - _THEIRS_CAP),
+            "base_omitted_lines": max(0, len(hunk["base"]) - _BASE_CAP),
             "has_base": bool(hunk["base"]),
             "context_before": before,
             "context_after": after,
         }
 
         if hunk["base"]:
-            hunk_summary["base"] = hunk["base"]
+            hunk_summary["base"] = hunk["base"][:_BASE_CAP]
 
         hunk_summaries.append(hunk_summary)
 

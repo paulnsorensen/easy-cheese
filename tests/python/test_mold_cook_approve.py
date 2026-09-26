@@ -345,7 +345,7 @@ def test_a_rejected_scope_response_does_not_advance_preparation(
     )
     prepared_path = tmp_path / "prepare.json"
     _ = prepared_path.write_text(json.dumps(prepared))
-    _, rejected, _ = _run(
+    approve_code, rejected, approve_err = _run(
         cook_commands.main,
         [
             "approve",
@@ -362,9 +362,9 @@ def test_a_rejected_scope_response_does_not_advance_preparation(
         ],
         capsys,
     )
-    assert rejected["decision"] == "rejected"
+    assert (approve_code, rejected["decision"], approve_err) == (0, "rejected", "")
 
-    code, resubmitted, _ = _run(
+    code, resubmitted, resubmit_err = _run(
         cook_commands.main,
         [
             "resubmit",
@@ -377,4 +377,5 @@ def test_a_rejected_scope_response_does_not_advance_preparation(
         ],
         capsys,
     )
-    assert code != 0 or resubmitted.get("outcome") in {"blocked", "invalid"}
+    assert (code, resubmitted["outcome"], resubmit_err) == (0, "invalid", "")
+    assert resubmitted["request_id"] == prepared["request_id"]
