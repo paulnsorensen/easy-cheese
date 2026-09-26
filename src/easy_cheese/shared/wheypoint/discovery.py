@@ -52,22 +52,22 @@ def _hide_mirrors(
 def _apply_filters(
     candidates: list[Candidate],
     *,
-    grep: str | None,
-    status: str | None,
-    next: str | None,
+    grep: Sequence[str],
+    status: Sequence[str],
+    next: Sequence[str],
     source: str | None,
     since: str | None,
 ) -> list[Candidate]:
-    needle = grep.lower() if grep else None
+    needles = [term.lower() for term in grep if term]
     since_date = _dt.date.fromisoformat(since) if since else None
     kept: list[Candidate] = []
     for candidate in candidates:
         hit = candidate.hit
-        if needle is not None and needle not in candidate.haystack:
+        if needles and not any(n in candidate.haystack for n in needles):
             continue
-        if status is not None and hit.status != status:
+        if status and hit.status not in status:
             continue
-        if next is not None and hit.next != next:
+        if next and hit.next not in next:
             continue
         if source is not None and hit.source != source:
             continue
@@ -86,9 +86,9 @@ def discover(
     corpus_root: Path | str | None = None,
     projects: Sequence[str] = (),
     roots: Sequence[Path | str] = (),
-    grep: str | None = None,
-    status: str | None = None,
-    next: str | None = None,
+    grep: Sequence[str] = (),
+    status: Sequence[str] = (),
+    next: Sequence[str] = (),
     source: str | None = None,
     since: str | None = None,
     limit: int | None = None,
@@ -100,8 +100,10 @@ def discover(
     `scope="project"` (default) reuses this project's store plus notes across
     the repository chain and every worktree. `scope="machine"` walks every
     project under `paths.corpus_home()` plus every machine search root.
-    `projects` narrows either scope to the named project keys. Filters
-    combine with AND; a note mirroring a store slug in the same project is
+    `projects` narrows either scope to the named project keys. Distinct
+    filters combine with AND; the terms of one repeatable filter (`grep`,
+    `status`, `next`) combine with OR, so one call searches several terms
+    at once. A note mirroring a store slug in the same project is
     hidden unless `show_mirrors` is set.
     """
     machine = scope == "machine"

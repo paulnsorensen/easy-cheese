@@ -180,9 +180,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
         scope: Literal["project", "machine"] = "project",
         project: list[str] | None = None,
         root: list[str] | None = None,
-        grep: str | None = None,
-        status: str | None = None,
-        next: str | None = None,
+        grep: list[str] | None = None,
+        status: list[str] | None = None,
+        next: list[str] | None = None,
         source: Literal["store", "note"] | None = None,
         since: str | None = None,
         limit: int | None = None,
@@ -201,11 +201,11 @@ def build_app(stdin: TextIO) -> fromargs.App:
         root
             an extra machine search root (repeatable)
         grep
-            case-insensitive substring filter
+            case-insensitive substring filter (repeatable; matches any term)
         status
-            filter by status
+            filter by status (repeatable; matches any)
         next
-            filter by next move
+            filter by next move (repeatable; matches any)
         source
             filter by hit source (store or note)
         since

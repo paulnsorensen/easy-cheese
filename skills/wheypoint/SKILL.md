@@ -38,9 +38,12 @@ python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [--compacted <proof.js
 python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
 python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
 python3 skills/wheypoint/scripts/wheypoint.pyz lint <projection-path>
-python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>] [--project <key>]
+python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]...
 python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
 ```
+
+Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND.
+Never loop over `list` once per term.
 
 `resolve`, `lint`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
 `/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
