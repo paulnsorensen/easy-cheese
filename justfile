@@ -1,7 +1,7 @@
 set dotenv-load := true
 # Includes requirements-build.txt so tests/python/test_pyz_bundle.py runs its
 # bundle integration seam instead of skipping it.
-python := "uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements/fromargs.txt --with-requirements requirements-build.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
+python := "uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
 
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
 # third-party pytest plugins happen to be globally installed. Without this a
@@ -83,7 +83,7 @@ test:
     {{python}} -m pytest tests/wheypoint/python -q -p xdist -n "$pytest_workers"
     node --test 'tests/js/**/*.test.mjs'
     bats tests/bash/test_install.bats
-    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements/fromargs.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
+    uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pyyaml==6.0.2 bats tests/fanout/bash/test_pr_plan_to_branches.bats
 
     # Surface any failure from the concurrent checks. Wait for both before
     # failing so a second failure is not masked by an early exit.
@@ -120,11 +120,11 @@ test-skill-overlap:
 
 # Build one self-contained Shiv .pyz archive per Python skill
 bundle:
-    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements/fromargs.txt --with-requirements requirements-build.txt python3 scripts/build_pyz.py
+    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt python3 scripts/build_pyz.py
 
 # Write every generated runtime source the bundle build checks for staleness
 update-generated:
-    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements/fromargs.txt --with-requirements requirements-build.txt python3 scripts/build_pyz.py --write-generated
+    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt python3 scripts/build_pyz.py --write-generated
 
 # Preview the exact tree a release ships (skills + .pyz only, no sources)
 release-preview:
@@ -159,7 +159,6 @@ lint-py-fix:
 typecheck-install:
     uv venv --quiet --allow-existing --python 3.12 .venv-typing
     uv pip install --quiet --require-hashes --python .venv-typing/bin/python --requirement requirements/typing.txt
-    uv pip install --quiet --no-deps --python .venv-typing/bin/python --requirement requirements/fromargs.txt
 
 # Type-check all Python (recommended tier fails on warnings too)
 typecheck: typecheck-install

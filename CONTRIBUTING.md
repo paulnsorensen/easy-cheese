@@ -45,8 +45,8 @@ just bundle
 `just bundle` resolves each application from PEP 517 wheels in a private wheelhouse.
 It writes the complete external and internal hash-locked closure to a temporary requirements file beside that wheelhouse.
 Then it invokes Shiv. The external runtime pins in `requirements/runtime.txt` are the only committed hash lock.
-The build also compiles `fromargs`, the CLI library, from the Git commit that `requirements/fromargs.txt` pins.
-pip cannot hash a Git source, so the full commit SHA is that pin. Its dependencies are hash-locked in `requirements/runtime.txt`.
+`fromargs`, the CLI library, and its Cyclopts closure are PyPI releases hash-locked in that file.
+To bump `fromargs`, update its version and hash in `requirements/runtime.txt` and `requirements/typing.txt`, then rebuild the bundles.
 
 Each Python skill declares its public subcommands in `commands.py`.
 Declare each handler with the `@bundle_command("<name>")` decorator at its definition site.

@@ -3,9 +3,7 @@
 # trees (src, scripts, .github/scripts, tests) actually make. Versions track
 # requirements/runtime.txt pins and the justfile's tool pins. Includes
 # pytest's transitive closure because --require-hashes needs every install
-# pinned. fromargs itself is a Git pin; `just typecheck-install` installs
-# requirements/fromargs.txt with --no-deps after this file, and cyclopts'
-# closure below satisfies it.
+# pinned.
 attrs==26.1.0 \
     --hash=sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309 \
     --hash=sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32
@@ -16,6 +14,8 @@ cyclopts==4.25.3 \
     --hash=sha256:40e76b3153ea90e885abd8d3a4d8184db5a5eec2fde8540025aae8d72fc973fc
 docstring-parser==0.18.0 \
     --hash=sha256:b3fcbed555c47d8479be0796ef7e19c2670d428d72e96da63f3a40122860374b
+fromargs==0.1.0 \
+    --hash=sha256:164ab49373d9d044d16164b4b880934d12b80bef484e2c908d77accfc471dc4f
 markdown-it-py==4.2.0 \
     --hash=sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a
 mdurl==0.1.2 \

@@ -80,7 +80,6 @@ jobs:
         run: |
           pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
           pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
-          pip install --disable-pip-version-check --no-cache-dir --no-deps --requirement requirements/fromargs.txt
 
       - name: Run melt script tests
         run: python3 -m pytest tests/python -q
@@ -113,7 +112,6 @@ jobs:
         run: |
           pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
           pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
-          pip install --disable-pip-version-check --no-cache-dir --no-deps --requirement requirements/fromargs.txt
 
       - name: Lint install.sh
         run: shellcheck scripts/install.sh
