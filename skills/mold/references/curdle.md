@@ -4,7 +4,7 @@ Curdle saves a validated draft and may run while Mold continues shaping its pare
 
 ## Artifact types
 
-Resolve the spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>)` — it anchors at the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location). Issues stay repo-local: write them as `.cheese/issues/<slug>-NNN.md`.
+Resolve the spec path with `SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug> | python3 -c 'import json,sys;print(json.load(sys.stdin)["path"])')` — it anchors at the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location). Issues stay repo-local: write them as `.cheese/issues/<slug>-NNN.md`.
 
 | Type | When | Path |
 | --- | --- | --- |

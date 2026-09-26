@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 class _ManifestIoModule(Protocol):
     ManifestLoadError: type[Exception]
-    json_command: Callable[..., Callable[[list[str]], int]]
     parse_mapping: Callable[..., dict[str, object]]
     read_mapping_arg_or_stdin: Callable[[list[str], str], dict[str, object]]
 
@@ -134,77 +133,9 @@ class TestReadMappingArgOrStdin:
         assert str(exc.value) == usage
 
 
-class TestJsonCommandKeys:
-    def test_key_mismatch_exits_one_naming_missing_and_unknown(
-        self,
-        manifest_io: _ManifestIoModule,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        calls: list[dict[str, object]] = []
-
-        def record(**payload: object) -> dict[str, object]:
-            calls.append(payload)
-            return payload
-
-        monkeypatch.setattr(sys, "stdin", io.StringIO('{"a": 1, "c": 3}'))
-        main = manifest_io.json_command(record, "usage: prog [<req>]", keys=("b", "a"))
-        assert main([]) == 1
-        assert capsys.readouterr().err == (
-            "ERROR: request keys mismatch: missing ['b'], unknown ['c']\n"
-        )
-        assert calls == []
-
-    def test_exact_keys_reach_the_function_in_payload_order(
-        self,
-        manifest_io: _ManifestIoModule,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        def echo(**payload: object) -> dict[str, object]:
-            return payload
-
-        monkeypatch.setattr(sys, "stdin", io.StringIO('{"b": 2, "a": 1}'))
-        main = manifest_io.json_command(echo, "usage: prog [<req>]", keys=("a", "b"))
-        assert main([]) == 0
-        assert capsys.readouterr().out == '{\n  "b": 2,\n  "a": 1\n}\n'
-
-
-class TestJsonCommandHelp:
-    @pytest.mark.parametrize("flag", ["-h", "--help"])
-    def test_help_prints_usage_without_reading_manifest(
-        self,
-        manifest_io: _ManifestIoModule,
-        flag: str,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        def succeed(**_: object) -> dict[str, bool]:
-            return {"ok": True}
-
-        main = manifest_io.json_command(succeed, "usage: prog [<req>]")
-        assert main([flag]) == 0
-        captured = capsys.readouterr()
-        assert captured.out == "usage: prog [<req>]\n"
-        assert captured.err == ""
-
-
 class TestFlagIsNotAManifestPath:
     def test_a_flag_argument_raises_the_usage_error(
         self, manifest_io: _ManifestIoModule
     ) -> None:
         with pytest.raises(manifest_io.ManifestLoadError, match="usage: prog"):
             _ = manifest_io.read_mapping_arg_or_stdin(["--json"], "usage: prog [<req>]")
-
-    def test_json_command_reports_usage_for_a_flag(
-        self,
-        manifest_io: _ManifestIoModule,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        def explode(**payload: object) -> object:
-            raise AssertionError(f"handler ran with {payload!r}")
-
-        main = manifest_io.json_command(explode, "usage: prog [<req>]")
-        assert main(["--json"]) == 2
-        err = capsys.readouterr().err
-        assert err.strip() == "ERROR: usage: prog [<req>]"
-        assert "manifest not found" not in err

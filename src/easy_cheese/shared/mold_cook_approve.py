@@ -7,10 +7,10 @@ infers consent: a response outside the affirmative set records a rejection.
 
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
-from typing import cast
+from typing import Annotated
+
+import fromargs
 
 from easy_cheese_schemas import (
     ArtifactRef,
@@ -158,32 +158,41 @@ def approve(
     return approval, _retained_path(artifact_root, record.digest)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="approve",
-        description="Record the user's literal approval response for one spec.",
-    )
-    _ = parser.add_argument("spec", type=Path)
-    _ = parser.add_argument("--artifact-root", required=True, type=Path)
-    _ = parser.add_argument("--request-id", required=True)
-    _ = parser.add_argument(
-        "--kind",
-        required=True,
-        choices=[MoldCookApprovalKind.SCOPE.value, *sorted(k.value for k in _PLAN_KINDS)],
-    )
-    _ = parser.add_argument(
-        "--response", required=True, help="the user's reply, word for word"
-    )
-    _ = parser.add_argument("--planner-result", type=Path)
-    _ = parser.add_argument(
-        "--curd-id",
-        action="append",
-        default=[],
-        help="a curd the response covers; the default is the full plan or landing",
-    )
-    args = parser.parse_args(argv)
-    planner_path = cast("Path | None", args.planner_result)
-    curd_ids = tuple(cast("list[str]", args.curd_id))
+def approve_cmd(
+    spec: str,
+    *,
+    artifact_root: str,
+    request_id: str,
+    kind: str,
+    response: Annotated[str, fromargs.Parameter(name="--response")],
+    planner_result: str | None = None,
+    curd_id: tuple[str, ...] = (),
+) -> dict[str, object]:
+    """Record the user's literal approval response for one spec.
+
+    Parameters
+    ----------
+    spec
+        Path to the mold spec markdown file.
+    artifact_root
+        Root directory the approval record is retained under.
+    request_id
+        Request id the approval is bound to.
+    kind
+        Approval kind: scope, plan, or partial-plan.
+    response
+        The user's reply, word for word.
+    planner_result
+        Optional path to a canonical PlannerResult JSON artifact.
+    curd_id
+        A curd the response covers; repeatable. Default is the full plan or landing.
+    """
+    allowed = {MoldCookApprovalKind.SCOPE.value, *sorted(k.value for k in _PLAN_KINDS)}
+    if kind not in allowed:
+        raise fromargs.CliError(
+            f"invalid --kind {kind!r}; choose from {sorted(allowed)}", exit_code=2
+        )
+    planner_path = Path(planner_result) if planner_result is not None else None
     try:
         planner = (
             None
@@ -191,33 +200,40 @@ def main(argv: list[str] | None = None) -> int:
             else resolve_contract_value(planner_path, PlannerResult, Path())
         )
         approval, path = approve(
-            cast(Path, args.spec),
-            artifact_root=cast(Path, args.artifact_root),
-            request_id=cast(str, args.request_id),
-            kind=MoldCookApprovalKind(cast(str, args.kind)),
-            response_text=cast(str, args.response),
+            Path(spec),
+            artifact_root=Path(artifact_root),
+            request_id=request_id,
+            kind=MoldCookApprovalKind(kind),
+            response_text=response,
             planner_result=planner,
             coverage=(
                 MoldCookCoverage(
-                    curd_ids=curd_ids,
+                    curd_ids=curd_id,
                     unresolved_work=() if planner is None else planner.unresolved_work,
                 )
-                if curd_ids
+                if curd_id
                 else None
             ),
         )
     except (ContractValidationError, OSError, ValueError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-    _ = sys.stdout.buffer.write(
-        canonical_bytes(
-            {
-                "approval_path": str(path),
-                "decision": approval.decision.value,
-                "kind": approval.kind.value,
-                "proposal_digest": approval.proposal_digest,
-                "request_id": approval.request_id,
-            }
-        )
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+    return {
+        "approval_path": str(path),
+        "decision": approval.decision.value,
+        "kind": approval.kind.value,
+        "proposal_digest": approval.proposal_digest,
+        "request_id": approval.request_id,
+    }
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "approve",
+        help="Record the user's literal approval response for one spec.",
+        help_formatter="plain",
+        default_command=approve_cmd,
     )
-    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)

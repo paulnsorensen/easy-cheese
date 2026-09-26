@@ -7,6 +7,7 @@ import subprocess
 from collections.abc import Callable, Iterable
 from typing import Protocol, TypedDict, cast
 
+import fromargs
 import pytest
 
 
@@ -33,6 +34,7 @@ class _Output(TypedDict):
     pr: int
     build: _BuildInfo
     merge: _MergeInfo
+    logs_expired: bool
 
 
 class _PrStatusModule(Protocol):
@@ -204,9 +206,9 @@ def test_missing_gh_exits_two(pr_status: _PrStatusModule, monkeypatch: pytest.Mo
         raise FileNotFoundError("gh not found")
 
     monkeypatch.setattr(subprocess, "run", raise_fnfe)
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(fromargs.CliError) as exc:
         _ = pr_status.fetch_checks(42)
-    assert exc.value.code == 2
+    assert exc.value.exit_code == 2
 
 
 def test_gh_failure_exits_one(pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,9 +221,9 @@ def test_gh_failure_exits_one(pr_status: _PrStatusModule, monkeypatch: pytest.Mo
         return _FakeCompletedProcess(stdout="", returncode=1, stderr="GraphQL: Could not resolve to a PullRequest")
 
     monkeypatch.setattr(subprocess, "run", runner)
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(fromargs.CliError) as exc:
         _ = pr_status.fetch_checks(42)
-    assert exc.value.code == 1
+    assert exc.value.exit_code == 1
 
 
 def test_extract_run_id_from_actions_url(pr_status: _PrStatusModule) -> None:
@@ -352,9 +354,9 @@ def test_unparseable_json_falls_back_then_exits_one_if_plain_also_fails(
         return _FakeCompletedProcess(stdout="", returncode=1, stderr="API error")
 
     monkeypatch.setattr(subprocess, "run", runner)
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(fromargs.CliError) as exc:
         _ = pr_status.fetch_checks(42)
-    assert exc.value.code == 1
+    assert exc.value.exit_code == 1
     # The fallback was actually attempted (a plain, no-`--json` invocation ran).
     assert any("--json" not in c for c in calls if c[:3] == ["gh", "pr", "checks"])
 
@@ -455,9 +457,9 @@ def test_non_list_json_from_gh_checks_exits_one(
         return _FakeCompletedProcess(stdout="", returncode=1, stderr="API error")
 
     monkeypatch.setattr(subprocess, "run", runner)
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(fromargs.CliError) as exc:
         _ = pr_status.fetch_checks(42)
-    assert exc.value.code == 1
+    assert exc.value.exit_code == 1
 
 
 def _fallback_runner(
@@ -821,13 +823,13 @@ def test_build_output_tags_failing_from_bucket(
     assert lint["failing"] is False
 
 
-def test_main_exits_three_for_out_of_family_fail_state(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+def test_main_reports_logs_expired_for_out_of_family_fail_state(
+    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Regression for the predicate-divergence finding: a build failing solely on
     a bucket==fail check whose state is outside the old conclusion family
-    (action_required) with expired logs must exit 3 — under the old
-    conclusion-family filter this returned 0 and graded a blank."""
+    (action_required) with expired logs must report logs_expired — under the old
+    conclusion-family filter this graded a blank."""
     checks_json = json.dumps(
         [
             {
@@ -853,15 +855,17 @@ def test_main_exits_three_for_out_of_family_fail_state(
             ]
         ),
     )
-    assert pr_status.main(["42"]) == 3
+    assert pr_status.main(["42"]) == 0
+    payload = cast(_Output, json.loads(capsys.readouterr().out))
+    assert payload["logs_expired"] is True
 
 
-def test_main_exits_three_when_failing_logs_unfetchable(
+def test_main_reports_logs_expired_when_failing_logs_unfetchable(
     pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """#76: a failing build with every failing check's log unfetchable (expired
-    Actions logs) exits 3 so the skill's halt branch fires instead of grading a
-    blank. The JSON is still emitted to stdout for debugging."""
+    Actions logs) sets logs_expired so the skill's halt branch fires instead of
+    grading a blank."""
     checks_json = json.dumps(
         [
             {
@@ -889,16 +893,15 @@ def test_main_exits_three_when_failing_logs_unfetchable(
         ),
     )
     rc = pr_status.main(["42"])
-    assert rc == 3
-    captured = capsys.readouterr()
-    # JSON still printed so a human can inspect the empty-summary failure.
-    payload = cast(_Output, json.loads(captured.out))
+    assert rc == 0
+    payload = cast(_Output, json.loads(capsys.readouterr().out))
+    assert payload["logs_expired"] is True
     assert payload["build"]["status"] == "failing"
     assert payload["build"]["checks"][0]["failure_summary"] == ""
 
 
-def test_main_exits_zero_when_some_failure_groundable(
-    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch
+def test_main_does_not_report_logs_expired_when_some_failure_groundable(
+    pr_status: _PrStatusModule, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """#76: a failing build is NOT halted when at least one failing check has a
     fetchable log — that finding can be graded; the empty ones become
@@ -938,6 +941,8 @@ def test_main_exits_zero_when_some_failure_groundable(
     monkeypatch.setattr(subprocess, "run", runner)
     rc = pr_status.main(["42"])
     assert rc == 0
+    payload = cast(_Output, json.loads(capsys.readouterr().out))
+    assert payload["logs_expired"] is False
 
 
 def test_failing_state_with_cancelled_bucket_fail_enriches(

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import tracemalloc
 from pathlib import Path
@@ -18,15 +17,12 @@ from easy_cheese.shared.handoff import (
     render_handoff_slug,
 )
 from easy_cheese.shared.wheypoint import projection, storage
-from easy_cheese.cli import wheypoint
+
+from conftest import run_cli
 
 
 def _run(command: str, *args: str, **fields: object) -> tuple[int, dict[str, object]]:
-    out = io.StringIO()
-    status = wheypoint.main(
-        [command, *args], stdin=io.StringIO(json.dumps(fields)), stdout=out
-    )
-    return status, cast(dict[str, object], json.loads(out.getvalue()))
+    return run_cli([command, *args], stdin=json.dumps(fields))
 
 
 def _intent(**fields: object) -> dict[str, object]:
@@ -300,12 +296,12 @@ def test_m2_validation_keeps_independent_diagnostics(
         ),
     )
     assert status == 1
-    problems = cast(list[str], _error(reply)["problems"])
-    assert any("bogus" in problem for problem in problems)
-    assert any("PR#" in problem for problem in problems)
-    assert any("credential" in problem for problem in problems)
+    message = cast(str, _error(reply)["message"])
+    assert "bogus" in message
+    assert "PR#" in message
+    assert "credential" in message
     if "entries" in extra:
-        assert any("entries" in problem for problem in problems)
+        assert "entries" in message
     assert not store.root.exists()
 
 

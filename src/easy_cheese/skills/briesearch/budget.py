@@ -33,18 +33,17 @@ Always prints a metrics object on stdout — invocation class, per-kind call
 counts, duplicates, cache hits, failures, budget, extensions — so a run's cost
 is inspectable even when nothing is wrong.
 
-Exit: 0 clean, 1 on any violation or an untrusted manifest, 2 when no manifest
-is found at the given path.
+Findings are reported in the `findings` field of the JSON result at exit 0.
+Exit: 1 on an untrusted manifest, 2 when no manifest is found at the given path.
 """
 
 from __future__ import annotations
 
-import argparse
-import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+
+import fromargs
 
 from easy_cheese.skills.briesearch.ledger import (
     CALL_KINDS,
@@ -216,38 +215,47 @@ def _find_manifest(target: Path) -> Path | None:
     return target if target.is_file() else None
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "path",
-        help=f"Research directory holding {MANIFEST_NAME}, or the manifest file.",
-    )
-    args = parser.parse_args(argv)
+def budget_check(path: str) -> dict[str, object]:
+    """Enforce the /briesearch search budget and dedup rules from the run ledger.
 
-    target = Path(cast(str, args.path))
+    Parameters
+    ----------
+    path
+        Research directory holding manifest.json, or the manifest file.
+    """
+    target = Path(path)
     manifest = _find_manifest(target)
     if manifest is None:
-        print(f"error: no {MANIFEST_NAME} found at {target}", file=sys.stderr)
-        return 2
+        raise fromargs.CliError(f"no {MANIFEST_NAME} found at {target}", exit_code=2)
     try:
         ledger = load_ledger(manifest)
     except LedgerError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
 
     report = check_ledger(ledger)
-    print(json.dumps(report.metrics, indent=2, sort_keys=True))
     for finding in report.findings:
         print(finding.render(), file=sys.stderr)
-    if report.findings:
-        print(
-            f"\n{len(report.findings)} budget violation(s) in {manifest}",
-            file=sys.stderr,
-        )
-        return 1
-    print(f"budget ok: {len(ledger.calls)} call(s) checked", file=sys.stderr)
-    return 0
+    return {
+        **report.metrics,
+        "findings": [
+            {"kind": finding.kind, "message": finding.message}
+            for finding in report.findings
+        ],
+    }
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "budget-check",
+        help="Enforce the /briesearch search budget and dedup rules from the run ledger.",
+        help_formatter="plain",
+        default_command=budget_check,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main())

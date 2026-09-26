@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import argparse
 import datetime as _dt
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Literal, TextIO, cast
+
+import fromargs
 
 from easy_cheese_schemas import CheckpointIntent, load
 from easy_cheese_schemas import schema_runtime
 
-from easy_cheese.cli.envelope import Refused
 from easy_cheese.shared import paths
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
 from easy_cheese.shared.wheypoint import discovery
@@ -22,29 +22,49 @@ from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
 from easy_cheese.shared.wheypoint import resolve_cli
 from easy_cheese.shared.wheypoint import storage
-from easy_cheese.shared.wheypoint import transcript
+from easy_cheese.shared.wheypoint import transcript as transcript_mod
 from easy_cheese.shared.wheypoint.resolve_cli import findings_payload, maybe_payload
 
 from easy_cheese.cli.wheypoint.checkpoint import open_store, read_intent
 
 
-def _addressed_corpus_root(args: argparse.Namespace) -> Path | None:
-    """`--project KEY` addresses another project's corpus (G10)."""
-    project = cast("str | None", getattr(args, "project", None))
-    return None if project is None else paths.corpus_home() / project
+def _project_key(value: str) -> str:
+    """Reject anything that is not one filesystem path segment (G9, G10)."""
+    if not value or value in (".", "..") or "/" in value or "\\" in value:
+        raise fromargs.CliError(f"--project: must be one path segment, not {value!r}")
+    return value
 
 
-def run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
-    work_id = cast(str, args.work_id)
-    store = open_store(work_id, corpus_root=_addressed_corpus_root(args))
+def _iso_date(value: str) -> str:
+    """Accept only a `YYYY-MM-DD` date, so a bad `--since` is a usage error."""
+    try:
+        _ = _dt.date.fromisoformat(value)
+    except ValueError as exc:
+        raise fromargs.CliError(
+            f"--since: must be a YYYY-MM-DD date, not {value!r}"
+        ) from exc
+    return value
+
+
+def _positive_int(value: int) -> int:
+    """Accept only a whole number of at least 1 for `--limit`."""
+    if value < 1:
+        raise fromargs.CliError(f"--limit: must be at least 1, not {value}")
+    return value
+
+
+def run_show(work_id: str, *, project: str | None = None) -> dict[str, object]:
+    project_key = _project_key(project) if project is not None else None
+    corpus_root = None if project_key is None else paths.corpus_home() / project_key
+    store = open_store(work_id, corpus_root=corpus_root)
     try:
         record = store.read_record()
     except (storage.StorageError, OSError, ValueError) as exc:
-        raise Refused("record-unreadable", str(exc)) from exc
+        raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=1) from exc
     if record is None:
-        raise Refused(
-            "record-missing",
-            f"work {work_id!r} has no record at {store.record_path}",
+        raise fromargs.CliError(
+            f"record-missing: work {work_id!r} has no record at {store.record_path}",
+            exit_code=1,
         )
     return {
         "work_id": record.work_id,
@@ -55,23 +75,32 @@ def run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     }
 
 
-def run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
-    ref = cast(str, args.ref)
-    legacy_flag = cast(bool, args.legacy)
-    corpus_root_path = _addressed_corpus_root(args)
-    corpus_root = (
-        str(corpus_root_path)
-        if corpus_root_path is not None
-        else cast("str | None", args.corpus_root)
-    )
-    workspace_root = cast("str | None", getattr(args, "workspace_root", None))
-    project_key = cast("str | None", getattr(args, "project", None))
+def run_resolve(
+    ref: str,
+    *,
+    legacy: bool = False,
+    corpus_root: str | None = None,
+    project: str | None = None,
+    workspace_root: str | None = None,
+) -> dict[str, object]:
+    # A legacy note lives beside the repository, not in a corpus, so a
+    # corpus root given with --legacy would be silently dropped.
+    chosen = [
+        name
+        for name, value in (("--legacy", legacy), ("--corpus-root", corpus_root), ("--project", project))
+        if value
+    ]
+    if len(chosen) > 1:
+        raise fromargs.CliError(f"{chosen[0]}: not allowed with {chosen[1]}")
+    project_key = _project_key(project) if project is not None else None
+    corpus_root_path = None if project_key is None else paths.corpus_home() / project_key
+    effective_corpus_root = str(corpus_root_path) if corpus_root_path is not None else corpus_root
     resolution = (
         resolve_mod.resolve_legacy(ref, start=Path.cwd())
-        if legacy_flag
+        if legacy
         else resolve_mod.resolve(
             ref,
-            corpus_root=corpus_root,
+            corpus_root=effective_corpus_root,
             project_key=project_key,
             workspace_root=workspace_root,
             require_workspace=project_key is not None,
@@ -80,13 +109,13 @@ def run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     payload = resolve_cli.resolve_payload(resolution, ref)
     if resolution.outcome == resolve_mod.ResolutionOutcome.NOT_FOUND:
         payload["suggestions"] = list(
-            discovery.suggestions(ref, start=Path.cwd(), corpus_root=corpus_root)
+            discovery.suggestions(ref, start=Path.cwd(), corpus_root=effective_corpus_root)
         )
+    resolve_cli.raise_if_error(payload)
     return payload
 
 
-def run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
-    path = cast(str, args.path)
+def run_lint(path: str) -> dict[str, object]:
     report = lint_mod.lint_projection_file(path)
     return {
         "path": path,
@@ -96,13 +125,14 @@ def run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     }
 
 
-def run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
+def run_validate(intent: str | None, stdin: TextIO) -> dict[str, object]:
     """Schema-only dry run: every problem, no store opened (AC-11)."""
-    payload = read_intent(args, stdin)
+    payload = read_intent(intent, stdin)
     if not isinstance(payload, dict):
-        raise Refused(
-            "invalid-intent",
-            f"a checkpoint intent must be a JSON object, not {type(payload).__name__}",
+        raise fromargs.CliError(
+            "invalid-intent: a checkpoint intent must be a JSON object, not "
+            + f"{type(payload).__name__}",
+            exit_code=1,
         )
     intent_payload = cast("dict[str, object]", payload)
     problems = [
@@ -143,29 +173,23 @@ def run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
             checkpoint_mod.delta_problems(action_intent, None, schema_only=True)
         )
     if problems:
-        raise Refused("invalid-intent", "; ".join(problems), {"problems": problems})
+        raise fromargs.CliError("invalid-intent: " + "; ".join(problems), exit_code=1)
     return {"valid": True, "work_id": loaded.value.work_id if loaded.value else None}
 
 
-def run_schema(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def run_schema(slug: str) -> dict[str, object]:
     """The JSON Schema for one registered contract, so no one unzips the bundle (AC-12)."""
-    slug = cast(str, args.slug)
     table = dict(schema_runtime.contract_registry())
     if slug not in table:
-        raise Refused(
-            "unknown-contract",
-            f"no contract is registered as {slug!r}; known: {', '.join(sorted(table))}",
-            {"known": sorted(table)},
+        raise fromargs.CliError(
+            f"unknown-contract: no contract is registered as {slug!r}; known: "
+            + f"{', '.join(sorted(table))}",
+            exit_code=1,
         )
     document = cast(
         dict[str, object], json.loads(schema_runtime.schema_bytes(table[slug]))
     )
     return {"slug": slug, "schema": document}
-
-
-def _corpus_root(args: argparse.Namespace) -> Path:
-    root_arg = cast("str | None", args.corpus_root)
-    return Path(root_arg) if root_arg is not None else paths.project_corpus_root()
 
 
 def _iso(epoch: float) -> str:
@@ -212,32 +236,48 @@ def _tsv_lines(
     return lines
 
 
-def run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def run_list(
+    *,
+    corpus_root: str | None = None,
+    scope: Literal["project", "machine"] = "project",
+    project: list[str] | None = None,
+    root: list[str] | None = None,
+    grep: str | None = None,
+    status: str | None = None,
+    next: str | None = None,
+    source: Literal["store", "note"] | None = None,
+    since: str | None = None,
+    limit: int | None = None,
+    mirrors: bool = False,
+) -> dict[str, object]:
     """Every store and legacy note a caller can resume from (AC-13, G9)."""
-    root = _corpus_root(args)
-    scope = cast(str, args.scope)
-    projects = cast("list[str] | None", args.project) or []
+    root_arg = Path(corpus_root) if corpus_root is not None else paths.project_corpus_root()
+    projects = [_project_key(key) for key in (project or [])]
+    if since is not None:
+        since = _iso_date(since)
+    if limit is not None:
+        limit = _positive_int(limit)
     effective_scope = "machine" if projects else scope
     result = discovery.discover(
         scope=effective_scope,
         start=Path.cwd(),
-        corpus_root=cast("str | None", args.corpus_root),
+        corpus_root=corpus_root,
         projects=projects,
-        roots=cast("list[str] | None", args.root) or [],
-        grep=cast("str | None", args.grep),
-        status=cast("str | None", args.status),
-        next=cast("str | None", args.next),
-        source=cast("str | None", args.source),
-        since=cast("str | None", args.since),
-        limit=cast("int | None", args.limit),
-        show_mirrors=cast(bool, args.mirrors),
+        roots=root or [],
+        grep=grep,
+        status=status,
+        next=next,
+        source=source,
+        since=since,
+        limit=limit,
+        show_mirrors=mirrors,
     )
     items = [_hit_item(hit) for hit in result.hits]
     lines = _tsv_lines(
         items, ("source", "project", "ref", "status", "next", "orientation")
     )
     return {
-        "corpus_root": str(root),
+        "corpus_root": str(root_arg),
         "scope": effective_scope,
         "items": items,
         "lines": lines,
@@ -247,12 +287,14 @@ def run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     }
 
 
-def run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def run_log(
+    work_id: str, *, corpus_root: str | None = None, project: str | None = None
+) -> dict[str, object]:
     """One line per complete revision, oldest first (AC-14)."""
-    work_id = cast(str, args.work_id)
-    root = _addressed_corpus_root(args)
+    project_key = _project_key(project) if project is not None else None
+    root = None if project_key is None else paths.corpus_home() / project_key
     if root is None:
-        root = _corpus_root(args)
+        root = Path(corpus_root) if corpus_root is not None else paths.project_corpus_root()
     store = open_store(work_id, corpus_root=root)
     scan = store.revisions()
     files, skipped = scan.files, scan.skipped
@@ -260,16 +302,18 @@ def run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
         try:
             record = store.read_record()
         except (storage.StorageError, OSError, ValueError) as exc:
-            raise Refused("record-unreadable", str(exc)) from exc
+            raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=1) from exc
         if record is None:
-            raise Refused(
-                "record-missing",
-                f"work {work_id!r} has no record at {store.record_path}",
+            raise fromargs.CliError(
+                f"record-missing: work {work_id!r} has no record at "
+                + f"{store.record_path}",
+                exit_code=1,
             )
-        raise Refused(
-            "store-inconsistent",
-            f"work {work_id!r} has a record but no complete revisions"
+        raise fromargs.CliError(
+            f"store-inconsistent: work {work_id!r} has a record but no complete "
+            + "revisions"
             + (f": {'; '.join(skipped)}" if skipped else ""),
+            exit_code=1,
         )
     entries: list[dict[str, object]] = []
     for file in files:
@@ -313,14 +357,14 @@ def run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     }
 
 
-def run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
+def run_turns(
+    *, transcript: str | None = None, session: str | None = None
+) -> dict[str, object]:
     """The user's own turns from a session transcript (AC-27, AC-28)."""
-    transcript_arg = cast("str | None", args.transcript)
-    session = cast("str | None", args.session)
-    if transcript_arg is not None:
-        path = Path(transcript_arg)
+    if transcript is not None:
+        path = Path(transcript)
     else:
-        directory = transcript.projects_dir(Path.cwd())
+        directory = transcript_mod.projects_dir(Path.cwd())
         if session is None:
             stamped: list[tuple[float | None, str]] = []
             for candidate in directory.glob("*.jsonl"):
@@ -346,23 +390,29 @@ def run_turns(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
                     reverse=True,
                 )
             ]
-            raise Refused(
-                "session-required",
-                f"{len(listing)} transcript(s) under {directory}: pass --session <id> "
-                + "(never guessed by recency) or --transcript <path>",
-                {"projects_dir": str(directory), "candidates": listing},
+            candidates_text = (
+                ", ".join(
+                    f"{item['session']} (modified {item['modified'] or 'unknown'})"
+                    for item in listing
+                )
+                or "none"
             )
-        if transcript.SESSION_ID_RE.fullmatch(session) is None:
-            raise Refused(
-                "invalid-session",
-                f"session id {session!r} must be one safe file-name segment",
+            raise fromargs.CliError(
+                f"session-required: {len(listing)} transcript(s) under {directory}: "
+                + "pass --session <id> (never guessed by recency) or --transcript "
+                + f"<path>. projects_dir: {directory}. candidates: {candidates_text}",
+                exit_code=1,
+            )
+        if transcript_mod.SESSION_ID_RE.fullmatch(session) is None:
+            raise fromargs.CliError(
+                f"invalid-session: session id {session!r} must be one safe "
+                + "file-name segment",
+                exit_code=1,
             )
         path = directory / f"{session}.jsonl"
     if not path.is_file():
-        raise Refused(
-            "transcript-missing", f"no transcript at {path}", {"path": str(path)}
-        )
-    turns, skipped = transcript.user_turns(path)
+        raise fromargs.CliError(f"transcript-missing: no transcript at {path}", exit_code=1)
+    turns, skipped = transcript_mod.user_turns(path)
     rows: list[dict[str, object]] = [
         {"timestamp": turn["timestamp"], "text": turn["text"]} for turn in turns
     ]

@@ -10,13 +10,14 @@ with the route it audits (#611). This module owns that one file read;
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
+
+import fromargs
 
 from easy_cheese.shared import paths
 from easy_cheese.shared.manifest_io import (
     ManifestLoadError,
-    json_command,
+    read_mapping_arg_or_stdin,
     read_mapping_file,
 )
 from easy_cheese_schemas.validate import require_exact_keys
@@ -73,12 +74,41 @@ def _record(
     )
 
 
-main = json_command(
-    _record,
-    "usage: press_telemetry_cli.py [<request.json>]",
-    keys=_REQUEST_KEYS,
-)
+_USAGE = "usage: press_telemetry_cli.py [<request.json>]"
+
+
+def press_telemetry_cmd(path: str | None = None) -> dict[str, object]:
+    """Build the Press attempt telemetry record.
+
+    Parameters
+    ----------
+    path
+        Path to the request JSON; reads stdin when omitted.
+    """
+    argv = [path] if path else []
+    try:
+        payload = read_mapping_arg_or_stdin(argv, _USAGE)
+    except ManifestLoadError as exc:
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
+    try:
+        require_exact_keys(payload, _REQUEST_KEYS, "request")
+        return _record(**payload)
+    except (TypeError, ValueError) as exc:
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "press-telemetry",
+        help="Build the Press attempt telemetry record.",
+        help_formatter="plain",
+        default_command=press_telemetry_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())

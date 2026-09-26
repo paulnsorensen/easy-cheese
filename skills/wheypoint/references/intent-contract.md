@@ -88,9 +88,8 @@ The runtime derives `prior_compaction_revision_id` from stored receipts and refu
 
 ## Reply envelope
 
-Every command prints exactly one JSON object, on one line, to stdout.
-A success reply is `{"ok": true, "command": "<name>", ...fields}`.
-A failure reply is `{"ok": false, "command": "<name>", "error": {"code": "...", "message": "...", ...extra}}`.
+A success reply prints one indented JSON document to stdout: `{"ok": true, "command": "<name>", ...fields}`.
+A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error": "<code>: <message>", "exit_code": 1}`.
 
 - **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`.
 - **`validate`** returns `valid` and `work_id`.
@@ -121,9 +120,10 @@ This escaping keeps one line one record.
 `corpus_root` (from `list`) is the resolved root directory the listing scanned.
 
 Exit `0` means the command succeeded; the reply carries the command's own fields.
-Exit `1` means the command refused the request; the reply carries `error.code` and `error.message`.
+Exit `1` means the command refused the request; the stderr line carries `error` and `exit_code`.
 Exit `2` means the command-line usage was wrong, before any command ran.
-Exit `3` means an unexpected internal error; `error.code` is `internal-error` and a Python traceback goes to stderr, never into the JSON.
+Exit `3` means the reply violated its own schema contract.
+An unexpected crash also exits `1`, but the stderr line names the exception class and points to a `traceback` file; it carries no refusal code.
 
 Each refusal names a `code`:
 
@@ -147,4 +147,3 @@ Each refusal names a `code`:
 - `invalid-session`: the given `--session` id was not a safe file-name segment.
 - `transcript-missing`: no transcript file exists at the resolved path.
 - `invalid-reference`: `resolve` could not interpret the given reference.
-- `internal-error`: an unexpected exception, not a refusal, reached `main`.

@@ -9,13 +9,12 @@ manipulation only -- no toml dependency.
 
 from __future__ import annotations
 
-import argparse
 import re
 import subprocess
-import sys
-from collections.abc import Sequence
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import TypedDict
+
+import fromargs
 
 from easy_cheese.shared import paths
 from easy_cheese.shared import hallouminate_artifacts
@@ -185,6 +184,9 @@ def migrate_legacy(config_path: Path | None = None, *, apply: bool) -> Change:
     return no_legacy
 
 
+_migrate_legacy = migrate_legacy
+
+
 def _git(repo_root: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-C", str(repo_root), *args],
@@ -244,70 +246,138 @@ def _report(change: Change) -> str:
     return f"[{change.leg}] {change.action}: {change.target_path} -- {change.detail}"
 
 
-def _run_leg(
-    leg: str, do_apply: bool, migrate: bool = False, roots: Sequence[str] = ()
-) -> int:
-    if leg in ("global", "doctor"):
-        print(_report(apply_global(apply=do_apply)))
-        if migrate:
-            print(_report(migrate_legacy(apply=do_apply)))
-    if leg == "doctor" and not do_apply and not migrate:
-        print(_report(migrate_legacy(apply=False)))
-    if leg in ("local", "doctor"):
-        print(_report(apply_local(Path.cwd(), apply=do_apply)))
-    if leg in ("artifacts", "doctor"):
-        for line in hallouminate_artifacts.run_leg(apply=do_apply, roots=roots):
-            print(line)
-    return 0
+def _changes_payload(changes: list[Change]) -> dict[str, object]:
+    return {"changes": [_report(change) for change in changes]}
 
 
-def _leg_main(leg: str, argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog=leg)
-    _ = parser.add_argument("--apply", action="store_true")
-    _ = parser.add_argument("--migrate-legacy", action="store_true")
-    _ = parser.add_argument("--root", action="append", default=[])
-    args = parser.parse_args(argv)
-    do_apply = cast(bool, args.apply)
-    migrate = cast(bool, args.migrate_legacy)
-    roots = cast("list[str]", args.root)
-    if migrate and leg != "global":
-        parser.error("--migrate-legacy is only valid for global")
-    if roots and leg != "artifacts":
-        parser.error("--root is only valid for artifacts")
-    return _run_leg(leg, do_apply, migrate, roots)
+def global_cmd(*, apply: bool = False, migrate_legacy: bool = False) -> dict[str, object]:
+    """Register or repair the durable Hallouminate corpus.
+
+    Parameters
+    ----------
+    apply
+        Write changes; default only reports.
+    migrate_legacy
+        Also remove a legacy cheese-global -> ~/.cheese block.
+    """
+    changes = [apply_global(apply=apply)]
+    if migrate_legacy:
+        changes.append(_migrate_legacy(apply=apply))
+    return _changes_payload(changes)
 
 
-def global_main(argv: list[str]) -> int:  # noqa: V103
-    return _leg_main("global", argv)
+def local_cmd(*, apply: bool = False) -> dict[str, object]:
+    """Register or repair this repository's Hallouminate tenant.
+
+    Parameters
+    ----------
+    apply
+        Write changes; default only reports.
+    """
+    return _changes_payload([apply_local(Path.cwd(), apply=apply)])
 
 
-def local_main(argv: list[str]) -> int:  # noqa: V103
-    return _leg_main("local", argv)
+def doctor_cmd(*, apply: bool = False) -> dict[str, object]:
+    """Run the global, local, and artifacts registration legs.
+
+    Parameters
+    ----------
+    apply
+        Write changes; default only reports.
+    """
+    changes = [apply_global(apply=apply)]
+    if not apply:
+        changes.append(_migrate_legacy(apply=False))
+    changes.append(apply_local(Path.cwd(), apply=apply))
+    payload = _changes_payload(changes)
+    payload["artifacts"] = list(hallouminate_artifacts.run_leg(apply=apply, roots=()))
+    return payload
 
 
-def doctor_main(argv: list[str]) -> int:  # noqa: V103
-    return _leg_main("doctor", argv)
+def artifacts_cmd(*, apply: bool = False, root: list[str] | None = None) -> dict[str, object]:
+    """Register every .cheese directory as one Hallouminate corpus.
+
+    Parameters
+    ----------
+    apply
+        Write changes; default only reports.
+    root
+        Root directory to scan (repeatable); default: cwd only.
+    """
+    return {"artifacts": list(hallouminate_artifacts.run_leg(apply=apply, roots=root or []))}
 
 
-def artifacts_main(argv: list[str]) -> int:  # noqa: V103
-    return _leg_main("artifacts", argv)
+def build_global_app() -> fromargs.App:
+    return fromargs.App(
+        "global",
+        help="Register or repair the durable Hallouminate corpus.",
+        help_formatter="plain",
+        default_command=global_cmd,
+    )
+
+
+def global_main(argv: list[str] | None = None) -> int:  # noqa: V103
+    return build_global_app().run(argv)
+
+
+def build_local_app() -> fromargs.App:
+    return fromargs.App(
+        "local",
+        help="Register or repair this repository's Hallouminate tenant.",
+        help_formatter="plain",
+        default_command=local_cmd,
+    )
+
+
+def local_main(argv: list[str] | None = None) -> int:  # noqa: V103
+    return build_local_app().run(argv)
+
+
+def build_doctor_app() -> fromargs.App:
+    return fromargs.App(
+        "doctor",
+        help="Run the global, local, and artifacts registration legs.",
+        help_formatter="plain",
+        default_command=doctor_cmd,
+    )
+
+
+def doctor_main(argv: list[str] | None = None) -> int:  # noqa: V103
+    return build_doctor_app().run(argv)
+
+
+def build_artifacts_app() -> fromargs.App:
+    return fromargs.App(
+        "artifacts",
+        help="Register every .cheese directory as one Hallouminate corpus.",
+        help_formatter="plain",
+        default_command=artifacts_cmd,
+    )
+
+
+def artifacts_main(argv: list[str] | None = None) -> int:  # noqa: V103
+    return build_artifacts_app().run(argv)
+
+
+LEAVES = ("global", "local", "doctor", "artifacts")
+
+
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "hallouminate-setup",
+        help="Register or repair the Hallouminate corpus and repo tenant.",
+        help_formatter="plain",
+    )
+    _ = app.command(global_cmd, name="global")
+    _ = app.command(local_cmd, name="local")
+    _ = app.command(doctor_cmd, name="doctor")
+    _ = app.command(artifacts_cmd, name="artifacts")
+    return app
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv if argv is None else argv
-    legs = {"global", "local", "doctor", "artifacts"}
-    prog0 = Path(argv[0]).name
-    if prog0 in legs:
-        leg, rest = prog0, argv[1:]
-    elif len(argv) >= 2 and argv[1] in legs:
-        leg, rest = argv[1], argv[2:]
-    else:
-        _ = sys.stderr.write(
-            "usage: hallouminate_setup.py {global|local|doctor|artifacts} [--apply]\n"
-        )
-        return 2
-    return _leg_main(leg, rest)
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

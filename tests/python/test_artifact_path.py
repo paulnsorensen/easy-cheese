@@ -7,7 +7,9 @@ never touches the filesystem, so these assert on returned/printed paths only.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -55,13 +57,15 @@ def test_valid_slug_accepted(slug: str) -> None:
 
 def test_main_prints_resolved_path(capsys: pytest.CaptureFixture[str]) -> None:
     assert ap.main(["cook", "my-slug"]) == 0
-    out = capsys.readouterr().out.strip()
-    assert out == str(Path(".cheese/cook/my-slug.md"))
+    out = cast(dict[str, object], json.loads(capsys.readouterr().out))
+    assert out["path"] == str(Path(".cheese/cook/my-slug.md"))
 
 
 def test_main_reports_error_on_bad_slug(capsys: pytest.CaptureFixture[str]) -> None:
     assert ap.main(["cook", "Bad"]) == 1
-    assert "error:" in capsys.readouterr().err
+    envelope = cast(dict[str, object], json.loads(capsys.readouterr().err))
+    assert envelope["exit_code"] == 1
+    assert "kebab-case" in str(envelope["error"])
 
 
 def test_main_research_prints_flat_artifact_path(
@@ -72,7 +76,8 @@ def test_main_research_prints_flat_artifact_path(
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj")
     assert ap.main(["research", "ignored-slug"]) == 0
-    assert capsys.readouterr().out.strip() == str(
+    out = cast(dict[str, object], json.loads(capsys.readouterr().out))
+    assert out["path"] == str(
         tmp_path / "proj" / "research" / "ignored-slug.md"
     )
 

@@ -86,8 +86,8 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
    Normalize a `PR#<n>` reference or a PR URL to its integer.
    Resolve `<owner>/<repo>` from the Git remote.
 2. **Fetch PR status.** Run `python3 skills/affinage/scripts/affinage.pyz pr-status <pr>`.
-   Exit 3 stops with `status: halt: pr-status-logs-expired`.
-   Any other nonzero exit stops with `status: halt: pr-status-unavailable`.
+   A `logs_expired: true` field stops with `status: halt: pr-status-logs-expired`.
+   A nonzero exit stops with `status: halt: pr-status-unavailable`.
    Route a conflicting or dirty merge state to `## Merge-conflict resolution`.
 3. **Run fresh review.** Run this step only in standalone mode without `--no-age`.
    Build contextual review input and call the bundled `age-route` command.

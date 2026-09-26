@@ -360,14 +360,17 @@ def test_fresh_context_verdict_is_required(taste: _MoldTasteTestModule) -> None:
         _ = taste.taste_test(DRAFT, LEDGER, None)  # pyright: ignore[reportArgumentType]
 
 
-def test_cli_requires_verdict_file(taste: _MoldTasteTestModule, tmp_path: Path) -> None:
+def test_cli_requires_verdict_file(
+    taste: _MoldTasteTestModule, tmp_path: Path, capsys: CaptureFixture[str]
+) -> None:
     draft = tmp_path / "draft.md"
     ledger = tmp_path / "ledger.json"
     _ = draft.write_text(DRAFT, encoding="utf-8")
     _ = ledger.write_text(json.dumps(LEDGER), encoding="utf-8")
-    with pytest.raises(SystemExit) as exc_info:
-        _ = taste.main(["--draft", str(draft), "--ledger", str(ledger)])
-    assert exc_info.value.code == 2
+    exit_code = taste.main(["--draft", str(draft), "--ledger", str(ledger)])
+    assert exit_code == 2
+    envelope = cast(dict[str, object], json.loads(capsys.readouterr().err))
+    assert envelope["exit_code"] == 2
 
 
 def test_stale_digest_is_a_blocker_before_decomposition(taste: _MoldTasteTestModule) -> None:
@@ -859,13 +862,16 @@ def test_cli_precheck_exits_zero_when_clean_and_one_with_gaps(
     exit_code = taste.main(["--draft", str(draft), "--ledger", str(ledger), "--precheck"])
     assert exit_code == 1
     captured = capsys.readouterr()
-    assert json.loads(captured.out) == {
-        "gaps": ["missing-section:F-1:interface", "missing-section:F-2:interface"]
-    }
+    assert captured.out == ""
+    envelope = cast(dict[str, object], json.loads(captured.err))
+    assert envelope["exit_code"] == 1
+    message = cast(str, envelope["error"])
+    assert "missing-section:F-1:interface" in message
+    assert "missing-section:F-2:interface" in message
 
 
 def test_cli_precheck_and_verdict_are_mutually_exclusive(
-    taste: _MoldTasteTestModule, tmp_path: Path
+    taste: _MoldTasteTestModule, tmp_path: Path, capsys: CaptureFixture[str]
 ) -> None:
     draft = tmp_path / "draft.md"
     ledger = tmp_path / "ledger.json"
@@ -873,14 +879,15 @@ def test_cli_precheck_and_verdict_are_mutually_exclusive(
     _ = draft.write_text(DRAFT, encoding="utf-8")
     _ = ledger.write_text(json.dumps(LEDGER), encoding="utf-8")
     _ = verdict_file.write_text(json.dumps(verdict(taste)), encoding="utf-8")
-    with pytest.raises(SystemExit) as exc_info:
-        _ = taste.main([
-            "--draft", str(draft),
-            "--ledger", str(ledger),
-            "--verdict", str(verdict_file),
-            "--precheck"
-        ])
-    assert exc_info.value.code == 2
+    exit_code = taste.main([
+        "--draft", str(draft),
+        "--ledger", str(ledger),
+        "--verdict", str(verdict_file),
+        "--precheck"
+    ])
+    assert exit_code == 2
+    envelope = cast(dict[str, object], json.loads(capsys.readouterr().err))
+    assert envelope["exit_code"] == 2
 
 
 COVERAGE_CLAUSES: list[dict[str, str]] = [

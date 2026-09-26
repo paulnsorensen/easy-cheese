@@ -39,13 +39,12 @@ Reads a markdown report, finds every evidence table (a table whose header has a
     bundle does no I/O beyond the corpus. With no manifest beside the report the
     check degrades to a single MANIFEST advisory.
 
-Exit: 0 clean (advisories may print), 1 on any error-level violation or when a
-report carries no evidence table, 2 on bad args / unreadable file.
+Violations are reported in the `violations` field of the JSON result at exit 0.
+Exit: 1 on an untrusted adjacent manifest, 2 on an unreadable report file.
 """
 
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from collections.abc import Mapping
@@ -53,6 +52,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 from urllib.parse import urlsplit
+
+import fromargs
 
 from easy_cheese.skills.briesearch.ledger import (
     EXTRACT,
@@ -693,20 +694,19 @@ def check_report(
     return violations, tables_checked
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "report", help="Path to the synthesis report markdown file."
-    )
-    args = parser.parse_args(argv)
+def ground_check_cmd(report: str) -> dict[str, object]:
+    """Lint a /briesearch synthesis report for grounding violations.
 
-    report = cast(str, args.report)
+    Parameters
+    ----------
+    report
+        Path to the synthesis report markdown file.
+    """
     path = Path(report)
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
-        print(f"error: cannot read {report}: {exc}", file=sys.stderr)
-        return 2
+        raise fromargs.CliError(f"cannot read {report}: {exc}", exit_code=2) from exc
 
     report_dir = path.resolve().parent
     manifest = find_ledger(report_dir)
@@ -717,29 +717,43 @@ def main(argv: list[str]) -> int:
         except LedgerError as exc:
             # A manifest that cannot be trusted is worse than none: the report
             # claims a capture record the gate cannot read.
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
+            raise fromargs.CliError(str(exc), exit_code=1) from exc
 
     violations, tables = check_report(
         text, report_dir, Path.cwd(), ledger, path.stem
     )
 
     if tables == 0:
-        print(f"error: no evidence table found in {report}", file=sys.stderr)
-        return 1
+        violations = [
+            *violations,
+            Violation("error", 0, "NO_TABLE", f"no evidence table found in {report}"),
+        ]
 
     for v in violations:
         print(v.render(), file=sys.stderr)
 
     errors = sum(1 for v in violations if v.level == "error")
-    if errors:
-        print(
-            f"\n{errors} grounding error(s) across {tables} table(s)", file=sys.stderr
-        )
-        return 1
-    print(f"grounding ok: {tables} table(s) checked", file=sys.stderr)
-    return 0
+    return {
+        "tables_checked": tables,
+        "errors": errors,
+        "violations": [
+            {"level": v.level, "kind": v.kind, "message": v.message} for v in violations
+        ],
+    }
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "ground-check",
+        help="Lint a /briesearch synthesis report for grounding violations.",
+        help_formatter="plain",
+        default_command=ground_check_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main())

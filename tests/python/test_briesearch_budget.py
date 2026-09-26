@@ -340,15 +340,18 @@ def test_main_accepts_the_manifest_file(tmp_path: Path) -> None:
     assert budget.main([str(tmp_path / "manifest.json")]) == 0
 
 
-def test_main_fails_on_a_violation_but_still_prints_metrics(
+def test_main_reports_a_violation_in_findings_but_still_exits_clean(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _ = _write_manifest(
         tmp_path, {"budget": {"search": 4}, "calls": [_search("q"), _search("q")]}
     )
-    assert budget.main([str(tmp_path)]) == 1
+    assert budget.main([str(tmp_path)]) == 0
     captured = capsys.readouterr()
-    assert json.loads(captured.out)["duplicates"]["search"] == 1
+    result = cast("dict[str, object]", json.loads(captured.out))
+    assert cast("dict[str, object]", result["duplicates"])["search"] == 1
+    findings = cast("list[dict[str, object]]", result["findings"])
+    assert [finding["kind"] for finding in findings] == ["DUPLICATE_SEARCH"]
     assert "ERROR DUPLICATE_SEARCH" in captured.err
 
 

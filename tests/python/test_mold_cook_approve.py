@@ -151,7 +151,8 @@ def test_approve_command_reports_bad_input_on_stderr(
 
     assert code == 1
     assert output == {}
-    assert err.startswith("ERROR:")
+    envelope = cast("dict[str, object]", json.loads(err))
+    assert envelope["exit_code"] == 1
 
 
 def test_documented_finalize_flow_reaches_cook_accept(

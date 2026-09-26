@@ -22,19 +22,16 @@ import pytest
 from easy_cheese_schemas import CheckpointIntent
 from easy_cheese.shared.wheypoint import commit, records, resolve_cli, storage
 from easy_cheese.cli import wheypoint
+from easy_cheese.cli.wheypoint import queries as queries_mod
 
-from conftest import WORK_ID, Promotion
+from conftest import WORK_ID, Promotion, run_cli
 
 CAPTURED_AT = "2026-08-02T00:00:00Z"
 
 
 def _run(command: str, *args: str, stdin: str = "") -> tuple[int, dict[str, object]]:
-    """Invoke the CLI the way the bundle does and parse its single JSON line."""
-    out = io.StringIO()
-    status = wheypoint.main([command, *args], stdin=io.StringIO(stdin), stdout=out)
-    lines = out.getvalue().splitlines()
-    assert len(lines) == 1, f"expected exactly one JSON line, got {lines!r}"
-    return status, json.loads(lines[0])
+    """Invoke the CLI the way the bundle does; see `conftest.run_cli`."""
+    return run_cli([command, *args], stdin=stdin)
 
 
 def _get(container: object, *path: str) -> object:
@@ -135,8 +132,6 @@ def test_checkpoint_refuses_a_genesis_intent_over_a_live_record(
     )
 
     assert status == 1
-    assert payload["ok"] is False
-    assert payload["command"] == "checkpoint"
     assert _get(payload, "error", "code") == "genesis-conflict"
     assert "never replaces a live one" in cast(str, _get(payload, "error", "message"))
     assert store.record_path.read_bytes() == before
@@ -203,19 +198,19 @@ def test_checkpoint_refuses_a_work_id_that_is_not_a_safe_path_segment() -> None:
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_an_unexpected_crash_is_exit_3_with_a_traceback_on_stderr(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_an_unexpected_crash_is_exit_1_with_a_traceback_on_stderr(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _boom(_args: object, _stdin: object) -> dict[str, object]:
+    def _boom(_work_id: str, **_kwargs: object) -> dict[str, object]:
         raise RuntimeError("boom")
 
-    monkeypatch.setitem(wheypoint._RUNNERS, "show", _boom)  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(queries_mod, "run_show", _boom)
 
     status, payload = _run("show", "--work-id", WORK_ID)
 
-    assert status == resolve_cli.EXIT_INTERNAL
-    assert _get(payload, "error", "code") == "internal-error"
-    assert "RuntimeError" in capsys.readouterr().err
+    assert status == 1
+    assert _get(payload, "error", "text") == "RuntimeError: boom"
+    assert isinstance(_get(payload, "traceback"), str)
 
 
 def test_checkpoint_mirrors_the_projection_into_an_explicit_note_dir(
@@ -319,7 +314,6 @@ def test_checkpoint_refuses_when_the_note_dir_cannot_be_created(tmp_path: Path) 
     )
 
     assert status == 1
-    assert payload["ok"] is False
     assert _get(payload, "error", "code") == "note-unwritable"
     # The refusal lands before the promotion, so nothing was committed either.
     show_status, show_payload = _run("show", "--work-id", WORK_ID)
@@ -348,7 +342,6 @@ def test_show_refuses_work_that_has_no_record() -> None:
     status, payload = _run("show", "--work-id", WORK_ID)
 
     assert status == 1
-    assert payload["ok"] is False
     assert _get(payload, "error", "code") == "record-missing"
 
 
@@ -475,9 +468,7 @@ def test_resolve_foreign_project_requires_and_accepts_workspace_root(
         ],
         stdout=out,
     )
-    adapter_payload = cast(
-        dict[str, object], json.loads(out.getvalue().splitlines()[0])
-    )
+    adapter_payload = cast(dict[str, object], json.loads(out.getvalue()))
     assert adapter_status == 0
     assert adapter_payload["outcome"] == "authoritative"
     assert adapter_payload["dispatchable"] is True
@@ -487,9 +478,7 @@ def test_resolve_foreign_project_requires_and_accepts_workspace_root(
         ["--ref", record_slug],
         stdout=phase_out,
     )
-    phase_payload = cast(
-        dict[str, object], json.loads(phase_out.getvalue().splitlines()[0])
-    )
+    phase_payload = cast(dict[str, object], json.loads(phase_out.getvalue()))
     assert phase_status == 0
     assert phase_payload["outcome"] == "authoritative"
     assert phase_payload["dispatchable"] is True
@@ -510,13 +499,8 @@ def test_resolve_refuses_a_reference_it_cannot_interpret() -> None:
     status, payload = _run("resolve", "--ref", "   ")
 
     assert status == 1
-    assert payload["outcome"] == "error"
-    assert payload["ok"] is False
-    assert payload["dispatchable"] is False
-    assert payload["findings"] == []
-    assert payload["searched"] == []
-    assert payload["source"] is None
-    assert payload["detail"] == "reference is empty"
+    assert _get(payload, "error", "code") == "error"
+    assert _get(payload, "error", "message") == "reference is empty"
 
 
 @pytest.mark.usefixtures("store")
@@ -530,9 +514,7 @@ def test_resolve_cli_and_the_bundle_produce_byte_identical_json_for_the_same_ref
 
     cli_out = io.StringIO()
     cli_status = resolve_cli.main(["--ref", WORK_ID], stdout=cli_out)
-    cli_payload = cast(
-        dict[str, object], json.loads(cli_out.getvalue().splitlines()[0])
-    )
+    cli_payload = cast(dict[str, object], json.loads(cli_out.getvalue()))
 
     assert cli_status == 0
     assert cli_payload == {**bundle_payload, "command": resolve_cli.COMMAND}
@@ -565,10 +547,9 @@ def test_resolve_refuses_a_corpus_root_given_with_legacy() -> None:
     )
 
     assert status == 2
-    assert payload["ok"] is False
-    assert _get(payload, "error", "code") == "usage"
-    message = cast(str, _get(payload, "error", "message"))
-    assert "--corpus-root" in message and "--legacy" in message
+    assert _get(payload, "error", "code") == ""
+    text = cast(str, _get(payload, "error", "text"))
+    assert "--legacy: not allowed with --corpus-root" in text
 
 
 def test_lint_reports_a_clean_projection(
@@ -601,60 +582,26 @@ def test_lint_reports_findings_as_an_answer_not_a_refusal(tmp_path: Path) -> Non
     assert payload["projection"] is None
 
 
-@pytest.mark.usefixtures("corpus_root")
-def test_the_subcommand_is_read_from_argv0_and_from_argv1_alike() -> None:
-    from_entry_point = io.StringIO()
-    from_module = io.StringIO()
-
-    # How the bundle dispatcher invokes it, and how the module runs directly.
-    assert (
-        wheypoint.main(
-            ["show", "--work-id", WORK_ID], stdin=io.StringIO(), stdout=from_entry_point
-        )
-        == 1
-    )
-    assert (
-        wheypoint.main(
-            ["/bundle/wheypoint.py", "show", "--work-id", WORK_ID],
-            stdin=io.StringIO(),
-            stdout=from_module,
-        )
-        == 1
-    )
-
-    assert from_entry_point.getvalue() == from_module.getvalue()
-    entry_point_payload = cast(
-        dict[str, object], json.loads(from_entry_point.getvalue())
-    )
-    assert _get(entry_point_payload, "error", "code") == "record-missing"
-
-
 def test_an_unknown_command_is_a_usage_error_in_the_same_json_shape() -> None:
-    out = io.StringIO()
+    status, payload = _run("destroy")
 
-    status = wheypoint.main(
-        ["wheypoint.py", "destroy"], stdin=io.StringIO(), stdout=out
-    )
-
-    payload = cast(dict[str, object], json.loads(out.getvalue()))
     assert status == 2
-    assert payload["ok"] is False
-    assert payload["command"] == "unknown"
-    assert _get(payload, "error", "code") == "usage"
-    assert "validate" in cast(str, _get(payload, "error", "message"))
+    assert _get(payload, "error", "code") == ""
+    text = cast(str, _get(payload, "error", "text"))
+    assert 'Unknown command "destroy". Available commands: checkpoint, validate' in text
 
 
 def test_a_missing_required_argument_is_a_usage_error_not_a_traceback() -> None:
     status, payload = _run("show")
 
     assert status == 2
-    assert payload["ok"] is False
-    assert payload["command"] == "show"
-    assert _get(payload, "error", "code") == "usage"
+    assert _get(payload, "error", "code") == ""
+    text = cast(str, _get(payload, "error", "text"))
+    assert text == 'Command "show" parameter --work-id requires an argument.'
 
 
 @pytest.mark.usefixtures("store")
-def test_every_reply_is_one_line_of_sorted_json() -> None:
+def test_every_reply_is_one_document_of_indented_json() -> None:
     out = io.StringIO()
     status = wheypoint.main(
         ["checkpoint"], stdin=io.StringIO(_first_intent()), stdout=out
@@ -662,10 +609,8 @@ def test_every_reply_is_one_line_of_sorted_json() -> None:
     text = out.getvalue()
 
     assert status == 0
-    assert text.endswith("\n")
-    assert text.count("\n") == 1
     payload = cast(dict[str, object], json.loads(text))
-    assert json.dumps(payload, sort_keys=True) + "\n" == text
+    assert json.dumps(payload, indent=2) + "\n" == text
 
 
 def test_the_command_surface_is_exactly_nine_commands() -> None:
@@ -729,7 +674,9 @@ def test_ac1_an_unknown_key_is_refused_by_path_on_every_write_path() -> None:
 
     # AC-10: the raw-delta surface is gone, so checkpoint is the only write path.
     status, payload = _run("commit", stdin="{}")
-    assert (status, _error(payload)[0]) == (2, "usage")
+    assert status == 2
+    assert _get(payload, "error", "code") == ""
+    assert "commit" in cast(str, _get(payload, "error", "text"))
 
 
 @pytest.mark.usefixtures("store")
@@ -1004,15 +951,13 @@ def test_ac11_validate_reports_every_problem_and_never_opens_the_store(
 ) -> None:
     status, payload = _run("validate", stdin=_first_intent(bogus=1, compacted=True))
     assert status == 1
-    problems = cast(list[str], _get(payload, "error", "problems"))
-    assert any("bogus" in p for p in problems) and any(
-        "compacted" in p for p in problems
-    )
+    message = cast(str, _get(payload, "error", "message"))
+    assert "bogus" in message and "compacted" in message
     status, payload = _run(
         "validate", stdin=_first_intent(next="affinage", artifact="x")
     )
     assert status == 1
-    assert any("PR#" in p for p in cast(list[str], _get(payload, "error", "problems")))
+    assert "PR#" in cast(str, _get(payload, "error", "message"))
     assert not store.record_path.exists()
 
     status, payload = _run("validate", stdin=_first_intent())
@@ -1030,7 +975,9 @@ def test_ac12_schema_prints_the_registered_json_schema() -> None:
 
     status, payload = _run("schema", "nope")
     assert (status, _error(payload)[0]) == (1, "unknown-contract")
-    assert "checkpoint-intent" in cast(list[str], _get(payload, "error", "known"))
+    message = cast(str, _get(payload, "error", "message"))
+    known = message.split("known: ", 1)[1]
+    assert "checkpoint-intent" in known
 
 
 def test_ac13_list_prints_one_line_per_work_item(corpus_root: Path) -> None:
@@ -1161,9 +1108,9 @@ def test_ac28_turns_derives_the_projects_dir_and_never_guesses_a_session(
 
     status, payload = _run("turns")
     assert (status, _error(payload)[0]) == (1, "session-required")
-    candidates = cast(list[dict[str, str]], _get(payload, "error", "candidates"))
-    assert sorted(c["session"] for c in candidates) == ["aaa", "bbb"]
-    assert all(c["modified"].endswith("Z") for c in candidates)
+    message = cast(str, _get(payload, "error", "message"))
+    assert "projects_dir" in message
+    assert "aaa" in message and "bbb" in message
 
     status, payload = _run("turns", "--session", "bbb")
     assert status == 0 and payload["transcript"] == str(projects / "bbb.jsonl")
@@ -1359,16 +1306,14 @@ def test_cure_a_tasks_projection_parses_and_lints_clean() -> None:
 def test_cure_validate_reports_next_action_and_delta_invariants() -> None:
     status, payload = _run("validate", stdin=_first_intent(next="tasks", artifact=None))
     assert status == 1
-    assert any(
-        "tasks must be non-empty" in p
-        for p in cast(list[str], _get(payload, "error", "problems"))
-    )
+    assert "tasks must be non-empty" in cast(str, _get(payload, "error", "message"))
     status, payload = _run(
         "validate", stdin=_first_intent(expected_revision_id="rev-000000000000")
     )
-    problems = cast(list[str], _get(payload, "error", "problems"))
+    problems = cast(str, _get(payload, "error", "message")).split("; ")
     assert (
-        status == 1 and len([p for p in problems if "expected_revision_id" in p]) == 1
+        status == 1
+        and len([p for p in problems if "expected_revision_id" in p]) == 1
     )
 
 
@@ -1446,7 +1391,7 @@ def test_cure_validate_reports_every_secret_not_just_the_first() -> None:
     status, payload = _run(
         "validate", stdin=_first_intent(orientation=f"a {token}", notes=f"b {token}")
     )
-    problems = cast(list[str], _get(payload, "error", "problems"))
+    problems = cast(str, _get(payload, "error", "message")).split("; ")
     assert status == 1 and sum("looks like a credential" in p for p in problems) == 2
 
 
@@ -1558,9 +1503,9 @@ def test_cure_validate_reports_the_next_action_gate_and_the_task_command_togethe
     )
 
     assert status == 1
-    problems = cast(list[str], _get(payload, "error", "problems"))
-    assert any("PR#" in p for p in problems)
-    assert any("tasks[0].command is not a skill dispatch" in p for p in problems)
+    message = cast(str, _get(payload, "error", "message"))
+    assert "PR#" in message
+    assert "tasks[0].command is not a skill dispatch" in message
 
 
 @pytest.mark.usefixtures("store")
@@ -1664,11 +1609,9 @@ def test_cure_turns_lists_a_candidate_even_when_stat_fails(
     status, payload = _run("turns")
 
     assert (status, _error(payload)[0]) == (1, "session-required")
-    candidates = cast(list[dict[str, object]], _get(payload, "error", "candidates"))
-    assert len(candidates) == 2
-    by_session = {cast(str, c["session"]): c["modified"] for c in candidates}
-    assert by_session["aaa"] is None
-    assert by_session["bbb"] is not None
+    message = cast(str, _get(payload, "error", "message"))
+    assert "aaa (modified unknown)" in message
+    assert "bbb (modified unknown)" not in message and "bbb (modified" in message
 
 
 @pytest.mark.usefixtures("store")
@@ -1694,7 +1637,7 @@ def test_cure_a_resumed_promotion_never_reuses_a_prior_note_dir(
     interrupted_status, _interrupted = _run(
         "checkpoint", "--note-dir", str(prior), stdin=body
     )
-    assert interrupted_status == resolve_cli.EXIT_INTERNAL
+    assert interrupted_status == 1
 
     default_notes = checkout / ".cheese" / "notes" / f"{WORK_ID}.md"
     status, payload = _run("checkpoint", stdin=body)
@@ -1710,7 +1653,7 @@ def test_resolve_answers_not_found_for_an_identifier_the_slug_grammar_rejects() 
     out = io.StringIO()
 
     status = resolve_cli.main(["--ref", "my_work"], stdout=out)
-    payload = cast(dict[str, object], json.loads(out.getvalue().splitlines()[0]))
+    payload = cast(dict[str, object], json.loads(out.getvalue()))
 
     assert status == 0
     assert payload["ok"] is True
@@ -1774,10 +1717,12 @@ def test_show_and_resolve_accept_a_positional_ref() -> None:
 def test_conflicting_positional_and_flag_ref_is_a_usage_error() -> None:
     """AC-1: a positional ref and a different --flag value exit 2, code usage."""
     status, payload = _run("show", WORK_ID, "--work-id", "other-id")
-    assert status == 2 and _get(payload, "error", "code") == "usage"
+    assert status == 2
+    assert "Unused Tokens" in cast(str, _get(payload, "error", "text"))
 
     status, payload = _run("resolve", WORK_ID, "--ref", "other-ref")
-    assert status == 2 and _get(payload, "error", "code") == "usage"
+    assert status == 2
+    assert "Unused Tokens" in cast(str, _get(payload, "error", "text"))
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -1828,7 +1773,7 @@ def test_no_command_accepts_a_format_flag() -> None:
     ):
         status, payload = _run(command, "--format", "json", *extra)
         assert status == 2
-        assert _get(payload, "error", "code") == "usage"
+        assert "Unknown option: --format" in cast(str, _get(payload, "error", "text"))
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -1891,7 +1836,7 @@ def test_list_rejects_a_bad_since_or_limit_as_usage(flags: tuple[str, str]) -> N
     status, payload = _run("list", *flags)
     assert status == 2
     error = cast(dict[str, object], payload["error"])
-    assert error["code"] == "usage"
+    assert error["code"] == ""
     assert flags[0] in cast(str, error["message"])
 
 

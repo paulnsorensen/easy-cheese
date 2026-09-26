@@ -132,7 +132,7 @@ class _CurdCountModule(Protocol):
     SpecReadError: type[Exception]
 
     def analyze(self, spec_path: Path, blast_radius: str | None) -> dict[str, object]: ...
-    def main(self, argv: list[str]) -> int: ...
+    def main(self, argv: list[str] | None = None) -> int: ...
 
 
 @pytest.fixture
@@ -579,13 +579,15 @@ class TestMain:
         assert digest["blast_radius"] is None
         assert digest["recommended_skill"] == "/cook"
 
-    def test_invalid_blast_radius_rejected_by_argparse(
-        self, curd_count: _CurdCountModule, tmp_path: Path
+    def test_invalid_blast_radius_rejected(
+        self, curd_count: _CurdCountModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         spec = tmp_path / "small.md"
         _ = spec.write_text(SPEC_SMALL)
-        with pytest.raises(SystemExit):
-            _ = curd_count.main([str(spec), "--blast-radius", "extreme"])
+        exit_code = curd_count.main([str(spec), "--blast-radius", "extreme"])
+        assert exit_code == 2
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert err["exit_code"] == 2
 
     def test_emits_trailing_newline(
         self, curd_count: _CurdCountModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]

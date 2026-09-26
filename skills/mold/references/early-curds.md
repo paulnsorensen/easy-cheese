@@ -10,7 +10,7 @@ A curd is ready to mint only when its scope, acceptance checks, test applicabili
 
 ## Composition
 
-Resolve the parent and child paths with `mold.pyz artifact-path specs <slug>`. Use a distinct child slug. The child uses `source: mold-curd-mini-spec`, `status: draft`, the mini-spec schema in `mini-spec-mode.md`, and a required `## Parent` section:
+Resolve the parent and child paths with `mold.pyz artifact-path specs <slug> | python3 -c 'import json,sys;print(json.load(sys.stdin)["path"])'`. Use a distinct child slug. The child uses `source: mold-curd-mini-spec`, `status: draft`, the mini-spec schema in `mini-spec-mode.md`, and a required `## Parent` section:
 
 ```markdown
 ## Parent
@@ -29,7 +29,7 @@ A changed child contract gets a new revision and a new execution decision. Do no
 Show the child contract, dependencies, changed files or intended footprint, and remaining parent work. Ask one route question through [`ask-user-question.md`](../../cheese/references/ask-user-question.md) only when the user wants Cook:
 
 - **Cook here in isolation:** dispatch the canonical Mold-to-Cook pointer to one isolated coder or worktree. Keep Mold's parent dialogue state with the orchestrator.
-- **Cook in another worktree:** give the user a command that names the child spec and its revision or digest. For local worktrees with a shared corpus, run `python3 skills/mold/scripts/mold.pyz artifact-path specs <child-slug>` and show `/cook --spec <absolute-path-printed-by-resolver>`. For a destination without that corpus, supply the complete validated spec as a portable file and show `/cook --spec <copied-spec-path>`. The destination must bind the user's Cook request to its own exact proposal. Never give a bare slug or a local-only path as if it worked in a cloud worktree.
+- **Cook in another worktree:** give the user a command that names the child spec and its revision or digest. For local worktrees with a shared corpus, run `python3 skills/mold/scripts/mold.pyz artifact-path specs <child-slug> | python3 -c 'import json,sys;print(json.load(sys.stdin)["path"])'` and show `/cook --spec <absolute-path-from-the-resolver>`. For a destination without that corpus, supply the complete validated spec as a portable file and show `/cook --spec <copied-spec-path>`. The destination must bind the user's Cook request to its own exact proposal. Never give a bare slug or a local-only path as if it worked in a cloud worktree.
 - **Keep shaping:** dispatch none. The child remains a validated draft.
 
 A direct `cook it` or `cook this` selection is execution consent only when the displayed child and route are unambiguous. The approval envelope binds the scope or plan, not the dispatch route. Record the selected route beside the child in the parent `## Curds` section. Execute only that route. A route change needs a new user selection, even when the scope and plan stay unchanged.

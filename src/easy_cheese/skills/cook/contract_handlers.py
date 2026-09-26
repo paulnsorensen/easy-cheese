@@ -8,12 +8,13 @@ without dispatching agents or inventing approval evidence.
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
-import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
+
+import fromargs
 
 from easy_cheese_schemas import (
     SCHEMA_ROOT,
@@ -26,7 +27,6 @@ from easy_cheese_schemas import (
     validate_contract,
 )
 from easy_cheese_schemas.mold_cook import (
-    CookPreparationResult,
     MoldCookHandoff,
     MoldCookMode,
 )
@@ -38,8 +38,8 @@ from easy_cheese.skills.cook.preparation import (
     PreparationEvidence,
     execute_accepted_handoff,
     load_preparation_result,
-    prepare,
-    resubmit,
+    prepare as run_preparation,
+    resubmit as run_resubmission,
     validate_preparation_result,
 )
 
@@ -66,94 +66,91 @@ def _validate_against(raw: bytes | str, schema: str | type) -> None:
     _ = validate_contract(raw, schema, supported_version_for(schema))
 
 
-def normalize_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="normalize.py")
-    _ = parser.add_argument("document", type=Path)
-    _ = parser.add_argument("--invocation", required=True, type=Path)
-    args = parser.parse_args(argv)
-    document = cast(Path, args.document)
-    invocation_path = cast(Path, args.invocation)
+def normalize(document: str, *, invocation: str) -> dict[str, object]:
+    """Normalize a typed contract payload on the host.
+
+    Parameters
+    ----------
+    document
+        Path to the raw agent-output document to normalize.
+    invocation
+        Path to the invocation JSON that supplies plan identity and version.
+    """
+    document_path = Path(document)
+    invocation_path = Path(invocation)
     # Read bytes, not text: the schema runtime converts a decode failure into a
     # ContractValidationError, while read_text would raise UnicodeDecodeError.
     try:
-        document_raw = document.read_bytes()
+        document_raw = document_path.read_bytes()
     except OSError as exc:
-        print(f"ERROR: cannot read {document}: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(f"cannot read {document_path}: {exc}", exit_code=1) from exc
     try:
         invocation_raw = invocation_path.read_bytes()
     except OSError as exc:
-        print(f"ERROR: cannot read {invocation_path}: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(f"cannot read {invocation_path}: {exc}", exit_code=1) from exc
     try:
-        invocation = cast(object, json.loads(invocation_raw))
+        invocation_parsed = cast(object, json.loads(invocation_raw))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        print(f"ERROR: invalid invocation JSON: {exc}", file=sys.stderr)
-        return 1
-    if not isinstance(invocation, dict):
-        print("ERROR: invocation must be a JSON object", file=sys.stderr)
-        return 1
-    invocation_payload = cast("dict[str, object]", invocation)
+        raise fromargs.CliError(f"invalid invocation JSON: {exc}", exit_code=1) from exc
+    if not isinstance(invocation_parsed, dict):
+        raise fromargs.CliError("invocation must be a JSON object", exit_code=1)
+    invocation_payload = cast("dict[str, object]", invocation_parsed)
     try:
         artifact = normalize_agent_output(document_raw, invocation_payload)
         _validate_against(artifact.canonical_bytes, type(artifact.value))
     except ContractValidationError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
     wrapper = {
         "value": artifact.value,
         "digest": _digest_of(artifact.canonical_bytes),
         "version": artifact.source_version,
     }
-    _ = sys.stdout.buffer.write(canonical_bytes(wrapper))
-    return 0
+    return cast("dict[str, object]", json.loads(canonical_bytes(wrapper)))
 
 
-def validate_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="validate.py")
-    _ = parser.add_argument("payload", type=Path)
-    _ = parser.add_argument("--schema", required=True)
-    args = parser.parse_args(argv)
-    payload = cast(Path, args.payload)
-    schema = cast(str, args.schema)
+def validate(payload: str, *, schema: str) -> str:
+    """Validate a typed contract payload against its registered schema.
+
+    Parameters
+    ----------
+    payload
+        Path to the JSON payload to validate.
+    schema
+        Schema slug to validate against, under SCHEMA_ROOT.
+    """
+    payload_path = Path(payload)
     try:
-        raw = payload.read_bytes()
+        raw = payload_path.read_bytes()
     except OSError as exc:
-        print(f"ERROR: cannot read {payload}: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(f"cannot read {payload_path}: {exc}", exit_code=1) from exc
     schema_uri = f"{SCHEMA_ROOT}/{schema}"
     try:
         _validate_against(raw, schema_uri)
-    except KeyError:
-        print(f"ERROR: unknown schema slug {schema!r}", file=sys.stderr)
-        return 1
+    except KeyError as exc:
+        raise fromargs.CliError(f"unknown schema slug {schema!r}", exit_code=1) from exc
     except ContractValidationError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-    print(f"OK: payload conforms to {schema!r}")
-    return 0
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+    return f"OK: payload conforms to {schema!r}"
 
 
-def _source_options(parser: argparse.ArgumentParser) -> None:
-    group = parser.add_mutually_exclusive_group()
-    _ = group.add_argument("--spec", type=Path)
-    _ = group.add_argument("--pointer", type=Path)
-    _ = group.add_argument("--slug")
-    _ = group.add_argument("--task")
-    _ = group.add_argument("--continuation")
-
-
-def _source_from_args(args: argparse.Namespace) -> tuple[str | Path, str | None]:
-    positional = cast("str | None", getattr(args, "source", None))
-    selected: tuple[tuple[str, str | Path | None], ...] = (
-        ("spec", cast("Path | None", getattr(args, "spec", None))),
-        ("pointer", cast("Path | None", getattr(args, "pointer", None))),
-        ("slug", cast("str | None", getattr(args, "slug", None))),
-        ("task", cast("str | None", getattr(args, "task", None))),
-        ("continuation", cast("str | None", getattr(args, "continuation", None))),
+def _source_from_args(
+    source: str | None,
+    *,
+    spec: str | None,
+    pointer: str | None,
+    slug: str | None,
+    task: str | None,
+    continuation: str | None,
+) -> tuple[str | Path, str | None]:
+    selected: tuple[tuple[str, str | None], ...] = (
+        ("spec", spec),
+        ("pointer", pointer),
+        ("slug", slug),
+        ("task", task),
+        ("continuation", continuation),
     )
     present = tuple((kind, value) for kind, value in selected if value is not None)
-    if positional is not None and present:
+    if source is not None and present:
         raise ValueError(
             "source positional argument cannot be combined with an explicit input option"
         )
@@ -161,19 +158,15 @@ def _source_from_args(args: argparse.Namespace) -> tuple[str | Path, str | None]
         raise ValueError("only one explicit input option may be supplied")
     if present:
         kind, value = present[0]
-        return value, kind
-    if positional is None:
+        return (Path(value) if kind in ("spec", "pointer") else value), kind
+    if source is None:
         raise ValueError("Cook preparation requires an input source")
-    return positional, None
+    return source, None
 
 
-def _path_option(args: argparse.Namespace, name: str) -> Path | None:
-    return cast("Path | None", getattr(args, name, None))
-
-
-def _hold_clearances(args: argparse.Namespace) -> tuple[CookHoldClearance, ...]:
+def _hold_clearances(clear_hold: Sequence[str]) -> tuple[CookHoldClearance, ...]:
     clearances: list[CookHoldClearance] = []
-    for value in cast("list[str]", getattr(args, "clear_hold", ())):
+    for value in clear_hold:
         hold_id, separator, raw_path = value.partition("=")
         if not separator or not hold_id or not raw_path:
             raise ValueError("--clear-hold requires HOLD_ID=DIALOGUE_JSON")
@@ -207,131 +200,221 @@ def _hold_clearances(args: argparse.Namespace) -> tuple[CookHoldClearance, ...]:
 
 
 def _evidence_from_args(
-    args: argparse.Namespace,
     *,
+    scope_approval: str | None,
+    plan_approval: str | None,
+    runner_approval: str | None,
+    planner_result: str | None,
+    setup_authorization: str | None,
+    setup_evidence: str | None,
+    bound_spec: str | None,
     clearances: tuple[CookHoldClearance, ...] = (),
 ) -> PreparationEvidence:
     """Collect the host-owned evidence the command-line options name."""
 
     return PreparationEvidence(
-        scope_approval=_path_option(args, "scope_approval"),
-        plan_approval=_path_option(args, "plan_approval"),
-        runner_approval=_path_option(args, "runner_approval"),
-        planner_result=_path_option(args, "planner_result"),
-        setup_authorization=_path_option(args, "setup_authorization"),
-        setup_evidence=_path_option(args, "setup_evidence"),
-        spec_binding=_path_option(args, "bound_spec"),
+        scope_approval=Path(scope_approval) if scope_approval else None,
+        plan_approval=Path(plan_approval) if plan_approval else None,
+        runner_approval=Path(runner_approval) if runner_approval else None,
+        planner_result=Path(planner_result) if planner_result else None,
+        setup_authorization=Path(setup_authorization) if setup_authorization else None,
+        setup_evidence=Path(setup_evidence) if setup_evidence else None,
+        spec_binding=Path(bound_spec) if bound_spec else None,
         clearances=clearances,
     )
 
 
-def _prepare_from_args(args: argparse.Namespace) -> CookPreparationResult:
-    source, explicit_kind = _source_from_args(args)
-    return prepare(
-        source,
-        request_id=cast("str | None", args.request_id),
-        repository_root=cast("str", args.repository_root),
-        artifact_root=cast("str", args.artifact_root),
-        mode=MoldCookMode(cast(str, args.mode)),
-        explicit_kind=explicit_kind,
-        evidence=_evidence_from_args(args),
-    )
-
-
-def _emit_preparation(result: object) -> int:
+def _emit_preparation(result: object) -> dict[str, object]:
     try:
         validated = validate_preparation_result(result)
     except (ContractValidationError, TypeError, ValueError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-    _ = sys.stdout.buffer.write(canonical_bytes(validated))
-    return 0
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+    return cast("dict[str, object]", json.loads(canonical_bytes(validated)))
 
 
-def prepare_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="prepare.py")
-    _ = parser.add_argument("source", nargs="?")
-    _source_options(parser)
-    _ = parser.add_argument("--request-id")
-    _ = parser.add_argument("--repository-root", default=".")
-    _ = parser.add_argument("--artifact-root", default=".cheese/cook")
-    _ = parser.add_argument("--mode", choices=("full", "light"), default="full")
-    _ = parser.add_argument("--scope-approval", type=Path)
-    _ = parser.add_argument("--plan-approval", type=Path)
-    _ = parser.add_argument("--runner-approval", type=Path)
-    _ = parser.add_argument("--planner-result", type=Path)
-    _ = parser.add_argument("--setup-authorization", type=Path)
-    _ = parser.add_argument("--setup-evidence", type=Path)
-    _ = parser.add_argument("--bound-spec", type=Path)
+def prepare(
+    source: str | None = None,
+    *,
+    spec: str | None = None,
+    pointer: str | None = None,
+    slug: str | None = None,
+    task: str | None = None,
+    continuation: str | None = None,
+    request_id: str | None = None,
+    repository_root: str = ".",
+    artifact_root: str = ".cheese/cook",
+    mode: str = "full",
+    scope_approval: str | None = None,
+    plan_approval: str | None = None,
+    runner_approval: str | None = None,
+    planner_result: str | None = None,
+    setup_authorization: str | None = None,
+    setup_evidence: str | None = None,
+    bound_spec: str | None = None,
+) -> dict[str, object]:
+    """Classify input and recompute a closed Cook preparation outcome.
+
+    Parameters
+    ----------
+    source
+        Input source; mutually exclusive with spec/pointer/slug/task/continuation.
+    spec
+        Explicit spec-file input source.
+    pointer
+        Explicit canonical-pointer input source.
+    slug
+        Explicit slug input source.
+    task
+        Explicit free-text task input source.
+    continuation
+        Explicit continuation-token input source.
+    request_id
+        Stable identifier for the preparation request.
+    repository_root
+        Repository root the preparation resolves paths against.
+    artifact_root
+        Artifact root preparation writes and reads under.
+    mode
+        Preparation mode: full or light.
+    scope_approval
+        Path to the scope-approval evidence.
+    plan_approval
+        Path to the plan-approval evidence.
+    runner_approval
+        Path to the runner-approval evidence.
+    planner_result
+        Path to the planner-result evidence.
+    setup_authorization
+        Path to the setup-authorization evidence.
+    setup_evidence
+        Path to the setup evidence.
+    bound_spec
+        Path to the bound-spec identity evidence.
+    """
     try:
-        result = _prepare_from_args(parser.parse_args(argv))
+        resolved_source, explicit_kind = _source_from_args(
+            source,
+            spec=spec,
+            pointer=pointer,
+            slug=slug,
+            task=task,
+            continuation=continuation,
+        )
+        evidence = _evidence_from_args(
+            scope_approval=scope_approval,
+            plan_approval=plan_approval,
+            runner_approval=runner_approval,
+            planner_result=planner_result,
+            setup_authorization=setup_authorization,
+            setup_evidence=setup_evidence,
+            bound_spec=bound_spec,
+        )
+        result = run_preparation(
+            resolved_source,
+            request_id=request_id,
+            repository_root=repository_root,
+            artifact_root=artifact_root,
+            mode=MoldCookMode(mode),
+            explicit_kind=explicit_kind,
+            evidence=evidence,
+        )
     except (ValueError, OSError, TypeError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
     return _emit_preparation(result)
 
 
-def resubmit_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="resubmit.py")
-    _ = parser.add_argument("previous", type=Path)
-    _ = parser.add_argument("--source")
-    _ = parser.add_argument("--repository-root", default=None)
-    _ = parser.add_argument("--artifact-root", default=None)
-    _ = parser.add_argument("--mode", choices=("full", "light"), default=None)
-    _ = parser.add_argument("--scope-approval", type=Path)
-    _ = parser.add_argument("--plan-approval", type=Path)
-    _ = parser.add_argument("--runner-approval", type=Path)
-    _ = parser.add_argument("--planner-result", type=Path)
-    _ = parser.add_argument("--setup-authorization", type=Path)
-    _ = parser.add_argument("--setup-evidence", type=Path)
-    _ = parser.add_argument("--bound-spec", type=Path)
-    _ = parser.add_argument(
-        "--clear-hold",
-        action="append",
-        default=[],
-        metavar="HOLD_ID=DIALOGUE_JSON",
-    )
-    args = parser.parse_args(argv)
-    previous_path = cast(Path, args.previous)
-    mode = cast("str | None", args.mode)
+def resubmit(
+    previous: str,
+    *,
+    source: str | None = None,
+    repository_root: str | None = None,
+    artifact_root: str | None = None,
+    mode: str | None = None,
+    scope_approval: str | None = None,
+    plan_approval: str | None = None,
+    runner_approval: str | None = None,
+    planner_result: str | None = None,
+    setup_authorization: str | None = None,
+    setup_evidence: str | None = None,
+    bound_spec: str | None = None,
+    clear_hold: Sequence[str] = (),
+) -> dict[str, object]:
+    """Recompute a preparation outcome from a previous result plus new evidence.
+
+    Parameters
+    ----------
+    previous
+        Path to the previous preparation result.
+    source
+        Optional replacement input source; must match the prior identity.
+    repository_root
+        Repository root the preparation resolves paths against.
+    artifact_root
+        Artifact root preparation writes and reads under.
+    mode
+        Preparation mode: full or light.
+    scope_approval
+        Path to the scope-approval evidence.
+    plan_approval
+        Path to the plan-approval evidence.
+    runner_approval
+        Path to the runner-approval evidence.
+    planner_result
+        Path to the planner-result evidence.
+    setup_authorization
+        Path to the setup-authorization evidence.
+    setup_evidence
+        Path to the setup evidence.
+    bound_spec
+        Path to the bound-spec identity evidence.
+    clear_hold
+        Repeatable HOLD_ID=DIALOGUE_JSON hold-clearance evidence.
+    """
     try:
-        previous = load_preparation_result(previous_path)
-        result = resubmit(
-            previous,
-            source=cast("str | None", args.source),
-            repository_root=cast(str, args.repository_root),
-            artifact_root=cast(str, args.artifact_root),
+        previous_result = load_preparation_result(previous)
+        clearances = _hold_clearances(clear_hold)
+        evidence = _evidence_from_args(
+            scope_approval=scope_approval,
+            plan_approval=plan_approval,
+            runner_approval=runner_approval,
+            planner_result=planner_result,
+            setup_authorization=setup_authorization,
+            setup_evidence=setup_evidence,
+            bound_spec=bound_spec,
+            clearances=clearances,
+        )
+        result = run_resubmission(
+            previous_result,
+            source=source,
+            repository_root=repository_root,
+            artifact_root=artifact_root,
             mode=None if mode is None else MoldCookMode(mode),
-            evidence=_evidence_from_args(args, clearances=_hold_clearances(args)),
+            evidence=evidence,
         )
     except (ContractValidationError, ValueError, OSError, TypeError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
     return _emit_preparation(result)
 
 
-def accept_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="accept.py")
-    _ = parser.add_argument("pointer")
-    _ = parser.add_argument(
-        "--spec",
-        type=Path,
-        default=None,
-        help="optional identity assertion; it cannot replace the handoff binding",
-    )
-    _ = parser.add_argument("--artifact-root", type=Path, default=None)
-    args = parser.parse_args(argv)
-    pointer_source = cast(str, args.pointer)
-    spec_path = cast("Path | None", args.spec)
-    artifact_root = cast("Path | None", args.artifact_root)
+def accept(
+    pointer: str, *, spec: str | None = None, artifact_root: str | None = None
+) -> dict[str, object]:
+    """Accept a validated MoldCookHandoff pointer as the canonical execution entry.
+
+    Parameters
+    ----------
+    pointer
+        Path to the canonical Mold-to-Cook pointer.
+    spec
+        Optional identity assertion; it cannot replace the handoff binding.
+    artifact_root
+        Optional artifact root override for the pointer resolution.
+    """
     try:
-        accepted = accept_mold_cook_handoff(
-            pointer_source,
-            artifact_root=artifact_root,
-        )
+        accepted = accept_mold_cook_handoff(pointer, artifact_root=artifact_root)
         handoff = cast(MoldCookHandoff, accepted.canonical.value)
-        if spec_path is not None:
-            spec_raw = read_spec_text(spec_path).encode("utf-8")
+        if spec is not None:
+            spec_raw = read_spec_text(Path(spec)).encode("utf-8")
             if _digest_of(spec_raw) != handoff.spec_ref.digest:
                 raise ContractValidationError(
                     "--spec does not match the handoff's bound spec"
@@ -343,12 +426,50 @@ def accept_main(argv: list[str]) -> int:
         OSError,
         UnicodeDecodeError,
     ) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
     wrapper = {
         "value": handoff,
         "digest": _digest_of(accepted.canonical.canonical_bytes),
         "normalization_receipt": accepted.normalization_receipt,
     }
-    _ = sys.stdout.buffer.write(canonical_bytes(wrapper))
-    return 0
+    return cast("dict[str, object]", json.loads(canonical_bytes(wrapper)))
+
+
+def _build_normalize_app() -> fromargs.App:
+    return fromargs.App("normalize", help_formatter="plain", default_command=normalize)
+
+
+def _build_validate_app() -> fromargs.App:
+    return fromargs.App("validate", help_formatter="plain", default_command=validate)
+
+
+def _build_prepare_app() -> fromargs.App:
+    return fromargs.App("prepare", help_formatter="plain", default_command=prepare)
+
+
+def _build_resubmit_app() -> fromargs.App:
+    return fromargs.App("resubmit", help_formatter="plain", default_command=resubmit)
+
+
+def _build_accept_app() -> fromargs.App:
+    return fromargs.App("accept", help_formatter="plain", default_command=accept)
+
+
+def normalize_main(argv: list[str] | None = None) -> int:
+    return _build_normalize_app().run(argv)
+
+
+def validate_main(argv: list[str] | None = None) -> int:
+    return _build_validate_app().run(argv)
+
+
+def prepare_main(argv: list[str] | None = None) -> int:
+    return _build_prepare_app().run(argv)
+
+
+def resubmit_main(argv: list[str] | None = None) -> int:
+    return _build_resubmit_app().run(argv)
+
+
+def accept_main(argv: list[str] | None = None) -> int:
+    return _build_accept_app().run(argv)

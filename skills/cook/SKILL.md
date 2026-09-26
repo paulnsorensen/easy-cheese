@@ -43,7 +43,7 @@ Show advisory `stale-commit` and `grounded-path-missing` findings.
 
 Accept a pasted spec or issue, focused acceptance criteria, or an unambiguous task.
 Read explicit spec paths verbatim.
-Resolve a bare slug with `SPEC=$(python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>)`.
+Resolve a bare slug to `path` from `python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>`.
 A Mold handoff pointer, a spec path, and a slug enter through § Mold-to-Cook ingress and preparation.
 Flags:
 

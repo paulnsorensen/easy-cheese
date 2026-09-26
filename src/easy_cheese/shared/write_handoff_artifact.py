@@ -33,7 +33,6 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Annotated
 
-import cyclopts
 import fromargs
 
 from easy_cheese.shared import handoff, paths
@@ -361,9 +360,9 @@ def build_app(
         *,
         slug: str,
         status: Annotated[
-            str, cyclopts.Parameter(help=f"Handback status: {status_vocabulary()}")
+            str, fromargs.Parameter(help=f"Handback status: {status_vocabulary()}")
         ],
-        next_skill: Annotated[str, cyclopts.Parameter(name="--next")],
+        next_skill: Annotated[str, fromargs.Parameter(name="--next")],
         artifact: str,
         orientation: str,
         phase: str,

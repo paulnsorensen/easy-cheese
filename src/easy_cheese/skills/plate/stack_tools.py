@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import argparse
-import json
 import re
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import cast
+
+import fromargs
 
 _TIMEOUT_SECONDS = 5
 _REMOTE_TIMEOUT_SECONDS = 10
@@ -172,16 +171,31 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
     return {"providers": providers, "recommended": recommended}
 
 
+def detect_cmd(*, cwd: str = ".") -> dict[str, object]:
+    """Detect supported stacked-PR providers without mutating repository state.
+
+    Parameters
+    ----------
+    cwd
+        Repository working directory (default: cwd).
+    """
+    path = Path(cwd)
+    if not path.is_dir():
+        raise fromargs.CliError(f"not a directory: {path}", exit_code=1)
+    return detect_stack_tools(path.resolve())
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "stack-tools",
+        help="Detect supported stacked-PR providers without mutating repository state.",
+        help_formatter="plain",
+        default_command=detect_cmd,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    _ = parser.add_argument("--cwd", type=Path, default=Path.cwd())
-    args = parser.parse_args(argv)
-    cwd = cast(Path, args.cwd)
-    if not cwd.is_dir():
-        print(f"ERROR: not a directory: {cwd}", file=sys.stderr)
-        return 1
-    print(json.dumps(detect_stack_tools(cwd.resolve()), indent=2, sort_keys=True))
-    return 0
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ interface.
 
 from __future__ import annotations
 
-import sys
+import fromargs
 
 from easy_cheese.shared.manifest_io import (  # noqa: E402
     ManifestLoadError,
@@ -27,24 +27,43 @@ def validate_pr_plan(plan: dict[str, object]) -> list[str]:
     return list(load_pr_plan(plan).problems)
 
 
-def main(argv: list[str]) -> int:
+def check(path: str | None = None) -> dict[str, object]:
+    """Validate an /ultracook fan-out PR plan document.
+
+    Parameters
+    ----------
+    path
+        Path to the plan (YAML or JSON); reads stdin when omitted.
+    """
+    argv = [path] if path else []
     try:
         plan = read_mapping_arg_or_stdin(argv, "usage: validate_pr_plan.py [<pr-plan.yaml|pr-plan.json>]")
     except ManifestLoadError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2 if str(exc).startswith("usage:") else 1
+        exit_code = 2 if str(exc).startswith("usage:") else 1
+        raise fromargs.CliError(str(exc), exit_code=exit_code) from exc
 
     loaded = load_pr_plan(plan)
     if loaded.problems:
-        for error in loaded.problems:
-            print(f"ERROR: {error}", file=sys.stderr)
-        print(f"\nFAIL: {len(loaded.problems)} validation error(s)", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(
+            "\n".join(f"ERROR: {error}" for error in loaded.problems), exit_code=1
+        )
 
     assert loaded.value is not None
-    print(f"OK: {len(loaded.value.groups)} PR group(s), plan valid")
-    return 0
+    return {"valid": True, "groups": len(loaded.value.groups)}
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "validate-pr-plan",
+        help="Validate an /ultracook fan-out PR plan document.",
+        help_formatter="plain",
+        default_command=check,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main())

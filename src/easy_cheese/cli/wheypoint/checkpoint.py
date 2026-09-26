@@ -8,13 +8,13 @@ ledger entry that makes the second write idempotent across a retry.
 
 from __future__ import annotations
 
-import argparse
 import contextlib
 import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO, cast
 
+import fromargs
 from attrs import define, evolve
 
 from easy_cheese_schemas import (
@@ -24,7 +24,6 @@ from easy_cheese_schemas import (
     WheypointDelta,
 )
 
-from easy_cheese.cli.envelope import Refused
 from easy_cheese.shared import paths
 from easy_cheese.shared.wheypoint import canonical
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
@@ -44,18 +43,17 @@ class _PendingMirror:
     target: str
 
 
-def _note_dir(args: argparse.Namespace) -> Path | None:
+def _note_dir(*, note_dir: str | None, no_note: bool) -> Path | None:
     """Where the readable mirror goes, or None when none is to be written.
 
     `--no-note` refuses one outright; an explicit `--note-dir` is taken as
     given; otherwise the mirror belongs beside the repository the checkpoint
     describes, and outside a repository there is nowhere for it to belong.
     """
-    if cast(bool, args.no_note):
+    if no_note:
         return None
-    given = cast(str | None, args.note_dir)
-    if given is not None:
-        return Path(given).expanduser()
+    if note_dir is not None:
+        return Path(note_dir).expanduser()
     toplevel = paths.git_toplevel()
     if toplevel is None:
         return None
@@ -66,24 +64,27 @@ def read_payload(stdin: TextIO) -> object:
     try:
         return cast(object, json.loads(stdin.read()))
     except ValueError as exc:
-        raise Refused("invalid-json", f"stdin is not one JSON value: {exc}") from exc
+        raise fromargs.CliError(
+            f"invalid-json: stdin is not one JSON value: {exc}", exit_code=1
+        ) from exc
 
 
-def read_intent(args: argparse.Namespace, stdin: TextIO) -> object:
+def read_intent(intent_arg: str | None, stdin: TextIO) -> object:
     """The JSON intent from a path argument, `-`, or stdin when neither (G6)."""
-    intent_arg = cast("str | None", getattr(args, "intent", None))
     if intent_arg is None or intent_arg == "-":
         return read_payload(stdin)
     path = Path(intent_arg)
     try:
         raw = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        raise Refused("intent-unreadable", f"{intent_arg}: {exc}") from exc
+        raise fromargs.CliError(
+            f"intent-unreadable: {intent_arg}: {exc}", exit_code=1
+        ) from exc
     try:
         return cast(object, json.loads(raw))
     except ValueError as exc:
-        raise Refused(
-            "invalid-json", f"{intent_arg} is not one JSON value: {exc}"
+        raise fromargs.CliError(
+            f"invalid-json: {intent_arg} is not one JSON value: {exc}", exit_code=1
         ) from exc
 
 
@@ -91,37 +92,44 @@ def open_store(work_id: str, *, corpus_root: Path | None = None) -> storage.Work
     try:
         return storage.WorkStore.open(work_id, corpus_root=corpus_root)
     except storage.StorageError as exc:
-        raise Refused("storage-error", str(exc)) from exc
+        raise fromargs.CliError(f"storage-error: {exc}", exit_code=1) from exc
 
 
-def run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
+def run_checkpoint(
+    intent_arg: str | None,
+    stdin: TextIO,
+    *,
+    compacted: str | None,
+    note_dir: str | None,
+    no_note: bool,
+) -> dict[str, object]:
     """A semantic intent, bound to the current record and committed.
 
     The binding is a read outside the lock, so it settles nothing: `commit`
     re-checks the parent under the lock and refuses a delta whose record has
     moved on. This command shortens the authoring, not the checking.
     """
-    payload = read_intent(args, stdin)
+    payload = read_intent(intent_arg, stdin)
     reserved = checkpoint_mod.commit_only_fields(payload)
     if reserved:
-        raise Refused(
-            "commit-only-field",
-            f"checkpoint does not author {', '.join(reserved)}: the runtime binds "
-            + "the parent automatically. Use base_revision_id to pin a read revision. "
-            + "Use checkpoint --compacted <proof-path> for a compaction proof.",
+        raise fromargs.CliError(
+            f"commit-only-field: checkpoint does not author {', '.join(reserved)}: "
+            + "the runtime binds the parent automatically. Use base_revision_id to pin "
+            + "a read revision. Use checkpoint --compacted <proof-path> for a compaction proof.",
+            exit_code=1,
         )
     try:
         intent = records.structure(payload, CheckpointIntent, forbid_unknown=True)
     except records.RecordError as exc:
-        raise Refused("invalid-intent", str(exc)) from exc
+        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
     secret = checkpoint_mod.secret_field(intent)
     if secret is not None:
-        raise Refused(
-            "secret-pattern",
-            f"{secret} looks like a credential: a checkpoint is durable, "
-            + "digest-protected text, so it cannot carry one",
+        raise fromargs.CliError(
+            f"secret-pattern: {secret} looks like a credential: a checkpoint is "
+            + "durable, digest-protected text, so it cannot carry one",
+            exit_code=1,
         )
-    proof = _compaction_proof(args)
+    proof = _compaction_proof(compacted)
     # The proof is part of the request: an identical intent with and without a
     # proof must not share a pending-mirror ledger entry.
     request_identity = request_identity_for(intent, proof)
@@ -129,21 +137,21 @@ def run_checkpoint(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]
     try:
         current = store.read_record()
     except ValueError as exc:
-        raise Refused(
-            "record-unreadable",
-            f"work {intent.work_id!r} has a record that cannot be read, so no "
-            + f"checkpoint can be bound to it: {exc}",
+        raise fromargs.CliError(
+            f"record-unreadable: work {intent.work_id!r} has a record that cannot "
+            + f"be read, so no checkpoint can be bound to it: {exc}",
+            exit_code=1,
         ) from exc
     try:
         delta = checkpoint_mod.build_delta(intent, current)
     except checkpoint_mod.IntentError as exc:
-        raise Refused("invalid-intent", str(exc)) from exc
+        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
     if proof is not None:
         delta = evolve(delta, compacted=True, compaction=proof)
     return _promote(
         delta,
         store,
-        args,
+        note_dir=_note_dir(note_dir=note_dir, no_note=no_note),
         request_identity=request_identity,
     )
 
@@ -162,45 +170,46 @@ def request_identity_for(
     )
 
 
-def _compaction_proof(args: argparse.Namespace) -> CompactionRecord | None:
+def _compaction_proof(path_arg: str | None) -> CompactionRecord | None:
     """The `--compacted` proof, validated before it can touch a delta."""
-    path_arg = cast("str | None", args.compacted)
     if path_arg is None:
         return None
     path = Path(path_arg)
     try:
         raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
     except OSError as exc:
-        raise Refused("compaction-proof-unreadable", f"{path_arg}: {exc}") from exc
+        raise fromargs.CliError(
+            f"compaction-proof-unreadable: {path_arg}: {exc}", exit_code=1
+        ) from exc
     except ValueError as exc:
-        raise Refused(
-            "compaction-proof-unreadable", f"{path_arg} is not one JSON value: {exc}"
+        raise fromargs.CliError(
+            f"compaction-proof-unreadable: {path_arg} is not one JSON value: {exc}",
+            exit_code=1,
         ) from exc
     try:
         return records.structure(raw, CompactionRecord, forbid_unknown=True)
     except records.RecordError as exc:
-        raise Refused("invalid-compaction-proof", str(exc)) from exc
+        raise fromargs.CliError(f"invalid-compaction-proof: {exc}", exit_code=1) from exc
 
 
-def _refusal_for(exc: Exception) -> Refused:
+def _refusal_for(exc: Exception) -> fromargs.CliError:
     """The one mapping from a kernel/storage error to a reply code, both paths."""
     if isinstance(exc, commit_mod.GenesisConflictError):
-        return Refused("genesis-conflict", str(exc))
+        return fromargs.CliError(f"genesis-conflict: {exc}", exit_code=1)
     if isinstance(exc, commit_mod.StaleParentError):
-        return Refused("stale-parent", str(exc))
+        return fromargs.CliError(f"stale-parent: {exc}", exit_code=1)
     if isinstance(exc, commit_mod.CommitError):
-        return Refused("commit-refused", str(exc))
-    return Refused("storage-error", str(exc))
+        return fromargs.CliError(f"commit-refused: {exc}", exit_code=1)
+    return fromargs.CliError(f"storage-error: {exc}", exit_code=1)
 
 
 def _promote(
     delta: WheypointDelta,
     store: storage.WorkStore,
-    args: argparse.Namespace,
     *,
+    note_dir: Path | None,
     request_identity: str,
 ) -> dict[str, object]:
-    note_dir = _note_dir(args)
     if note_dir is None:
         try:
             result = commit_mod.commit(
@@ -215,17 +224,18 @@ def _promote(
     try:
         note_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        raise Refused(
-            "note-unwritable",
-            f"note directory {note_dir} cannot be created: {exc}",
+        raise fromargs.CliError(
+            f"note-unwritable: note directory {note_dir} cannot be created: {exc}",
+            exit_code=1,
         ) from exc
 
     try:
         current = store.read_record()
     except ValueError as exc:
-        raise Refused(
-            "record-unreadable",
-            f"work {store.work_id!r} has a record that cannot be read: {exc}",
+        raise fromargs.CliError(
+            f"record-unreadable: work {store.work_id!r} has a record that cannot "
+            + f"be read: {exc}",
+            exit_code=1,
         ) from exc
     target = note_dir / (f"{store.work_id if current is None else current.slug}.md")
     pending = _read_pending(store, request_identity)
@@ -233,10 +243,10 @@ def _promote(
         revision = store.find_complete_revision(pending.revision_id)
         if revision is not None:
             if revision.request_digest != pending.request_digest:
-                raise Refused(
-                    "pending-corrupt",
-                    f"request ledger for {request_identity!r} names a different "
-                    + f"request than revision {pending.revision_id!r}",
+                raise fromargs.CliError(
+                    f"pending-corrupt: request ledger for {request_identity!r} names "
+                    + f"a different request than revision {pending.revision_id!r}",
+                    exit_code=1,
                 )
             resume_target = note_dir / pending.target
             result = _resume_mirror(store, revision.revision_id, resume_target, pending)
@@ -244,10 +254,10 @@ def _promote(
         try:
             store.remove_pending(request_identity)
         except OSError as exc:
-            raise Refused(
-                "storage-error",
-                f"request ledger {store.pending_path(request_identity)} cannot be "
-                + f"cleared: {exc}",
+            raise fromargs.CliError(
+                "storage-error: request ledger "
+                + f"{store.pending_path(request_identity)} cannot be cleared: {exc}",
+                exit_code=1,
             ) from exc
 
     request_digest = records.request_fingerprint(delta)
@@ -268,7 +278,7 @@ def _promote(
         )
     except _MirrorError as exc:
         _drop_uncommitted_pending(store, pending)
-        raise Refused("note-unwritable", str(exc)) from exc
+        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         _drop_uncommitted_pending(store, pending)
         raise _refusal_for(exc) from exc
@@ -305,8 +315,8 @@ def _read_pending(
     except FileNotFoundError:
         return None
     except OSError as exc:
-        raise Refused(
-            "storage-error", f"request ledger {path} cannot be read: {exc}"
+        raise fromargs.CliError(
+            f"storage-error: request ledger {path} cannot be read: {exc}", exit_code=1
         ) from exc
     try:
         decoded = cast(object, json.loads(raw.decode("utf-8")))
@@ -320,11 +330,13 @@ def _read_pending(
             target=cast(str, payload["target"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
-        raise Refused(
-            "pending-corrupt", f"request ledger {path} is invalid: {exc}"
+        raise fromargs.CliError(
+            f"pending-corrupt: request ledger {path} is invalid: {exc}", exit_code=1
         ) from exc
     if pending.request_identity != request_identity:
-        raise Refused("pending-corrupt", f"request ledger {path} has invalid identity")
+        raise fromargs.CliError(
+            f"pending-corrupt: request ledger {path} has invalid identity", exit_code=1
+        )
     return pending
 
 
@@ -344,8 +356,9 @@ def _write_pending(store: storage.WorkStore, pending: _PendingMirror) -> None:
             ),
         )
     except OSError as exc:
-        raise Refused(
-            "note-unwritable", f"request ledger {path} cannot be written: {exc}"
+        raise fromargs.CliError(
+            f"note-unwritable: request ledger {path} cannot be written: {exc}",
+            exit_code=1,
         ) from exc
 
 
@@ -362,10 +375,10 @@ def _clear_pending(store: storage.WorkStore, request_identity: str) -> None:
     try:
         store.remove_pending(request_identity)
     except OSError as exc:
-        raise Refused(
-            "storage-error",
-            f"request ledger {store.pending_path(request_identity)} cannot be "
-            + f"cleared: {exc}",
+        raise fromargs.CliError(
+            "storage-error: request ledger "
+            + f"{store.pending_path(request_identity)} cannot be cleared: {exc}",
+            exit_code=1,
         ) from exc
 
 
@@ -382,7 +395,7 @@ def _resume_mirror(
             finalize=_mirror_finalizer(target),
         )
     except _MirrorError as exc:
-        raise Refused("note-unwritable", str(exc)) from exc
+        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         raise _refusal_for(exc) from exc
     _clear_pending(store, pending.request_identity)

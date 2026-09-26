@@ -19,15 +19,15 @@ prose checklist in lockstep through one stable key.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import shutil
 import subprocess
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
+from typing import Annotated, Literal, cast
+
+import fromargs
 
 RENDER_TARGETS = ("dot", "svg", "png", "mermaid")
 BINARY_TARGETS = {"svg", "png"}
@@ -238,72 +238,63 @@ def _load_state(path: Path) -> dict[str, object]:
     return cast(dict[str, object], obj)
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "--state",
-        type=Path,
-        help=(
-            "Optional mold state.json (reserved for per-session annotation; "
-            "the gate model itself is static)."
-        ),
-    )
-    _ = parser.add_argument(
-        "--render",
-        choices=RENDER_TARGETS,
-        default="dot",
-        help="Render target. svg/png need Graphviz `dot`; absent it degrades to mermaid.",
-    )
-    _ = parser.add_argument(
-        "--out",
-        type=Path,
-        help=(
-            "Write to this path instead of stdout (required when the effective "
-            "output is binary — svg/png with Graphviz present)."
-        ),
-    )
-    args = parser.parse_args(argv)
-    state = cast("Path | None", args.state)
-    render_target = cast(str, args.render)
-    out = cast("Path | None", args.out)
+def render_cmd(
+    *,
+    state: str | None = None,
+    render_target: Annotated[
+        Literal["dot", "svg", "png", "mermaid"], fromargs.Parameter(name="--render")
+    ] = "dot",
+    out: str | None = None,
+) -> dict[str, object]:
+    """Render mold's gate state machine.
 
+    Parameters
+    ----------
+    state
+        Optional mold state.json (reserved for per-session annotation; the gate
+        model itself is static).
+    render_target
+        Render target. svg/png need Graphviz `dot`; absent it degrades to mermaid.
+    out
+        Write to this path instead of stdout (required when the effective
+        output is binary — svg/png with Graphviz present).
+    """
     if state is not None:
         try:
-            _ = _load_state(state)  # validated for shape; model stays static
+            _ = _load_state(Path(state))  # validated for shape; model stays static
         except RenderError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 2
+            raise fromargs.CliError(str(exc)) from exc
 
     try:
         effective, payload = render(render_target)
     except RenderError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-
-    if effective != render_target:
-        print(
-            f"note: `dot` not on PATH; degraded {render_target} -> {effective}",
-            file=sys.stderr,
-        )
+        raise fromargs.CliError(str(exc)) from exc
 
     if out is not None:
+        out_path = Path(out)
         try:
-            _ = out.write_bytes(payload)
+            _ = out_path.write_bytes(payload)
         except OSError as exc:
-            print(f"error: could not write {out}: {exc}", file=sys.stderr)
-            return 2
-        print(str(out))
-        return 0
+            raise fromargs.CliError(f"could not write {out_path}: {exc}") from exc
+        return {"path": str(out_path)}
 
     if effective in BINARY_TARGETS:
-        print(
-            f"error: {effective} is binary; pass --out <path>",
-            file=sys.stderr,
-        )
-        return 2
-    _ = sys.stdout.write(payload.decode("utf-8"))
-    return 0
+        raise fromargs.CliError(f"{effective} is binary; pass --out <path>")
+    return {"render": effective, "text": payload.decode("utf-8")}
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "gate-graph",
+        help=(__doc__ or "").splitlines()[0],
+        help_formatter="plain",
+        default_command=render_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main())

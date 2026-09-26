@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -27,7 +28,7 @@ def _group(body: object) -> dict[str, object]:
     }
 
 
-def test_null_body_emits_an_empty_body(capsys: pytest.CaptureFixture[str]) -> None:
+def test_null_body_emits_an_empty_body() -> None:
     loaded = load(
         {"contract_version": CONTRACT_VERSION, "shape": "single", "groups": [_group(None)]},
         PrPlan,
@@ -35,9 +36,9 @@ def test_null_body_emits_an_empty_body(capsys: pytest.CaptureFixture[str]) -> No
     )
     assert loaded.value is not None
 
-    pr_plan_to_branches.emit_commands(loaded.value)
+    commands = pr_plan_to_branches.emit_commands(loaded.value)
 
-    assert "--body ''" in capsys.readouterr().out
+    assert any("--body ''" in line for line in commands)
 
 
 def test_unversioned_document_exits_nonzero_without_emitting(
@@ -62,3 +63,14 @@ def test_unversioned_document_exits_nonzero_without_emitting(
     captured = capsys.readouterr()
     assert "contract_version" in captured.err
     assert "git checkout" not in captured.out
+
+
+def test_convert_returns_commands_for_a_valid_plan(tmp_path: Path) -> None:
+    plan = {"contract_version": CONTRACT_VERSION, "shape": "single", "groups": [_group(None)]}
+    path = tmp_path / "plan.json"
+    _ = path.write_text(json.dumps(plan))
+
+    result = pr_plan_to_branches.convert(str(path))
+    commands = cast("list[str]", result["commands"])
+
+    assert any("git checkout -b" in line for line in commands)

@@ -20,42 +20,39 @@ Returns JSON on stdout:
           }
         ]
       },
-      "merge": {"mergeable": str, "state": str}
+      "merge": {"mergeable": str, "state": str},
+      "logs_expired": bool
     }
 
-Wraps `gh pr checks`, `gh pr view`, and `gh run view --log-failed`. Exits
-non-zero so the caller can halt cleanly:
+Wraps `gh pr checks`, `gh pr view`, and `gh run view --log-failed`.
 
-    1  PR / gh API error            -> status: halt: pr-status-unavailable
-    2  missing gh binary            -> status: halt: pr-status-unavailable
-    3  failing build, no groundable -> status: halt: pr-status-logs-expired
-       log evidence (every failing
-       Actions check's failure_summary
-       empty)
+`logs_expired` is the expired-Actions-logs case: the build is failing and every
+failing check whose logs are fetchable (has a `/runs/<id>` run id) produced no
+log to ground on (typically expired GitHub Actions logs past the retention
+window). Grading a blank CI line is worse than halting and asking the human to
+rerun the failed jobs first. Failing checks with no fetchable run id (external
+CI / non-Actions status checks) are excluded — rerunning them won't help — so a
+build failing solely on those reports `logs_expired: false` and they become
+Needs-investigation. The command exits 0 for every completed status fetch; the
+caller reads `logs_expired` to decide whether to halt.
 
-Exit 3 is the expired-Actions-logs case: the build is failing and every failing
-check whose logs are fetchable (has a `/runs/<id>` run id) produced no log to
-ground on (typically expired GitHub Actions logs past the retention window).
-Grading a blank CI line is worse than halting and asking the human to rerun the
-failed jobs first. Failing checks with no fetchable run id (external CI /
-non-Actions status checks) are excluded — rerunning them won't help — so a build
-failing solely on those exits 0 and they become Needs-investigation.
+A fetch that cannot complete raises a CLI error instead:
+
+    1  PR / gh API error
+    2  missing gh binary
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import subprocess
 import sys
 from typing import TypedDict, cast
 
-FAILURE_TAIL_LINES = 10
+import fromargs
 
-# Exit code for "failing build, but no failing check produced any groundable
-# log evidence" — see the module docstring.
-EXIT_LOGS_EXPIRED = 3
+FAILURE_TAIL_LINES = 10
 
 
 class _EnrichedCheck(TypedDict):
@@ -81,6 +78,7 @@ class _Output(TypedDict):
     pr: int
     build: _BuildInfo
     merge: _MergeInfo
+    logs_expired: bool
 
 
 # Heuristic patterns for extracting failed-test names from log output.
@@ -96,7 +94,7 @@ _FAILED_TEST_PATTERNS = (
 
 
 def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
-    """Run gh, returning the completed process. Exits 2 if gh is not installed."""
+    """Run gh, returning the completed process. Raises CliError (exit 2) if gh is not installed."""
     try:
         return subprocess.run(
             ["gh", *args],
@@ -104,26 +102,24 @@ def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
             text=True,
             check=False,
         )
-    except FileNotFoundError:
-        _ = sys.stderr.write("pr-status.py: gh CLI not found in PATH\n")
-        sys.exit(2)
+    except FileNotFoundError as exc:
+        raise fromargs.CliError("pr-status: gh CLI not found in PATH", exit_code=2) from exc
 
 
 def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
-    """Invoke gh and return stdout. Exits the process on failure unless allow_fail."""
+    """Invoke gh and return stdout. Raises CliError (exit 1) on failure unless allow_fail."""
     result = _gh(args)
     if result.returncode != 0:
         if allow_fail:
             _ = sys.stderr.write(
-                f"pr-status.py: gh {' '.join(args)} failed (exit {result.returncode}); "
+                f"pr-status: gh {' '.join(args)} failed (exit {result.returncode}); "
                 + "continuing with empty result\n"
             )
             return ""
-        _ = sys.stderr.write(
-            f"pr-status.py: gh {' '.join(args)} failed (exit {result.returncode}): "
-            + f"{result.stderr.strip()}\n"
+        raise fromargs.CliError(
+            f"gh {' '.join(args)} failed (exit {result.returncode}): {result.stderr.strip()}",
+            exit_code=1,
         )
-        sys.exit(1)
     return result.stdout
 
 
@@ -178,13 +174,13 @@ def _fetch_checks_plain(
         # real "passing, no checks" answer; the latter must surface as exit 1.
         if "no checks reported" in plain.stderr.lower():
             return []
-        _ = sys.stderr.write(
-            "pr-status.py: gh pr checks --json failed (exit "
+        raise fromargs.CliError(
+            "gh pr checks --json failed (exit "
             + f"{json_result.returncode}: {json_result.stderr.strip()}) and the "
             + f"plain fallback also failed (exit {plain.returncode}: "
-            + f"{plain.stderr.strip()})\n"
+            + f"{plain.stderr.strip()})",
+            exit_code=1,
         )
-        sys.exit(1)
 
     checks: list[dict[str, object]] = []
     for line in text.splitlines():
@@ -213,7 +209,7 @@ def fetch_merge_state(pr: int) -> _MergeInfo:
         data = cast(object, json.loads(raw))
     except json.JSONDecodeError as exc:
         _ = sys.stderr.write(
-            f"pr-status.py: could not parse gh pr view JSON ({exc}); "
+            f"pr-status: could not parse gh pr view JSON ({exc}); "
             + "treating merge state as UNKNOWN\n"
         )
         return {"mergeable": "UNKNOWN", "state": "UNKNOWN"}
@@ -317,11 +313,14 @@ def build_output(pr: int) -> _Output:
             }
         )
 
-    return {
+    output: _Output = {
         "pr": pr,
         "build": {"status": status, "checks": enriched},
         "merge": merge,
+        "logs_expired": False,
     }
+    output["logs_expired"] = all_failures_ungroundable(output)
+    return output
 
 
 def all_failures_ungroundable(output: _Output) -> bool:
@@ -353,26 +352,29 @@ def all_failures_ungroundable(output: _Output) -> bool:
     return all(not c["failure_summary"] for c in fetchable)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Fetch PR status (build + merge) for /affinage grading.",
-    )
-    _ = parser.add_argument("pr", type=int, help="PR number")
-    args = parser.parse_args(argv)
-    pr = cast(int, args.pr)
+def pr_status(pr: int) -> _Output:
+    """Fetch PR status (build + merge) for /affinage grading.
 
-    output = build_output(pr)
-    json.dump(output, sys.stdout, indent=2)
-    _ = sys.stdout.write("\n")
-    if all_failures_ungroundable(output):
-        _ = sys.stderr.write(
-            "pr-status.py: build is failing but no failing check produced any "
-            + "log evidence (logs likely expired); exiting "
-            + f"{EXIT_LOGS_EXPIRED} so the caller can halt\n"
-        )
-        return EXIT_LOGS_EXPIRED
-    return 0
+    Parameters
+    ----------
+    pr
+        PR number.
+    """
+    return build_output(pr)
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "pr-status",
+        help="Fetch PR status (build + merge) for /affinage grading.",
+        help_formatter="plain",
+        default_command=pr_status,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

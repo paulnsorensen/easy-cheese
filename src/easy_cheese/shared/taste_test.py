@@ -6,7 +6,6 @@ The canonical ``MoldSpecDocument`` validates Mold frontmatter and test contracts
 
 from __future__ import annotations
 
-import argparse
 import copy
 import hashlib
 import json
@@ -14,7 +13,8 @@ import errno
 import os
 import re
 import stat
-import sys
+
+import fromargs
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -1474,65 +1474,87 @@ def _load_json(path: Path) -> object:
     return cast(object, json.loads(path.read_text(encoding="utf-8")))
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description=__doc__.splitlines()[0] if __doc__ else "Mold taste gate"
-    )
-    _ = parser.add_argument("--draft", type=Path, required=True)
-    _ = parser.add_argument("--ledger", type=Path, required=True)
-    _ = parser.add_argument("--correction-round", type=int, default=0)
-    mode = parser.add_mutually_exclusive_group(required=True)
-    _ = mode.add_argument("--verdict", type=Path, help="fresh-context verdict JSON")
-    _ = mode.add_argument(
-        "--precheck",
-        action="store_true",
-        help="run the lexical pre-check on the draft alone; no verdict, no round",
-    )
-    _ = mode.add_argument(
-        "--coverage",
-        action="store_true",
-        help="print each G-n goal clause's disposition for the narrowing-delta line",
-    )
-    args = parser.parse_args(argv)
+def taste_test_cmd(
+    *,
+    draft: str,
+    ledger: str,
+    correction_round: int = 0,
+    verdict: str | None = None,
+    precheck: bool = False,
+    coverage: bool = False,
+) -> dict[str, object]:
+    """Run Mold's fork-coherence taste gate against one draft and ledger.
+
+    Parameters
+    ----------
+    draft
+        Path to the draft under test.
+    ledger
+        Path to the decision ledger JSON.
+    correction_round
+        Correction round number, from 0 through 2.
+    verdict
+        Path to the fresh-context verdict JSON. Choose exactly one of
+        verdict, precheck, or coverage.
+    precheck
+        Run the lexical pre-check on the draft alone; no verdict, no round.
+    coverage
+        Report each G-n goal clause's disposition for the narrowing-delta line.
+    """
+    modes = [name for name, chosen in (
+        ("verdict", verdict is not None),
+        ("precheck", precheck),
+        ("coverage", coverage),
+    ) if chosen]
+    if len(modes) != 1:
+        raise fromargs.CliError(
+            "choose exactly one of --verdict, --precheck, or --coverage",
+            exit_code=2,
+        )
     try:
-        draft_path = cast(Path, args.draft)
-        ledger_path = cast(Path, args.ledger)
-        draft = draft_path.read_bytes()
-        ledger = _load_json(ledger_path)
-        if cast(bool, args.precheck):
-            gaps = lexical_precheck(draft, ledger)
-            print(json.dumps({"gaps": list(gaps)}, sort_keys=True))
-            return 0 if not gaps else 1
-        if cast(bool, args.coverage):
-            dispositions = goal_coverage(draft, ledger)
-            covered = sum(1 for value in dispositions.values() if value == "covered")
-            print(
-                json.dumps(
-                    {
-                        "clauses": dispositions,
-                        "covered": covered,
-                        "total": len(dispositions),
-                    },
-                    sort_keys=True,
+        draft_bytes = Path(draft).read_bytes()
+        ledger_value = _load_json(Path(ledger))
+        if precheck:
+            gaps = lexical_precheck(draft_bytes, ledger_value)
+            if gaps:
+                raise fromargs.CliError(
+                    "precheck gaps found: " + "; ".join(gaps), exit_code=1
                 )
-            )
-            return 0
-        verdict_path = cast(Path, args.verdict)
-        correction_round = cast(int, args.correction_round)
-        verdict = _load_json(verdict_path)
+            return {"gaps": []}
+        if coverage:
+            dispositions = goal_coverage(draft_bytes, ledger_value)
+            covered = sum(1 for value in dispositions.values() if value == "covered")
+            return {
+                "clauses": dispositions,
+                "covered": covered,
+                "total": len(dispositions),
+            }
+        verdict_value = _load_json(Path(cast(str, verdict)))
         result = taste_test(
-            draft,
-            ledger,
-            cast("Mapping[str, object] | ForkTasteVerdict", verdict),
+            draft_bytes,
+            ledger_value,
+            cast("Mapping[str, object] | ForkTasteVerdict", verdict_value),
             correction_round=correction_round,
         )
-        print(json.dumps(result.to_dict(), sort_keys=True))
         gate = decomposition_gate(result, correction_round=correction_round)
-        return 0 if gate.allowed else 1
+        if not gate.allowed:
+            suffix = ", ".join(gate.reopened_forks) or "none"
+            raise fromargs.CliError(
+                f"{gate.reason}: reopen={suffix}", exit_code=1
+            )
+        return result.to_dict()
     except (OSError, json.JSONDecodeError, TasteTestError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
 
 
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "taste-test",
+        help="Run Mold's fork-coherence taste gate against one draft and ledger.",
+        help_formatter="plain",
+        default_command=taste_test_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)

@@ -8,13 +8,13 @@ normalization decision stays in :mod:`easy_cheese.skills.mold.producer`.
 
 from __future__ import annotations
 
-import argparse
 import json
-import sys
 from collections.abc import Mapping
 from enum import Enum
 from pathlib import Path
 from typing import TypeVar, cast
+
+import fromargs
 
 from easy_cheese_schemas.contracts import CurdPlan
 from easy_cheese_schemas.mold_cook import MoldCookInputKind, MoldCookMode
@@ -40,32 +40,33 @@ __all__ = [
 _EnumT = TypeVar("_EnumT", bound=Enum)
 
 
-def _write_json_output(value: object, output: Path | None) -> None:
-    text = json.dumps(value, sort_keys=True, indent=2) + "\n"
-    if output is None:
-        _ = sys.stdout.write(text)
-    else:
-        write_bounded_artifact(output, text.encode())
-        _ = sys.stdout.write(text)
+def _normalize_planner(
+    writer: str,
+    *,
+    request: str,
+    invocation: str,
+    output: str | None = None,
+) -> dict[str, object]:
+    """Materialize a planner writer envelope into a canonical PlannerResult.
 
-
-def normalize_planner_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        prog="normalize-planner",
-        description="Materialize a planner writer envelope into a canonical PlannerResult.",
-    )
-    _ = parser.add_argument("writer", type=Path)
-    _ = parser.add_argument("--request", required=True, type=Path)
-    _ = parser.add_argument("--invocation", required=True, type=Path)
-    _ = parser.add_argument("--output", type=Path)
-    args = parser.parse_args(argv)
+    Parameters
+    ----------
+    writer
+        Path to the planner writer's JSON envelope.
+    request
+        Path to the JSON planner request.
+    invocation
+        Path to the JSON invocation record naming the plan and curd ids.
+    output
+        Optional path to also write the canonical result to.
+    """
     try:
-        writer_raw = read_json_artifact(cast(Path, args.writer))
-        request_raw = read_json_artifact(cast(Path, args.request))
-        invocation = read_json_artifact(cast(Path, args.invocation))
-        if not isinstance(invocation, Mapping):
+        writer_raw = read_json_artifact(Path(writer))
+        request_raw = read_json_artifact(Path(request))
+        invocation_raw = read_json_artifact(Path(invocation))
+        if not isinstance(invocation_raw, Mapping):
             raise FinalizationError("invocation must be a JSON object")
-        invocation_mapping = cast(Mapping[str, object], invocation)
+        invocation_mapping = cast(Mapping[str, object], invocation_raw)
         host_raw = invocation_mapping.get("planner", invocation_mapping)
         if not isinstance(host_raw, Mapping):
             raise FinalizationError("invocation.planner must be a JSON object")
@@ -94,8 +95,11 @@ def normalize_planner_main(argv: list[str]) -> int:
                 host.get("source_plan"),
             ),
         )
-        _write_json_output(canonical_output(result), cast(Path | None, args.output))
-        return 0
+        payload = canonical_output(result)
+        if output is not None:
+            write_bounded_artifact(
+                Path(output), (json.dumps(payload, sort_keys=True, indent=2) + "\n").encode()
+            )
     except (
         FinalizationError,
         OSError,
@@ -103,8 +107,21 @@ def normalize_planner_main(argv: list[str]) -> int:
         ValueError,
         json.JSONDecodeError,
     ) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+    return payload
+
+
+def _normalize_planner_app() -> fromargs.App:
+    return fromargs.App(
+        "normalize-planner",
+        help="Materialize a planner writer envelope into a canonical PlannerResult.",
+        help_formatter="plain",
+        default_command=_normalize_planner,
+    )
+
+
+def normalize_planner_main(argv: list[str] | None = None) -> int:
+    return _normalize_planner_app().run(argv)
 
 
 def _parse_enum(value: str, enum: type[_EnumT], label: str) -> _EnumT:
@@ -114,55 +131,77 @@ def _parse_enum(value: str, enum: type[_EnumT], label: str) -> _EnumT:
         raise FinalizationError(f"invalid {label}: {value!r}") from exc
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        prog="finalize",
-        description="Finalize a Mold spec and publish only a consumer-valid handoff.",
-    )
-    _ = parser.add_argument("spec", type=Path)
-    _ = parser.add_argument("--approval", type=Path)
-    _ = parser.add_argument("--artifact-root", required=True, type=Path)
-    _ = parser.add_argument("--operation-id", required=True)
-    _ = parser.add_argument("--request-id", required=True)
-    _ = parser.add_argument("--input-kind", default=MoldCookInputKind.DIRECT_SPEC.value)
-    _ = parser.add_argument("--mode", default=MoldCookMode.FULL.value)
-    _ = parser.add_argument("--planner-result", type=Path)
-    _ = parser.add_argument("--plan", type=Path)
-    _ = parser.add_argument("--coverage", type=Path)
-    _ = parser.add_argument("--taste-result", type=Path)
-    _ = parser.add_argument("--ledger", type=Path)
-    _ = parser.add_argument("--curdle-anyway", action="store_true")
-    args = parser.parse_args(argv)
+def _finalize(
+    spec: str,
+    *,
+    approval: str | None = None,
+    artifact_root: str,
+    operation_id: str,
+    request_id: str,
+    input_kind: str = MoldCookInputKind.DIRECT_SPEC.value,
+    mode: str = MoldCookMode.FULL.value,
+    planner_result: str | None = None,
+    plan: str | None = None,
+    coverage: str | None = None,
+    taste_result: str | None = None,
+    ledger: str | None = None,
+    curdle_anyway: bool = False,
+) -> dict[str, object]:
+    """Finalize a Mold spec and publish only a consumer-valid handoff.
+
+    Parameters
+    ----------
+    spec
+        Path to the mold spec markdown file.
+    approval
+        Optional path to a JSON approval artifact.
+    artifact_root
+        Root directory for finalization artifacts.
+    operation_id
+        Idempotency key for this finalize operation.
+    request_id
+        Request id the handoff carries.
+    input_kind
+        MoldCookInputKind value naming the input shape.
+    mode
+        MoldCookMode value naming the execution mode.
+    planner_result
+        Optional path to a canonical PlannerResult JSON artifact.
+    plan
+        Optional path to a CurdPlan JSON artifact.
+    coverage
+        Optional path to a proposed coverage JSON artifact.
+    taste_result
+        Optional path to a fork taste verdict JSON artifact.
+    ledger
+        Optional path to a decision ledger JSON artifact.
+    curdle_anyway
+        Publish the handoff even when a taste gate would otherwise block it.
+    """
     try:
-        taste_path = cast(Path | None, args.taste_result)
-        ledger_path = cast(Path | None, args.ledger)
         taste: object | None = (
-            None if taste_path is None else read_json_artifact(taste_path)
+            None if taste_result is None else read_json_artifact(Path(taste_result))
         )
-        ledger: object | None = (
-            None if ledger_path is None else read_json_artifact(ledger_path)
+        ledger_data: object | None = (
+            None if ledger is None else read_json_artifact(Path(ledger))
         )
         outcome = finalize_mold(
-            cast(Path, args.spec),
-            artifact_root=cast(Path, args.artifact_root),
-            operation_id=cast(str, args.operation_id),
-            request_id=cast(str, args.request_id),
-            input_kind=_parse_enum(
-                cast(str, args.input_kind), MoldCookInputKind, "input kind"
-            ),
-            mode=_parse_enum(cast(str, args.mode), MoldCookMode, "mode"),
-            approval=cast(Path | None, args.approval),
-            planner_result=cast(Path | None, args.planner_result),
-            plan=cast(Path | None, args.plan),
-            proposed_coverage=cast(Path | None, args.coverage),
+            Path(spec),
+            artifact_root=Path(artifact_root),
+            operation_id=operation_id,
+            request_id=request_id,
+            input_kind=_parse_enum(input_kind, MoldCookInputKind, "input kind"),
+            mode=_parse_enum(mode, MoldCookMode, "mode"),
+            approval=Path(approval) if approval is not None else None,
+            planner_result=Path(planner_result) if planner_result is not None else None,
+            plan=Path(plan) if plan is not None else None,
+            proposed_coverage=Path(coverage) if coverage is not None else None,
             taste_result=cast(
                 ForkTasteVerdict | Mapping[str, object] | Path | None, taste
             ),
-            decision_ledger=ledger,
-            curdle_anyway=cast(bool, args.curdle_anyway),
+            decision_ledger=ledger_data,
+            curdle_anyway=curdle_anyway,
         )
-        _write_json_output(outcome.to_dict(), None)
-        return 0
     except (
         FinalizationError,
         OSError,
@@ -170,9 +209,22 @@ def main(argv: list[str]) -> int:
         ValueError,
         json.JSONDecodeError,
     ) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+    return outcome.to_dict()
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "finalize",
+        help="Finalize a Mold spec and publish only a consumer-valid handoff.",
+        help_formatter="plain",
+        default_command=_finalize,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main())

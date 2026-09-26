@@ -10,7 +10,6 @@ that cost exactly what it was told not to.
 
 from __future__ import annotations
 
-import io
 import json
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -22,7 +21,7 @@ from easy_cheese_schemas import HandoffTask, NextMove, WheypointRecord
 from easy_cheese.shared.wheypoint import checkpoint, commit, storage
 from easy_cheese.cli import wheypoint
 
-from conftest import WORK_ID
+from conftest import WORK_ID, run_cli
 
 CAPTURED_AT = "2026-08-30T12:00:00Z"
 DOSSIER = [
@@ -41,11 +40,8 @@ DOSSIER = [
 
 
 def _run(command: str, *args: str, stdin: str = "") -> tuple[int, dict[str, object]]:
-    out = io.StringIO()
-    status = wheypoint.main([command, *args], stdin=io.StringIO(stdin), stdout=out)
-    lines = out.getvalue().splitlines()
-    assert len(lines) == 1, f"expected exactly one JSON line, got {lines!r}"
-    return status, json.loads(lines[0])
+    """Invoke the CLI the way the bundle does; see `conftest.run_cli`."""
+    return run_cli([command, *args], stdin=stdin)
 
 
 def _intent(**overrides: object) -> str:

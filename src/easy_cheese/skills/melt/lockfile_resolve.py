@@ -6,11 +6,11 @@ Takes one side and regenerates the lockfile from the manifest.
 
 from __future__ import annotations
 
-import argparse
 import subprocess
-import sys
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
+from typing import Literal, TypedDict
+
+import fromargs
 
 from easy_cheese.shared.git_utils import (
     detect_lockfile_type,
@@ -167,53 +167,52 @@ def _collect_lockfiles(files: list[str]) -> list[str]:
     return [f for f in get_conflicted_files() if detect_lockfile_type(f)]
 
 
-class _Args(Protocol):
-    strategy: str
-    dry_run: bool
-    files: list[str]
+class _LockfileBatchResult(TypedDict):
+    mode: str
+    results: list[_LockfileResult]
+    resolved: int
+    total: int
+
+
+def lockfile_resolve_cmd(
+    *files: str,
+    strategy: Literal["ours", "theirs", "regen"] = "theirs",
+    dry_run: bool = False,
+) -> _LockfileBatchResult:
+    """Resolve lockfile conflicts by taking a side and regenerating.
+
+    Parameters
+    ----------
+    files
+        Specific lockfiles to resolve (default: auto-detect).
+    strategy
+        Take ours, theirs, or just regenerate.
+    dry_run
+        Show what would be done without making changes.
+    """
+    lockfiles = _collect_lockfiles(list(files))
+    results = [resolve_lockfile(p, strategy, dry_run) for p in lockfiles]
+    resolved = sum(1 for r in results if r["resolved"])
+    return {
+        "mode": "dry-run" if dry_run else "apply",
+        "results": results,
+        "resolved": resolved,
+        "total": len(results),
+    }
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "lockfile-resolve",
+        help="Resolve lockfile conflicts by taking a side and regenerating.",
+        help_formatter="plain",
+        default_command=lockfile_resolve_cmd,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Resolve lockfile conflicts by taking a side and regenerating"
-    )
-    _ = parser.add_argument(
-        "--strategy",
-        choices=["ours", "theirs", "regen"],
-        default="theirs",
-        help="Strategy: take ours, theirs, or just regenerate (default: theirs)",
-    )
-    _ = parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be done without making changes",
-    )
-    _ = parser.add_argument(
-        "files",
-        nargs="*",
-        help="Specific lockfiles to resolve (default: auto-detect)",
-    )
-
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
-    lockfiles = _collect_lockfiles(args.files)
-
-    if not lockfiles:
-        print("no conflicted lockfiles")
-        return 0
-
-    results: list[_LockfileResult] = []
-    for path in lockfiles:
-        result = resolve_lockfile(path, args.strategy, args.dry_run)
-        results.append(result)
-        status = "ok" if result["resolved"] else "--"
-        print(f"{status} {result['path']}: {result['message']}")
-
-    resolved = sum(1 for r in results if r["resolved"])
-    mode = "dry-run" if args.dry_run else "apply"
-    print(f"{resolved}/{len(results)} resolved ({mode})")
-
-    return 0 if resolved == len(results) else 1
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

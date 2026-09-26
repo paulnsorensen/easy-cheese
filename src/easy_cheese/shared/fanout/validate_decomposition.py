@@ -2,9 +2,9 @@
 """Validate an /ultracook fan-out decomposition manifest. Exit 0 on success, 1 on errors (one per line on stderr)."""
 from __future__ import annotations
 
-import sys
 from typing import cast
 
+import fromargs
 from attrs import validators
 
 from easy_cheese.shared.manifest_io import (  # noqa: E402
@@ -108,27 +108,44 @@ def validate_manifest(manifest: dict[str, object]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str]) -> int:
+def check(path: str | None = None) -> dict[str, object]:
+    """Validate an /ultracook fan-out decomposition manifest.
+
+    Parameters
+    ----------
+    path
+        Path to the manifest (YAML or JSON); reads stdin when omitted.
+    """
+    argv = [path] if path else []
     try:
         manifest = read_mapping_arg_or_stdin(
             argv, "usage: validate_decomposition.py [<manifest.yaml|json>]"
         )
     except ManifestLoadError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2 if str(exc).startswith("usage:") else 1
+        exit_code = 2 if str(exc).startswith("usage:") else 1
+        raise fromargs.CliError(str(exc), exit_code=exit_code) from exc
 
     errors = validate_manifest(manifest)
     if errors:
-        for e in errors:
-            print(f"ERROR: {e}", file=sys.stderr)
-        print(f"\nFAIL: {len(errors)} validation error(s)", file=sys.stderr)
-        return 1
+        raise fromargs.CliError("\n".join(f"ERROR: {e}" for e in errors), exit_code=1)
 
     curds_field = manifest.get("curds", [])
     curd_count = len(cast("list[object]", curds_field)) if isinstance(curds_field, list) else 0
-    print(f"OK: {curd_count} curds, decomposition valid")
-    return 0
+    return {"valid": True, "curds": curd_count}
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "validate-decomposition",
+        help="Validate an /ultracook fan-out decomposition manifest.",
+        help_formatter="plain",
+        default_command=check,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main())

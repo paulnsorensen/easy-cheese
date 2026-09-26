@@ -83,13 +83,19 @@ def run_fixture(request: pytest.FixtureRequest) -> _RunFn:
 
 
 def _error_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
-    combined = result.stdout + result.stderr
-    return [line for line in combined.splitlines() if line.startswith("ERROR:")]
+    if result.returncode == 0:
+        return []
+    payload = cast(dict[str, object], json.loads(result.stderr))
+    message = cast(str, payload["error"])
+    return [line for line in message.splitlines() if line.startswith("ERROR:")]
 
 
 def _notice_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
-    combined = result.stdout + result.stderr
-    return [line for line in combined.splitlines() if line.startswith("NOTICE:")]
+    if result.returncode != 0:
+        return []
+    payload = cast(dict[str, object], json.loads(result.stdout))
+    notice = payload.get("notice")
+    return [cast(str, notice)] if notice else []
 
 
 def _write(tmp_path: Path, name: str, text: str) -> Path:
