@@ -39,8 +39,11 @@ jobs:
           sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
           gh --version
 
-      - name: Install pinned build tooling
-        run: python3 -m pip install --disable-pip-version-check --no-cache-dir --requirement requirements-build.txt
+      # The bundle build imports each skill's commands.py, which needs fromargs.
+      - name: Install pinned build tooling and runtime deps
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-cache-dir --requirement requirements-build.txt
+          python3 -m pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
 
       - name: Stage shippable release tree
         run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/release"
