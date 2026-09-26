@@ -28,10 +28,18 @@ def _doctor(argv: list[str]) -> int:
     return doctor_main(argv)
 
 
+@bundle_command("artifacts")
+def _artifacts(argv: list[str]) -> int:
+    from easy_cheese.shared.hallouminate_setup import artifacts_main
+
+    return artifacts_main(argv)
+
+
 COMMANDS = (
     derive_command(_global, "Register or repair the durable Hallouminate corpus"),
     derive_command(_local, "Register or repair this repository's Hallouminate tenant"),
-    derive_command(_doctor, "Run both the global and local registration legs"),
+    derive_command(_doctor, "Run the global, local, and artifacts registration legs"),
+    derive_command(_artifacts, "Register every .cheese directory as one Hallouminate corpus"),
 )
 
 

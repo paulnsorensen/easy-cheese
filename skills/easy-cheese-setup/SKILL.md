@@ -19,19 +19,20 @@ Register the durable `cheese-durable` Hallouminate corpus. The corpus makes each
 
 Register the current repository as a Hallouminate tenant when the user requests it. This process is idempotent. It does not delete data.
 
-The engine is a self-contained bundle at `skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz`. It has three commands. Each command changes data only with `--apply`. Without this option, each command only reports.
+The engine is a self-contained bundle at `skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz`. It has four commands. Each command changes data only with `--apply`. Without this option, each command only reports.
 
 ```
-python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz global [--apply]   # durable-corpus registration/repair
-python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz local  [--apply]   # per-repository tenant registration
-python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz doctor [--apply]   # both legs
+python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz global    [--apply]                     # durable-corpus registration/repair
+python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz local     [--apply]                     # per-repository tenant registration
+python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz artifacts [--apply] [--root PATH ...]    # register every .cheese dir as one corpus
+python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz doctor    [--apply]                     # all three legs
 ```
 
 At installation, `install.sh` calls `global --apply` when `--mcp` includes `hallouminate`. This skill controls the interactive process.
 
 ## Flow
 
-Run `doctor` without `--apply` first. It reports the planned actions for both legs without changes. Show the report as evidence. Ask the user for confirmation. Apply only the approved legs.
+Run `doctor` without `--apply` first. It reports the planned actions for all three legs without changes. Show the report as evidence. Ask the user for confirmation. Apply only the approved legs.
 
 ### Global leg — durable corpus
 
@@ -56,6 +57,14 @@ Run `doctor` without `--apply` first. It reports the planned actions for both le
 
 - Run `hallouminate init-repo <name> --path <main-root>` when both required conditions are true. The repository must have `.cheese/` artifacts. It must not have a Hallouminate tenant.
 - Register the main repository root. Do not register a worktree. This rule prevents a temporary path from replacing the tenant identity.
+
+### Artifacts leg — machine-wide `.cheese` corpus
+
+Run `artifacts` after new repositories accumulate `.cheese` artifacts worth searching.
+Hallouminate indexes a gitignored `.cheese` dir only when a `paths` entry names that dir directly, so the block lists each `.cheese` directory, not a shared parent root.
+A `paths` entry that no longer exists on disk makes the daemon skip the whole corpus with a warning.
+A complete scan removes missing entries; an incomplete scan reports an error and leaves the block unchanged.
+After an `--apply` that changes the file, run `hallouminate daemon restart`, then `hallouminate index --corpus cheese-artifacts`.
 
 ## Rules
 

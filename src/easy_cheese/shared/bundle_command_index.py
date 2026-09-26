@@ -11,6 +11,7 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'append-attempt': ('hard-cheese',),
     'approve': ('cook', 'mold'),
     'artifact-path': ('age', 'briesearch', 'cook', 'mold'),
+    'artifacts': ('easy-cheese-setup',),
     'baseline': ('cook',),
     'batch-resolve': ('melt',),
     'budget-check': ('briesearch',),
