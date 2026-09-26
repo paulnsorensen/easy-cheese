@@ -24,7 +24,7 @@ Each build creates a temporary private wheelhouse containing:
 - the shared internal wheel;
 - the selected application wheels;
 - external runtime wheels downloaded from `requirements/runtime.txt`.
-- the `fromargs` CLI library wheel, built with `pip wheel --no-deps` from the Git commit that `requirements/fromargs.txt` pins (`_build_fromargs_wheel`). pip cannot hash a Git source under `--require-hashes`, so the full 40-character commit SHA is the integrity pin; its Cyclopts closure (`cyclopts`, `rich`, `rich-rst`, `pygments`, `markdown-it-py`, `mdurl`, `docstring-parser`) is hash-locked in `requirements/runtime.txt`. The shared wheel declares `fromargs` as a dependency. The Cyclopts closure grows each archive from about 2 MB to about 10 MB (stored uncompressed).
+- the `fromargs` CLI library wheel, built with `pip wheel --no-deps` from the Git commit that `requirements/fromargs.txt` pins (`_build_fromargs_wheel`). pip cannot hash a Git source under `--require-hashes`, so the full 40-character commit SHA is the integrity pin; its Cyclopts closure (`cyclopts`, `rich`, `rich-rst`, `pygments`, `markdown-it-py`, `mdurl`, `docstring-parser`) is hash-locked in `requirements/runtime.txt`. The shared wheel declares `fromargs` as a dependency. The Cyclopts closure is about 8 MB of stored members, so archives are deflated (see the Shiv flags below).
 
 The runtime lock is version- and hash-pinned. Downloads require wheels and hashes. Every wheel is rejected unless its filename is `py3-none-any`, its WHEEL metadata declares `Root-Is-Purelib: true`, and it contains no `.so`, `.pyd`, or `.dylib` member.[^4]
 
@@ -43,7 +43,7 @@ For each application, the builder invokes Shiv with:
 - `--only-binary=:all:`;
 - `--require-hashes`;
 - `--reproducible`;
-- `--uncompressed`;
+- `--compressed` (deflated members keep each committed archive near 3 MB with the Cyclopts closure, not about 10 MB stored; raw bytes then depend on the host zlib, which is why `check_bundles.py` compares member content, not archive bytes);
 - a `/usr/bin/env python3` interpreter line.
 
 The output is written to `skills/<skill>/scripts/<skill>.pyz` and marked executable. At runtime, the archive manages Shiv's cache extraction transparently and dispatches the packaged console script. Shiv itself is not imported from the application and need not exist on the consumer machine.[^6]
