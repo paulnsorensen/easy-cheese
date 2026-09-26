@@ -38,21 +38,22 @@ the silent path: skipping the lock now fails the write with an instruction.
 
 from __future__ import annotations
 
-import argparse
 import contextlib
 import hashlib
 import json
 import os
 import stat
 import subprocess
-import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import BinaryIO, Callable, Protocol, TextIO, cast
+from typing import Annotated, BinaryIO, Callable, Protocol, cast
 
-from easy_cheese.shared import cli, git_utils, write_handoff_artifact
+import cyclopts
+import fromargs
+
+from easy_cheese.shared import git_utils, paths, write_handoff_artifact
 
 PHASE = "age"
 SCRATCH_DIR = ".cheese"
@@ -84,7 +85,7 @@ def _run_git(args: list[str], root: Path) -> subprocess.CompletedProcess[str]:
     try:
         return git_utils.run_git([*_GIT_SAFE_CONFIG, *args], cwd=root)
     except OSError as exc:
-        raise cli.CliError(f"cannot run git {' '.join(args)}: {exc}") from exc
+        raise fromargs.CliError(f"cannot run git {' '.join(args)}: {exc}") from exc
 
 
 def repo_root(root: Path) -> Path | None:
@@ -97,12 +98,12 @@ def repo_root(root: Path) -> Path | None:
     if result.returncode == 0:
         top = result.stdout.strip()
         if not top:
-            raise cli.CliError(f"git reported no work tree for {root}")
+            raise fromargs.CliError(f"git reported no work tree for {root}")
         return Path(top)
     detail = result.stderr.strip() or f"git exited {result.returncode}"
     if _NOT_A_REPOSITORY in detail.lower():
         return None
-    raise cli.CliError(f"cannot resolve the git work tree at {root}: {detail}")
+    raise fromargs.CliError(f"cannot resolve the git work tree at {root}: {detail}")
 
 
 def _output_stems(slug: str) -> tuple[str, ...]:
@@ -137,7 +138,7 @@ def _stream_git(args: list[str], root: Path, consume: Callable[[bytes], None]) -
             stderr=subprocess.PIPE,
         )
     except OSError as exc:
-        raise cli.CliError(f"cannot run git {' '.join(args)}: {exc}") from exc
+        raise fromargs.CliError(f"cannot run git {' '.join(args)}: {exc}") from exc
 
     stdout = cast(BinaryIO, process.stdout)
     stderr_stream = cast(BinaryIO, process.stderr)
@@ -156,14 +157,14 @@ def _stream_git(args: list[str], root: Path, consume: Callable[[bytes], None]) -
         stderr_stream.close()
     if returncode != 0:
         detail = stderr.decode("utf-8", "replace").strip()
-        raise cli.CliError(f"git {' '.join(args)} failed: {detail}")
+        raise fromargs.CliError(f"git {' '.join(args)} failed: {detail}")
 
 
 def _open_regular(path: Path) -> tuple[int, os.stat_result]:
     try:
         handle = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
     except OSError as exc:
-        raise cli.CliError(f"cannot open evidence path {path}: {exc}") from exc
+        raise fromargs.CliError(f"cannot open evidence path {path}: {exc}") from exc
     try:
         metadata = os.fstat(handle)
     except OSError:
@@ -171,7 +172,7 @@ def _open_regular(path: Path) -> tuple[int, os.stat_result]:
         raise
     if not stat.S_ISREG(metadata.st_mode):
         os.close(handle)
-        raise cli.CliError(f"refusing to hash non-regular evidence path {path}")
+        raise fromargs.CliError(f"refusing to hash non-regular evidence path {path}")
     return handle, metadata
 
 
@@ -200,7 +201,7 @@ def _hash_untracked_path(
                 while chunk := stream.read(_GIT_CHUNK_SIZE):
                     digest.update(chunk)
     except OSError as exc:
-        raise cli.CliError(f"cannot hash untracked path {name!r}: {exc}") from exc
+        raise fromargs.CliError(f"cannot hash untracked path {name!r}: {exc}") from exc
     digest.update(b"\0")
 
 
@@ -284,7 +285,7 @@ def tree_digest(root: Path, *, slug: str, evidence: bool = True) -> str | None:
         return None
     head = _run_git(["rev-parse", "--verify", "--quiet", "HEAD"], top)
     if head.returncode not in (0, 1):
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"cannot read HEAD in {top}: {head.stderr.strip() or head.returncode}"
         )
     digest = hashlib.sha256()
@@ -382,7 +383,7 @@ def _evidence_files(root: Path, slug: str) -> dict[str, str]:
             files[name] = _evidence_identity(path)
         except OSError as exc:
             display = _display_path(name)
-            raise cli.CliError(f"cannot hash review input {display!r}: {exc}") from exc
+            raise fromargs.CliError(f"cannot hash review input {display!r}: {exc}") from exc
     return files
 
 
@@ -391,15 +392,15 @@ def _reject_symlink_components(root: Path, target: Path) -> None:
     for part in target.relative_to(root).parts:
         current = current / part
         if current.is_symlink():
-            raise cli.CliError(
+            raise fromargs.CliError(
                 f"refusing to follow a symlink in the review-lock path: {current}"
             )
 
 
 def lock_path(*, root: Path, slug: str) -> Path:
     if not slug:
-        raise cli.CliError("--slug must be non-empty")
-    cli.reject_path_segment("--slug", slug)
+        raise fromargs.CliError("--slug must be non-empty")
+    paths.reject_path_segment("--slug", slug)
     target = root / SCRATCH_DIR / PHASE / f"{slug}{LOCK_SUFFIX}"
     _reject_symlink_components(root, target)
     return target
@@ -420,7 +421,7 @@ def _write_no_follow(target: Path, text: str) -> None:
             raise
         os.replace(scratch, target)
     except OSError as exc:
-        raise cli.CliError(f"cannot write review lock {target}: {exc}") from exc
+        raise fromargs.CliError(f"cannot write review lock {target}: {exc}") from exc
 
 
 @dataclass(frozen=True)
@@ -442,7 +443,7 @@ def _capture_payload(root: Path, slug: str) -> dict[str, object]:
     }
     source_after = tree_digest(root, slug=slug, evidence=False)
     if source_before != source_after:
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"the source tree changed while capturing {slug!r}; capture the review lock again"
         )
     payload["source_digest"] = source_after
@@ -465,7 +466,7 @@ def capture(*, root: Path, slug: str) -> Path:
 
 def _read_lock(target: Path, slug: str) -> _ReviewLock:
     if not target.is_file():
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"no review lock for {slug!r}: run `{_LOCK_COMMAND} {slug}` at the start "
             + "of the review. /age is review-only — the lock is what proves no fix was "
             + "applied inline; /cure owns application."
@@ -473,29 +474,29 @@ def _read_lock(target: Path, slug: str) -> _ReviewLock:
     try:
         payload = cast(object, json.loads(target.read_text(encoding="utf-8")))
     except ValueError as exc:
-        raise cli.CliError(f"unreadable review lock {target}: {exc}") from exc
+        raise fromargs.CliError(f"unreadable review lock {target}: {exc}") from exc
     fields = cast("dict[str, object]", payload) if isinstance(payload, dict) else {}
     digest = fields.get("digest")
     if not isinstance(digest, str):
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"review lock {target} recorded no digest: re-run `{_LOCK_COMMAND} {slug}` "
             + "from inside the git work tree under review."
         )
     lock_slug = fields.get("slug")
     if lock_slug is not None and not isinstance(lock_slug, str):
-        raise cli.CliError(f"review lock {target} has invalid slug")
+        raise fromargs.CliError(f"review lock {target} has invalid slug")
     source_digest = fields.get("source_digest")
     if source_digest is not None and not isinstance(source_digest, str):
-        raise cli.CliError(f"review lock {target} has invalid source_digest")
+        raise fromargs.CliError(f"review lock {target} has invalid source_digest")
     evidence_value = fields.get("evidence_files")
     evidence_files: Mapping[str, str] | None = None
     if evidence_value is not None:
         if not isinstance(evidence_value, dict):
-            raise cli.CliError(f"review lock {target} has invalid evidence_files")
+            raise fromargs.CliError(f"review lock {target} has invalid evidence_files")
         validated: dict[str, str] = {}
         for name, value in cast(dict[object, object], evidence_value).items():
             if not isinstance(name, str) or not isinstance(value, str):
-                raise cli.CliError(f"review lock {target} has invalid evidence_files")
+                raise fromargs.CliError(f"review lock {target} has invalid evidence_files")
             validated[name] = value
         evidence_files = MappingProxyType(validated)
     return _ReviewLock(
@@ -523,13 +524,13 @@ def verify(*, root: Path, slug: str) -> None:
         moved = sorted(
             name for name in before.keys() | after.keys() if before.get(name) != after.get(name)
         )
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"review evidence changed after {slug!r}'s review lock, and the source tree "
             + f"did not: {', '.join(_display_path(name) for name in moved) or 'unknown file'}. Write the packet and every "
             + "other .cheese/ input before the lock. To continue this review, run "
             + f"`{_LOCK_COMMAND} {slug} --refresh-evidence`, then write the report again."
         )
-    raise cli.CliError(
+    raise fromargs.CliError(
         f"the production tree changed after {slug!r}'s review lock: /age does not "
         + "apply fixes — invoke /cure with the findings instead. If the change came "
         + f"from outside this review, re-run `{_LOCK_COMMAND} {slug}` and review again. "
@@ -547,19 +548,19 @@ def refresh_evidence(*, root: Path, slug: str) -> Path:
     payload = _read_lock(lock_path(root=top, slug=slug), slug)
     locked_source = payload.source_digest
     if locked_source is None:
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"review lock for {slug!r} recorded no source digest: "
             + f"re-run `{_LOCK_COMMAND} {slug}` and review again."
         )
     locked_files = payload.evidence_files
     if locked_files is None:
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"review lock for {slug!r} recorded no evidence files: "
             + f"re-run `{_LOCK_COMMAND} {slug}` and review again."
         )
     candidate = _capture_payload(top, slug)
     if locked_source != candidate["source_digest"]:
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"the source tree changed after {slug!r}'s review lock, so the evidence "
             + "refresh is refused: /age does not apply fixes — invoke /cure with the "
             + "findings instead. Run `git status --short` to see the changed files."
@@ -575,7 +576,7 @@ def refresh_evidence(*, root: Path, slug: str) -> Path:
     if moved or unexpected:
         changed = [*moved, *unexpected]
         display = ", ".join(_display_path(name) for name in changed)
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"review evidence changed after {slug!r}'s review lock, so the evidence "
             + f"refresh is refused: {display}. Require a fresh review."
         )
@@ -584,67 +585,54 @@ def refresh_evidence(*, root: Path, slug: str) -> Path:
     return target
 
 
-def _cmd_lock(args: argparse.Namespace) -> None:
-    root = Path(cast("str | None", args.root) or Path.cwd())
-    slug = cast(str, args.slug)
-    if cast(bool, args.refresh_evidence):
-        target = refresh_evidence(root=root, slug=slug)
-    else:
-        target = capture(root=root, slug=slug)
-    cli.emit(str(target), stdout=cast(TextIO, args.stdout))
+def review_lock(
+    *,
+    slug: str,
+    root: str | None = None,
+    refresh: Annotated[bool, cyclopts.Parameter(name="--refresh-evidence")] = False,
+) -> str:
+    """Record the production-tree digest the age report write checks.
+
+    Parameters
+    ----------
+    slug
+        Review slug (lock filename stem).
+    root
+        Repo root (default: cwd); the lock lands under .cheese/age/.
+    refresh
+        Capture the lock again after a file under .cheese/ moved; refused when
+        the source tree differs from the existing lock.
+    """
+    root_path = Path(root or Path.cwd())
+    if refresh:
+        return str(refresh_evidence(root=root_path, slug=slug))
+    return str(capture(root=root_path, slug=slug))
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument(
-        "--slug", required=True, help="review slug (lock filename stem)"
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "review-lock",
+        help="Record the production-tree digest that gates the age report write.",
+        help_formatter="plain",
+        default_command=review_lock,
     )
-    _ = parser.add_argument(
-        "--root",
-        default=None,
-        help="repo root (default: cwd); the lock lands under .cheese/age/",
-    )
-    _ = parser.add_argument(
-        "--refresh-evidence",
-        action="store_true",
-        help=(
-            "capture the lock again after a file under .cheese/ moved; "
-            "refused when the source tree differs from the existing lock"
-        ),
-    )
-    parser.set_defaults(func=_cmd_lock)
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
-def _peek(argv: list[str]) -> tuple[str | None, str | None, Path]:
-    """Read --slug/--phase/--root without consuming the writer's own parse."""
-    parser = argparse.ArgumentParser(add_help=False)
-    _ = parser.add_argument("--slug")
-    _ = parser.add_argument("--phase")
-    _ = parser.add_argument("--root")
-    try:
-        known, _rest = parser.parse_known_args(argv)
-    except SystemExit:
-        return None, None, Path.cwd()
-    root = Path(cast("str | None", known.root) or Path.cwd())
-    return cast("str | None", known.slug), cast("str | None", known.phase), root
+def _verify_age_write(slug: str, phase: str, root: Path) -> None:
+    """Refuse an age report written from a context that moved the production tree."""
+    if phase == PHASE:
+        verify(root=root, slug=slug)
 
 
 def gated_write_handoff_artifact(argv: list[str]) -> int:
     """`write-handoff-artifact`, refusing an age report written over inline fixes."""
-    # The gate and the writer must read one argv, so repair it before the gate.
-    argv = cli.repair_argv(write_handoff_artifact.setup_parser, argv)
-    slug, phase, root = _peek(argv)
-    if phase == PHASE and slug:
-        try:
-            verify(root=root, slug=slug)
-        except cli.CliError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
-            return 2
-    return write_handoff_artifact.main(argv)
+    # One parse: the gate reads the same --slug/--phase/--root the writer uses.
+    return write_handoff_artifact.build_app(before_write=_verify_age_write).run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

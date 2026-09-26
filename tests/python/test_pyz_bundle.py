@@ -471,7 +471,7 @@ def test_cook_baseline_classifies_failures_via_stdin(bundles: Path) -> None:
 def test_cook_baseline_rejects_malformed_stdin(bundles: Path) -> None:
     result = _run(bundles / "cook.pyz", "baseline", stdin="not json")
     assert result.returncode == 2, result.stderr
-    assert result.stderr.startswith("ERROR:")
+    assert json.loads(result.stderr.splitlines()[-1])["exit_code"] == result.returncode
 
 
 def test_cook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
@@ -479,7 +479,7 @@ def test_cook_baseline_rejects_wrong_typed_value(bundles: Path) -> None:
         bundles / "cook.pyz", "baseline", stdin='{"baseline": [], "current": {}}'
     )
     assert result.returncode == 2, result.stderr
-    assert result.stderr.startswith("ERROR:")
+    assert json.loads(result.stderr.splitlines()[-1])["exit_code"] == result.returncode
 
 
 # Pinned env so the resolved corpus path is deterministic and does not depend on

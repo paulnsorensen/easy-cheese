@@ -24,7 +24,6 @@ phase where the chain should go, but does not influence where this artifact
 lands.
 """
 
-import argparse
 import contextlib
 import os
 import sys
@@ -32,9 +31,12 @@ import tempfile
 import traceback
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+from typing import Annotated
 
-from easy_cheese.shared import cli, handoff, paths
+import cyclopts
+import fromargs
+
+from easy_cheese.shared import handoff, paths
 
 from easy_cheese_schemas.phase_contracts import (
     COMPILED_TRANSITION_REGISTRY,
@@ -63,7 +65,7 @@ def _validate_transition(
             payload_schema_uri=payload_schema_uri,
         )
     except TransitionError as exc:
-        raise cli.contract_error(exc, context=f"--phase {source} --slug {slug}") from exc
+        raise fromargs.contract_error(exc, context=f"--phase {source} --slug {slug}") from exc
 
 def _render_preamble(
     *,
@@ -87,7 +89,7 @@ def _render_preamble(
     try:
         status_kind, reason = parse_status_field(status)
     except StatusError as exc:
-        raise cli.contract_error(exc, context=context) from exc
+        raise fromargs.contract_error(exc, context=context) from exc
 
     handoff_slug = handoff.HandoffSlug(
         status=status_kind,
@@ -102,13 +104,13 @@ def _render_preamble(
     try:
         return handoff.render_handoff_slug(handoff_slug)
     except StatusError as exc:
-        raise cli.contract_error(exc, context=context) from exc
+        raise fromargs.contract_error(exc, context=context) from exc
 
 
 def _reject_traversal(field: str, value: str) -> None:
     """Reject path-traversal segments in values used to build the on-disk path."""
     if ".." in value or "/" in value or "\\" in value:
-        raise cli.CliError(f"{field} rejects path traversal: {value!r}")
+        raise fromargs.CliError(f"{field} rejects path traversal: {value!r}")
 
 
 def _build_contents(*, preamble: str, body: str | None) -> str:
@@ -136,7 +138,7 @@ def _traceback_if(*, unexpected: bool) -> None:
 
 def _orphaned(
     exc: BaseException, *, target: Path, root: Path, exit_code: int
-) -> cli.CliError:
+) -> fromargs.CliError:
     """The artifact landed but its revision did not: one greppable line says so.
 
     The path is printed relative to the repository root, so the line is the same
@@ -144,7 +146,7 @@ def _orphaned(
     """
     shown = target.relative_to(root) if root in target.parents else target
     print(f"wheypoint: artifact-orphaned {shown}", file=sys.stderr)
-    return cli.CliError(
+    return fromargs.CliError(
         f"wrote {shown}, but the wheypoint revision failed: "
         + f"{type(exc).__name__}: {exc}; "
         + "the next resolve will gate on stale-artifact-link",
@@ -163,7 +165,7 @@ def _atomic_write(target: Path, contents: str) -> None:
             dir=target_dir,
         )
     except OSError as exc:
-        raise cli.CliError(f"cannot write {target}: {exc}") from exc
+        raise fromargs.CliError(f"cannot write {target}: {exc}") from exc
 
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -174,7 +176,7 @@ def _atomic_write(target: Path, contents: str) -> None:
         os.replace(tmp_name, target)
     except OSError as exc:
         _cleanup_tmp(fd, tmp_name, target)
-        raise cli.CliError(f"cannot write {target}: {exc}") from exc
+        raise fromargs.CliError(f"cannot write {target}: {exc}") from exc
     except BaseException:
         _cleanup_tmp(fd, tmp_name, target)
         raise
@@ -218,13 +220,13 @@ def _wheypoint_revision(
             store=store,
             write_contents=write_contents,
         )
-    except cli.CliError:
+    except fromargs.CliError:
         # The writer's own refusal (e.g. a failed atomic write) already carries
         # its caller-facing message and exit code; the kernel never raises one.
         raise
     except phase_commit.PhaseCommitRefusal as exc:
         _traceback_if(unexpected=False)
-        raise cli.CliError(str(exc)) from exc
+        raise fromargs.CliError(str(exc)) from exc
     except phase_commit.ArtifactOrphaned as exc:
         _traceback_if(unexpected=not exc.expected)
         raise _orphaned(
@@ -232,7 +234,7 @@ def _wheypoint_revision(
         ) from exc
     except Exception as exc:
         _traceback_if(unexpected=not isinstance(exc, wheypoint_storage.StorageError))
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"wheypoint: {type(exc).__name__}: {exc}",
             exit_code=EXIT_WHEYPOINT,
         ) from exc
@@ -275,28 +277,34 @@ def write_artifact(
     baseline: str | None = None,
     grounded: Sequence[str] = (),
     corpus_root: Path | str | None = None,
+    before_write: Callable[[str, str, Path], None] | None = None,
 ) -> Path:
+    """Write the artifact atomically; return the final path.
+
+    ``before_write(slug, phase, root)`` runs after every argument check and
+    before any write; a ``fromargs.CliError`` it raises refuses the write.
+    """
     """Write the artifact atomically; return the final path."""
     if not slug:
-        raise cli.CliError("--slug must be non-empty")
+        raise fromargs.CliError("--slug must be non-empty")
     if not next_skill:
-        raise cli.CliError("--next must be non-empty")
+        raise fromargs.CliError("--next must be non-empty")
     if not phase:
-        raise cli.CliError("--phase must be non-empty")
+        raise fromargs.CliError("--phase must be non-empty")
     if not orientation:
-        raise cli.CliError("--orientation must be non-empty")
+        raise fromargs.CliError("--orientation must be non-empty")
     _reject_traversal("--slug", slug)
     _reject_traversal("--phase", phase)
     slug_problem = paths.validate_slug(slug)
     # Every phase, chain or not: the readers that later resolve this
     # artifact all route through `paths`, which admits only kebab-case.
     if slug_problem is not None:
-        raise cli.CliError(f"--slug: {slug_problem}")
+        raise fromargs.CliError(f"--slug: {slug_problem}")
     # Transition validation runs first: an argv that trips both this and the
     # `--grounded` rule must report the contract error, not the CLI error.
     _validate_transition(phase, next_skill, payload_schema_uri, slug=slug)
     if phase not in paths.CHAIN_PHASES and grounded:
-        raise cli.CliError(f"--grounded is only valid for chain phases, not {phase!r}")
+        raise fromargs.CliError(f"--grounded is only valid for chain phases, not {phase!r}")
     preamble = _render_preamble(
         status=status,
         next_skill=next_skill,
@@ -318,7 +326,7 @@ def write_artifact(
     # Phase names are validated against the compiled registry and therefore
     # select exactly one directory beneath .cheese/.
     if cheese_root not in target.resolve().parents:
-        raise cli.CliError(f"--phase must stay under .cheese/: {phase!r}")
+        raise fromargs.CliError(f"--phase must stay under .cheese/: {phase!r}")
 
     contents = _build_contents(preamble=preamble, body=body)
 
@@ -327,6 +335,8 @@ def write_artifact(
         if corpus_root is not None
         else paths.project_corpus_root(paths.project_key(root_path))
     )
+    if before_write is not None:
+        before_write(slug, phase, root_path)
     _wheypoint_revision(
         slug=slug,
         phase=phase,
@@ -342,120 +352,97 @@ def write_artifact(
     return target
 
 
-class _Args(Protocol):
-    slug: str
-    status: str
-    next: str
-    artifact: str
-    orientation: str
-    taste_test: str | None
-    durable_flags: str | None
-    baseline: str | None
-    body_file: str | None
-    grounded: list[str]
-    phase: str
-    payload_schema: str | None
-    root: str | None
-    corpus_root: str | None
-    stdout: TextIO
+def build_app(
+    before_write: Callable[[str, str, Path], None] | None = None,
+) -> fromargs.App:
+    """The `write-handoff-artifact` command; `before_write` gates the write."""
+
+    def write_handoff_artifact(
+        *,
+        slug: str,
+        status: Annotated[
+            str, cyclopts.Parameter(help=f"Handback status: {status_vocabulary()}")
+        ],
+        next_skill: Annotated[str, cyclopts.Parameter(name="--next")],
+        artifact: str,
+        orientation: str,
+        phase: str,
+        taste_test: str | None = None,
+        durable_flags: str | None = None,
+        baseline: str | None = None,
+        body_file: str | None = None,
+        grounded: list[str] | None = None,
+        payload_schema: str | None = None,
+        root: str | None = None,
+        corpus_root: str | None = None,
+    ) -> Path:
+        """Write .cheese/<phase>/<slug>.md atomically and print its path.
+
+        Parameters
+        ----------
+        slug
+            Artifact slug (filename stem).
+        next_skill
+            Next skill name or 'done'.
+        artifact
+            Path to the prior artifact (may be empty).
+        orientation
+            One-line orientation.
+        phase
+            Name of THIS phase's own directory under .cheese/ (path authority).
+        taste_test
+            Optional taste_test: keyed preamble line (omitted when absent).
+        durable_flags
+            Optional durable_flags: keyed preamble line (omitted when absent).
+        baseline
+            Optional baseline: keyed preamble line (omitted when absent).
+        body_file
+            Optional path to body content.
+        grounded
+            Grounded file path, optionally pinned to a positive line range
+            (PATH[#START-END]); repeatable; chain phases only.
+        payload_schema
+            Payload schema URI for transition validation.
+        root
+            Repo root (default: the git toplevel, else cwd).
+        corpus_root
+            Wheypoint corpus root override (default: the per-project XDG corpus).
+        """
+        body: str | None = None
+        if body_file is not None:
+            body_path = Path(body_file)
+            if not body_path.is_file():
+                raise fromargs.CliError(f"--body-file not found: {body_path}")
+            body = body_path.read_text(encoding="utf-8")
+        return write_artifact(
+            slug=slug,
+            status=status,
+            next_skill=next_skill,
+            artifact=artifact,
+            orientation=orientation,
+            body=body,
+            root=paths.resolve_repo_root(root),
+            phase=phase,
+            payload_schema_uri=payload_schema,
+            taste_test=taste_test,
+            durable_flags=durable_flags,
+            baseline=baseline,
+            grounded=grounded or (),
+            corpus_root=corpus_root,
+            before_write=before_write,
+        )
+
+    return fromargs.App(
+        "write-handoff-artifact",
+        help="Write a handoff artifact (preamble + optional body) atomically.",
+        help_formatter="plain",
+        default_command=write_handoff_artifact,
+    )
 
 
-def _cmd_write(args: argparse.Namespace) -> None:
-    a = cast(_Args, cast(object, args))
-    body: str | None = None
-    if a.body_file is not None:
-        body_path = Path(a.body_file)
-        if not body_path.is_file():
-            raise cli.CliError(f"--body-file not found: {body_path}")
-        body = body_path.read_text(encoding="utf-8")
-
-    root = paths.resolve_repo_root(a.root)
-    target = write_artifact(
-        slug=a.slug,
-        status=a.status,
-        next_skill=a.next,
-        artifact=a.artifact,
-        orientation=a.orientation,
-        body=body,
-        root=root,
-        phase=a.phase,
-        payload_schema_uri=a.payload_schema,
-        taste_test=a.taste_test,
-        durable_flags=a.durable_flags,
-        baseline=a.baseline,
-        grounded=a.grounded,
-        corpus_root=a.corpus_root,
-    )
-    cli.emit(str(target), stdout=a.stdout)
-
-
-def setup_parser(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--slug", required=True, help="artifact slug (filename stem)")
-    _ = parser.add_argument(
-        "--status", required=True, help=f"handback status: {status_vocabulary()}"
-    )
-    _ = parser.add_argument("--next", required=True, help="next skill name or 'done'")
-    _ = parser.add_argument(
-        "--artifact", required=True, help="path to prior artifact (may be empty)"
-    )
-    _ = parser.add_argument("--orientation", required=True, help="one-line orientation")
-    _ = parser.add_argument(
-        "--taste-test",
-        default=None,
-        help="optional taste_test: keyed preamble line (omitted when absent)",
-    )
-    _ = parser.add_argument(
-        "--durable-flags",
-        default=None,
-        help="optional durable_flags: keyed preamble line (omitted when absent)",
-    )
-    _ = parser.add_argument(
-        "--baseline",
-        default=None,
-        help="optional baseline: keyed preamble line (omitted when absent)",
-    )
-    _ = parser.add_argument(
-        "--body-file", default=None, help="optional path to body content"
-    )
-    _ = parser.add_argument(
-        "--grounded",
-        action="append",
-        default=[],
-        metavar="PATH[#START-END]",
-        help=(
-            "grounded file path, optionally pinned to a positive line range; "
-            "repeatable; chain phases only"
-        ),
-    )
-    _ = parser.add_argument(
-        "--phase",
-        required=True,
-        help="name of THIS phase's own directory under .cheese/ (path authority)",
-    )
-    _ = parser.add_argument(
-        "--payload-schema",
-        default=None,
-        help="payload schema URI for transition validation",
-    )
-    _ = parser.add_argument(
-        "--root",
-        default=None,
-        help=(
-            "repo root (default: the git toplevel, else cwd); "
-            ".cheese/<phase>/<slug>.md is written under this"
-        ),
-    )
-    _ = parser.add_argument(
-        "--corpus-root",
-        default=None,
-        help="wheypoint corpus root override (default: the per-project XDG corpus)",
-    )
-    parser.set_defaults(func=_cmd_write)
-
-
-def main(argv: list[str]) -> int:
-    return cli.run(setup_parser, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(setup_parser))
+    raise SystemExit(main())

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 
 import pytest
 
@@ -15,7 +16,6 @@ if TYPE_CHECKING:
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SEVERITY_CLI = REPO_ROOT / "src" / "easy_cheese" / "shared" / "severity.py"
-
 
 class _SeverityModule(Protocol):
     RubricError: type[RubricError]
@@ -257,7 +257,7 @@ class TestCli:
             text=True,
             check=True,
         )
-        assert result.stdout.strip() == "blocker"
+        assert json.loads(result.stdout) == "blocker"
 
     def test_bucket_subcommand(self) -> None:
         result = subprocess.run(
@@ -266,7 +266,7 @@ class TestCli:
             text=True,
             check=True,
         )
-        assert result.stdout.strip() == "moderate"
+        assert json.loads(result.stdout) == "moderate"
 
     def test_bucket_multi_module(self) -> None:
         result = subprocess.run(
@@ -283,10 +283,10 @@ class TestCli:
             text=True,
             check=True,
         )
-        assert result.stdout.strip() == "sprawling"
+        assert json.loads(result.stdout) == "sprawling"
 
     def test_invalid_input_exits_nonzero(self) -> None:
-        # --fix-cost-later "explosive" is rejected by RubricError → cli.CliError → exit 2
+        # --fix-cost-later "explosive" is rejected by RubricError -> fromargs.CliError -> exit 2
         result = subprocess.run(
             [
                 sys.executable,
@@ -305,11 +305,12 @@ class TestCli:
             text=True,
         )
         assert result.returncode == 2
-        assert result.stderr.startswith("ERROR:")
-        assert "fix-cost-later" in result.stderr
+        payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert payload["exit_code"] == 2
+        assert "fix-cost-later" in str(payload["error"])
 
     def test_invalid_dimension_exits_two_with_error_prefix(self) -> None:
-        # --dimension "vibes" is not in DIMENSIONS; cli.CliError emits "ERROR: ..."
+        # --dimension "vibes" is not in DIMENSIONS; fromargs.CliError emits a JSON error line
         result = subprocess.run(
             [
                 sys.executable,
@@ -328,5 +329,6 @@ class TestCli:
             text=True,
         )
         assert result.returncode == 2
-        assert result.stderr.startswith("ERROR:")
-        assert "dimension" in result.stderr
+        payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert payload["exit_code"] == 2
+        assert "dimension" in str(payload["error"])

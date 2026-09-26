@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Scan a tree for /pasteurize instrumentation tags and emit a deterministic verdict.
 
-Exit codes (spec):
-  0 — clean scope (no hits)
-  1 — at least one tag hit (deterministic "instrumentation still present")
-  2 — error (unreadable root, unusable session tag, no Git worktree, etc.)
+The command exits 0 and reports the verdict in the `files`/`total` fields of
+its JSON output, whether or not it finds a tag hit. A real failure
+(unreadable root, unusable session tag, no Git worktree, etc.) exits 2.
 
 /pasteurize prefixes every temporary log with one session tag such as
 `[DEBUG-a4f2]`. Pass that session with `--session-tag a4f2`: the scan then
@@ -19,16 +18,14 @@ never enter the scan.
 """
 from __future__ import annotations
 
-import argparse
 import os
 import re
 import subprocess
-import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import TextIO, TypedDict, cast
+from typing import TypedDict
 
-from easy_cheese.shared import cli  # noqa: E402
+import fromargs
 
 DEFAULT_TAGS = (
     "[DEBUG-",
@@ -170,73 +167,73 @@ def sweep(
     return {"files": hits, "total": total}
 
 
-def _resolve_tags(args: argparse.Namespace) -> tuple[str, ...]:
-    session_arg = cast("str | None", args.session_tag)
-    tags_arg = cast("str | None", args.tags)
-    if session_arg and tags_arg:
-        raise cli.CliError("pass --session-tag or --tags, not both")
-    if session_arg:
+def _resolve_tags(session_tag: str | None, tags: str | None) -> tuple[str, ...]:
+    if session_tag and tags:
+        raise fromargs.CliError("pass --session-tag or --tags, not both")
+    if session_tag:
         try:
-            return session_tags(session_arg.split(","))
+            return session_tags(session_tag.split(","))
         except ValueError as exc:
-            raise cli.CliError(str(exc)) from exc
-    tags = tuple(t for t in (tags_arg.split(",") if tags_arg else DEFAULT_TAGS) if t)
-    if not tags:
-        raise cli.CliError("no tags to scan for")
-    return tags
+            raise fromargs.CliError(str(exc)) from exc
+    resolved = tuple(t for t in (tags.split(",") if tags else DEFAULT_TAGS) if t)
+    if not resolved:
+        raise fromargs.CliError("no tags to scan for")
+    return resolved
 
 
-def _run(args: argparse.Namespace) -> int:
-    root_arg = cast(Path, args.root)
-    root = root_arg.resolve()
-    if not root.exists():
-        raise cli.CliError(f"root does not exist: {root_arg}")
-    if not root.is_dir():
-        raise cli.CliError(f"root is not a directory: {root_arg}")
+def sweep_cmd(
+    *,
+    root: Path | None = None,
+    session_tag: str | None = None,
+    tags: str | None = None,
+    changed_only: bool = False,
+) -> _SweepResult:
+    """Scan a tree for /pasteurize instrumentation tags and report the verdict.
 
-    tags = _resolve_tags(args)
+    Parameters
+    ----------
+    root
+        Directory to scan (default: cwd).
+    session_tag
+        Comma-separated /pasteurize session tags (e.g. a4f2); matches the
+        exact token [DEBUG-<tag>].
+    tags
+        Comma-separated tag tokens to scan for (default: pasteurize set).
+    changed_only
+        Scan only the files that this Git worktree changed.
+    """
+    root = root if root is not None else Path.cwd()
+    resolved_root = root.resolve()
+    if not resolved_root.exists():
+        raise fromargs.CliError(f"root does not exist: {root}")
+    if not resolved_root.is_dir():
+        raise fromargs.CliError(f"root is not a directory: {root}")
+
+    resolved_tags = _resolve_tags(session_tag, tags)
 
     files: list[Path] | None = None
-    if cast(bool, args.changed_only):
+    if changed_only:
         try:
-            files = changed_files(root)
+            files = changed_files(resolved_root)
         except (OSError, RuntimeError) as exc:
-            raise cli.CliError(f"--changed-only needs a Git worktree: {exc}") from exc
+            raise fromargs.CliError(f"--changed-only needs a Git worktree: {exc}") from exc
 
-    result = sweep(root, tags, files=files)
-    stdout = cast(TextIO, args.stdout)
-
-    if cast(bool, args.json_mode):
-        cli.emit(result, json_mode=True, stdout=stdout)
-    else:
-        cli.emit(
-            result["files"] or ["(clean)"],
-            limit=cast(int, args.limit),
-            full=cast(bool, args.full),
-            stdout=stdout,
-        )
-        print(f"total: {result['total']}", file=stdout)
-
-    return 1 if result["total"] else 0
+    return sweep(resolved_root, resolved_tags, files=files)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    _ = parser.add_argument("--root", type=Path, default=Path.cwd(),
-                        help="Directory to scan (default: cwd).")
-    _ = parser.add_argument("--session-tag", default=None,
-                        help="Comma-separated /pasteurize session tags (e.g. a4f2); matches the exact token [DEBUG-<tag>].")
-    _ = parser.add_argument("--tags", default=None,
-                        help="Comma-separated tag tokens to scan for (default: pasteurize set).")
-    _ = parser.add_argument("--changed-only", action="store_true",
-                        help="Scan only the files that this Git worktree changed.")
-    _ = parser.add_argument("--limit", type=int, default=50,
-                        help="Max files to list in plain output (default: 50).")
-    parser.set_defaults(func=_run)
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "debug-tag-sweep",
+        help="Scan a tree for /pasteurize instrumentation tags and emit a verdict.",
+        help_formatter="plain",
+        default_command=sweep_cmd,
+    )
+    return app
 
 
 def main(argv: list[str] | None = None) -> int:
-    return cli.run(_setup, argv=argv)
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())

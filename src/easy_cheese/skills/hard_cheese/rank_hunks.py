@@ -14,22 +14,20 @@ Usage:
     python3 skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks \
         --base <ref> --head <ref> [--top N] [--cwd <path>]
 
-Output is a single-line JSON list, sorted by score descending, of
+Output is one JSON list, sorted by score descending, of
 `{id, path, start, end, score, reasons}`. An empty diff emits `[]`.
-Deterministic: no timestamps, no randomness. Stdlib-only.
+Deterministic: no timestamps, no randomness.
 """
 
 from __future__ import annotations
 
-import argparse
-import json
 import os
 import re
 import subprocess
 from pathlib import Path
-from typing import TextIO, TypedDict, cast
+from typing import TypedDict, cast
 
-from easy_cheese.shared import cli
+import fromargs
 
 _CHURN_WEIGHT = 1.0
 _CHURN_CAP = 10
@@ -103,15 +101,15 @@ def _run_git(args: list[str], *, cwd: Path | None) -> str:
             timeout=_GIT_TIMEOUT_SECONDS,
         )
     except OSError as exc:
-        raise cli.CliError(f"git invocation failed: {exc}") from exc
+        raise fromargs.CliError(f"git invocation failed: {exc}") from exc
     except subprocess.TimeoutExpired as exc:
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"git {' '.join(args)} timed out after {_GIT_TIMEOUT_SECONDS} seconds"
         ) from exc
     except subprocess.CalledProcessError as exc:
         stderr = cast("str | None", exc.stderr) or ""
         message = _first_stderr_line(stderr, fallback=str(exc))
-        raise cli.CliError(f"git {' '.join(args)} failed: {message}") from exc
+        raise fromargs.CliError(f"git {' '.join(args)} failed: {message}") from exc
     return result.stdout
 
 
@@ -368,58 +366,52 @@ def rank_hunks(base: str, head: str, *, cwd: Path | None = None) -> list[Hunk]:
     return results
 
 
-def _git_ref(value: str) -> str:
+def _git_ref(flag: str, value: str) -> str:
     if value.startswith("-"):
-        raise argparse.ArgumentTypeError("ref must not start with '-'")
+        raise fromargs.CliError(f"{flag}: ref must not start with '-'")
     if any(ord(char) < 32 or ord(char) == 127 for char in value):
-        raise argparse.ArgumentTypeError("ref must not contain control characters")
+        raise fromargs.CliError(f"{flag}: ref must not contain control characters")
     return value
 
 
-def _positive_int(value: str) -> int:
-    try:
-        parsed = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("--top must be an integer >= 1") from exc
-    if parsed < 1:
-        raise argparse.ArgumentTypeError("--top must be an integer >= 1")
-    return parsed
+def rank(
+    *, base: str, head: str, top: int = 3, cwd: str | None = None
+) -> list[Hunk]:
+    """Rank git diff hunks between two refs by risk score.
+
+    Parameters
+    ----------
+    base
+        Base git ref.
+    head
+        Head git ref.
+    top
+        Max hunks to emit.
+    cwd
+        Git working directory (default: cwd). Test hook.
+    """
+    base = _git_ref("--base", base)
+    head = _git_ref("--head", head)
+    if top < 1:
+        raise fromargs.CliError("--top must be an integer >= 1")
+    workdir = Path(cwd) if cwd else None
+    if workdir is not None and not workdir.is_dir():
+        raise fromargs.CliError(f"--cwd {workdir} is not a directory")
+    return rank_hunks(base, head, cwd=workdir)[:top]
 
 
-def _cmd_rank(args: argparse.Namespace) -> int:
-    base = cast(str, args.base)
-    head = cast(str, args.head)
-    top = cast(int, args.top)
-    cwd_arg = cast("str | None", args.cwd)
-    cwd = Path(cwd_arg) if cwd_arg else None
-    if cwd is not None and not cwd.is_dir():
-        raise cli.CliError(f"--cwd {cwd} is not a directory")
-    stdout = cast(TextIO, args.stdout)
-    hunks = rank_hunks(base, head, cwd=cwd)
-    print(json.dumps(hunks[:top], indent=None, sort_keys=True), file=stdout)
-    return 0
-
-
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Rank git diff hunks between two refs by risk score."
-    _ = parser.add_argument("--base", required=True, type=_git_ref, help="base git ref")
-    _ = parser.add_argument("--head", required=True, type=_git_ref, help="head git ref")
-    _ = parser.add_argument(
-        "--top", type=_positive_int, default=3, help="max hunks to emit (default: 3)"
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "rank-hunks",
+        help="Rank git diff hunks between two refs by risk score.",
+        help_formatter="plain",
+        default_command=rank,
     )
-    _ = parser.add_argument(
-        "--cwd", default=None, help="git working directory (default: cwd). Test hook."
-    )
-    parser.set_defaults(func=_cmd_rank)
 
 
 def main(argv: list[str] | None = None) -> int:
-    def setup(parser: argparse.ArgumentParser) -> None:
-        parser.prog = "rank-hunks"  # noqa: V101
-        _setup(parser)
-
-    return cli.run(setup, argv=argv)
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

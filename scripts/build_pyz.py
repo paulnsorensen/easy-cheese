@@ -27,6 +27,7 @@ SRC_ROOT = REPO_ROOT / "src"
 PACKAGE_ROOT = SRC_ROOT / "easy_cheese"
 SKILLS_ROOT = PACKAGE_ROOT / "skills"
 RUNTIME_LOCK = REPO_ROOT / "requirements" / "runtime.txt"
+FROMARGS_PIN = REPO_ROOT / "requirements" / "fromargs.txt"
 SCHEMA_ROOT = SRC_ROOT / "easy_cheese_schemas"
 BUILD_SCRIPTS_ROOT = REPO_ROOT / "scripts"
 SCHEMA_CATALOG_SOURCE = SCHEMA_ROOT / "_schema_catalog.py"
@@ -398,7 +399,7 @@ def _build_shared_wheel(project_root: Path, wheelhouse: Path) -> Path:
     _ = (project / "pyproject.toml").write_text(
         _project_toml(
             "easy-cheese-shared",
-            dependencies=(f"easy-cheese-schemas=={VERSION}",),
+            dependencies=(f"easy-cheese-schemas=={VERSION}", "fromargs"),
         ),
         encoding="utf-8",
     )
@@ -446,6 +447,55 @@ def _download_runtime_wheels(wheelhouse: Path) -> tuple[Path, ...]:
         validate_pure_wheel(wheel)
     return wheels
 
+
+def _fromargs_requirement() -> str:
+    """The one commit-pinned fromargs requirement in requirements/fromargs.txt."""
+    lines = [
+        line.strip()
+        for line in FROMARGS_PIN.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if len(lines) != 1 or re.search(r"@[0-9a-f]{40}#", lines[0]) is None:
+        raise RuntimeError(
+            f"{FROMARGS_PIN} must hold one Git requirement pinned to a full commit SHA"
+        )
+    return lines[0]
+
+
+def _build_fromargs_wheel(wheelhouse: Path) -> Path:
+    """Build fromargs from its pinned commit into the wheelhouse.
+
+    pip cannot hash a Git source, so the full commit SHA is the integrity pin.
+    Its dependencies come from the hash-locked runtime wheels.
+    """
+    with tempfile.TemporaryDirectory(
+        prefix="ec-fromargs-", dir=wheelhouse.parent
+    ) as outdir_name:
+        outdir = Path(outdir_name)
+        _ = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "wheel",
+                "--no-deps",
+                "--no-build-isolation",
+                "--wheel-dir",
+                str(outdir),
+                _fromargs_requirement(),
+            ],
+            cwd=REPO_ROOT,
+            env=_build_environment(),
+            check=True,
+        )
+        built = list(outdir.glob("*.whl"))
+        if len(built) != 1:
+            raise RuntimeError(f"fromargs build produced {len(built)} wheels")
+        wheel = _normalize_internal_wheel(built[0])
+        validate_pure_wheel(wheel)
+        final = wheelhouse / wheel.name
+        _ = shutil.move(wheel, final)
+        return final
 
 def validate_command_surfaces(skills: Iterable[str]) -> None:
     """Reject a skill whose `COMMANDS` manifest and `@bundle_command` surface disagree.
@@ -512,6 +562,7 @@ def build_wheelhouse(
     with tempfile.TemporaryDirectory(prefix="easy-cheese-projects-") as temporary:
         projects = Path(temporary)
         _ = _download_runtime_wheels(wheelhouse)
+        _ = _build_fromargs_wheel(wheelhouse)
         _ = _build_schema_wheel(wheelhouse)
         _ = _build_shared_wheel(projects, wheelhouse)
         _ = _parallel_map(

@@ -76,7 +76,7 @@ class TestScriptsPresent:
 
 class TestSharedHelpersPresent:
     def test_shared_helpers_present(self) -> None:
-        for helper in ("manifest_io.py", "schema.py", "cli.py", "worktree.py"):
+        for helper in ("manifest_io.py", "schema.py", "worktree.py"):
             assert (REPO_ROOT / "src" / "easy_cheese" / "shared" / helper).is_file(), (
                 f"missing required shared helper: easy_cheese/shared/{helper}"
             )

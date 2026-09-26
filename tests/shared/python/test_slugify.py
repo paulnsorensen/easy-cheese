@@ -19,10 +19,10 @@ SLUGIFY_CLI = SHARED / "slugify.py"
 
 @pytest.fixture(scope="module")
 def slugify_mod() -> ModuleType:
-    # Preload cli + paths so slugify's top-level `import cli` / `import paths` resolve.
+    # Preload paths so slugify's `paths` import resolves to the same file.
     if str(SHARED) not in sys.path:
         sys.path.insert(0, str(SHARED))
-    for name in ("cli", "paths", "slugify"):
+    for name in ("paths", "slugify"):
         spec = importlib.util.spec_from_file_location(name, SHARED / f"{name}.py")
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
@@ -140,7 +140,7 @@ class TestFiveWordCap:
 
 
 class TestCollision:
-    def test_collision_exits_two_with_error_prefix(self, tmp_path: Path) -> None:
+    def test_collision_exits_two_with_json_error(self, tmp_path: Path) -> None:
         # Pre-create .cheese/specs/<slug>.md under tmp_path.
         specs_dir = tmp_path / "specs"
         specs_dir.mkdir(parents=True)
@@ -152,11 +152,13 @@ class TestCollision:
             "--json",
         )
         assert result.returncode == 2
-        assert result.stderr.startswith("ERROR:"), result.stderr
-        assert "already exists" in result.stderr
+        error = cast(dict[str, object], json.loads(result.stderr))
+        assert error["exit_code"] == 2
+        message = cast(str, error["error"])
+        assert "already exists" in message
         # Hint guides recovery without referencing a flag the CLI does not define.
-        assert "--suffix" not in result.stderr
-        assert "rephrase --task" in result.stderr or "remove the existing" in result.stderr
+        assert "--suffix" not in message
+        assert "rephrase --task" in message or "remove the existing" in message
         # No stdout on error.
         assert result.stdout == ""
 
@@ -180,11 +182,14 @@ class TestEmptySlugRejected:
             "--json",
         )
         assert result.returncode == 2
-        assert result.stderr.startswith("ERROR:")
+        error = cast(dict[str, object], json.loads(result.stderr))
+        assert error["exit_code"] == 2
+        assert "empty slug" in cast(str, error["error"])
+        assert result.stdout == ""
 
 
 class TestModuleApi:
     def test_module_loads(self, slugify_mod: ModuleType) -> None:
-        # Smoke test: module exposes _from_task + _setup, and importing did not blow up.
-        assert hasattr(slugify_mod, "_from_task")
-        assert hasattr(slugify_mod, "_setup")
+        # Smoke test: module exposes the handler + app builder, and importing did not blow up.
+        assert hasattr(slugify_mod, "from_task")
+        assert hasattr(slugify_mod, "build_app")

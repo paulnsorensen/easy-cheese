@@ -13,7 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from easy_cheese.shared import cli, worktree
+import fromargs
+
+from easy_cheese.shared import worktree
 
 
 def _run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -101,7 +103,7 @@ class TestHarvest:
         _ = _run(repo, "add", "-A")
         _ = _run(repo, "commit", "-m", "main edit")
 
-        with pytest.raises(cli.CliError):
+        with pytest.raises(fromargs.CliError):
             _ = worktree.harvest(str(info["branch"]), "main", repo=str(repo))
 
         # No CHERRY_PICK_HEAD left behind.
@@ -151,7 +153,7 @@ class TestTeardown:
         shutil.rmtree(repo / str(info["path"]))
         _ = _run(repo, "worktree", "prune")
 
-        with pytest.raises(cli.CliError):
+        with pytest.raises(fromargs.CliError):
             worktree.teardown(str(info["path"]), str(info["branch"]), repo=str(repo))
 
         branches = _run(repo, "branch", "--list", "worktree-agent-curd7").stdout
@@ -162,7 +164,7 @@ class TestFailsLoud:
     def test_teardown_of_missing_worktree_raises(
         self, repo: Path
     ) -> None:
-        with pytest.raises(cli.CliError):
+        with pytest.raises(fromargs.CliError):
             worktree.teardown(
                 ".claude/worktrees/agent-nope", "worktree-agent-nope", repo=str(repo)
             )
@@ -177,7 +179,7 @@ class TestCreateValidatesSlug:
     def test_bad_slug_raises_and_creates_nothing(
         self, repo: Path, bad: str
     ) -> None:
-        with pytest.raises(cli.CliError, match="invalid slug"):
+        with pytest.raises(fromargs.CliError, match="invalid slug"):
             _ = worktree.create(bad, "main", repo=str(repo))
         assert "agent-" not in _run(repo, "worktree", "list").stdout
 
@@ -190,11 +192,11 @@ class TestTeardownGuardsTarget:
     def test_path_outside_worktree_dir_refused(
         self, repo: Path
     ) -> None:
-        with pytest.raises(cli.CliError, match="refusing to tear down"):
+        with pytest.raises(fromargs.CliError, match="refusing to tear down"):
             worktree.teardown("some/other/dir", "worktree-agent-x", repo=str(repo))
 
     def test_escaping_path_refused(self, repo: Path) -> None:
-        with pytest.raises(cli.CliError, match="refusing to tear down"):
+        with pytest.raises(fromargs.CliError, match="refusing to tear down"):
             worktree.teardown(
                 ".claude/worktrees/../../etc/agent-x", "worktree-agent-x", repo=str(repo)
             )
@@ -202,5 +204,5 @@ class TestTeardownGuardsTarget:
     def test_non_worktree_branch_refused(
         self, repo: Path
     ) -> None:
-        with pytest.raises(cli.CliError, match="refusing to delete branch"):
+        with pytest.raises(fromargs.CliError, match="refusing to delete branch"):
             worktree.teardown(".claude/worktrees/agent-x", "main", repo=str(repo))

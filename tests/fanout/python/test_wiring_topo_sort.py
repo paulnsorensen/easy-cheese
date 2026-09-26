@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from typing import cast
 from pathlib import Path
 
 import pytest
@@ -77,23 +78,27 @@ class TestComputeWaves:
 
 
 class TestCLI:
-    def test_linear_chain_plain_text(self, tmp_path: Path) -> None:
+    """Drives the checked-in cook.pyz bundle; pending-rebuild until the
+    orchestrator regenerates bundles with the fromargs-based
+    wiring_topo_sort.py."""
+
+    def test_linear_chain(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
         _write_manifest(
             manifest, _wiring(("W1", []), ("W2", ["W1"]), ("W3", ["W2"]))
         )
         result = _run_cli("--manifest", str(manifest))
         assert result.returncode == 0, result.stderr
-        assert result.stdout == "wave 1: W1\nwave 2: W2\nwave 3: W3\n"
+        assert json.loads(result.stdout) == {"waves": [["W1"], ["W2"], ["W3"]]}
 
-    def test_branching_dag_plain_text(self, tmp_path: Path) -> None:
+    def test_branching_dag(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
         _write_manifest(
             manifest, _wiring(("W1", []), ("W2", ["W1"]), ("W3", ["W1"]))
         )
         result = _run_cli("--manifest", str(manifest))
         assert result.returncode == 0, result.stderr
-        assert result.stdout == "wave 1: W1\nwave 2: W2, W3\n"
+        assert json.loads(result.stdout) == {"waves": [["W1"], ["W2", "W3"]]}
 
     def test_json_output_shape(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
@@ -104,15 +109,15 @@ class TestCLI:
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == {"waves": [["W1"], ["W2", "W3"]]}
 
-    def test_empty_wiring_emits_nothing(self, tmp_path: Path) -> None:
+    def test_empty_wiring_emits_empty_waves(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"
         _ = manifest.write_text(yaml.safe_dump({"wiring": []}), encoding="utf-8")
         result = _run_cli("--manifest", str(manifest))
         assert result.returncode == 0, result.stderr
-        assert result.stdout == ""
+        assert json.loads(result.stdout) == {"waves": []}
 
     def test_missing_manifest_exits_two(self, tmp_path: Path) -> None:
-        # A nonexistent path is a usage-shaped error per cli.run, so exit 2
+        # A nonexistent path is a usage-shaped error per fromargs, so exit 2
         # (not 1) — the dispatcher distinguishes "bad invocation" from "valid
         # invocation, content failed".
         missing = tmp_path / "does-not-exist.yaml"
@@ -126,11 +131,12 @@ class TestCLI:
         result = _run_cli("--manifest", str(manifest))
         assert result.returncode == 2
         assert result.stdout == ""
-        assert result.stderr == "ERROR: cycle detected: W1, W2\n"
-
+        error = cast("dict[str, object]", json.loads(result.stderr))
+        assert error["error"] == "cycle detected: W1, W2"
+        assert error["exit_code"] == 2
 
     def test_missing_manifest_flag_exits_two(self) -> None:
-        # argparse's own missing-required-arg path also exits 2; check that
+        # fromargs' own missing-required-arg path also exits 2; check that
         # the CLI surface doesn't accidentally silently default the path.
         result = _run_cli()
         assert result.returncode == 2
@@ -145,4 +151,4 @@ class TestCLI:
         )
         result = _run_cli("--manifest", str(manifest))
         assert result.returncode == 0, result.stderr
-        assert result.stdout == "wave 1: W1\n"
+        assert json.loads(result.stdout) == {"waves": [["W1"]]}

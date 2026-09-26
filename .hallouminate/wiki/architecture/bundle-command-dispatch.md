@@ -21,7 +21,7 @@ One helper, `_lookup` (`src/easy_cheese/shared/bundle_commands.py:163`), accepts
 
 ## Leading-flag hoist rule
 
-Bundle command dispatch reads `argv[0]` as the command, so a flag before the command is a caller mistake. `_hoisted_leading_flags` (`src/easy_cheese/shared/bundle_commands.py:219`) moves only `--json` and `--full` after the command and prints `note: moved --json after 'severity'`. `cli.run` injects these two flags into every parser, and they take no value.
+Bundle command dispatch reads `argv[0]` as the command, so a flag before the command is a caller mistake. `_hoisted_leading_flags` (`src/easy_cheese/shared/bundle_commands.py:219`) moves only `--json` and `--full` after the command and prints `note: moved --json after 'severity'`. `fromargs` owns these two global flags and strips them anywhere before `--`: `--json` is a no-op because output is always JSON, and `--full` turns off a command's `limit=` truncation.
 
 Any other leading flag exits 2 with `Put the command first` and names the flag. The reason is a security one: the value of a flag can equal a command name. An earlier rule hoisted every dash token, and `age.pyz --slug handoff review-lock` then ran `handoff` with shifted arguments. A help flag among the leading flags prints the top-level help.
 
@@ -29,17 +29,11 @@ Any other leading flag exits 2 with `Put the command first` and names the flag. 
 
 ## Quote repair rule
 
-Quote repair fixes one bundle call shape: `--files '2 --modules 2'` arrives as one token. `repair_split_quotes` (`src/easy_cheese/shared/argv_repair.py:84`) splits a token only when all of these hold:
+Quote repair fixes one bundle call shape: `--files '2 --modules 2'` arrives as one token. Every bundle command that builds a `fromargs.App` gets the repair from `fromargs` itself (`skillz-that-grillz` `lib/fromargs`, pinned by commit in `requirements/fromargs.txt`). `fromargs` splits a token only when the app rejects the original argv, the token is the value of an option that cannot hold free text (not a flag, not an unconstrained `str` or path), and exactly one split candidate parses. It never splits a positional or free-text value, stops at `--`, and never splits a token that would free a help or version flag. The `note: split quoted argument ...` line names the pieces. `tests/shared/python/test_forgiving_cli_press.py` locks this behavior through a real `fromargs.App`.
 
-- The token is the value of an option that cannot hold free text: the option has `choices`, or a `type` other than `str` (`src/easy_cheese/shared/argv_repair.py:38`). The previous token names the option, or the token uses the `--opt=` form.
-- One piece is a declared option string.
-- The original argv fails to parse, and the split argv parses.
+**Output contract.** A `fromargs` handler returns data. `fromargs` prints it as one indented JSON document on stdout, and reports every refusal as one stderr line `{"error": <message>, "exit_code": <n>}`. Only a raised `fromargs.CliError` sets a nonzero exit, so an outcome that is not an error (for example a stale `freshness-check` state or `debug-tag-sweep` tags) is a field in the JSON, not an exit code.
 
-The repair never splits a positional token or the value of a plain string option. An earlier rule split free text, and it could write a shortened `orientation` into a durable handoff. The repair stops at a bare `--`. It returns the original argv when a split frees `-h` or `--help`, because the probe parse would print a help page to stdout and corrupt a `--json` consumer. The note prints the pieces.
-
-**Boundary.** `cli.run` and the age review-lock gate `gated_write_handoff_artifact` both call the public `cli.repair_argv` (`src/easy_cheese/shared/cli.py:70`). A handler that builds its own parser gets flag standardization from `dispatch`, but no quote repair.
-
-**One argv for a gate.** A gate that peeks at argv before a `cli.run` handler must repair first. The age review-lock gate calls `cli.repair_argv(write_handoff_artifact.setup_parser, argv)` and passes that one list to the peek and to the writer (`src/easy_cheese/skills/age/review_lock.py:382`). Otherwise the gate and the writer can read different `--slug` values.
+**One parse for a gate.** The age review-lock gate `gated_write_handoff_artifact` does not peek at argv. It builds the writer app with `write_handoff_artifact.build_app(before_write=...)`; the writer's own parse hands `(slug, phase, root)` to the hook before any write (`src/easy_cheese/skills/age/review_lock.py`). The gate and the writer therefore always read the same `--slug`.
 
 `read_mapping_arg_or_stdin` rejects an `argv[0]` that starts with `-` with the handler's usage error (`src/easy_cheese/shared/manifest_io.py:35`). A hoisted `--json` therefore never becomes a manifest path.
 
@@ -47,7 +41,7 @@ The repair never splits a positional token or the value of a plain string option
 
 Bundle command dispatch needs two static tables for its guidance, because a bundle cannot import another skill.
 
-- **Leaves.** Each shared parser module exports a `LEAVES` tuple beside its `add_subparsers` call (for example `src/easy_cheese/shared/severity.py:160`). Each skill `commands.py` passes it as `derive_command(..., leaves=<module>.LEAVES)`. A drift test compares every command of every skill with the `{a,b} ...` subparser group in its real `--help` output, with no allowlist (`tests/python/test_bundle_commands.py:389`). A new command with subparsers and no leaves fails the test.
+- **Leaves.** Each shared parser module exports a `LEAVES` tuple beside its `add_subparsers` call (for example `src/easy_cheese/shared/severity.py:160`). Each skill `commands.py` passes it as `derive_command(..., leaves=<module>.LEAVES)`. A drift test compares every command of every skill with the subcommands in its real `--help` output (the `Commands:` section of `fromargs` plain help, or an argparse `{a,b} ...` group), with no allowlist (`tests/python/test_bundle_commands.py:389`). A new command with subparsers and no leaves fails the test.
 - **Index.** `scripts/_bundle_command_index_compiler.py` projects every skill's `COMMANDS` into `src/easy_cheese/shared/bundle_command_index.py` (`COMMAND_BUNDLES` and `LEAF_OWNERS`). `just update-generated` writes the file, and the build checks that it is current (`scripts/build_pyz.py:159`). The dispatcher reads both tables directly, and it survives a missing index module.
 
 `references/commands.md` lists the leaves of each command in a last `Subcommands` column. The column is last because `tests/python/test_easy_cheese_setup_contract.py` pins the `| name | summary |` prefix of each row.

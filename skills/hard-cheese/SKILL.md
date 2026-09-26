@@ -51,8 +51,9 @@ The handoff blocks define the portable contract because slash commands are host 
      --slug <slug> --passing-score <n>
    ```
 
-   Exit `0` for `previously_passed`. Print `"previously passed"` and stop. Continue to step 3 for `stale` or `new`.
-   A stale result has exit status `2`. A new result has exit status `3`.
+   The command prints one JSON object and exits `0` for every state. Read its `state` field.
+   For `previously_passed`, print `"previously passed"` and stop. Continue to step 3 for `stale` or `new`.
+   A nonzero exit status is an input error; its stderr line is JSON with `error` and `exit_code`.
    A result is stale when `HEAD` changes or the last PASS score is too low.
 
 3. **Rank the hunks, then compose the vibecheck prompt.** Keep it faithful to Sankaranarayanan 2026. Use "share for review" to keep the gate implementation independent.

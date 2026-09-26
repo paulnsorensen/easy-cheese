@@ -247,9 +247,11 @@ python3 skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep \
 `--session-tag` matches the exact token `[DEBUG-a4f2]`.
 `--changed-only` scans the files that this worktree changed.
 The sweep excludes tool output such as `.cheese/`, caches, and run logs.
-Exit status 0 means that the sweep found no tags.
-Exit status 1 means that the sweep found listed tags.
+The sweep prints one JSON object with `files` and `total`, and exits 0 when it finishes.
+A `total` of 0 means that the sweep found no tags.
+A nonzero `total` means that the sweep found the tags that `files` lists.
 Remove each listed tag before you continue.
+A nonzero exit status is an input error; its stderr line is JSON with `error` and `exit_code`.
 Do not use the broad `--tags` scan to certify a clean worktree.
 
 Identify what could prevent this bug.

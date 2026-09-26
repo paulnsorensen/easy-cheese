@@ -122,27 +122,27 @@ def test_halt_status_extracts_reason(tmp_path: Path) -> None:
 def test_missing_file_raises_cli_error(tmp_path: Path) -> None:
     result = _run(tmp_path, "--phase", "age", "--slug", "ghost")
     assert result.returncode == 2
-    assert result.stderr.startswith("ERROR:")
-    assert "artifact not found" in result.stderr
-    assert "ghost" in result.stderr
+    payload = cast("dict[str, object]", json.loads(result.stderr))
+    assert "artifact not found" in str(payload["error"])
+    assert "ghost" in str(payload["error"])
 
 
 def test_malformed_preamble_raises_cli_error(tmp_path: Path) -> None:
-    # A garbled preamble must surface as the CliError contract (ERROR: / exit 2),
+    # A garbled preamble must surface as the CliError contract (JSON / exit 2),
     # not an uncaught HandoffParseError traceback (exit 1).
     _ = _write_artifact(tmp_path, "age", "garbled", "this is not a handoff preamble\n")
 
     result = _run(tmp_path, "--phase", "age", "--slug", "garbled")
     assert result.returncode == 2, result.stderr
-    assert result.stderr.startswith("ERROR:")
-    assert "malformed handoff preamble" in result.stderr
+    payload = cast("dict[str, object]", json.loads(result.stderr))
+    assert "malformed handoff preamble" in str(payload["error"])
     assert "Traceback" not in result.stderr
     assert result.stdout == ""
 
 
 def test_missing_required_arg_exits_2(tmp_path: Path) -> None:
-    # Omit --slug; argparse should error and exit 2.
+    # Omit --slug; parsing should error and exit 2.
     result = _run(tmp_path, "--phase", "age")
     assert result.returncode == 2
-    # argparse writes usage to stderr; sanity-check it complained about --slug.
-    assert "--slug" in result.stderr
+    payload = cast("dict[str, object]", json.loads(result.stderr))
+    assert "slug" in str(payload["error"]).lower()

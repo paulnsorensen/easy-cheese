@@ -18,7 +18,7 @@ _COMMAND_RE = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _SUMMARY_RE = re.compile(r"[^\s|][^\r\n\v\f|]*")
 _LONG_FLAG_UNDERSCORE_RE = re.compile(r"^(--[a-z0-9]+(?:_[a-z0-9]+)+)(=.*)?$")
 _HELP_FLAGS = frozenset({"-h", "--help"})
-# `cli.run` injects these valueless flags into every parser.
+# fromargs strips these valueless global flags anywhere before `--`.
 _HOISTABLE_FLAGS = frozenset({"--json", "--full"})
 _Value = TypeVar("_Value")
 CommandHandler = Callable[[list[str]], int]

@@ -16,15 +16,17 @@ from typing import TYPE_CHECKING, Protocol, cast
 import pytest
 
 if TYPE_CHECKING:
-    import argparse
     import re
+
+    import fromargs
     from collections.abc import Callable
 
 
 class _PathsCliModule(Protocol):
     KEBAB_SLUG: re.Pattern[str]
     PHASES: frozenset[str]
-    _setup: Callable[[argparse.ArgumentParser], None]
+    build_app: Callable[[], fromargs.App]
+    main: Callable[..., int]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -50,23 +52,23 @@ class TestSlugify:
     def test_basic(self) -> None:
         result = _run("slugify", "--text", "Tail trailing newline")
         assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() == "tail-trailing-newline"
+        assert json.loads(result.stdout) == "tail-trailing-newline"
 
     def test_punctuation_stripped(self) -> None:
         result = _run("slugify", "--text", "Don't break!!! User-facing API.")
         assert result.returncode == 0
-        assert result.stdout.strip() == "dont-break-user-facing-api"
+        assert json.loads(result.stdout) == "dont-break-user-facing-api"
 
     def test_empty_text_errors(self) -> None:
         result = _run("slugify", "--text", "")
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_only_stopwords_errors(self) -> None:
         # All-stopword input produces an empty slug → CliError.
         result = _run("slugify", "--text", "the of and")
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_missing_text_arg_exits_two(self) -> None:
         result = _run("slugify")
@@ -89,23 +91,23 @@ class TestValidate:
     def test_rejects_bad(self, slug: str) -> None:
         result = _run("validate", "--slug", slug)
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_rejects_leading_hyphen(self) -> None:
         # argparse needs `--slug=-leading` to keep the leading dash as a value.
         result = _run("validate", "--slug=-leading")
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_missing_slug_arg_exits_two(self) -> None:
         result = _run("validate")
         assert result.returncode == 2
 
     def test_acceptance_bad_double_hyphen(self) -> None:
-        # Spec acceptance: validate --slug bad--slug exits 2 with ERROR.
+        # Spec acceptance: validate --slug bad--slug exits 2 with an error payload.
         result = _run("validate", "--slug", "bad--slug")
         assert result.returncode == 2
-        assert result.stderr.startswith("ERROR:")
+        assert "error" in json.loads(result.stderr)
 
 
 class TestExisting:
@@ -122,7 +124,6 @@ class TestExisting:
             "age",
             "--root",
             str(tmp_path),
-            "--json",
         )
         assert result.returncode == 0, result.stderr
         payload = cast(list[str], json.loads(result.stdout))
@@ -137,7 +138,6 @@ class TestExisting:
             "age",
             "--root",
             str(tmp_path),
-            "--json",
         )
         assert result.returncode == 0
         assert json.loads(result.stdout) == []
@@ -155,7 +155,6 @@ class TestExisting:
             "age",
             "--root",
             str(tmp_path),
-            "--json",
         )
         assert result.returncode == 0
         assert json.loads(result.stdout) == []
@@ -171,7 +170,7 @@ class TestExisting:
             str(tmp_path),
         )
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_unknown_phase_errors(self, tmp_path: Path) -> None:
         result = _run(
@@ -184,8 +183,8 @@ class TestExisting:
             str(tmp_path),
         )
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
-        assert "unknown phase" in result.stderr
+        error_payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert "unknown phase" in str(error_payload["error"])
 
     def test_missing_required_args_exits_two(self) -> None:
         result = _run("existing")
@@ -202,7 +201,7 @@ class TestExisting:
         env["EASY_CHEESE_HOME"] = str(home)
         env["EASY_CHEESE_PROJECT"] = "owner-repo"
 
-        result = _run("existing", "--slug", "demo", "--phase", "specs", "--json", env=env)
+        result = _run("existing", "--slug", "demo", "--phase", "specs", env=env)
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == [str(spec)]
 
@@ -229,7 +228,6 @@ class TestExisting:
             "specs",
             "--root",
             str(override_root),
-            "--json",
             env=env,
         )
         assert result.returncode == 0, result.stderr
@@ -248,7 +246,7 @@ class TestList:
         env["EASY_CHEESE_HOME"] = str(home)
         env["EASY_CHEESE_PROJECT"] = "owner-repo"
 
-        result = _run("list", "--phase", "specs", "--json", env=env)
+        result = _run("list", "--phase", "specs", env=env)
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == [{"slug": "demo", "path": str(spec)}]
 
@@ -257,51 +255,47 @@ class TestList:
         art.parent.mkdir(parents=True)
         _ = art.write_text("body", encoding="utf-8")
 
-        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path), "--json")
+        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
         assert result.returncode == 0, result.stderr
         assert json.loads(result.stdout) == [{"slug": "demo", "path": str(art)}]
 
-    def test_json_mode_honors_limit(self, tmp_path: Path) -> None:
-        # --limit must cap JSON output too, not only plain mode; --full
-        # overrides it. Programmatic callers rely on --json + --limit.
+    def test_limit_caps_output(self, tmp_path: Path) -> None:
+        # --limit must cap output; omitted it returns the full list.
         for name in ("alpha", "bravo", "charlie"):
             art = tmp_path / ".cheese" / "cook" / f"{name}.md"
             art.parent.mkdir(parents=True, exist_ok=True)
             _ = art.write_text("body", encoding="utf-8")
 
+        uncapped = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
+        assert uncapped.returncode == 0, uncapped.stderr
+        assert len(cast(list[object], json.loads(uncapped.stdout))) == 3
+
         capped = _run(
             "list", "--phase", "cook", "--repo-root", str(tmp_path),
-            "--json", "--limit", "2",
+            "--limit", "2",
         )
         assert capped.returncode == 0, capped.stderr
         assert len(cast(list[object], json.loads(capped.stdout))) == 2
 
-        full = _run(
-            "list", "--phase", "cook", "--repo-root", str(tmp_path),
-            "--json", "--limit", "2", "--full",
-        )
-        assert full.returncode == 0, full.stderr
-        assert len(cast(list[object], json.loads(full.stdout))) == 3
-
-    def test_plain_mode_emits_slugs_only(self, tmp_path: Path) -> None:
+    def test_emits_slug_and_path_dicts(self, tmp_path: Path) -> None:
         art = tmp_path / ".cheese" / "cook" / "demo.md"
         art.parent.mkdir(parents=True)
         _ = art.write_text("body", encoding="utf-8")
 
         result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
         assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() == "demo"
+        assert json.loads(result.stdout) == [{"slug": "demo", "path": str(art)}]
 
     def test_empty_when_missing(self, tmp_path: Path) -> None:
-        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path), "--json")
+        result = _run("list", "--phase", "cook", "--repo-root", str(tmp_path))
         assert result.returncode == 0
         assert json.loads(result.stdout) == []
 
     def test_unknown_phase_errors(self, tmp_path: Path) -> None:
         result = _run("list", "--phase", "bogus", "--repo-root", str(tmp_path))
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
-        assert "unknown phase" in result.stderr
+        error_payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert "unknown phase" in str(error_payload["error"])
 
     def test_missing_required_args_exits_two(self) -> None:
         result = _run("list")
@@ -336,20 +330,21 @@ class TestResolve:
     def test_invalid_slug_exits_two(self, tmp_path: Path) -> None:
         result = _run("resolve", "--slug", "Bad_Slug", "--repo-root", str(tmp_path))
         assert result.returncode == 2
-        assert "ERROR:" in result.stderr
+        assert "error" in json.loads(result.stderr)
 
     def test_unknown_phase_exits_two(self, tmp_path: Path) -> None:
         result = _run(
             "resolve", "--slug", "demo", "--phase", "bogus", "--repo-root", str(tmp_path)
         )
         assert result.returncode == 2
-        assert "ERROR: unknown phase 'bogus'" in result.stderr
+        assert "unknown phase 'bogus'" in json.loads(result.stderr)["error"]
 
 
 class TestModuleImport:
-    def test_setup_callable_present(self, paths_cli_mod: _PathsCliModule) -> None:
-        # Sanity: the module exports the argparse setup hook cli.run consumes.
-        assert callable(paths_cli_mod._setup)  # pyright: ignore[reportPrivateUsage]
+    def test_build_app_and_main_present(self, paths_cli_mod: _PathsCliModule) -> None:
+        # Sanity: the module exports the fromargs entry points.
+        assert callable(paths_cli_mod.build_app)
+        assert callable(paths_cli_mod.main)
 
     def test_cli_shares_the_slug_rules(self, paths_cli_mod: _PathsCliModule) -> None:
         # One module owns the regex and phase list the CLI validates against.

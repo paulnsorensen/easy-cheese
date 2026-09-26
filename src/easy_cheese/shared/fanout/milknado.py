@@ -20,13 +20,12 @@ fan-out, so milknado is never a hard dependency.
 """
 from __future__ import annotations
 
-import argparse
 import os
 from collections.abc import Iterable
-from typing import Protocol, TextIO
 
-# cli is co-staged in the bundled .pyz alongside this module
-from easy_cheese.shared import cli
+import fromargs
+
+LEAVES = ("probe",)
 
 # Capability tokens — substrings that identify a milknado tool regardless of the
 # harness's ``mcp__milknado__`` prefixing.
@@ -62,34 +61,32 @@ def probe(tools: Iterable[str] | None = None) -> str | None:
     return None
 
 
-class _Args(Protocol):
-    tools: str | None
-    json_mode: bool
-    stdout: TextIO
+def probe_cmd(*, tools: str | None = None) -> str:
+    """Probe the milknado seam (engine | tracker | none).
+
+    Parameters
+    ----------
+    tools
+        Comma/space-separated available tool names. When omitted, read
+        from the EC_MCP_TOOLS env var (empty -> none).
+    """
+    parsed = _split(tools) if tools is not None else None
+    role = probe(parsed)
+    return "none" if role is None else role
 
 
-def _cmd_probe(args: _Args) -> None:
-    tools = _split(args.tools) if args.tools is not None else None
-    role = probe(tools)
-    cli.emit("none" if role is None else role, json_mode=args.json_mode, stdout=args.stdout)
-
-
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Probe the milknado seam (engine | tracker | none)."
-    _ = parser.add_argument(
-        "--tools",
-        default=None,
-        help=(
-            "Comma/space-separated available tool names. When omitted, read "
-            f"from the {TOOLS_ENV} env var (empty → none)."
-        ),
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "milknado",
+        help="Probe the milknado seam (engine | tracker | none).",
+        help_formatter="plain",
+        default_command=probe_cmd,
     )
-    parser.set_defaults(func=_cmd_probe)
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

@@ -63,11 +63,10 @@ returns `action: "halt"` while `disposition` stays `"retry"`. Branch on
 """
 from __future__ import annotations
 
-import argparse
-from typing import Literal, Protocol, TextIO, TypedDict
+from typing import Annotated, Literal, TypedDict
 
-# cli is co-staged in the bundled .pyz alongside this module
-from easy_cheese.shared import cli
+import cyclopts
+import fromargs
 
 from easy_cheese_schemas.phase_contracts import (
     RETRY,
@@ -112,13 +111,6 @@ TABLES: dict[str, list[str]] = {
 }
 
 
-def _non_negative_int(raw: str) -> int:
-    value = int(raw)
-    if value < 0:
-        raise argparse.ArgumentTypeError("retry count cannot be negative")
-    return value
-
-
 def decide(
     phase_index: int,
     status: str,
@@ -131,11 +123,11 @@ def decide(
     """Pure decision — no I/O. Raises CliError on invalid phase index."""
     max_index = len(table) - 1
     if phase_index < 0 or phase_index > max_index:
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"phase-index out of range: {phase_index} (valid 0..{max_index})"
         )
     if retry_count < 0:
-        raise cli.CliError(f"retry-count cannot be negative: {retry_count}")
+        raise fromargs.CliError(f"retry-count cannot be negative: {retry_count}")
     current_phase = table[phase_index]
     next_phase = table[phase_index + 1] if phase_index < max_index else None
     if allow_early_stop is None:
@@ -145,7 +137,7 @@ def decide(
     try:
         name, reason = parse_status_field(status, require_reason=False)
     except StatusError as exc:
-        raise cli.contract_error(exc, context=context) from exc
+        raise fromargs.contract_error(exc, context=context) from exc
     disposition = status_disposition(name)
 
     if disposition == STOP:
@@ -169,7 +161,7 @@ def decide(
         }
     if disposition == RETRY:
         if reason is None:
-            raise cli.contract_error(
+            raise fromargs.contract_error(
                 StatusError("needs-context requires a named gap"), context=context
             )
         if retry_count >= 1:
@@ -264,69 +256,63 @@ def decide(
     }
 
 
-class _Args(Protocol):
-    table: str
-    phase_index: int
-    status: str
-    next: str | None
-    retry_count: int
-    stdout: TextIO
+TableName = Literal[
+    "linear",
+    "not-applicable-linear",
+    "not-applicable-curd",
+    "not-applicable-postmerge",
+]
 
 
-def _cmd_decide(args: _Args) -> None:
-    table = TABLES[args.table]
-    verdict = decide(
-        args.phase_index,
-        args.status,
-        args.next,
-        table=table,
-        allow_early_stop=table in (LINEAR_TABLE, NOT_APPLICABLE_LINEAR),
-        retry_count=args.retry_count,
+def decide_cmd(
+    *,
+    phase_index: int,
+    status: str,
+    next_field: Annotated[
+        str | None, cyclopts.Parameter(name="--next")
+    ] = None,
+    table: TableName = "linear",
+    retry_count: int = 0,
+) -> Verdict:
+    """Decide /ultracook's next action from a phase handoff.
+
+    Parameters
+    ----------
+    phase_index
+        0-indexed phase that just returned.
+    status
+        `status` field from the handoff slug; see the handback vocabulary.
+    next_field
+        `next` field from the handoff slug (e.g. press, cure, done).
+    table
+        Which receipt-specific table to walk: linear or a closed
+        not-applicable path. Fan remediation uses its progress-aware state.
+    retry_count
+        needs-context retries already consumed by this phase (default 0).
+    """
+    picked_table = TABLES[table]
+    return decide(
+        phase_index,
+        status,
+        next_field,
+        table=picked_table,
+        allow_early_stop=picked_table in (LINEAR_TABLE, NOT_APPLICABLE_LINEAR),
+        retry_count=retry_count,
     )
-    cli.emit(verdict, json_mode=True, stdout=args.stdout)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Decide /ultracook's next action from a phase handoff."
-    _ = parser.add_argument(
-        "--phase-index",
-        type=int,
-        required=True,
-        dest="phase_index",
-        help="0-indexed phase that just returned.",
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "phase-decision",
+        help="Decide /ultracook's next action from a phase handoff.",
+        help_formatter="plain",
+        default_command=decide_cmd,
     )
-    _ = parser.add_argument(
-        "--status",
-        required=True,
-        help="`status` field from the handoff slug; see the handback vocabulary.",
-    )
-    _ = parser.add_argument(
-        "--next",
-        default=None,
-        help="`next` field from the handoff slug (e.g. press, cure, done).",
-    )
-    _ = parser.add_argument(
-        "--table",
-        choices=sorted(TABLES),
-        default="linear",
-        help=(
-            "Which receipt-specific table to walk: linear or a closed "
-            "not-applicable path. Fan remediation uses its progress-aware state."
-        ),
-    )
-    _ = parser.add_argument(
-        "--retry-count",
-        type=_non_negative_int,
-        default=0,
-        dest="retry_count",
-        help="needs-context retries already consumed by this phase (default 0).",
-    )
-    parser.set_defaults(func=_cmd_decide)
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

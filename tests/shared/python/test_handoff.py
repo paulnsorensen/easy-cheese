@@ -9,20 +9,11 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import cast
 
 import pytest
 
 from easy_cheese.shared.bundle_commands import Command
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-
-class _HandoffCliModule(Protocol):
-    _cmd_render: Callable[..., None]
-    _cmd_parse: Callable[..., None]
-    _cmd_dispatch: Callable[..., None]
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
@@ -52,7 +43,7 @@ class TestRender:
             "--orientation", "bar",
         )
         assert result.returncode == 0, result.stderr
-        lines = result.stdout.splitlines()
+        lines = cast(str, json.loads(result.stdout)).splitlines()
         assert lines == [
             "status: ok",
             "next: cure",
@@ -69,7 +60,7 @@ class TestRender:
             "--orientation", "Stopped.",
         )
         assert result.returncode == 0, result.stderr
-        lines = result.stdout.splitlines()
+        lines = cast(str, json.loads(result.stdout)).splitlines()
         assert lines[0] == "status: halt: dep conflict"
         assert lines[1] == "next: done"
         assert lines[2] == "artifact: "
@@ -84,7 +75,7 @@ class TestRender:
             "--orientation", "y",
         )
         assert result.returncode == 0, result.stderr
-        assert result.stdout.splitlines()[1] == "next: age"
+        assert cast(str, json.loads(result.stdout)).splitlines()[1] == "next: age"
 
     def test_halt_without_reason_errors(self) -> None:
         result = _run(
@@ -95,8 +86,9 @@ class TestRender:
             "--orientation", "x",
         )
         assert result.returncode == 3
-        assert "halt status requires" in result.stderr
-        assert "--status" in result.stderr
+        payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert "halt status requires" in str(payload["error"])
+        assert "--status" in str(payload["error"])
 
     def test_unknown_status_errors(self) -> None:
         result = _run(
@@ -107,8 +99,9 @@ class TestRender:
             "--orientation", "x",
         )
         assert result.returncode == 3
-        assert "status must be" in result.stderr
-        assert "--status" in result.stderr
+        payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert "status must be" in str(payload["error"])
+        assert "--status" in str(payload["error"])
 
 
 class TestParse:
@@ -147,7 +140,8 @@ class TestParse:
         )
         assert rendered.returncode == 0, rendered.stderr
         fixture = tmp_path / "p.md"
-        _ = fixture.write_text(rendered.stdout + ("\n" if not rendered.stdout.endswith("\n") else ""))
+        rendered_text = cast(str, json.loads(rendered.stdout))
+        _ = fixture.write_text(rendered_text + ("\n" if not rendered_text.endswith("\n") else ""))
         parsed = _run("parse", "--file", str(fixture))
         assert parsed.returncode == 0, parsed.stderr
         payload = cast("dict[str, object]", json.loads(parsed.stdout))
@@ -161,14 +155,16 @@ class TestParse:
     def test_missing_file_errors(self, tmp_path: Path) -> None:
         result = _run("parse", "--file", str(tmp_path / "nope.md"))
         assert result.returncode == 2
-        assert "file not found" in result.stderr
+        payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert "file not found" in str(payload["error"])
 
     def test_malformed_preamble_errors(self, tmp_path: Path) -> None:
         fixture = tmp_path / "bad.md"
         _ = fixture.write_text("status: ok\nnext: age\n")  # missing artifact + orientation
         result = _run("parse", "--file", str(fixture))
         assert result.returncode == 3
-        assert "ERROR:" in result.stderr
+        payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert payload["exit_code"] == 3
 
     def test_malformed_preamble_error_carries_file_path(self, tmp_path: Path) -> None:
         fixture = tmp_path / "bad.md"
@@ -193,7 +189,8 @@ class TestDispatch:
     def test_non_dispatch_errors(self) -> None:
         result = _run("dispatch", "age slug")
         assert result.returncode == 2
-        assert "not a skill dispatch" in result.stderr
+        payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert "not a skill dispatch" in str(payload["error"])
 
 
 class TestJsonMode:
@@ -224,7 +221,8 @@ class TestArgparse:
     def test_render_missing_required_arg_exits_two(self) -> None:
         result = _run("render", "--status", "ok")  # missing --next/--orientation
         assert result.returncode == 2
-        assert "usage:" in result.stderr.lower() or "required" in result.stderr.lower()
+        payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert "error" in payload
 
     def test_parse_missing_file_arg_exits_two(self) -> None:
         result = _run("parse")
@@ -236,11 +234,14 @@ class TestArgparse:
 
 
 class TestModuleImports:
-    def test_loads_via_importlib(self, handoff_cli_mod: _HandoffCliModule) -> None:
+    def test_loads_via_importlib(self, handoff_cli_mod: ModuleType) -> None:
         # Sanity: the module exposes the subcommand handlers (in-process unit test).
-        assert callable(handoff_cli_mod._cmd_render)  # pyright: ignore[reportPrivateUsage]
-        assert callable(handoff_cli_mod._cmd_parse)  # pyright: ignore[reportPrivateUsage]
-        assert callable(handoff_cli_mod._cmd_dispatch)  # pyright: ignore[reportPrivateUsage]
+        from easy_cheese.shared import handoff
+
+        del handoff_cli_mod
+        assert callable(handoff.render)
+        assert callable(handoff.parse)
+        assert callable(handoff.dispatch)
 
     def test_old_module_is_not_importable(self) -> None:
         with pytest.raises(ImportError):
@@ -277,8 +278,8 @@ class TestBundleRegistration:
                 "Callable[[list[str]], int]", getattr(importlib.import_module(module_name), attribute)
             )
             assert handler_fn(args) == 0
-            outputs.add(capsys.readouterr().out)
-        assert outputs == {"status: ok\nnext: cure\nartifact: foo\nbar\n"}
+            outputs.add(cast(str, json.loads(capsys.readouterr().out)))
+        assert outputs == {"status: ok\nnext: cure\nartifact: foo\nbar"}
 
 
 class TestModeCli:
@@ -289,11 +290,11 @@ class TestModeCli:
 
         base = ["render", "--status", "ok", "--next", "cook", "--artifact", "", "--orientation", "o"]
         assert handoff_mod.main(base) == 0
-        plain = capsys.readouterr().out
+        plain = cast(str, json.loads(capsys.readouterr().out))
         assert handoff_mod.main([*base, "--mode", "parallel"]) == 0
-        with_mode = capsys.readouterr().out
+        with_mode = cast(str, json.loads(capsys.readouterr().out))
         assert "mode:" not in plain
-        assert "mode: parallel\n" in with_mode
+        assert "mode: parallel" in with_mode.splitlines()
 
         preamble = tmp_path / "pre.md"
         _ = preamble.write_text(with_mode, encoding="utf-8")
@@ -313,8 +314,8 @@ class TestBaselineCli:
 
         base = ["render", "--status", "ok", "--next", "cook", "--artifact", "", "--orientation", "o"]
         assert handoff_mod.main([*base, "--baseline", "suite=pytest test_id=t signature=s"]) == 0
-        rendered = capsys.readouterr().out
-        assert "baseline: suite=pytest test_id=t signature=s\n" in rendered
+        rendered = cast(str, json.loads(capsys.readouterr().out))
+        assert "baseline: suite=pytest test_id=t signature=s" in rendered.splitlines()
 
         preamble = tmp_path / "pre.md"
         _ = preamble.write_text(rendered, encoding="utf-8")

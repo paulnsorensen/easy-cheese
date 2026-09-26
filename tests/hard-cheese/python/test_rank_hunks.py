@@ -460,7 +460,7 @@ def test_unknown_base_ref_exits_nonzero_without_traceback(
     )
     assert result.returncode != 0
     assert "Traceback" not in result.stderr
-    assert result.stderr.startswith("ERROR:")
+    assert json.loads(result.stderr.splitlines()[-1])["exit_code"] == result.returncode
     stderr_lines = [line for line in result.stderr.splitlines() if line.strip()]
     assert len(stderr_lines) == 1
 
@@ -494,7 +494,7 @@ def test_unknown_head_ref_exits_nonzero_without_traceback(
     )
     assert result.returncode != 0
     assert "Traceback" not in result.stderr
-    assert result.stderr.startswith("ERROR:")
+    assert json.loads(result.stderr.splitlines()[-1])["exit_code"] == result.returncode
 
 
 def test_non_directory_cwd_exits_nonzero_without_traceback(

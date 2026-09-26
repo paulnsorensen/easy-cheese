@@ -21,12 +21,12 @@ mold hint) call to turn a curd count into a mode name.
 """
 from __future__ import annotations
 
-import argparse
 import math
 from collections.abc import Sized
-from typing import Protocol, TextIO, cast
 
-from easy_cheese.shared import cli
+import fromargs
+
+LEAVES = ("select",)
 
 PARALLEL_THRESHOLD = 2
 
@@ -54,51 +54,47 @@ def select_mode_from_score(score: float) -> str:
     )
 
 
-class _Args(Protocol):
-    count: int | None
-    score: float
-    json_mode: bool
-    stdout: TextIO
+def select_cmd(*, count: int | None = None, score: float | None = None) -> str:
+    """Pick /ultracook's mode (linear|parallel|decompose-first) from a curd
+    count (curd block present) or a score (no curd block).
 
-
-def _cmd_select(args: argparse.Namespace) -> None:
-    a = cast(_Args, cast(object, args))
-    # The decomposer knows the curd count; the count is all select_mode reads.
-    if a.count is not None:
-        if a.count < 0:
-            raise cli.CliError(f"invalid --count {a.count}: must be zero or greater")
-        cli.emit(select_mode(range(a.count)), json_mode=a.json_mode, stdout=a.stdout)
-        return
-    score = a.score
+    Parameters
+    ----------
+    count
+        Number of curds in the decomposition.
+    score
+        Fan-out score for the no-curd-block fallback.
+    """
+    if count is not None and score is not None:
+        raise fromargs.CliError("--count and --score are mutually exclusive")
+    if count is None and score is None:
+        raise fromargs.CliError("one of --count or --score is required")
+    if count is not None:
+        # The decomposer knows the curd count; the count is all select_mode reads.
+        if count < 0:
+            raise fromargs.CliError(f"invalid --count {count}: must be zero or greater")
+        return select_mode(range(count))
+    assert score is not None
     if not math.isfinite(score) or score < 0:
-        raise cli.CliError(f"invalid --score {score}: must be zero or greater and finite")
-    cli.emit(select_mode_from_score(score), json_mode=a.json_mode, stdout=a.stdout)
+        raise fromargs.CliError(f"invalid --score {score}: must be zero or greater and finite")
+    return select_mode_from_score(score)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = (
-        "Pick /ultracook's mode (linear|parallel|decompose-first) from a "
-        "curd count (curd block present) or a score (no curd block)."
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "mode",
+        help=(
+            "Pick /ultracook's mode (linear|parallel|decompose-first) from a "
+            "curd count (curd block present) or a score (no curd block)."
+        ),
+        help_formatter="plain",
+        default_command=select_cmd,
     )
-    group = parser.add_mutually_exclusive_group(required=True)
-    _ = group.add_argument(
-        "--count",
-        type=int,
-        default=None,
-        help="Number of curds in the decomposition.",
-    )
-    _ = group.add_argument(
-        "--score",
-        type=float,
-        default=None,
-        help="Fan-out score for the no-curd-block fallback.",
-    )
-    parser.set_defaults(func=_cmd_select)
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

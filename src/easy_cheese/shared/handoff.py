@@ -20,13 +20,13 @@ The block sits at the top of every findings report so downstream skills
 
 from __future__ import annotations
 
-import argparse
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Annotated
 
-from easy_cheese.shared import cli
+import cyclopts
+import fromargs
 
 from easy_cheese_schemas.handback_status import require_single_line
 from easy_cheese_schemas.phase_contracts import (
@@ -34,7 +34,6 @@ from easy_cheese_schemas.phase_contracts import (
     parse_status_field,
     render_status_field,
     status_disposition,
-    status_vocabulary,
 )
 
 # Flag propagation rules — see skills/cheese/references/handoff-gate.md § Flag propagation.
@@ -251,89 +250,114 @@ def propagate_flags(source_flags: list[str], *, in_auto_chain: bool) -> list[str
 # ----- CLI: render / parse / dispatch --------------------------------------
 
 
-def _cmd_render(args: argparse.Namespace) -> None:
+def render(
+    *,
+    status: str,
+    next_skill: Annotated[str, cyclopts.Parameter(name="--next")],
+    orientation: str,
+    artifact: str = "",
+    taste_test: str | None = None,
+    durable_flags: str | None = None,
+    mode: str | None = None,
+    baseline: str | None = None,
+) -> str:
+    """Render a 4-line handoff preamble.
+
+    Parameters
+    ----------
+    status
+        Handback status; see phase_contracts.status_vocabulary().
+    next_skill
+        Next skill name (or 'done').
+    orientation
+        One-line orientation.
+    artifact
+        Path to prior report; empty if none.
+    taste_test
+        Optional taste_test: keyed line.
+    durable_flags
+        Optional durable_flags: keyed line.
+    mode
+        Optional mode: keyed line (e.g. parallel).
+    baseline
+        Optional baseline: keyed line.
+    """
     try:
-        status, reason = parse_status_field(cast(str, args.status))
+        parsed_status, reason = parse_status_field(status)
     except StatusError as exc:
-        raise cli.contract_error(exc, context="--status") from exc
-    next_skill = cast(str, args.next_skill)
-    artifact = cast(str, args.artifact)
+        raise fromargs.contract_error(exc, context="--status") from exc
     slug = HandoffSlug(
-        status=status,
+        status=parsed_status,
         reason=reason,
         next_skill=next_skill.lstrip("/"),
         artifact=artifact or None,
-        orientation=cast(str, args.orientation),
-        taste_test=cast("str | None", args.taste_test),
-        durable_flags=cast("str | None", args.durable_flags),
-        mode=cast("str | None", args.mode),
-        baseline=cast("str | None", args.baseline),
+        orientation=orientation,
+        taste_test=taste_test,
+        durable_flags=durable_flags,
+        mode=mode,
+        baseline=baseline,
     )
     try:
-        print(render_handoff_slug(slug), file=cast("TextIO", args.stdout))
+        return render_handoff_slug(slug)
     except ValueError as exc:
-        raise cli.CliError(str(exc)) from exc
+        raise fromargs.CliError(str(exc)) from exc
 
 
-def _cmd_parse(args: argparse.Namespace) -> None:
-    file_arg = cast(str, args.file)
-    path = Path(file_arg)
+def parse(*, file: str) -> dict[str, object]:
+    """Parse a handoff preamble from a file.
+
+    Parameters
+    ----------
+    file
+        Path to file containing the preamble.
+    """
+    path = Path(file)
     if not path.is_file():
-        raise cli.CliError(f"file not found: {file_arg}")
+        raise fromargs.CliError(f"file not found: {file}")
     try:
         slug = parse_handoff_slug(path.read_text(encoding="utf-8"))
     except HandoffParseError as exc:
-        raise cli.contract_error(exc, context=f"--file {file_arg}") from exc
+        raise fromargs.contract_error(exc, context=f"--file {file}") from exc
     try:
         disposition = slug.disposition
     except StatusError as exc:
-        raise cli.contract_error(exc, context=f"--file {file_arg}") from exc
-    cli.emit(
-        {**slug_payload(slug), "next_skill": slug.next_skill, "disposition": disposition},
-        stdout=cast("TextIO", args.stdout),
-    )
+        raise fromargs.contract_error(exc, context=f"--file {file}") from exc
+    return {**slug_payload(slug), "next_skill": slug.next_skill, "disposition": disposition}
 
 
-def _cmd_dispatch(args: argparse.Namespace) -> None:
+def dispatch(command: str) -> dict[str, object]:
+    """Split a '/skill arg --flag' command.
+
+    Parameters
+    ----------
+    command
+        Full dispatch string, e.g. '/age slug --hard'.
+    """
     try:
-        skill, dispatch_args = parse_skill_dispatch(cast(str, args.command))
+        skill, dispatch_args = parse_skill_dispatch(command)
     except ValueError as exc:
-        raise cli.CliError(str(exc)) from exc
-    cli.emit({"skill": skill, "args": dispatch_args}, stdout=cast("TextIO", args.stdout))
+        raise fromargs.CliError(str(exc)) from exc
+    return {"skill": skill, "args": dispatch_args}
 
 
 LEAVES = ("render", "parse", "dispatch")
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Render, parse, and dispatch handoff preambles."
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
-    render = sub.add_parser("render", help="render a 4-line handoff preamble")
-    _ = render.add_argument(
-        "--status", required=True, help=f"handback status: {status_vocabulary()}"
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "handoff",
+        help="Render, parse, and dispatch handoff preambles.",
+        help_formatter="plain",
     )
-    _ = render.add_argument("--next", dest="next_skill", required=True, help="next skill name (or 'done')")
-    _ = render.add_argument("--artifact", default="", help="path to prior report; empty if none")
-    _ = render.add_argument("--orientation", required=True, help="one-line orientation")
-    _ = render.add_argument("--taste-test", default=None, help="optional taste_test: keyed line")
-    _ = render.add_argument("--durable-flags", default=None, help="optional durable_flags: keyed line")
-    _ = render.add_argument("--mode", default=None, help="optional mode: keyed line (e.g. parallel)")
-    _ = render.add_argument("--baseline", default=None, help="optional baseline: keyed line")
-    render.set_defaults(func=_cmd_render)
-
-    parse = sub.add_parser("parse", help="parse a handoff preamble from a file")
-    _ = parse.add_argument("--file", required=True, help="path to file containing the preamble")
-    parse.set_defaults(func=_cmd_parse)
-
-    dispatch = sub.add_parser("dispatch", help="split a '/skill arg --flag' command")
-    _ = dispatch.add_argument("command", help="full dispatch string, e.g. '/age slug --hard'")
-    dispatch.set_defaults(func=_cmd_dispatch)
+    _ = app.command(render, name="render")
+    _ = app.command(parse, name="parse")
+    _ = app.command(dispatch, name="dispatch")
+    return app
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())
