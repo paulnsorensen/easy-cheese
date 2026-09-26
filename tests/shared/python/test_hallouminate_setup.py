@@ -243,6 +243,31 @@ class TestMigrateLegacy:
         assert 'name = "my-repo"' in text
         assert 'path = "/opt/my-repo"' in text
 
+    def test_migration_stops_at_any_easy_cheese_marker(
+        self, hallouminate_setup: _HallouminateSetupModule, config_path: Path
+    ) -> None:
+        config_path.parent.mkdir(parents=True)
+        _ = config_path.write_text(
+            """[[corpus]]
+name = \"cheese-global\"
+paths = [\"~/.cheese\"]
+# >>> easy-cheese:other-corpus
+[[corpus]]
+name = \"cheese-global\"
+paths = [\"~/.cheese\"]
+# <<< easy-cheese:other-corpus
+""",
+            encoding="utf-8",
+        )
+
+        change = hallouminate_setup.migrate_legacy(config_path, apply=True)
+
+        assert change.action == "remove"
+        text = config_path.read_text(encoding="utf-8")
+        assert text.count('name = "cheese-global"') == 1
+        assert "# >>> easy-cheese:other-corpus" in text
+        assert "# <<< easy-cheese:other-corpus" in text
+
 
 class TestApplyLocalMainRoot:
     def test_init_repo_targets_main_root_not_worktree(

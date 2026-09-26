@@ -44,9 +44,14 @@ def test_skill_does_not_name_the_configuration_path_as_universal() -> None:
     assert "HALLOUMINATE_CONFIG" in text
 
 
-def test_command_surface_declares_exactly_the_three_legs() -> None:
+def test_command_surface_declares_exactly_the_four_legs() -> None:
     validate_command_surface(setup_commands, setup_commands.COMMANDS)
-    assert sorted(command_map(setup_commands.COMMANDS)) == ["doctor", "global", "local"]
+    assert sorted(command_map(setup_commands.COMMANDS)) == [
+        "artifacts",
+        "doctor",
+        "global",
+        "local",
+    ]
 
 
 def test_every_command_target_resolves_to_the_shared_leg() -> None:

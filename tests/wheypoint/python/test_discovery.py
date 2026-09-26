@@ -225,7 +225,6 @@ def test_machine_root_flag_backends_agree_on_notes(
         _ = _write_note(repo1 / pruned, "pruned-note")
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "empty-cheese"))
     original_path = os.environ.get("PATH", "")
-
     monkeypatch.setenv("PATH", "")
     walk_result = discovery.discover(
         scope="machine", start=tmp_path, roots=[repo1, repo2]
@@ -237,7 +236,12 @@ def test_machine_root_flag_backends_agree_on_notes(
 
     if not HAS_RG:
         pytest.skip("rg is not installed; the walk fallback is already verified")
-    monkeypatch.setenv("PATH", original_path)
+    rg_entries = [
+        entry for entry in original_path.split(os.pathsep) if Path(entry).name != "shims"
+    ]
+    if not any((Path(entry) / "rg").is_file() for entry in rg_entries):
+        pytest.skip("rg is only available through a shim")
+    monkeypatch.setenv("PATH", os.pathsep.join(rg_entries))
     rg_result = discovery.discover(
         scope="machine", start=tmp_path, roots=[repo1, repo2]
     )

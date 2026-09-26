@@ -10,15 +10,24 @@ manipulation only -- no toml dependency.
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TypedDict, cast
 
 from easy_cheese.shared import paths
+from easy_cheese.shared import hallouminate_artifacts
+from easy_cheese.shared.hallouminate_blocks import (
+    Change as Change,
+    atomic_write,
+    config_path as config_path,
+    extract_block,
+    find_marked_span,
+    replace_marked_block,
+    resolve_config_path,
+)
 
 
 class _State(TypedDict):
@@ -34,33 +43,6 @@ END = "# <<< easy-cheese:cheese-durable"
 _PATHS0_RE = re.compile(r'paths\s*=\s*\[\s*"([^"]*)"')
 
 
-@dataclass(frozen=True)
-class Change:
-    """One leg's computed or applied action, for reporting + idempotency checks."""
-
-    leg: str
-    action: str  # "noop" | "create" | "replace" | "remove" | "init-repo"
-    target_path: str
-    detail: str
-
-
-def config_path() -> Path:
-    """``${XDG_CONFIG_HOME:-~/.config}/hallouminate/config.toml``.
-
-    ``$HALLOUMINATE_CONFIG`` overrides outright (tests point this at a temp file).
-    """
-    override = os.environ.get("HALLOUMINATE_CONFIG", "").strip()
-    if override:
-        return Path(override)
-    raw = os.environ.get("XDG_CONFIG_HOME", "").strip()
-    base = Path(raw) if raw and Path(raw).is_absolute() else Path.home() / ".config"
-    return base / "hallouminate" / "config.toml"
-
-
-def _resolve_config_path(explicit: Path | None) -> Path:
-    return Path(explicit) if explicit is not None else config_path()
-
-
 def _block(home: Path) -> str:
     return (
         f"{BEGIN}\n"
@@ -73,79 +55,23 @@ def _block(home: Path) -> str:
     )
 
 
-def _find_marked_span(lines: list[str]) -> tuple[int, int] | None:
-    """``(begin_idx, end_idx)`` (inclusive) of the marked block, or None.
-
-    An orphan ``BEGIN`` with no closing ``END`` (a half-written/truncated block)
-    spans begin→EOF, so it is replaced in place rather than left to trip the
-    blind-append path into a duplicate cheese-durable corpus.
-    """
-    begin_idx = None
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped == BEGIN:
-            begin_idx = i
-        elif stripped == END and begin_idx is not None:
-            return begin_idx, i
-    if begin_idx is not None:
-        return begin_idx, len(lines) - 1
-    return None
-
-
-def _atomic_write(path: Path, text: str) -> None:
-    """Write via a temp sibling + ``os.replace`` so an interrupted write can
-    never truncate the shared user config (it holds unrelated corpora)."""
-    tmp = path.with_name(f"{path.name}.ec-tmp")
-    # write_bytes (not write_text) so line endings pass through verbatim on
-    # every Python -- write_text(newline=...) is 3.13+, CI runs 3.12.
-    _ = tmp.write_bytes(text.encode("utf-8"))
-    _ = tmp.replace(path)
-
-
-def _extract_block(text: str) -> str | None:
-    lines = text.splitlines(keepends=True)
-    span = _find_marked_span(lines)
-    if span is None:
-        return None
-    begin_idx, end_idx = span
-    return "".join(lines[begin_idx : end_idx + 1])
-
-
-def _dominant_newline(text: str) -> str:
-    """The config's prevailing line ending, so a rewritten block does not mix
-    CRLF and LF in a shared user config that is CRLF-terminated."""
-    crlf = text.count("\r\n")
-    lf_only = text.count("\n") - crlf
-    return "\r\n" if crlf > lf_only else "\n"
-
-
-def _replace_marked_block(text: str, new_block: str) -> str:
-    newline = _dominant_newline(text)
-    if newline != "\n":
-        new_block = new_block.replace("\r\n", "\n").replace("\n", newline)
-    lines = text.splitlines(keepends=True)
-    span = _find_marked_span(lines)
-    if span is not None:
-        begin_idx, end_idx = span
-        return "".join(lines[:begin_idx]) + new_block + "".join(lines[end_idx + 1 :])
-    prefix = text
-    if prefix and not prefix.endswith(("\n", "\r\n")):
-        prefix += newline
-    return prefix + new_block
-
-
 def detect_state(config_path: Path | None = None) -> _State:
     """``{present, path, drifted, drift_from}`` for the marked cheese-durable block.
 
     ``drifted`` is True when the block is present but its ``paths[0]`` does not
     match ``paths.corpus_home()``.
     """
-    path = _resolve_config_path(config_path)
+    path = resolve_config_path(config_path)
     if not path.is_file():
         return {"present": False, "path": None, "drifted": False, "drift_from": None}
-    block = _extract_block(path.read_text(encoding="utf-8"))
+    block = extract_block(path.read_text(encoding="utf-8"), begin=BEGIN, end=END)
     if block is None:
-        return {"present": False, "path": str(path), "drifted": False, "drift_from": None}
+        return {
+            "present": False,
+            "path": str(path),
+            "drifted": False,
+            "drift_from": None,
+        }
     match = _PATHS0_RE.search(block)
     current = match.group(1) if match else None
     home = str(paths.corpus_home())
@@ -169,7 +95,7 @@ def apply_global(config_path: Path | None = None, *, apply: bool) -> Change:
     hallouminate errors on duplicate corpus names. Idempotent: a second
     ``apply=True`` run leaves the file byte-identical.
     """
-    path = _resolve_config_path(config_path)
+    path = resolve_config_path(config_path)
     home = paths.corpus_home()
     state = detect_state(path)
     if not state["present"]:
@@ -191,7 +117,9 @@ def apply_global(config_path: Path | None = None, *, apply: bool) -> Change:
         # read_bytes (not read_text) so CRLF endings survive verbatim on
         # every Python -- read_text(newline=...) is 3.13+, CI runs 3.12.
         text = path.read_bytes().decode("utf-8")
-        _atomic_write(path, _replace_marked_block(text, _block(home)))
+        atomic_write(
+            path, replace_marked_block(text, _block(home), begin=BEGIN, end=END)
+        )
     return Change("global", action, str(path), detail)
 
 
@@ -199,7 +127,7 @@ def _unmarked_corpus_sections(text: str) -> list[tuple[int, int]]:
     """``(start_idx, end_idx_exclusive)`` line ranges of ``[[corpus]]`` sections
     that fall outside the marked cheese-durable block."""
     lines = text.splitlines(keepends=True)
-    marked_span = _find_marked_span(lines)
+    marked_span = find_marked_span(lines, begin=BEGIN, end=END)
     sections: list[tuple[int, int]] = []
     i = 0
     n = len(lines)
@@ -216,7 +144,11 @@ def _unmarked_corpus_sections(text: str) -> list[tuple[int, int]]:
             # section that follows the last [[corpus]] block.
             while i < n:
                 stripped = lines[i].strip()
-                if stripped.startswith("[") or stripped in (BEGIN, END):
+                if (
+                    stripped.startswith("[")
+                    or stripped.startswith("# >>> easy-cheese:")
+                    or stripped.startswith("# <<< easy-cheese:")
+                ):
                     break
                 i += 1
             sections.append((start, i))
@@ -231,8 +163,10 @@ def migrate_legacy(config_path: Path | None = None, *, apply: bool) -> Change:
     block pointing anywhere else is left untouched. Skill-only leg -- never
     called from install.sh, so the installer stays non-destructive.
     """
-    path = _resolve_config_path(config_path)
-    no_legacy = Change("global", "noop", str(path), "no legacy cheese-global block found")
+    path = resolve_config_path(config_path)
+    no_legacy = Change(
+        "global", "noop", str(path), "no legacy cheese-global block found"
+    )
     if not path.is_file():
         return no_legacy
     # read_bytes (not read_text) so CRLF endings survive verbatim on
@@ -246,7 +180,7 @@ def migrate_legacy(config_path: Path | None = None, *, apply: bool) -> Change:
             if not apply:
                 return Change("global", "remove", str(path), detail)
             updated = "".join(lines[:start]) + "".join(lines[end:])
-            _atomic_write(path, updated)
+            atomic_write(path, updated)
             return Change("global", "remove", str(path), detail)
     return no_legacy
 
@@ -266,12 +200,16 @@ def _main_root(repo_root: Path) -> Path:
     for line in porcelain.splitlines():
         if line.startswith("worktree "):
             return Path(line[len("worktree ") :])
-    common_dir = _git(repo_root, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    common_dir = _git(
+        repo_root, "rev-parse", "--path-format=absolute", "--git-common-dir"
+    ).strip()
     return Path(common_dir).parent
 
 
 def _run_init_repo(name: str, path: Path) -> None:
-    _ = subprocess.run(["hallouminate", "init-repo", name, "--path", str(path)], check=True)
+    _ = subprocess.run(
+        ["hallouminate", "init-repo", name, "--path", str(path)], check=True
+    )
 
 
 def apply_local(repo_root: Path, *, apply: bool) -> Change:
@@ -280,11 +218,18 @@ def apply_local(repo_root: Path, *, apply: bool) -> Change:
     """
     repo_root = Path(repo_root)
     if not (repo_root / ".cheese").is_dir():
-        return Change("local", "noop", str(repo_root), "no .cheese/ directory; not a cheese repo")
+        return Change(
+            "local", "noop", str(repo_root), "no .cheese/ directory; not a cheese repo"
+        )
     try:
         main_root = _main_root(repo_root)
     except subprocess.CalledProcessError:
-        return Change("local", "noop", str(repo_root), ".cheese/ present but not a git repo; skipping init-repo")
+        return Change(
+            "local",
+            "noop",
+            str(repo_root),
+            ".cheese/ present but not a git repo; skipping init-repo",
+        )
     if (main_root / ".hallouminate" / "config.toml").is_file():
         return Change("local", "noop", str(main_root), "already a hallouminate tenant")
     name = main_root.name
@@ -299,7 +244,9 @@ def _report(change: Change) -> str:
     return f"[{change.leg}] {change.action}: {change.target_path} -- {change.detail}"
 
 
-def _run_leg(leg: str, do_apply: bool, migrate: bool = False) -> int:
+def _run_leg(
+    leg: str, do_apply: bool, migrate: bool = False, roots: Sequence[str] = ()
+) -> int:
     if leg in ("global", "doctor"):
         print(_report(apply_global(apply=do_apply)))
         if migrate:
@@ -308,6 +255,9 @@ def _run_leg(leg: str, do_apply: bool, migrate: bool = False) -> int:
         print(_report(migrate_legacy(apply=False)))
     if leg in ("local", "doctor"):
         print(_report(apply_local(Path.cwd(), apply=do_apply)))
+    if leg in ("artifacts", "doctor"):
+        for line in hallouminate_artifacts.run_leg(apply=do_apply, roots=roots):
+            print(line)
     return 0
 
 
@@ -315,12 +265,16 @@ def _leg_main(leg: str, argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog=leg)
     _ = parser.add_argument("--apply", action="store_true")
     _ = parser.add_argument("--migrate-legacy", action="store_true")
+    _ = parser.add_argument("--root", action="append", default=[])
     args = parser.parse_args(argv)
     do_apply = cast(bool, args.apply)
     migrate = cast(bool, args.migrate_legacy)
+    roots = cast("list[str]", args.root)
     if migrate and leg != "global":
         parser.error("--migrate-legacy is only valid for global")
-    return _run_leg(leg, do_apply, migrate)
+    if roots and leg != "artifacts":
+        parser.error("--root is only valid for artifacts")
+    return _run_leg(leg, do_apply, migrate, roots)
 
 
 def global_main(argv: list[str]) -> int:  # noqa: V103
@@ -335,26 +289,24 @@ def doctor_main(argv: list[str]) -> int:  # noqa: V103
     return _leg_main("doctor", argv)
 
 
+def artifacts_main(argv: list[str]) -> int:  # noqa: V103
+    return _leg_main("artifacts", argv)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
-    legs = {"global", "local", "doctor"}
+    legs = {"global", "local", "doctor", "artifacts"}
     prog0 = Path(argv[0]).name
     if prog0 in legs:
         leg, rest = prog0, argv[1:]
     elif len(argv) >= 2 and argv[1] in legs:
         leg, rest = argv[1], argv[2:]
     else:
-        _ = sys.stderr.write("usage: hallouminate_setup.py {global|local|doctor} [--apply]\n")
+        _ = sys.stderr.write(
+            "usage: hallouminate_setup.py {global|local|doctor|artifacts} [--apply]\n"
+        )
         return 2
-    parser = argparse.ArgumentParser(prog=leg)
-    _ = parser.add_argument("--apply", action="store_true")
-    _ = parser.add_argument("--migrate-legacy", action="store_true")
-    args = parser.parse_args(rest)
-    do_apply = cast(bool, args.apply)
-    migrate = cast(bool, args.migrate_legacy)
-    if migrate and leg != "global":
-        parser.error("--migrate-legacy is only valid for global")
-    return _run_leg(leg, do_apply, migrate)
+    return _leg_main(leg, rest)
 
 
 if __name__ == "__main__":

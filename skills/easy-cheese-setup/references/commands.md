@@ -4,6 +4,7 @@
 
 | Command | Purpose | Subcommands |
 | --- | --- | --- |
-| `doctor` | Run both the global and local registration legs |  |
+| `artifacts` | Register every .cheese directory as one Hallouminate corpus |  |
+| `doctor` | Run the global, local, and artifacts registration legs |  |
 | `global` | Register or repair the durable Hallouminate corpus |  |
 | `local` | Register or repair this repository's Hallouminate tenant |  |
