@@ -5,33 +5,30 @@ Replaces the LLM-judged "did this already pass?" confirmation-bias step at the
 top of the /hard-cheese gate. Reads the attempt log at
 `.cheese/hard-cheese/<slug>.md` (which the gate writes after each attempt),
 compares the last recorded passing-attempt HEAD against the current
-`git rev-parse HEAD`, and exits with a state + exit code the calling skill
-can branch on without re-reading the log itself.
+`git rev-parse HEAD`, and returns one of three states.
 
-States and exit codes:
+Exits 0 for every state; the calling skill reads the `state` field instead
+of the exit code:
 
-    previously_passed  exit 0   — last pass matches current HEAD; gate may skip.
-    stale              exit 2   — last pass exists but HEAD has moved; re-run gate.
-    new                exit 3   — no prior attempt (or log is unreadable / malformed).
+    previously_passed  — last pass matches current HEAD; gate may skip.
+    stale               — last pass exists but HEAD has moved; re-run gate.
+    new                 — no prior attempt (or log is unreadable / malformed).
 
 Usage:
 
-    python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check --slug <slug> [--json]
+    python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check --slug <slug>
 
-Output is the state string by default, or `{"state": ..., "diff_head": ...}`
-when `--json` is passed. Stdlib-only.
+Output is one JSON document: `{"state": ..., "diff_head": ...}`.
 """
 from __future__ import annotations
 
-import argparse
 import re
 import subprocess
 from pathlib import Path
-from typing import TextIO, TypedDict, cast
+from typing import TypedDict, cast
 
-from easy_cheese.shared import cli
+import fromargs
 
-EXIT_FOR_STATE = {"previously_passed": 0, "stale": 2, "new": 3}
 MIN_PASSING_SCORE = 1
 MAX_PASSING_SCORE = 5
 
@@ -61,13 +58,13 @@ def git_head(cwd: Path | None = None) -> str:
             cwd=str(cwd) if cwd is not None else None,
         )
     except FileNotFoundError as exc:
-        raise cli.CliError("git not found on PATH") from exc
+        raise fromargs.CliError("git not found on PATH") from exc
     except subprocess.CalledProcessError as exc:
         stderr = (cast("str | None", exc.stderr) or "").strip()
-        raise cli.CliError(f"git rev-parse HEAD failed: {stderr or exc}") from exc
+        raise fromargs.CliError(f"git rev-parse HEAD failed: {stderr or exc}") from exc
     sha = result.stdout.strip()
     if not sha:
-        raise cli.CliError("git rev-parse HEAD returned empty output")
+        raise fromargs.CliError("git rev-parse HEAD returned empty output")
     return sha
 
 
@@ -182,70 +179,54 @@ def _sha_matches(recorded: str, diff_head: str) -> bool:
     return diff_head.startswith(recorded) or recorded.startswith(diff_head)
 
 
-def _cmd_check(args: argparse.Namespace) -> int:
-    slug = (cast("str | None", args.slug) or "").strip()
-    if not slug:
-        raise cli.CliError("--slug must not be empty")
-    cheese_root_arg = cast("str | None", args.cheese_root)
-    repo_root_arg = cast("str | None", args.repo_root)
-    passing_score = cast(int, args.passing_score)
-    json_mode = cast(bool, args.json_mode)
-    stdout = cast("TextIO | None", args.stdout)
+def freshness_check(
+    *,
+    slug: str,
+    passing_score: int = 3,
+    cheese_root: str | None = None,
+    repo_root: str | None = None,
+) -> FreshnessResult:
+    """Decide /hard-cheese freshness for <slug>.
 
-    cheese_root = Path(cheese_root_arg) if cheese_root_arg else Path(".cheese")
-    repo_root = Path(repo_root_arg) if repo_root_arg else None
-    result = decide(
+    Parameters
+    ----------
+    slug
+        hard-cheese slug to check
+    passing_score
+        minimum SOLO score that counts as a fresh pass (default: 3)
+    cheese_root
+        override .cheese directory (default: ./.cheese). Test hook.
+    repo_root
+        override git cwd for rev-parse (default: cwd). Test hook.
+    """
+    slug = slug.strip()
+    if not slug:
+        raise fromargs.CliError("--slug must not be empty")
+    if passing_score < MIN_PASSING_SCORE or passing_score > MAX_PASSING_SCORE:
+        raise fromargs.CliError("--passing-score must be between 1 and 5")
+    cheese_root_path = Path(cheese_root) if cheese_root else Path(".cheese")
+    repo_root_path = Path(repo_root) if repo_root else None
+    return decide(
         slug,
-        cheese_root=cheese_root,
-        repo_root=repo_root,
+        cheese_root=cheese_root_path,
+        repo_root=repo_root_path,
         passing_score=passing_score,
     )
-    if json_mode:
-        cli.emit(result, json_mode=True, stdout=stdout)
-    else:
-        cli.emit(result["state"], stdout=stdout)
-    return EXIT_FOR_STATE[result["state"]]
 
 
-def _passing_score(value: str) -> int:
-    try:
-        score = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("--passing-score must be an integer 1-5") from exc
-    if score < MIN_PASSING_SCORE or score > MAX_PASSING_SCORE:
-        raise argparse.ArgumentTypeError("--passing-score must be between 1 and 5")
-    return score
-
-
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Decide /hard-cheese freshness for <slug>."
-    _ = parser.add_argument("--slug", required=True, help="hard-cheese slug to check")
-    _ = parser.add_argument(
-        "--passing-score",
-        type=_passing_score,
-        default=3,
-        help="minimum SOLO score that counts as a fresh pass (default: 3)",
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "freshness-check",
+        help="Decide /hard-cheese freshness for <slug>.",
+        help_formatter="plain",
+        default_command=freshness_check,
     )
-    _ = parser.add_argument(
-        "--cheese-root",
-        default=None,
-        help="override .cheese directory (default: ./.cheese). Test hook.",
-    )
-    _ = parser.add_argument(
-        "--repo-root",
-        default=None,
-        help="override git cwd for rev-parse (default: cwd). Test hook.",
-    )
-    parser.set_defaults(func=_cmd_check)
+    return app
 
 
 def main(argv: list[str] | None = None) -> int:
-    def setup(parser: argparse.ArgumentParser) -> None:
-        parser.prog = "freshness-check"  # noqa: V101
-        _setup(parser)
-
-    return cli.run(setup, argv=argv)
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

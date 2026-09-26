@@ -10,35 +10,22 @@ subtree). The repo root is resolved via parents[N] from this file.
 
 from __future__ import annotations
 
-import argparse
+import fromargs
 import json
 import os
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
 from io import StringIO
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+from typing import Protocol, cast
 
 import pytest
 
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-cheese.pyz"
 
 
-class _CliNamespace(Protocol):
-    def run(
-        self,
-        setup: Callable[[argparse.ArgumentParser], None],
-        *,
-        argv: Sequence[str] | None = ...,
-        stdout: TextIO | None = ...,
-    ) -> int: ...
-
-
 class _FreshnessCheckModule(Protocol):
-    cli: _CliNamespace
-
-    def _setup(self, parser: argparse.ArgumentParser) -> None: ...
+    def build_app(self) -> fromargs.App: ...
     def last_pass_attempt(self, log_path: Path) -> dict[str, object] | None: ...
     def decide(
         self,
@@ -140,14 +127,16 @@ def _run_cli(repo: Path, slug: str, *extra: str) -> subprocess.CompletedProcess[
 
 
 class TestStateNew:
-    def test_unknown_slug_exits_3_state_new(self, repo: Path) -> None:
+    def test_unknown_slug_state_new(self, repo: Path) -> None:
+        # pending-rebuild: hard-cheese.pyz still runs the pre-fromargs CLI;
+        # hand-verified via PYTHONPATH=src against source (see report).
         result = _run_cli(repo, "never-seen")
-        assert result.returncode == 3
-        assert result.stdout.strip() == "new"
+        assert result.returncode == 0
+        assert json.loads(result.stdout)["state"] == "new"
 
     def test_json_payload_carries_head(self, repo: Path) -> None:
-        result = _run_cli(repo, "never-seen", "--json")
-        assert result.returncode == 3
+        result = _run_cli(repo, "never-seen")
+        assert result.returncode == 0
         payload = cast("dict[str, str]", json.loads(result.stdout))
         assert payload == {"state": "new", "diff_head": _head(repo)}
 
@@ -155,15 +144,15 @@ class TestStateNew:
         # Directory exists but the specific slug file does not.
         (repo / ".cheese" / "hard-cheese").mkdir(parents=True)
         result = _run_cli(repo, "absent")
-        assert result.returncode == 3
-        assert result.stdout.strip() == "new"
+        assert result.returncode == 0
+        assert json.loads(result.stdout)["state"] == "new"
 
 
 class TestStatePreviouslyPassed:
     def test_table_log_matching_head(self, repo: Path) -> None:
         head = _head(repo)
         _ = _write_log(repo, "feat-b", _table_log("feat-b", head))
-        result = _run_cli(repo, "feat-b", "--json")
+        result = _run_cli(repo, "feat-b")
         assert result.returncode == 0
         assert json.loads(result.stdout) == {
             "state": "previously_passed",
@@ -175,28 +164,28 @@ class TestStateStale:
     def test_table_log_stale(self, repo: Path) -> None:
         _ = _write_log(repo, "feat-d", _table_log("feat-d", "abc123" * 7))  # not current HEAD
         result = _run_cli(repo, "feat-d")
-        assert result.returncode == 2
-        assert result.stdout.strip() == "stale"
+        assert result.returncode == 0
+        assert json.loads(result.stdout)["state"] == "stale"
 
     def test_matching_head_below_requested_passing_score_is_stale(self, repo: Path) -> None:
         head = _head(repo)
         _ = _write_log(repo, "strict", _table_log("strict", head, status="PASS", score="3"))
         result = _run_cli(repo, "strict", "--passing-score", "4")
-        assert result.returncode == 2
-        assert result.stdout.strip() == "stale"
+        assert result.returncode == 0
+        assert json.loads(result.stdout)["state"] == "stale"
 
     def test_in_process_returns_status_and_injected_output(
         self, repo: Path, freshness_check: _FreshnessCheckModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
         _ = _write_log(repo, "feat-e", _table_log("feat-e", "abc123" * 7))
         output = StringIO()
-        status = freshness_check.cli.run(
-            freshness_check._setup,  # pyright: ignore[reportPrivateUsage]
-            argv=("--slug", "feat-e", "--cheese-root", str(repo / ".cheese"), "--repo-root", str(repo)),
+        status = freshness_check.build_app().run(
+            ("--slug", "feat-e", "--cheese-root", str(repo / ".cheese"), "--repo-root", str(repo)),
             stdout=output,
         )
-        assert status == 2
-        assert output.getvalue() == "stale\n"
+        assert status == 0
+        payload = cast("dict[str, object]", json.loads(output.getvalue()))
+        assert payload["state"] == "stale"
         assert capsys.readouterr().out == ""
 
 
@@ -261,14 +250,14 @@ class TestMalformedLog:
     def test_garbage_log_is_new(self, repo: Path) -> None:
         _ = _write_log(repo, "garbage", "this is not a valid log at all\n")
         result = _run_cli(repo, "garbage")
-        assert result.returncode == 3
-        assert result.stdout.strip() == "new"
+        assert result.returncode == 0
+        assert json.loads(result.stdout)["state"] == "new"
 
     def test_empty_log_is_new(self, repo: Path) -> None:
         _ = _write_log(repo, "empty", "")
         result = _run_cli(repo, "empty")
-        assert result.returncode == 3
-        assert result.stdout.strip() == "new"
+        assert result.returncode == 0
+        assert json.loads(result.stdout)["state"] == "new"
 
 
 # ---------- CLI: arg handling --------------------------------------------- #

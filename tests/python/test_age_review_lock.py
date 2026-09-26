@@ -17,8 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+import fromargs
 import pytest
-from easy_cheese.shared import cli, git_utils
+from easy_cheese.shared import git_utils
 from easy_cheese.skills.age import review_lock
 
 
@@ -393,7 +394,7 @@ def test_a_git_failure_fails_closed_instead_of_disabling_the_gate(
 ) -> None:
     """A probe that cannot answer must not read as "no repository"."""
     missing = repo / "gone"
-    with pytest.raises(cli.CliError):
+    with pytest.raises(fromargs.CliError):
         _ = review_lock.tree_digest(missing, slug="demo")
     assert review_lock.gated_write_handoff_artifact(_write_args(missing, "demo")) == 2
     assert not (missing / ".cheese" / "age" / "demo.md").exists()
@@ -483,7 +484,7 @@ def test_a_symlinked_lock_directory_is_refused(repo: Path, tmp_path: Path) -> No
     scratch.mkdir(exist_ok=True)
     (scratch / "age").symlink_to(outside, target_is_directory=True)
 
-    with pytest.raises(cli.CliError, match="symlink"):
+    with pytest.raises(fromargs.CliError, match="symlink"):
         _ = review_lock.lock_path(root=repo, slug="demo")
     assert review_lock.main(["--slug", "demo", "--root", str(repo)]) == 2
     assert not (outside / f"demo{review_lock.LOCK_SUFFIX}").exists()
@@ -500,10 +501,10 @@ def test_a_slug_inside_quoted_free_text_never_reaches_the_writer(
         if token not in ("--slug", "demo", "reviewed the diff")
     ]
     args.insert(args.index("--orientation") + 1, "done --slug demo")
-    with pytest.raises(SystemExit) as raised:
-        _ = review_lock.gated_write_handoff_artifact(args)
-    assert raised.value.code == 2
-    assert "--slug" in capsys.readouterr().err
+    assert review_lock.gated_write_handoff_artifact(args) == 2
+    err = capsys.readouterr().err
+    assert "note:" not in err
+    assert "--slug" in json.loads(err.splitlines()[-1])["error"]
     assert not _report(repo, "demo").exists()
 
 
@@ -550,7 +551,7 @@ def test_lock_parser_rejects_invalid_optional_fields(repo: Path) -> None:
     lock = review_lock.lock_path(root=repo, slug="demo")
     lock.parent.mkdir(parents=True, exist_ok=True)
     _ = lock.write_text(json.dumps({"slug": "demo", "digest": "0" * 64, "source_digest": 3}), encoding="utf-8")
-    with pytest.raises(cli.CliError, match="invalid source_digest"):
+    with pytest.raises(fromargs.CliError, match="invalid source_digest"):
         review_lock.verify(root=repo, slug="demo")
 
 

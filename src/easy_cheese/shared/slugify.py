@@ -7,59 +7,58 @@ CLI:
 
 Slug rules match ``paths.slugify``: lowercase, kebab-case, stopwords dropped,
 capped at 5 words. Collision with an existing ``.cheese/specs/<slug>.md``
-exits 2 via ``cli.CliError``.
+exits 2 via ``fromargs.CliError``.
 """
 
 from __future__ import annotations
 
-import argparse
-from typing import TextIO, cast
+import fromargs
 
-from easy_cheese.shared import cli, paths
-
-
-def _from_task(args: argparse.Namespace) -> None:
-    task = cast(str, args.task)
-    slug = paths.slugify(task, max_words=5)
-    if not slug:
-        raise cli.CliError(
-            f"task text {task!r} produced an empty slug; provide more words"
-        )
-    err = paths.validate_slug(slug)
-    if err is not None:
-        raise cli.CliError(err)
-    artifact = paths.artifact_path("specs", slug, root=cast(str, args.root))
-    if artifact.exists():
-        raise cli.CliError(
-            f"{artifact} already exists; rephrase --task for a distinct slug "
-            + "or remove the existing spec"
-        )
-    cli.emit(
-        {"slug": slug, "path": str(artifact)},
-        json_mode=cast(bool, args.json_mode),
-        stdout=cast(TextIO, args.stdout),
-    )
-
+from easy_cheese.shared import paths
 
 LEAVES = ("from-task",)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Derive a slug + .cheese/specs/<slug>.md path from task text."
-    sub = parser.add_subparsers(dest="cmd")
-    from_task = sub.add_parser("from-task", help="derive slug+path from task text")
-    _ = from_task.add_argument("--task", required=True, help="free-form task description")
-    _ = from_task.add_argument(
-        "--root",
-        default=".cheese",
-        help="root directory for artifact path (default: .cheese)",
+def from_task(*, task: str, root: str = ".cheese") -> dict[str, str]:
+    """Derive slug+path from task text.
+
+    Parameters
+    ----------
+    task
+        Free-form task description.
+    root
+        Root directory for the artifact path.
+    """
+    slug = paths.slugify(task, max_words=5)
+    if not slug:
+        raise fromargs.CliError(
+            f"task text {task!r} produced an empty slug; provide more words"
+        )
+    err = paths.validate_slug(slug)
+    if err is not None:
+        raise fromargs.CliError(err)
+    artifact = paths.artifact_path("specs", slug, root=root)
+    if artifact.exists():
+        raise fromargs.CliError(
+            f"{artifact} already exists; rephrase --task for a distinct slug "
+            + "or remove the existing spec"
+        )
+    return {"slug": slug, "path": str(artifact)}
+
+
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "slugify",
+        help="Derive a slug + .cheese/specs/<slug>.md path from task text.",
+        help_formatter="plain",
     )
-    from_task.set_defaults(func=_from_task)
+    _ = app.command(from_task, name="from-task")
+    return app
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

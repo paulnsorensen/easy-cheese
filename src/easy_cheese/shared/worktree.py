@@ -13,13 +13,13 @@ owns `teardown()` (worktree remove + branch delete) for every completed curd.
 """
 from __future__ import annotations
 
-import argparse
 import os
 from pathlib import Path
-from typing import TextIO, cast
 
-# cli and git_utils are co-staged in the bundled .pyz alongside this module
-from easy_cheese.shared import cli, git_utils
+import fromargs
+
+# git_utils is co-staged in the bundled .pyz alongside this module
+from easy_cheese.shared import git_utils
 
 WORKTREE_DIR = ".claude/worktrees"
 
@@ -36,7 +36,7 @@ def _git(repo: str, *args: str) -> str:
     """Run a git command in `repo`; raise CliError (loud) on failure."""
     result = git_utils.run_git(list(args), cwd=repo)
     if result.returncode != 0:
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"git {' '.join(args)} failed ({result.returncode}): {result.stderr.strip()}"
         )
     return result.stdout
@@ -47,7 +47,7 @@ def _validate_slug(slug: str) -> None:
     separators, no parent refs, no empty. The slug names the worktree dir and
     branch, so an unchecked slug is arbitrary path/branch injection."""
     if not slug or "/" in slug or "\\" in slug or ".." in slug:
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"invalid slug {slug!r}: must be non-empty and free of path separators or '..'"
         )
 
@@ -64,11 +64,11 @@ def _validate_teardown_target(path: str, branch: str) -> None:
         or ".." in norm_path.parts
         or not norm_path.name.startswith("agent-")
     ):
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"refusing to tear down {path!r}: not a {WORKTREE_DIR}/agent-* worktree"
         )
     if not branch.startswith("worktree-agent-"):
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"refusing to delete branch {branch!r}: not a worktree-agent-* branch"
         )
 
@@ -92,7 +92,7 @@ def harvest(branch: str, onto: str, *, repo: str = ".") -> list[str]:
         return []
     try:
         _ = _git(repo, "cherry-pick", *revs)
-    except cli.CliError:
+    except fromargs.CliError:
         # Leave the repo clean for the orchestrator's /melt fallback: a
         # half-finished cherry-pick (unmerged index / CHERRY_PICK_HEAD) would
         # cascade-poison the next harvest's `git checkout onto`.
@@ -113,69 +113,76 @@ def teardown(path: str, branch: str, *, repo: str = ".") -> None:
     for args in (("worktree", "remove", "--force", path), ("branch", "-D", branch)):
         try:
             _ = _git(repo, *args)
-        except cli.CliError as exc:
+        except fromargs.CliError as exc:
             errors.append(str(exc))
     if errors:
-        raise cli.CliError("; ".join(errors))
+        raise fromargs.CliError("; ".join(errors))
 
 
-def _cmd_create(args: argparse.Namespace) -> None:
-    cli.emit(
-        create(
-            cast(str, args.slug),
-            cast(str, args.base),
-            repo=cast(str, args.repo),
-        ),
-        json_mode=True,
-        stdout=cast("TextIO | None", args.stdout),
-    )
+def create_cmd(*, slug: str, base: str, repo: str = ".") -> dict[str, object]:
+    """Create a worktree off a base ref.
+
+    Parameters
+    ----------
+    slug
+        Curd slug (names the worktree + branch).
+    base
+        Base ref to branch the worktree from.
+    repo
+        Repo root (default: cwd).
+    """
+    return create(slug, base, repo=repo)
 
 
-def _cmd_harvest(args: argparse.Namespace) -> None:
-    picked = harvest(cast(str, args.branch), cast(str, args.onto), repo=cast(str, args.repo))
-    cli.emit({"picked": picked}, json_mode=True, stdout=cast("TextIO | None", args.stdout))
+def harvest_cmd(*, branch: str, onto: str, repo: str = ".") -> dict[str, object]:
+    """Cherry-pick a curd branch onto the orchestrator branch.
+
+    Parameters
+    ----------
+    branch
+        Curd branch to harvest.
+    onto
+        Orchestrator branch to cherry-pick onto.
+    repo
+        Repo root (default: cwd).
+    """
+    return {"picked": harvest(branch, onto, repo=repo)}
 
 
-def _cmd_teardown(args: argparse.Namespace) -> None:
-    path = cast(str, args.path)
-    branch = cast(str, args.branch)
-    teardown(path, branch, repo=cast(str, args.repo))
-    cli.emit(
-        {"removed": path, "deleted_branch": branch},
-        json_mode=True,
-        stdout=cast("TextIO | None", args.stdout),
-    )
+def teardown_cmd(*, path: str, branch: str, repo: str = ".") -> dict[str, object]:
+    """Remove a worktree and delete its branch.
+
+    Parameters
+    ----------
+    path
+        Worktree path to remove.
+    branch
+        Worktree branch to delete.
+    repo
+        Repo root (default: cwd).
+    """
+    teardown(path, branch, repo=repo)
+    return {"removed": path, "deleted_branch": branch}
 
 
 LEAVES = ("create", "harvest", "teardown")
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Create, harvest, or tear down a curd worktree."
-    sub = parser.add_subparsers(dest="action", required=True)
-
-    p_create = sub.add_parser("create", help="Create a worktree off a base ref.")
-    _ = p_create.add_argument("--slug", required=True, help="Curd slug (names the worktree + branch).")
-    _ = p_create.add_argument("--base", required=True, help="Base ref to branch the worktree from.")
-    _ = p_create.add_argument("--repo", default=".", help="Repo root (default: cwd).")
-    p_create.set_defaults(func=_cmd_create)
-
-    p_harvest = sub.add_parser("harvest", help="Cherry-pick a curd branch onto the orchestrator branch.")
-    _ = p_harvest.add_argument("--branch", required=True, help="Curd branch to harvest.")
-    _ = p_harvest.add_argument("--onto", required=True, help="Orchestrator branch to cherry-pick onto.")
-    _ = p_harvest.add_argument("--repo", default=".", help="Repo root (default: cwd).")
-    p_harvest.set_defaults(func=_cmd_harvest)
-
-    p_teardown = sub.add_parser("teardown", help="Remove a worktree and delete its branch.")
-    _ = p_teardown.add_argument("--path", required=True, help="Worktree path to remove.")
-    _ = p_teardown.add_argument("--branch", required=True, help="Worktree branch to delete.")
-    _ = p_teardown.add_argument("--repo", default=".", help="Repo root (default: cwd).")
-    p_teardown.set_defaults(func=_cmd_teardown)
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "worktree",
+        help="Create, harvest, or tear down a curd worktree.",
+        help_formatter="plain",
+    )
+    _ = app.command(create_cmd, name="create")
+    _ = app.command(harvest_cmd, name="harvest")
+    _ = app.command(teardown_cmd, name="teardown")
+    return app
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

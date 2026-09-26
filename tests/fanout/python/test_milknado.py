@@ -6,6 +6,7 @@ native fan-out), proven by stubbing the tool surface away.
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -70,6 +71,9 @@ class TestProbeEnvFallback:
 
 
 class TestCli:
+    """Drives the checked-in cook.pyz bundle; pending-rebuild until the
+    orchestrator regenerates bundles with the fromargs-based milknado.py."""
+
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(BUNDLE), "milknado", *args],
@@ -80,14 +84,14 @@ class TestCli:
     def test_empty_tools_prints_none(self) -> None:
         result = self._run("--tools", "")
         assert result.returncode == 0
-        assert result.stdout.strip() == "none"
+        assert json.loads(result.stdout) == "none"
 
     def test_tracker(self) -> None:
         result = self._run("--tools", "mcp__milknado__milknado_todo_add")
         assert result.returncode == 0
-        assert result.stdout.strip() == "tracker"
+        assert json.loads(result.stdout) == "tracker"
 
     def test_engine(self) -> None:
         result = self._run("--tools", "milknado_todo_claim,milknado_node_verify")
         assert result.returncode == 0
-        assert result.stdout.strip() == "engine"
+        assert json.loads(result.stdout) == "engine"

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import argparse
 import ast
 import contextlib
 import importlib
 import inspect
 import io
+import json
 import re
 import sys
 from pathlib import Path
@@ -15,10 +15,10 @@ from types import ModuleType
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, cast
 
+import fromargs
 import pytest
 
 from easy_cheese.shared import bundle_commands as bc
-from easy_cheese.shared import cli
 from scripts import build_pyz as _build_pyz
 
 _CommandHandler = Callable[[list[str]], int]
@@ -374,6 +374,9 @@ def test_no_long_option_uses_an_underscore_in_its_flag_name() -> None:
 # argparse prints a subparser group as `{a,b} ...` in the usage text. A `choices=`
 # option or positional has no trailing `...`.
 _SUBPARSER_GROUP_RE = re.compile(r"\{([a-z0-9_,\s-]+)\}\s+\.\.\.")
+# fromargs' plain help lists each subcommand as `  <name>: <summary>` under a
+# `Commands:` heading, beside the `--help, -h` and `--version` flags.
+_PLAIN_COMMAND_RE = re.compile(r"^  ([a-z0-9][a-z0-9-]*): ", re.MULTILINE)
 
 
 def _subparser_names(handler: _CommandHandler) -> set[str]:
@@ -381,10 +384,15 @@ def _subparser_names(handler: _CommandHandler) -> set[str]:
     with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
         with contextlib.suppress(SystemExit):
             _ = handler(["--help"])
-    match = _SUBPARSER_GROUP_RE.search(buffer.getvalue())
-    if match is None:
+    text = buffer.getvalue()
+    match = _SUBPARSER_GROUP_RE.search(text)
+    if match is not None:
+        return {name.strip() for name in match.group(1).split(",")}
+    _, heading, commands = text.partition("\nCommands:\n")
+    if not heading:
         return set()
-    return {name.strip() for name in match.group(1).split(",")}
+    section = commands.split("\n\n", 1)[0]
+    return set(_PLAIN_COMMAND_RE.findall(section))
 
 
 @pytest.mark.parametrize("skill", _build_pyz.SKILLS)
@@ -572,57 +580,50 @@ def test_dispatch_standardizes_flag_names_before_the_handler_runs(
     assert calls == [["--flag-name=1", "--", "--kept_as_is"]]
 
 
-def test_dispatch_hoisted_json_flag_reaches_a_leaf_handler_via_cli_run(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A hoisted `--json` given before the command must survive `cli.run`'s
-    subparser dispatch, not get overwritten by the subparser's own default.
-    """
-    seen: list[bool] = []
-    module = ModuleType("test_bundle_target_json_subparser")
+def _leaf_app_module(
+    monkeypatch: pytest.MonkeyPatch, name: str, items: list[str], *, limit: int | None
+) -> str:
+    """Register a module whose handler runs a fromargs app with one `list` leaf."""
+    module = ModuleType(name)
 
-    def record(args: argparse.Namespace) -> None:
-        seen.append(cast(bool, args.json_mode))
-
-    def setup(parser: argparse.ArgumentParser) -> None:
-        sub = parser.add_subparsers()
-        leaf = sub.add_parser("list")
-        leaf.set_defaults(func=record)
+    def list_items() -> list[str]:
+        return items
 
     def handler(argv: list[str]) -> int:
-        return cli.run(setup, argv=argv)
+        app = fromargs.App("paths")
+        _ = app.command(list_items, name="list", limit=limit)
+        return app.run(argv)
 
     module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
     monkeypatch.setitem(sys.modules, module.__name__, module)
-    commands = (command("paths", target=f"{module.__name__}:handler"),)
+    return f"{module.__name__}:handler"
+
+
+def test_dispatch_hoisted_json_flag_reaches_a_fromargs_leaf(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A hoisted `--json` given before the command is a no-op for the leaf."""
+    target = _leaf_app_module(
+        monkeypatch, "test_bundle_target_json_leaf", ["a", "b"], limit=None
+    )
+    commands = (command("paths", target=target),)
 
     assert bc.dispatch(commands, ["--json", "paths", "list"]) == 0
-    assert seen == [True]
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == ["a", "b"]
+    assert '"error"' not in captured.err
 
 
-def test_dispatch_hoisted_full_flag_reaches_a_leaf_handler_via_cli_run(
-    monkeypatch: pytest.MonkeyPatch,
+def test_dispatch_hoisted_full_flag_reaches_a_fromargs_leaf(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A hoisted `--full` given before the command must survive `cli.run`'s
-    subparser dispatch, not get overwritten by the subparser's own default.
-    """
-    seen: list[bool] = []
-    module = ModuleType("test_bundle_target_full_subparser")
+    """A hoisted `--full` given before the command turns off leaf truncation."""
+    target = _leaf_app_module(
+        monkeypatch, "test_bundle_target_full_leaf", ["a", "b", "c"], limit=1
+    )
+    commands = (command("paths", target=target),)
 
-    def record(args: argparse.Namespace) -> None:
-        seen.append(cast(bool, args.full))
-
-    def setup(parser: argparse.ArgumentParser) -> None:
-        sub = parser.add_subparsers()
-        leaf = sub.add_parser("list")
-        leaf.set_defaults(func=record)
-
-    def handler(argv: list[str]) -> int:
-        return cli.run(setup, argv=argv)
-
-    module.handler = handler  # pyright: ignore[reportAttributeAccessIssue]
-    monkeypatch.setitem(sys.modules, module.__name__, module)
-    commands = (command("paths", target=f"{module.__name__}:handler"),)
-
+    assert bc.dispatch(commands, ["paths", "list"]) == 0
+    assert json.loads(capsys.readouterr().out) == ["a"]
     assert bc.dispatch(commands, ["--full", "paths", "list"]) == 0
-    assert seen == [True]
+    assert json.loads(capsys.readouterr().out) == ["a", "b", "c"]

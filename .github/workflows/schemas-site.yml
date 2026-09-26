@@ -59,6 +59,7 @@ jobs:
           set -euo pipefail
           pip install --no-cache-dir pytest==9.0.3
           pip install --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+          pip install --no-cache-dir --no-deps --requirement requirements/fromargs.txt
 
       # The suite pins the generated tree to tests/schemas/python/goldens, i.e.
       # to the same bytes the published package validates against. A red run

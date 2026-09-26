@@ -9,6 +9,7 @@ would fail CI on every unrelated rebuild.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -292,4 +293,4 @@ class TestHtmlReportCli:
         )
 
         assert result.returncode == 2
-        assert "rejects path traversal" in result.stderr
+        assert "rejects path traversal" in json.loads(result.stderr)["error"]

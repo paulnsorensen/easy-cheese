@@ -24,6 +24,7 @@ Each build creates a temporary private wheelhouse containing:
 - the shared internal wheel;
 - the selected application wheels;
 - external runtime wheels downloaded from `requirements/runtime.txt`.
+- the `fromargs` CLI library wheel, built with `pip wheel --no-deps` from the Git commit that `requirements/fromargs.txt` pins (`_build_fromargs_wheel`). pip cannot hash a Git source under `--require-hashes`, so the full 40-character commit SHA is the integrity pin; its Cyclopts closure (`cyclopts`, `rich`, `rich-rst`, `pygments`, `markdown-it-py`, `mdurl`, `docstring-parser`) is hash-locked in `requirements/runtime.txt`. The shared wheel declares `fromargs` as a dependency. The Cyclopts closure grows each archive from about 2 MB to about 10 MB (stored uncompressed).
 
 The runtime lock is version- and hash-pinned. Downloads require wheels and hashes. Every wheel is rejected unless its filename is `py3-none-any`, its WHEEL metadata declares `Root-Is-Purelib: true`, and it contains no `.so`, `.pyd`, or `.dylib` member.[^4]
 

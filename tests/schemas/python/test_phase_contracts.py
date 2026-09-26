@@ -9,6 +9,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, cast
 
+import fromargs
 import pytest
 import yaml
 
@@ -55,12 +56,7 @@ def _load(name: str, path: Path) -> ModuleType:
     return module
 
 
-class _CliModule(Protocol):
-    CliError: type[Exception]
-
-
 class _WriterModule(Protocol):
-    cli: _CliModule
     COMPILED_TRANSITION_REGISTRY: TransitionRegistry
 
     def validate_transition(
@@ -112,7 +108,6 @@ class _BuildPyzModule(Protocol):
 def writer() -> _WriterModule:
     if str(SHARED_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SHARED_SCRIPTS))
-    _ = _load("cli", SHARED_SCRIPTS / "cli.py")
     _ = _load("handoff", SHARED_SCRIPTS / "handoff.py")
     return cast(
         _WriterModule, cast(object, _load("phase_contract_writer", WRITER_PATH))
@@ -656,7 +651,7 @@ def test_writer_validates_registered_transition_and_preserves_phase_path(
 def test_writer_rejects_invalid_transition_before_creating_directories(
     writer: _WriterModule, tmp_path: Path
 ) -> None:
-    with pytest.raises(writer.cli.CliError, match="mold -> cure is not declared"):
+    with pytest.raises(fromargs.CliError, match="mold -> cure is not declared"):
         _ = writer.write_artifact(
             slug="bad-route",
             status="ok",
@@ -675,7 +670,7 @@ def test_writer_rejects_invalid_transition_before_creating_directories(
 def test_writer_rejects_wrong_schema_before_creating_directories(
     writer: _WriterModule, tmp_path: Path
 ) -> None:
-    with pytest.raises(writer.cli.CliError, match="payload schema .* not declared"):
+    with pytest.raises(fromargs.CliError, match="payload schema .* not declared"):
         _ = writer.write_artifact(
             slug="wrong-schema",
             status="ok",
@@ -694,7 +689,7 @@ def test_writer_rejects_wrong_schema_before_creating_directories(
 def test_writer_rejects_missing_phase_before_creating_directories(
     writer: _WriterModule, tmp_path: Path
 ) -> None:
-    with pytest.raises(writer.cli.CliError, match="--phase must be non-empty"):
+    with pytest.raises(fromargs.CliError, match="--phase must be non-empty"):
         _ = writer.write_artifact(
             slug="missing-phase",
             status="ok",
@@ -712,7 +707,7 @@ def test_writer_rejects_missing_phase_before_creating_directories(
 def test_writer_rejects_unknown_phase_before_creating_directories(
     writer: _WriterModule, tmp_path: Path
 ) -> None:
-    with pytest.raises(writer.cli.CliError, match="unknown source phase 'unknown'"):
+    with pytest.raises(fromargs.CliError, match="unknown source phase 'unknown'"):
         _ = writer.write_artifact(
             slug="unknown-phase",
             status="ok",

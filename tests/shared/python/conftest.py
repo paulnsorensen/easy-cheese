@@ -33,11 +33,6 @@ def severity() -> ModuleType:
 
 
 @pytest.fixture(scope="session")
-def cli() -> ModuleType:
-    return importlib.import_module("easy_cheese.shared.cli")
-
-
-@pytest.fixture(scope="session")
 def handoff() -> ModuleType:
     return importlib.import_module("easy_cheese.shared.handoff")
 

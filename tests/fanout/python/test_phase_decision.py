@@ -12,9 +12,9 @@ import sys
 from pathlib import Path
 from typing import cast
 
+import fromargs
 import pytest
 
-from easy_cheese.shared import cli
 from easy_cheese.shared.fanout import phase_decision
 from easy_cheese.shared.fanout.phase_decision import Verdict
 
@@ -134,11 +134,11 @@ class TestEarlyStop:
 
 class TestInvalidIndex:
     def test_negative_index_raises(self) -> None:
-        with pytest.raises(cli.CliError):
+        with pytest.raises(fromargs.CliError):
             _ = phase_decision.decide(-1, "ok")
 
     def test_index_past_end_raises(self) -> None:
-        with pytest.raises(cli.CliError):
+        with pytest.raises(fromargs.CliError):
             _ = phase_decision.decide(7, "ok")
 
 
@@ -219,7 +219,7 @@ class TestVerdictFields:
 
 class TestRetryCap:
     def test_bare_needs_context_is_a_contract_error(self) -> None:
-        with pytest.raises(cli.CliError) as excinfo:
+        with pytest.raises(fromargs.CliError) as excinfo:
             _ = phase_decision.decide(1, "needs-context")
         assert excinfo.value.exit_code == 3
         assert "press (phase 1)" in str(excinfo.value)
@@ -237,7 +237,7 @@ class TestRetryCap:
         assert "retry cap (1) reached" in result["exit_message"]
 
     def test_negative_retry_count_is_rejected(self) -> None:
-        with pytest.raises(cli.CliError) as excinfo:
+        with pytest.raises(fromargs.CliError) as excinfo:
             _ = phase_decision.decide(1, "needs-context: gap", retry_count=-5)
         assert excinfo.value.exit_code == 2
         assert str(excinfo.value) == "retry-count cannot be negative: -5"
@@ -245,7 +245,7 @@ class TestRetryCap:
 
 class TestUnknownStatusStillContractError:
     def test_unknown_status_raises_contract_error_with_phase_context(self) -> None:
-        with pytest.raises(cli.CliError) as excinfo:
+        with pytest.raises(fromargs.CliError) as excinfo:
             _ = phase_decision.decide(2, "haltish")
         assert excinfo.value.exit_code == 3
         assert "age (phase 2)" in str(excinfo.value)

@@ -15,38 +15,55 @@ not this helper's.
 """
 from __future__ import annotations
 
-import argparse
 import tempfile
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Annotated
 
-from easy_cheese.shared import cli, html_report
+import cyclopts
+import fromargs
+
+from easy_cheese.shared import html_report, paths
 
 
-def _cmd_render(args: argparse.Namespace) -> None:
-    out_name = cast(str, args.out_name)
-    in_path = cast(str, args.in_path)
-    cli.reject_path_segment("--out-name", out_name)
+def render(
+    *,
+    in_path: Annotated[str, cyclopts.Parameter(name="--in")],
+    title: str,
+    out_name: str,
+) -> str:
+    """Render a Markdown report artifact into a self-contained HTML file.
+
+    Parameters
+    ----------
+    in_path
+        Source markdown artifact.
+    title
+        Document title.
+    out_name
+        Output filename stem.
+    """
+    paths.reject_path_segment("--out-name", out_name)
     src = Path(in_path)
     if not src.is_file():
-        raise cli.CliError(f"--in not found: {in_path}")
-    document = html_report.render(src.read_text(encoding="utf-8"), title=cast(str, args.title))
+        raise fromargs.CliError(f"--in not found: {in_path}")
+    document = html_report.render(src.read_text(encoding="utf-8"), title=title)
     out_path = Path(tempfile.gettempdir()) / f"{out_name}.html"
     _ = out_path.write_text(document, encoding="utf-8")
-    cli.emit(str(out_path), stdout=cast("TextIO", args.stdout))
+    return str(out_path)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Render a Markdown report artifact into a self-contained HTML file."
-    _ = parser.add_argument("--in", dest="in_path", required=True, help="source markdown artifact")
-    _ = parser.add_argument("--title", required=True, help="document title")
-    _ = parser.add_argument("--out-name", dest="out_name", required=True, help="output filename stem")
-    parser.set_defaults(func=_cmd_render)
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "render-html",
+        help="Render a Markdown report artifact into a self-contained HTML file.",
+        help_formatter="plain",
+        default_command=render,
+    )
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

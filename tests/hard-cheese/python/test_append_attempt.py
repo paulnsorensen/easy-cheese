@@ -14,12 +14,13 @@ is self-contained.
 """
 from __future__ import annotations
 
+import json
 import multiprocessing as mp
 import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 import pytest
 
@@ -28,12 +29,12 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-cheese.pyz"
 
 
-class _CliNamespace(Protocol):
+class _FromargsNamespace(Protocol):
     CliError: type[Exception]
 
 
 class _AppendAttemptModule(Protocol):
-    cli: _CliNamespace
+    fromargs: _FromargsNamespace
 
     def _validate_slug(self, slug: str) -> str: ...
     def _escape_cell(self, value: str) -> str: ...
@@ -91,8 +92,7 @@ def test_subcommand_help_names_the_command(command: str) -> None:
     assert result.returncode == 0
     assert result.stderr == ""
     usage = result.stdout.splitlines()[0]
-    assert usage.startswith("usage: ")
-    assert f" {command} [" in usage
+    assert usage.startswith(f"Usage: {command} ")
 
 
 def _read_rows(artifact: Path) -> list[str]:
@@ -103,19 +103,19 @@ def _read_rows(artifact: Path) -> list[str]:
 
 class TestSlugValidation:
     def test_rejects_traversal(self, append_attempt: _AppendAttemptModule) -> None:
-        with pytest.raises(append_attempt.cli.CliError):
+        with pytest.raises(append_attempt.fromargs.CliError):
             _ = append_attempt._validate_slug("../escape")  # pyright: ignore[reportPrivateUsage]
 
     def test_rejects_forward_slash(self, append_attempt: _AppendAttemptModule) -> None:
-        with pytest.raises(append_attempt.cli.CliError):
+        with pytest.raises(append_attempt.fromargs.CliError):
             _ = append_attempt._validate_slug("foo/bar")  # pyright: ignore[reportPrivateUsage]
 
     def test_rejects_backslash(self, append_attempt: _AppendAttemptModule) -> None:
-        with pytest.raises(append_attempt.cli.CliError):
+        with pytest.raises(append_attempt.fromargs.CliError):
             _ = append_attempt._validate_slug("foo\\bar")  # pyright: ignore[reportPrivateUsage]
 
     def test_rejects_empty(self, append_attempt: _AppendAttemptModule) -> None:
-        with pytest.raises(append_attempt.cli.CliError):
+        with pytest.raises(append_attempt.fromargs.CliError):
             _ = append_attempt._validate_slug("")  # pyright: ignore[reportPrivateUsage]
 
     def test_accepts_kebab(self, append_attempt: _AppendAttemptModule) -> None:
@@ -174,6 +174,8 @@ class TestCli:
         assert "--slug" in result.stderr
 
     def test_traversal_slug_rejected_via_cli(self, tmp_path: Path) -> None:
+        # pending-rebuild: hard-cheese.pyz still runs the pre-fromargs CLI;
+        # hand-verified via PYTHONPATH=src against source (see report).
         result = _run(
             tmp_path,
             "--slug", "../escape",
@@ -181,7 +183,8 @@ class TestCli:
             "--feedback", "fb", "--explanation", "ex",
         )
         assert result.returncode == 2
-        assert "ERROR" in result.stderr
+        error = cast("dict[str, object]", json.loads(result.stderr.strip().splitlines()[-1]))
+        assert error["exit_code"] == 2
 
     def test_two_serial_appends_produce_two_rows(self, tmp_path: Path) -> None:
         for status, score, feedback in [

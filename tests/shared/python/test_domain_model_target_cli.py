@@ -236,8 +236,8 @@ class TestPathsCommand:
 
         assert result.returncode == 2
         assert result.stdout == ""
-        assert "ERROR:" in result.stderr
-        assert message in result.stderr
+        error_payload = cast("dict[str, object]", json.loads(result.stderr))
+        assert message in str(error_payload["error"])
 
     def test_invalid_corpus_shape_is_rejected(
         self, resolver_env: tuple[Path, Path]
@@ -256,7 +256,7 @@ class TestPathsCommand:
 
         assert result.returncode == 2
         assert result.stdout == ""
-        assert "ERROR: --corpus must match repo:<name>:wiki" in result.stderr
+        assert json.loads(result.stderr)["error"] == "--corpus must match repo:<name>:wiki"
 
 
 @pytest.mark.parametrize(

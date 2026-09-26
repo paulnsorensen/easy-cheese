@@ -26,13 +26,13 @@ Output (JSON):
 """
 from __future__ import annotations
 
-import argparse
 import json
 import sys
-from typing import Protocol, TextIO, TypedDict, cast
+from typing import TypedDict, cast
 
-# cli is co-staged in the bundled .pyz alongside this module
-from easy_cheese.shared import cli
+import fromargs
+
+LEAVES = ("classify",)
 
 
 class FailureRecord(TypedDict):
@@ -93,43 +93,43 @@ def _validate_records(value: object, field: str) -> list[FailureRecord]:
     classify() -- a wrong-typed value here must surface as CliError, not an
     uncaught TypeError/KeyError once classify() starts indexing it."""
     if not isinstance(value, list):
-        raise cli.CliError(f"{field} must be a list of failure records")
+        raise fromargs.CliError(f"{field} must be a list of failure records")
     items = cast(list[object], value)
     for index, record in enumerate(items):
         if not isinstance(record, dict):
-            raise cli.CliError(f"{field}[{index}] must be an object")
+            raise fromargs.CliError(f"{field}[{index}] must be an object")
         missing = [key for key in ("suite", "test_id", "signature") if key not in record]
         if missing:
-            raise cli.CliError(f"{field}[{index}] missing required key(s): {', '.join(missing)}")
+            raise fromargs.CliError(f"{field}[{index}] missing required key(s): {', '.join(missing)}")
     return cast(list[FailureRecord], items)
 
 
-class _Args(Protocol):
-    stdout: TextIO
-
-
-def _cmd_classify(args: _Args) -> None:
+def classify_cmd() -> Classification:
+    """Classify current failures against a stored baseline (reads JSON from stdin)."""
     try:
         payload = cast(object, json.load(sys.stdin))
         if not isinstance(payload, dict):
-            raise cli.CliError("expected a JSON object with baseline/current on stdin")
+            raise fromargs.CliError("expected a JSON object with baseline/current on stdin")
         payload_items = cast(dict[str, object], payload)
         baseline_arg = _validate_records(payload_items.get("baseline", []), "baseline")
         current_arg = _validate_records(payload_items.get("current", []), "current")
     except json.JSONDecodeError as exc:
-        raise cli.CliError("expected a JSON object with baseline/current on stdin") from exc
-    result = classify(baseline_arg, current_arg)
-    cli.emit(result, json_mode=True, stdout=args.stdout)
+        raise fromargs.CliError("expected a JSON object with baseline/current on stdin") from exc
+    return classify(baseline_arg, current_arg)
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = "Classify current failures against a stored baseline (reads JSON from stdin)."
-    parser.set_defaults(func=_cmd_classify)
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "baseline",
+        help="Classify current failures against a stored baseline.",
+        help_formatter="plain",
+        default_command=classify_cmd,
+    )
 
 
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())

@@ -1,0 +1,6 @@
+# fromargs: the self-healing Cyclopts CLI library behind every bundle command.
+# It is not on PyPI, so the pin is a Git commit. pip cannot hash a Git source,
+# so install this file without --require-hashes and with --no-deps; its
+# dependency closure is hash-locked in requirements/runtime.txt.
+# scripts/build_pyz.py builds this pin into the private Shiv wheelhouse.
+fromargs @ git+https://github.com/paulnsorensen/skillz-that-grillz.git@1e82915254bf4429fd729690363b3f7985dd67cc#subdirectory=lib/fromargs

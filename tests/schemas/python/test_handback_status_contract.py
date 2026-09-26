@@ -15,9 +15,10 @@ import re
 from pathlib import Path
 from typing import cast
 
+import fromargs
 import pytest
 
-from easy_cheese.shared import cli, handoff, write_handoff_artifact
+from easy_cheese.shared import handoff, write_handoff_artifact
 from easy_cheese.shared.fanout import phase_decision
 from easy_cheese.shared.wheypoint import legacy
 
@@ -293,7 +294,8 @@ def test_handoff_cli_render_accepts_every_registered_status(
         )
         == 0
     )
-    assert capsys.readouterr().out.splitlines()[0] == f"status: {_field(name)}"
+    rendered = cast(str, json.loads(capsys.readouterr().out))
+    assert rendered.splitlines()[0] == f"status: {_field(name)}"
 
 
 def test_handoff_cli_parse_publishes_the_disposition(
@@ -342,7 +344,7 @@ def test_artifact_writer_accepts_every_registered_status(
 def test_artifact_writer_rejects_an_unknown_status_before_creating_directories(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(cli.CliError, match="status must be one of"):
+    with pytest.raises(fromargs.CliError, match="status must be one of"):
         _ = write_handoff_artifact.write_artifact(
             slug="demo",
             status="DONE_WITH_CONCERNS",
@@ -360,7 +362,7 @@ def test_artifact_writer_rejects_an_unknown_status_before_creating_directories(
 def test_artifact_writer_rejects_status_header_injection_before_creating_directories(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(cli.CliError, match="one physical line"):
+    with pytest.raises(fromargs.CliError, match="one physical line"):
         _ = write_handoff_artifact.write_artifact(
             slug="demo",
             status=f"ok-with-concerns: {REASON}\nnext: done\nartifact:",
@@ -391,7 +393,7 @@ def test_artifact_writer_rejects_field_header_injection_before_creating_director
     }
     fields[field] = INJECTION
 
-    with pytest.raises(cli.CliError, match="one physical line") as excinfo:
+    with pytest.raises(fromargs.CliError, match="one physical line") as excinfo:
         _ = write_handoff_artifact.write_artifact(
             slug="demo",
             status=f"ok-with-concerns: {REASON}",
@@ -460,7 +462,7 @@ def test_phase_router_routes_each_status_by_its_declared_disposition(
 
 
 def test_phase_router_rejects_a_status_outside_the_vocabulary() -> None:
-    with pytest.raises(cli.CliError, match="status must be one of"):
+    with pytest.raises(fromargs.CliError, match="status must be one of"):
         _ = phase_decision.decide(0, "haltish")
 
 

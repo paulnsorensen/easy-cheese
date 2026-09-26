@@ -45,11 +45,12 @@ phase (raises, never emits a soft-fail verdict).
 """
 from __future__ import annotations
 
-import argparse
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol, TextIO, cast
+from typing import Literal, cast
+
+import fromargs
 
 from easy_cheese_schemas import (
     ArtifactRef,
@@ -61,7 +62,6 @@ from easy_cheese_schemas import (
     validate_contract,
 )
 
-from easy_cheese.shared import cli
 from easy_cheese.shared.fanout.remediation import (
     Verdict,
     validate_event_identity,
@@ -80,7 +80,7 @@ def _read_bytes(path: Path) -> bytes:
     try:
         return path.read_bytes()
     except OSError as exc:
-        raise cli.CliError(f"cannot read {path}: {exc}") from exc
+        raise fromargs.CliError(f"cannot read {path}: {exc}") from exc
 
 
 def _load_contract(path: Path, schema: type, context: str) -> tuple[object, bytes]:
@@ -88,7 +88,7 @@ def _load_contract(path: Path, schema: type, context: str) -> tuple[object, byte
     try:
         value = validate_contract(raw, schema, supported_version_for(schema)).value
     except ContractValidationError as exc:
-        raise cli.contract_error(exc, context=context) from exc
+        raise fromargs.contract_error(exc, context=context) from exc
     return value, raw
 
 
@@ -102,13 +102,13 @@ def _load_state(state_path: Path) -> RemediationState:
     except StateStoreError as exc:
         cause = exc.__cause__
         if isinstance(cause, ContractValidationError):
-            raise cli.contract_error(cause, context="remediation state") from exc
-        raise cli.CliError(f"cannot read {state_path}: {cause or exc}") from exc
+            raise fromargs.contract_error(cause, context="remediation state") from exc
+        raise fromargs.CliError(f"cannot read {state_path}: {cause or exc}") from exc
 
 
 def _require_request_digest(value: str | None) -> str:
     if value is None or _REQUEST_DIGEST.fullmatch(value) is None:
-        raise cli.CliError(
+        raise fromargs.CliError(
             "--request-digest is required and must match sha256:<64 lowercase hex>",
             exit_code=3,
         )
@@ -131,19 +131,19 @@ def _cross_check_gate_evidence(
     """
     claimed = observation.gate_evidence
     if not gate_evidence_paths and claimed:
-        raise cli.CliError(
+        raise fromargs.CliError(
             "every claimed gate-evidence reference requires a host-resolved --gate-evidence path",
             exit_code=3,
         )
     if gate_evidence_paths and not claimed:
-        raise cli.CliError(
+        raise fromargs.CliError(
             "--gate-evidence paths require claimed gate-evidence references",
             exit_code=3,
         )
     if not gate_evidence_paths:
         return
     if len(gate_evidence_paths) != len(claimed):
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"--gate-evidence count {len(gate_evidence_paths)} does not match the {len(claimed)} gate-evidence references in the cure observation",
             exit_code=3,
         )
@@ -151,7 +151,7 @@ def _cross_check_gate_evidence(
         raw = _read_bytes(path)
         actual = bytes_digest(raw)
         if actual != evidence.artifact.digest:
-            raise cli.CliError(
+            raise fromargs.CliError(
                 f"gate-evidence digest mismatch for {path}: file is {actual}, cure observation claims {evidence.artifact.digest}",
                 exit_code=3,
             )
@@ -162,7 +162,7 @@ def _publish_and_reload(state_path: Path, next_state: RemediationState) -> Remed
     try:
         return publish_state(state_path.parent, state_path, next_state)
     except StateStoreError as exc:
-        raise cli.CliError(
+        raise fromargs.CliError(
             f"state publish/reload failed; no next phase dispatched: {exc}",
             exit_code=2,
         ) from exc
@@ -214,109 +214,101 @@ def apply_event(
     return next_state, verdict
 
 
-def _decide(args: _Args) -> Verdict:
-    state_path = args.state
-    request_digest = _require_request_digest(args.request_digest)
+def _decide(
+    state_path: Path,
+    event: Literal["review", "cure"],
+    request_digest: str | None,
+    review: Path | None,
+    cure_result: Path | None,
+    gate_evidence: list[Path] | None,
+) -> Verdict:
+    checked_digest = _require_request_digest(request_digest)
     state = _load_state(state_path)
 
-    if args.event == "review":
-        if args.review is None:
-            raise cli.CliError("a review event requires --review")
-        if args.cure_result is not None:
-            raise cli.CliError("a review event does not accept --cure-result")
+    if event == "review":
+        if review is None:
+            raise fromargs.CliError("a review event requires --review")
+        if cure_result is not None:
+            raise fromargs.CliError("a review event does not accept --cure-result")
         review_value, review_raw = _load_contract(
-            args.review, ReviewResult, "review result"
+            review, ReviewResult, "review result"
         )
-        review = cast(ReviewResult, review_value)
-        review_ref = _artifact_ref(args.review, review_raw, role="review")
+        review_contract = cast(ReviewResult, review_value)
+        review_ref = _artifact_ref(review, review_raw, role="review")
         try:
             _next_state, verdict = apply_event(
-                state, event="review", artifact_ref=review_ref, review=review,
-                request_digest=request_digest,
+                state, event="review", artifact_ref=review_ref, review=review_contract,
+                request_digest=checked_digest,
                 publish=lambda value: _publish_and_reload(state_path, value),
             )
         except ValueError as exc:
-            raise cli.CliError(f"review event rejected: {exc}", exit_code=3) from exc
+            raise fromargs.CliError(f"review event rejected: {exc}", exit_code=3) from exc
     else:
-        if args.cure_result is None:
-            raise cli.CliError("a cure event requires --cure-result")
-        if args.review is not None:
-            raise cli.CliError("a cure event does not accept --review")
+        if cure_result is None:
+            raise fromargs.CliError("a cure event requires --cure-result")
+        if review is not None:
+            raise fromargs.CliError("a cure event does not accept --review")
         cure_value, cure_raw = _load_contract(
-            args.cure_result, RemediationCureObservation, "cure observation"
+            cure_result, RemediationCureObservation, "cure observation"
         )
         observation = cast(RemediationCureObservation, cure_value)
-        gate_paths = list(args.gate_evidence) if args.gate_evidence else []
+        gate_paths = list(gate_evidence) if gate_evidence else []
         _cross_check_gate_evidence(observation, gate_paths)
-        cure_ref = _artifact_ref(args.cure_result, cure_raw, role="cure-result")
+        cure_ref = _artifact_ref(cure_result, cure_raw, role="cure-result")
         try:
             _next_state, verdict = apply_event(
                 state, event="cure", artifact_ref=cure_ref, observation=observation,
-                request_digest=request_digest,
+                request_digest=checked_digest,
                 publish=lambda value: _publish_and_reload(state_path, value),
             )
         except ValueError as exc:
-            raise cli.CliError(f"cure event rejected: {exc}", exit_code=3) from exc
+            raise fromargs.CliError(f"cure event rejected: {exc}", exit_code=3) from exc
 
     verdict["state_ref"] = str(state_path)
     return verdict
 
 
-class _Args(Protocol):
-    state: Path
-    event: str
-    request_digest: str | None
-    review: Path | None
-    cure_result: Path | None
-    gate_evidence: list[Path] | None
-    stdout: TextIO
+def decide_cmd(
+    *,
+    state: Path,
+    event: Literal["review", "cure"],
+    request_digest: str | None = None,
+    review: Path | None = None,
+    cure_result: Path | None = None,
+    gate_evidence: list[Path] | None = None,
+) -> Verdict:
+    """Apply one fan-remediation event and publish the next state.
+
+    Parameters
+    ----------
+    state
+        current RemediationState artifact.
+    event
+        event to apply.
+    request_digest
+        required sha256:<hex> digest of the host request that produced the event.
+    review
+        ReviewResult for a review event.
+    cure_result
+        RemediationCureObservation for a cure event.
+    gate_evidence
+        optional, repeatable gate-evidence file for a host digest cross-check.
+    """
+    return _decide(state, event, request_digest, review, cure_result, gate_evidence)
 
 
-def _cmd_decide(args: _Args) -> None:
-    verdict = _decide(args)
-    cli.emit(verdict, json_mode=True, stdout=args.stdout)
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "remediation-decision",
+        help="Apply one fan-remediation event and publish the next state (JSON out).",
+        help_formatter="plain",
+        default_command=decide_cmd,
+    )
 
 
-def _setup(parser: argparse.ArgumentParser) -> None:
-    parser.description = (
-        "Apply one fan-remediation event and publish the next state (JSON out)."
-    )
-    _ = parser.add_argument(
-        "--state", required=True, type=Path, help="current RemediationState artifact"
-    )
-    _ = parser.add_argument(
-        "--event", required=True, choices=("review", "cure"), help="event to apply"
-    )
-    _ = parser.add_argument(
-        "--request-digest",
-        dest="request_digest",
-        default=None,
-        help="required sha256:<hex> digest of the host request that produced the event",
-    )
-    _ = parser.add_argument(
-        "--review", type=Path, default=None, help="ReviewResult for a review event"
-    )
-    _ = parser.add_argument(
-        "--cure-result",
-        dest="cure_result",
-        type=Path,
-        default=None,
-        help="RemediationCureObservation for a cure event",
-    )
-    _ = parser.add_argument(
-        "--gate-evidence",
-        dest="gate_evidence",
-        type=Path,
-        action="append",
-        default=None,
-        help="optional, repeatable gate-evidence file for a host digest cross-check",
-    )
-    parser.set_defaults(func=_cmd_decide)
-
-
-def main(argv: list[str]) -> int:
-    return cli.run(_setup, argv=argv)
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli.run(_setup))
+    raise SystemExit(main())
