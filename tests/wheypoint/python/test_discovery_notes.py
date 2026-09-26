@@ -26,7 +26,7 @@ def _write(path: Path, text: str = "content\n") -> Path:
 
 @pytest.fixture
 def isolated_roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.delenv("EASY_CHEESE_SEARCH_ROOTS", raising=False)
+    monkeypatch.setenv("EASY_CHEESE_SEARCH_ROOTS", str(tmp_path / "unused-default-root"))
     return tmp_path
 
 
@@ -103,7 +103,6 @@ def test_walk_and_rg_backends_agree(
     _ = _write(repo2 / ".cheese" / "artifacts" / "beta.md")
     _ = _write(repo1 / ".cheese" / "vendor" / ".cheese" / "nested.md")
     original_path = os.environ.get("PATH", "")
-
     monkeypatch.setenv("PATH", "")
     walk_scan = discovery_notes.find_cheese_dirs([repo1, repo2])
 
@@ -113,7 +112,12 @@ def test_walk_and_rg_backends_agree(
 
     if not HAS_RG:
         pytest.skip("rg is not installed; the walk fallback is already verified")
-    monkeypatch.setenv("PATH", original_path)
+    rg_entries = [
+        entry for entry in original_path.split(os.pathsep) if Path(entry).name != "shims"
+    ]
+    if not any((Path(entry) / "rg").is_file() for entry in rg_entries):
+        pytest.skip("rg is only available through a shim")
+    monkeypatch.setenv("PATH", os.pathsep.join(rg_entries))
     rg_scan = discovery_notes.find_cheese_dirs([repo1, repo2])
 
     assert rg_scan.backend == "rg"

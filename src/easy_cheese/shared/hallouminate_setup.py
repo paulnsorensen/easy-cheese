@@ -144,7 +144,11 @@ def _unmarked_corpus_sections(text: str) -> list[tuple[int, int]]:
             # section that follows the last [[corpus]] block.
             while i < n:
                 stripped = lines[i].strip()
-                if stripped.startswith("[") or stripped in (BEGIN, END):
+                if (
+                    stripped.startswith("[")
+                    or stripped.startswith("# >>> easy-cheese:")
+                    or stripped.startswith("# <<< easy-cheese:")
+                ):
                     break
                 i += 1
             sections.append((start, i))

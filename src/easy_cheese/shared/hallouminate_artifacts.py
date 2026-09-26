@@ -12,7 +12,9 @@ dependency.
 from __future__ import annotations
 
 import re
+import tomllib
 from collections.abc import Sequence
+from typing import cast
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,14 +32,50 @@ BEGIN = "# >>> easy-cheese:cheese-artifacts"
 END = "# <<< easy-cheese:cheese-artifacts"
 
 _PATH_LINE_RE = re.compile(r'^\s*"((?:[^"\\]|\\.)*)",?\s*$')
+_CORPUS_NAME_RE = re.compile(r"""^name\s*=\s*["']cheese-artifacts["']\s*(?:#.*)?$""")
 
 
 def _toml_escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    escapes = {
+        "\\": "\\\\",
+        '"': '\\"',
+        "\b": "\\b",
+        "\t": "\\t",
+        "\n": "\\n",
+        "\f": "\\f",
+        "\r": "\\r",
+    }
+    result: list[str] = []
+    for char in value:
+        if char in escapes:
+            result.append(escapes[char])
+        elif ord(char) < 0x20 or ord(char) == 0x7F:
+            result.append(f"\\u{ord(char):04X}")
+        else:
+            result.append(char)
+    return "".join(result)
 
 
 def _toml_unescape(value: str) -> str:
-    return value.replace('\\"', '"').replace("\\\\", "\\")
+    result: list[str] = []
+    i = 0
+    while i < len(value):
+        if value[i] != "\\" or i + 1 == len(value):
+            result.append(value[i])
+            i += 1
+            continue
+        escaped = value[i + 1]
+        simple = {"b": "\b", "t": "\t", "n": "\n", "f": "\f", "r": "\r", '"': '"', "\\": "\\"}
+        if escaped in simple:
+            result.append(simple[escaped])
+            i += 2
+        elif escaped == "u" and i + 5 < len(value):
+            result.append(chr(int(value[i + 2 : i + 6], 16)))
+            i += 6
+        else:
+            result.extend(("\\", escaped))
+            i += 2
+    return "".join(result)
 
 
 def _block(dirs: Sequence[str]) -> str:
@@ -73,6 +111,33 @@ def _listed_paths(block: str) -> tuple[str, ...]:
     return tuple(result)
 
 
+def _has_unmarked_same_name(text: str) -> bool:
+    unmarked = remove_marked_block(text, begin=BEGIN, end=END)
+    try:
+        parsed = cast(dict[str, object], tomllib.loads(unmarked))
+    except tomllib.TOMLDecodeError:
+        parsed = {}
+    corpus_tables: object = parsed.get("corpus", ())
+    if isinstance(corpus_tables, list):
+        for corpus in cast(list[object], corpus_tables):
+            if (
+                isinstance(corpus, dict)
+                and cast(dict[str, object], corpus).get("name") == "cheese-artifacts"
+            ):
+                return True
+
+    in_corpus = False
+    for line in unmarked.splitlines():
+        stripped = line.strip()
+        if stripped == "[[corpus]]":
+            in_corpus = True
+        elif stripped.startswith("["):
+            in_corpus = False
+        elif in_corpus and _CORPUS_NAME_RE.fullmatch(stripped):
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class ArtifactsState:
     """The cheese-artifacts block's listed paths, plus any that no longer exist."""
@@ -97,43 +162,61 @@ def detect_artifacts_state(config_path: Path | None = None) -> ArtifactsState:
 def apply_artifacts(
     config_path: Path | None = None, *, apply: bool, roots: Sequence[Path | str] = ()
 ) -> Change:
-    """Insert-or-replace the marked cheese-artifacts [[corpus]] block with
-    every discovered `.cheese` directory.
+    """Insert-or-replace the marked cheese-artifacts [[corpus]] block.
 
-    Noop when the block already lists exactly the discovered dirs. Removes
-    the block when discovery finds none -- a corpus with no paths is
-    useless. Idempotent: a second ``apply=True`` run leaves the file
-    byte-identical.
+    A complete scan retains listed directories that still exist. Incomplete
+    scans and unmarked duplicate corpora never mutate the configuration.
     """
     path = resolve_config_path(config_path)
     scan = find_cheese_dirs(roots)
-    discovered = tuple(sorted(str(d) for d in scan.dirs))
     text = path.read_bytes().decode("utf-8") if path.is_file() else ""
     existing_block = extract_block(text, begin=BEGIN, end=END)
     existing = _listed_paths(existing_block) if existing_block is not None else ()
+    diagnostics = "; ".join(scan.errors)
     backend_note = f"backend={scan.backend}"
+    if diagnostics:
+        backend_note += f"; {diagnostics}"
 
-    if not discovered:
+    if _has_unmarked_same_name(text):
+        return Change(
+            "artifacts",
+            "error",
+            str(path),
+            "refusing mutation: unmarked cheese-artifacts corpus already exists",
+        )
+    incomplete = tuple(
+        error
+        for error in scan.errors
+        if error != "rg failed or timed out; fell back to a directory walk"
+    )
+    if incomplete:
+        return Change(
+            "artifacts",
+            "error",
+            str(path),
+            f"incomplete scan; refusing mutation: {'; '.join(incomplete)} ({backend_note})",
+        )
+
+    discovered = tuple(sorted(str(d) for d in scan.dirs))
+    retained = tuple(
+        sorted({item for item in existing if Path(item).expanduser().is_dir()})
+    )
+    desired = tuple(sorted(set(discovered) | set(retained)))
+    if not desired:
         if existing_block is None:
             action = "noop"
-            detail = (
-                f"no .cheese directories found; nothing to register ({backend_note})"
-            )
+            detail = f"no .cheese directories found; nothing to register ({backend_note})"
         else:
             action = "remove"
-            detail = (
-                f"no .cheese directories found; removing empty corpus ({backend_note})"
-            )
-    elif set(discovered) == set(existing):
+            detail = f"no existing .cheese directories; removing corpus ({backend_note})"
+    elif set(desired) == set(existing):
         action = "noop"
-        detail = (
-            f"cheese-artifacts already lists {len(discovered)} dirs ({backend_note})"
-        )
+        detail = f"cheese-artifacts already lists {len(desired)} dirs ({backend_note})"
     else:
-        added = len(set(discovered) - set(existing))
-        removed = len(set(existing) - set(discovered))
+        added = len(set(desired) - set(existing))
+        removed = len(set(existing) - set(desired))
         action = "create" if existing_block is None else "replace"
-        detail = f"added {added}, removed {removed}, total {len(discovered)} ({backend_note})"
+        detail = f"added {added}, removed {removed}, total {len(desired)} ({backend_note})"
 
     if not apply or action == "noop":
         return Change("artifacts", action, str(path), detail)
@@ -143,7 +226,7 @@ def apply_artifacts(
         atomic_write(path, remove_marked_block(text, begin=BEGIN, end=END))
     else:
         atomic_write(
-            path, replace_marked_block(text, _block(discovered), begin=BEGIN, end=END)
+            path, replace_marked_block(text, _block(desired), begin=BEGIN, end=END)
         )
     return Change("artifacts", action, str(path), detail)
 
@@ -162,7 +245,7 @@ def run_leg(*, apply: bool, roots: Sequence[str] = ()) -> list[str]:
             "[artifacts] drift: these listed paths no longer exist: "
             + ", ".join(state.missing)
         )
-    if apply and change.action != "noop":
+    if apply and change.action in {"create", "replace", "remove"}:
         lines.append(
             "[artifacts] run `hallouminate daemon restart` then "
             + "`hallouminate index --corpus cheese-artifacts` to pick up this change"

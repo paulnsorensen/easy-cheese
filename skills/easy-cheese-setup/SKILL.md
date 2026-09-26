@@ -63,6 +63,7 @@ Run `doctor` without `--apply` first. It reports the planned actions for all thr
 Run `artifacts` after new repositories accumulate `.cheese` artifacts worth searching.
 Hallouminate indexes a gitignored `.cheese` dir only when a `paths` entry names that dir directly, so the block lists each `.cheese` directory, not a shared parent root.
 A `paths` entry that no longer exists on disk makes the daemon skip the whole corpus with a warning.
+A complete scan removes missing entries; an incomplete scan reports an error and leaves the block unchanged.
 After an `--apply` that changes the file, run `hallouminate daemon restart`, then `hallouminate index --corpus cheese-artifacts`.
 
 ## Rules

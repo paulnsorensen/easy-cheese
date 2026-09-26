@@ -107,6 +107,7 @@ def _rg_files(roots: list[Path], glob: str) -> list[Path] | None:
         completed = subprocess.run(
             [
                 "rg",
+                "-0",
                 "--files",
                 "--hidden",
                 "--no-ignore",
@@ -116,14 +117,13 @@ def _rg_files(roots: list[Path], glob: str) -> list[Path] | None:
                 *existing,
             ],
             capture_output=True,
-            text=True,
             timeout=_RG_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.SubprocessError):
         return None
     if completed.returncode not in (0, 1):
         return None
-    return [Path(line) for line in completed.stdout.splitlines() if line]
+    return [Path(os.fsdecode(path)) for path in completed.stdout.split(b"\0") if path]
 
 
 class _Walker(Protocol):

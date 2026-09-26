@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -101,10 +103,28 @@ class TestApplyArtifactsReplace:
 
         assert change.action == "replace"
         assert "added 1" in change.detail
-        assert "removed 1" in change.detail
+        assert "removed 0" in change.detail
         text = config_path.read_text(encoding="utf-8")
         assert text.count('name = "cheese-artifacts"') == 1
-        assert str(repo_a.resolve()) not in text
+        assert f'"{repo_a.resolve() / ".cheese"}"' in text
+        assert f'"{cheese_b.resolve()}"' in text
+
+    def test_retains_existing_dirs_omitted_by_later_scan(
+        self, tmp_path: Path, config_path: Path
+    ) -> None:
+        repo_a = tmp_path / "repo-a"
+        repo_b = tmp_path / "repo-b"
+        cheese_a = _write_cheese_md(repo_a)
+        cheese_b = _write_cheese_md(repo_b)
+        _ = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo_a])
+
+        change = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo_b])
+
+        assert change.action == "replace"
+        assert "added 1" in change.detail
+        assert "removed 0" in change.detail
+        text = config_path.read_text(encoding="utf-8")
+        assert f'"{cheese_a.resolve()}"' in text
         assert f'"{cheese_b.resolve()}"' in text
 
     def test_preserves_unrelated_corpora(self, tmp_path: Path, config_path: Path) -> None:
@@ -131,6 +151,9 @@ class TestApplyArtifactsRemove:
         _ = _write_cheese_md(repo)
         _ = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
 
+        import shutil
+
+        shutil.rmtree(repo)
         empty_root = tmp_path / "empty"
         empty_root.mkdir()
         change = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[empty_root])
@@ -150,6 +173,23 @@ class TestApplyArtifactsRemove:
         assert change.action == "noop"
         assert not config_path.exists()
 
+    def test_removes_block_after_listed_dir_disappears(
+        self, tmp_path: Path, config_path: Path
+    ) -> None:
+        repo = tmp_path / "repo"
+        _ = _write_cheese_md(repo)
+        _ = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
+
+        import shutil
+
+        shutil.rmtree(repo)
+        empty_root = tmp_path / "empty"
+        empty_root.mkdir()
+        change = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[empty_root])
+
+        assert change.action == "remove"
+        assert "cheese-artifacts" not in config_path.read_text(encoding="utf-8")
+
 
 class TestPathEscaping:
     def test_round_trips_paths_with_quotes_and_backslashes(
@@ -162,6 +202,24 @@ class TestPathEscaping:
 
         state = artifacts_mod.detect_artifacts_state(config_path)
         assert state.listed == (str(cheese.resolve()),)
+
+    def test_escapes_control_characters_as_toml_basic_string(
+        self,
+        tmp_path: Path,
+        config_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import tomllib
+
+        monkeypatch.setenv("PATH", "")
+
+        repo = tmp_path / "control\nrepo\t\x01"
+        cheese = _write_cheese_md(repo)
+
+        _ = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
+
+        parsed = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        assert parsed["corpus"][0]["paths"] == [str(cheese.resolve())]
 
 
 class TestDetectArtifactsState:
@@ -239,3 +297,132 @@ class TestRunLeg:
         lines = artifacts_mod.run_leg(apply=False, roots=[str(empty_root)])
 
         assert any("drift" in line for line in lines)
+
+
+    def test_incomplete_scan_reports_error_without_mutating(
+        self,
+        tmp_path: Path,
+        config_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        repo = tmp_path / "repo"
+        _ = _write_cheese_md(repo)
+        _ = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
+        before = config_path.read_bytes()
+        from easy_cheese.shared.wheypoint.discovery_notes import CheeseDirScan
+
+        def incomplete_scan(_roots: Sequence[Path | str]) -> CheeseDirScan:
+            return CheeseDirScan(
+                dirs=(), backend="walk", errors=("directory walk timed out",)
+            )
+
+        monkeypatch.setattr(artifacts_mod, "find_cheese_dirs", incomplete_scan)
+
+        change = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[tmp_path])
+
+        assert change.action == "error"
+        assert "incomplete scan" in change.detail
+        assert config_path.read_bytes() == before
+
+    def test_successful_fallback_keeps_mutation_and_reports_warning(
+        self,
+        tmp_path: Path,
+        config_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from easy_cheese.shared.wheypoint.discovery_notes import CheeseDirScan
+
+        repo = tmp_path / "repo"
+        cheese = _write_cheese_md(repo)
+        warning = "rg failed or timed out; fell back to a directory walk"
+        def fallback_scan(_roots: Sequence[Path | str]) -> CheeseDirScan:
+            return CheeseDirScan(
+                dirs=(cheese.resolve(),), backend="walk", errors=(warning,)
+            )
+
+        monkeypatch.setattr(artifacts_mod, "find_cheese_dirs", fallback_scan)
+
+        change = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
+
+        assert change.action == "create"
+        assert warning in change.detail
+        assert f'"{cheese.resolve()}"' in config_path.read_text(encoding="utf-8")
+
+    def test_refuses_unmarked_same_name_corpus(
+        self, tmp_path: Path, config_path: Path
+    ) -> None:
+        config_path.parent.mkdir(parents=True)
+        original = (
+            '[[corpus]]\n'
+            "name   =   'cheese-artifacts'\n"
+            'paths = ["/opt/old-cheese"]\n'
+        )
+        _ = config_path.write_text(original, encoding="utf-8")
+        repo = tmp_path / "repo"
+        _ = _write_cheese_md(repo)
+
+        change = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
+
+        assert change.action == "error"
+        assert "unmarked cheese-artifacts" in change.detail
+        assert config_path.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize(
+    "table_header,name_key",
+    [
+        ("[[ corpus ]]", 'name = "cheese-artifacts"'),
+        ("[[corpus]] # trailing comment", 'name = "cheese-artifacts"'),
+        ("[[corpus]]", '"name" = "cheese-artifacts"'),
+    ],
+)
+def test_refuses_valid_toml_duplicate_corpus_forms(
+    tmp_path: Path,
+    config_path: Path,
+    table_header: str,
+    name_key: str,
+) -> None:
+    import tomllib
+
+    config_path.parent.mkdir(parents=True)
+    original = (
+        f"{table_header}\n"
+        f"{name_key}\n"
+        'paths = ["/opt/old-cheese"]\n'
+    )
+    assert tomllib.loads(original)["corpus"][0]["name"] == "cheese-artifacts"
+    _ = config_path.write_text(original, encoding="utf-8")
+    repo = tmp_path / "repo"
+    _ = _write_cheese_md(repo)
+
+    change = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
+
+    assert change.action == "error"
+    assert "unmarked cheese-artifacts" in change.detail
+    assert config_path.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize("use_rg", [False, True])
+def test_control_path_apply_state_and_idempotency(
+    tmp_path: Path,
+    config_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    use_rg: bool,
+) -> None:
+    if use_rg and shutil.which("rg") is None:
+        pytest.skip("rg is not installed")
+    if not use_rg:
+        monkeypatch.setenv("PATH", "")
+
+    repo = tmp_path / "control\nrepo\t\r\x01"
+    cheese = _write_cheese_md(repo)
+
+    first = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
+    assert first.action == "create"
+    state = artifacts_mod.detect_artifacts_state(config_path)
+    assert state.listed == (str(cheese.resolve()),)
+
+    before_second = config_path.read_bytes()
+    second = artifacts_mod.apply_artifacts(config_path, apply=True, roots=[repo])
+    assert second.action == "noop"
+    assert config_path.read_bytes() == before_second
