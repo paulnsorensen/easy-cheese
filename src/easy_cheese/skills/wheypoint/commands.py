@@ -90,7 +90,7 @@ COMMANDS = (
     derive_command(_resolve, "Resolve a slug, work id, or path to the current record"),
     derive_command(_show, "Print the current record for a work id"),
     derive_command(_lint, "Lint a generated projection against the record"),
-    derive_command(_list, "List every work item under the corpus root"),
+    derive_command(_list, "List and search work items and notes across worktrees"),
     derive_command(_log, "Walk the revisions of one work id, oldest first"),
     derive_command(_turns, "Print the user's own turns from a session transcript"),
     derive_command(

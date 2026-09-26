@@ -245,6 +245,7 @@ READ_ONLY_GIT = {
     ("git", "cat-file", "-e", None),
     ("git", "merge-base", "--is-ancestor", None, "HEAD"),
     ("git", "rev-list", "--count", None),
+    ("git", "rev-parse", "--show-toplevel"),
     ("git", "worktree", "list", "--porcelain"),
 }
 MUTATING_GIT = ("commit", "push", "add", "checkout", "reset", "rm", "tag", "merge")

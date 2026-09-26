@@ -15,6 +15,7 @@ from easy_cheese_schemas import schema_runtime
 from easy_cheese.cli.envelope import Refused
 from easy_cheese.shared import paths
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
+from easy_cheese.shared.wheypoint import discovery
 from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import projection
 from easy_cheese.shared.wheypoint import records
@@ -24,12 +25,18 @@ from easy_cheese.shared.wheypoint import storage
 from easy_cheese.shared.wheypoint import transcript
 from easy_cheese.shared.wheypoint.resolve_cli import findings_payload, maybe_payload
 
-from easy_cheese.cli.wheypoint.checkpoint import open_store, read_payload
+from easy_cheese.cli.wheypoint.checkpoint import open_store, read_intent
+
+
+def _addressed_corpus_root(args: argparse.Namespace) -> Path | None:
+    """`--project KEY` addresses another project's corpus (G10)."""
+    project = cast("str | None", getattr(args, "project", None))
+    return None if project is None else paths.corpus_home() / project
 
 
 def run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     work_id = cast(str, args.work_id)
-    store = open_store(work_id)
+    store = open_store(work_id, corpus_root=_addressed_corpus_root(args))
     try:
         record = store.read_record()
     except (storage.StorageError, OSError, ValueError) as exc:
@@ -51,13 +58,31 @@ def run_show(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
 def run_resolve(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     ref = cast(str, args.ref)
     legacy_flag = cast(bool, args.legacy)
-    corpus_root = cast("str | None", args.corpus_root)
+    corpus_root_path = _addressed_corpus_root(args)
+    corpus_root = (
+        str(corpus_root_path)
+        if corpus_root_path is not None
+        else cast("str | None", args.corpus_root)
+    )
+    workspace_root = cast("str | None", getattr(args, "workspace_root", None))
+    project_key = cast("str | None", getattr(args, "project", None))
     resolution = (
         resolve_mod.resolve_legacy(ref, start=Path.cwd())
         if legacy_flag
-        else resolve_mod.resolve(ref, corpus_root=corpus_root)
+        else resolve_mod.resolve(
+            ref,
+            corpus_root=corpus_root,
+            project_key=project_key,
+            workspace_root=workspace_root,
+            require_workspace=project_key is not None,
+        )
     )
-    return resolve_cli.resolve_payload(resolution, ref)
+    payload = resolve_cli.resolve_payload(resolution, ref)
+    if resolution.outcome == resolve_mod.ResolutionOutcome.NOT_FOUND:
+        payload["suggestions"] = list(
+            discovery.suggestions(ref, start=Path.cwd(), corpus_root=corpus_root)
+        )
+    return payload
 
 
 def run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
@@ -73,8 +98,7 @@ def run_lint(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
 
 def run_validate(args: argparse.Namespace, stdin: TextIO) -> dict[str, object]:
     """Schema-only dry run: every problem, no store opened (AC-11)."""
-    _ = args
-    payload = read_payload(stdin)
+    payload = read_intent(args, stdin)
     if not isinstance(payload, dict):
         raise Refused(
             "invalid-intent",
@@ -144,63 +168,92 @@ def _corpus_root(args: argparse.Namespace) -> Path:
     return Path(root_arg) if root_arg is not None else paths.project_corpus_root()
 
 
+def _iso(epoch: float) -> str:
+    return _dt.datetime.fromtimestamp(epoch, tz=_dt.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
+def _hit_item(hit: discovery.Hit) -> dict[str, object]:
+    """A discovery hit as a `list` item: the old store keys, plus G9's new ones."""
+    item: dict[str, object] = {
+        "source": hit.source,
+        "project": hit.project,
+        "ref": hit.ref,
+        "status": hit.status,
+        "next": hit.next,
+        "orientation": hit.orientation,
+        "path": str(hit.path),
+        "resume": str(hit.resume),
+        "updated": _iso(hit.updated),
+    }
+    if hit.source == "store":
+        item["work_id"] = hit.ref
+        item["revision_number"] = hit.revision_number
+    if hit.problem is not None:
+        item["problem"] = hit.problem
+    return item
+
+
 def _tsv_lines(
     items: list[dict[str, object]],
     columns: tuple[str | tuple[str, Callable[[object], str]], ...],
 ) -> list[str]:
-    """One tab-separated line per item; a missing column key renders as `-`."""
+    """One tab-separated line per item; a missing or null cell renders as `-`."""
     lines: list[str] = []
     for item in items:
         cells: list[str] = []
         for column in columns:
             key, formatter = column if isinstance(column, tuple) else (column, str)
-            cell = "-" if key not in item else formatter(item[key])
+            value = item.get(key)
+            cell = "-" if value is None else formatter(value)
             cells.append(projection.escape(cell, tab=True))
         lines.append("\t".join(cells))
     return lines
 
 
 def run_list(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
-    """One line per work item under the corpus root (AC-13)."""
+    """Every store and legacy note a caller can resume from (AC-13, G9)."""
     root = _corpus_root(args)
-    items: list[dict[str, object]] = []
-    for store in storage.WorkStore.enumerate(root):
-        work_id = store.work_id
-        try:
-            record = store.read_record()
-        except (storage.StorageError, records.RecordError, ValueError) as exc:
-            items.append(
-                {
-                    "work_id": work_id,
-                    "status": "unreadable",
-                    "unreadable": str(exc),
-                    "orientation": str(exc),
-                }
-            )
-            continue
-        if record is None:
-            items.append({"work_id": work_id, "status": "no-record", "no_record": True})
-            continue
-        head = record.orientation.strip().partition("\n")[0]
-        items.append(
-            {
-                "work_id": record.work_id,
-                "revision_number": record.revision_number,
-                "status": record.status.value,
-                "next": record.next_action.move.value,
-                "orientation": head,
-            }
-        )
-    lines = _tsv_lines(
-        items, ("work_id", "revision_number", "status", "next", "orientation")
+    scope = cast(str, args.scope)
+    projects = cast("list[str] | None", args.project) or []
+    effective_scope = "machine" if projects else scope
+    result = discovery.discover(
+        scope=effective_scope,
+        start=Path.cwd(),
+        corpus_root=cast("str | None", args.corpus_root),
+        projects=projects,
+        roots=cast("list[str] | None", args.root) or [],
+        grep=cast("str | None", args.grep),
+        status=cast("str | None", args.status),
+        next=cast("str | None", args.next),
+        source=cast("str | None", args.source),
+        since=cast("str | None", args.since),
+        limit=cast("int | None", args.limit),
+        show_mirrors=cast(bool, args.mirrors),
     )
-    return {"corpus_root": str(root), "items": items, "lines": lines}
+    items = [_hit_item(hit) for hit in result.hits]
+    lines = _tsv_lines(
+        items, ("source", "project", "ref", "status", "next", "orientation")
+    )
+    return {
+        "corpus_root": str(root),
+        "scope": effective_scope,
+        "items": items,
+        "lines": lines,
+        "searched": list(result.searched),
+        "hidden_mirrors": result.hidden_mirrors,
+        "errors": list(result.errors),
+    }
 
 
 def run_log(args: argparse.Namespace, _stdin: TextIO) -> dict[str, object]:
     """One line per complete revision, oldest first (AC-14)."""
     work_id = cast(str, args.work_id)
-    store = open_store(work_id, corpus_root=_corpus_root(args))
+    root = _addressed_corpus_root(args)
+    if root is None:
+        root = _corpus_root(args)
+    store = open_store(work_id, corpus_root=root)
     scan = store.revisions()
     files, skipped = scan.files, scan.skipped
     if not files:

@@ -38,6 +38,21 @@ PLACEHOLDER_DIGEST = "sha256:" + "0" * 64
 WORK_ID = "work-0001"
 
 
+@pytest.fixture(autouse=True)  # noqa: V103 -- autouse isolation fixture
+def no_real_machine_search(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep machine-scope discovery off the real `~`.
+
+    `list --scope machine` walks `$EASY_CHEESE_SEARCH_ROOTS` (default `~`) and
+    always reads `~/.cheese/notes`, so every test gets an empty search root and
+    an empty HOME. A test that needs its own HOME sets it again.
+    """
+    home = tmp_path_factory.mktemp("search-home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_SEARCH_ROOTS", str(home))
+
+
 @define(frozen=True)
 class Promotion:
     """One consistent (record, revision, projection markdown) triple."""

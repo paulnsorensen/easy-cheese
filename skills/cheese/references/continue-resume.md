@@ -12,6 +12,8 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    The handoff file restores state.
    The user's live message overrides it.
 1. **Resolve through the runtime, never by hand.** Use `/wheypoint resolve --ref <absolute-path | work-id | slug>`.
+   For a hit from another project, add `--project KEY --workspace-root PATH`.
+   An alias KEY is accepted only when ambient `EASY_CHEESE_PROJECT` equals KEY and the bound checkout contains the pinned revision commit.
    The runtime tries an explicit path first.
    It then tries the exact work ID and a unique slug.
    It finally checks legacy notes in the current `.cheese/notes/` directory and each sibling worktree.
@@ -19,8 +21,13 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    Dispatch only the validated authoritative current revision.
    The runtime generates the Markdown as a projection.
    The runtime does not treat it as authoritative.
-   A `.cheese/` parent identifies the original repository root.
+   A `.cheese/` parent identifies the original repository root for legacy notes.
+   A canonical foreign projection identifies its corpus, but not its source checkout.
    Resolve repository-relative handoff paths from the directory above `.cheese/`.
+   Without `--workspace-root PATH`, a foreign-project result is gated and is not dispatchable.
+   After an authoritative foreign result, switch to the bound owning checkout.
+   Rerun resolve there before dispatching.
+   If switching is unavailable, stop and request that workspace.
    A `legacy` result is non-authoritative context.
    Never dispatch a legacy result automatically.
    Any runtime `gated` outcome from a legacy `halt` or `gated` status stops.
@@ -128,7 +135,8 @@ Also use it when the user manually resumes the pipeline from a cleared context.
      Use bare `/affinage` only when the handoff names no pull request.
      Add `--auto` only together with an explicit `--stake <floor>` value.
      Stop and ask for the floor when the user requested `--auto` without one.
-   - **When `status:` is `ok` and `next:` names a pipeline phase**, dispatch `/\<next\> \<slug\>` directly.
+   - **When `status:` is `ok` and `next:` names a pipeline phase**, dispatch `/\<next\> \<slug\>` after switching a foreign result to its bound owning checkout.
+     Rerun `wheypoint-resolve --ref <slug>` there before dispatching; if switching is unavailable, stop and request that workspace.
      The valid phases are `mold | cook | press | age | cure | affinage`.
      Apply the same `affinage` exception.
      Under `--safe`, select this dispatch option first.

@@ -53,6 +53,18 @@ def _parser() -> Parser:
         default=None,
         help="the corpus to resolve in; defaults to this project's XDG corpus",
     )
+    _ = parser.add_argument(
+        "--project",
+        dest="project",
+        default=None,
+        help="resolve another project's corpus (corpus_home()/KEY)",
+    )
+    _ = parser.add_argument(
+        "--workspace-root",
+        dest="workspace_root",
+        default=None,
+        help="the owning repository checkout for cross-project continuation",
+    )
     return parser
 
 
@@ -122,8 +134,17 @@ def main(
     try:
         ref = cast(str, args.ref)
         corpus_root = cast("str | None", args.corpus_root)
+        project_key = cast("str | None", args.project)
+        workspace_root = cast("str | None", args.workspace_root)
         payload = resolve_payload(
-            resolve_mod.resolve(ref, corpus_root=corpus_root), ref
+            resolve_mod.resolve(
+                ref,
+                corpus_root=corpus_root,
+                project_key=project_key,
+                workspace_root=workspace_root,
+                require_workspace=project_key is not None,
+            ),
+            ref,
         )
     except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
         traceback.print_exc(file=sys.stderr)
