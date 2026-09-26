@@ -20,7 +20,7 @@ import pytest
 from easy_cheese_schemas import HandoffTask, NextMove, WheypointRecord
 
 from easy_cheese.shared.wheypoint import checkpoint, commit, storage
-from easy_cheese.skills.wheypoint import wheypoint
+from easy_cheese.cli import wheypoint
 
 from conftest import WORK_ID
 

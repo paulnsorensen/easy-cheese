@@ -15,11 +15,13 @@ from attrs import evolve
 from easy_cheese_schemas import (
     ArtifactLink,
     CompactionRecord,
+    Durability,
+    RepositoryProvenance,
     WheypointRecord,
     WheypointRevision,
 )
 
-from easy_cheese.shared.wheypoint import canonical, lint, records, storage
+from easy_cheese.shared.wheypoint import canonical, lint, projection, records, storage
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
 
 PROJECT = "paulnsorensen-easy-cheese"
@@ -66,6 +68,7 @@ def run(
     corpus_root: Path,
     *,
     project_key: str = PROJECT,
+    workspace_root: Path | None = None,
     git_object_exists: Callable[[str], bool] = lambda obj: True,
     artifact_digest: Callable[[str], str | None] = lambda path: None,
 ) -> resolve_mod.Resolution:
@@ -73,6 +76,7 @@ def run(
         ref,
         corpus_root=corpus_root,
         project_key=project_key,
+        workspace_root=workspace_root,
         git_object_exists=git_object_exists,
         artifact_digest=artifact_digest,
     )
@@ -123,6 +127,280 @@ def test_an_explicit_path_beats_the_corpus_lookups(
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.work_id == "alpha"
     assert found.searched == (str(path),)
+
+
+def test_an_absolute_projection_outside_the_corpus_is_not_authoritative(
+    tmp_path: Path,
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    store, _ = seed(
+        corpus_root, make_record, make_promotion, work_id="alpha", slug="beta"
+    )
+    outside = tmp_path / "projection.md"
+    _ = outside.write_text(
+        store.projection_path(1, "rev-0001").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
+    found = run(str(outside), corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.NOT_FOUND
+    assert not found.dispatchable
+
+
+def test_a_foreign_projection_requires_its_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    home = tmp_path / "cheese"
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    foreign_root = home / "foreign-project"
+    store, _ = seed(
+        foreign_root,
+        make_record,
+        make_promotion,
+        work_id="foreign-work",
+        slug="foreign-slug",
+    )
+
+    def fail_if_called(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError(
+            "repository-sensitive lint must wait for workspace binding"
+        )
+
+    monkeypatch.setattr(resolve_mod.lint, "lint_work", fail_if_called)
+    found = resolve_mod.resolve(
+        str(store.projection_path(1, "rev-0001")),
+        git_object_exists=lambda _obj: True,
+        artifact_digest=lambda _path: None,
+    )
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert found.work_id == "foreign-work"
+    assert "workspace-required" in [finding.code.value for finding in found.findings]
+    assert any("--workspace-root" in finding.detail for finding in found.findings)
+
+
+def test_a_foreign_projection_uses_the_bound_workspace_and_rechecks_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    home = tmp_path / "cheese"
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    workspace = tmp_path / "foreign-checkout"
+    workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/foreign/project.git",
+        ],
+        cwd=workspace,
+        check=True,
+    )
+    untrusted_workspace = tmp_path / "foreign-project"
+    untrusted_workspace.mkdir()
+    artifact = workspace / "notes.md"
+    _ = artifact.write_text("fresh\n", encoding="utf-8")
+    digest = storage.file_digest(artifact)
+    assert digest is not None
+    record = make_record(
+        work_id="foreign-work",
+        slug="foreign-slug",
+        project_key="foreign-project",
+        working_context=[],
+        artifact_links=[
+            ArtifactLink(path="notes.md", digest=digest, revision_id="rev-0001")
+        ],
+    )
+    promotion = make_promotion(1, "rev-0001", record=record)
+    store = storage.WorkStore.open("foreign-work", corpus_root=home / "foreign-project")
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    projection = store.projection_path(1, "rev-0001")
+
+    untrusted = resolve_mod.resolve(
+        str(projection),
+        workspace_root=untrusted_workspace,
+        git_object_exists=lambda _obj: True,
+    )
+    assert untrusted.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "workspace-mismatch" in [
+        finding.code.value for finding in untrusted.findings
+    ]
+    found = resolve_mod.resolve(
+        str(projection),
+        workspace_root=workspace,
+        git_object_exists=lambda _obj: True,
+    )
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+
+    wrong_workspace = tmp_path / "wrong-project"
+    wrong_workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=wrong_workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/wrong/project.git",
+        ],
+        cwd=wrong_workspace,
+        check=True,
+    )
+    wrong = resolve_mod.resolve(
+        str(projection),
+        workspace_root=wrong_workspace,
+        git_object_exists=lambda _obj: True,
+    )
+    assert wrong.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "workspace-mismatch" in [finding.code.value for finding in wrong.findings]
+
+    _ = artifact.write_text("stale\n", encoding="utf-8")
+    stale = resolve_mod.resolve(
+        str(projection),
+        workspace_root=workspace,
+        git_object_exists=lambda _obj: True,
+    )
+    assert stale.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "stale-artifact-link" in [finding.code.value for finding in stale.findings]
+
+
+def test_alias_project_binding_requires_a_pinned_commit_in_the_bound_checkout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    home = tmp_path / "cheese"
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "Alias Key")
+    workspace = tmp_path / "alias-checkout"
+    workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/owner/repo.git",
+        ],
+        cwd=workspace,
+        check=True,
+    )
+    _ = (workspace / "README.md").write_text("alias\n", encoding="utf-8")
+    _ = subprocess.run(["git", "add", "README.md"], cwd=workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "genesis",
+        ],
+        cwd=workspace,
+        check=True,
+    )
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=workspace, text=True
+    ).strip()
+    record = make_record(
+        work_id="alias-work",
+        slug="alias-slug",
+        project_key="alias-key",
+        working_context=[],
+    )
+    promotion = make_promotion(1, "rev-0001", record=record)
+    revision = evolve(
+        promotion.revision,
+        repository=RepositoryProvenance(branch="main", commit=commit),
+    )
+    record = evolve(
+        promotion.record,
+        revision_digest=records.revision_digest(revision),
+    )
+    _, markdown = projection.build_projection(
+        record, durability=Durability.CANONICAL_LOCAL
+    )
+    store = storage.WorkStore.open("alias-work", corpus_root=home / "alias-key")
+    store.promote(record, revision, markdown)
+
+    found = resolve_mod.resolve(
+        str(store.projection_path(1, "rev-0001")),
+        project_key="alias-key",
+        workspace_root=workspace,
+        require_workspace=True,
+    )
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+
+    wrong_workspace = tmp_path / "wrong-alias-checkout"
+    wrong_workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=wrong_workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/wrong/repo.git",
+        ],
+        cwd=wrong_workspace,
+        check=True,
+    )
+    wrong = resolve_mod.resolve(
+        str(store.projection_path(1, "rev-0001")),
+        project_key="alias-key",
+        workspace_root=wrong_workspace,
+        require_workspace=True,
+    )
+    assert wrong.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "git-object-missing" in [finding.code.value for finding in wrong.findings]
+
+    no_commit_record = make_record(
+        work_id="alias-no-commit",
+        slug="alias-no-commit-slug",
+        project_key="alias-key",
+        working_context=[],
+    )
+    no_commit_promotion = make_promotion(1, "rev-0001", record=no_commit_record)
+    no_commit_revision = evolve(
+        no_commit_promotion.revision,
+        repository=RepositoryProvenance(branch="main", commit=None),
+    )
+    no_commit_record = evolve(
+        no_commit_promotion.record,
+        revision_digest=records.revision_digest(no_commit_revision),
+    )
+    _, no_commit_markdown = projection.build_projection(
+        no_commit_record, durability=Durability.CANONICAL_LOCAL
+    )
+    no_commit_store = storage.WorkStore.open(
+        "alias-no-commit", corpus_root=home / "alias-key"
+    )
+    no_commit_store.promote(no_commit_record, no_commit_revision, no_commit_markdown)
+    no_commit = resolve_mod.resolve(
+        str(no_commit_store.projection_path(1, "rev-0001")),
+        project_key="alias-key",
+        workspace_root=workspace,
+        require_workspace=True,
+    )
+    assert no_commit.outcome is resolve_mod.ResolutionOutcome.GATED
+    assert "git-object-missing" in [
+        finding.code.value for finding in no_commit.findings
+    ]
 
 
 def test_a_unique_slug_resolves_when_no_work_id_matches(
@@ -986,7 +1264,7 @@ def test_ac24_the_v2_golden_store_resolves_authoritative_with_its_pinned_digests
     import json
 
     from easy_cheese.shared.wheypoint import records, storage
-    from easy_cheese.skills.wheypoint import wheypoint
+    from easy_cheese.cli import wheypoint
 
     fixtures = Path(__file__).resolve().parents[1] / "fixtures"
     monkeypatch.setenv("EASY_CHEESE_HOME", str(fixtures))
@@ -1076,6 +1354,17 @@ def test_a_subdirectory_cwd_still_anchors_artifact_digests_to_the_repo_root(
         _ = subprocess.run(
             ["git", *args], cwd=repo, env=env, check=True, capture_output=True
         )
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/paulnsorensen/easy-cheese.git",
+        ],
+        cwd=repo,
+        check=True,
+    )
     notes = repo / "notes.md"
     _ = notes.write_text("hello\n", encoding="utf-8")
     digest = storage.file_digest(notes)

@@ -241,11 +241,17 @@ def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> 
     names = _bundle_members(wheypoint_pyz)
     for module in ("__init__.py", *(f"{name}.py" for name in KERNEL_MODULES)):
         assert f"easy_cheese/shared/wheypoint/{module}" in names, module
-    for module in ("__init__.py", "commands.py", "transcript.py", "wheypoint.py"):
+    for module in ("__init__.py", "commands.py"):
         assert f"easy_cheese/skills/wheypoint/{module}" in names, module
     assert not any(
         f"easy_cheese/skills/wheypoint/{name}.py" in names for name in KERNEL_MODULES
     )
+    for module in ("__init__.py", "envelope.py"):
+        assert f"easy_cheese/cli/{module}" in names, module
+    for module in ("__init__.py", "checkpoint.py", "parser.py", "queries.py"):
+        assert f"easy_cheese/cli/wheypoint/{module}" in names, module
+    assert "easy_cheese/skills/wheypoint/wheypoint.py" not in names
+    assert "easy_cheese/skills/wheypoint/transcript.py" not in names
     # The shared library it reuses rather than reimplements.
     assert "easy_cheese/shared/paths.py" in names
     # Schemas and locked deps ride along, nested, exactly as for ultracook.

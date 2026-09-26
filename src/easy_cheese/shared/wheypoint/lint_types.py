@@ -26,6 +26,8 @@ class LintCode(str, Enum):
     PARENT_DIGEST_MISMATCH = "parent-digest-mismatch"
     PARENT_NOT_CONTIGUOUS = "parent-not-contiguous"
     PROJECT_MISMATCH = "project-mismatch"
+    WORKSPACE_REQUIRED = "workspace-required"
+    WORKSPACE_MISMATCH = "workspace-mismatch"
     GIT_OBJECT_MISSING = "git-object-missing"
     STALE_COMMIT = "stale-commit"
     ARTIFACT_COVERAGE_INVALID = "artifact-coverage-invalid"

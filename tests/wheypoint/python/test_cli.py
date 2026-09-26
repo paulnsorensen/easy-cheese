@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -19,7 +21,7 @@ import pytest
 
 from easy_cheese_schemas import CheckpointIntent
 from easy_cheese.shared.wheypoint import commit, records, resolve_cli, storage
-from easy_cheese.skills.wheypoint import wheypoint
+from easy_cheese.cli import wheypoint
 
 from conftest import WORK_ID, Promotion
 
@@ -373,6 +375,124 @@ def test_resolve_reports_a_committed_work_id_as_dispatchable() -> None:
     assert payload["work_id"] == WORK_ID
     assert payload["record"] == created["record"]
     assert payload["findings"] == []
+
+
+def test_resolve_foreign_project_requires_and_accepts_workspace_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "cheese"
+    same_workspace = tmp_path / "same-checkout"
+    same_workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=same_workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/project/a.git",
+        ],
+        cwd=same_workspace,
+        check=True,
+    )
+    monkeypatch.chdir(same_workspace)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "project-a")
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    created_record = cast(dict[str, object], created["record"])
+    record_slug = cast(str, created_record["slug"])
+
+    ambient_status, ambient = _run(
+        "resolve", "--ref", WORK_ID, "--project", "project-a"
+    )
+    assert ambient_status == 0
+    assert ambient["outcome"] == "authoritative"
+    assert ambient["dispatchable"] is True
+
+    foreign_workspace = tmp_path / "foreign-checkout"
+    foreign_workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=foreign_workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/project/b.git",
+        ],
+        cwd=foreign_workspace,
+        check=True,
+    )
+    monkeypatch.chdir(foreign_workspace)
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "project-b")
+    gated_status, gated = _run("resolve", "--ref", WORK_ID, "--project", "project-a")
+    assert gated_status == 0
+    assert gated["outcome"] == "gated"
+    assert "workspace-required" in [
+        cast(dict[str, object], finding)["code"]
+        for finding in cast("list[object]", gated["findings"])
+    ]
+
+    wrong_status, wrong = _run(
+        "resolve",
+        "--ref",
+        WORK_ID,
+        "--project",
+        "project-a",
+        "--workspace-root",
+        str(foreign_workspace),
+    )
+    assert wrong_status == 0
+    assert wrong["outcome"] == "gated"
+    assert "workspace-mismatch" in [
+        cast(dict[str, object], finding)["code"]
+        for finding in cast("list[object]", wrong["findings"])
+    ]
+
+    monkeypatch.delenv("EASY_CHEESE_PROJECT")
+    status, payload = _run(
+        "resolve",
+        "--ref",
+        WORK_ID,
+        "--project",
+        "project-a",
+        "--workspace-root",
+        str(same_workspace),
+    )
+    assert status == 0
+    assert payload["outcome"] == "authoritative"
+    assert payload["dispatchable"] is True
+
+    out = io.StringIO()
+    adapter_status = resolve_cli.main(
+        [
+            "--ref",
+            WORK_ID,
+            "--project",
+            "project-a",
+            "--workspace-root",
+            str(same_workspace),
+        ],
+        stdout=out,
+    )
+    adapter_payload = cast(
+        dict[str, object], json.loads(out.getvalue().splitlines()[0])
+    )
+    assert adapter_status == 0
+    assert adapter_payload["outcome"] == "authoritative"
+    assert adapter_payload["dispatchable"] is True
+    monkeypatch.chdir(same_workspace)
+    phase_out = io.StringIO()
+    phase_status = resolve_cli.main(
+        ["--ref", record_slug],
+        stdout=phase_out,
+    )
+    phase_payload = cast(
+        dict[str, object], json.loads(phase_out.getvalue().splitlines()[0])
+    )
+    assert phase_status == 0
+    assert phase_payload["outcome"] == "authoritative"
+    assert phase_payload["dispatchable"] is True
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -924,9 +1044,17 @@ def test_ac13_list_prints_one_line_per_work_item(corpus_root: Path) -> None:
     assert status == 0
     lines = cast(list[str], payload["lines"])
     assert len(lines) == 2
-    assert lines[0].split("\t") == ["other-work", "1", "ok", "cook", "Other."]
-    assert lines[1].split("\t")[0] == WORK_ID
+    assert lines[0].split("\t") == [
+        "store",
+        "paulnsorensen-easy-cheese",
+        "other-work",
+        "ok",
+        "cook",
+        "Other.",
+    ]
+    assert lines[1].split("\t")[2] == WORK_ID
     assert payload["corpus_root"] == str(corpus_root)
+    assert payload["scope"] == "project"
 
 
 @pytest.mark.usefixtures("store")
@@ -1342,7 +1470,7 @@ def test_cure_enumerate_ignores_directories_that_are_not_work_ids(
     _ = (rogue / storage.RECORD_FILENAME).write_text("{}", encoding="utf-8")
     status, payload = _run("list")
     assert status == 0
-    assert [line.split("\t")[0] for line in cast(list[str], payload["lines"])] == [
+    assert [line.split("\t")[2] for line in cast(list[str], payload["lines"])] == [
         WORK_ID
     ]
 
@@ -1554,13 +1682,15 @@ def test_cure_a_resumed_promotion_never_reuses_a_prior_note_dir(
     prior = tmp_path / "prior-notes"
     body = _first_intent()
 
-    real_clear = wheypoint._clear_pending  # pyright: ignore[reportPrivateUsage]
+    from easy_cheese.cli.wheypoint import checkpoint as checkpoint_mod
+
+    real_clear = checkpoint_mod._clear_pending  # pyright: ignore[reportPrivateUsage]
 
     def crash_once(_store: storage.WorkStore, _request_identity: str) -> None:
-        monkeypatch.setattr(wheypoint, "_clear_pending", real_clear)
+        monkeypatch.setattr(checkpoint_mod, "_clear_pending", real_clear)
         raise RuntimeError("simulated crash before the ledger entry is cleared")
 
-    monkeypatch.setattr(wheypoint, "_clear_pending", crash_once)
+    monkeypatch.setattr(checkpoint_mod, "_clear_pending", crash_once)
     interrupted_status, _interrupted = _run(
         "checkpoint", "--note-dir", str(prior), stdin=body
     )
@@ -1612,3 +1742,269 @@ def test_resolve_reads_only_the_corpus_root_it_is_given(
     assert scoped_payload["work_id"] == WORK_ID
     projection = cast(dict[str, object], scoped_payload["projection"])
     assert projection["revision_id"] == promotion.revision.revision_id
+
+
+def test_ac11_the_old_skills_module_path_is_gone() -> None:
+    """AC-11: the CLI lives under `easy_cheese.cli`, not the retired skills path."""
+    with pytest.raises(ImportError):
+        import easy_cheese.skills.wheypoint.wheypoint  # noqa: F401  # pyright: ignore[reportMissingImports]
+
+
+# --------------------------------------------------------------------------
+# wheypoint-cli pass 2b: positional refs (G5), intent paths (G6), and G9/G10/G11
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_show_and_resolve_accept_a_positional_ref() -> None:
+    """AC-1: the positional form behaves the same as the flag form."""
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    status, payload = _run("show", WORK_ID)
+    assert status == 0 and payload["work_id"] == WORK_ID
+
+    status, payload = _run("log", WORK_ID)
+    assert status == 0 and payload["work_id"] == WORK_ID
+
+    status, payload = _run("resolve", WORK_ID)
+    assert status == 0 and payload["work_id"] == WORK_ID
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_conflicting_positional_and_flag_ref_is_a_usage_error() -> None:
+    """AC-1: a positional ref and a different --flag value exit 2, code usage."""
+    status, payload = _run("show", WORK_ID, "--work-id", "other-id")
+    assert status == 2 and _get(payload, "error", "code") == "usage"
+
+    status, payload = _run("resolve", WORK_ID, "--ref", "other-ref")
+    assert status == 2 and _get(payload, "error", "code") == "usage"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_and_validate_read_an_intent_path_same_as_stdin(
+    tmp_path: Path,
+) -> None:
+    """AC-2: `checkpoint intent.json` and `validate intent.json` equal stdin."""
+    intent_path = tmp_path / "intent.json"
+    _ = intent_path.write_text(_first_intent(), encoding="utf-8")
+
+    stdin_status, stdin_payload = _run("validate", stdin=_first_intent())
+    file_status, file_payload = _run("validate", str(intent_path))
+    assert (stdin_status, stdin_payload) == (file_status, file_payload)
+
+    checkpoint_status, checkpoint_payload = _run("checkpoint", str(intent_path))
+    assert checkpoint_status == 0
+    assert checkpoint_payload["work_id"] == WORK_ID
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_and_validate_refuse_a_missing_intent_path() -> None:
+    """AC-2: a missing intent path is a refusal, not a traceback."""
+    status, payload = _run("checkpoint", "/no/such/intent.json")
+    assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+
+    status, payload = _run("validate", "/no/such/intent.json")
+    assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_and_validate_refuse_invalid_utf8_intent(tmp_path: Path) -> None:
+    """AC-2: an intent file with invalid UTF-8 is unreadable, not internal."""
+    intent_path = tmp_path / "invalid.json"
+    _ = intent_path.write_bytes(b"\xff")
+
+    for command in ("checkpoint", "validate"):
+        status, payload = _run(command, str(intent_path))
+        assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_no_command_accepts_a_format_flag() -> None:
+    """AC-4: every command refuses --format as a usage error."""
+    for command, extra in (
+        ("show", ["--work-id", WORK_ID]),
+        ("list", []),
+        ("resolve", ["--ref", WORK_ID]),
+    ):
+        status, payload = _run(command, "--format", "json", *extra)
+        assert status == 2
+        assert _get(payload, "error", "code") == "usage"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_grep_next_source_and_limit_combine_with_and() -> None:
+    """AC-7: --grep, --next, --source, and --limit filter and combine with AND."""
+    _ = _run("checkpoint", stdin=_first_intent(orientation="Alpha work.\nMore."))
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(work_id="other-work", orientation="Beta work.\nMore."),
+    )
+
+    status, payload = _run("list", "--grep", "alpha")
+    assert status == 0
+    refs = [
+        cast(dict[str, object], item)["ref"]
+        for item in cast("list[object]", payload["items"])
+    ]
+    assert refs == [WORK_ID]
+
+    status, payload = _run(
+        "list", "--grep", "work", "--next", "cook", "--source", "store", "--limit", "1"
+    )
+    assert status == 0
+    assert len(cast("list[object]", payload["items"])) == 1
+
+    status, payload = _run("list", "--grep", "alpha", "--next", "press")
+    assert status == 0
+    assert payload["items"] == []
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_status_and_since_filter() -> None:
+    """AC-7: --status and --since filter; a future --since removes every hit."""
+    _ = _run("checkpoint", stdin=_first_intent(orientation="Alpha work.\nMore."))
+
+    status, payload = _run("list", "--status", "ok", "--since", "2000-01-01")
+    assert status == 0
+    assert len(cast("list[object]", payload["items"])) == 1
+
+    status, payload = _run("list", "--status", "gated")
+    assert status == 0
+    assert payload["items"] == []
+
+    status, payload = _run("list", "--since", "2999-01-01")
+    assert status == 0
+    assert payload["items"] == []
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ("--since", "yesterday"),
+        ("--since", "2026-13-01"),
+        ("--limit", "0"),
+        ("--limit", "x"),
+    ],
+)
+def test_list_rejects_a_bad_since_or_limit_as_usage(flags: tuple[str, str]) -> None:
+    """A malformed filter is a usage error (exit 2), never an internal error."""
+    status, payload = _run("list", *flags)
+    assert status == 2
+    error = cast(dict[str, object], payload["error"])
+    assert error["code"] == "usage"
+    assert flags[0] in cast(str, error["message"])
+
+
+def test_list_project_flag_implies_machine_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G9: --project limits hits to that project and implies machine scope."""
+    home = tmp_path / "cheese"
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-a")
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-b")
+    status, payload = _run("list", "--project", "proj-a")
+    assert status == 0
+    assert payload["scope"] == "machine"
+    projects = {
+        cast(dict[str, object], item)["project"]
+        for item in cast("list[object]", payload["items"])
+    }
+    assert projects == {"proj-a"}
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_lines_render_a_handwritten_note_readably(tmp_path: Path) -> None:
+    """A note without a preamble shows its title and `-` for null cells."""
+    root = tmp_path / "elsewhere"
+    note = root / ".cheese" / "notes" / "brief.md"
+    note.parent.mkdir(parents=True)
+    _ = note.write_text("# Resume brief\n\nbody\n", encoding="utf-8")
+
+    status, payload = _run(
+        "list", "--scope", "machine", "--root", str(root), "--source", "note"
+    )
+
+    assert status == 0
+    lines = cast("list[str]", payload["lines"])
+    brief = [line for line in lines if "\tbrief\t" in line]
+    assert len(brief) == 1
+    cells = brief[0].split("\t")
+    assert cells[3:] == ["-", "-", "Resume brief"]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+@pytest.mark.usefixtures("corpus_root")
+def test_list_hides_a_mirror_note_until_mirrors_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-8: a note mirroring a store slug is hidden unless --mirrors is given."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+    _ = subprocess.run(
+        ["git", "init", "-q", "-b", "main"], cwd=repo, env=env, check=True
+    )
+    _ = subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "seed"],
+        cwd=repo,
+        env=env,
+        check=True,
+    )
+    monkeypatch.chdir(repo)
+
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    status, payload = _run("list")
+    assert status == 0
+    assert payload["hidden_mirrors"] == 1
+    sources = {
+        cast(dict[str, object], item)["source"]
+        for item in cast("list[object]", payload["items"])
+    }
+    assert sources == {"store"}
+
+    status, payload = _run("list", "--mirrors")
+    assert status == 0
+    assert payload["hidden_mirrors"] == 0
+    sources = {
+        cast(dict[str, object], item)["source"]
+        for item in cast("list[object]", payload["items"])
+    }
+    assert sources == {"store", "note"}
+
+
+def test_show_project_flag_reads_another_projects_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-9: `show --project KEY <id>` reads another project's store."""
+    home = tmp_path / "cheese"
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-a")
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-b")
+    status, payload = _run("show", "--work-id", WORK_ID)
+    assert (status, _error(payload)[0]) == (1, "record-missing")
+
+    status, payload = _run("show", "--project", "proj-a", "--work-id", WORK_ID)
+    assert status == 0 and payload["work_id"] == WORK_ID
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_miss_lists_close_suggestions() -> None:
+    """AC-10: a near-miss id lists in `suggestions`; the outcome stays not-found."""
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    status, payload = _run("resolve", "--ref", "work-0002")
+    assert status == 0
+    assert payload["outcome"] == "not-found"
+    assert WORK_ID in cast(list[str], payload["suggestions"])
