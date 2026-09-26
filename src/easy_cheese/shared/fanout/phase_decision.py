@@ -65,7 +65,6 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, TypedDict
 
-import cyclopts
 import fromargs
 
 from easy_cheese_schemas.phase_contracts import (
@@ -269,7 +268,7 @@ def decide_cmd(
     phase_index: int,
     status: str,
     next_field: Annotated[
-        str | None, cyclopts.Parameter(name="--next")
+        str | None, fromargs.Parameter(name="--next")
     ] = None,
     table: TableName = "linear",
     retry_count: int = 0,

@@ -29,14 +29,15 @@ copy-paste blocks; the user picks and runs.
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, TypedDict, cast
+
+import fromargs
 
 # Safe git ref name characters: alphanumeric, slash, dot, dash, underscore.
 # Used to prevent shell metacharacters from being interpolated into the printed
@@ -104,12 +105,6 @@ class _DetectResult(TypedDict):
     unique_commits: list[_Commit]
     remedies: list[_Remedy]
     warnings: list[str]
-
-
-class _Args(Protocol):
-    base: str
-    branch: str | None
-    json: bool
 
 
 def _current_branch() -> str | None:
@@ -539,107 +534,56 @@ def detect(branch: str, base_ref: str) -> _DetectResult:
     return result
 
 
-def format_terse(d: _DetectResult) -> str:
-    if d["verdict"] == "not-detected":
-        lines = [f"verdict: not-detected branch={d['branch']} base={d['base']}"]
-        for w in d["warnings"]:
-            lines.append(f"warn: {w}")
-        return "\n".join(lines)
+class _NotApplicableResult(TypedDict):
+    verdict: str
+    reason: str
 
-    lines: list[str] = []
-    pr = d["pr"]
-    sc = d["squash_commit"]
-    header = f"verdict: SQUASH-MERGED method={d['method']}"
-    if pr:
-        header += f" PR=#{pr['number']}"
-    lines.append(header)
-    if pr:
-        lines.append(f"  pr-url: {pr['url']}")
-        lines.append(f"  merged-at: {pr['merged_at']}")
-    if sc:
-        lines.append(f"  squash-commit: {sc['short']} {sc['subject']}")
 
-    for w in d["warnings"]:
-        lines.append(f"warn: {w}")
+def detect_squash_residue_cmd(
+    *, base: str = "origin/main", branch: str | None = None
+) -> _DetectResult | _NotApplicableResult:
+    """Detect squash-merge residue and emit the remedy.
 
-    if d["unique_commits"]:
-        lines.append(f"unique commits ({len(d['unique_commits'])}):")
-        for c in d["unique_commits"]:
-            lines.append(f"  {c['short']} {c['subject']}")
-    elif d["method"] == "local-synth":
-        lines.append(f"branch commits ({len(d['branch_commits'])}):")
-        for c in d["branch_commits"]:
-            lines.append(f"  {c['short']} {c['subject']}")
-    else:
-        lines.append("unique commits: 0 (branch is fully contained in base)")
+    Parameters
+    ----------
+    base
+        Base ref to compare against.
+    branch
+        Branch to check (default: current).
+    """
+    if not _SAFE_REF.match(base):
+        raise fromargs.CliError(f"--base {base!r} contains unsafe characters", exit_code=1)
 
-    lines.append("")
-    lines.append("remedies — pick one, copy-paste, review before running:")
-    for i, r in enumerate(d["remedies"]):
-        label = chr(ord("A") + i)
-        marker = "DESTRUCTIVE" if r["destructive"] else "non-destructive"
-        lines.append("")
-        lines.append(f"  [{label}] {r['name']} ({marker})")
-        lines.append(f"      {r['description']}")
-        for cmd in r["commands"]:
-            lines.append(f"      {cmd}")
-    return "\n".join(lines)
+    resolved_branch = branch or _current_branch() or _branch_during_rebase()
+    if not resolved_branch:
+        raise fromargs.CliError(
+            "cannot determine current branch — pass --branch <name>", exit_code=1
+        )
+
+    if not _SAFE_REF.match(resolved_branch):
+        raise fromargs.CliError(
+            f"branch {resolved_branch!r} contains unsafe characters", exit_code=1
+        )
+
+    base_short = base.split("/")[-1]
+    if resolved_branch == base_short or resolved_branch in ("main", "master", "develop"):
+        return {"verdict": "not-applicable", "reason": f"on base branch {resolved_branch}"}
+
+    return detect(resolved_branch, base)
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "detect-squash-residue",
+        help="Detect squash-merge residue and emit the remedy.",
+        help_formatter="plain",
+        default_command=detect_squash_residue_cmd,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Detect squash-merge residue and emit the remedy."
-    )
-    _ = parser.add_argument(
-        "--base",
-        default="origin/main",
-        help="Base ref to compare against (default: origin/main).",
-    )
-    _ = parser.add_argument("--branch", help="Branch to check (default: current).")
-    _ = parser.add_argument("--json", action="store_true", help="Output as JSON.")
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
-
-    if not _SAFE_REF.match(args.base):
-        msg = f"error: --base {args.base!r} contains unsafe characters"
-        if args.json:
-            print(json.dumps({"verdict": "error", "error": msg}))
-        else:
-            print(msg, file=sys.stderr)
-        return 1
-
-    branch = args.branch or _current_branch() or _branch_during_rebase()
-    if not branch:
-        msg = "error: cannot determine current branch — pass --branch <name>"
-        if args.json:
-            print(json.dumps({"verdict": "error", "error": msg}))
-        else:
-            print(msg, file=sys.stderr)
-        return 1
-
-    if not _SAFE_REF.match(branch):
-        msg = f"error: branch {branch!r} contains unsafe characters"
-        if args.json:
-            print(json.dumps({"verdict": "error", "error": msg}))
-        else:
-            print(msg, file=sys.stderr)
-        return 1
-
-    base_short = args.base.split("/")[-1]
-    if branch == base_short or branch in ("main", "master", "develop"):
-        msg = f"not-applicable: on base branch {branch}"
-        if args.json:
-            print(json.dumps({"verdict": "not-applicable", "reason": msg}))
-        else:
-            print(msg)
-        return 0
-
-    result = detect(branch, args.base)
-    if args.json:
-        print(json.dumps(result, indent=2))
-    else:
-        print(format_terse(result))
-    return 0
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

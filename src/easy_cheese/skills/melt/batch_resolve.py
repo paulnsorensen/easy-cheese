@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """Batch conflict resolution using mergiraf.
 
-Default output is terse: one line per file plus a one-line summary.
-Use --verbose for markdown-sectioned output. Run without --apply for dry-run.
+Run without --apply for a dry run. Pass --debug <path> to inspect one file
+without changing the working tree.
 """
 
 from __future__ import annotations
 
-import argparse
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
+from typing import TypedDict
+
+import fromargs
 
 from easy_cheese.shared.git_utils import (
     binary_conflict_guidance,
@@ -41,6 +42,13 @@ class _DebugResult(TypedDict):
     conflict_markers: int | None
     exit_code: int | None
     message: str
+
+
+class _BatchResult(TypedDict):
+    mode: str
+    results: list[_ResolveResult]
+    resolved: int
+    total: int
 
 
 def resolve_file(path: str, dry_run: bool = True, verbose: bool = False) -> _ResolveResult:
@@ -194,128 +202,59 @@ def debug_file(path: str, keep_dir: str | None = None) -> _DebugResult:
     return result
 
 
-def format_debug(d: _DebugResult) -> str:
-    lines = [f"path: {d['path']}"]
-    if not d["supported"] or d["tempdir"] is None:
-        lines.append(f"result: {d['message']}")
-        return "\n".join(lines)
-    markers = d["conflict_markers"] if d["conflict_markers"] is not None else "(none)"
-    lines.extend([
-        f"tempdir: {d['tempdir']}",
-        f"merged:  {d['merged_path'] or '(none)'}",
-        f"log:     {d['log_path']}",
-        f"exit:    {d['exit_code']}",
-        f"markers: {markers}",
-        f"result:  {d['message']}",
-        "",
-        "inspect:",
-        f"  cat {d['log_path']}",
-    ])
-    if d["merged_path"]:
-        lines.extend([
-            f"  cat {d['merged_path']}",
-            f"  diff {d['tempdir']}/ours {d['merged_path']}",
-        ])
-    return "\n".join(lines)
+def batch_resolve(
+    *files: str,
+    apply: bool = False,
+    verbose: bool = False,
+    debug: str | None = None,
+) -> _DebugResult | _BatchResult:
+    """Resolve conflicts with mergiraf, or inspect one file with --debug.
 
+    Parameters
+    ----------
+    files
+        Specific files (default: all conflicted files).
+    apply
+        Apply resolutions (default is dry-run).
+    verbose
+        Emit mergiraf debug logs (RUST_LOG=mergiraf=debug) to stderr.
+    debug
+        Inspect mergiraf on a single file: keeps the tempdir, captures
+        RUST_LOG=mergiraf=debug, and reports artifact paths. No working
+        tree changes.
+    """
+    if not shutil.which("mergiraf"):
+        raise fromargs.CliError(
+            "mergiraf not found — install with: cargo install mergiraf", exit_code=1
+        )
 
-def format_terse(results: list[_ResolveResult], dry_run: bool) -> str:
-    if not results:
-        return "no conflicts"
+    if debug:
+        return debug_file(debug)
 
-    lines: list[str] = []
-    for r in results:
-        marker = "ok" if r["resolved"] else "--"
-        lines.append(f"{marker} {r['path']}: {r['message']}")
-
+    dry_run = not apply
+    target_files = list(files) if files else get_conflicted_files()
+    results = [resolve_file(p, dry_run=dry_run, verbose=verbose) for p in target_files]
     resolved = sum(1 for r in results if r["resolved"])
-    mode = "dry-run" if dry_run else "apply"
-    lines.append(f"{resolved}/{len(results)} resolved ({mode})")
-    return "\n".join(lines)
+    return {
+        "mode": "dry-run" if dry_run else "apply",
+        "results": results,
+        "resolved": resolved,
+        "total": len(results),
+    }
 
 
-def format_verbose(results: list[_ResolveResult], dry_run: bool) -> str:
-    resolved = [r for r in results if r["resolved"]]
-    unresolved = [r for r in results if not r["resolved"]]
-
-    lines = [
-        "# Batch Resolution Summary",
-        f"Mode: {'dry-run' if dry_run else 'apply'}",
-        f"Total: {len(results)} | Resolved: {len(resolved)} | Unresolved: {len(unresolved)}",
-        "",
-    ]
-
-    if resolved:
-        lines.append("## Resolved")
-        for r in resolved:
-            lines.append(f"  ok {r['path']}: {r['message']}")
-        lines.append("")
-
-    if unresolved:
-        lines.append("## Needs Manual Resolution")
-        for r in unresolved:
-            lines.append(f"  -- {r['path']}: {r['message']}")
-        lines.append("")
-
-    if dry_run and resolved:
-        lines.append("Run with --apply to apply these resolutions.")
-
-    return "\n".join(lines)
-
-
-class _Args(Protocol):
-    apply: bool
-    verbose: bool
-    debug: str | None
-    files: list[str]
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "batch-resolve",
+        help="Resolve conflicts with mergiraf.",
+        help_formatter="plain",
+        default_command=batch_resolve,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Batch resolve conflicts using mergiraf.")
-    _ = parser.add_argument(
-        "--apply", action="store_true", help="Apply resolutions (default is dry-run)."
-    )
-    _ = parser.add_argument(
-        "--verbose", action="store_true", help="Markdown-formatted output and mergiraf debug logs."
-    )
-    _ = parser.add_argument(
-        "--debug",
-        metavar="PATH",
-        help=(
-            "Inspect mergiraf on a single file: keeps the tempdir, captures "
-            "RUST_LOG=mergiraf=debug, prints artifact paths. No working tree changes."
-        ),
-    )
-    _ = parser.add_argument("files", nargs="*", help="Specific files (default: all conflicted files).")
-
-    args = cast(_Args, cast(object, parser.parse_args(argv)))
-
-    if not shutil.which("mergiraf"):
-        print("mergiraf not found — install with: cargo install mergiraf", file=sys.stderr)
-        return 1
-
-    if args.debug:
-        result = debug_file(args.debug)
-        print(format_debug(result))
-        return 0 if result["supported"] and result["conflict_markers"] == 0 else 1
-
-    dry_run = not args.apply
-    files = args.files if args.files else get_conflicted_files()
-
-    if not files:
-        print("no conflicts")
-        return 0
-
-    results = [resolve_file(p, dry_run=dry_run, verbose=args.verbose) for p in files]
-
-    if args.verbose:
-        print(format_verbose(results, dry_run))
-    else:
-        print(format_terse(results, dry_run))
-
-    unresolved = [r for r in results if not r["resolved"]]
-    return 0 if not unresolved else 1
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

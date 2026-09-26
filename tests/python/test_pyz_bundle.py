@@ -448,9 +448,11 @@ def test_press_bundle_loads_router_and_rejects_receipt_keys(bundles: Path) -> No
     )
 
     assert result.returncode == 1
+    envelope = cast(dict[str, object], json.loads(result.stderr))
+    assert envelope["exit_code"] == 1
     assert (
-        result.stderr.strip()
-        == "ERROR: request keys mismatch: missing ['repair_cycles'], unknown ['current_receipt']"
+        envelope["error"]
+        == "request keys mismatch: missing ['repair_cycles'], unknown ['current_receipt']"
     )
 
 
@@ -513,7 +515,7 @@ def test_artifact_path_specs_matches_paths_module(bundles: Path, skill: str) -> 
         extra_env=_CORPUS_ENV,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == expected
+    assert cast(dict[str, object], json.loads(result.stdout))["path"] == expected
 
 
 def test_artifact_path_research_uses_generic_phase_resolution(bundles: Path) -> None:
@@ -526,7 +528,10 @@ def test_artifact_path_research_uses_generic_phase_resolution(bundles: Path) -> 
         extra_env=_CORPUS_ENV,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "/tmp/ec-corpus/demo-project/research/demo-slug.md"
+    assert (
+        cast(dict[str, object], json.loads(result.stdout))["path"]
+        == "/tmp/ec-corpus/demo-project/research/demo-slug.md"
+    )
 
 
 def test_artifact_path_rejects_bad_slug(bundles: Path) -> None:
@@ -665,7 +670,9 @@ def test_ground_check_fails_uncited_claim(bundles: Path, tmp_path: Path) -> None
     body = _GROUNDED_REPORT.replace("ref.md:25", "(synthesized from the docs)")
     report = _write(tmp_path, body)
     result = _run(bundles / "briesearch.pyz", "ground-check", str(report))
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    payload = cast(dict[str, object], json.loads(result.stdout))
+    assert payload["errors"] == 1
     assert "CITATION" in result.stderr
     assert "granular approval_policy" in result.stderr
 
@@ -683,7 +690,7 @@ def test_ground_check_passes_grounded_report(
         str(_write(tmp_path, _GROUNDED_REPORT)),
     )
     assert result.returncode == 0, result.stderr
-    assert "grounding ok" in result.stderr
+    assert json.loads(result.stdout)["errors"] == 0
 
 
 def test_ground_check_rejects_nonlabel_confidence(
@@ -695,7 +702,8 @@ def test_ground_check_rejects_nonlabel_confidence(
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] >= 1
     assert "CONFIDENCE" in result.stderr
 
 
@@ -724,7 +732,9 @@ def test_ground_check_no_table_is_error(bundles: Path, tmp_path: Path) -> None:
     itself a grounding failure, not a pass-by-default."""
     report = _write(tmp_path, "## Research: q\n\nCodex has no permission surface.\n")
     result = _run(bundles / "briesearch.pyz", "ground-check", str(report))
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    payload = cast(dict[str, object], json.loads(result.stdout))
+    assert payload["errors"] == 1
     assert "no evidence table" in result.stderr
 
 
@@ -751,7 +761,7 @@ def test_ground_check_accepts_nonlocal_and_existing_local_citations(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
     assert result.returncode == 0, result.stderr
-    assert "grounding ok" in result.stderr
+    assert json.loads(result.stdout)["errors"] == 0
 
 
 def test_ground_check_scans_every_table(bundles: Path, tmp_path: Path) -> None:
@@ -770,10 +780,12 @@ def test_ground_check_scans_every_table(bundles: Path, tmp_path: Path) -> None:
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    payload = cast(dict[str, object], json.loads(result.stdout))
+    assert payload["tables_checked"] == 2
+    assert payload["errors"] == 1
     assert "CITATION" in result.stderr
     assert "Y holds" in result.stderr
-    assert "2 table(s)" in result.stderr
 
 
 def test_ground_check_reads_source_column_in_three_col_table(
@@ -832,7 +844,8 @@ def test_ground_check_rejects_numeric_ratio_as_citation(
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] == 1
     assert "CITATION" in result.stderr
     assert "contrast ratio" in result.stderr
 
@@ -853,7 +866,8 @@ def test_ground_check_flags_short_row_as_malformed(
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] == 1
     assert "MALFORMED" in result.stderr
 
 
@@ -867,7 +881,8 @@ def test_ground_check_rejects_unresolved_footnote(
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] >= 1
     assert "FOOTNOTE" in result.stderr
     assert "missing" in result.stderr
 
@@ -882,7 +897,8 @@ def test_ground_check_rejects_footnote_definition_without_citation(
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] >= 1
     assert "FOOTNOTE" in result.stderr
     assert "no verifiable citation" in result.stderr
 
@@ -908,7 +924,8 @@ def test_ground_check_rejects_duplicate_footnote_labels(
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] >= 1
     assert "FOOTNOTE" in result.stderr
     assert "duplicate definition" in result.stderr
 
@@ -932,7 +949,8 @@ def test_ground_check_rejects_missing_report_local_raw_path(
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] >= 1
     assert "LOCAL_PATH" in result.stderr
     assert "raw/01-missing.md" in result.stderr
 
@@ -952,7 +970,8 @@ def test_ground_check_rejects_invalid_local_line_anchor(
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] >= 1
     assert "LOCAL_PATH" in result.stderr
     assert "line anchor" in result.stderr
 
@@ -972,7 +991,8 @@ def test_ground_check_rejects_local_path_traversal(
     result = _run(
         bundles / "briesearch.pyz", "ground-check", str(_write(tmp_path, body))
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] == 2
     assert result.stderr.count("outside allowed root") == 2
 
 
@@ -1010,7 +1030,8 @@ def test_ground_check_fails_url_the_manifest_never_retrieved(
         "ground-check",
         str(_write(tmp_path, _REMOTE_REPORT)),
     )
-    assert result.returncode == 1, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["errors"] == 1
     assert "REMOTE" in result.stderr
     assert "https://example.com/a" in result.stderr
 
@@ -1039,7 +1060,7 @@ def test_ground_check_passes_url_retrieved_by_a_provider_tool(
         str(_write(tmp_path, _REMOTE_REPORT)),
     )
     assert result.returncode == 0, result.stderr
-    assert "grounding ok" in result.stderr
+    assert json.loads(result.stdout)["errors"] == 0
 
 
 def test_ground_check_advises_when_no_manifest_backs_remote_citations(
@@ -1088,7 +1109,7 @@ def test_budget_check_fails_a_repeated_search(bundles: Path, tmp_path: Path) -> 
         "filters": {"days": 30},
     }
     result = _budget_check(bundles, tmp_path, {"calls": [search, dict(search)]})
-    assert result.returncode == 1, result.stdout
+    assert result.returncode == 0, result.stdout
     assert "DUPLICATE_SEARCH" in result.stderr
     assert json.loads(result.stdout)["duplicates"]["search"] == 1
 
@@ -1106,7 +1127,7 @@ def test_budget_check_fails_overspend_with_no_extension(
         for i in range(3)
     ]
     result = _budget_check(bundles, tmp_path, {"budget": {"search": 2}, "calls": calls})
-    assert result.returncode == 1, result.stdout
+    assert result.returncode == 0, result.stdout
     assert "3 search call(s) against a declared budget of 2" in result.stderr
 
 
@@ -1130,8 +1151,8 @@ def test_budget_check_passes_a_run_within_budget(bundles: Path, tmp_path: Path) 
         },
     )
     assert result.returncode == 0, result.stderr
-    assert "budget ok" in result.stderr
     metrics = cast(dict[str, object], json.loads(result.stdout))
+    assert cast(list[object], metrics["findings"]) == []
     assert metrics["invocation"] == "sidechain"
     assert metrics["cached"] == 1
 

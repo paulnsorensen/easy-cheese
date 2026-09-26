@@ -50,7 +50,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, BinaryIO, Callable, Protocol, cast
 
-import cyclopts
 import fromargs
 
 from easy_cheese.shared import git_utils, paths, write_handoff_artifact
@@ -589,7 +588,7 @@ def review_lock(
     *,
     slug: str,
     root: str | None = None,
-    refresh: Annotated[bool, cyclopts.Parameter(name="--refresh-evidence")] = False,
+    refresh: Annotated[bool, fromargs.Parameter(name="--refresh-evidence")] = False,
 ) -> str:
     """Record the production-tree digest the age report write checks.
 

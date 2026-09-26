@@ -25,7 +25,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import cyclopts
 import fromargs
 
 from easy_cheese_schemas.handback_status import require_single_line
@@ -253,7 +252,7 @@ def propagate_flags(source_flags: list[str], *, in_auto_chain: bool) -> list[str
 def render(
     *,
     status: str,
-    next_skill: Annotated[str, cyclopts.Parameter(name="--next")],
+    next_skill: Annotated[str, fromargs.Parameter(name="--next")],
     orientation: str,
     artifact: str = "",
     taste_test: str | None = None,

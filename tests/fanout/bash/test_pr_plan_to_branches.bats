@@ -136,7 +136,7 @@ YAML
 @test "script -h prints usage and exits 0" {
     run "$SCRIPT" -h
     [ "$status" -eq 0 ]
-    [[ "$output" == *"shape"* ]]
+    [[ "$output" == *"Convert a fan-out pr-plan"* ]]
 }
 
 @test "script rejects missing file with exit 1" {
@@ -208,7 +208,7 @@ JSON
     write_orthogonal_flat_plan
     run "$SCRIPT" "$PLAN_FILE"
     [ "$status" -eq 0 ]
-    [ "$(printf '%s\n' "$output" | grep -c '^git cherry-pick ')" -eq 3 ]
+    [ "$(printf '%s\n' "$output" | grep -c 'git cherry-pick ')" -eq 3 ]
 }
 
 # -- stacked_linear shape ----------------------------------------------------
@@ -398,7 +398,7 @@ groups:
     commits: [abc1234]
 YAML
     write_fake_bin
-    out="$("$SCRIPT" "$PLAN_FILE")"
+    out="$("$SCRIPT" "$PLAN_FILE" | jq -r '.commands[]')"
     # Evaluate the emitted command stream with the fakes on PATH and capture
     # what gh saw. If sq() is broken, bash itself errors out before gh runs.
     run env PATH="$FAKE_BIN:$PATH" bash -c "$out"
@@ -431,7 +431,7 @@ SH
 exit 0
 SH
     chmod +x "$FAKE_BIN/gh" "$FAKE_BIN/git"
-    out="$("$SCRIPT" "$PLAN_FILE")"
+    out="$("$SCRIPT" "$PLAN_FILE" | jq -r '.commands[]')"
     run env PATH="$FAKE_BIN:$PATH" bash -c "$out"
     [ "$status" -eq 0 ]
     [[ "$output" != *"FAIL: gh pr create"* ]]
@@ -458,7 +458,7 @@ SH
 }
 JSON
     write_fake_bin
-    out="$("$SCRIPT" "$JSON_PLAN")"
+    out="$("$SCRIPT" "$JSON_PLAN" | jq -r '.commands[]')"
     run env PATH="$FAKE_BIN:$PATH" bash -c "$out"
     [ "$status" -eq 0 ]
     # Body must survive verbatim — single quotes, newlines, and double quotes.

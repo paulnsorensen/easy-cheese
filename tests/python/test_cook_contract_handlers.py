@@ -105,9 +105,9 @@ def test_normalize_reports_an_invalid_utf8_document_as_a_contract_error(
     code = normalize_main([str(document), "--invocation", str(invocation)])
 
     assert code == 1
-    err = capsys.readouterr().err
-    assert err.startswith("ERROR:")
-    assert "invalid JSON" in err
+    envelope = cast(dict[str, object], json.loads(capsys.readouterr().err))
+    assert envelope["exit_code"] == 1
+    assert "invalid JSON" in str(envelope["error"])
 
 
 def test_normalize_reports_an_invalid_utf8_invocation_as_an_error(
@@ -120,7 +120,9 @@ def test_normalize_reports_an_invalid_utf8_invocation_as_an_error(
     code = normalize_main([str(document), "--invocation", str(invocation)])
 
     assert code == 1
-    assert capsys.readouterr().err.startswith("ERROR: invalid invocation JSON:")
+    envelope = cast(dict[str, object], json.loads(capsys.readouterr().err))
+    assert envelope["exit_code"] == 1
+    assert str(envelope["error"]).startswith("invalid invocation JSON:")
 
 
 def test_validate_reports_an_invalid_utf8_payload_as_a_contract_error(
@@ -132,9 +134,9 @@ def test_validate_reports_an_invalid_utf8_payload_as_a_contract_error(
     code = validate_main([str(payload), "--schema", "curd-plan"])
 
     assert code == 1
-    err = capsys.readouterr().err
-    assert err.startswith("ERROR:")
-    assert "invalid JSON" in err
+    envelope = cast(dict[str, object], json.loads(capsys.readouterr().err))
+    assert envelope["exit_code"] == 1
+    assert "invalid JSON" in str(envelope["error"])
 
 
 def test_validate_accepts_the_normalized_plan(

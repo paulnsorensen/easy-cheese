@@ -26,12 +26,13 @@ ERROR:-line accumulation and exit codes follow .github/scripts/validate_wiki.py.
 
 from __future__ import annotations
 
-import argparse
 import importlib
 import importlib.util
 import json
 import re
 import sys
+
+import fromargs
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import ModuleType
@@ -806,39 +807,44 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     return errors, policy.notice
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "spec_path", type=Path, help="Path to the mold spec markdown file."
-    )
-    _ = parser.add_argument(
-        "--strict",
-        action="store_true",
-        help=(
-            "Mint/rewrite posture: enforce the current hardened format "
-            "unconditionally, with no legacy acceptance."
-        ),
-    )
-    args = parser.parse_args(argv)
-    spec_path = cast(Path, args.spec_path)
-    strict = cast(bool, args.strict)
+def validate_spec_cmd(spec_path: str, *, strict: bool = False) -> dict[str, object]:
+    """Validate a mold spec markdown file.
 
-    if not spec_path.is_file():
-        print(f"ERROR: spec not found: {spec_path}", file=sys.stderr)
-        return 1
+    Parameters
+    ----------
+    spec_path
+        Path to the mold spec markdown file.
+    strict
+        Mint/rewrite posture: enforce the current hardened format
+        unconditionally, with no legacy acceptance.
+    """
+    path = Path(spec_path)
+    if not path.is_file():
+        raise fromargs.CliError(f"spec not found: {path}", exit_code=1)
 
-    errors, notice = validate(spec_path, strict=strict)
-    if notice is not None:
-        print(f"{notice} in {spec_path}")
+    errors, notice = validate(path, strict=strict)
     if errors:
-        for error in errors:
-            print(error, file=sys.stderr)
-        print(f"\nFAIL: {len(errors)} error(s) in {spec_path}", file=sys.stderr)
-        return 1
+        message = "\n".join(errors) + f"\n\nFAIL: {len(errors)} error(s) in {path}"
+        raise fromargs.CliError(message, exit_code=1)
 
-    print(f"OK: {spec_path} is a valid mold spec")
-    return 0
+    result: dict[str, object] = {"spec_path": str(path), "valid": True}
+    if notice is not None:
+        result["notice"] = f"{notice} in {path}"
+    return result
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "validate-spec",
+        help=(__doc__ or "").splitlines()[0],
+        help_formatter="plain",
+        default_command=validate_spec_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main())

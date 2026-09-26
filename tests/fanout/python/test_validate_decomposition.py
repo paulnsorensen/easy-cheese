@@ -10,18 +10,22 @@ end-to-end composition and CLI are exercised via validate_decomposition.
 
 from __future__ import annotations
 
+import io
 import json
-import subprocess
-import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Callable, cast
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
+import pytest
 
 
 def _l(value: object) -> list[object]:
     return cast(list[object], value)
+
+
+def _main(module: ModuleType, argv: list[str]) -> int:
+    fn = cast(Callable[[list[str]], int], module.main)
+    return fn(argv)
 
 
 def _behaviour_errors(module: ModuleType, c: dict[str, object]) -> list[str]:
@@ -448,47 +452,39 @@ class TestValidateManifestE2E:
 
 
 class TestCLI:
-    def test_exits_zero_on_valid_manifest(self, tmp_path: Path) -> None:
+    def test_exits_zero_on_valid_manifest(
+        self, tmp_path: Path, validate_decomposition: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         manifest_path = tmp_path / "manifest.yaml"
         _ = manifest_path.write_text(json.dumps(_manifest()), encoding="utf-8")
-        result = subprocess.run(
-            [sys.executable, str(BUNDLE), "validate_decomposition", str(manifest_path)],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, result.stderr
+        assert _main(validate_decomposition, [str(manifest_path)]) == 0
+        assert '"valid": true' in capsys.readouterr().out
 
-    def test_exits_nonzero_on_invalid_manifest(self, tmp_path: Path) -> None:
+    def test_exits_nonzero_on_invalid_manifest(
+        self, tmp_path: Path, validate_decomposition: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         # Two parallel-eligible curds sharing a file — a real disjointness fault.
         curds = _curds(2)
         curds[1]["files"] = _l(curds[0]["files"])[:1] + cast(list[object], ["other.ts"])
         manifest_path = tmp_path / "manifest.yaml"
         _ = manifest_path.write_text(json.dumps(_manifest(curds=_l(curds))), encoding="utf-8")
-        result = subprocess.run(
-            [sys.executable, str(BUNDLE), "validate_decomposition", str(manifest_path)],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 1
-        assert "file-disjoint" in result.stderr or "appears in curd" in result.stderr
+        assert _main(validate_decomposition, [str(manifest_path)]) == 1
+        err = capsys.readouterr().err
+        assert "file-disjoint" in err or "appears in curd" in err
 
-    def test_exits_nonzero_on_missing_file(self, tmp_path: Path) -> None:
-        result = subprocess.run(
-            [sys.executable, str(BUNDLE), "validate_decomposition", str(tmp_path / "nope.json")],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 1
-        assert "not found" in result.stderr
+    def test_exits_nonzero_on_missing_file(
+        self, tmp_path: Path, validate_decomposition: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert _main(validate_decomposition, [str(tmp_path / "nope.json")]) == 1
+        assert "not found" in capsys.readouterr().err
 
-    def test_reads_from_stdin_when_no_arg(self) -> None:
-        result = subprocess.run(
-            [sys.executable, str(BUNDLE), "validate_decomposition"],
-            input=json.dumps(_manifest()),
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0
+    def test_reads_from_stdin_when_no_arg(
+        self,
+        validate_decomposition: ModuleType,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(_manifest())))
+        assert _main(validate_decomposition, []) == 0
 
 
 # ---------------------------------------------------------------------------

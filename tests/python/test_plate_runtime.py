@@ -685,7 +685,7 @@ def test_validate_publication_cli_reports_a_landing_topology_mismatch(
 
     stderr = capsys.readouterr().err
     assert (
-        "ERROR: landing-topology-mismatch: landing.shape stacked_linear requires topology stacked, "
+        "landing-topology-mismatch: landing.shape stacked_linear requires topology stacked, "
         + "got 'single'"
     ) in stderr
 
@@ -700,7 +700,7 @@ def test_validate_publication_cli_reports_oversize_state_file(
     assert publication.main([str(path)]) == 1
 
     stderr = capsys.readouterr().err
-    assert f"ERROR: state file exceeds {max_state_bytes} bytes" in stderr
+    assert f"state file exceeds {max_state_bytes} bytes" in stderr
 
 
 def test_validate_publication_cli_reports_non_utf8_state_file(
@@ -712,4 +712,4 @@ def test_validate_publication_cli_reports_non_utf8_state_file(
     assert publication.main([str(path)]) == 1
 
     stderr = capsys.readouterr().err
-    assert "ERROR: state file is not valid UTF-8" in stderr
+    assert "state file is not valid UTF-8" in stderr

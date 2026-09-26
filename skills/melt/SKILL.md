@@ -48,7 +48,6 @@ Flags:
 
 - `--base` — Sets the base ref. The default is `origin/main`.
 - `--branch` — Sets the branch. The default is the current branch.
-- `--json` — Produces structured output.
 
 The detector checks these signals in order:
 
@@ -94,12 +93,10 @@ Run the summary command.
 python3 skills/melt/scripts/melt.pyz conflict-summary
 ```
 
-The default output contains one metadata line for each file and a small frame around each conflict.
+The default output is one JSON object with a `files` array. Each file includes its path, hunk line ranges, bounded `ours`, `theirs`, and optional `base` arrays, context lines, omitted-line counts, and a resolution recommendation.
 
 Flags:
 
-- `--json` — Produces structured output.
-- `--verbose` — Produces a Markdown view.
 - `--context N` — Sets the context line count. The default is `3`.
 
 Use these commands for raw Git context:
@@ -120,7 +117,7 @@ python3 skills/melt/scripts/melt.pyz batch-resolve
 # Apply clean resolutions and stage them.
 python3 skills/melt/scripts/melt.pyz batch-resolve --apply
 
-# Show Markdown output and mergiraf debug logs.
+# Send mergiraf debug logs (RUST_LOG=mergiraf=debug) to stderr.
 python3 skills/melt/scripts/melt.pyz batch-resolve --verbose
 ```
 

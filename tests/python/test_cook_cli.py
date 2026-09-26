@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 from easy_cheese.skills.cook import commands
+from easy_cheese_schemas.contracts import canonical_digest
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "cook_payloads"
 
@@ -52,9 +53,10 @@ def test_normalize_rejects_deeply_nested_document(capsys: pytest.CaptureFixture[
     )
     captured = capsys.readouterr()
     assert exit_code == 1
-    assert captured.err.startswith("ERROR:")
-    assert "MAX_CONTRACT_DEPTH" in captured.err
-    assert "Traceback" not in captured.err
+    assert captured.out == ""
+    envelope = cast(dict[str, object], json.loads(captured.err))
+    assert envelope["exit_code"] == 1
+    assert "MAX_CONTRACT_DEPTH" in cast(str, envelope["error"])
 
 
 def test_normalize_rejects_duplicate_key_document(capsys: pytest.CaptureFixture[str]) -> None:
@@ -110,8 +112,8 @@ def test_normalize_emits_canonical_json_for_clean_payload(
     assert cast(str, canonical["digest"]).startswith("sha256:")
     version = cast(dict[str, object], canonical["version"])
     assert version["major"] == "1"
-    # Re-encoding must reproduce the same bytes: the CLI's stdout is already canonical.
-    assert json.dumps(canonical, sort_keys=True, separators=(",", ":")) == captured.out.strip()
+    # The reported digest must match the canonical digest of the returned value.
+    assert canonical["digest"] == canonical_digest(value)
 
 
 def test_validate_rejects_nonconforming_payload(capsys: pytest.CaptureFixture[str]) -> None:

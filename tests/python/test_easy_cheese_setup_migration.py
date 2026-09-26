@@ -44,4 +44,4 @@ def test_migrate_legacy_rejected_for_other_legs(tmp_path: Path, leg: str) -> Non
     config = tmp_path / "config.toml"
     result = _run(config, leg, "--migrate-legacy")
     assert result.returncode == 2
-    assert "only valid for global" in result.stderr
+    assert "Unknown option: --migrate-legacy." in result.stderr

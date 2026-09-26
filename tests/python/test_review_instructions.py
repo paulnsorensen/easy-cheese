@@ -244,4 +244,6 @@ def test_cli_accepts_json_path_and_text_mode(tmp_path: Path, capsys: pytest.Capt
         encoding="utf-8",
     )
     assert review_instructions.main([str(request)]) == 1
-    assert "ERROR:" in capsys.readouterr().err
+    err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+    assert err["exit_code"] == 1
+    assert cast(str, err["error"]) == "changed_paths[0] must not contain '..'"

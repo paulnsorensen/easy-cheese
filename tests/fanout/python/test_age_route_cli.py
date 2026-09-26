@@ -90,10 +90,10 @@ def test_score_only_payload_is_rejected(capsys: pytest.CaptureFixture[str]) -> N
     exit_code, out, err = _run({"surface_score": 20}, capsys)
     assert exit_code != 0
     assert out == ""
-    assert "ERROR" in err
+    assert '"error"' in err
 
 
 def test_missing_manifest_path_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = age_route_cli.main([str(REPO_ROOT / "does-not-exist.json")])
     assert exit_code == 2
-    assert "ERROR" in capsys.readouterr().err
+    assert '"error"' in capsys.readouterr().err

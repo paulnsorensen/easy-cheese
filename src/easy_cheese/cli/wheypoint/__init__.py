@@ -5,63 +5,35 @@ This package is a mouth, not a brain. Every decision it reports was made by
 revision, or decides what is dispatchable, because a second implementation of
 any of those would be a second answer to a question the kernel already answers.
 
-The contract with a caller is that *one line of JSON on stdout* is the whole
-reply, success or failure. A refusal is an answer too, so it is emitted in the
-same place and the same shape -- `{"ok": false, "command": ..., "error":
-{"code": ..., "message": ...}}` -- and never as a traceback, which no caller
-can parse. The exit code carries the same news for a shell:
+The contract with a caller is the fromargs contract: a success reply is one
+indented JSON document on stdout, exit 0. A refusal is one JSON line on
+stderr, ``{"error": "<code>: <message>", "exit_code": <n>}``.
 
 | exit | meaning                                                          |
 |------|------------------------------------------------------------------|
-| 0    | the command answered; `ok` is true                                |
-| 1    | the command refused; `error.code` says why                        |
-| 2    | the invocation itself was wrong (unknown command, bad arguments)  |
+| 0    | the command answered                                            |
+| 1    | the command refused, or an unexpected crash occurred            |
+| 2    | the invocation itself was wrong (unknown command, bad arguments) |
+| 3    | a contract or schema violation                                  |
 
 A resolution that is gated, ambiguous, or not found is an *answer* about the
-corpus, so it exits 0 with `ok: true` and the outcome in the payload; only a
+corpus, so it prints with ``ok: true`` and the outcome in the payload; only a
 reference that could not be interpreted at all is a refusal. Lint findings are
 answers by the same rule.
-
-All nine commands are reached through this one entry point because the bundle
-dispatcher gives each subcommand its own entry point and rewrites `sys.argv[0]`
-to the subcommand name -- so the command is read from `argv[0]` first, and
-from `argv[1]` when the module is run directly.
 """
 
 from __future__ import annotations
 
 import sys
-import traceback
-from pathlib import Path
-from typing import TextIO
+from typing import Annotated, Literal, TextIO
 
-from easy_cheese.cli.envelope import (
-    EXIT_INTERNAL,
-    EXIT_OK,
-    EXIT_REFUSED,
-    EXIT_USAGE,
-    BadUsage,
-    Refused,
-    emit,
-    refuse,
-)
-from easy_cheese.shared.wheypoint.resolve_cli import resolve_status
+import fromargs
 
 from easy_cheese.cli.wheypoint.checkpoint import (
     request_identity_for as request_identity_for,
     run_checkpoint,
 )
-from easy_cheese.cli.wheypoint.parser import normalize_positional_ref, parser_for
-from easy_cheese.cli.wheypoint.queries import (
-    run_lint,
-    run_list,
-    run_log,
-    run_resolve,
-    run_schema,
-    run_show,
-    run_turns,
-    run_validate,
-)
+from easy_cheese.cli.wheypoint import queries as queries_mod
 
 COMMANDS = (
     "checkpoint",
@@ -75,34 +47,236 @@ COMMANDS = (
     "turns",
 )
 
-_RUNNERS = {
-    "checkpoint": run_checkpoint,
-    "validate": run_validate,
-    "schema": run_schema,
-    "resolve": run_resolve,
-    "show": run_show,
-    "lint": run_lint,
-    "list": run_list,
-    "log": run_log,
-    "turns": run_turns,
-}
+
+def _ok(command: str, payload: dict[str, object]) -> dict[str, object]:
+    return {"ok": True, "command": command, **payload}
 
 
-def _command_of(argv: list[str]) -> tuple[str | None, list[str]]:
-    """The subcommand, read from the name it was invoked as, then from argv.
+def build_app(stdin: TextIO) -> fromargs.App:
+    app = fromargs.App(
+        "wheypoint",
+        help="Checkpoint, resolve, and inspect durable Wheypoint records.",
+        help_formatter="plain",
+    )
 
-    The bundle gives every subcommand its own entry point into this one module
-    and rewrites `argv[0]` to the subcommand name; running the module directly
-    leaves `argv[0]` as the file, so the name is looked for in `argv[1]` next.
-    """
-    invoked = Path(argv[0]).name if argv else ""
-    if invoked.endswith(".py"):
-        invoked = invoked[: -len(".py")]
-    if invoked in COMMANDS:
-        return invoked, list(argv[1:])
-    if len(argv) >= 2 and argv[1] in COMMANDS:
-        return argv[1], list(argv[2:])
-    return None, []
+    def checkpoint(
+        intent: Annotated[
+            str | None, fromargs.Parameter(allow_leading_hyphen=True)
+        ] = None,
+        *,
+        compacted: str | None = None,
+        note_dir: str | None = None,
+        no_note: bool = False,
+    ) -> dict[str, object]:
+        """Checkpoint a semantic intent onto the current record.
+
+        Parameters
+        ----------
+        intent
+            path to a JSON intent file, or - for stdin (default: stdin)
+        compacted
+            path to a caller-authored CompactionRecord proving the session
+            rehydrated from the current revision before writing
+        note_dir
+            directory the readable projection is mirrored into (default:
+            <git toplevel>/.cheese/notes)
+        no_note
+            write no mirror; the checkpoint stays canonical-local
+        """
+        return _ok(
+            "checkpoint",
+            run_checkpoint(
+                intent,
+                stdin,
+                compacted=compacted,
+                note_dir=note_dir,
+                no_note=no_note,
+            ),
+        )
+
+    def validate(
+        intent: Annotated[
+            str | None, fromargs.Parameter(allow_leading_hyphen=True)
+        ] = None,
+    ) -> dict[str, object]:
+        """Validate an intent against its schema without opening the store.
+
+        Parameters
+        ----------
+        intent
+            path to a JSON intent file, or - for stdin (default: stdin)
+        """
+        return _ok("validate", queries_mod.run_validate(intent, stdin))
+
+    def schema(slug: str) -> dict[str, object]:
+        """Print the JSON Schema for a registered contract slug.
+
+        Parameters
+        ----------
+        slug
+            a registered contract slug, e.g. checkpoint-intent
+        """
+        return _ok("schema", queries_mod.run_schema(slug))
+
+    def resolve(
+        ref: str,
+        *,
+        legacy: bool = False,
+        corpus_root: str | None = None,
+        project: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, object]:
+        """Resolve a slug, work id, or path to the current record.
+
+        Parameters
+        ----------
+        ref
+            an absolute projection path, a work id, or a slug
+        legacy
+            resolve a pre-kernel .cheese/notes/<slug>.md instead
+        corpus_root
+            the corpus to resolve in; defaults to this project's XDG corpus
+        project
+            resolve in another project's corpus (corpus_home()/KEY)
+        workspace_root
+            the owning repository checkout for cross-project continuation
+        """
+        return _ok(
+            "resolve",
+            queries_mod.run_resolve(
+                ref,
+                legacy=legacy,
+                corpus_root=corpus_root,
+                project=project,
+                workspace_root=workspace_root,
+            ),
+        )
+
+    def show(work_id: str, *, project: str | None = None) -> dict[str, object]:
+        """Print the current record for a work id.
+
+        Parameters
+        ----------
+        work_id
+            the work id
+        project
+            read another project's corpus (corpus_home()/KEY)
+        """
+        return _ok("show", queries_mod.run_show(work_id, project=project))
+
+    def lint(path: str) -> dict[str, object]:
+        """Lint a generated projection against the record.
+
+        Parameters
+        ----------
+        path
+            path to a rendered projection document
+        """
+        return _ok("lint", queries_mod.run_lint(path))
+
+    def list_(
+        *,
+        corpus_root: str | None = None,
+        scope: Literal["project", "machine"] = "project",
+        project: list[str] | None = None,
+        root: list[str] | None = None,
+        grep: str | None = None,
+        status: str | None = None,
+        next: str | None = None,
+        source: Literal["store", "note"] | None = None,
+        since: str | None = None,
+        limit: int | None = None,
+        mirrors: bool = False,
+    ) -> dict[str, object]:
+        """List and search work items and notes across worktrees.
+
+        Parameters
+        ----------
+        corpus_root
+            the per-project corpus root (default: the project's own corpus)
+        scope
+            this project's worktrees (default), or the whole machine
+        project
+            limit hits to this project key (repeatable; implies --scope machine)
+        root
+            an extra machine search root (repeatable)
+        grep
+            case-insensitive substring filter
+        status
+            filter by status
+        next
+            filter by next move
+        source
+            filter by hit source (store or note)
+        since
+            filter to YYYY-MM-DD or later
+        limit
+            cap the hit count
+        mirrors
+            show notes that mirror a store hit
+        """
+        return _ok(
+            "list",
+            queries_mod.run_list(
+                corpus_root=corpus_root,
+                scope=scope,
+                project=project,
+                root=root,
+                grep=grep,
+                status=status,
+                next=next,
+                source=source,
+                since=since,
+                limit=limit,
+                mirrors=mirrors,
+            ),
+        )
+
+    def log(
+        work_id: str, *, corpus_root: str | None = None, project: str | None = None
+    ) -> dict[str, object]:
+        """Walk the revisions of one work id, oldest first.
+
+        Parameters
+        ----------
+        work_id
+            the work id
+        corpus_root
+            the per-project corpus root (default: the project's own corpus)
+        project
+            read another project's corpus (corpus_home()/KEY)
+        """
+        return _ok(
+            "log",
+            queries_mod.run_log(work_id, corpus_root=corpus_root, project=project),
+        )
+
+    def turns(
+        *, transcript: str | None = None, session: str | None = None
+    ) -> dict[str, object]:
+        """Print the user's own turns from a session transcript.
+
+        Parameters
+        ----------
+        transcript
+            path to a session .jsonl transcript
+        session
+            session id under the derived projects directory
+        """
+        return _ok(
+            "turns", queries_mod.run_turns(transcript=transcript, session=session)
+        )
+
+    _ = app.command(checkpoint, name="checkpoint")
+    _ = app.command(validate, name="validate")
+    _ = app.command(schema, name="schema")
+    _ = app.command(resolve, name="resolve")
+    _ = app.command(show, name="show")
+    _ = app.command(lint, name="lint")
+    _ = app.command(list_, name="list")
+    _ = app.command(log, name="log")
+    _ = app.command(turns, name="turns")
+    return app
 
 
 def main(
@@ -111,40 +285,8 @@ def main(
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
 ) -> int:
-    argv2: list[str] = sys.argv if argv is None else argv
     stdin2: TextIO = sys.stdin if stdin is None else stdin
-    stdout2: TextIO = sys.stdout if stdout is None else stdout
-
-    command, rest = _command_of(argv2)
-    if command is None:
-        return refuse(
-            stdout2,
-            "unknown",
-            "usage",
-            f"expected one of {', '.join(COMMANDS)}",
-            EXIT_USAGE,
-        )
-    try:
-        args = parser_for(command).parse_args(rest)
-        normalize_positional_ref(command, args)
-    except BadUsage as exc:
-        return refuse(stdout2, command, "usage", str(exc), EXIT_USAGE)
-    try:
-        payload = _RUNNERS[command](args, stdin2)
-    except Refused as exc:
-        return refuse(stdout2, command, exc.code, str(exc), EXIT_REFUSED, exc.extra)
-    except Exception as exc:  # noqa: BLE001 - a traceback is not a reply
-        traceback.print_exc(file=sys.stderr)
-        return refuse(
-            stdout2,
-            command,
-            "internal-error",
-            f"{type(exc).__name__}: {exc}",
-            EXIT_INTERNAL,
-        )
-    status = resolve_status(payload)
-    emit(stdout2, {"ok": status == EXIT_OK, "command": command, **payload})
-    return status
+    return build_app(stdin2).run(argv, stdout=stdout)
 
 
 if __name__ == "__main__":

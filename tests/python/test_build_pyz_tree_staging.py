@@ -246,9 +246,8 @@ def test_the_wheypoint_bundle_carries_its_whole_runtime(wheypoint_pyz: Path) -> 
     assert not any(
         f"easy_cheese/skills/wheypoint/{name}.py" in names for name in KERNEL_MODULES
     )
-    for module in ("__init__.py", "envelope.py"):
-        assert f"easy_cheese/cli/{module}" in names, module
-    for module in ("__init__.py", "checkpoint.py", "parser.py", "queries.py"):
+    assert "easy_cheese/cli/__init__.py" in names
+    for module in ("__init__.py", "checkpoint.py", "queries.py"):
         assert f"easy_cheese/cli/wheypoint/{module}" in names, module
     assert "easy_cheese/skills/wheypoint/wheypoint.py" not in names
     assert "easy_cheese/skills/wheypoint/transcript.py" not in names

@@ -438,7 +438,7 @@ class TestCliDispatch:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("HALLOUMINATE_CONFIG", str(config_path))
-        rc = hallouminate_setup.main(["hallouminate_setup.py", "global", "--apply"])
+        rc = hallouminate_setup.main(["global", "--apply"])
         assert rc == 0
         text = config_path.read_text(encoding="utf-8")
         assert text.count('name = "cheese-durable"') == 1
@@ -474,7 +474,7 @@ class TestCliDispatch:
         _ = config_path.write_text(original, encoding="utf-8")
         monkeypatch.setenv("HALLOUMINATE_CONFIG", str(config_path))
 
-        rc = hallouminate_setup.main(["hallouminate_setup.py", "doctor"])
+        rc = hallouminate_setup.main(["doctor"])
 
         assert rc == 0
         assert "remove legacy cheese-global -> ~/.cheese block" in capsys.readouterr().out
@@ -497,7 +497,7 @@ class TestCliDispatch:
         )
         monkeypatch.setenv("HALLOUMINATE_CONFIG", str(config_path))
 
-        rc = hallouminate_setup.main(["hallouminate_setup.py", "global", "--apply"])
+        rc = hallouminate_setup.main(["global", "--apply"])
 
         assert rc == 0
         text = config_path.read_text(encoding="utf-8")
@@ -511,6 +511,6 @@ class TestCliDispatch:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("HALLOUMINATE_CONFIG", str(config_path))
-        rc = hallouminate_setup.main(["hallouminate_setup.py"])
+        rc = hallouminate_setup.main([])
         assert rc == 2
         assert not config_path.exists()

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import asdict
 
-from easy_cheese.shared.manifest_io import json_command
-from easy_cheese_schemas.validate import is_int
+import fromargs
+
+from easy_cheese.shared.manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
+from easy_cheese_schemas.validate import is_int, require_exact_keys
 
 from .press_route import Continue, Dispatch, Stop, press_route
+
+_USAGE = "usage: press_route_cli.py [<request.json>]"
+_KEYS = ("outcome", "repair_cycles")
 
 
 def _action_payload(action: Continue | Dispatch | Stop) -> dict[str, object]:
@@ -29,12 +33,38 @@ def _route(*, outcome: object, repair_cycles: object) -> dict[str, object]:
     return _action_payload(press_route(outcome, repair_cycles))
 
 
-main = json_command(
-    _route,
-    "usage: press_route_cli.py [<request.json>]",
-    keys=("outcome", "repair_cycles"),
-)
+def press_route_cmd(path: str | None = None) -> dict[str, object]:
+    """Return the Press action: continue, dispatch /age, or stop.
+
+    Parameters
+    ----------
+    path
+        Path to the request JSON; reads stdin when omitted.
+    """
+    argv = [path] if path else []
+    try:
+        payload = read_mapping_arg_or_stdin(argv, _USAGE)
+    except ManifestLoadError as exc:
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
+    try:
+        require_exact_keys(payload, _KEYS, "request")
+        return _route(**payload)
+    except (TypeError, ValueError) as exc:
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "press-route",
+        help="Return the Press action: continue, dispatch /age, or stop.",
+        help_formatter="plain",
+        default_command=press_route_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())

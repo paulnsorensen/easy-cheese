@@ -23,12 +23,13 @@ gate. `/ultracook` is retired as a top-level skill choice.
 
 ## Procedure
 
-After `curdle.md` writes the spec to disk, run the script and read the JSON
-digest into context:
+After `curdle.md` writes the spec to disk, resolve its path, then run the
+script and read the JSON digest into context. `<path>` is the `path` field of
+the `artifact-path` reply:
 
 ```bash
-SPEC=$(python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>)
-python3 skills/mold/scripts/mold.pyz curd-count "$SPEC" \
+python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>
+python3 skills/mold/scripts/mold.pyz curd-count <path> \
   --blast-radius <low|medium|high>
 ```
 

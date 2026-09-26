@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import argparse
 import copy
 import json
 import re
-import sys
 from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
+
+import fromargs
 
 from easy_cheese.shared.publication import BoundedReadOverflow, read_bounded
 from easy_cheese_schemas.contracts import LandingShape, parse_landing_mapping
@@ -226,23 +226,35 @@ def validate_publication(data: object) -> dict[str, object]:
     return {"valid": True, **normalized}
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    _ = parser.add_argument("state", type=Path)
-    args = parser.parse_args(argv)
-    state_path = cast(Path, args.state)
+def validate_cmd(state: str) -> dict[str, object]:
+    """Validate terminal Plate publication evidence.
+
+    Parameters
+    ----------
+    state
+        Path to the publication state JSON file.
+    """
+    path = Path(state)
     try:
-        data = cast(object, json.loads(_read_state_text(state_path)))
-        result = validate_publication(data)
+        data = cast(object, json.loads(_read_state_text(path)))
+        return validate_publication(data)
     except (OSError, json.JSONDecodeError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        raise fromargs.CliError(str(error), exit_code=1) from error
     except PublicationValidationError as error:
-        for message in error.errors:
-            print(f"ERROR: {message}", file=sys.stderr)
-        return 1
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
+        raise fromargs.CliError("\n".join(error.errors), exit_code=1) from error
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "validate-publication",
+        help="Validate terminal Plate publication evidence.",
+        help_formatter="plain",
+        default_command=validate_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":

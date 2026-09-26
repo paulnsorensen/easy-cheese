@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import argparse
 from collections.abc import Generator
 from contextlib import contextmanager, nullcontext
 import hashlib
@@ -14,7 +13,9 @@ import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Union, cast
+from typing import Annotated, Union, cast
+
+import fromargs
 from typing_extensions import TypeAlias, override
 from urllib.parse import parse_qs, quote, urlparse
 
@@ -400,12 +401,17 @@ class _Handler(BaseHTTPRequestHandler):
         return {"closed": True}
 
 
-def serve_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="review serve")
-    parser.add_argument("--state-dir", type=Path, required=True)
-    parser.add_argument("--port", type=int, default=0)
-    args = parser.parse_args(argv)
-    state = args.state_dir
+def _serve(*, state_dir: str, port: int = 0) -> None:
+    """Launch the local review server and block until the review closes.
+
+    Parameters
+    ----------
+    state_dir
+        Directory holding review.json.
+    port
+        TCP port to bind; 0 picks an ephemeral port.
+    """
+    state = Path(state_dir)
     state.mkdir(parents=True, exist_ok=True)
     path = state / "review.json"
     with state_transaction(path):
@@ -415,7 +421,7 @@ def serve_main(argv: list[str]) -> int:
             review.closed = False
             review.save(path)
     token = secrets.token_urlsafe(32)
-    server = _ReviewServer(("127.0.0.1", args.port), _Handler)
+    server = _ReviewServer(("127.0.0.1", port), _Handler)
     server.review = review
     server.token = token
     server.state_signature = _state_signature(path)
@@ -446,67 +452,101 @@ def serve_main(argv: list[str]) -> int:
                 if server.review.closed:
                     break
     except KeyboardInterrupt:
-        return 0
+        return None
     finally:
         server.server_close()
-    return 0
+    return None
 
 
-def _args(argv: list[str], command: str) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog=f"review {command}")
-    parser.add_argument("--state-dir", type=Path, required=True)
-    return parser.parse_args(argv)
+def serve_main(argv: list[str] | None = None) -> int:
+    app = fromargs.App("review-serve", help_formatter="plain", default_command=_serve)
+    return app.run(argv)
 
 
-def publish_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--state-dir", type=Path, required=True)
-    parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--base-revision", type=int, default=None)
-    args = parser.parse_args(argv)
-    args.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-    path = args.state_dir / "review.json"
+def _publish(
+    *,
+    state_dir: str,
+    input_path: Annotated[str, fromargs.Parameter(name="--input")],
+    base_revision: int | None = None,
+) -> JSONObject:
+    """Publish a new revision from an input JSON document.
+
+    Parameters
+    ----------
+    state_dir
+        Directory holding review.json.
+    input_path
+        Path to the JSON document to publish as the next revision.
+    base_revision
+        Expected current revision number; a mismatch is a stale-base error.
+    """
+    state = Path(state_dir)
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path = state / "review.json"
     try:
         with state_transaction(path):
             review = MoldReview.load(path)
-            document = json.loads(args.input.read_text(encoding="utf-8"))
+            document = json.loads(Path(input_path).read_text(encoding="utf-8"))
             if not isinstance(document, dict):
                 raise TypeError("input JSON must be an object")
-            revision = review.publish(cast(JSONObject, document), args.base_revision)
+            revision = review.publish(cast(JSONObject, document), base_revision)
             review.save(path)
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        print(json.dumps({"error": str(exc)}))
-        return 1
-    print(json.dumps(revision.__dict__, sort_keys=True))
-    return 0
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+    return cast(JSONObject, revision.__dict__)
 
 
-def poll_main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--state-dir", type=Path, required=True)
-    parser.add_argument("--after", type=int, default=0)
-    parser.add_argument("--timeout", type=float, default=0)
-    args = parser.parse_args(argv)
-    path = args.state_dir / "review.json"
-    deadline = time.monotonic() + args.timeout
+def publish_main(argv: list[str] | None = None) -> int:
+    app = fromargs.App("review-publish", help_formatter="plain", default_command=_publish)
+    return app.run(argv)
+
+
+def _poll(*, state_dir: str, after: int = 0, timeout: float = 0) -> JSONObject | None:
+    """Poll for a submission past ``after``, waiting up to ``timeout`` seconds.
+
+    Parameters
+    ----------
+    state_dir
+        Directory holding review.json.
+    after
+        Submission cursor already seen by the caller.
+    timeout
+        Seconds to wait for a new submission before giving up.
+    """
+    path = Path(state_dir) / "review.json"
+    deadline = time.monotonic() + timeout
     while True:
         with state_transaction(path):
             review = MoldReview.load(path)
-        if len(review.submissions) > args.after:
-            print(json.dumps(review.submissions[args.after], sort_keys=True))
-            return 0
+        if len(review.submissions) > after:
+            return review.submissions[after]
         if time.monotonic() >= deadline:
             print("null")
-            return 0
+            return None
         time.sleep(0.05)
 
 
-def close_main(argv: list[str]) -> int:
-    args = _args(argv, "close")
-    path = args.state_dir / "review.json"
+def poll_main(argv: list[str] | None = None) -> int:
+    app = fromargs.App("review-poll", help_formatter="plain", default_command=_poll)
+    return app.run(argv)
+
+
+def _close(*, state_dir: str) -> dict[str, bool]:
+    """Mark the review closed.
+
+    Parameters
+    ----------
+    state_dir
+        Directory holding review.json.
+    """
+    path = Path(state_dir) / "review.json"
     with state_transaction(path):
         review = MoldReview.load(path)
         review.closed = True
         review.save(path)
-    print(json.dumps({"closed": True}))
-    return 0
+    return {"closed": True}
+
+
+def close_main(argv: list[str] | None = None) -> int:
+    app = fromargs.App("review-close", help_formatter="plain", default_command=_close)
+    return app.run(argv)

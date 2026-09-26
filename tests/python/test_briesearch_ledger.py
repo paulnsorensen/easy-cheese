@@ -311,7 +311,7 @@ def test_main_fails_on_a_mismatched_adjacent_manifest(
         json.dumps({"calls": [_extract("https://example.com/other")]}),
         encoding="utf-8",
     )
-    assert ground_check.main([str(report)]) == 1
+    assert ground_check.main([str(report)]) == 0
     assert "REMOTE" in capsys.readouterr().err
 
 

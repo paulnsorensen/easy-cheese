@@ -19,7 +19,6 @@ import tempfile
 from pathlib import Path
 from typing import Annotated
 
-import cyclopts
 import fromargs
 
 from easy_cheese.shared import html_report, paths
@@ -27,7 +26,7 @@ from easy_cheese.shared import html_report, paths
 
 def render(
     *,
-    in_path: Annotated[str, cyclopts.Parameter(name="--in")],
+    in_path: Annotated[str, fromargs.Parameter(name="--in")],
     title: str,
     out_name: str,
 ) -> str:

@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Callable, cast
 
 import yaml
 import pytest
-
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
 
 
 def _d(value: object) -> dict[str, object]:
@@ -21,6 +17,11 @@ def _d(value: object) -> dict[str, object]:
 
 def _l(value: object) -> list[object]:
     return cast(list[object], value)
+
+
+def _main(module: ModuleType, argv: list[str]) -> int:
+    fn = cast(Callable[[list[str]], int], module.main)
+    return fn(argv)
 
 
 def _nav(container: object, key: str | int) -> object:
@@ -768,23 +769,26 @@ class TestPrPlanValidator:
 
 
 class TestCLIs:
-    def test_validate_manifest_cli_accepts_yaml(self, tmp_path: Path) -> None:
+    def test_validate_manifest_cli_accepts_yaml(
+        self, tmp_path: Path, validate_manifest: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         path = tmp_path / "manifest.yaml"
         _ = path.write_text(yaml.safe_dump(_manifest(), sort_keys=False), encoding="utf-8")
-        result = subprocess.run([sys.executable, str(BUNDLE), "validate_manifest", str(path)], capture_output=True, text=True)
-        assert result.returncode == 0, result.stderr
-        assert "manifest valid" in result.stdout
+        assert _main(validate_manifest, [str(path)]) == 0
+        assert '"valid": true' in capsys.readouterr().out
 
-    def test_validate_decomposition_cli_accepts_yaml(self, tmp_path: Path) -> None:
+    def test_validate_decomposition_cli_accepts_yaml(
+        self, tmp_path: Path, validate_decomposition: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         path = tmp_path / "manifest.yaml"
         _ = path.write_text(yaml.safe_dump(_manifest(), sort_keys=False), encoding="utf-8")
-        result = subprocess.run([sys.executable, str(BUNDLE), "validate_decomposition", str(path)], capture_output=True, text=True)
-        assert result.returncode == 0, result.stderr
-        assert "decomposition valid" in result.stdout
+        assert _main(validate_decomposition, [str(path)]) == 0
+        assert '"valid": true' in capsys.readouterr().out
 
-    def test_validate_pr_plan_cli_accepts_json(self, tmp_path: Path) -> None:
+    def test_validate_pr_plan_cli_accepts_json(
+        self, tmp_path: Path, validate_pr_plan: ModuleType, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         path = tmp_path / "pr-plan.json"
         _ = path.write_text(json.dumps(_pr_plan()), encoding="utf-8")
-        result = subprocess.run([sys.executable, str(BUNDLE), "validate_pr_plan", str(path)], capture_output=True, text=True)
-        assert result.returncode == 0, result.stderr
-        assert "plan valid" in result.stdout
+        assert _main(validate_pr_plan, [str(path)]) == 0
+        assert '"valid": true' in capsys.readouterr().out

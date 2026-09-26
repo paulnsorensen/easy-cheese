@@ -14,12 +14,19 @@ python3 skills/mold/scripts/mold.pyz gate-graph \
   [--state <state.json>] [--render dot|svg|png|mermaid] [--out <path>]
 ```
 
-- `--render dot` (default): canonical Graphviz `.dot` to stdout.
-- `--render mermaid`: a fenced ```mermaid flowchart block to stdout — renders
-  natively in GitHub and markdown viewers, **no binary required**.
+Without `--out`, the command prints one JSON document to stdout:
+`{"render": "<dot|mermaid>", "text": "<rendered source>"}`. The `render` field
+names the effective target — it differs from the requested `--render` only on
+the svg/png degrade path (below). With `--out <path>`, the command writes the
+rendered bytes to that path and prints `{"path": "<out>"}` instead.
+
+- `--render dot` (default): canonical Graphviz `.dot` as the `text` field.
+- `--render mermaid`: a fenced ```mermaid flowchart block as the `text` field —
+  renders natively in GitHub and markdown viewers, **no binary required**.
 - `--render svg|png`: shells out to Graphviz `dot` when it is on PATH; pass
-  `--out <path>` for binary targets. When `dot` is absent it **degrades to
-  mermaid** and prints a note to stderr — run-anywhere by construction.
+  `--out <path>` for binary targets — printing binary bytes to stdout is
+  rejected. When `dot` is absent it **degrades to mermaid** — run-anywhere by
+  construction.
 - `--state`: an optional Mold `state.json`. The command validates its shape.
   The gate model stays static, so the state does not change the graph today.
 

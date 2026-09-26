@@ -2,13 +2,12 @@
 
 Mocks subprocess.run for mergiraf invocations and run_git for staging.
 Covers: unsupported file, missing stages, mergiraf success, conflicts remain,
-mergiraf failure, dry-run vs apply, formatters.
+mergiraf failure, dry-run vs apply.
 """
 
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
 from typing import Protocol, TypedDict, cast
@@ -42,12 +41,6 @@ class _BatchResolveModule(Protocol):
     ) -> _ResolveResult: ...
 
     def debug_file(self, path: str, keep_dir: str | None = ...) -> _DebugResult: ...
-
-    def format_debug(self, d: Mapping[str, object]) -> str: ...
-
-    def format_terse(self, results: list[_ResolveResult], dry_run: bool) -> str: ...
-
-    def format_verbose(self, results: list[_ResolveResult], dry_run: bool) -> str: ...
 
     def extract_stages(self, path: str) -> tuple[str | None, str | None, str | None]: ...
 
@@ -289,106 +282,6 @@ class TestDebugFile:
         assert result["merged_path"] is None
         assert "no merged file" in result["message"]
         assert result["exit_code"] == 2
-
-    def test_format_debug_includes_inspect_block(self, batch_resolve: _BatchResolveModule) -> None:
-        d = {
-            "path": "foo.py",
-            "supported": True,
-            "tempdir": "/tmp/dbg",
-            "merged_path": "/tmp/dbg/merged",
-            "log_path": "/tmp/dbg/mergiraf.log",
-            "conflict_markers": 0,
-            "exit_code": 0,
-            "message": "clean merge",
-        }
-        out = batch_resolve.format_debug(d)
-        assert "tempdir: /tmp/dbg" in out
-        assert "merged:" in out
-        assert "log:" in out
-        assert "inspect:" in out
-        assert "cat /tmp/dbg/merged" in out
-
-    def test_format_debug_short_circuits_for_unsupported(
-        self, batch_resolve: _BatchResolveModule
-    ) -> None:
-        out = batch_resolve.format_debug(
-            {"path": "x.lock", "supported": False, "message": "unsupported file type"}
-        )
-        assert "result: unsupported file type" in out
-        assert "inspect:" not in out
-
-    def test_format_debug_short_circuits_when_tempdir_none(
-        self, batch_resolve: _BatchResolveModule
-    ) -> None:
-        d = {
-            "path": "foo.py",
-            "supported": True,
-            "tempdir": None,
-            "merged_path": None,
-            "log_path": None,
-            "conflict_markers": None,
-            "exit_code": None,
-            "message": "could not extract all three stages",
-        }
-        out = batch_resolve.format_debug(d)
-        assert "result: could not extract all three stages" in out
-        assert "inspect:" not in out
-        assert "cat None" not in out
-
-    def test_format_debug_shows_log_but_not_diff_when_merged_path_none(
-        self, batch_resolve: _BatchResolveModule
-    ) -> None:
-        d = {
-            "path": "foo.py",
-            "supported": True,
-            "tempdir": "/tmp/dbg",
-            "merged_path": None,
-            "log_path": "/tmp/dbg/mergiraf.log",
-            "conflict_markers": None,
-            "exit_code": 2,
-            "message": "mergiraf produced no merged file (exit 2)",
-        }
-        out = batch_resolve.format_debug(d)
-        assert "inspect:" in out
-        assert "cat /tmp/dbg/mergiraf.log" in out
-        assert "cat None" not in out
-        assert "diff" not in out
-
-
-class TestFormatters:
-    def test_terse_includes_status_and_summary(self, batch_resolve: _BatchResolveModule) -> None:
-        results: list[_ResolveResult] = [
-            {
-                "path": "a.py",
-                "resolved": True,
-                "supported": True,
-                "message": "would resolve cleanly",
-            },
-            {"path": "b.py", "resolved": False, "supported": True, "message": "conflicts remain"},
-        ]
-        out = batch_resolve.format_terse(results, dry_run=True)
-        assert "ok a.py" in out
-        assert "-- b.py" in out
-        assert "1/2 resolved (dry-run)" in out
-        assert "##" not in out  # No markdown headings.
-
-    def test_terse_empty_results(self, batch_resolve: _BatchResolveModule) -> None:
-        assert batch_resolve.format_terse([], dry_run=False) == "no conflicts"
-
-    def test_verbose_emits_markdown_sections(self, batch_resolve: _BatchResolveModule) -> None:
-        results: list[_ResolveResult] = [
-            {"path": "a.py", "resolved": True, "supported": True, "message": "ok"},
-            {"path": "b.py", "resolved": False, "supported": True, "message": "fail"},
-        ]
-        out = batch_resolve.format_verbose(results, dry_run=True)
-        assert "## Resolved" in out
-        assert "## Needs Manual Resolution" in out
-        assert "Run with --apply" in out
-        assert "✓" not in out
-        assert "✗" not in out
-        assert "  ok a.py" in out
-        assert "  -- b.py" in out
-
 
 class TestBinaryFiles:
     """A binary file with a mergiraf extension must never reach the text merge path."""

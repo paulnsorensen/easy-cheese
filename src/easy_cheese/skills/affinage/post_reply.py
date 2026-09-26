@@ -19,7 +19,8 @@ Resolves <handle> for both idempotence detection and the footer in this order:
     2. gh api user --jq .login (the authenticated gh user).
     3. git config user.name (final fallback).
 
-Exits non-zero on any failure (missing args, gh failure, no handle).
+Operational errors (gh failure, unresolved handle) exit 1; usage errors (bad
+flags, missing required fields) exit 2.
 """
 
 from __future__ import annotations
@@ -27,6 +28,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+
+import fromargs
 
 # IMPORTANT: This is the attribution suffix's verbatim fixed text. Do not
 # paraphrase, do not change capitalization, do not change punctuation. The
@@ -37,24 +40,6 @@ ATTRIBUTION_PREFIX = "agent on behalf of"
 
 # Horizontal-rule line that separates the reply from the attribution.
 ATTRIBUTION_SEPARATOR = "---"
-
-_USAGE = (
-    "Usage:\n"
-    "  post-reply --thread --pr <pr> --comment-id <id> --body <body>\n"
-    "  post-reply --issue  --pr <pr>                    --body <body>\n"
-)
-
-
-def _die(message: str) -> SystemExit:
-    """Build a fatal error exiting 1 (operational failure). Caller `raise`s it."""
-    _ = sys.stderr.write(f"post-reply: {message}\n")
-    return SystemExit(1)
-
-
-def _usage_error() -> SystemExit:
-    """Build a usage error exiting 2. Caller `raise`s it."""
-    _ = sys.stderr.write(_USAGE)
-    return SystemExit(2)
 
 
 def _capture(args: list[str]) -> str:
@@ -80,9 +65,10 @@ def resolve_handle() -> str:
     name = _capture(["git", "config", "user.name"])
     if name:
         return name
-    raise _die(
+    raise fromargs.CliError(
         "could not resolve a GitHub handle (set RESPOND_GH_HANDLE, sign in "
-        + "with gh, or set git config user.name)"
+        + "with gh, or set git config user.name)",
+        exit_code=1,
     )
 
 
@@ -90,7 +76,7 @@ def resolve_repo() -> str:
     """Resolve <owner>/<repo> from the current git remote via gh."""
     repo = _capture(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
     if not repo:
-        raise _die("could not resolve <owner>/<repo> from the current git remote")
+        raise fromargs.CliError("could not resolve <owner>/<repo> from the current git remote", exit_code=1)
     return repo
 
 
@@ -120,9 +106,12 @@ def _post(api_path: str, full_body: str) -> None:
             check=False,
         )
     except FileNotFoundError as exc:
-        raise _die("gh CLI not found in PATH") from exc
+        raise fromargs.CliError("gh CLI not found in PATH", exit_code=1) from exc
     if result.returncode != 0:
-        raise _die(f"gh api POST {api_path} failed (exit {result.returncode}): {result.stderr.strip()}")
+        raise fromargs.CliError(
+            f"gh api POST {api_path} failed (exit {result.returncode}): {result.stderr.strip()}",
+            exit_code=1,
+        )
     _ = sys.stdout.write(result.stdout)
 
 
@@ -136,82 +125,62 @@ def post_issue_comment(pr: str, full_body: str) -> None:
     _post(f"repos/{repo}/issues/{pr}/comments", full_body)
 
 
-def _scan_flags(argv: list[str]) -> tuple[str, str, str, str]:
-    """Scan argv into (mode, pr, comment_id, body) without post-parse validation.
-    Raises SystemExit on mode conflicts or unknown flags."""
-    mode = ""
-    pr = ""
-    comment_id = ""
-    body = ""
+def post_reply(
+    *,
+    thread: bool = False,
+    issue: bool = False,
+    pr: str = "",
+    comment_id: str = "",
+    body: str = "",
+) -> None:
+    """Post a reply to a GitHub PR thread or PR conversation with the mandatory attribution suffix.
 
-    def set_mode(new_mode: str) -> None:
-        nonlocal mode
-        if mode and mode != new_mode:
-            raise _die(f"cannot combine --thread and --issue (mode already set to '{mode}')")
-        if mode and mode == new_mode:
-            raise _die(f"--{new_mode} passed more than once")
-        mode = new_mode
-
-    i = 0
-    while i < len(argv):
-        arg = argv[i]
-        if arg == "--thread":
-            set_mode("thread")
-            i += 1
-        elif arg == "--issue":
-            set_mode("issue")
-            i += 1
-        elif arg == "--pr":
-            pr = argv[i + 1] if i + 1 < len(argv) else ""
-            i += 2
-        elif arg == "--comment-id":
-            comment_id = argv[i + 1] if i + 1 < len(argv) else ""
-            i += 2
-        elif arg == "--body":
-            body = argv[i + 1] if i + 1 < len(argv) else ""
-            i += 2
-        elif arg in ("-h", "--help"):
-            _ = sys.stdout.write(_USAGE)
-            raise SystemExit(0)
-        else:
-            raise _die(f"unknown argument: {arg}")
-
-    return mode, pr, comment_id, body
-
-
-def _validate(mode: str, pr: str, comment_id: str, body: str) -> None:
-    """Enforce the cross-flag rules. Raises SystemExit with the bash-compatible
-    exit codes (2 for usage, 1 for operational) on any violation."""
-    if not mode:
-        raise _usage_error()
+    Parameters
+    ----------
+    thread
+        Reply to a specific inline review-thread comment.
+    issue
+        Post a top-level PR conversation comment (used for review-body summary
+        replies that have no anchored comment).
+    pr
+        PR number.
+    comment_id
+        Review-thread comment id (required for --thread).
+    body
+        Reply body text.
+    """
+    if thread and issue:
+        raise fromargs.CliError("cannot combine --thread and --issue")
+    if not thread and not issue:
+        raise fromargs.CliError("post-reply requires --thread or --issue")
     if not pr:
-        raise _die("missing --pr")
+        raise fromargs.CliError("missing --pr")
     if not body:
-        raise _die("missing --body")
-    if mode == "thread" and not comment_id:
-        raise _die("missing --comment-id (required for --thread)")
-    if mode == "issue" and comment_id:
-        raise _die("--comment-id is not valid for --issue mode")
-
-
-def _parse_args(argv: list[str]) -> tuple[str, str, str, str]:
-    """Parse argv into (mode, pr, comment_id, body) via scan + validate. Raises
-    SystemExit with the bash-compatible exit codes on any validation failure."""
-    mode, pr, comment_id, body = _scan_flags(argv)
-    _validate(mode, pr, comment_id, body)
-    return mode, pr, comment_id, body
-
-
-def main(argv: list[str] | None = None) -> int:
-    mode, pr, comment_id, body = _parse_args(list(sys.argv[1:] if argv is None else argv))
+        raise fromargs.CliError("missing --body")
+    if thread and not comment_id:
+        raise fromargs.CliError("missing --comment-id (required for --thread)")
+    if issue and comment_id:
+        raise fromargs.CliError("--comment-id is not valid for --issue mode")
     handle = resolve_handle()
     full_body = compose_body(body, handle)
-    if mode == "thread":
+    if thread:
         post_thread_reply(pr, comment_id, full_body)
     else:
         post_issue_comment(pr, full_body)
-    return 0
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "post-reply",
+        help="Post a reply to a GitHub PR thread or PR conversation with the mandatory attribution suffix.",
+        help_formatter="plain",
+        default_command=post_reply,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

@@ -13,21 +13,22 @@ Public API::
     )
     main([request_json_path])
 
-The command accepts one JSON request path or JSON on stdin.  ``--text`` renders
-an intentionally readable form; JSON is the default.
+The command accepts one JSON request path or JSON on stdin.  ``--text`` returns
+``{"text": ...}`` holding an intentionally readable rendering; JSON is the
+default.
 """
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import os
 import stat
-import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Literal, NoReturn, cast
+
+import fromargs
 
 from easy_cheese.shared.manifest_io import ManifestLoadError, read_mapping_arg_or_stdin
 from easy_cheese_schemas.validate import require_exact_keys
@@ -627,38 +628,46 @@ def _request(payload: Mapping[str, object]) -> dict[str, object]:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run the JSON-in/JSON-out helper, or its readable ``--text`` mode."""
-    parser = argparse.ArgumentParser(
-        description="Collect deterministic candidate review instruction sources."
-    )
-    _ = parser.add_argument(
-        "--text", action="store_true", help="render readable source text"
-    )
-    _ = parser.add_argument(
-        "request", nargs="?", help="JSON request path; otherwise read stdin"
-    )
-    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
-    request = cast(str | None, args.request)
+def review_instructions(
+    request: str | None = None, *, text: bool = False
+) -> dict[str, object]:
+    """Collect deterministic candidate review instruction sources.
+
+    Parameters
+    ----------
+    request
+        JSON request path; otherwise read stdin.
+    text
+        Render readable source text as ``{"text": ...}`` instead of the
+        collection result.
+    """
     request_args = [request] if request is not None else []
     try:
         payload = read_mapping_arg_or_stdin(
             request_args, "usage: review-instructions [--text] [<request.json>]"
         )
     except (ManifestLoadError, OSError, UnicodeError, ValueError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 2
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
     try:
         result = _request(payload)
-        if cast(bool, args.text):
-            _ = sys.stdout.write(render_text(result))
-        else:
-            json.dump(result, sys.stdout, indent=2, ensure_ascii=False)
-            _ = sys.stdout.write("\n")
     except (InstructionCollectionError, OSError, TypeError, UnicodeError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-    return 0
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+    if text:
+        return {"text": render_text(result)}
+    return result
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "review-instructions",
+        help="Collect deterministic candidate review instruction sources.",
+        help_formatter="plain",
+        default_command=review_instructions,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":

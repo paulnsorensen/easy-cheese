@@ -15,6 +15,7 @@ these also exercise the bundled artifact, not just the source tree.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -65,7 +66,7 @@ class _GateGraphModule(Protocol):
         self, target: str, *, dot_present: bool | None = None
     ) -> tuple[str, bytes]: ...
     def dot_available(self) -> bool: ...
-    def main(self, argv: list[str]) -> int: ...
+    def main(self, argv: list[str] | None = None) -> int: ...
     def gate_id(self, checklist_label: str) -> str: ...
 
 
@@ -273,33 +274,40 @@ class TestCli:
     def test_default_render_is_dot(self, gate_graph: _GateGraphModule, capsys: pytest.CaptureFixture[str]) -> None:
         rc = gate_graph.main([])
         assert rc == 0
-        out = capsys.readouterr().out
-        assert out.startswith("digraph mold_gates {")
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["render"] == "dot"
+        assert parsed["text"] == gate_graph.to_dot()
 
     def test_mermaid_to_stdout(self, gate_graph: _GateGraphModule, capsys: pytest.CaptureFixture[str]) -> None:
         rc = gate_graph.main(["--render", "mermaid"])
         assert rc == 0
-        assert "```mermaid" in capsys.readouterr().out
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["render"] == "mermaid"
+        assert parsed["text"] == gate_graph.to_mermaid()
 
-    def test_out_file_written(self, gate_graph: _GateGraphModule, tmp_path: Path) -> None:
+    def test_out_file_written(self, gate_graph: _GateGraphModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         out = tmp_path / "g.dot"
         rc = gate_graph.main(["--render", "dot", "--out", str(out)])
         assert rc == 0
         assert out.read_text(encoding="utf-8") == gate_graph.to_dot()
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["path"] == str(out)
 
-    def test_svg_degrades_to_mermaid_note_when_dot_absent(
+    def test_svg_degrades_to_mermaid_when_dot_absent(
         self,
         gate_graph: _GateGraphModule,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        # No dot: svg degrades to mermaid (text) and prints fine, with a note on
-        # stderr. Forced via monkeypatch so this covers the degrade path on hosts
-        # that DO have graphviz too, not only on bare ones.
+        # No dot: svg degrades to mermaid (text). Forced via monkeypatch so this
+        # covers the degrade path on hosts that DO have graphviz too, not only
+        # on bare ones.
         monkeypatch.setattr(gate_graph, "dot_available", lambda: False)
         rc = gate_graph.main(["--render", "svg"])
         assert rc == 0
-        assert "degraded svg -> mermaid" in capsys.readouterr().err
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["render"] == "mermaid"
+        assert parsed["text"] == gate_graph.to_mermaid()
 
     def test_binary_to_stdout_is_rejected(
         self,
@@ -321,7 +329,8 @@ class TestCli:
         monkeypatch.setattr(gate_graph.subprocess, "run", fake_run)
         rc = gate_graph.main(["--render", "svg"])
         assert rc == 2
-        assert "is binary; pass --out" in capsys.readouterr().err
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert "is binary; pass --out" in cast(str, err["error"])
 
     def test_dot_timeout_exits_2(
         self,
@@ -338,7 +347,8 @@ class TestCli:
         monkeypatch.setattr(gate_graph.subprocess, "run", fake_run)
         rc = gate_graph.main(["--render", "svg"])
         assert rc == 2
-        assert "timed out" in capsys.readouterr().err
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert "timed out" in cast(str, err["error"])
 
     def test_out_write_failure_exits_2(
         self,
@@ -349,7 +359,8 @@ class TestCli:
         out = tmp_path / "nope" / "g.dot"
         rc = gate_graph.main(["--render", "dot", "--out", str(out)])
         assert rc == 2
-        assert "could not write" in capsys.readouterr().err
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert "could not write" in cast(str, err["error"])
 
     def test_bad_state_file_exits_2(
         self, gate_graph: _GateGraphModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -358,7 +369,8 @@ class TestCli:
         _ = bad.write_text("{not json", encoding="utf-8")
         rc = gate_graph.main(["--state", str(bad)])
         assert rc == 2
-        assert "could not read state" in capsys.readouterr().err
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert "could not read state" in cast(str, err["error"])
 
 
 class TestGateIdInjectivity:
@@ -486,7 +498,7 @@ class TestCliDegradeToFile:
     fallback bytes to the named file AND print the degrade note, not silently
     write an empty/binary file."""
 
-    def test_out_with_degraded_svg_writes_mermaid_and_notes(
+    def test_out_with_degraded_svg_writes_mermaid(
         self, gate_graph: _GateGraphModule, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         if gate_graph.dot_available():
@@ -495,14 +507,16 @@ class TestCliDegradeToFile:
         rc = gate_graph.main(["--render", "svg", "--out", str(out)])
         assert rc == 0
         assert out.read_text(encoding="utf-8") == gate_graph.to_mermaid()
-        assert "degraded svg -> mermaid" in capsys.readouterr().err
+        parsed = cast(dict[str, object], json.loads(capsys.readouterr().out))
+        assert parsed["path"] == str(out)
 
-    def test_unknown_render_choice_rejected_by_argparse(
-        self, gate_graph: _GateGraphModule
+    def test_unknown_render_choice_rejected(
+        self, gate_graph: _GateGraphModule, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        # argparse choices guard the CLI surface before render() is ever called.
-        with pytest.raises(SystemExit):
-            _ = gate_graph.main(["--render", "jpeg"])
+        rc = gate_graph.main(["--render", "jpeg"])
+        assert rc == 2
+        err = cast(dict[str, object], json.loads(capsys.readouterr().err))
+        assert err["exit_code"] == 2
 
 
 class TestNonGoalsGatePresence:
@@ -714,7 +728,8 @@ class TestCommittedPyzFreshness:
             capture_output=True,
             check=True,
         )
-        assert result.stdout == MOLD_DOT.read_bytes(), (
+        parsed = cast(dict[str, object], json.loads(result.stdout))
+        assert parsed["text"] == MOLD_DOT.read_text(encoding="utf-8"), (
             "committed mold.pyz renders a .dot differing from committed mold.dot — "
             "the bundle is stale; rebuild it from src/mold/ so all four lockstep "
             "artifacts (handshake checklist, gate-graph.py, mold.dot, mold.pyz) "

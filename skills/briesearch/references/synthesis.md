@@ -74,7 +74,7 @@ An absence claim is easy to infer from silence. It is also difficult to disprove
 
 Before you finish a deep report, run the grounding gate. Then compare the conclusion with the captured evidence.
 
-1. **Run `ground-check`.** Run `python3 skills/briesearch/scripts/briesearch.pyz ground-check "$ROOT/research/<slug>/<slug>.md"`. The command fails on an unsupported claim, invalid confidence label, or remote citation without a recorded retrieval. It prints `ADVISORY` for each `certain` absence claim. Correct each error before you return the report. For each advisory, add exclusion evidence or reduce confidence.
+1. **Run `ground-check`.** Run `python3 skills/briesearch/scripts/briesearch.pyz ground-check "$ROOT/research/<slug>/<slug>.md"`. Read the `violations` field for an unsupported claim, invalid confidence label, or remote citation without a recorded retrieval. It reports an `ADVISORY` for each `certain` absence claim. Correct each error before you return the report. For each advisory, add exclusion evidence or reduce confidence.
 2. **Compare the conclusion with the raw capture.** A conclusion must not conflict with a recorded fact. Read the cited `raw/NN-host.md` lines for each material claim. Correct a conflicting Finding or stop. Do not return the conflict.
 
 ## Output shape

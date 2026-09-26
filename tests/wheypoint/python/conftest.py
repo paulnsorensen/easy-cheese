@@ -7,6 +7,10 @@ assertion is about what happens when exactly one of those three is wrong.
 
 from __future__ import annotations
 
+import contextlib
+import io
+import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypedDict, cast
@@ -209,3 +213,36 @@ def corpus_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "cheese"))
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "paulnsorensen-easy-cheese")
     return tmp_path / "cheese" / "paulnsorensen-easy-cheese"
+
+
+_CODED_ERROR = re.compile(r"([a-z][a-z0-9-]*): (.*)", re.DOTALL)
+
+
+def run_cli(argv: list[str], *, stdin: str = "") -> tuple[int, dict[str, object]]:
+    """Run `wheypoint.main` and parse the stream fromargs writes for its status.
+
+    Exit 0 prints one JSON document on stdout. Any other status prints nothing
+    on stdout and one JSON line on stderr, `{"error": ..., "exit_code": n}`.
+    A refusal error reads `<code>: <message>`; this helper splits it into
+    `error.code` and `error.message` and keeps the raw text in `error.text`.
+    """
+    from easy_cheese.cli import wheypoint
+
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stderr(err):
+        status = wheypoint.main(argv, stdin=io.StringIO(stdin), stdout=out)
+    if status == 0:
+        assert err.getvalue() == "", err.getvalue()
+        return status, cast(dict[str, object], json.loads(out.getvalue()))
+    assert out.getvalue() == "", f"a failure wrote stdout: {out.getvalue()!r}"
+    lines = err.getvalue().splitlines()
+    assert len(lines) == 1, f"expected one stderr JSON line, got {lines!r}"
+    envelope = cast(dict[str, object], json.loads(lines[0]))
+    assert envelope["exit_code"] == status
+    text = cast(str, envelope["error"])
+    match = _CODED_ERROR.fullmatch(text)
+    code, message = (match.group(1), match.group(2)) if match else ("", text)
+    return status, {
+        **envelope,
+        "error": {"code": code, "message": message, "text": text},
+    }

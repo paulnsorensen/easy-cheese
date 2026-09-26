@@ -344,8 +344,9 @@ def test_accept_main_reports_a_wrong_route_without_a_traceback(
     captured = capsys.readouterr()
     assert code == 1
     assert captured.out == ""
-    assert captured.err.startswith("ERROR: ")
-    assert "'age'" in captured.err
+    envelope = cast(dict[str, object], json.loads(captured.err))
+    assert envelope["exit_code"] == 1
+    assert "'age'" in str(envelope["error"])
 
 
 def test_cook_pyz_rejects_a_pointer_with_the_old_plan_schema(tmp_path: Path) -> None:

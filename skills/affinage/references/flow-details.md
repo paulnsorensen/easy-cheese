@@ -9,13 +9,12 @@ Run `python3 skills/affinage/scripts/affinage.pyz pr-status <pr>`.
 The command returns JSON with build status, failed check summaries, failed test names, and merge state.
 Each failed check summary includes approximately 10 final log lines.
 
-- **Exit 3** means `logs-expired`.
-  CI fails, but no failed check has usable logs.
+- **`logs_expired: true`** in the JSON output means CI fails, but no failed check has usable logs.
   Write `status: halt: pr-status-logs-expired` and stop.
   Tell the user to rerun failed jobs with `gh run rerun <run-id> --failed`.
   Read `<run-id>` from the `/actions/runs/<id>/` URL segment or `gh pr checks`.
   Then tell the user to run `/affinage` again.
-- **Any other nonzero exit** means the PR or GitHub status is unavailable.
+- **A nonzero exit** means the PR or GitHub status is unavailable.
   Exit 1 identifies a PR or API error.
   Exit 2 identifies a missing `gh` binary.
   Write `status: halt: pr-status-unavailable` and stop.

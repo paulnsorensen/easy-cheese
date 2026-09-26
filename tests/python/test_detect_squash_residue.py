@@ -84,8 +84,6 @@ class _DetectSquashResidueModule(Protocol):
 
     def detect(self, branch: str, base_ref: str) -> _DetectResult: ...
 
-    def format_terse(self, d: _DetectResult) -> str: ...
-
     def _commits_since(self, base: str, head: str = ...) -> list[_Commit] | None: ...
 
     def _check_via_tree_match(
@@ -765,88 +763,6 @@ class TestRefValidation:
             "origin/main\nrm -rf",
         ):
             assert not detect_squash_residue._SAFE_REF.match(ref), ref  # pyright: ignore[reportPrivateUsage]
-
-
-class TestFormatTerse:
-    def test_not_detected_prints_verdict(
-        self, detect_squash_residue: _DetectSquashResidueModule
-    ) -> None:
-        out = detect_squash_residue.format_terse(
-            cast(
-                _DetectResult,
-                cast(
-                    object,
-                    {
-                        "verdict": "not-detected",
-                        "branch": "feature",
-                        "base": "origin/main",
-                        "warnings": [],
-                    },
-                ),
-            )
-        )
-        assert "verdict: not-detected" in out
-
-    def test_squash_merged_includes_pr_and_both_remedies(
-        self, detect_squash_residue: _DetectSquashResidueModule
-    ) -> None:
-        d = cast(
-            _DetectResult,
-            cast(
-                object,
-                {
-            "verdict": "squash-merged",
-            "method": "tree-match+gh",
-            "pr": {
-                "number": 42,
-                "url": "https://example.com/pr/42",
-                "merged_at": "2026-05-15T12:00:00Z",
-            },
-            "squash_commit": {
-                "sha": "c" * 40,
-                "short": "c" * 8,
-                "subject": "Squashed feature (#42)",
-            },
-            "warnings": [],
-            "unique_commits": [
-                {"sha": "a" * 40, "short": "a" * 8, "subject": "follow-up"}
-            ],
-            "branch_commits": [],
-            "remedies": [
-                {
-                    "name": "merge",
-                    "destructive": False,
-                    "description": "Merge base into branch (non-destructive).",
-                    "commands": ["git rebase --abort", "git merge origin/main"],
-                },
-                {
-                    "name": "reset-and-cherry-pick",
-                    "destructive": True,
-                    "description": "Reset and replay (DESTRUCTIVE).",
-                    "commands": [
-                        "git rebase --abort",
-                        "git reset --hard origin/main",
-                        "git cherry-pick aaaaaaaa",
-                    ],
-                },
-            ],
-                },
-            ),
-        )
-        out = detect_squash_residue.format_terse(d)
-        assert "SQUASH-MERGED" in out
-        assert "PR=#42" in out
-        assert "https://example.com/pr/42" in out
-        assert "Squashed feature (#42)" in out
-        assert "follow-up" in out
-        # Both remedies labeled and ordered.
-        assert "[A] merge" in out
-        assert "(non-destructive)" in out
-        assert "[B] reset-and-cherry-pick" in out
-        assert "(DESTRUCTIVE)" in out
-        assert out.index("[A] merge") < out.index("[B] reset-and-cherry-pick")
-        assert "git merge origin/main" in out
-        assert "git cherry-pick aaaaaaaa" in out
 
 
 def _make_git_log(rows: list[tuple[str, str, str]]) -> subprocess.CompletedProcess[str]:

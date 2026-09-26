@@ -6,12 +6,12 @@ For file types not handled by mergiraf (shell scripts, config files, etc.).
 
 from __future__ import annotations
 
-import argparse
 import re
 import subprocess
-import sys
 from pathlib import Path
-from typing import Protocol, cast
+from typing import TypedDict
+
+import fromargs
 
 from easy_cheese.shared.git_utils import (
     MARKER_BASE,
@@ -79,79 +79,101 @@ def resolve_hunks(content: str, strategy: str, grep_pattern: str | None = None) 
     return "\n".join(result)
 
 
-class _Args(Protocol):
-    file: str
-    ours: bool
-    theirs: bool
-    grep: str | None
-    dry_run: bool
+class _PickResult(TypedDict, total=False):
+    path: str
+    resolved: bool
+    remaining: bool
+    message: str
+    content: str
 
 
-def _parse_args(argv: list[str] | None = None) -> _Args:
-    parser = argparse.ArgumentParser(description="Pick ours or theirs for conflict hunks")
-    _ = parser.add_argument("file", help="File to resolve")
-    _ = parser.add_argument("--ours", action="store_true", help="Take our changes for matching hunks")
-    _ = parser.add_argument(
-        "--theirs", action="store_true", help="Take their changes for matching hunks"
+def conflict_pick(
+    file: str,
+    *,
+    ours: bool = False,
+    theirs: bool = False,
+    grep: str | None = None,
+    dry_run: bool = False,
+) -> _PickResult:
+    """Pick ours or theirs for conflict hunks in one file.
+
+    Parameters
+    ----------
+    file
+        File to resolve.
+    ours
+        Take our changes for matching hunks.
+    theirs
+        Take their changes for matching hunks.
+    grep
+        Only resolve hunks matching this regex.
+    dry_run
+        Return resolved content without writing.
+    """
+    if ours and theirs:
+        raise fromargs.CliError("Cannot use both --ours and --theirs", exit_code=1)
+    if not ours and not theirs:
+        raise fromargs.CliError("Must specify --ours or --theirs", exit_code=1)
+
+    strategy = "ours" if ours else "theirs"
+
+    guidance = binary_conflict_guidance(file)
+    if guidance is not None:
+        raise fromargs.CliError(guidance, exit_code=1)
+
+    try:
+        content = Path(file).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise fromargs.CliError(f"File not found: {file}", exit_code=1) from None
+    except UnicodeDecodeError:
+        raise fromargs.CliError(
+            f"{file} is not UTF-8 text; resolve it manually", exit_code=1
+        ) from None
+
+    if "<<<<<<" not in content:
+        return {"path": file, "resolved": False, "remaining": False, "message": "no conflicts"}
+
+    resolved = resolve_hunks(content, strategy, grep)
+    has_remaining = "<<<<<<" in resolved
+
+    if dry_run:
+        return {
+            "path": file,
+            "resolved": not has_remaining,
+            "remaining": has_remaining,
+            "message": "dry run",
+            "content": resolved,
+        }
+
+    _ = Path(file).write_text(resolved, encoding="utf-8")
+    if has_remaining:
+        return {
+            "path": file,
+            "resolved": False,
+            "remaining": True,
+            "message": "some conflicts remain",
+        }
+
+    add_result: subprocess.CompletedProcess[str] = run_git(["add", file])
+    if add_result.returncode != 0:
+        raise fromargs.CliError(
+            f"resolved but staging failed: {add_result.stderr.strip()}", exit_code=1
+        )
+    return {"path": file, "resolved": True, "remaining": False, "message": "resolved and staged"}
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "conflict-pick",
+        help="Pick ours or theirs for conflict hunks.",
+        help_formatter="plain",
+        default_command=conflict_pick,
     )
-    _ = parser.add_argument("--grep", metavar="PATTERN", help="Only resolve hunks matching this regex")
-    _ = parser.add_argument(
-        "--dry-run", action="store_true", help="Print resolved content without writing"
-    )
-    return cast(_Args, cast(object, parser.parse_args(argv)))
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
-
-    if args.ours and args.theirs:
-        print("Error: Cannot use both --ours and --theirs", file=sys.stderr)
-        return 1
-    if not args.ours and not args.theirs:
-        print("Error: Must specify --ours or --theirs", file=sys.stderr)
-        return 1
-
-    strategy = "ours" if args.ours else "theirs"
-
-    guidance = binary_conflict_guidance(args.file)
-    if guidance is not None:
-        print(f"Error: {guidance}", file=sys.stderr)
-        return 1
-
-    try:
-        content = Path(args.file).read_text(encoding="utf-8")
-    except FileNotFoundError:
-        print(f"Error: File not found: {args.file}", file=sys.stderr)
-        return 1
-    except UnicodeDecodeError:
-        print(f"Error: {args.file} is not UTF-8 text; resolve it manually", file=sys.stderr)
-        return 1
-
-    if "<<<<<<" not in content:
-        print(f"no conflicts in {args.file}")
-        return 0
-
-    resolved = resolve_hunks(content, strategy, args.grep)
-    has_remaining = "<<<<<<" in resolved
-
-    if args.dry_run:
-        print(resolved)
-        if has_remaining:
-            print("# some conflicts remain (not matching --grep)", file=sys.stderr)
-        return 0
-
-    _ = Path(args.file).write_text(resolved, encoding="utf-8")
-    if has_remaining:
-        print(f"partial {args.file}: some conflicts remain")
-        return 0
-
-    add_result: subprocess.CompletedProcess[str] = run_git(["add", args.file])
-    if add_result.returncode != 0:
-        print(f"resolved but staging failed: {add_result.stderr.strip()}", file=sys.stderr)
-        return 1
-    print(f"ok {args.file}: resolved and staged")
-    return 0
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

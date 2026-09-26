@@ -11,11 +11,10 @@ a second serialization would be a knob nothing asked for.
 
 from __future__ import annotations
 
-import argparse
-import json
-import sys
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import TypedDict
+
+import fromargs
 
 from easy_cheese.shared.paths import project_corpus_root, validate_slug
 
@@ -78,21 +77,32 @@ def research_layout(slug: str, *, root: Path | str | None = None) -> ResearchLay
     }
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    _ = parser.add_argument(
-        "slug",
-        help=f"Kebab-case research slug ({MIN_SLUG_WORDS}-{MAX_SLUG_WORDS} words).",
-    )
-    args = parser.parse_args(argv)
+def research_layout_cmd(slug: str) -> ResearchLayout:
+    """Print the slug-aware research/<slug>/ layout as JSON.
+
+    Parameters
+    ----------
+    slug
+        Kebab-case research slug (MIN_SLUG_WORDS-MAX_SLUG_WORDS words).
+    """
     try:
-        layout = research_layout(cast(str, args.slug))
+        return research_layout(slug)
     except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    print(json.dumps(layout, indent=2))
-    return 0
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "research-layout",
+        help="Print the slug-aware research/<slug>/ layout as JSON.",
+        help_formatter="plain",
+        default_command=research_layout_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())

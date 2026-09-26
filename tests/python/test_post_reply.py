@@ -194,9 +194,7 @@ def test_handle_resolution_exhausted_exits_1(post_reply: _PostReplyModule, monke
             ]
         ),
     )
-    with pytest.raises(SystemExit) as exc:
-        _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
-    assert exc.value.code == 1
+    assert post_reply.main(["--issue", "--pr", "42", "--body", "Hello."]) == 1
 
 
 def test_repo_resolution_failure_exits_1(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -210,9 +208,7 @@ def test_repo_resolution_failure_exits_1(post_reply: _PostReplyModule, monkeypat
             ]
         ),
     )
-    with pytest.raises(SystemExit) as exc:
-        _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
-    assert exc.value.code == 1
+    assert post_reply.main(["--issue", "--pr", "42", "--body", "Hello."]) == 1
 
 
 # --- argument validation --------------------------------------------------
@@ -232,27 +228,23 @@ def test_post_api_failure_exits_1(post_reply: _PostReplyModule, monkeypatch: pyt
             ]
         ),
     )
-    with pytest.raises(SystemExit) as exc:
-        _ = post_reply.main(["--issue", "--pr", "42", "--body", "Hello."])
-    assert exc.value.code == 1
+    assert post_reply.main(["--issue", "--pr", "42", "--body", "Hello."]) == 1
 
 
 @pytest.mark.parametrize(
     "argv, code",
     [
-        (["--thread", "--comment-id", "999", "--body", "x"], 1),  # missing --pr
-        (["--thread", "--pr", "42", "--body", "x"], 1),  # missing --comment-id
-        (["--issue", "--pr", "42", "--comment-id", "999", "--body", "x"], 1),  # comment-id w/ issue
-        (["--issue", "--pr", "42", "--body", "x", "--bogus", "v"], 1),  # unknown flag
-        (["--thread", "--issue", "--pr", "42", "--comment-id", "1", "--body", "x"], 1),  # combine
-        (["--issue", "--pr", "42"], 1),  # missing --body
+        (["--thread", "--comment-id", "999", "--body", "x"], 2),  # missing --pr
+        (["--thread", "--pr", "42", "--body", "x"], 2),  # missing --comment-id
+        (["--issue", "--pr", "42", "--comment-id", "999", "--body", "x"], 2),  # comment-id w/ issue
+        (["--issue", "--pr", "42", "--body", "x", "--bogus", "v"], 2),  # unknown flag
+        (["--thread", "--issue", "--pr", "42", "--comment-id", "1", "--body", "x"], 2),  # combine
+        (["--issue", "--pr", "42"], 2),  # missing --body
         (["--pr", "42", "--body", "x"], 2),  # no mode -> usage
     ],
 )
 def test_arg_validation_exit_codes(post_reply: _PostReplyModule, argv: list[str], code: int) -> None:
-    with pytest.raises(SystemExit) as exc:
-        _ = post_reply.main(argv)
-    assert exc.value.code == code
+    assert post_reply.main(argv) == code
 
 
 # --- help flag ------------------------------------------------------------
@@ -263,9 +255,7 @@ def test_help_prints_usage_to_stdout_and_exits_0(
     post_reply: _PostReplyModule, flag: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """--help / -h must write usage to stdout and exit 0 — it is not an error."""
-    with pytest.raises(SystemExit) as exc:
-        _ = post_reply.main([flag])
-    assert exc.value.code == 0
+    assert post_reply.main([flag]) == 0
     captured = capsys.readouterr()
     assert "Usage" in captured.out
     assert captured.err == ""

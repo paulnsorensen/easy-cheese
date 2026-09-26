@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import subprocess
-import sys
 from pathlib import Path
 from typing import cast
+
+import fromargs
 
 _TIMEOUT_SECONDS = 30
 _REMOTE_OPERATIONS = {"link", "push", "rebase", "submit", "sync"}
@@ -408,75 +408,92 @@ def verify_publication(
     }
 
 
-def _common_parser(description: str) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=description)
-    _ = parser.add_argument("--cwd", type=Path, default=Path.cwd())
-    return parser
+def preflight_cmd(*, trunk: str, remote: str = "origin", cwd: str = ".") -> dict[str, object]:
+    """Validate the gh-stack trunk and origin branch before mutation.
+
+    Parameters
+    ----------
+    trunk
+        GitHub branch name to validate.
+    remote
+        Publication remote (default: origin).
+    cwd
+        Git working directory (default: cwd).
+    """
+    try:
+        return preflight(Path(cwd).resolve(), trunk, remote)
+    except GhStackValidationError as error:
+        raise fromargs.CliError(str(error), exit_code=1) from error
+
+
+def build_preflight_app() -> fromargs.App:
+    return fromargs.App(
+        "gh-stack-preflight",
+        help="Validate gh-stack trunk and remote before mutation.",
+        help_formatter="plain",
+        default_command=preflight_cmd,
+    )
 
 
 def preflight_main(argv: list[str] | None = None) -> int:
-    parser = _common_parser("Validate gh-stack trunk and remote before mutation")
-    _ = parser.add_argument("--trunk", required=True)
-    _ = parser.add_argument("--remote", default="origin")
-    args = parser.parse_args(argv)
+    return build_preflight_app().run(argv)
+
+
+def run_cmd(*command: str, cwd: str = ".") -> dict[str, object]:
+    """Run one guarded gh-stack mutation and reject warning-only success.
+
+    Parameters
+    ----------
+    command
+        Full 'gh stack ...' command, given after a bare '--'.
+    cwd
+        Git working directory (default: cwd).
+    """
     try:
-        result = preflight(
-            cast(Path, args.cwd).resolve(),
-            cast(str, args.trunk),
-            cast(str, args.remote),
-        )
+        return run_guarded(list(command), Path(cwd).resolve())
     except GhStackValidationError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
+        raise fromargs.CliError(str(error), exit_code=1) from error
+
+
+def build_run_app() -> fromargs.App:
+    return fromargs.App(
+        "gh-stack-run",
+        help="Run one guarded gh-stack mutation and reject warning-only success.",
+        help_formatter="plain",
+        default_command=run_cmd,
+    )
 
 
 def run_main(argv: list[str] | None = None) -> int:
-    parser = _common_parser("Run one guarded gh-stack mutation")
-    _ = parser.add_argument("command", nargs=argparse.REMAINDER)
-    args = parser.parse_args(argv)
-    command = cast("list[str]", args.command)
-    if command[:1] == ["--"]:
-        command = command[1:]
+    return build_run_app().run(argv)
+
+
+def verify_cmd(*, trunk: str, remote: str = "origin", cwd: str = ".") -> dict[str, object]:
+    """Verify exact gh-stack PR and remote stack publication state.
+
+    Parameters
+    ----------
+    trunk
+        GitHub branch name to verify against.
+    remote
+        Publication remote (default: origin).
+    cwd
+        Git working directory (default: cwd).
+    """
     try:
-        result = run_guarded(command, cast(Path, args.cwd).resolve())
+        return verify_publication(Path(cwd).resolve(), trunk, remote)
     except GhStackValidationError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
-    stdout = cast(str, result["stdout"])
-    stderr = cast(str, result["stderr"])
-    if stdout:
-        print(stdout, end="")
-    if stderr:
-        print(stderr, end="", file=sys.stderr)
-    print(
-        json.dumps(
-            {
-                key: value
-                for key, value in result.items()
-                if key not in {"stdout", "stderr"}
-            },
-            indent=2,
-            sort_keys=True,
-        )
+        raise fromargs.CliError(str(error), exit_code=1) from error
+
+
+def build_verify_app() -> fromargs.App:
+    return fromargs.App(
+        "gh-stack-verify",
+        help="Verify exact gh-stack PR and remote stack publication state.",
+        help_formatter="plain",
+        default_command=verify_cmd,
     )
-    return 0
 
 
 def verify_main(argv: list[str] | None = None) -> int:
-    parser = _common_parser("Verify exact gh-stack publication state")
-    _ = parser.add_argument("--trunk", required=True)
-    _ = parser.add_argument("--remote", default="origin")
-    args = parser.parse_args(argv)
-    try:
-        result = verify_publication(
-            cast(Path, args.cwd).resolve(),
-            cast(str, args.trunk),
-            cast(str, args.remote),
-        )
-    except GhStackValidationError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
+    return build_verify_app().run(argv)

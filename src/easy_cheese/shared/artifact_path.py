@@ -7,10 +7,9 @@ root-resolution math live there as the single source of truth. See
 
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
-from typing import cast
+
+import fromargs
 
 from easy_cheese.shared import paths
 
@@ -28,21 +27,32 @@ def artifact_path(phase: str, slug: str) -> Path:
     return paths.artifact_path(phase, slug)
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser()
-    _ = parser.add_argument("phase")
-    _ = parser.add_argument("slug")
-    args = parser.parse_args(argv)
-    phase = cast(str, args.phase)
-    slug = cast(str, args.slug)
+def resolve(phase: str, slug: str) -> dict[str, str]:
+    """Resolve the artifact path for a phase and slug.
+
+    Parameters
+    ----------
+    phase
+        Phase name that owns the artifact.
+    slug
+        Kebab-case slug that identifies the artifact.
+    """
     try:
         resolved = artifact_path(phase, slug)
     except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    print(resolved)
-    return 0
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
+    return {"path": str(resolved)}
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "artifact-path", help_formatter="plain", default_command=resolve
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())

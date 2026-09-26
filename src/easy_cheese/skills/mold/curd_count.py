@@ -21,12 +21,11 @@ confirms file-disjointness before parallel fan-out runs.
 """
 from __future__ import annotations
 
-import argparse
-import json
 import re
-import sys
 from pathlib import Path
-from typing import cast
+from typing import Literal
+
+import fromargs
 
 from easy_cheese.shared.fanout.mode import PARALLEL_THRESHOLD
 from easy_cheese.shared.taste_test import (
@@ -171,40 +170,43 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
     }
 
 
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description=(__doc__ or "").splitlines()[0],
-    )
-    _ = parser.add_argument(
-        "spec_path",
-        type=Path,
-        help="Path to the spec markdown file (typically .cheese/specs/<slug>.md).",
-    )
-    _ = parser.add_argument(
-        "--blast-radius",
-        choices=["low", "medium", "high"],
-        help="Verdict from mold's shape-check; drives the recommendation when curds < threshold.",
-    )
-    args = parser.parse_args(argv)
-    spec_path = cast(Path, args.spec_path)
-    blast_radius = cast("str | None", args.blast_radius)
+def curd_count_cmd(
+    spec_path: str,
+    *,
+    blast_radius: Literal["low", "medium", "high"] | None = None,
+) -> dict[str, object]:
+    """Count candidate curds in a mold-generated spec.
 
-    if not spec_path.exists():
-        print(f"error: spec not found: {spec_path}", file=sys.stderr)
-        return 2
-    if not spec_path.is_file():
-        print(f"error: not a file: {spec_path}", file=sys.stderr)
-        return 2
-
+    Parameters
+    ----------
+    spec_path
+        Path to the spec markdown file (typically .cheese/specs/<slug>.md).
+    blast_radius
+        Verdict from mold's shape-check; drives the recommendation when curds < threshold.
+    """
+    path = Path(spec_path)
+    if not path.exists():
+        raise fromargs.CliError(f"spec not found: {path}")
+    if not path.is_file():
+        raise fromargs.CliError(f"not a file: {path}")
     try:
-        digest = analyze(spec_path, blast_radius)
+        return analyze(path, blast_radius)
     except SpecReadError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-    json.dump(digest, sys.stdout, indent=2)
-    _ = sys.stdout.write("\n")
-    return 0
+        raise fromargs.CliError(str(exc)) from exc
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "curd-count",
+        help=(__doc__ or "").splitlines()[0],
+        help_formatter="plain",
+        default_command=curd_count_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main())

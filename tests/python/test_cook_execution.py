@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import subprocess
@@ -1095,7 +1094,7 @@ def test_resubmit_cli_forwards_approval_evidence(
         "load_preparation_result",
         fake_load,
     )
-    monkeypatch.setattr(contract_handlers, "resubmit", fake_resubmit)
+    monkeypatch.setattr(contract_handlers, "run_resubmission", fake_resubmit)
     scope = tmp_path / "scope.json"
     plan = tmp_path / "plan.json"
     runner = tmp_path / "runner.json"
@@ -1229,7 +1228,7 @@ def test_hold_clearance_ref_uses_the_shared_digest_helper(tmp_path: Path) -> Non
     _ = dialogue.write_bytes(content)
 
     clearances = contract_handlers._hold_clearances(  # pyright: ignore[reportPrivateUsage]
-        argparse.Namespace(clear_hold=[f"user-hold={dialogue}"])
+        [f"user-hold={dialogue}"]
     )
 
     digest = contract_handlers._digest_of(content)  # pyright: ignore[reportPrivateUsage]
