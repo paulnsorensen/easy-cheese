@@ -254,7 +254,8 @@ def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
         f"canonical bytes changed for schema_version {SCHEMA_VERSION}: bump SCHEMA_VERSION "
         + f"to {SCHEMA_VERSION + 1}, regenerate the golden, and mark the new fields metadata={{'since': N}}"
     )
-    assert pins["schema_version"] == SCHEMA_VERSION, bump
+    # v3 is a historical golden: its bytes and digests stay pinned forever.
+    assert pins["schema_version"] == 3
     assert records.canonical_payload(record) == raw, bump
     assert records.record_digest(record) == pins["record_digest"], bump
     assert records.revision_digest(revision) == pins["revision_digest"], bump
@@ -265,3 +266,36 @@ def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
         )
         != pins["record_digest"]
     )
+
+
+def test_the_v4_golden_record_pins_canonical_bytes_and_digests() -> None:
+    import json
+    from pathlib import Path
+
+    from easy_cheese_schemas import SCHEMA_VERSION, WheypointRevision
+
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures"
+    raw = (fixtures / "golden-record-v4.json").read_bytes()
+    pins = cast(
+        dict[str, object],
+        json.loads(
+            (fixtures / "golden-record-v4.pins.json").read_text(encoding="utf-8")
+        ),
+    )
+    record = records.structure(cast(object, json.loads(raw)), WheypointRecord)
+    revision = records.structure(
+        cast(object, json.loads((fixtures / "golden-revision-v4.json").read_bytes())),
+        WheypointRevision,
+    )
+    bump = (
+        f"canonical bytes changed for schema_version {SCHEMA_VERSION}: bump SCHEMA_VERSION "
+        + f"to {SCHEMA_VERSION + 1}, regenerate the golden, and mark the new fields metadata={{'since': N}}"
+    )
+    assert pins["schema_version"] == SCHEMA_VERSION, bump
+    assert records.canonical_payload(record) == raw, bump
+    assert records.record_digest(record) == pins["record_digest"], bump
+    assert records.revision_digest(revision) == pins["revision_digest"], bump
+    # The pinned bytes exercise every since-4 field family.
+    assert record.edges and revision.applied_edges
+    assert record.artifact_links[0].ref is not None
+    assert record.decisions[0].origin is not None

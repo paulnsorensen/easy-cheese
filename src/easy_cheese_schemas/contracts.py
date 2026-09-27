@@ -392,6 +392,12 @@ def _tuple_sequence(value: list[_ItemT] | tuple[_ItemT, ...]) -> tuple[_ItemT, .
     )
 
 
+def _optional_tuple_sequence(
+    value: list[_ItemT] | tuple[_ItemT, ...] | None,
+) -> tuple[_ItemT, ...] | None:
+    return None if value is None else _tuple_sequence(value)
+
+
 @schema_constraints(pattern=_URI_RE.pattern, minLength=1)
 def _uri(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _URI_RE.fullmatch(value) is None:
@@ -3200,6 +3206,9 @@ class MoldSpecDocument:
 # pressure, so "as much text as you like" is a denial-of-service on the next
 # cold reader as much as on the store.
 _MAX_TEXT = 2000
+# Notes carry the session narrative a cold reader resumes from, so they get a
+# wider bound than every other text field.
+_MAX_NOTES = 6000
 _MAX_ITEMS = 64
 # A ledger is an aggregate over the three protected lists, not a peer of one of
 # them: a receipt has to be able to name every entry a legal record can hold,
@@ -3254,14 +3263,20 @@ class EntryState(str, Enum):
     RESOLVED = "resolved"
     SUPERSEDED = "superseded"
     WITHDRAWN = "withdrawn"
+    # Moved to another record; `successor` names where it went. Never gates.
+    FORKED = "forked"
 
 
 class TransitionAction(str, Enum):
-    """The only ways a delta may move an entry out of `ACTIVE`."""
+    """The only ways a delta may move an entry out of `ACTIVE`.
+
+    `FORK` is host-only: the host applies it when it reconciles a fork, and an
+    agent-authored delta may not carry it."""
 
     RESOLVE = "resolve"
     SUPERSEDE = "supersede"
     WITHDRAW = "withdraw"
+    FORK = "fork"
 
 
 class Durability(str, Enum):
@@ -3273,11 +3288,31 @@ class Durability(str, Enum):
     PUBLISHED = "published"
 
 
-_SETTLED = {EntryState.RESOLVED, EntryState.SUPERSEDED, EntryState.WITHDRAWN}
+class EdgeKind(str, Enum):
+    """How a record relates to the work item or document an edge names."""
+
+    FORKED_FROM = "forked_from"
+    FORKED_TO = "forked_to"
+    SUPERSEDES = "supersedes"
+    SUPERSEDED_BY = "superseded_by"
+    IMPLEMENTS = "implements"
+    INFORMS = "informs"
+    CHECKPOINTS = "checkpoints"
+    BLOCKED_BY = "blocked_by"
+    RELATES_TO = "relates_to"
+
+
+_SETTLED = {
+    EntryState.RESOLVED,
+    EntryState.SUPERSEDED,
+    EntryState.WITHDRAWN,
+    EntryState.FORKED,
+}
 _TRANSITION_STATE = {
     TransitionAction.RESOLVE: EntryState.RESOLVED,
     TransitionAction.SUPERSEDE: EntryState.SUPERSEDED,
     TransitionAction.WITHDRAW: EntryState.WITHDRAWN,
+    TransitionAction.FORK: EntryState.FORKED,
 }
 
 
@@ -3288,6 +3323,16 @@ def _bounded_text(_instance: object, attribute: _NamedAttribute, value: object) 
     if len(value) > _MAX_TEXT:
         raise ValueError(
             f"{attribute.name} must be at most {_MAX_TEXT} characters, not {len(value)}"
+        )
+
+
+@schema_constraints(minLength=1, maxLength=_MAX_NOTES)
+def _notes_text(_instance: object, attribute: _NamedAttribute, value: object) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{attribute.name} must be a non-empty string")
+    if len(value) > _MAX_NOTES:
+        raise ValueError(
+            f"{attribute.name} must be at most {_MAX_NOTES} characters, not {len(value)}"
         )
 
 
@@ -3553,6 +3598,20 @@ class ProtectedEntry:
         validator=validators.optional(_bounded_text),
         metadata={"since": 3},
     )
+    # Cross-record lineage: the entry this one was forked from, the entry a
+    # forked entry moved to, and the entries copied from this one.
+    origin: str | None = field(
+        default=None, validator=_optional_uri, metadata={"since": 4}
+    )
+    successor: str | None = field(
+        default=None, validator=_optional_uri, metadata={"since": 4}
+    )
+    copies: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_uri_list(limit=_MAX_ITEMS),
+        metadata={"since": 4},
+    )
 
 
 @define(frozen=True)
@@ -3627,6 +3686,54 @@ class ArtifactLink:
         default=None, validator=validators.optional(_lower_identifier)
     )
     covers_entry_ids: list[str] = field(factory=list, validator=_lower_identifier_list)
+    ref: str | None = field(
+        default=None, validator=_optional_uri, metadata={"since": 4}
+    )
+
+
+@contract("work-edge")
+@define(frozen=True)
+class WorkEdge:
+    """One typed relation from the owning record to a work item or document.
+    A record holds its edges as a set keyed by `(to, kind)`."""
+
+    to: str = field(validator=_uri)
+    kind: EdgeKind = field(validator=validators.instance_of(EdgeKind))
+    revision_id: str = field(validator=_lower_identifier)
+    rationale: str | None = field(
+        default=None, validator=validators.optional(_bounded_text)
+    )
+
+
+@define(frozen=True)
+class WorkEdgeKey:
+    """The `(to, kind)` identity that addresses one edge for removal."""
+
+    to: str = field(validator=_uri)
+    kind: EdgeKind = field(validator=validators.instance_of(EdgeKind))
+
+
+def _edge_set(
+    item: type[WorkEdge] | type[WorkEdgeKey], *, non_empty: bool = False
+) -> Validator:
+    items = _list_of(item, non_empty=non_empty, limit=_MAX_ITEMS)
+
+    def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
+        items(instance, attribute, value)
+        seen: set[tuple[str, EdgeKind]] = set()
+        for edge in cast("tuple[WorkEdge | WorkEdgeKey, ...]", value):
+            key = (edge.to, edge.kind)
+            if key in seen:
+                raise ValueError(
+                    f"{attribute.name} must not repeat the {edge.kind.value} "
+                    + f"edge to {edge.to!r}"
+                )
+            seen.add(key)
+
+    setattr(
+        validate, "__schema_constraints__", getattr(items, "__schema_constraints__")
+    )
+    return validate
 
 
 @define(frozen=True)
@@ -3796,7 +3903,7 @@ class WheypointRecord:
     decision_dossier: list[DecisionFork] = field(validator=_record_dossier)
     notes: str | None = field(
         default=None,
-        validator=validators.optional(_bounded_text),
+        validator=validators.optional(_notes_text),
         metadata={"since": 3},
     )
     directives: list[ProtectedEntry] = field(
@@ -3805,6 +3912,12 @@ class WheypointRecord:
             EntryKind.DIRECTIVE, "decisions", "questions", "blockers"
         ),
         metadata={"since": 3},
+    )
+    edges: tuple[WorkEdge, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_edge_set(WorkEdge),
+        metadata={"since": 4},
     )
 
     @property
@@ -3882,7 +3995,7 @@ class WheypointDelta:
     )
     notes: str | None = field(
         default=None,
-        validator=validators.optional(_bounded_text),
+        validator=validators.optional(_notes_text),
         metadata={"since": 3},
     )
     next_action: NextAction | None = None
@@ -3910,6 +4023,26 @@ class WheypointDelta:
         default=None,
         validator=_optional_bounded_list,
         metadata={"since": 3},
+    )
+    add_edges: tuple[WorkEdge, ...] | None = field(
+        default=None,
+        converter=_optional_tuple_sequence,
+        validator=validators.optional(_edge_set(WorkEdge)),
+        metadata={"since": 4},
+    )
+    remove_edges: tuple[WorkEdgeKey, ...] | None = field(
+        default=None,
+        converter=_optional_tuple_sequence,
+        validator=validators.optional(_edge_set(WorkEdgeKey)),
+        metadata={"since": 4},
+    )
+    remove_dossier_forks: tuple[str, ...] | None = field(
+        default=None,
+        converter=_optional_tuple_sequence,
+        validator=validators.optional(
+            _string_list(limit=_MAX_ITEMS, item_validator=_bounded_text)
+        ),
+        metadata={"since": 4},
     )
     transitions: list[EntryTransition] | None = field(
         default=None, validator=_one_transition_per_entry
@@ -3973,6 +4106,18 @@ class WheypointRevision:
     )
     compaction: CompactionRecord | None = None
     session_provenance: SessionProvenance | None = None
+    applied_edges: tuple[WorkEdge, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_edge_set(WorkEdge),
+        metadata={"since": 4},
+    )
+    removed_edges: tuple[WorkEdgeKey, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_edge_set(WorkEdgeKey),
+        metadata={"since": 4},
+    )
 
 
 @define(frozen=True)
@@ -4032,7 +4177,7 @@ class CheckpointIntent:
     )
     notes: str | None = field(
         default=None,
-        validator=validators.optional(_bounded_text),
+        validator=validators.optional(_notes_text),
         metadata={"since": 3},
     )
     next: NextMove | None = None
@@ -4053,6 +4198,28 @@ class CheckpointIntent:
         default=None,
         validator=_optional_non_empty_bounded_list,
         metadata={"since": 3},
+    )
+    add_edges: tuple[WorkEdge, ...] | None = field(
+        default=None,
+        converter=_optional_tuple_sequence,
+        validator=validators.optional(_edge_set(WorkEdge, non_empty=True)),
+        metadata={"since": 4},
+    )
+    remove_edges: tuple[WorkEdgeKey, ...] | None = field(
+        default=None,
+        converter=_optional_tuple_sequence,
+        validator=validators.optional(_edge_set(WorkEdgeKey, non_empty=True)),
+        metadata={"since": 4},
+    )
+    remove_dossier_forks: tuple[str, ...] | None = field(
+        default=None,
+        converter=_optional_tuple_sequence,
+        validator=validators.optional(
+            _string_list(
+                non_empty=True, limit=_MAX_ITEMS, item_validator=_bounded_text
+            )
+        ),
+        metadata={"since": 4},
     )
     decision_dossier: list[DecisionFork] | None = field(
         default=None, validator=_optional_bounded_list
@@ -4181,6 +4348,7 @@ __all__ = [
     "DecisionFork",
     "DossierOption",
     "Durability",
+    "EdgeKind",
     "EntryKind",
     "EntryState",
     "EntryTransition",
@@ -4198,5 +4366,7 @@ __all__ = [
     "WheypointRecord",
     "WheypointRevision",
     "WheypointStatus",
+    "WorkEdge",
+    "WorkEdgeKey",
     "WorktreeStrategy",
 ]

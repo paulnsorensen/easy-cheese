@@ -21,6 +21,7 @@ from typing import Protocol, cast, final
 
 import pytest
 
+from easy_cheese_schemas import contracts as wc
 from easy_cheese_schemas import gates, io, load
 from easy_cheese_schemas.manifest import Phase, RunManifest
 from easy_cheese_schemas.pr_plan import PrPlan
@@ -979,3 +980,172 @@ class TestLandingShapeMirrorsPrShape:
         assert LandingShape is not PrShape
         assert [m.value for m in LandingShape] == [m.value for m in PrShape]
         assert [m.name for m in LandingShape] == [m.name for m in PrShape]
+
+
+_WHEYPOINT_DIGEST = "sha256:" + "0" * 64
+
+
+def _wheypoint_record(
+    *,
+    questions: tuple[wc.ProtectedEntry, ...] = (),
+    dossier: tuple[wc.DecisionFork, ...] = (),
+    notes: str | None = None,
+    edges: tuple[wc.WorkEdge, ...] = (),
+) -> wc.WheypointRecord:
+    return wc.WheypointRecord(
+        schema_version=4,
+        work_id="parent",
+        slug="parent",
+        title="Parent",
+        created="2026-09-27",
+        project_key="project",
+        revision_id="rev-0001",
+        revision_number=1,
+        revision_digest=_WHEYPOINT_DIGEST,
+        orientation="Continue the parent.",
+        working_context=[],
+        next_action=wc.NextAction(move=wc.NextMove.COOK, orientation="Cook it."),
+        decisions=[],
+        questions=list(questions),
+        blockers=[],
+        artifact_links=[],
+        decision_dossier=list(dossier),
+        notes=notes,
+        edges=edges,
+    )
+
+
+def _gating_question(state: wc.EntryState) -> wc.ProtectedEntry:
+    return wc.ProtectedEntry(
+        entry_id="q-1",
+        kind=wc.EntryKind.QUESTION,
+        summary="Which store owns the edge?",
+        state=state,
+        blocks_continuation=True,
+        rationale=None if state is wc.EntryState.ACTIVE else "Moved to the child.",
+        successor="wheypoint:project/child#q-1"
+        if state is wc.EntryState.FORKED
+        else None,
+    )
+
+
+def _open_fork() -> wc.DecisionFork:
+    option = wc.DossierOption(option="child", evidence=["spec F-2"], breaks="none")
+    return wc.DecisionFork(fork="Which store owns the edge?", options=[option])
+
+
+def _notes_holders(notes: str) -> tuple[object, ...]:
+    return (
+        _wheypoint_record(notes=notes),
+        wc.WheypointDelta(
+            work_id="parent", expected_revision_id="rev-0001", notes=notes
+        ),
+        wc.CheckpointIntent(work_id="parent", notes=notes),
+    )
+
+
+class TestWheypointSchemaFour:
+    def test_ac7_forked_gating_question_derives_ok(self) -> None:
+        record = _wheypoint_record(
+            questions=(_gating_question(wc.EntryState.FORKED),)
+        )
+
+        assert record.gating_entry_ids == ()
+        assert record.status is wc.WheypointStatus.OK
+
+    def test_ac7_same_question_active_still_gates(self) -> None:
+        record = _wheypoint_record(
+            questions=(_gating_question(wc.EntryState.ACTIVE),),
+            dossier=(_open_fork(),),
+        )
+
+        assert record.gating_entry_ids == ("q-1",)
+        assert record.status is wc.WheypointStatus.GATED
+
+    def test_ac7_fork_transition_lands_in_forked_state(self) -> None:
+        transition = wc.EntryTransition(
+            entry_id="q-1", action=wc.TransitionAction.FORK, rationale="Moved."
+        )
+
+        assert transition.resulting_state is wc.EntryState.FORKED
+
+    def test_ac7_forked_entry_must_say_why_it_left_active(self) -> None:
+        with pytest.raises(ValueError, match="rationale"):
+            _ = wc.ProtectedEntry(
+                entry_id="q-1",
+                kind=wc.EntryKind.QUESTION,
+                summary="s",
+                state=wc.EntryState.FORKED,
+                blocks_continuation=True,
+            )
+
+    def test_ac16_notes_accept_6000_characters(self) -> None:
+        for holder in _notes_holders("n" * 6000):
+            assert getattr(holder, "notes") == "n" * 6000
+
+    @pytest.mark.parametrize("index", [0, 1, 2], ids=["record", "delta", "intent"])
+    def test_ac16_notes_refuse_6001_characters(self, index: int) -> None:
+        with pytest.raises(ValueError, match="notes must be at most 6000"):
+            _ = _notes_holders("n" * 6001)[index]
+
+    def test_ac16_other_text_keeps_the_2000_bound(self) -> None:
+        with pytest.raises(ValueError, match="orientation must be at most 2000"):
+            _ = wc.CheckpointIntent(work_id="parent", orientation="o" * 2001)
+
+    def test_edges_refuse_a_repeated_target_and_kind(self) -> None:
+        edge = wc.WorkEdge(
+            to="wheypoint:project/child",
+            kind=wc.EdgeKind.FORKED_TO,
+            revision_id="rev-0001",
+        )
+
+        with pytest.raises(ValueError, match="edges must not repeat"):
+            _ = _wheypoint_record(edges=(edge, edge))
+
+    def test_edges_allow_one_target_under_two_kinds(self) -> None:
+        edges = tuple(
+            wc.WorkEdge(to="repo:docs/spec.md", kind=kind, revision_id="rev-0001")
+            for kind in (wc.EdgeKind.IMPLEMENTS, wc.EdgeKind.INFORMS)
+        )
+
+        assert _wheypoint_record(edges=edges).edges == edges
+
+    def test_refs_must_be_absolute_uris(self) -> None:
+        with pytest.raises(ValueError, match="to must be an absolute URI"):
+            _ = wc.WorkEdgeKey(to="docs/spec.md", kind=wc.EdgeKind.INFORMS)
+        with pytest.raises(ValueError, match="ref must be an absolute URI"):
+            _ = wc.ArtifactLink(path="docs/spec.md", ref="docs/spec.md")
+        with pytest.raises(ValueError, match=r"copies\[1\] must be an absolute URI"):
+            _ = wc.ProtectedEntry(
+                entry_id="d-1",
+                kind=wc.EntryKind.DECISION,
+                summary="s",
+                state=wc.EntryState.ACTIVE,
+                blocks_continuation=False,
+                origin="wheypoint:project/parent@rev-0001#d-1",
+                copies=("child",),
+            )
+
+    def test_intent_refuses_an_empty_edge_request(self) -> None:
+        with pytest.raises(ValueError, match="remove_edges must be a non-empty list"):
+            _ = wc.CheckpointIntent(work_id="parent", remove_edges=())
+
+    def test_every_schema_four_field_is_marked_and_defaulted(self) -> None:
+        import attrs
+
+        added = {
+            wc.WheypointRecord: ("edges",),
+            wc.ProtectedEntry: ("origin", "successor", "copies"),
+            wc.ArtifactLink: ("ref",),
+            wc.WheypointDelta: ("add_edges", "remove_edges", "remove_dossier_forks"),
+            wc.CheckpointIntent: ("add_edges", "remove_edges", "remove_dossier_forks"),
+            wc.WheypointRevision: ("applied_edges", "removed_edges"),
+        }
+        for cls, names in added.items():
+            fields = attrs.fields_dict(cls)
+            for name in names:
+                assert fields[name].metadata == {"since": 4}, (cls, name)
+                assert fields[name].default is not attrs.NOTHING, (cls, name)
+
+    def test_work_edge_is_a_registered_contract(self) -> None:
+        assert ("work-edge", wc.WorkEdge) in wc.registered_contracts()
