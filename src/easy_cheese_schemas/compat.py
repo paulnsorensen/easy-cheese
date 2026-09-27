@@ -46,8 +46,9 @@ from easy_cheese_schemas.validate import is_int
 # 2 adds WheypointRevision.parent_revision_digest, which pins each receipt to
 # the exact ancestor it was written against. 3 adds strict unknown-key
 # rejection on the write path (`load(..., forbid_unknown=True)`) and an Enum
-# hook that names the offending value, not just the allowed set.
-SCHEMA_VERSION = 3
+# hook that names the offending value, not just the allowed set. 4 adds work
+# edges, the forked entry state, typed refs, and a wider notes bound.
+SCHEMA_VERSION = 4
 MIN_READABLE = 1  # N-1 tolerance; widens as the schema evolves
 STAMP_KEY = "schema_version"
 
