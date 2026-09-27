@@ -4,7 +4,7 @@ wedge builds every Python-backed skill as one content-addressed `.pyz` and publi
 
 ## Discovery and configuration
 
-Each Python-backed skill carries `skills/<skill>/wedge.toml`: `name` (the launcher file name), `entry` (`easy_cheese.skills.<package>.commands:main`), `source` (`src/easy_cheese`), `include` (`src/easy_cheese_schemas`), `project` (the repository root, which holds `pyproject.toml` and `uv.lock`), and `repo` (`paulnsorensen/easy-cheese`). `scripts/runtime_gates.py` derives `SKILLS` from `src/easy_cheese/skills/*/commands.py`, and a test keeps that roster equal to the set of `wedge.toml` files.[^2]
+Each Python-backed skill carries `skills/<skill>/wedge.toml` with only `name` (the launcher file name) and `entry` (`easy_cheese.skills.<package>.commands:main`). `skills/wedge.toml` supplies the shared settings for every skill beside it: `source` (`src/easy_cheese`), `include` (`src/easy_cheese_schemas`), `project` (the repository root, which holds `pyproject.toml` and `uv.lock`), `groups` (`runtime`, the dependency group that carries the CLI closure), and `repo` (`paulnsorensen/easy-cheese`); both files join each skill's key. `scripts/runtime_gates.py` derives `SKILLS` from `src/easy_cheese/skills/*/commands.py`, and a test keeps that roster equal to the set of `wedge.toml` files.[^2]
 
 Each `commands.py` declares the application's public subcommands as an immutable `COMMANDS` tuple: every handler is a `@bundle_command("name")`-decorated function that imports its target lazily, and `derive_command(handler, summary)` compiles it into a `Command(name, "module:callable", summary)`. Dispatch validates unique command names, imports only the selected target, passes it a command-local `list[str]`, and requires an integer status return. Command targets write result text to stdout or diagnostics to stderr; dispatch does not mutate `sys.argv` or execute modules through `runpy`.[^12]
 
@@ -69,7 +69,7 @@ Until 2026-09-27 the repository committed each archive under `skills/<skill>/scr
 [^2]: skills/*/wedge.toml; scripts/runtime_gates.py:`SKILLS`
 [^3]: pyproject.toml (`[dependency-groups]`, `[tool.uv]`); uv.lock
 [^4]: requirements/runtime.txt; tests/python/test_wedge_pin.py:`test_runtime_requirements_match_the_uv_lock`
-[^5]: skills/*/wedge.toml (`source`, `include`)
+[^5]: skills/wedge.toml (`source`, `include`)
 [^6]: skills/*/scripts/*.wedge.json
 [^7]: skills/*/scripts/<skill> (generated launcher)
 [^8]: scripts/runtime_gates.py:`GENERATED_RUNTIME_SOURCES`, `write_generated_runtime`

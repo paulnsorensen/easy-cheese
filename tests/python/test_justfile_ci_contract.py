@@ -164,6 +164,7 @@ def test_wedge_workflow_checks_locks_on_pull_requests_and_publishes_on_main() ->
     assert "wedge check --root skills" in wedge_run("check")
     publish = wedge_run("publish")
     assert "wedge publish" in publish and "--root skills" in publish
+    assert "--branch main" in publish, "publish refuses a commit that main does not contain"
     assert "pull_request" in cast(str, cast(dict[str, object], jobs["check"])["if"])
     assert "push" in cast(str, cast(dict[str, object], jobs["publish"])["if"])
 

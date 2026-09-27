@@ -3,8 +3,9 @@
 tools/wedge/uv.lock pins one wedge commit for local runs, the test archive
 build, and CI. The runtime closure is pinned twice (uv.lock for the archives,
 requirements/runtime.txt for the test and typing environments) and must not
-drift. Every Python skill commits a wedge.toml that names its command entry
-point and the `runtime` group; `wedge check` verifies the locks and launchers.
+drift. skills/wedge.toml holds the shared build settings; every Python skill
+commits a wedge.toml that names only itself and its command entry point.
+`wedge check` verifies the locks and launchers.
 """
 
 from __future__ import annotations
@@ -67,13 +68,17 @@ def test_runtime_requirements_match_the_uv_lock() -> None:
 
 
 def test_every_python_skill_has_a_consistent_wedge_config() -> None:
+    shared = tomllib.loads((REPO_ROOT / "skills" / "wedge.toml").read_text(encoding="utf-8"))
+    assert shared["groups"] == ["runtime"]
+    assert shared["repo"] == "paulnsorensen/easy-cheese"
+    assert shared["source"] == "../../src/easy_cheese"
     configured = {path.parent.name for path in (REPO_ROOT / "skills").glob("*/wedge.toml")}
     assert configured == set(runtime_gates.SKILLS)
     for skill in runtime_gates.SKILLS:
         config = tomllib.loads(
             (REPO_ROOT / "skills" / skill / "wedge.toml").read_text(encoding="utf-8")
         )
-        assert config["name"] == skill
-        assert config["entry"] == f"easy_cheese.skills.{skill.replace('-', '_')}.commands:main"
-        assert config["groups"] == ["runtime"]
-        assert config["repo"] == "paulnsorensen/easy-cheese"
+        assert config == {
+            "name": skill,
+            "entry": f"easy_cheese.skills.{skill.replace('-', '_')}.commands:main",
+        }

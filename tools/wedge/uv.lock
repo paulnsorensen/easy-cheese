@@ -53,12 +53,12 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "skillz-that-grillz", git = "https://github.com/paulnsorensen/skillz-that-grillz?subdirectory=lib&rev=a71dfddaa37024cc11ae757d08e70494bb5c60e8" }]
+requires-dist = [{ name = "skillz-that-grillz", git = "https://github.com/paulnsorensen/skillz-that-grillz?subdirectory=lib&rev=45c7a9b2f55eba0b64277376500e0d3561a6298d" }]
 
 [[package]]
 name = "fromargs"
 version = "0.1.0"
-source = { git = "https://github.com/paulnsorensen/skillz-that-grillz?subdirectory=lib%2Ffromargs&rev=a71dfddaa37024cc11ae757d08e70494bb5c60e8#a71dfddaa37024cc11ae757d08e70494bb5c60e8" }
+source = { git = "https://github.com/paulnsorensen/skillz-that-grillz?subdirectory=lib%2Ffromargs&rev=45c7a9b2f55eba0b64277376500e0d3561a6298d#45c7a9b2f55eba0b64277376500e0d3561a6298d" }
 dependencies = [
     { name = "cyclopts" },
 ]
@@ -154,7 +154,7 @@ wheels = [
 [[package]]
 name = "skillz-that-grillz"
 version = "0.0.0"
-source = { git = "https://github.com/paulnsorensen/skillz-that-grillz?subdirectory=lib&rev=a71dfddaa37024cc11ae757d08e70494bb5c60e8#a71dfddaa37024cc11ae757d08e70494bb5c60e8" }
+source = { git = "https://github.com/paulnsorensen/skillz-that-grillz?subdirectory=lib&rev=45c7a9b2f55eba0b64277376500e0d3561a6298d#45c7a9b2f55eba0b64277376500e0d3561a6298d" }
 dependencies = [
     { name = "fromargs" },
     { name = "shiv" },

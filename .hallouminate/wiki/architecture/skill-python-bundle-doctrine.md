@@ -85,9 +85,9 @@ This doctrine supersedes the split runtime roots under `src/<skill>/` and `share
 [^1]: AGENTS.md; skills/*/wedge.toml; tools/wedge/pyproject.toml
 [^2]: tools/wedge/uv.lock; .github/workflows/wedge.yml
 [^3]: src/easy_cheese/skills/; src/easy_cheese/shared/; src/easy_cheese_schemas/
-[^4]: pyproject.toml (`[dependency-groups] runtime`, `[tool.uv] default-groups`); uv.lock; skills/*/wedge.toml
+[^4]: pyproject.toml (`[dependency-groups] runtime`); uv.lock; skills/wedge.toml (`groups`)
 [^5]: skills/*/scripts/<skill> (generated launcher); AGENTS.md
-[^6]: skills/*/wedge.toml (`source`, `include`); scripts/runtime_gates.py:`check_skill_references`; tests/python/test_doctrine_topology.py
+[^6]: skills/wedge.toml (`source`, `include`); scripts/runtime_gates.py:`check_skill_references`; tests/python/test_doctrine_topology.py
 [^7]: scripts/runtime_gates.py; scripts/skill_archives.py; tests/python/test_wedge_pin.py; .github/workflows/wedge.yml
 [^8]: src/easy_cheese/shared/bundle_commands.py:`Command`; src/easy_cheese/skills/*/commands.py
 [^9]: src/easy_cheese/shared/bundle_commands.py:`dispatch`; tests/python/test_bundle_commands.py

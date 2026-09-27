@@ -32,7 +32,8 @@ them while enforcement is implemented separately.
 - A skill that executes Python ships exactly the wedge launcher
   `skills/<skill>/scripts/<skill>` and its lock
   `skills/<skill>/scripts/<skill>.wedge.json`, built from
-  `skills/<skill>/wedge.toml`; a skill with no Python ships no launcher.
+  `skills/<skill>/wedge.toml` over the shared `skills/wedge.toml`; a skill
+  with no Python ships no launcher.
   Skill prose invokes only its own launcher—never loose source,
   `common.pyz`, repository automation, or another skill's launcher.
 - Runtime Python lives under `src/`. Tests remain under `tests/`; repository

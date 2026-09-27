@@ -122,7 +122,7 @@ See the [bundle pipeline](./architecture/pyz-bundling-pipeline.md) and
 [skill Python bundle doctrine](./architecture/skill-python-bundle-doctrine.md)
 for the dependency and purity contracts.
 
-[^1]: skills/*/wedge.toml; tools/wedge/pyproject.toml; tools/wedge/uv.lock
+[^1]: skills/wedge.toml; skills/*/wedge.toml; tools/wedge/pyproject.toml; tools/wedge/uv.lock
 [^2]: pyproject.toml; src/easy_cheese/shared; src/easy_cheese/skills
 [^3]: pyproject.toml; uv.lock; requirements/runtime.txt; tests/python/test_wedge_pin.py
 [^4]: .github/workflows/wedge.yml; scripts/runtime_gates.py; scripts/skill_archives.py
