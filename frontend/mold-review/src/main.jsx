@@ -4,10 +4,10 @@ import {api} from './api.js';
 import {useTheme} from './theme.js';
 import {ArtifactCanvas} from './components/ArtifactCanvas.jsx';
 import {ExcalidrawPanel} from './components/ExcalidrawPanel.jsx';
-import {LayoutCards} from './components/LayoutCards.jsx';
-import {LayoutTabs} from './components/LayoutTabs.jsx';
 import {MermaidPanel} from './components/MermaidPanel.jsx';
+import {PinProvider, PinQueue, Pinnable} from './components/Pins.jsx';
 import {Question} from './components/Question.jsx';
+import {DecisionMap, GatesPanel, Inline, LedgerPanel, PlacementPanel, RevisionsPopover, TrailRow} from './components/Shapes.jsx';
 import {ThemeToggle} from './components/ThemeToggle.jsx';
 import './style.css';
 
@@ -28,10 +28,10 @@ function useReviewData() {
   const [data, setData] = useState(initialData);
   const [answers, setAnswers] = useState({});
   const [notes, setNotes] = useState('');
-  const [annotations, setAnnotations] = useState('');
+  const [pins, setPins] = useState([]);
   const [scene, setScene] = useState(null);
   const [artifactValues, setArtifactValues] = useState({});
-  const [layout, setLayout] = useState('mixed');
+  const [view, setView] = useState('');
   const [mermaidSource, setMermaidSource] = useState(defaultMermaid);
   const [status, setStatus] = useState('Loading');
   const [hydrationVersion, setHydrationVersion] = useState(0);
@@ -40,10 +40,10 @@ function useReviewData() {
     const working = workingCopy(review);
     setAnswers(working.answers || {});
     setNotes(working.notes || '');
-    setAnnotations(working.annotations || '');
+    setPins(Array.isArray(working.pins) ? working.pins : []);
     setScene(working.scene || null);
     setArtifactValues(working.artifacts || {});
-    setLayout(working.layout || 'mixed');
+    setView(working.view || '');
     setMermaidSource(working.mermaid_source || defaultMermaid);
     setHydrationVersion(current => current + 1);
   }
@@ -65,14 +65,14 @@ function useReviewData() {
     setAnswers,
     notes,
     setNotes,
-    annotations,
-    setAnnotations,
+    pins,
+    setPins,
     scene,
     setScene,
     artifactValues,
     setArtifactValues,
-    layout,
-    setLayout,
+    view,
+    setView,
     mermaidSource,
     setMermaidSource,
     hydrate,
@@ -166,18 +166,60 @@ function useAutosave({data, feedback, revision, hydrationVersion, setData, setSt
   return {flush: useCallback(() => flushRef.current(), []), discard, hasFailed};
 }
 
+const SHAPES = ['ledger', 'placement', 'diagram', 'gates', 'decision map'];
+// "all" hides the audit views; they open on their own tabs.
+const AUDIT_SHAPES = new Set(['gates', 'decision map']);
+
+function eyebrow(doc) {
+  const parts = ['goal', doc.tier && `${doc.tier} tier`, doc.stage].filter(Boolean);
+  return parts.length > 1 ? parts.join(' · ') : 'Mold review canvas';
+}
+
+function GoalTitle({goal, emphasis}) {
+  const at = emphasis ? goal.indexOf(emphasis) : -1;
+  if (at < 0) return goal;
+  return <>{goal.slice(0, at)}<em>{emphasis}</em>{goal.slice(at + emphasis.length)}</>;
+}
+
+// Plain-text mirror of the pins, kept in `annotations` for pollers that read text only.
+function pinText(pins) {
+  return pins.map((pin, index) => `${index + 1}. ${pin.text} (${pin.anchor})`).join('\n');
+}
+
+function availableShapes(doc) {
+  const map = doc.decision_map || {};
+  return {
+    ledger: Array.isArray(doc.ledger) && doc.ledger.length > 0,
+    placement: Boolean(doc.placement?.rows?.length),
+    diagram: true,
+    gates: Boolean(doc.gates?.items?.length),
+    'decision map': Boolean(map.settled?.length || map.open?.length || map.verdict),
+  };
+}
+
 function App() {
   const {
-    data, setData, answers, setAnswers, notes, setNotes, annotations, setAnnotations,
-    scene, setScene, artifactValues, setArtifactValues, layout, setLayout, mermaidSource, setMermaidSource,
+    data, setData, answers, setAnswers, notes, setNotes, pins, setPins,
+    scene, setScene, artifactValues, setArtifactValues, view, setView, mermaidSource, setMermaidSource,
     hydrate, hydrationVersion, status, setStatus,
   } = useReviewData();
   const [submitted, setSubmitted] = useState(false);
   const [newRevision, setNewRevision] = useState(false);
+  const [annotate, setAnnotate] = useState(true);
+  const [revisionsOpen, setRevisionsOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(true);
   const theme = useTheme();
   const revision = data.revision?.number || 0;
-  const questions = data.revision?.document?.questions || [];
-  const artifacts = data.revision?.document?.artifacts || [];
+  const doc = data.revision?.document || {};
+  const questions = doc.questions || [];
+  const artifacts = doc.artifacts || [];
+  const trail = doc.trail || [];
+  const revisions = doc.revisions || [];
+  const available = availableShapes(doc);
+  const defaultView = doc.stage === 'decision map' && available['decision map'] ? 'decision map' : 'all';
+  const activeView = view === 'all' || available[view] ? view : defaultView;
+  const show = shape => available[shape] && (activeView === 'all' ? !AUDIT_SHAPES.has(shape) : activeView === shape);
+
   const serializedAnswers = useMemo(
     () => Object.fromEntries(questions.map(question => [
       question.id,
@@ -189,8 +231,8 @@ function App() {
     [answers, questions],
   );
   const feedback = useMemo(
-    () => ({answers: serializedAnswers, notes, annotations, scene, artifacts: artifactValues, mermaid_source: mermaidSource, layout}),
-    [serializedAnswers, notes, annotations, scene, artifactValues, mermaidSource, layout],
+    () => ({answers: serializedAnswers, notes, pins, annotations: pinText(pins), scene, artifacts: artifactValues, mermaid_source: mermaidSource, view: activeView}),
+    [serializedAnswers, notes, pins, scene, artifactValues, mermaidSource, activeView],
   );
 
   const {flush: flushAutosave, discard: discardAutosave, hasFailed} = useAutosave({data, feedback, revision, hydrationVersion, setData, setStatus});
@@ -207,13 +249,21 @@ function App() {
     return () => clearInterval(timer);
   }, [revision]);
 
-  async function submit() {
+  const pinApi = useMemo(() => ({
+    annotate,
+    pins,
+    addPin: (anchor, text) => setPins(current => [...current, {id: `pin-${Date.now().toString(36)}-${current.length}`, anchor, text}]),
+    removePin: id => setPins(current => current.filter(pin => pin.id !== id)),
+  }), [annotate, pins, setPins]);
+
+  async function submit(end = false) {
     setStatus('Sending');
     try {
       await flushAutosave();
+      const payload = end ? {...feedback, end_session: true} : feedback;
       const result = await api('/api/submit', {
         method: 'POST',
-        body: JSON.stringify({revision, operation_id: `browser-${revision}`, feedback}),
+        body: JSON.stringify({revision, operation_id: `browser-${revision}`, feedback: payload}),
       });
       setSubmitted(true);
       setStatus(`Submitted ${result.submission_id}`);
@@ -242,46 +292,115 @@ function App() {
     }
   }
 
+  const goal = doc.goal || data.goal || 'Mold review';
+  const agentStatus = doc.agent_status;
+  const sendLabel = `send to agent${pins.length ? ` · ${pins.length}` : ''}`;
+  const pairShapes = activeView === 'all' && available.placement;
+
   return (
-    <main className="ec-canvas">
-      <header className="ec-canvas-head">
-        <div><p className="ec-eyebrow">Mold review canvas</p><h1>{data.goal || 'Mold review'}</h1></div>
-        <div className="ec-canvas-tools">
-          <ThemeToggle choice={theme.choice} choices={theme.choices} onChange={theme.setChoice} />
-          <p className={`ec-status${blocked ? '' : ' ec-status--live'}`} role="status">Revision {revision} · {status}</p>
-          {hasFailed && <button type="button" className="ec-btn ec-btn--sm" onClick={discardAutosave}>discard unsaved changes</button>}
-          {newRevision && !blocked && <button type="button" className="ec-btn ec-btn--sm" onClick={switchRevision}>new revision available — switch</button>}
-        </div>
-      </header>
-      <LayoutTabs layout={layout} onChange={setLayout} />
-      <section className="ec-split">
-        <article className="questions">
-          <div>
-            <h2>Decision questions</h2>
-            <p className="ec-canvas-lede">Choose the response that best reflects your review. Your working notes save as you type.</p>
+    <PinProvider value={pinApi}>
+      <main className="mc-shell">
+        <header className="mc-bar">
+          <span className="ec-brand"><span className="mc-brand-root"><a href="https://cheeselord.dev">cheeselord.dev</a><span className="ec-brand-sep">/</span></span><b>easy-cheese</b><span className="ec-brand-sep">/</span>mold</span>
+          <div className="mc-bar-tools">
+            <div className="ec-segment" role="group" aria-label="Pointer mode">
+              <button type="button" aria-pressed={annotate} onClick={() => setAnnotate(true)}>annotate</button>
+              <button type="button" aria-pressed={!annotate} onClick={() => setAnnotate(false)}>explore</button>
+            </div>
+            {revisions.length > 0 && (
+              <button type="button" className="mc-link" aria-expanded={revisionsOpen} onClick={() => setRevisionsOpen(open => !open)}>revisions</button>
+            )}
+            <ThemeToggle choice={theme.choice} choices={theme.choices} onChange={theme.setChoice} />
+            <p className={`ec-status${blocked ? '' : ' ec-status--live'}`} role="status">r{revision} · {status}</p>
+            {hasFailed && <button type="button" className="ec-btn ec-btn--sm" onClick={discardAutosave}>discard unsaved changes</button>}
+            {newRevision && !blocked && <button type="button" className="ec-btn ec-btn--sm mc-btn-accent" onClick={switchRevision}>new revision available — switch</button>}
           </div>
-          {questions.map(question => (
-            <Question
-              key={question.id}
-              question={question}
-              answer={answers[question.id]}
-              onChange={value => setAnswers(current => ({...current, [question.id]: value}))}
-            />
-          ))}
-          <label className="ec-field">Working notes<textarea className="ec-input" aria-label="Working notes" value={notes} onChange={event => setNotes(event.target.value)} /></label>
-          <label className="ec-field">Annotations<textarea className="ec-input" aria-label="Annotations" value={annotations} onChange={event => setAnnotations(event.target.value)} /></label>
-          <button type="button" className="ec-btn ec-btn--fill" onClick={submit} disabled={!revision || submitted}>send to agent</button>
-        </article>
-        <section className="artifacts">
-          <LayoutCards layout={layout} />
-          {artifacts.length ? <ArtifactCanvas artifacts={artifacts} values={artifactValues} theme={theme.resolved} onChange={(id, value) => setArtifactValues(current => ({...current, [id]: value}))} /> : <>
-            <MermaidPanel source={mermaidSource} theme={theme.resolved} onChange={setMermaidSource} />
-            <ExcalidrawPanel scene={scene} theme={theme.resolved} onChange={setScene} />
-          </>}
-        </section>
-      </section>
-    </main>
+          {revisionsOpen && revisions.length > 0 && <RevisionsPopover revisions={revisions} />}
+        </header>
+
+        <div className="mc-goal">
+          <p className="ec-eyebrow">{eyebrow(doc)}</p>
+          <h1 className="ec-title mc-goal-title"><GoalTitle goal={goal} emphasis={doc.goal_emphasis} /></h1>
+        </div>
+
+        <div className="mc-body">
+          <section className="mc-shapes" aria-label="Shapes">
+            <nav className="ec-tabs" aria-label="Shape views">
+              {['all', ...SHAPES].map(shape => (
+                <button
+                  key={shape}
+                  type="button"
+                  className="ec-tab"
+                  aria-pressed={activeView === shape}
+                  disabled={shape !== 'all' && !available[shape]}
+                  onClick={() => setView(shape)}
+                >
+                  {shape}
+                </button>
+              ))}
+            </nav>
+            <div className="mc-stack">
+              {show('ledger') && <LedgerPanel ledger={doc.ledger} />}
+              {(show('placement') || show('diagram')) && (
+                <div className={pairShapes ? 'mc-pair' : 'mc-stack'}>
+                  {show('diagram') && (
+                    <div className="mc-stack">
+                      {artifacts.length ? (
+                        <ArtifactCanvas artifacts={artifacts} values={artifactValues} theme={theme.resolved} onChange={(id, value) => setArtifactValues(current => ({...current, [id]: value}))} />
+                      ) : (
+                        <>
+                          <Pinnable anchor="diagram › mermaid" handle><MermaidPanel source={mermaidSource} theme={theme.resolved} onChange={setMermaidSource} /></Pinnable>
+                          <Pinnable anchor="diagram › sketch" handle><ExcalidrawPanel scene={scene} theme={theme.resolved} onChange={setScene} /></Pinnable>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {show('placement') && <PlacementPanel placement={doc.placement} />}
+                </div>
+              )}
+              {show('gates') && <GatesPanel gates={doc.gates} />}
+              {show('decision map') && <DecisionMap map={doc.decision_map} />}
+              {doc.shape_note && <p className="mc-note">{doc.shape_note}</p>}
+            </div>
+          </section>
+
+          <aside className={`mc-convo${sheetOpen ? '' : ' mc-convo--lowered'}`} aria-label="Conversation">
+            <div className="mc-sheet-head">
+              <span className="mc-sheet-grip" aria-hidden="true" />
+              <div className="mc-row mc-row--between">
+                <p className={`ec-status${agentStatus && !agentStatus.startsWith('no ') ? ' ec-status--live' : ''}`}>
+                  {agentStatus || 'feedback autosaves'}{pins.length ? ` · ${pins.length} queued` : ''}
+                </p>
+                <button type="button" className="mc-link mc-sheet-toggle" aria-label={sheetOpen ? 'Lower sheet' : 'Raise sheet'} onClick={() => setSheetOpen(open => !open)}>{sheetOpen ? '˅' : '˄'}</button>
+              </div>
+            </div>
+            <div className="mc-convo-scroll">
+              {doc.summary && <p className="mc-summary"><Inline text={doc.summary} /></p>}
+              {trail.filter(item => item.position !== 'after').map(item => <TrailRow key={item.label} item={item} />)}
+              {questions.map(question => (
+                <Question
+                  key={question.id}
+                  question={question}
+                  answer={answers[question.id]}
+                  onChange={value => setAnswers(current => ({...current, [question.id]: value}))}
+                />
+              ))}
+              {trail.filter(item => item.position === 'after').map(item => <TrailRow key={item.label} item={item} />)}
+              <PinQueue />
+            </div>
+            <div className="mc-composer">
+              <textarea className="ec-input" aria-label="Message the agent" placeholder="Message the agent" value={notes} onChange={event => setNotes(event.target.value)} />
+              <div className="mc-row">
+                <button type="button" className="ec-btn ec-btn--fill" onClick={() => submit(false)} disabled={!revision || submitted}>{sendLabel}</button>
+                <button type="button" className="mc-link mc-push" onClick={() => submit(true)} disabled={!revision || submitted}>send &amp; end</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </main>
+    </PinProvider>
   );
 }
 
 createRoot(document.getElementById('root')).render(<App />);
+

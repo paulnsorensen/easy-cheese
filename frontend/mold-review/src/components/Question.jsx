@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 
 function OptionCard({option, type, name, checked, recommended, onSelect}) {
   const detail = option.tradeoff || option.description;
@@ -7,8 +7,8 @@ function OptionCard({option, type, name, checked, recommended, onSelect}) {
       <input type={type} name={name} checked={checked} onChange={onSelect} />
       <span>
         <strong>{option.label}</strong>
-        {recommended && <> <span className="ec-badge">Recommended</span></>}
-        <small>Option ID: {option.id}{detail ? ` · ${detail}` : ''}</small>
+        {recommended && <> <span className="ec-badge">recommended</span></>}
+        <small>{option.id}{detail ? ` · ${detail}` : ''}</small>
       </span>
     </label>
   );
@@ -19,6 +19,8 @@ export function Question({question, answer, onChange}) {
   const selected = answer?.selected || [];
   const other = answer?.other || '';
   const recommended = question.recommended_option_id || question.recommended;
+  const [otherOpen, setOtherOpen] = useState(Boolean(other));
+  const meta = question.meta || question.context;
 
   function selectOption(id) {
     if (mode === 'single') {
@@ -32,10 +34,9 @@ export function Question({question, answer, onChange}) {
   }
 
   return (
-    <fieldset className="ec-panel ec-question question">
+    <fieldset className="ec-panel ec-question question mc-question">
       <legend>{question.prompt || question.text}</legend>
-      <small className="ec-question-meta">Question ID: {question.id} · Selection mode: {mode}</small>
-      <p className="ec-question-help">{mode === 'single' ? 'Choose one response.' : 'Choose all responses that apply.'}</p>
+      <small className="ec-question-meta">{question.id}{meta ? ` · ${meta}` : ''}{mode === 'single' ? '' : ' · choose all that apply'}</small>
       <div className="ec-options">
         {(question.options || []).map(option => (
           <OptionCard
@@ -49,15 +50,20 @@ export function Question({question, answer, onChange}) {
           />
         ))}
       </div>
-      <label className="ec-field">
-        Other
-        <input
-          className="ec-input"
-          value={other}
-          onChange={event => onChange({selected, other: event.target.value})}
-          placeholder="Add your own response"
-        />
-      </label>
+      {otherOpen || other ? (
+        <label className="ec-field">
+          Other
+          <input
+            className="ec-input"
+            value={other}
+            autoFocus={!other}
+            onChange={event => onChange({selected, other: event.target.value})}
+            placeholder="Add your own response"
+          />
+        </label>
+      ) : (
+        <button type="button" className="mc-link" onClick={() => setOtherOpen(true)}>other…</button>
+      )}
     </fieldset>
   );
 }
