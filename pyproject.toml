@@ -58,6 +58,9 @@ only-include = [
 # surface (pytest, pyyaml, vulture); `just typecheck` creates it on demand.
 [tool.basedpyright]
 include = ["src", "scripts", ".github/scripts", "tests"]
+# Setting `exclude` replaces basedpyright's defaults, so restate them. The last
+# entry is an agent-workspace fixture whose tests run from the copied repo root.
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "tests/fixtures/prompt_lab/repo"]
 pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv-typing"
