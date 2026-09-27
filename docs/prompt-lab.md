@@ -81,3 +81,63 @@ uv run --no-project --with-requirements requirements/prompt-lab.txt python scrip
 `--prompt current` reads `skills/cook/SKILL.md`. `--max-runs` caps agent runs plus reflection calls; `--max-budget-usd` caps each single run through the CLI's own budget flag; `--timeout-seconds` bounds each run and each test command. Optimization evaluates the seed on train plus validation first and exports `best_candidate.md` only when the best candidate scores strictly higher. A run budget that ends early still writes `result.json` with the records so far. Pass `--keep-workspaces` to retain every agent workspace under the output directory for inspection.
 
 The runner uses the session's Claude Code authentication and drops user and project settings, hooks, and MCP servers for each run. It passes `--dangerously-skip-permissions` because the workspace is disposable; never point it at a real checkout. Reflection also runs through `claude -p`, so no OpenAI key is needed for this path. Three synthetic tasks are a harness smoke test, not a quality claim; a real suite needs pinned external repositories like the tilth benchmark's fix tasks.
+
+## Tilth runner
+
+`agent_lab.py optimize --runner tilth` swaps the `claude -p` runner for tilth's own
+`benchmark/run.py` harness and a real GEPA search over a `/cook` skill candidate (a
+dict of repo-relative component paths: `skills/cook/SKILL.md`, its `references/*.md`,
+and `src/easy_cheese/skills/cook/**/*.py`). Each unique candidate GEPA proposes gets
+its own disposable `.claude-plugin` overlay, built with `candidate build`'s guard
+pipeline (a token-budget check, then a build gate when the candidate touches code).
+A guard violation scores as a fixed, always-dominated point; it never calls the
+benchmark runner.
+
+```bash
+python3 scripts/agent_lab.py tasks mine --repo owner/name --out mined_tasks.json \
+  --tilth-root /path/to/tilth
+python3 scripts/agent_lab.py validate mined_tasks.json
+uv run --no-project --with-requirements requirements/prompt-lab.txt python scripts/agent_lab.py optimize \
+  --runner tilth --tasks mined_tasks.json --model unused --seed current \
+  --tilth-root /path/to/tilth --search-model haiku \
+  --validation-model haiku --output-dir .context/agent-lab/tilth-opt-01 \
+  --max-metric-calls 40
+```
+
+`tasks mine` pulls SHA-pinned fix tasks from a repository's merged pull requests and
+gates each one on tilth's `benchmark/check_task.py` (the task must fail at its base
+commit and pass at its head commit). It mines only lowercase Conventional Commit
+`fix:` titles, and by default only pull requests whose author association is OWNER,
+MEMBER, or COLLABORATOR; pass `--allow-untrusted-authors` to mine every merged pull
+request regardless of author. The CLI output reports each dropped pull request's
+number and reason under `drops`. A mined task set is untrusted input: `test_patch`
+and `test_command` come from the source repository, so run `validate`, `optimize`,
+and `graduate` against it only inside a sandboxed checkout, never against a real one.
+
+`--search-model`, `--validation-model`, `--reflection-model`, and `graduate`'s
+`--models` all take a tilth benchmark model alias (for example `haiku`, `sonnet`,
+`sonnet5`, `opus`, `fable`), not a full model ID; `benchmark/run.py` rejects anything
+else. `--search-model` runs train-split tasks; `--validation-model` runs
+validation-split tasks; both accept a cheaper alias than the final holdout check.
+`optimize`'s output is a Pareto front over `(correctness, -tokens)`, one candidate
+directory per front member, plus `result.json`.
+
+After optimization, grade a candidate against the seed on the sealed holdout split
+with `graduate`:
+
+```bash
+uv run --no-project --with-requirements requirements/prompt-lab.txt python scripts/agent_lab.py graduate \
+  --seed current --candidate .context/agent-lab/tilth-opt-01/candidates/<sha> \
+  --holdout mined_tasks.json --tilth-root /path/to/tilth \
+  --models sonnet,opus,fable \
+  --output-dir .context/agent-lab/graduation-01
+```
+
+`--models` defaults to `sonnet,opus,fable` and rejects any set missing one of
+those three aliases; graduation always grades a candidate at all three.
+
+`graduate` promotes only when the candidate is non-dominated on every model and
+strictly better on at least one axis on at least one model. A promotion writes
+`best_candidate/` and `graduation.json` under `--output-dir`; a hold writes neither.
+Every build runs inside a disposable `git worktree`, so the real checkout is never
+written.
