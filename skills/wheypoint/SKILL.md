@@ -42,14 +42,12 @@ python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] 
 python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
 ```
 
-Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND.
-Never loop over `list` once per term.
+Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term.
 
 `resolve`, `lint`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
 `/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
 Foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
-The parent delegates persistence as one structured checkpoint task to this capability.
-Run `validate` before `checkpoint`; workers never invoke either command at a hard limit.
+The parent delegates persistence as one structured checkpoint task to this capability and runs `validate` before `checkpoint`; workers never invoke either command at a hard limit.
 Phase skills use their own `wheypoint-resolve --ref <slug>` command for resolution.
 The command returns `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, or `error`.
 Use authoritative `working_context` as the first batched `tilth_read`; follow [`references/delta-contract.md`](references/delta-contract.md) for all outcomes and findings.
@@ -106,8 +104,7 @@ The projection is never the authority; never edit it and never resume from it by
 
 ## `next:` values
 
-- `mold`, `cut`, `cook`, `press`, `age`, `cure`: the next pipeline phase.
-  `next: cook` on a standalone checkpoint names the phase to resume; it does not publish a Cook→Cook phase artifact.
+- `mold`, `cut`, `cook`, `press`, `age`, `cure`: the next pipeline phase; on a standalone checkpoint, `next: cook` names the phase to resume and does not publish a Cook→Cook phase artifact.
 - `affinage`: PR review comments or failing CI; `artifact` names the PR.
 - `briesearch`, `culture`: a read-only next move that `/cheese --continue` dispatches.
 - `tasks`: independent moves; see [`references/parallel-handoffs.md`](references/parallel-handoffs.md).
