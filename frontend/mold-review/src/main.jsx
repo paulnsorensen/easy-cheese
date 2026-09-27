@@ -39,7 +39,9 @@ function useReviewData() {
   function hydrate(review) {
     const working = workingCopy(review);
     setAnswers(working.answers || {});
-    setNotes(working.notes || '');
+    const notes = working.notes || '';
+    const legacyAnnotations = !Array.isArray(working.pins) && typeof working.annotations === 'string' && working.annotations ? working.annotations : '';
+    setNotes(legacyAnnotations ? (notes ? `${notes}\n\n${legacyAnnotations}` : legacyAnnotations) : notes);
     setPins(Array.isArray(working.pins) ? working.pins : []);
     setScene(working.scene || null);
     setArtifactValues(working.artifacts || {});
@@ -186,6 +188,43 @@ function pinText(pins) {
   return pins.map((pin, index) => `${index + 1}. ${pin.text} (${pin.anchor})`).join('\n');
 }
 
+function toArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function toText(value) {
+  return typeof value === 'string' ? value : undefined;
+}
+
+// Guards against agent-supplied fields with the wrong type, so a malformed
+// document renders instead of throwing.
+function normalizeDocument(doc) {
+  const map = doc.decision_map;
+  return {
+    ...doc,
+    goal: toText(doc.goal),
+    goal_emphasis: toText(doc.goal_emphasis),
+    tier: toText(doc.tier),
+    stage: toText(doc.stage),
+    summary: toText(doc.summary),
+    agent_status: toText(doc.agent_status),
+    shape_note: toText(doc.shape_note),
+    trail: toArray(doc.trail),
+    revisions: toArray(doc.revisions),
+    questions: toArray(doc.questions),
+    artifacts: toArray(doc.artifacts),
+    ledger: toArray(doc.ledger).map(row => ({...row, items: toArray(row.items)})),
+    placement: doc.placement ? {...doc.placement, rows: toArray(doc.placement.rows)} : doc.placement,
+    gates: doc.gates ? {...doc.gates, items: toArray(doc.gates.items)} : doc.gates,
+    decision_map: map ? {
+      ...map,
+      settled: toArray(map.settled),
+      open: toArray(map.open),
+      verdict: map.verdict ? {...map.verdict, lines: toArray(map.verdict.lines)} : map.verdict,
+    } : map,
+  };
+}
+
 function availableShapes(doc) {
   const map = doc.decision_map || {};
   return {
@@ -210,7 +249,8 @@ function App() {
   const [sheetOpen, setSheetOpen] = useState(true);
   const theme = useTheme();
   const revision = data.revision?.number || 0;
-  const doc = data.revision?.document || {};
+  const sourceDoc = data.revision?.document;
+  const doc = useMemo(() => normalizeDocument(sourceDoc || {}), [sourceDoc]);
   const questions = doc.questions || [];
   const artifacts = doc.artifacts || [];
   const trail = doc.trail || [];
@@ -261,9 +301,10 @@ function App() {
     try {
       await flushAutosave();
       const payload = end ? {...feedback, end_session: true} : feedback;
+      const operationId = end ? `browser-${revision}-end` : `browser-${revision}`;
       const result = await api('/api/submit', {
         method: 'POST',
-        body: JSON.stringify({revision, operation_id: `browser-${revision}`, feedback: payload}),
+        body: JSON.stringify({revision, operation_id: operationId, feedback: payload}),
       });
       setSubmitted(true);
       setStatus(`Submitted ${result.submission_id}`);
@@ -301,7 +342,7 @@ function App() {
     <PinProvider value={pinApi}>
       <main className="mc-shell">
         <header className="mc-bar">
-          <span className="ec-brand"><span className="mc-brand-root"><a href="https://cheeselord.dev">cheeselord.dev</a><span className="ec-brand-sep">/</span></span><b>easy-cheese</b><span className="ec-brand-sep">/</span>mold</span>
+          <span className="ec-brand"><span className="mc-brand-root"><a href="https://cheeselord.dev" target="_blank" rel="noreferrer">cheeselord.dev</a><span className="ec-brand-sep">/</span></span><b>easy-cheese</b><span className="ec-brand-sep">/</span>mold</span>
           <div className="mc-bar-tools">
             <div className="ec-segment" role="group" aria-label="Pointer mode">
               <button type="button" aria-pressed={annotate} onClick={() => setAnnotate(true)}>annotate</button>

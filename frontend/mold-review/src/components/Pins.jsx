@@ -1,4 +1,4 @@
-import React, {createContext, useContext, useState} from 'react';
+import React, {createContext, useContext, useEffect, useState} from 'react';
 
 // Pins are numbered notes the user attaches to a part of the canvas.
 // Each pin records an anchor (for example "placement › public") and the note text.
@@ -49,6 +49,9 @@ function PinEditor({anchor, onDone}) {
 export function Pinnable({anchor, handle = false, highlight = false, children}) {
   const {annotate, pins} = useContext(PinContext);
   const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!annotate) setEditing(false);
+  }, [annotate]);
   const numbers = pinNumbers(pins, anchor);
   const markers = annotate && numbers.map(number => <PinMarker key={number} number={number} />);
   const editor = editing && <PinEditor anchor={anchor} onDone={() => setEditing(false)} />;
