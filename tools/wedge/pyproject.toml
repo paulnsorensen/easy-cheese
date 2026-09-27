@@ -9,5 +9,5 @@ name = "easy-cheese-wedge"
 version = "0"
 requires-python = ">=3.11"
 dependencies = [
-  "skillz-that-grillz @ git+https://github.com/paulnsorensen/skillz-that-grillz@45c7a9b2f55eba0b64277376500e0d3561a6298d#subdirectory=lib",
+  "skillz-that-grillz @ git+https://github.com/paulnsorensen/skillz-that-grillz@b0391ff581f61e2a5d919fedc19711b29bc29d92#subdirectory=lib",
 ]
