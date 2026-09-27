@@ -295,6 +295,8 @@ def build_delta(
             add_directives=grouped.get("add_directives"),
             add_artifact_links=intent.artifact_links,
             remove_artifact_links=intent.remove_artifact_links,
+            add_edges=intent.add_edges,
+            remove_edges=intent.remove_edges,
             transitions=intent.transitions,
             session_provenance=_provenance(
                 intent, genesis=current is None, now=clock

@@ -1248,3 +1248,43 @@ def test_a_file_name_carrying_its_own_hash_still_grounds(
     record = make_record(working_context=[entry])
     findings = lint_freshness.grounded_path_findings(record, tmp_path)
     assert findings == []
+
+
+def test_a_sibling_link_reports_an_advisory_link_pending_on_the_target(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    from easy_cheese_schemas.contracts import EdgeKind, WorkEdge
+
+    store = make_store(corpus_root)
+    target = make_promotion()
+    store.promote(target.record, target.revision, target.markdown)
+    source = make_promotion(
+        record=make_record(
+            work_id="work-0002",
+            revision_id="rev-0007",
+            edges=(
+                WorkEdge(
+                    to=f"wheypoint:{PROJECT}/work-0001",
+                    kind=EdgeKind.SUPERSEDES,
+                    revision_id="rev-0007",
+                ),
+            ),
+        ),
+        revision_id="rev-0007",
+    )
+    storage.WorkStore.open("work-0002", corpus_root=corpus_root).promote(
+        source.record, source.revision, source.markdown
+    )
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.LINK_PENDING,)
+    assert report.findings[0].detail == (
+        "work-0002@rev-0007 supersedes -> reciprocal superseded_by pending"
+    )
+    assert not lint.gates_continuation(report.findings[0])
+    assert [(p.source_work_id, p.kind) for p in report.pending] == [
+        ("work-0002", EdgeKind.SUPERSEDED_BY)
+    ]

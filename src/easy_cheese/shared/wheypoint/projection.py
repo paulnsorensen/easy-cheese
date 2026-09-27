@@ -49,6 +49,7 @@ from easy_cheese_schemas.handback_status import (
     parse_status_field,
     render_status_field,
 )
+from easy_cheese_schemas.contracts import EdgeKind
 
 from . import canonical, records
 
@@ -76,6 +77,16 @@ _DIRECTIVES_HEADING = "## Directives"
 _NOTES_HEADING = "## Notes"
 _CONTEXT_HEADING = "## Context"
 _ARTIFACTS_HEADING = "## Artifacts"
+_LINKS_HEADING = "## Links"
+_LINEAGE_HEADING = "## Lineage"
+_LINEAGE_KINDS = frozenset(
+    {
+        EdgeKind.FORKED_FROM,
+        EdgeKind.FORKED_TO,
+        EdgeKind.SUPERSEDES,
+        EdgeKind.SUPERSEDED_BY,
+    }
+)
 _DOSSIER_HEADING = "## Decision dossier"
 _TASKS_HEADING = "## Tasks"
 _FENCE = "```json"
@@ -233,6 +244,31 @@ def _body(record: WheypointRecord) -> list[str]:
         lines.append(f"- {escape(link.path)}" + (f" ({detail_text})" if detail_text else ""))
     if not record.artifact_links:
         lines.append(_NONE)
+    lines += ["", _LINKS_HEADING, ""]
+    for edge in record.edges:
+        pin = f" @{edge.revision_id}" if edge.revision_id else ""
+        lines.append(f"- {edge.kind.value} {escape(edge.to)}{pin}")
+        if edge.rationale:
+            lines.append(f"  rationale: {escape(edge.rationale)}")
+    if not record.edges:
+        lines.append(_NONE)
+    lines += ["", _LINEAGE_HEADING, "", *(_lineage(record) or [_NONE])]
+    return lines
+
+
+def _lineage(record: WheypointRecord) -> list[str]:
+    """Fork and supersession edges, then each entry's cross-record lineage."""
+    lines = [
+        f"- {edge.kind.value} {escape(edge.to)}"
+        for edge in record.edges
+        if edge.kind in _LINEAGE_KINDS
+    ]
+    for entry in records.entries(record):
+        if entry.origin:
+            lines.append(f"- {entry.entry_id} origin {escape(entry.origin)}")
+        if entry.successor:
+            lines.append(f"- {entry.entry_id} successor {escape(entry.successor)}")
+        lines.extend(f"- {entry.entry_id} copies {escape(ref)}" for ref in entry.copies)
     return lines
 
 

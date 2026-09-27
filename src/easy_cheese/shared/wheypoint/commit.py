@@ -67,10 +67,12 @@ from easy_cheese_schemas import (
     WheypointRecord,
     WheypointRevision,
 )
+from easy_cheese_schemas.contracts import WorkEdge, WorkEdgeKey
 
 from easy_cheese.shared import paths
 
 from . import canonical
+from . import edges as edges_mod
 from . import lineage
 from . import projection as projection_mod
 from . import records, refs, storage
@@ -703,6 +705,13 @@ def _apply(
         additions=additions,
         digest_of=digest_of,
     )
+    merged = _merge_edges(current.edges, delta, revision_id=revision_id)
+    reciprocals = edges_mod.apply_pending_reciprocals(
+        merged.edges,
+        edges_mod.pending_reciprocals(current, corpus_root=store.corpus_root),
+        revision_id=revision_id,
+    )
+    draft = evolve(draft, edges=reciprocals.edges)
     compaction = (
         None
         if delta.compaction is None
@@ -725,6 +734,8 @@ def _apply(
         additions=[entry for kind in ADDITION_FIELDS for entry in additions[kind]],
         transitions=transitions,
         preserved=preserved,
+        applied_edges=merged.applied + reciprocals.applied,
+        removed_edges=merged.removed,
         repository=repository,
         durability=durability,
     )
@@ -785,6 +796,7 @@ def _genesis(
             + "blocker, or directive, or a notes body: orientation alone is not a record"
         )
     revision_id = _revision_id(delta, fingerprint)
+    merged = _merge_edges((), delta, revision_id=revision_id)
     try:
         draft = WheypointRecord(
             schema_version=SCHEMA_VERSION,
@@ -814,6 +826,7 @@ def _genesis(
                 digest_of=digest_of,
             ),
             decision_dossier=list(delta.decision_dossier or []),
+            edges=merged.edges,
         )
     except ValueError as exc:
         raise CommitError(f"the delta does not produce a legal record: {exc}") from exc
@@ -829,9 +842,22 @@ def _genesis(
         additions=[entry for kind in ADDITION_FIELDS for entry in additions[kind]],
         transitions=[],
         preserved=[],
+        applied_edges=merged.applied,
+        removed_edges=merged.removed,
         repository=repository,
         durability=durability,
     )
+
+
+def _merge_edges(
+    current: tuple[WorkEdge, ...], delta: WheypointDelta, *, revision_id: str
+) -> edges_mod.MergedEdges:
+    try:
+        return edges_mod.merge_edges(
+            current, delta.add_edges, delta.remove_edges, revision_id=revision_id
+        )
+    except edges_mod.EdgeError as exc:
+        raise CommitError(str(exc)) from exc
 
 
 def _title(orientation: str) -> str:
@@ -851,6 +877,8 @@ def _finish(
     additions: list[ProtectedEntry],
     transitions: list[EntryTransition],
     preserved: list[str],
+    applied_edges: tuple[WorkEdge, ...],
+    removed_edges: tuple[WorkEdgeKey, ...],
     repository: RepositoryProvenance,
     durability: Durability,
 ) -> PendingRevision:
@@ -867,6 +895,8 @@ def _finish(
         applied_additions=additions,
         applied_transitions=transitions,
         preserved_entry_ids=preserved,
+        applied_edges=applied_edges,
+        removed_edges=removed_edges,
         projection_path=store.relative_projection_path(
             draft.revision_number, draft.revision_id
         ),

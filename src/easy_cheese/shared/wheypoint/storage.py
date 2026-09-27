@@ -197,6 +197,11 @@ class WorkStore:
         return cls(work_id=work_id, root=base / WORK_DIRNAME / work_id)
 
     @property
+    def corpus_root(self) -> Path:
+        """The project corpus this store was opened under."""
+        return self.root.parent.parent
+
+    @property
     def record_path(self) -> Path:
         return self.root / RECORD_FILENAME
 

@@ -46,7 +46,7 @@ from easy_cheese.shared import git_utils, handoff, paths
 
 from . import checkpoint as checkpoint_mod
 from . import legacy as legacy_mod
-from . import lint, lint_freshness, lint_types, records, storage
+from . import edges, lint, lint_freshness, lint_types, records, storage
 
 _IDENTIFIER_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 # A parent may live outside every worktree, but only as a reference someone can
@@ -87,6 +87,7 @@ class Resolution:
     legacy_slug: legacy_mod.LegacyHandoffSlug | None = None
     phase_slug: handoff.HandoffSlug | None = None
     detail: str | None = None
+    pending: tuple[edges.PendingEdge, ...] = field(default=())
 
     @property
     def dispatchable(self) -> bool:
@@ -557,6 +558,7 @@ def _validate(
         projection=report.projection,
         findings=findings,
         searched=searched,
+        pending=report.pending,
     )
     gating = tuple(f for f in findings if lint_types.gates_continuation(f))
     if gating:

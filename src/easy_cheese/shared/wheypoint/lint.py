@@ -34,6 +34,7 @@ from easy_cheese_schemas import (
 
 from easy_cheese.shared import paths
 
+from . import edges
 from . import lineage
 from . import lint_freshness
 from .lint_types import (
@@ -52,13 +53,16 @@ class LintReport:
     """Everything that is wrong, plus what was readable while checking.
 
     `normalizations` holds one receipt per link the reader filled in from an
-    older schema. They are advisory data, never findings.
+    older schema. They are advisory data, never findings. `pending` holds the
+    reciprocal edges sibling records ask this one to add; each also appears
+    as an advisory `link-pending` finding.
     """
 
     findings: tuple[LintFinding, ...] = field(default=())
     record: WheypointRecord | None = None
     projection: WheypointProjection | None = None
     normalizations: tuple[NormalizationReceipt, ...] = field(default=())
+    pending: tuple[edges.PendingEdge, ...] = field(default=())
 
     @property
     def ok(self) -> bool:
@@ -223,12 +227,23 @@ def lint_work(
     if projection is not None:
         findings.extend(_durability_findings(projection, record))
     findings.extend(lint_freshness.grounded_path_findings(record, root))
+    pending = edges.pending_reciprocals(record, corpus_root=store.corpus_root)
+    findings.extend(
+        LintFinding(
+            LintCode.LINK_PENDING,
+            f"{item.source_work_id}@{item.source_revision_id} "
+            + f"{edges.RECIPROCAL[item.kind].value} -> reciprocal "
+            + f"{item.kind.value} pending",
+        )
+        for item in pending
+    )
     _, normalizations = records.normalize_links(record)
     return LintReport(
         findings=tuple(findings),
         record=record,
         projection=projection,
         normalizations=normalizations,
+        pending=pending,
     )
 
 
