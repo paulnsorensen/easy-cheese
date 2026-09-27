@@ -13,12 +13,14 @@ import importlib.util
 import itertools
 import re
 import sys
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from enum import Enum
 from types import ModuleType
 from typing import Protocol, cast, final
 
+import attrs
 import pytest
 
 from easy_cheese_schemas import contracts as wc
@@ -1029,6 +1031,41 @@ def _gating_question(state: wc.EntryState) -> wc.ProtectedEntry:
     )
 
 
+_EDGE_KEY = wc.WorkEdgeKey(to="repo:docs/spec.md", kind=wc.EdgeKind.INFORMS)
+_INTENT = wc.CheckpointIntent(work_id="parent")
+_DELTA = wc.WheypointDelta(work_id="parent", expected_revision_id="rev-0001")
+
+
+def _fork_transition() -> wc.EntryTransition:
+    return wc.EntryTransition(
+        entry_id="q-1",
+        action=wc.TransitionAction.FORK,
+        rationale="Moved to the child.",
+        successor="wheypoint:project/child#q-1",
+    )
+
+
+def _entry(
+    *,
+    state: wc.EntryState = wc.EntryState.ACTIVE,
+    rationale: str | None = None,
+    origin: str | None = None,
+    successor: str | None = None,
+    copies: tuple[str, ...] = (),
+) -> wc.ProtectedEntry:
+    return wc.ProtectedEntry(
+        entry_id="d-1",
+        kind=wc.EntryKind.DECISION,
+        summary="s",
+        state=state,
+        blocks_continuation=False,
+        rationale=rationale,
+        origin=origin,
+        successor=successor,
+        copies=copies,
+    )
+
+
 def _open_fork() -> wc.DecisionFork:
     option = wc.DossierOption(option="child", evidence=["spec F-2"], breaks="none")
     return wc.DecisionFork(fork="Which store owns the edge?", options=[option])
@@ -1064,10 +1101,63 @@ class TestWheypointSchemaFour:
 
     def test_ac7_fork_transition_lands_in_forked_state(self) -> None:
         transition = wc.EntryTransition(
-            entry_id="q-1", action=wc.TransitionAction.FORK, rationale="Moved."
+            entry_id="q-1",
+            action=wc.TransitionAction.FORK,
+            rationale="Moved.",
+            successor="wheypoint:project/child#q-1",
         )
 
         assert transition.resulting_state is wc.EntryState.FORKED
+
+    def test_intent_refuses_a_fork_transition(self) -> None:
+        with pytest.raises(ValueError, match="host derives fork transitions"):
+            _ = wc.CheckpointIntent(work_id="parent", transitions=[_fork_transition()])
+
+    def test_delta_accepts_a_host_fork_transition(self) -> None:
+        delta = wc.WheypointDelta(
+            work_id="parent",
+            expected_revision_id="rev-0001",
+            transitions=[_fork_transition()],
+        )
+
+        assert delta.transitions == [_fork_transition()]
+
+    def test_fork_transition_must_name_its_successor(self) -> None:
+        with pytest.raises(ValueError, match="successor must name the entry"):
+            _ = wc.EntryTransition(
+                entry_id="q-1", action=wc.TransitionAction.FORK, rationale="Moved."
+            )
+
+    def test_non_fork_transition_refuses_a_successor(self) -> None:
+        with pytest.raises(ValueError, match="successor must be null for a resolve"):
+            _ = wc.EntryTransition(
+                entry_id="q-1",
+                action=wc.TransitionAction.RESOLVE,
+                rationale="Done.",
+                successor="wheypoint:project/child#q-1",
+            )
+
+    def test_forked_entry_must_name_its_successor(self) -> None:
+        with pytest.raises(ValueError, match="successor must name the entry"):
+            _ = wc.ProtectedEntry(
+                entry_id="q-1",
+                kind=wc.EntryKind.QUESTION,
+                summary="s",
+                state=wc.EntryState.FORKED,
+                blocks_continuation=True,
+                rationale="Moved.",
+            )
+
+    def test_unforked_entry_refuses_a_successor(self) -> None:
+        with pytest.raises(ValueError, match="successor must be null unless"):
+            _ = wc.ProtectedEntry(
+                entry_id="q-1",
+                kind=wc.EntryKind.QUESTION,
+                summary="s",
+                state=wc.EntryState.ACTIVE,
+                blocks_continuation=True,
+                successor="wheypoint:project/child#q-1",
+            )
 
     def test_ac7_forked_entry_must_say_why_it_left_active(self) -> None:
         with pytest.raises(ValueError, match="rationale"):
@@ -1079,9 +1169,9 @@ class TestWheypointSchemaFour:
                 blocks_continuation=True,
             )
 
-    def test_ac16_notes_accept_6000_characters(self) -> None:
-        for holder in _notes_holders("n" * 6000):
-            assert getattr(holder, "notes") == "n" * 6000
+    @pytest.mark.parametrize("index", [0, 1, 2], ids=["record", "delta", "intent"])
+    def test_ac16_notes_accept_6000_characters(self, index: int) -> None:
+        assert getattr(_notes_holders("n" * 6000)[index], "notes") == "n" * 6000
 
     @pytest.mark.parametrize("index", [0, 1, 2], ids=["record", "delta", "intent"])
     def test_ac16_notes_refuse_6001_characters(self, index: int) -> None:
@@ -1110,32 +1200,125 @@ class TestWheypointSchemaFour:
 
         assert _wheypoint_record(edges=edges).edges == edges
 
-    def test_refs_must_be_absolute_uris(self) -> None:
-        with pytest.raises(ValueError, match="to must be an absolute URI"):
-            _ = wc.WorkEdgeKey(to="docs/spec.md", kind=wc.EdgeKind.INFORMS)
-        with pytest.raises(ValueError, match="ref must be an absolute URI"):
-            _ = wc.ArtifactLink(path="docs/spec.md", ref="docs/spec.md")
-        with pytest.raises(ValueError, match=r"copies\[1\] must be an absolute URI"):
-            _ = wc.ProtectedEntry(
-                entry_id="d-1",
-                kind=wc.EntryKind.DECISION,
-                summary="s",
-                state=wc.EntryState.ACTIVE,
-                blocks_continuation=False,
-                origin="wheypoint:project/parent@rev-0001#d-1",
-                copies=("child",),
-            )
+    def test_work_edge_revision_is_host_stamped(self) -> None:
+        edge = wc.WorkEdge(to="repo:docs/spec.md", kind=wc.EdgeKind.INFORMS)
 
-    def test_intent_refuses_an_empty_edge_request(self) -> None:
-        with pytest.raises(ValueError, match="remove_edges must be a non-empty list"):
-            _ = wc.CheckpointIntent(work_id="parent", remove_edges=())
+        assert edge.revision_id is None
+
+    @pytest.mark.parametrize(
+        ("build", "message"),
+        [
+            (
+                lambda: wc.WorkEdgeKey(to="docs/spec.md", kind=wc.EdgeKind.INFORMS),
+                "to must be an absolute URI",
+            ),
+            (
+                lambda: wc.WorkEdge(to="docs/spec.md", kind=wc.EdgeKind.INFORMS),
+                "to must be an absolute URI",
+            ),
+            (
+                lambda: wc.ArtifactLink(path="docs/spec.md", ref="docs/spec.md"),
+                "ref must be an absolute URI",
+            ),
+            (lambda: _entry(copies=("child",)), r"copies\[1\] must be an absolute URI"),
+            (lambda: _entry(origin="parent#d-1"), "origin must be an absolute URI"),
+            (
+                lambda: _entry(
+                    state=wc.EntryState.FORKED, rationale="Moved.", successor="child"
+                ),
+                "successor must be an absolute URI",
+            ),
+            (
+                lambda: wc.EntryTransition(
+                    entry_id="d-1",
+                    action=wc.TransitionAction.FORK,
+                    rationale="Moved.",
+                    successor="child",
+                ),
+                "successor must be an absolute URI",
+            ),
+        ],
+        ids=[
+            "edge-key-to",
+            "edge-to",
+            "link-ref",
+            "copies",
+            "origin",
+            "successor",
+            "transition-successor",
+        ],
+    )
+    def test_refs_must_be_absolute_uris(
+        self, build: Callable[[], object], message: str
+    ) -> None:
+        with pytest.raises(ValueError, match=message):
+            _ = build()
+
+    @pytest.mark.parametrize(
+        ("name", "value", "message"),
+        [
+            ("add_edges", (), "add_edges must not be an empty list"),
+            ("remove_edges", (), "remove_edges must not be an empty list"),
+            (
+                "remove_dossier_forks",
+                (),
+                "remove_dossier_forks must not be an empty list",
+            ),
+            ("remove_dossier_forks", ("f", "f"), "must not contain duplicate 'f'"),
+            (
+                "remove_dossier_forks",
+                ("f" * 2001,),
+                r"remove_dossier_forks\[1\] must be at most 2000",
+            ),
+            ("remove_edges", (_EDGE_KEY, _EDGE_KEY), "remove_edges must not repeat"),
+        ],
+        ids=[
+            "add-edges-empty",
+            "remove-edges-empty",
+            "forks-empty",
+            "forks-duplicate",
+            "forks-over-bound",
+            "remove-edges-duplicate",
+        ],
+    )
+    def test_intent_refuses_a_bad_edge_or_fork_request(
+        self, name: str, value: tuple[object, ...], message: str
+    ) -> None:
+        with pytest.raises(ValueError, match=message):
+            _ = attrs.evolve(_INTENT, **{name: value})
+
+    @pytest.mark.parametrize(
+        ("name", "value", "message"),
+        [
+            ("remove_dossier_forks", ("f", "f"), "must not contain duplicate 'f'"),
+            (
+                "remove_dossier_forks",
+                ("f" * 2001,),
+                r"remove_dossier_forks\[1\] must be at most 2000",
+            ),
+            ("remove_edges", (_EDGE_KEY, _EDGE_KEY), "remove_edges must not repeat"),
+        ],
+        ids=["forks-duplicate", "forks-over-bound", "remove-edges-duplicate"],
+    )
+    def test_delta_refuses_a_bad_edge_or_fork_request(
+        self, name: str, value: tuple[object, ...], message: str
+    ) -> None:
+        with pytest.raises(ValueError, match=message):
+            _ = attrs.evolve(_DELTA, **{name: value})
+
+    @pytest.mark.parametrize(
+        "name", ["add_edges", "remove_edges", "remove_dossier_forks"]
+    )
+    def test_delta_accepts_an_explicit_empty_collection(self, name: str) -> None:
+        delta = attrs.evolve(_DELTA, **{name: ()})
+
+        assert getattr(delta, name) == ()
 
     def test_every_schema_four_field_is_marked_and_defaulted(self) -> None:
-        import attrs
-
         added = {
             wc.WheypointRecord: ("edges",),
             wc.ProtectedEntry: ("origin", "successor", "copies"),
+            wc.EntryTransition: ("successor",),
             wc.ArtifactLink: ("ref",),
             wc.WheypointDelta: ("add_edges", "remove_edges", "remove_dossier_forks"),
             wc.CheckpointIntent: ("add_edges", "remove_edges", "remove_dossier_forks"),

@@ -3270,8 +3270,8 @@ class EntryState(str, Enum):
 class TransitionAction(str, Enum):
     """The only ways a delta may move an entry out of `ACTIVE`.
 
-    `FORK` is host-only: the host applies it when it reconciles a fork, and an
-    agent-authored delta may not carry it."""
+    `FORK` is host-only: the host applies it when it reconciles a fork, and a
+    `CheckpointIntent` may not carry it."""
 
     RESOLVE = "resolve"
     SUPERSEDE = "supersede"
@@ -3557,6 +3557,19 @@ def _successor_rule(
         _lower_identifier(instance, attribute, value)
 
 
+def _fork_successor_rule(
+    instance: ProtectedEntry, attribute: _NamedAttribute, value: object
+) -> None:
+    if instance.state is EntryState.FORKED and value is None:
+        raise ValueError(f"{attribute.name} must name the entry this one moved to")
+    if instance.state is not EntryState.FORKED and value is not None:
+        raise ValueError(
+            f"{attribute.name} must be null unless the entry is forked, "
+            + f"not {value!r}"
+        )
+    _optional_uri(instance, attribute, value)
+
+
 def _rationale_rule(
     instance: ProtectedEntry, attribute: _NamedAttribute, value: object
 ) -> None:
@@ -3604,7 +3617,7 @@ class ProtectedEntry:
         default=None, validator=_optional_uri, metadata={"since": 4}
     )
     successor: str | None = field(
-        default=None, validator=_optional_uri, metadata={"since": 4}
+        default=None, validator=_fork_successor_rule, metadata={"since": 4}
     )
     copies: tuple[str, ...] = field(
         factory=tuple,
@@ -3658,6 +3671,22 @@ def _target_rule(
         _lower_identifier(instance, attribute, value)
 
 
+def _fork_target_rule(
+    instance: EntryTransition, attribute: _NamedAttribute, value: object
+) -> None:
+    fork = instance.action is TransitionAction.FORK
+    if fork and value is None:
+        raise ValueError(
+            f"{attribute.name} must name the entry this one moved to for a "
+            + f"{TransitionAction.FORK.value} transition"
+        )
+    if not fork and value is not None:
+        raise ValueError(
+            f"{attribute.name} must be null for a {instance.action.value} transition"
+        )
+    _optional_uri(instance, attribute, value)
+
+
 @define(frozen=True)
 class EntryTransition:
     """The only way protected state changes: an entry, what happens to it, and
@@ -3668,6 +3697,9 @@ class EntryTransition:
     action: TransitionAction
     rationale: str = field(validator=_bounded_text)
     target_entry_id: str | None = field(default=None, validator=_target_rule)
+    successor: str | None = field(
+        default=None, validator=_fork_target_rule, metadata={"since": 4}
+    )
 
     @property
     def resulting_state(self) -> EntryState:
@@ -3695,11 +3727,17 @@ class ArtifactLink:
 @define(frozen=True)
 class WorkEdge:
     """One typed relation from the owning record to a work item or document.
-    A record holds its edges as a set keyed by `(to, kind)`."""
+    A record holds its edges as a set keyed by `(to, kind)`.
+
+    `revision_id` names the owning record's revision that wrote the edge. The
+    host stamps it at commit, as it does for `ArtifactLink.revision_id`; a
+    caller-supplied value is never honoured."""
 
     to: str = field(validator=_uri)
     kind: EdgeKind = field(validator=validators.instance_of(EdgeKind))
-    revision_id: str = field(validator=_lower_identifier)
+    revision_id: str | None = field(
+        default=None, validator=validators.optional(_lower_identifier)
+    )
     rationale: str | None = field(
         default=None, validator=validators.optional(_bounded_text)
     )
@@ -3713,10 +3751,10 @@ class WorkEdgeKey:
     kind: EdgeKind = field(validator=validators.instance_of(EdgeKind))
 
 
-def _edge_set(
-    item: type[WorkEdge] | type[WorkEdgeKey], *, non_empty: bool = False
-) -> Validator:
-    items = _list_of(item, non_empty=non_empty, limit=_MAX_ITEMS)
+# The since-4 collections are tuples, not the `list` of their neighbours, so a
+# frozen instance stays hashable and immutable all the way down.
+def _edge_set(item: type[WorkEdge] | type[WorkEdgeKey]) -> Validator:
+    items = _list_of(item, limit=_MAX_ITEMS)
 
     def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
         items(instance, attribute, value)
@@ -3959,6 +3997,19 @@ def _one_transition_per_entry(
         seen.add(transition.entry_id)
 
 
+def _agent_transitions(
+    instance: object, attribute: _NamedAttribute, value: list[EntryTransition] | None
+) -> None:
+    _one_transition_per_entry(instance, attribute, value)
+    for transition in value or ():
+        if transition.action is TransitionAction.FORK:
+            raise ValueError(
+                f"{attribute.name} must not carry a "
+                + f"{TransitionAction.FORK.value} transition for "
+                + f"{transition.entry_id!r}: the host derives fork transitions"
+            )
+
+
 @schema_constraints(maxItems=_MAX_ITEMS)
 def _optional_bounded_list(
     instance: object, attribute: _NamedAttribute, value: object
@@ -4155,6 +4206,23 @@ def _optional_non_empty_bounded_list(
         raise ValueError(f"{attribute.name} must not be an empty list")
 
 
+def _not_empty(inner: Validator) -> Validator:
+    def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
+        if value == ():
+            raise ValueError(f"{attribute.name} must not be an empty list")
+        inner(instance, attribute, value)
+
+    constraints = cast("dict[str, object]", getattr(inner, "__schema_constraints__"))
+    setattr(validate, "__schema_constraints__", {**constraints, "minItems": 1})
+    if hasattr(inner, "__schema_item_constraints__"):
+        setattr(
+            validate,
+            "__schema_item_constraints__",
+            getattr(inner, "__schema_item_constraints__"),
+        )
+    return validate
+
+
 @contract("checkpoint-intent")
 @define(frozen=True)
 class CheckpointIntent:
@@ -4202,22 +4270,20 @@ class CheckpointIntent:
     add_edges: tuple[WorkEdge, ...] | None = field(
         default=None,
         converter=_optional_tuple_sequence,
-        validator=validators.optional(_edge_set(WorkEdge, non_empty=True)),
+        validator=validators.optional(_not_empty(_edge_set(WorkEdge))),
         metadata={"since": 4},
     )
     remove_edges: tuple[WorkEdgeKey, ...] | None = field(
         default=None,
         converter=_optional_tuple_sequence,
-        validator=validators.optional(_edge_set(WorkEdgeKey, non_empty=True)),
+        validator=validators.optional(_not_empty(_edge_set(WorkEdgeKey))),
         metadata={"since": 4},
     )
     remove_dossier_forks: tuple[str, ...] | None = field(
         default=None,
         converter=_optional_tuple_sequence,
         validator=validators.optional(
-            _string_list(
-                non_empty=True, limit=_MAX_ITEMS, item_validator=_bounded_text
-            )
+            _not_empty(_string_list(limit=_MAX_ITEMS, item_validator=_bounded_text))
         ),
         metadata={"since": 4},
     )
@@ -4225,7 +4291,7 @@ class CheckpointIntent:
         default=None, validator=_optional_bounded_list
     )
     transitions: list[EntryTransition] | None = field(
-        default=None, validator=_one_transition_per_entry
+        default=None, validator=_agent_transitions
     )
     base_revision_id: str | None = field(
         default=None, validator=validators.optional(_lower_identifier)
