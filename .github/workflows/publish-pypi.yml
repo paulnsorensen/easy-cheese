@@ -2,7 +2,7 @@ name: publish-pypi
 
 # Publish the easy-cheese-schemas package to PyPI when pyproject.toml's version
 # changes on main. release.yml cannot carry this: it force-retargets the version
-# tag onto an orphan `release` branch holding only SKILL.md + .pyz + metadata, so
+# tag onto an orphan `release` branch holding only SKILL.md + wedge launcher + lock + metadata, so
 # no package source is reachable from the published tag. This fires on every
 # pyproject.toml touch and no-ops unless the declared version is new to PyPI.
 #

@@ -6,7 +6,7 @@ Each per-curd press pass hardened its own file in isolation:
   (skills/cook/references/quality-gates.md). A future edit to one without
   the other would silently drift and no test would catch it.
 - W2 (curd 6) added `_cmd_classify` unit coverage and curd 1 documented the
-  `python3 skills/cook/scripts/cook.pyz baseline` example in cook's corpus,
+  `python3 skills/cook/scripts/cook baseline` example in cook's corpus,
   but nothing ties that documented example command to the actual subcommand
   dispatch table -- the class of bug this run actually hit.
 - curd 4 asserted every consumer's handoff-slug fence carries a bare
@@ -28,7 +28,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 COOK_SKILL = REPO_ROOT / "skills" / "cook" / "SKILL.md"
 QUALITY_GATES = REPO_ROOT / "skills" / "cook" / "references" / "quality-gates.md"
 MANIFEST_SCHEMA = REPO_ROOT / "skills" / "ultracook" / "references" / "manifest-schema.json"
-COOK_PYZ = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import skill_archives  # noqa: E402
 
 
 def read(path: Path) -> str:
@@ -99,7 +100,7 @@ class TestCookSkillMatchesQualityGatesDoc:
 
 # ---------------------------------------------------------------------------
 # 2. Doc example <-> CLI truth: ultracook/SKILL.md's documented command must
-#    actually dispatch through the built .pyz bundle.
+#    actually dispatch through the built cook archive.
 # ---------------------------------------------------------------------------
 
 
@@ -109,21 +110,21 @@ class TestBaselineCaptureExampleDispatches:
         # (and the documented example) now live under cook's own corpus --
         # SKILL.md or one of its references/*.md files.
         body = _cook_corpus()
-        assert "cook.pyz baseline" in body, (
+        assert "scripts/cook baseline" in body, (
             "cook's corpus (SKILL.md + references/*.md) must document the "
-            "`cook.pyz baseline` invocation this test then verifies "
+            "`scripts/cook baseline` invocation this test then verifies "
             "actually dispatches"
         )
 
     def test_documented_baseline_subcommand_actually_dispatches(self) -> None:
-        # Build the real cook.pyz bundle the same way tests/fanout does
+        # Run the built cook archive (scripts/skill_archives.py)
         # and invoke it exactly as the doc's example prescribes: subcommand
         # `baseline`, gate failures as JSON on stdin. If a future edit
         # unregisters baseline.py from the bundle (as it was before the
         # wiring commit landed), this fails instead of the doc silently
         # documenting a dead command.
 
-        bundle = COOK_PYZ
+        bundle = skill_archives.archive_path("cook")
         payload = {
             "baseline": [{"suite": "unit", "test_id": "test_a", "signature": "boom"}],
             "current": [{"suite": "unit", "test_id": "test_a", "signature": "boom"}],
@@ -135,7 +136,7 @@ class TestBaselineCaptureExampleDispatches:
             text=True,
         )
         assert result.returncode == 0, (
-            f"documented `cook.pyz baseline` command failed: {result.stderr}"
+            f"documented `scripts/cook baseline` command failed: {result.stderr}"
         )
         emitted = cast(dict[str, object], json.loads(result.stdout))
         assert emitted == {
@@ -193,20 +194,20 @@ class TestBaselineBlockShapeAgreesWithSchema:
 
 # ---------------------------------------------------------------------------
 # 4. Doc example <-> CLI truth: cook/SKILL.md's repair-pathway `worktree`
-#    subcommand must actually dispatch through the built cook.pyz bundle.
+#    subcommand must actually dispatch through the built cook archive.
 # ---------------------------------------------------------------------------
 
 
 class TestCookWorktreeSubcommandDispatches:
     def test_cook_skill_documents_worktree_subcommand(self) -> None:
         body = _cook_corpus()
-        assert "cook.pyz worktree" in body, (
+        assert "scripts/cook worktree" in body, (
             "cook's corpus (SKILL.md + references/*.md) must document the "
-            "`cook.pyz worktree` invocation this test then verifies actually dispatches"
+            "`scripts/cook worktree` invocation this test then verifies actually dispatches"
         )
 
-    def test_cook_pyz_worktree_create_actually_dispatches(self, tmp_path: Path) -> None:
-        # Build the real cook.pyz bundle the same way tests/fanout does and
+    def test_cook_worktree_create_actually_dispatches(self, tmp_path: Path) -> None:
+        # Run the built cook archive (scripts/skill_archives.py) and
         # invoke `worktree create` exactly as the doc's example prescribes.
         # If cook's SKILLS registry doesn't wire the shared worktree.py module
         # in, this fails instead of the doc silently documenting a dead command.
@@ -222,12 +223,12 @@ class TestCookWorktreeSubcommandDispatches:
         _ = sp.run(["git", "-C", str(repo), "add", "-A"], check=True)
         _ = sp.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
 
-        bundle = COOK_PYZ
+        bundle = skill_archives.archive_path("cook")
         result = sp.run(
             [sys.executable, str(bundle), "worktree", "create", "--slug", "repair-x", "--base", "main", "--repo", str(repo)],
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, f"documented `cook.pyz worktree create` failed: {result.stderr}"
+        assert result.returncode == 0, f"documented `scripts/cook worktree create` failed: {result.stderr}"
         emitted = cast(dict[str, object], json.loads(result.stdout))
         assert emitted == {"path": ".claude/worktrees/agent-repair-x", "branch": "worktree-agent-repair-x"}

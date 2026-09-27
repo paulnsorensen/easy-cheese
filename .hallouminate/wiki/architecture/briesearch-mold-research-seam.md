@@ -23,7 +23,7 @@ Never persist a credential-bearing URL. Canonical identity comes from hostname a
 
 ## The finalizer is the Mold-to-Cook boundary
 
-`python3 skills/mold/scripts/mold.pyz finalize` is the single Mold publication path. It validates the bounded spec and readiness evidence, publishes the referenced artifacts, and reveals the canonical `HandoffPointer` under `pointers/<operation-id>.json`. Cook consumes that pointer through the shared handoff validator, which resolves and digest-checks the references, approval, and landing before readiness. Cook no longer performs the removed optional-spec landing lookup or emits its legacy stderr note.
+`python3 skills/mold/scripts/mold finalize` is the single Mold publication path. It validates the bounded spec and readiness evidence, publishes the referenced artifacts, and reveals the canonical `HandoffPointer` under `pointers/<operation-id>.json`. Cook consumes that pointer through the shared handoff validator, which resolves and digest-checks the references, approval, and landing before readiness. Cook no longer performs the removed optional-spec landing lookup or emits its legacy stderr note.
 
 ## Grounding rows must be real
 

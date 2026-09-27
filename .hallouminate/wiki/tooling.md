@@ -94,36 +94,38 @@ gate.
   operation, and report the precision loss.
 - **Workflow skills stay portable.** There is no repo-wide MCP requirement.
 
-## `.pyz` bundles
+## `.pyz` archives
 
-Every Python-backed skill ships exactly one same-named Shiv archive at
-`skills/<skill>/scripts/<skill>.pyz`; there is no `common.pyz` or
-`COMMON_CONSUMERS` fan-out.[^1] Runtime source lives under
-`src/easy_cheese/`: each skill application depends on the cohesive shared
-distribution and the published schemas package through package metadata.[^2]
+Every Python-backed skill ships exactly one same-named wedge launcher at
+`skills/<skill>/scripts/<skill>` with a lock beside it; there is no
+`common.pyz` or `COMMON_CONSUMERS` fan-out.[^1] Runtime source lives under
+`src/easy_cheese/`; each archive vendors that whole package plus
+`src/easy_cheese_schemas` and dispatches only its own skill's commands.[^2]
 
-`just bundle` rebuilds every archive from PEP 517 wheels in a private
-wheelhouse. `requirements/runtime.txt` is the sole committed hash lock and
-admits only external wheels. Each build uses pip's resolved-install report to
-write the complete external-plus-internal closure beside the temporary
-wheelhouse, then gives that ephemeral file to Shiv under `--require-hashes`.
-Locally built wheel hashes are verified during assembly but never versioned.[^3]
+`just wedge-lock` rebuilds every archive through the wedge commit that
+`scripts/wedge.py` pins and rewrites each lock and launcher. The archive
+closure is the root project's non-dev export from `uv.lock`: the schemas'
+dependencies plus the `runtime` dependency group. `requirements/runtime.txt`
+pins the same closure for the test and typing environments, and a test keeps
+the two equal.[^3]
 
-The archives are committed deployment artifacts. `build-pyz.yml` rebuilds them
-in a read-only CI job, compares canonical archive-member content against
-`HEAD`, and runs isolation tests; it never commits generated changes. Changes
-to runtime source, build inputs, the external runtime lock, manifests, or
-committed archives must therefore be followed by `just bundle` before
-publication.[^4]
+The archives are release assets, not committed files. `wedge.yml` runs
+`wedge check` on every pull request (a stale lock or an edited launcher fails)
+and, after a merge to `main`, builds each locked skill and uploads any missing
+`<skill>-<digest12>.pyz` to the rolling `wedge` prerelease. The launcher
+downloads that asset on first run and verifies its content digest. Changes to
+runtime source, `pyproject.toml`, `uv.lock`, or a `wedge.toml` must therefore
+be followed by `just wedge-lock` before publication. Tests execute built
+archives through `scripts/skill_archives.py`, never the launcher.[^4]
 
 See the [bundle pipeline](./architecture/pyz-bundling-pipeline.md) and
 [skill Python bundle doctrine](./architecture/skill-python-bundle-doctrine.md)
 for the dependency and purity contracts.
 
-[^1]: scripts/build_pyz.py
+[^1]: skills/*/wedge.toml; scripts/wedge.py
 [^2]: pyproject.toml; src/easy_cheese/shared; src/easy_cheese/skills
-[^3]: scripts/build_pyz.py; requirements/runtime.txt
-[^4]: .github/workflows/build-pyz.yml; scripts/check_bundles.py
+[^3]: pyproject.toml; uv.lock; requirements/runtime.txt; tests/python/test_wedge_pin.py
+[^4]: .github/workflows/wedge.yml; scripts/runtime_gates.py; scripts/skill_archives.py
 
 ## CI workflows
 

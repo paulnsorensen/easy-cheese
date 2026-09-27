@@ -36,14 +36,8 @@ from easy_cheese.skills.cook.contract_handlers import accept_main
 
 from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
-COOK_PYZ = (
-    Path(__file__).resolve().parents[2] / "skills" / "cook" / "scripts" / "cook.pyz"
-)
-
-pytestmark = pytest.mark.skipif(  # noqa: V107
-    not COOK_PYZ.is_file(),
-    reason="cook.pyz bundle is not present in this checkout",
-)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import skill_archives  # noqa: E402
 
 
 def _write_ref(
@@ -236,9 +230,10 @@ def test_local_dialogue_requires_the_question_and_exact_response(
 def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     _ = env.pop("PYTHONPATH", None)
+    archive = skill_archives.archive_path("cook")
     return subprocess.run(
-        [sys.executable, str(COOK_PYZ), *args],
-        cwd=str(COOK_PYZ.parent if cwd is None else cwd),
+        [sys.executable, str(archive), *args],
+        cwd=str(archive.parent if cwd is None else cwd),
         capture_output=True,
         text=True,
         env=env,

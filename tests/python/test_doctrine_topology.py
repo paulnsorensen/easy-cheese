@@ -1,93 +1,113 @@
-"""Doctrine-topology conformance: the one-skill/one-bundle boundary rules.
+"""Doctrine-topology conformance: the one-skill/one-launcher boundary rules.
 
-Easy Cheese's landed doctrine forbids reintroducing a shared common.pyz,
-copying another skill's sources into a skill's own tree, and flattening the
-src/ runtime roots. These tests fabricate each violation and assert the
-enforcement in scripts/check_bundles.py (or, where no runtime checker exists,
-the repo's own layout) rejects it.
-
-Whole-package staging markers (nested dirs, .dist-info metadata) are already
-guarded by tests/python/test_build_pyz_tree_staging.py against real builds;
-not duplicated here.
+Easy Cheese's landed doctrine forbids reintroducing a shared common.pyz or any
+checked-in archive, copying another skill's sources into a skill's own tree,
+naming another skill's launcher, and flattening the src/ runtime roots. These
+tests fabricate each violation and assert scripts/runtime_gates.py (or, where
+no runtime checker exists, the repo's own layout) rejects it.
 """
 
 from __future__ import annotations
 
-import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from scripts import check_bundles
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+import runtime_gates  # noqa: E402
 
 
-def _init_repo(root: Path) -> None:
-    """Commit everything under `root` so a baseline blob read succeeds."""
-    for command in (
-        ["git", "init", "--quiet"],
-        ["git", "config", "user.email", "t@t.example"],
-        ["git", "config", "user.name", "t"],
-    ):
-        _ = subprocess.run(command, cwd=root, check=True)
-    _ = subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-    _ = subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=root, check=True)
+def _scan(root: Path, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    monkeypatch.setattr(runtime_gates, "REPO_ROOT", root)
+    return runtime_gates.check_skill_references()
 
 
-def test_common_pyz_reintroduction_fails_the_bundle_gate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def _skill(root: Path, name: str) -> Path:
+    skill_dir = root / "skills" / name
+    (skill_dir / "scripts").mkdir(parents=True)
+    return skill_dir
+
+
+def test_checked_in_archive_fails_the_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A resurrected skills/*/scripts/common.pyz must fail the gate outright."""
-    bundle_dir = tmp_path / "skills" / "demo" / "scripts"
-    bundle_dir.mkdir(parents=True)
-    _ = (bundle_dir / "common.pyz").write_bytes(b"stale-shared-bundle")
-    _init_repo(tmp_path)
-    monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
+    """A resurrected skills/*/scripts/*.pyz must fail the gate outright."""
+    _ = (_skill(tmp_path, "demo") / "scripts" / "common.pyz").write_bytes(b"stale")
 
-    assert check_bundles.main() == 1
-    output = capsys.readouterr().out
-    assert "obsolete shared bundle" in output
+    violations = _scan(tmp_path, monkeypatch)
+
+    assert any("checked-in archives are retired" in v for v in violations)
 
 
-def test_check_pyz_references_flags_common_pyz_mentions(
+def test_common_pyz_mentions_are_flagged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Docs still naming the retired shared bundle are a doctrine violation."""
-    skill_dir = tmp_path / "skills" / "demo"
-    skill_dir.mkdir(parents=True)
-    _ = (skill_dir / "SKILL.md").write_text("Shared helpers live in common.pyz.\n")
-    monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
+    _ = (_skill(tmp_path, "demo") / "SKILL.md").write_text(
+        "Shared helpers live in common.pyz.\n"
+    )
 
-    violations = check_bundles.check_pyz_references()
+    violations = _scan(tmp_path, monkeypatch)
+
     assert any("obsolete shared bundle common.pyz" in v for v in violations)
 
 
-def test_check_pyz_references_flags_cross_skill_source_copying(
+def test_retired_archive_tokens_are_flagged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A skill's own source naming a sibling skill's .pyz signals its code
-    or docs leaked in from another skill's tree. Static archive inspection cannot
-    see this violation because it audits one archive at a time.
-    """
-    demo_scripts = tmp_path / "skills" / "demo" / "scripts"
-    demo_scripts.mkdir(parents=True)
-    _ = (demo_scripts / "helper.py").write_text(
+    """A skill's own source naming any .pyz signals code or docs copied from the
+    retired archive era, or from another skill's tree."""
+    _ = (_skill(tmp_path, "demo") / "scripts" / "helper.py").write_text(
         "# copied from other-skill.pyz's helper module\n"
     )
-    monkeypatch.setattr(check_bundles, "REPO_ROOT", tmp_path)
 
-    violations = check_bundles.check_pyz_references()
-    assert any(
-        "other-skill.pyz, not its own demo.pyz" in v for v in violations
+    violations = _scan(tmp_path, monkeypatch)
+
+    assert any("references retired archive other-skill.pyz" in v for v in violations)
+
+
+def test_cross_skill_launcher_reference_is_flagged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A skill may invoke only its own launcher."""
+    _ = (_skill(tmp_path, "demo") / "SKILL.md").write_text(
+        "Run `python3 skills/cook/scripts/cook paths list`.\n"
     )
+
+    violations = _scan(tmp_path, monkeypatch)
+
+    assert any("references cook's launcher, not its own scripts/demo" in v for v in violations)
+
+
+def test_mismatched_launcher_path_is_flagged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = (_skill(tmp_path, "cook") / "SKILL.md").write_text(
+        "Run `python3 skills/other-skill/scripts/cook paths list`.\n"
+    )
+
+    violations = _scan(tmp_path, monkeypatch)
+
+    assert any("which is not that skill's launcher" in v for v in violations)
+
+
+def test_own_launcher_reference_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = (_skill(tmp_path, "cook") / "SKILL.md").write_text(
+        "Run `python3 skills/cook/scripts/cook paths list` or `scripts/cook paths`.\n"
+    )
+
+    assert _scan(tmp_path, monkeypatch) == []
 
 
 def test_source_tree_has_no_flat_runtime_roots() -> None:
     """Every runtime source lives under src/easy_cheese/{skills,shared,cli} or
     src/easy_cheese_schemas; nothing else may sit at the src/ or
-    src/easy_cheese root (the doctrine this bundle-currency gate exists to
-    keep honest).
+    src/easy_cheese root (the doctrine the reference gate exists to keep honest).
     """
     src_root = REPO_ROOT / "src"
     ignored = {"__pycache__"}

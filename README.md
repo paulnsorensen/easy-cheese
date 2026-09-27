@@ -24,7 +24,7 @@ A portable, harness-agnostic Agent Skills toolkit for any [Agent Skills](https:/
 - [Skills](#skills)
 - [Scope](#scope)
 - [Python package](#python-package)
-- [Build skill archives](#build-skill-archives)
+- [Run and relock skill archives](#run-and-relock-skill-archives)
 - [Optional tools](#optional-tools)
 - [Install](#install)
 - [Validate](#validate)
@@ -54,7 +54,7 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 
 Content shared _across_ skills lives in the `cheese` skill's `references/` directory (for example, `skills/cheese/references/handoff-gate.md`). Full installs include `cheese`. When you install one workflow skill, install `cheese` with it. Skills reference shared material by sibling-relative path (`../cheese/references/<file>.md` from a `SKILL.md`, `../../cheese/references/<file>.md` from a `references/*.md`) so links resolve in both the repository and an installed skills directory.
 
-A Python-backed skill ships exactly one executable archive at `skills/<skill>/scripts/<skill>.pyz`. Runtime source lives under `src/easy_cheese/`; Python source does not live under `skills/`. A skill that does not execute Python ships no archive.
+A Python-backed skill ships exactly one executable archive at `skills/<skill>/scripts/<skill>`. Runtime source lives under `src/easy_cheese/`; Python source does not live under `skills/`. A skill that does not execute Python ships no archive.
 
 ## Skills
 
@@ -123,7 +123,7 @@ before review.
 
 Easy-cheese is intentionally a small surface. What that means in practice:
 
-- **Skills only.** The repository publishes no custom agents, commands, eta templates, or harness-specific bundles. `SKILL.md` defines each capability, and Python-backed skills include a portable `.pyz` runtime archive.
+- **Skills only.** The repository publishes no custom agents, commands, eta templates, or harness-specific bundles. `SKILL.md` defines each capability, and Python-backed skills include a small launcher that fetches their portable `.pyz` runtime archive from a GitHub release.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. Source-code work follows the shared routing contract: prefer tilth when present, use equivalent native AST/LSP/anchored-edit backends when available, and report any precision loss from bounded fallbacks.
 - **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while approved file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
@@ -138,24 +138,23 @@ pip install easy-cheese-schemas
 
 For the stability policy, `schema_version` contract, and strictness tiers, see [Easy-cheese schemas](https://github.com/paulnsorensen/easy-cheese/blob/main/docs/easy-cheese-schemas.md).
 
-## Build skill archives
+## Run and relock skill archives
 
-You don't need Shiv or pip to run a checked-in skill archive. Run an archive with Python:
-
-```sh
-python3 skills/<skill>/scripts/<skill>.pyz <subcommand>
-```
-
-If you change runtime source, build inputs, a phase contract, or a committed archive, install the pinned build tools and rebuild every archive:
+You need only Python 3.11 or newer to run a skill. Each Python-backed skill commits a small launcher and a lock; the launcher downloads the skill's content-addressed `.pyz` from this repository's `wedge` release on first run, verifies it against the lock, caches it, and runs it:
 
 ```sh
-python3 -m pip install --requirement requirements-build.txt
-just bundle
+python3 skills/<skill>/scripts/<skill> <subcommand>
 ```
 
-`just bundle` builds each application from PEP 517 wheels in a private wheelhouse and resolves the complete external and internal dependency closure into an ephemeral hash-locked requirements file beside that wheelhouse. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The bundle resolves a selected target lazily and calls it with only that command's arguments.
+If you change runtime source, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`, relock every skill and commit the regenerated locks and launchers:
 
-The external runtime pins in `requirements/runtime.txt` are the sole committed hash lock. That lock includes the `fromargs` CLI library, installed from its PyPI release. `just check` validates the repository but does not rebuild the archives. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
+```sh
+just wedge-lock
+```
+
+`just wedge-lock` runs [wedge](https://github.com/paulnsorensen/skillz-that-grillz/tree/main/lib), pinned by commit in `scripts/wedge.py`. wedge exports the runtime closure from `uv.lock`, vendors `src/`, builds one reproducible archive per skill, and pins a digest over the archive's contents. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The archive resolves a selected target lazily and calls it with only that command's arguments.
+
+`just check` runs `wedge check`, which fails on a stale lock without building. After a merge to `main`, the `wedge` workflow builds each locked skill and uploads any missing archive to the release. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
 
 ## Optional tools
 

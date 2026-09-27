@@ -87,6 +87,16 @@ jobs:
           pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
           pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
 
+      - name: Gate the checked-in runtime
+        run: python3 scripts/runtime_gates.py
+
+      # Every suite that executes a skill runs its built archive, not the
+      # committed launcher. Build the set once here through the pinned wedge.
+      - name: Build skill archives once
+        run: |
+          python3 scripts/skill_archives.py --out-dir "$RUNNER_TEMP/archives"
+          echo "EASY_CHEESE_PREBUILT_PYZ=$RUNNER_TEMP/archives" >> "$GITHUB_ENV"
+
       - name: Run melt script tests
         run: python3 -m pytest tests/python -q
 

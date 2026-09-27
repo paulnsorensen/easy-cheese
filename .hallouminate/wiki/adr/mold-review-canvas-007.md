@@ -1,6 +1,6 @@
 # ADR: Keep the local review transport bounded
 
-Status: implemented (2026-09-19); the bounded local review transport and Mold canvas are available through `mold.pyz`. Remaining prerequisites are typed-plan approval and the existing project quality gates.
+Status: implemented (2026-09-19); the bounded local review transport and Mold canvas are available through the mold launcher. Remaining prerequisites are typed-plan approval and the existing project quality gates.
 
 ## Context
 
@@ -8,7 +8,7 @@ A browser-accessible localhost server still needs an explicit access and file bo
 
 ## Decision
 
-Use localhost, a launch token, host/origin checks, and declared copied assets. Expose serve, publish, poll, and close through mold.pyz.[^1]
+Use localhost, a launch token, host/origin checks, and declared copied assets. Expose serve, publish, poll, and close through the mold launcher.[^1]
 
 ## Alternatives
 

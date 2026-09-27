@@ -2,6 +2,7 @@
 
 ## Log
 
+- 2026-09-27 · wedge-migration · merged · architecture/pyz-bundling-pipeline.md, architecture/skill-python-bundle-doctrine.md, tooling.md, architecture.md, architecture/bundle-command-dispatch.md, architecture/ultracook-runtime-retirement.md, gotchas/stacked-pr-restack.md · wedge replaces the committed Shiv archives: launcher + lock per skill, assets on the `wedge` release, gates in scripts/runtime_gates.py; pyz-pipeline-contracts ADRs and spec marked superseded
 - 2026-07-22 · cook+age:baseline-repair-pathway · merged · adr/baseline-repair-pathway-004.md · dispatch-brief-level override (chain forward with `--auto --open-pr` via prompt instruction, not a SKILL.md edit) added to the Decision bullet.
 - 2026-07-22 · cook+age:baseline-repair-pathway · merged · adr/plate-publication-boundary-001.md · new pre-check ahead of New-PR topology policy: a `worktree-agent-repair-*` branch resolves through the repair pathway's mechanical file-overlap check first.
 
@@ -85,7 +86,7 @@
 - 2026-09-10 · session-analytics:fan-out · new-page · analytics/fanout-patterns-2026-09-10.md · no parallel fan-out, coder chains are continuations, age absorbs cure (67 coders), reviewer mode gate never fires, taste-test fix-rate parity → `reviewer (taste-test)` and `gate-runner` tier rows; time-ordered attribution gotcha.
 
 
-- 2026-09-19 · pr-702-forgiving-cli · new-page · architecture/bundle-command-dispatch.md · runtime dispatch of `.pyz` bundles: top-level help, exact-name and close-match guidance with the `_` alias, the `--json`/`--full`-only hoist rule, the quote-repair rule and its `cli.run` boundary, one argv for the age gate, `LEAVES`, and the generated `bundle_command_index`.
+- 2026-09-19 · pr-702-forgiving-cli · new-page · architecture/bundle-command-dispatch.md · runtime dispatch of skill archives: top-level help, exact-name and close-match guidance with the `_` alias, the `--json`/`--full`-only hoist rule, the quote-repair rule and its `cli.run` boundary, one argv for the age gate, `LEAVES`, and the generated `bundle_command_index`.
 
 - 2026-09-20 · cdfe10a30b682635 · merged · gotchas/wheypoint-resume-traps.md · PR710 recovery publication ownership, serialized idempotency, immutable first-checkpoint evidence, and explicit-root corpus selection.
 

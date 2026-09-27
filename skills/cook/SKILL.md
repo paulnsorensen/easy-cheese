@@ -33,7 +33,7 @@ Do not weaken an existing test.
 
 ## Phase entry
 
-Run `python3 skills/cook/scripts/cook.pyz wheypoint-resolve --ref <slug>`.
+Run `python3 skills/cook/scripts/cook wheypoint-resolve --ref <slug>`.
 `authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
@@ -43,7 +43,7 @@ Show advisory `stale-commit` and `grounded-path-missing` findings.
 
 Accept a pasted spec or issue, focused acceptance criteria, or an unambiguous task.
 Read explicit spec paths verbatim.
-Resolve a bare slug to `path` from `python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>`.
+Resolve a bare slug to `path` from `python3 skills/cook/scripts/cook artifact-path specs <slug>`.
 A Mold handoff pointer, a spec path, and a slug enter through § Mold-to-Cook ingress and preparation.
 Flags:
 
@@ -106,7 +106,7 @@ Closed N/A bypasses Press.
 For big work, ask "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
 Keep waves at a maximum of four.
 
-Use `python3 skills/cook/scripts/cook.pyz worktree teardown` for cleanup.
+Use `python3 skills/cook/scripts/cook worktree teardown` for cleanup.
 Propagate `--auto` through dispatched phases.
 
 ## Baseline capture
@@ -167,7 +167,7 @@ Use the canonical boundary writer when you emit this handoff for the typed fan r
 Carry the result schema explicitly:
 
 ```text
-python3 skills/cook/scripts/cook.pyz write-handoff-artifact \
+python3 skills/cook/scripts/cook write-handoff-artifact \
   --slug <slug> --status <status> --phase cook --next age \
   --artifact <artifact-path> --orientation "<one-line orientation>" \
   --payload-schema https://schemas.easy-cheese.dev/curd-result \

@@ -9,14 +9,15 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BUNDLE = ROOT / "skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz"
+sys.path.insert(0, str(ROOT / "scripts"))
+import skill_archives  # noqa: E402
 
 
 def _run(config: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HALLOUMINATE_CONFIG"] = str(config)
     env["XDG_DATA_HOME"] = str(config.parent / "data")
-    return subprocess.run([sys.executable, str(BUNDLE), *args], env=env, text=True, capture_output=True)
+    return subprocess.run([sys.executable, str(skill_archives.archive_path("easy-cheese-setup")), *args], env=env, text=True, capture_output=True)
 
 
 def test_global_migrate_legacy_dry_run_preserves_config(tmp_path: Path) -> None:

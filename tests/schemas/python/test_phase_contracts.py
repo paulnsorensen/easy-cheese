@@ -86,9 +86,8 @@ class _WriterModule(Protocol):
     ) -> Path: ...
 
 
-class _BuildPyzModule(Protocol):
+class _RuntimeGatesModule(Protocol):
     REPO_ROOT: Path
-    SCHEMA_ROOT: Path
     GENERATED_RUNTIME_SOURCES: tuple[tuple[Path, str, Callable[[], str]], ...]
 
     def _compiled_phase_registry_source(self) -> str: ...
@@ -101,7 +100,7 @@ class _BuildPyzModule(Protocol):
 
     def _compiled_schema_catalog_source(self) -> str: ...
 
-    def build_bundles(self, destinations: dict[str, Path]) -> dict[str, Path]: ...
+    def check(self) -> list[str]: ...
 
 
 @pytest.fixture(scope="module")
@@ -266,14 +265,14 @@ def test_checked_in_registry_projection_matches_build_generator() -> None:
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz: _BuildPyzModule = cast(
-        _BuildPyzModule,
-        cast(object, _load("phase_contract_build_pyz", scripts / "build_pyz.py")),
+    runtime_gates: _RuntimeGatesModule = cast(
+        _RuntimeGatesModule,
+        cast(object, _load("phase_contract_runtime_gates", scripts / "runtime_gates.py")),
     )
 
     assert (
         REPO_ROOT / "src" / "easy_cheese_schemas" / "_compiled_phase_registry.py"
-    ).read_text(encoding="utf-8") == build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
+    ).read_text(encoding="utf-8") == runtime_gates._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
 
 
 def _write_phase_yaml(path: Path, source: str) -> None:
@@ -304,22 +303,22 @@ def test_build_compiler_is_clean_bootstrap_safe_and_fresh_per_call(
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz: _BuildPyzModule = cast(
-        _BuildPyzModule,
-        cast(object, _load("phase_contract_build_bootstrap", scripts / "build_pyz.py")),
+    runtime_gates: _RuntimeGatesModule = cast(
+        _RuntimeGatesModule,
+        cast(object, _load("phase_contract_gate_bootstrap", scripts / "runtime_gates.py")),
     )
-    monkeypatch.setattr(build_pyz, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(runtime_gates, "REPO_ROOT", tmp_path)
     declaration = tmp_path / "skills" / "smoke" / "phase-contract.yaml"
     _write_phase_yaml(declaration, "smoke")
 
-    first = build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
+    first = runtime_gates._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
     _ = declaration.write_text(
         declaration.read_text(encoding="utf-8").replace(
             "source: smoke", "source: fresh"
         ),
         encoding="utf-8",
     )
-    second = build_pyz._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
+    second = runtime_gates._compiled_phase_registry_source()  # pyright: ignore[reportPrivateUsage]
 
     assert 'source": "smoke"' in first
     assert 'source": "fresh"' in second
@@ -341,18 +340,18 @@ def test_checked_in_generated_file_bytes_covers_missing_stale_and_matching(
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz: _BuildPyzModule = cast(
-        _BuildPyzModule,
+    runtime_gates: _RuntimeGatesModule = cast(
+        _RuntimeGatesModule,
         cast(
             object,
             _load(
                 f"generated_file_validator_{artifact_name.replace(' ', '_')}",
-                scripts / "build_pyz.py",
+                scripts / "runtime_gates.py",
             ),
         ),
     )
     generated = tmp_path / source_name
-    validate = build_pyz._checked_in_generated_file_bytes  # pyright: ignore[reportPrivateUsage]
+    validate = runtime_gates._checked_in_generated_file_bytes  # pyright: ignore[reportPrivateUsage]
 
     with pytest.raises(RuntimeError) as missing:
         _ = validate(
@@ -390,14 +389,14 @@ def test_checked_in_catalog_projection_matches_build_generator() -> None:
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz: _BuildPyzModule = cast(
-        _BuildPyzModule,
-        cast(object, _load("schema_catalog_build_pyz", scripts / "build_pyz.py")),
+    runtime_gates: _RuntimeGatesModule = cast(
+        _RuntimeGatesModule,
+        cast(object, _load("schema_catalog_runtime_gates", scripts / "runtime_gates.py")),
     )
 
     assert (REPO_ROOT / "src" / "easy_cheese_schemas" / "_schema_catalog.py").read_text(
         encoding="utf-8"
-    ) == build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    ) == runtime_gates._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_schema_catalog_compilation_follows_the_inventory(
@@ -412,50 +411,48 @@ def test_schema_catalog_compilation_follows_the_inventory(
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz: _BuildPyzModule = cast(
-        _BuildPyzModule,
-        cast(object, _load("schema_catalog_build_inventory", scripts / "build_pyz.py")),
+    runtime_gates: _RuntimeGatesModule = cast(
+        _RuntimeGatesModule,
+        cast(object, _load("schema_catalog_gate_inventory", scripts / "runtime_gates.py")),
     )
     stub = ModuleType("easy_cheese_schemas._fresh_plan_stub")
     fresh_plan = type("FreshPlan", (), {})
     stub.__dict__["registered_contracts"] = lambda: (("fresh-plan", fresh_plan),)
     monkeypatch.setitem(sys.modules, stub.__name__, stub)
-    inventory = build_pyz._contract_modules_inventory()  # pyright: ignore[reportPrivateUsage]
+    inventory = runtime_gates._contract_modules_inventory()  # pyright: ignore[reportPrivateUsage]
     listed = cast(tuple[str, ...], getattr(inventory, "CONTRACT_MODULES"))
     monkeypatch.setattr(inventory, "CONTRACT_MODULES", (*listed, stub.__name__))
 
-    rendered = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    rendered = runtime_gates._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
 
     assert "curd-plan" in rendered
     assert "fresh-plan" in rendered
 
 
-def test_bundle_build_rejects_stale_checked_in_catalog(
+def test_runtime_gate_rejects_stale_checked_in_catalog(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A checked-in catalog that disagrees with the compiled one stops the build."""
+    """A checked-in catalog that disagrees with the compiled one fails the gate."""
     scripts = REPO_ROOT / "scripts"
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
-    build_pyz: _BuildPyzModule = cast(
-        _BuildPyzModule,
-        cast(object, _load("schema_catalog_build_stale", scripts / "build_pyz.py")),
+    runtime_gates: _RuntimeGatesModule = cast(
+        _RuntimeGatesModule,
+        cast(object, _load("schema_catalog_gate_stale", scripts / "runtime_gates.py")),
     )
-    compiled = build_pyz._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
+    compiled = runtime_gates._compiled_schema_catalog_source()  # pyright: ignore[reportPrivateUsage]
     stale = tmp_path / "_schema_catalog.py"
     _ = stale.write_text(compiled.replace('/pr-plan"', '/stale-plan"', 1), encoding="utf-8")
     assert stale.read_text(encoding="utf-8") != compiled
     monkeypatch.setattr(
-        build_pyz,
+        runtime_gates,
         "GENERATED_RUNTIME_SOURCES",
-        ((stale, "schema catalog", build_pyz._compiled_schema_catalog_source),),  # pyright: ignore[reportPrivateUsage]
+        ((stale, "schema catalog", runtime_gates._compiled_schema_catalog_source),),  # pyright: ignore[reportPrivateUsage]
     )
-    target = tmp_path / "cook.pyz"
 
-    with pytest.raises(RuntimeError, match="checked-in schema catalog is stale"):
-        _ = build_pyz.build_bundles({"cook": target})
+    problems = runtime_gates.check()
 
-    assert not target.exists()
+    assert f"checked-in schema catalog is stale; regenerate {stale}" in problems
 
 
 def test_compile_rejects_duplicate_source() -> None:

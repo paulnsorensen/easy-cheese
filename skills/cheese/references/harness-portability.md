@@ -10,7 +10,7 @@ Prefer bundled or repo-local paths.
 They work on every host:
 
 - `src/easy_cheese/shared/*.py` for repo-wide helpers such as corpus path resolution, handoff artifact writing, and slug readers.
-- `skills/<skill>/scripts/*.pyz` for skill-specific helpers bundled with the repo.
+- `skills/<skill>/scripts/<skill>` for the skill launcher, which runs the helpers bundled with the repo.
 
 Do not use the `${CLAUDE_SKILL_DIR}` environment variable in invocation paths.
 Claude Code substitutes it, but Codex CLI does not.

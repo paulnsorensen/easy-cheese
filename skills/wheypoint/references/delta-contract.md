@@ -8,7 +8,7 @@ No plugin hook is part of this contract. Issue #654 ask 4 (a `/compact` hook tha
 
 ## Entry resolution
 
-Each phase uses its own archive for entry resolution: `python3 skills/<phase>/scripts/<phase>.pyz wheypoint-resolve --ref <slug>`.
+Each phase uses its own archive for entry resolution: `python3 skills/<phase>/scripts/<phase> wheypoint-resolve --ref <slug>`.
 Pass `--corpus-root <dir>` to read this project's corpus from another location; the writer accepts the same flag.
 A corpus belonging to another project resolves but gates on `project-mismatch`, so the flag relocates a corpus rather than borrowing one.
 `--corpus-root` is not accepted with `--legacy`, which reads a note beside the repository rather than any corpus; the pair exits `2`.

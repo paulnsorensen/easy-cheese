@@ -1,6 +1,8 @@
 # ADR: Bundle builds verify the staged import closure, including function-body imports
 
-Status: accepted (2026-08-18)
+Status: superseded (2026-09-27)
+
+wedge replaced the committed Shiv archives and the `build_pyz.py`/`check_bundles.py` pipeline this record governed. The generated-runtime and command-surface gates it relied on live on in `scripts/runtime_gates.py`; see [[architecture/pyz-bundling-pipeline]].
 
 Spec: pyz-pipeline-contracts (durable specs corpus).
 

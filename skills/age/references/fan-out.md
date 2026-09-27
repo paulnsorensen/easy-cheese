@@ -6,7 +6,7 @@ The coordinator interprets evidence; the versioned router determines assignments
 
 ## Context input
 
-Score the actual review range with `python3 skills/age/scripts/age.pyz review-surface --repo . <base>...HEAD`.
+Score the actual review range with `python3 skills/age/scripts/age review-surface --repo . <base>...HEAD`.
 Use the explicit committed range, or the working diff when that is the review target.
 The bare default scores the working tree against HEAD; it does not measure a committed branch.
 Keep every changed path in context, including paths with zero workload weight.
@@ -15,7 +15,7 @@ When a specification exists, read its `leverage:` frontmatter list.
 Preserve every fired trigger in subject evidence.
 Map applicable triggers to supported risk flags; retain triggers without a direct flag mapping as evidence.
 
-Collect instruction sources with `python3 skills/age/scripts/age.pyz review-instructions <request.json>`.
+Collect instruction sources with `python3 skills/age/scripts/age review-instructions <request.json>`.
 Its request contains `repo_root`, `scope`, `changed_paths`, and `external_sources`.
 Each explicit external source contains `path` and repository-relative `applies_to` scopes.
 Use `--text` for a readable rendering, returned as JSON with a `text` field; JSON is the default.
@@ -70,7 +70,7 @@ An altitude recommendation that contradicts an approved design identifies that d
 
 ## Plan and effort
 
-Run `python3 skills/age/scripts/age.pyz age-route <request.json>` and save its complete JSON as `.cheese/age/<slug>-plan.json`.
+Run `python3 skills/age/scripts/age age-route <request.json>` and save its complete JSON as `.cheese/age/<slug>-plan.json`.
 The same canonical context and policy version produce the same plan.
 Semantic context can differ between independent runs; do not call that fully deterministic.
 
@@ -140,7 +140,7 @@ Keep `dispatched: <n> workers, one message: <true|false>` for the observed first
 Use zero and false when no workers were dispatched.
 Record `verifier: skipped (sub-agent)` separately when applicable.
 
-Run `python3 skills/age/scripts/age.pyz review-plan-check <request.json>` before writing the report.
+Run `python3 skills/age/scripts/age review-plan-check <request.json>` before writing the report.
 The request contains the full `plan` and `observations`.
 Observations contain `assignment_ids`, `one_message`, and `source` (`host` or `reported`).
 Use null observations when the host provides none; do not fabricate receipts.

@@ -34,6 +34,9 @@ from tests.python.test_mold_cook_producer import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import skill_archives  # noqa: E402
+
 SLUG = "phase-rehydration-tracer"
 
 
@@ -57,7 +60,7 @@ def _run(
     return subprocess.run(
         [
             sys.executable,
-            str(REPO_ROOT / "skills" / bundle / "scripts" / f"{bundle}.pyz"),
+            str(skill_archives.archive_path(bundle)),
             *args,
         ],
         cwd=str(cwd),
@@ -598,7 +601,7 @@ def _phase_entry_section(phase: str) -> str:
 @pytest.mark.parametrize("phase", ENTRY_SKILLS)
 def test_curd_4_phase_skill_documents_wheypoint_resolve_entry(phase: str) -> None:
     section = _phase_entry_section(phase)
-    assert f"skills/{phase}/scripts/{phase}.pyz wheypoint-resolve" in section, phase
+    assert f"skills/{phase}/scripts/{phase} wheypoint-resolve" in section, phase
     for outcome in PHASE_ENTRY_OUTCOMES:
         assert f"`{outcome}`" in section, (phase, outcome)
     assert "`working_context` is the first batched `tilth_read`" in section, phase

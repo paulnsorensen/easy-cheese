@@ -15,7 +15,7 @@ Plate completes local work before review. It finishes required artifacts, valida
 
 ## Phase entry
 
-Run `python3 skills/plate/scripts/plate.pyz wheypoint-resolve --ref <slug>`.
+Run `python3 skills/plate/scripts/plate wheypoint-resolve --ref <slug>`.
 `authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
@@ -78,7 +78,7 @@ See [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-
 
 ## Tool routing
 
-- Run `python3 skills/plate/scripts/plate.pyz stack-tools` before you select a stack provider.
+- Run `python3 skills/plate/scripts/plate stack-tools` before you select a stack provider.
   The command detects Graphite, Git Town, and `gh stack`. It does not change repository state.
 - Use Git and GitHub for repository, remote, and PR state. Use the selected provider CLI for stack state.
 - Use the repository code-intelligence backend to edit tracked artifacts. Use the same backend to read them.
@@ -160,7 +160,7 @@ A failed quality gate proves that the work is not shippable. Therefore, halt at 
 ## Completion
 
 Write the terminal evidence to a temporary JSON file.
-Run `python3 skills/plate/scripts/plate.pyz validate-publication <state.json>`.
+Run `python3 skills/plate/scripts/plate validate-publication <state.json>`.
 Report completion only when the command returns normalized evidence with `valid: true`.
 
 ```json

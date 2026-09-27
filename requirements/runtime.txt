@@ -1,7 +1,9 @@
-# Pure-Python runtime wheels admitted to the private Shiv wheelhouse. Native
-# extensions are rejected before packaging.
+# Pure-Python runtime wheels for the test and typing environments. The skill
+# archives take the same closure from uv.lock (the schemas' dependencies plus
+# the `runtime` dependency group); tests/python/test_wedge_pin.py keeps the
+# two equal. Native extensions are rejected before packaging.
 #
-# Pinned with hashes so the wheelhouse is reproducible from this lock alone.
+# Pinned with hashes so the environment is reproducible from this lock alone.
 #
 # pyproject.toml carries the published floors (attrs>=, cattrs>=); these pins are
 # the exact versions the bundle job exercises. Raising one means

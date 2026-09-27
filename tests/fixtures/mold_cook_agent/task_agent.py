@@ -129,7 +129,7 @@ events: list[dict[str, object]] = [
         "mode": "full",
         "outcome": prepare["outcome"],
         "approval_kind": prepare["approval_kind"],
-        "tool": "cook.pyz prepare",
+        "tool": "scripts/cook prepare",
         "returncode": prepare_code,
     },
     {"type": "approval_requested", "kind": "scope"},
@@ -144,7 +144,7 @@ events: list[dict[str, object]] = [
         "type": "prepare",
         "mode": "full",
         "outcome": resubmit_outcome,
-        "tool": "cook.pyz resubmit",
+        "tool": "scripts/cook resubmit",
         "returncode": resubmit_code,
     },
 ]
@@ -250,7 +250,7 @@ events.extend(
         {
             "type": "plan_materialized",
             "outcome": finalized.get("status"),
-            "tool": "mold.pyz finalize",
+            "tool": "scripts/mold finalize",
             "returncode": finalize_code,
         },
         {
@@ -262,7 +262,7 @@ events.extend(
             "type": "consumer_accept",
             "ready": accept_code == 0 and bool(accepted),
             "artifact_ref": "artifacts/pointers/agent.json",
-            "tool": "cook.pyz accept",
+            "tool": "scripts/cook accept",
         },
     ]
 )

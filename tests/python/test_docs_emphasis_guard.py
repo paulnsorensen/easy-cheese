@@ -111,34 +111,34 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         # commands now live one hop under cook's fan-pathway reference. Legacy
         # phase-state and decomposition commands are intentionally not live.
         REPO_ROOT / "skills/cook/SKILL.md": (
-            "cook.pyz artifact-path",
-            "cook.pyz read-handoff-slug",
-            "cook.pyz mode",
-            "cook.pyz milknado",
-            "cook.pyz worktree create",
-            "cook.pyz worktree harvest",
-            "cook.pyz worktree teardown",
+            "scripts/cook artifact-path",
+            "scripts/cook read-handoff-slug",
+            "scripts/cook mode",
+            "scripts/cook milknado",
+            "scripts/cook worktree create",
+            "scripts/cook worktree harvest",
+            "scripts/cook worktree teardown",
         ),
         REPO_ROOT / "skills/age/SKILL.md": (
-            "age.pyz read-handoff-slug",
-            "age.pyz write-handoff-artifact",
-            "age.pyz html-report",
+            "scripts/age read-handoff-slug",
+            "scripts/age write-handoff-artifact",
+            "scripts/age html-report",
         ),
         REPO_ROOT / "skills/affinage/SKILL.md": (
-            "python3 skills/affinage/scripts/affinage.pyz pr-status",
-            "python3 skills/affinage/scripts/affinage.pyz post-reply",
+            "python3 skills/affinage/scripts/affinage pr-status",
+            "python3 skills/affinage/scripts/affinage post-reply",
         ),
         REPO_ROOT / "skills/hard-cheese/SKILL.md": (
-            "python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check",
-            "python3 skills/hard-cheese/scripts/hard-cheese.pyz append-attempt",
+            "python3 skills/hard-cheese/scripts/hard-cheese freshness-check",
+            "python3 skills/hard-cheese/scripts/hard-cheese append-attempt",
         ),
         REPO_ROOT / "skills/mold/SKILL.md": (
-            "mold.pyz artifact-path",
-            "mold.pyz gate-graph",
+            "scripts/mold artifact-path",
+            "scripts/mold gate-graph",
         ),
         REPO_ROOT / "skills/pasteurize/SKILL.md": (
-            "python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun",
-            "python3 skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep",
+            "python3 skills/pasteurize/scripts/pasteurize repro-rerun",
+            "python3 skills/pasteurize/scripts/pasteurize debug-tag-sweep",
         ),
     }
 

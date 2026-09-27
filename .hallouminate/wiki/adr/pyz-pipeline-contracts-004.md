@@ -1,6 +1,8 @@
 # ADR: The subcommand registry is pruned to the prose-referenced set with strict two-way equality
 
-Status: accepted (2026-08-18)
+Status: superseded (2026-09-27)
+
+wedge replaced the committed Shiv archives and the `build_pyz.py`/`check_bundles.py` pipeline this record governed. The generated-runtime and command-surface gates it relied on live on in `scripts/runtime_gates.py`; see [[architecture/pyz-bundling-pipeline]].
 
 Spec: pyz-pipeline-contracts (durable specs corpus).
 

@@ -80,7 +80,7 @@ def test_the_harvest_step_names_the_bundled_command() -> None:
     gates = _read(REFERENCES / "quality-gates.md")
 
     assert "worktree_harvest(" not in gates
-    assert "cook.pyz worktree harvest \\" in gates
+    assert "scripts/cook worktree harvest \\" in gates
     assert "--branch <repair-branch> --onto <run-branch> --repo <run-worktree>" in gates
 
 
@@ -100,7 +100,7 @@ def test_the_documented_handoff_reader_command_parses(
 
     fan = _read(REFERENCES / "fan-pathway.md")
     assert "read-handoff-slug --phase <phase> --slug <slug>" in fan
-    assert "cook.pyz read-handoff-slug <path>" not in fan
+    assert "scripts/cook read-handoff-slug <path>" not in fan
 
     assert read_handoff_slug.main(["--help"]) == 0
     help_text = capsys.readouterr().out

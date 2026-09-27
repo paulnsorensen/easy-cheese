@@ -13,4 +13,4 @@ def test_melt_invokes_only_its_repo_relative_archive() -> None:
     )
 
     assert "${CLAUDE_SKILL_DIR}" not in prose
-    assert "python3 skills/melt/scripts/melt.pyz" in prose
+    assert "python3 skills/melt/scripts/melt" in prose

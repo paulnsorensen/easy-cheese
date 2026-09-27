@@ -18,7 +18,7 @@ Recorded by the `/affinage` → `/cure` chain on PR #662 (`feat/wheypoint-phase-
 
 ## Follow-up
 
-- Every skill bundle carries the whole `easy_cheese.shared` tree, so the kernel move added ~190 KB to each of 13 `.pyz` files. Splitting the kernel into its own wheel for the chain skills only is a sprawling change left for a later PR.
+- Every skill bundle carries the whole `easy_cheese.shared` tree, so the kernel move added ~190 KB to each of 13 skill archives. Splitting the kernel into its own wheel for the chain skills only is a sprawling change left for a later PR.
 
 ## Second cure (seven-lens /age, 57 findings, `all-medium, cheap`)
 
@@ -37,7 +37,7 @@ Recorded by the `/affinage` → `/cure` chain on PR #662 (`feat/wheypoint-phase-
 ## Third pass (re-age of the cure, 33 findings, `all-medium, cheap`)
 
 - **Refuse before the write, always.** `commit_phase_revision` validates the slug (`paths.validate_slug`) and probe-binds the `CheckpointIntent` before `write_contents()`; `write_artifact` rejects a non-kebab `--slug` for every phase at the argv boundary. Before this, `my_slug` or a 2001-char `--orientation` passed every pre-write guard, wrote the artifact, and then failed inside `_phase_links`/`CheckpointIntent` as exit `5` with an orphaned file. Rule: anything that can still refuse the input runs before the artifact `os.replace`.
-- **Bundle membership is derived, not listed.** `tests/python/test_build_pyz_tree_staging.py` computes the kernel module set from `src/easy_cheese/shared/wheypoint/*.py` and asserts set equality against each chain bundle; a hand-maintained list had silently dropped five modules.
+- **Bundle membership is derived, not listed.** `tests/python/test_build_pyz_tree_staging.py` (retired with the Shiv builder; a wedge archive carries the whole `src/easy_cheese` package) computed the kernel module set from `src/easy_cheese/shared/wheypoint/*.py` and asserted set equality against each chain bundle; a hand-maintained list had silently dropped five modules.
 - **`lint` has no `__all__`.** The `lint_types` vocabulary is re-exported with the explicit `X as X` form; `resolve.py`/`commit.py` import `lint_freshness` directly (the pass-through delegators are gone) and `resolve.py` takes `LintFinding`/`gates_continuation` from `lint_types`.
 - **One receipt reader.** `storage._structure_receipt` owns the identity checks and skip strings for both `revisions()` and `survey_receipts()`; projection stems are listed once per scan. `grounded.resolve_within(path_text, resolved_root) -> GroundedPathIssue | None`; `resolve._slug_matches -> tuple[str, ...]`.
 - **`git-unavailable` is one `key=value` line per `lint_work`** (`lint_freshness.git_warnings_once` latch); `--corpus-root` and `--legacy` are mutually exclusive in the resolve parser.

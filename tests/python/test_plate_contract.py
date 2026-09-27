@@ -94,10 +94,10 @@ def test_plate_repair_topology_requires_run_branch_and_one_overlap_rule() -> Non
     assert "Count a binary path as one changed line" in flat
     assert "git rev-parse --verify <run-branch>" in flat
     # Cook owns the harvest command. Plate routes to it rather than naming
-    # cook.pyz, which the bundle-closure gate forbids in a plate document.
+    # scripts/cook, which the skill-reference gate forbids in a plate document.
     assert "Cook owns the harvest command" in flat
     assert "cook/references/quality-gates.md" in flat
-    assert "cook.pyz" not in repair
+    assert "scripts/cook" not in repair
     # Never the non-existent `worktree_harvest` function.
     assert "worktree_harvest" not in repair
 
@@ -179,8 +179,8 @@ def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
     assert gate["result"] == "pass"
     assert "Topology preflight" in completion
     assert 'gate: {"command": "n/a", "result": "n/a"}' in completion
-    assert "scripts/plate.pyz validate-publication" in completion
-    assert "scripts/plate.pyz stack-tools" in skill
+    assert "scripts/plate validate-publication" in completion
+    assert "scripts/plate stack-tools" in skill
 
 
 def test_plate_stack_references_preserve_absorbed_behavior_and_safety() -> None:

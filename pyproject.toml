@@ -107,3 +107,14 @@ ignore_decorators = [
   "@contract",
   "@document_contract",
 ]
+
+# The wedge runtime closure. `wedge build` exports this project's non-dev
+# closure into every skill archive, and uv includes default groups in that
+# export, so fromargs (and its Cyclopts closure) ride along without joining
+# the published easy-cheese-schemas wheel's own dependencies. Keep the pin
+# equal to requirements/runtime.txt; a test compares the two.
+[dependency-groups]
+runtime = ["fromargs==0.1.0"]
+
+[tool.uv]
+default-groups = ["runtime"]

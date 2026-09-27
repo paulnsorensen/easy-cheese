@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Count candidate curds in a mold-generated spec and recommend the next skill.
 
-Reads a mold-generated spec — the path `mold.pyz artifact-path specs <slug>`
+Reads a mold-generated spec — the path `scripts/mold artifact-path specs <slug>`
 resolves (`.cheese/specs/<slug>.md` by default) — counts distinct behavioural
 goals under `## Goals`, and emits a JSON digest naming the recommended downstream skill
 based on that count plus the shape-check blast-radius verdict. The `## Quality

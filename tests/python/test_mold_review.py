@@ -116,8 +116,10 @@ def test_concurrent_publish_and_autosave_preserve_both_updates(tmp_path: Path) -
     assert restored.working[1] == {"answer": "yes"}
 
 
-def test_close_cli_stops_running_review_server(tmp_path: Path) -> None:
-    path = Path(__file__).resolve().parents[2] / "skills/mold/scripts/mold.pyz"
+def test_close_cli_stops_running_review_server(
+    tmp_path: Path, skill_archive: Callable[[str], Path]
+) -> None:
+    path = skill_archive("mold")
     process = subprocess.Popen(
         ["python3", str(path), "review", "serve", "--state-dir", str(tmp_path), "--port", "0"],
         stdout=subprocess.PIPE,
@@ -141,8 +143,10 @@ def test_close_cli_stops_running_review_server(tmp_path: Path) -> None:
 
 
 
-def test_serve_persists_initial_review_and_returns_tokenized_url(tmp_path: Path) -> None:
-    archive = Path(__file__).resolve().parents[2] / "skills/mold/scripts/mold.pyz"
+def test_serve_persists_initial_review_and_returns_tokenized_url(
+    tmp_path: Path, skill_archive: Callable[[str], Path]
+) -> None:
+    archive = skill_archive("mold")
     process = subprocess.Popen(
         ["python3", str(archive), "review", "serve", "--state-dir", str(tmp_path), "--port", "0"],
         stdout=subprocess.PIPE,

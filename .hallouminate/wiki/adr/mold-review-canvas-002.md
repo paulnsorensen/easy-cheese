@@ -1,4 +1,4 @@
-# ADR: Bundle the review server and assets in mold.pyz
+# ADR: Bundle the review server and assets in the mold archive
 
 Status: accepted design (2026-09-16); implementation pending.
 

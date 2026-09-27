@@ -1,14 +1,14 @@
 """The staged release tree is exactly the shippable surface: every skill carries
-its built <skill>.pyz and its SKILL.md, no raw .py sources leak in, and dev-only
-scaffolding (src/, shared/, scripts/, tests/, docs/, .github/) is left behind.
-These are the invariants that, when violated silently, shipped the empty v0.5.1.
+its wedge launcher, its lock, and its SKILL.md; no raw .py source, archive, or
+wedge build configuration leaks in; and dev-only scaffolding (src/, shared/,
+scripts/, tests/, docs/, .github/) is left behind. These are the invariants
+that, when violated silently, shipped the empty v0.5.1.
 """
 
 from __future__ import annotations
 
+import json
 import sys
-import shutil
-import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -17,66 +17,53 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import build_pyz  # noqa: E402
+import runtime_gates  # noqa: E402
 import stage_release  # noqa: E402
 from ref_extraction import relative_md_refs  # noqa: E402  # pyright: ignore[reportImplicitRelativeImport]
 
 
-def _copy_committed_bundles(destinations: dict[str, Path]) -> dict[str, Path]:
-    for skill, destination in destinations.items():
-        source = REPO_ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        _ = shutil.copy2(source, destination)
-    return destinations
-
-
 @pytest.fixture(scope="module")
 def staged(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(build_pyz, "build_bundles", _copy_committed_bundles)
-    try:
-        yield stage_release.stage(tmp_path_factory.mktemp("release") / "tree")
-    finally:
-        monkeypatch.undo()
+    yield stage_release.stage(tmp_path_factory.mktemp("release") / "tree")
 
 
-def test_release_builds_all_skills_in_one_batch(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    batch_sizes: list[int] = []
-
-    def build_batch(destinations: dict[str, Path]) -> dict[str, Path]:
-        batch_sizes.append(len(destinations))
-        return _copy_committed_bundles(destinations)
-
-    monkeypatch.setattr(build_pyz, "build_bundles", build_batch)
-
-    _ = stage_release.stage(tmp_path / "release")
-
-    assert batch_sizes == [len(build_pyz.SKILLS)]
+def _fake_tree(root: Path, *, without_lock: str | None = None) -> Path:
+    """A minimal tree that passes _verify unless one lock is withheld."""
+    for skill in runtime_gates.SKILLS:
+        scripts = root / "skills" / skill / "scripts"
+        scripts.mkdir(parents=True)
+        _ = (root / "skills" / skill / "SKILL.md").write_text(f"# {skill}\n")
+        _ = (scripts / skill).write_text("#!/usr/bin/env python3\n")
+        if skill != without_lock:
+            _ = (scripts / f"{skill}.wedge.json").write_text("{}\n")
+    return root
 
 
-def test_every_skill_ships_its_bundle(staged: Path) -> None:
-    for skill in build_pyz.SKILLS:
-        pyz = staged / "skills" / skill / "scripts" / f"{skill}.pyz"
-        assert pyz.is_file(), f"missing bundle for {skill}"
-        # A real zipapp, not an empty placeholder: it carries the dispatcher.
-        with zipfile.ZipFile(pyz) as zf:
-            assert "__main__.py" in zf.namelist()
+def test_every_skill_ships_its_launcher_and_lock(staged: Path) -> None:
+    for skill in runtime_gates.SKILLS:
+        scripts = staged / "skills" / skill / "scripts"
+        launcher = scripts / skill
+        lock = scripts / f"{skill}.wedge.json"
+        assert launcher.is_file(), f"missing launcher for {skill}"
+        assert launcher.stat().st_mode & 0o111, f"launcher for {skill} is not executable"
+        assert lock.is_file(), f"missing lock for {skill}"
+        assert json.loads(lock.read_text(encoding="utf-8"))["name"] == skill
 
 
 def test_skill_metadata_ships(staged: Path) -> None:
-    for skill in build_pyz.SKILLS:
+    for skill in runtime_gates.SKILLS:
         assert (staged / "skills" / skill / "SKILL.md").is_file()
 
 
-
-
-def test_no_raw_python_under_skills(staged: Path) -> None:
-    """The release ships the .pyz, never the loose .py — the whole point of the
-    src/ relocation. A stray .py here means a skill leaked its sources."""
-    stray = sorted(p.relative_to(staged) for p in (staged / "skills").rglob("*.py"))
-    assert stray == [], f"raw python leaked into release: {stray}"
+def test_no_source_archive_or_build_config_under_skills(staged: Path) -> None:
+    """The release ships the launcher and lock, never loose .py, a local
+    archive, or the wedge build configuration."""
+    stray = sorted(
+        str(p.relative_to(staged))
+        for pattern in ("*.py", "*.pyz", "wedge.toml")
+        for p in (staged / "skills").rglob(pattern)
+    )
+    assert stray == [], f"build inputs leaked into release: {stray}"
 
 
 @pytest.mark.parametrize("dev_dir", ["src", "shared", "scripts", "tests", "docs", ".github"])
@@ -92,20 +79,36 @@ def test_top_level_metadata_present(staged: Path) -> None:
 @pytest.mark.parametrize("danger", ["/", str(REPO_ROOT), str(REPO_ROOT.parent)])
 def test_stage_refuses_to_wipe_dangerous_paths(danger: str) -> None:
     """rmtree on --out must never touch the filesystem root, the repo, or an
-    ancestor — accidental data loss is the irreversible failure mode here."""
+    ancestor: accidental data loss is the irreversible failure mode here."""
     with pytest.raises(SystemExit, match="refusing to wipe"):
         _ = stage_release.stage(Path(danger))
 
 
-def test_verify_rejects_missing_bundle(tmp_path: Path) -> None:
-    """_verify is the publish gate — it must reject a tree whose bundles are absent."""
+def test_verify_rejects_missing_launcher(tmp_path: Path) -> None:
+    """_verify is the publish gate; it must reject a tree without a launcher."""
     fake = tmp_path / "tree"
     (fake / "skills" / "affinage").mkdir(parents=True)
     _ = (fake / "skills" / "affinage" / "SKILL.md").write_text("# affinage\n")
-    with pytest.raises(SystemExit, match="missing bundle"):
+    with pytest.raises(SystemExit, match="missing launcher"):
         stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
 
 
+def test_verify_rejects_missing_lock(tmp_path: Path) -> None:
+    fake = _fake_tree(tmp_path / "tree", without_lock="cook")
+    with pytest.raises(SystemExit, match=r"missing lock .*cook\.wedge\.json"):
+        stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.parametrize("stray", ["helper.py", "cook.pyz"])
+def test_verify_rejects_stray_source_or_archive(tmp_path: Path, stray: str) -> None:
+    fake = _fake_tree(tmp_path / "tree")
+    _ = (fake / "skills" / "cook" / "scripts" / stray).write_bytes(b"x")
+    with pytest.raises(SystemExit, match="must not ship under skills/"):
+        stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_verify_accepts_a_complete_tree(tmp_path: Path) -> None:
+    stage_release._verify(_fake_tree(tmp_path / "tree"))  # pyright: ignore[reportPrivateUsage]
 
 
 def test_relative_refs_resolve_in_staged_tree(staged: Path) -> None:
@@ -129,7 +132,7 @@ _MOVED_DOC_NAMES = (
 
 
 def test_moved_cheese_kernel_docs_ship_with_zero_vendoring(staged: Path) -> None:
-    """The four shared docs move with the wholesale skills/ copy — no dedicated
+    """The four shared docs move with the wholesale skills/ copy; no dedicated
     vendoring step exists or is needed. Locks the ship location explicitly so a
     future denylist/exclude change to stage_release can't silently drop them
     while test_relative_refs_resolve_in_staged_tree stays green (that test only
@@ -149,6 +152,15 @@ def test_release_workflow_validates_staged_tree_after_transformations() -> None:
 
     assert stage < validate < publish
     assert "working-directory: ${{ runner.temp }}/release" in workflow[stage:validate]
+
+
+def test_release_workflow_builds_nothing() -> None:
+    """Archives come from the wedge release the merge-to-main job fills, so the
+    tag workflow installs no build tooling and runs no build."""
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "requirements-build.txt" not in workflow
+    assert "build_pyz" not in workflow
+    assert "shiv" not in workflow.lower()
 
 
 def test_release_workflow_pins_checkout_to_v7_0_1() -> None:

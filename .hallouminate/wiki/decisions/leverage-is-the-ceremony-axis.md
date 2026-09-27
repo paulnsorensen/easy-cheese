@@ -24,7 +24,7 @@ Root cause: ceremony was keyed to ambiguity and scope size ("one or two files", 
 
 - Skill bodies are capped at 3,600 estimated tokens (`TARGET_TOKENS` in `.github/scripts/validate_skills.py`; `.github/skill-budgets.json` only records per-skill grandfathered sizes). Mold's SKILL.md sits at the cap; every addition there must point at a reference instead of restating. Three of the five PRs tripped this, and the review fixes tripped it again.
 - Supported context risks map to review subjects through `age_route.RISK_MAPPINGS`. Unmapped leverage triggers remain evidence; they do not become implicit dispatch overrides.
-- The handshake checklist labels and `gate_graph.py` `COHERENCE_GATES` are compared by a prose-sync test; edit both, then regenerate `mold.dot` with `mold.pyz gate-graph --render dot --out skills/mold/scripts/mold.dot` and rebundle `mold.pyz`. `just bundle` rewrites every `.pyz`; restore the untouched ones before committing.
+- The handshake checklist labels and `gate_graph.py` `COHERENCE_GATES` are compared by a prose-sync test; edit both, then regenerate `mold.dot` with `scripts/mold gate-graph --render dot --out skills/mold/scripts/mold.dot` and run `just wedge-lock`. Any change under `src/` changes every skill lock, so commit every regenerated `*.wedge.json`.
 - The taste-test schema field `consequential` was kept; prose redefines what qualifies. Renaming it would touch published schemas for no behavior change.
 - `## Interface sketches` was kept as the section name because it is a published `MoldSpecDocument` section with legacy fixtures. The content contract changed, not the name.
 - Follow-up disposition phrases are pinned in order by `test_mold_followup_routing.py`; the batching was done around them, not by rewriting them.

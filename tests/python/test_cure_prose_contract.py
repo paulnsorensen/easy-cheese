@@ -51,14 +51,14 @@ def _coder_brief_command() -> str:
 def test_documented_render_brief_command_matches_the_findings_cli() -> None:
     command = _coder_brief_command()
     assert command == (
-        'python3 skills/cure/scripts/cure.pyz findings render-brief --report <path> --selection "<ids>"'
+        'python3 skills/cure/scripts/cure findings render-brief --report <path> --selection "<ids>"'
     )
 
 
 def test_documented_render_brief_invocation_runs_against_the_real_cli(tmp_path: Path) -> None:
     command = _coder_brief_command()
     tokens = command.split()
-    assert tokens[:3] == ["python3", "skills/cure/scripts/cure.pyz", "findings"]
+    assert tokens[:3] == ["python3", "skills/cure/scripts/cure", "findings"]
     subcommand = tokens[3]
     report_path = tmp_path / "report.md"
     _ = report_path.write_text(SAMPLE_REPORT, encoding="utf-8")

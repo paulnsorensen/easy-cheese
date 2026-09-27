@@ -13,7 +13,10 @@ import yaml
 
 from easy_cheese_schemas.wiring_graph import WiringCycleError, compute_waves, cycle_errors
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import skill_archives  # noqa: E402
 
 
 def _wiring(*entries: tuple[str, list[str]]) -> list[dict[str, str | list[str]]]:
@@ -26,7 +29,7 @@ def _write_manifest(path: Path, wiring: list[dict[str, str | list[str]]]) -> Non
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "wiring_topo_sort", *args],
+        [sys.executable, str(skill_archives.archive_path("cook")), "wiring_topo_sort", *args],
         capture_output=True,
         text=True,
     )
@@ -78,9 +81,7 @@ class TestComputeWaves:
 
 
 class TestCLI:
-    """Drives the checked-in cook.pyz bundle; pending-rebuild until the
-    orchestrator regenerates bundles with the fromargs-based
-    wiring_topo_sort.py."""
+    """Drives the built cook archive."""
 
     def test_linear_chain(self, tmp_path: Path) -> None:
         manifest = tmp_path / "manifest.yaml"

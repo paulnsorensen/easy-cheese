@@ -1,0 +1,58 @@
+name: wedge
+
+# `check` fails a pull request whose wedge lock is stale or whose launcher
+# drifted from the template. `publish` builds each locked skill after a merge
+# and uploads any missing content-addressed archive to the rolling `wedge`
+# release. Publication is append-only, so concurrent runs are safe; do not
+# add cancellation that could drop a pending publication.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check wedge locks
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Pins wedge to the commit that scripts/wedge.py pins; a test keeps
+      # the two equal.
+      - name: Check wedge locks
+        uses: paulnsorensen/skillz-that-grillz/actions/wedge@db88754fb3682d2984fbba375938873c1e83bdc7
+        with:
+          command: check
+          roots: skills
+
+  publish:
+    name: publish wedge assets
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Verify HEAD is on main
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not an ancestor of origin/main. Refusing to publish wedge assets from an unreviewed commit."
+            exit 1
+          fi
+
+      - name: Publish wedge assets
+        uses: paulnsorensen/skillz-that-grillz/actions/wedge@db88754fb3682d2984fbba375938873c1e83bdc7
+        with:
+          command: publish
+          roots: skills

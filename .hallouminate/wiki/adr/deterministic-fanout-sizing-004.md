@@ -26,7 +26,7 @@ performs.
 not exist yet**.
 
 Sizing a curd from the LOC of the files it touches was tried and is disproven:
-`scripts/build_pyz.py` is 335 lines while the edit against it is 3. File size
+`scripts/build_pyz.py` (the Shiv builder, retired for wedge) was 335 lines while the edit against it was 3. File size
 carries no information about edit size.
 
 ## Decision

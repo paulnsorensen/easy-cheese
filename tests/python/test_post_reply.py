@@ -1,5 +1,5 @@
 """Tests for src/affinage/post-reply.py (bundled as the `post-reply` subcommand
-of affinage.pyz). Ports the contract previously covered by
+of the affinage archive). Ports the contract previously covered by
 tests/bash/test_post_reply.bats and adds the exact-suffix-match edge case.
 
 subprocess.run is faked by argv prefix so no real gh/git is invoked; the fake

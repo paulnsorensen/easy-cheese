@@ -19,7 +19,7 @@ Press never owns first coverage. Press never edits production code. Cook owns th
 
 ## Phase entry
 
-Run `python3 skills/press/scripts/press.pyz wheypoint-resolve --ref <slug>`.
+Run `python3 skills/press/scripts/press wheypoint-resolve --ref <slug>`.
 `authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
@@ -48,7 +48,7 @@ Press preserves the Cook `durable_flags:` value without change. Press ignores th
 Run this command for boundary routing:
 
 ```sh
-python3 skills/press/scripts/press.pyz press-route \
+python3 skills/press/scripts/press press-route \
   .cheese/press/<slug>.attempt-N.route.json
 ```
 
@@ -83,7 +83,7 @@ A third in-contract RED returns `Stop("third-red")`. Do not create attempt-4 pat
 Run this command after routing:
 
 ```sh
-python3 skills/press/scripts/press.pyz press-telemetry \
+python3 skills/press/scripts/press press-telemetry \
   .cheese/press/<slug>.attempt-N.telemetry-request.json
 ```
 
@@ -124,7 +124,7 @@ See [`../cook/references/quality-gates.md`](../cook/references/quality-gates.md)
 1. **Read** — Load the approved spec, Cook handoff, and baseline block. Use canonical terms from `.cheese/glossary/<slug>.md` when that file exists.
 2. **Attack** — Add or run only adversarial tests. Do not add first-coverage tests. Do not change production paths.
 3. **Classify** — Select `green`, `in_contract_red`, `invalid_evidence`, or `production_changed` from the adversarial run.
-4. **Continue or stop** — Run `python3 skills/press/scripts/press.pyz press-route` with `outcome` and `repair_cycles`. Only `Continue`, `Dispatch`, and `Stop` action shapes are public.
+4. **Continue or stop** — Run `python3 skills/press/scripts/press press-route` with `outcome` and `repair_cycles`. Only `Continue`, `Dispatch`, and `Stop` action shapes are public.
 5. **Report** — Write `.cheese/press/<slug>.md` at a terminal result. Include the attempts, evidence, and review follow-ups.
 6. **Hand off** — Send only a GREEN `Dispatch("/age")` to the global Age route.
 
@@ -153,10 +153,10 @@ Honor the no-chain directive when the caller supplies it. Write the Press handof
 
 Write `.cheese/press/<slug>.md` only at a terminal Press result. A corrective `Continue` stays inside the Press phase. It writes no durable handoff.
 
-Write the file with `python3 skills/press/scripts/press.pyz write-handoff-artifact`; include one or more `--grounded <path[#start-end]>` arguments. Use the canonical preamble:
+Write the file with `python3 skills/press/scripts/press write-handoff-artifact`; include one or more `--grounded <path[#start-end]>` arguments. Use the canonical preamble:
 
 ```text
-python3 skills/press/scripts/press.pyz write-handoff-artifact \
+python3 skills/press/scripts/press write-handoff-artifact \
   --slug <slug> --status <status> --phase press --next <next> \
   --artifact .cheese/cook/<slug>.md --orientation "<one-line orientation>" \
   --durable-flags "<preserved Cook value>" --baseline "<baseline artifact path>" \

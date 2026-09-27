@@ -16,7 +16,7 @@ A skill is a directory whose shape encodes progressive disclosure
 skills/<skill-name>/
 ├── SKILL.md          # required: YAML frontmatter (name + description) + body
 ├── references/       # optional: detail pulled in on demand
-├── scripts/          # optional: executable helpers (often a .pyz bundle)
+├── scripts/          # optional: executable helpers (often a wedge launcher + lock)
 └── assets/           # optional: templates / static resources
 ```
 
@@ -39,14 +39,14 @@ is referenced by sibling-relative path (`../cheese/references/<file>.md`
 from a `SKILL.md`, `../../cheese/references/<file>.md` from a
 `references/*.md`) (`README.md:53`).
 
-Python skills ship a self-contained application archive invoked as
-`python3 skills/<skill>/scripts/<skill>.pyz <subcommand>`
-(`skills/mold/SKILL.md:23`). Migrated applications start at
-`src/easy_cheese/skills/<skill>/commands.py`; the builder copies their
-transitive imports while preserving package paths. `APPLICATION_SKILLS` in
-`scripts/build_pyz.py` discovers that layout. The legacy `SKILLS` registry
-remains only for skills awaiting migration. See [tooling](./tooling.md) for why
-committed bundles are checked artifacts rather than CI-regenerated output.
+Python skills ship a wedge launcher and lock, invoked as
+`python3 skills/<skill>/scripts/<skill> <subcommand>`
+(`skills/mold/SKILL.md:23`); the launcher fetches the skill's content-addressed
+archive from the `wedge` release on first run. Applications start at
+`src/easy_cheese/skills/<skill>/commands.py`; `skills/<skill>/wedge.toml`
+names that entry point, and wedge vendors the whole `src/easy_cheese` package.
+`SKILLS` in `scripts/runtime_gates.py` discovers that layout. See
+[tooling](./tooling.md) for how locks, launchers, and release assets relate.
 
 
 

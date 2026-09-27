@@ -1,0 +1,12 @@
+# wedge packages this skill's CLI as a content-addressed .pyz release asset.
+# `python3 scripts/wedge.py lock skills/hard-cheese` rewrites scripts/hard-cheese and
+# scripts/hard-cheese.wedge.json after any change under src/.
+name = "hard-cheese"
+entry = "easy_cheese.skills.hard_cheese.commands:main"
+# The whole runtime package; each archive carries every skill's package
+# beside shared and cli, and dispatches only its own commands.
+source = "../../src/easy_cheese"
+include = ["../../src/easy_cheese_schemas"]
+# The repository project: its uv.lock pins the runtime closure.
+project = "../.."
+repo = "paulnsorensen/easy-cheese"

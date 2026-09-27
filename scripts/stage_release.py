@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""Assemble the shippable release tree: SKILL.md + one built <skill>.pyz per skill,
-plus top-level project metadata. Everything a consumer does NOT need — raw script
-sources (src/, shared/), build/test tooling, docs, CI config — is left behind.
+"""Assemble the shippable release tree: each skill's SKILL.md, wedge launcher,
+and lock, plus top-level project metadata. Everything a consumer does NOT
+need — runtime sources (src/), build/test tooling, docs, CI config — is left
+behind.
 
 The release workflow commits this tree to the `release` branch and points the
 version tag at it, so `gh skill install` (which reads the git tree at the tag)
-pulls a minimal, self-contained skill: the dispatching .pyz, never the loose .py.
-
-Bundles are built straight into the staged tree via build_pyz.build_bundles, so
-neither this script nor its test mutates the repo's working copy.
+pulls a minimal skill: the launcher and its lock, never the loose .py. The
+launcher downloads the skill's content-addressed archive from the rolling
+`wedge` release on first run; wedge.yml publishes that archive after every
+merge to main, so this script builds nothing.
 """
 
 from __future__ import annotations
@@ -21,13 +22,12 @@ from pathlib import Path
 from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import build_pyz  # noqa: E402  (sibling module in scripts/)
+import runtime_gates  # noqa: E402  (sibling module in scripts/)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Allowlist, not denylist: new dev scaffolding added to the repo stays out of
-# releases by default. `skills` ships wholesale (post-build); metadata files
-# ship if present.
+# releases by default. `skills` ships wholesale; metadata files ship if present.
 SHIP = [
     "skills",
     "README.md",
@@ -36,6 +36,9 @@ SHIP = [
     "CODE_OF_CONDUCT.md",
     ".claude-plugin",
 ]
+
+# Build configuration and any stray local archive stay out of the tree.
+SKILL_IGNORE = shutil.ignore_patterns("wedge.toml", "*.pyz")
 
 
 def _copy(
@@ -64,7 +67,7 @@ def _guard_out(out: Path) -> None:
 
 
 def stage(out: Path) -> Path:
-    """Build the release tree at ``out`` (wiped first). Returns ``out``."""
+    """Assemble the release tree at ``out`` (wiped first). Returns ``out``."""
     _guard_out(out)
     if out.exists():
         shutil.rmtree(out)
@@ -73,16 +76,7 @@ def stage(out: Path) -> Path:
     for rel in SHIP:
         src = REPO_ROOT / rel
         if src.exists():
-            # Rebuild bundles instead of copying stale archives into the release.
-            ignore = shutil.ignore_patterns("*.pyz") if rel == "skills" else None
-            _copy(src, out / rel, ignore=ignore)
-
-    _ = build_pyz.build_bundles(
-        {
-            skill: out / "skills" / skill / "scripts" / f"{skill}.pyz"
-            for skill in build_pyz.SKILLS
-        }
-    )
+            _copy(src, out / rel, ignore=SKILL_IGNORE if rel == "skills" else None)
 
     _verify(out)
     return out
@@ -95,15 +89,22 @@ def _verify(out: Path) -> None:
     if not any(skills.glob("*/SKILL.md")):
         raise SystemExit(f"stage_release: no skills found under {skills}")
 
-    for skill in build_pyz.SKILLS:
-        pyz = skills / skill / "scripts" / f"{skill}.pyz"
-        if not pyz.is_file():
-            raise SystemExit(f"stage_release: missing bundle {pyz}")
+    for skill in runtime_gates.SKILLS:
+        launcher = skills / skill / "scripts" / skill
+        lock = skills / skill / "scripts" / f"{skill}.wedge.json"
+        if not launcher.is_file():
+            raise SystemExit(f"stage_release: missing launcher {launcher}")
+        if not lock.is_file():
+            raise SystemExit(f"stage_release: missing lock {lock}")
 
-    stray = sorted(str(p.relative_to(out)) for p in skills.rglob("*.py"))
+    stray = sorted(
+        str(p.relative_to(out))
+        for pattern in ("*.py", "*.pyz")
+        for p in skills.rglob(pattern)
+    )
     if stray:
         raise SystemExit(
-            "stage_release: raw .py sources must not ship under skills/; found: "
+            "stage_release: raw .py sources and archives must not ship under skills/; found: "
             + ", ".join(stray)
         )
 

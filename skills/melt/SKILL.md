@@ -36,7 +36,7 @@ Use this sequence for manual resolutions: search, fresh bounded read, stale-safe
 Run this check before the conflict summary.
 
 ```bash
-python3 skills/melt/scripts/melt.pyz detect-squash-residue
+python3 skills/melt/scripts/melt detect-squash-residue
 ```
 
 If the verdict is `SQUASH-MERGED`, stop the cascade.
@@ -90,7 +90,7 @@ Suggest remedy [B] only when the user requests linear history or verifies a smal
 Run the summary command.
 
 ```bash
-python3 skills/melt/scripts/melt.pyz conflict-summary
+python3 skills/melt/scripts/melt conflict-summary
 ```
 
 The default output is one JSON object with a `files` array. Each file includes its path, hunk line ranges, bounded `ours`, `theirs`, and optional `base` arrays, context lines, omitted-line counts, and a resolution recommendation.
@@ -112,19 +112,19 @@ Run a structural merge for each file type that mergiraf supports.
 
 ```bash
 # Preview. Dry-run is the default.
-python3 skills/melt/scripts/melt.pyz batch-resolve
+python3 skills/melt/scripts/melt batch-resolve
 
 # Apply clean resolutions and stage them.
-python3 skills/melt/scripts/melt.pyz batch-resolve --apply
+python3 skills/melt/scripts/melt batch-resolve --apply
 
 # Send mergiraf debug logs (RUST_LOG=mergiraf=debug) to stderr.
-python3 skills/melt/scripts/melt.pyz batch-resolve --verbose
+python3 skills/melt/scripts/melt batch-resolve --verbose
 ```
 
 Use `--debug` to inspect one file without changes.
 
 ```bash
-python3 skills/melt/scripts/melt.pyz batch-resolve --debug <path>
+python3 skills/melt/scripts/melt batch-resolve --debug <path>
 ```
 
 The command prints the merged output path, log path, and conflict marker count.
@@ -140,7 +140,7 @@ The Melt text tools refuse a binary file.
 They never decode, edit, or stage it.
 For an ordinary binary file, select one side with `git checkout --ours -- <path>` or `git checkout --theirs -- <path>`.
 Then run `git add <path>`.
-A generated archive, such as a `.pyz` bundle, has no correct side.
+A generated archive, such as a Python zipapp, has no correct side.
 Resolve the source conflicts first, then rebuild the archive with the project build command.
 
 ### 3. Resolve remaining conflicts

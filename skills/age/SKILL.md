@@ -17,7 +17,7 @@ Review a diff or scoped path before merging or after `/press`. Use this skill wh
 
 ## Phase entry
 
-Run `python3 skills/age/scripts/age.pyz wheypoint-resolve --ref <slug>`.
+Run `python3 skills/age/scripts/age wheypoint-resolve --ref <slug>`.
 `authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
@@ -65,7 +65,7 @@ Age never fires the gate.
 
 `--html` emits a static HTML copy alongside `.cheese/age/<slug>.md`.
 Write the markdown first.
-Then run `python3 skills/age/scripts/age.pyz html-report --report .cheese/age/<slug>.md --slug <slug>`.
+Then run `python3 skills/age/scripts/age html-report --report .cheese/age/<slug>.md --slug <slug>`.
 Print the returned path.
 The HTML groups findings by severity into the shared HTML shell.
 The output is offline and uses no CDN or JS.
@@ -93,16 +93,16 @@ This workflow omits the git-history/precedent dimension.
 
 1. Identify the diff, scope, and relevant specification or issue.
    Read `references/fan-out.md` for the context checklist and deterministic planning contract.
-   Collect instruction sources, build context, and run `age.pyz age-route` through its bundle path.
+   Collect instruction sources, build context, and run `scripts/age age-route` through its bundle path.
    Use the returned assignments, effort, dispatch batches, and explicit capability restrictions.
    Assemble shared evidence and the plan before the lock; do not launch a separate classifier agent.
    The lock covers the packet, because the packet is review evidence.
-   Then run `python3 skills/age/scripts/age.pyz review-lock --slug <slug>` to lock the production tree.
+   Then run `python3 skills/age/scripts/age review-lock --slug <slug>` to lock the production tree.
    Use the resolved slug from `## Inputs`.
    Step 5 rejects the report when a production file changes.
 2. Gather evidence from the diff, touched files, tests, and callers/imports.
-   Resolve the upstream report with `python3 skills/age/scripts/age.pyz artifact-path --phase press --slug <slug>`.
-   Validate its preamble with `python3 skills/age/scripts/age.pyz read-handoff-slug --phase press --slug <slug>`.
+   Resolve the upstream report with `python3 skills/age/scripts/age artifact-path --phase press --slug <slug>`.
+   Validate its preamble with `python3 skills/age/scripts/age read-handoff-slug --phase press --slug <slug>`.
    That command returns preamble fields only.
    Read the resolved file itself for the `## Review follow-ups` section and every unresolved item.
    Copy each unresolved item into a `## Press findings` sub-section.
@@ -133,7 +133,7 @@ If `.cheese/glossary/<slug>.md` exists, read it to flag naming drift as a deslop
    Set `<next>` to `done` when that set is empty.
    Set `<artifact>` to the upstream report path from step 2. Use `""` only when no upstream report exists.
    Set `<baseline>` to the baseline block from that upstream handoff. Omit `--baseline` only when the upstream handoff has none.
-   Run `python3 skills/age/scripts/age.pyz write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --grounded <path[#start-end]> --body-file ".cheese/age/<slug>-body.md"`.
+   Run `python3 skills/age/scripts/age write-handoff-artifact --phase age --slug <slug> --status ok --next <next> --artifact "<artifact>" --orientation "<one-line orientation>" --durable-flags "<none | one line per flag>" --baseline "<baseline>" --grounded <path[#start-end]> --body-file ".cheese/age/<slug>-body.md"`.
 
    Print the path.
    Only a new packet for this slug permits recovery; follow `references/packet.md` § Late evidence.
@@ -180,7 +180,7 @@ Set `durable_flags:` to `none` by default, as in cook's gate.
 When the plan or host restricts coverage, record the actual restriction in `durable_flags` and `## Confidence`, not a size-only warning.
 Record the resolved worker types under `## Agent resolution` in the body.
 Record dispatch metadata for every topology. Use the fields in [report-example.md](references/report-example.md).
-Check supplied dispatch observations with `age.pyz review-plan-check` before writing; absent observations remain explicitly unobserved.
+Check supplied dispatch observations with `scripts/age review-plan-check` before writing; absent observations remain explicitly unobserved.
 
 Print `Age report: .cheese/age/<slug>.md`.
 When `press: skipped` is set, print the following warning:

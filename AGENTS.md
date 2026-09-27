@@ -29,10 +29,12 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 This is the target contract. Existing violations are migration work; do not expand
 them while enforcement is implemented separately.
 
-- A skill that executes Python ships exactly
-  `skills/<skill>/scripts/<skill>.pyz`; a skill with no Python ships no
-  `.pyz`. Skill prose invokes only its own archive—never loose source,
-  `common.pyz`, repository automation, or another skill's bundle.
+- A skill that executes Python ships exactly the wedge launcher
+  `skills/<skill>/scripts/<skill>` and its lock
+  `skills/<skill>/scripts/<skill>.wedge.json`, built from
+  `skills/<skill>/wedge.toml`; a skill with no Python ships no launcher.
+  Skill prose invokes only its own launcher—never loose source,
+  `common.pyz`, repository automation, or another skill's launcher.
 - Runtime Python lives under `src/`. Tests remain under `tests/`; repository
   build, release, generation, and maintenance programs may live under
   `scripts/`.
@@ -42,16 +44,21 @@ them while enforcement is implemented separately.
   kebab-case; Python package segments use underscores.
 - `cli/` holds command surfaces only; it may import `shared/` and schemas.
   `shared/` code must not import `cli/`.
-- Bundles may contain Python modules, bytecode, and immutable package resources.
-  Dependencies must be pure Python and zip-importable. Native extensions,
-  platform-specific libraries, required external executables, runtime
-  installation/downloads, and caller-managed extraction are prohibited. Shiv's
-  transparent cache extraction is part of the archive runtime contract.
-- Each bundle contains its entrypoints and metadata-resolved runtime closure:
-  one skill distribution, the cohesive internal shared distribution, schemas,
-  and approved pure-Python dependencies. Other skill distributions are excluded.
-- Checked-in `.pyz` files are generated deployment artifacts, never source of
-  truth. Python source never lives under `skills/`.
+- Archives may contain Python modules, bytecode, and immutable package
+  resources. Dependencies must be pure Python and zip-importable. Native
+  extensions, platform-specific libraries, required external executables,
+  runtime package installation, and caller-managed extraction are prohibited.
+  The launcher's first-run download of the skill's own locked archive, and
+  Shiv's transparent cache extraction, are part of the archive runtime contract.
+- Each archive contains the whole `easy_cheese` package, `easy_cheese_schemas`,
+  and the pure-Python closure that `uv.lock` pins (the schemas' dependencies
+  plus the `runtime` dependency group). It dispatches only its own skill's
+  `COMMANDS`.
+- The launcher and lock are generated deployment files, never source of
+  truth: `just wedge-lock` regenerates them after any change under `src/`,
+  `pyproject.toml`, `uv.lock`, or a `wedge.toml`, and `just wedge-check` fails
+  on a stale lock or an edited launcher. Hand-written Python never lives under
+  `skills/`. The archive itself is a `wedge` release asset, never a committed file.
 
 The durable rationale and migration boundary live in
 [the skill Python bundle doctrine](.hallouminate/wiki/architecture/skill-python-bundle-doctrine.md).

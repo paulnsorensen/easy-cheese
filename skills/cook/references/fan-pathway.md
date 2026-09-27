@@ -48,7 +48,7 @@ remove the listed files to start fresh.
 Read a handoff with the phase and the slug, not with a path:
 
 ```text
-python3 skills/cook/scripts/cook.pyz read-handoff-slug --phase <phase> --slug <slug>
+python3 skills/cook/scripts/cook read-handoff-slug --phase <phase> --slug <slug>
 ```
 
 The command exits with status 2 when either flag is absent.
@@ -159,7 +159,7 @@ This condition means 2 or more curds.
 
 Otherwise, `select_mode(curds)` returns `"linear"`.
 
-The installed route exposes the same selector as `python3 skills/cook/scripts/cook.pyz mode --count <curd-count>`.
+The installed route exposes the same selector as `python3 skills/cook/scripts/cook mode --count <curd-count>`.
 
 Get the count from the validated `CurdPlan`.
 
@@ -231,7 +231,7 @@ Before any curd runs, probe which role the available toolset supports.
 
 Use `src/easy_cheese/shared/fanout/milknado.py::probe`.
 
-The installed route exposes the probe as `python3 skills/cook/scripts/cook.pyz milknado --tools "<available tool names>"`.
+The installed route exposes the probe as `python3 skills/cook/scripts/cook milknado --tools "<available tool names>"`.
 
 The probe returns one of three roles:
 
@@ -349,7 +349,7 @@ Wiring rows exist in the manifest, not the curd block.
 
 - Give each curd its own worktree.
   First create the worktree when the host has no native worktree-isolated sub-agent primitive.
-  Use `python3 skills/cook/scripts/cook.pyz worktree create --slug <id> --base <orchestrator-branch>`.
+  Use `python3 skills/cook/scripts/cook worktree create --slug <id> --base <orchestrator-branch>`.
   The command returns `{path, branch}`.
 
 - Run the disposition-specific sequential chain for each curd.
@@ -359,13 +359,13 @@ Wiring rows exist in the manifest, not the curd block.
 - After every curd returns, harvest its commits.
   Then tear down each curd worktree.
 
-- Harvest with `python3 skills/cook/scripts/cook.pyz worktree harvest --branch <curd-branch> --onto <orchestrator-branch>`.
+- Harvest with `python3 skills/cook/scripts/cook worktree harvest --branch <curd-branch> --onto <orchestrator-branch>`.
   On conflict, invoke `/melt`.
   If `/melt` cannot resolve the conflict, use per-curd PRs.
   The worktrees share one object store.
   Therefore, this operation does not require `git fetch`.
 
-- Tear down with `python3 skills/cook/scripts/cook.pyz worktree teardown --path <worktree-path> --branch <curd-branch>`.
+- Tear down with `python3 skills/cook/scripts/cook worktree teardown --path <worktree-path> --branch <curd-branch>`.
   A completed run leaves no `worktree-agent-*` branch.
   It also leaves no stray worker directory.
 
@@ -496,23 +496,23 @@ The agent drives the transitions with three bundle commands. Use one
 `ARTIFACT_ROOT` for the whole loop; for a Mold pointer, use the root that Mold
 used.
 
-1. Run `cook.pyz prepare <source> --artifact-root "$ARTIFACT_ROOT"` and save the
+1. Run `scripts/cook prepare <source> --artifact-root "$ARTIFACT_ROOT"` and save the
    JSON result. Name the source with `--spec`, `--pointer`, `--slug`, or `--task`.
-2. Read `outcome`, act, then run `cook.pyz resubmit <saved result> --source
+2. Read `outcome`, act, then run `scripts/cook resubmit <saved result> --source
    <source>` with every evidence flag that you supplied before plus the new one.
    Save each new result.
 
 | `outcome` | Action | New evidence flag |
 | --- | --- | --- |
-| `needs-approval` | Show the retained `proposal_ref` content. Ask the user once through the [question transport](../../cheese/references/ask-user-question.md). Run `cook.pyz approve` with the literal reply. Accept the reply forms named in [`handshake.md`](../../mold/references/handshake.md) § User key. | `--scope-approval` or `--plan-approval`, as `approval_kind` names |
+| `needs-approval` | Show the retained `proposal_ref` content. Ask the user once through the [question transport](../../cheese/references/ask-user-question.md). Run `scripts/cook approve` with the literal reply. Accept the reply forms named in [`handshake.md`](../../mold/references/handshake.md) § User key. | `--scope-approval` or `--plan-approval`, as `approval_kind` names |
 | `needs-planning` | Dispatch a fresh-context planner on `planner_request`. Normalize its writer view on the host. | `--planner-result` |
 | `needs-preparation` | Follow the setup authorization rules below. The host records the runner approval; `approve` does not. | `--runner-approval`, `--setup-authorization`, `--setup-evidence` |
 | `blocked` | Show each hold. Only a fresh user dialogue clears a hold. | `--clear-hold HOLD_ID=DIALOGUE_JSON` |
 | `invalid` | Stop and show the findings. | none |
-| `ready` | Run `cook.pyz accept <pointer> --spec <spec>` on `handoff_ref`, then execute. | none |
+| `ready` | Run `scripts/cook accept <pointer> --spec <spec>` on `handoff_ref`, then execute. | none |
 
 ```bash
-python3 skills/cook/scripts/cook.pyz approve "$SPEC" \
+python3 skills/cook/scripts/cook approve "$SPEC" \
   --artifact-root "$ARTIFACT_ROOT" \
   --request-id "<request_id from the result>" \
   --kind scope \

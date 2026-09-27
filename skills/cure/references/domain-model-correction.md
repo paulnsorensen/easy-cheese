@@ -8,7 +8,7 @@ Do not rewrite terms outside that diff.
 After the Hallouminate probe, resolve the store with the Cure bundle command:
 
 ```text
-python3 skills/cure/scripts/cure.pyz domain-model-target \
+python3 skills/cure/scripts/cure domain-model-target \
   --probe <unavailable|no-match|match> \
   [--corpus repo:<repo>:wiki --model <present|absent|unknown>]
 ```

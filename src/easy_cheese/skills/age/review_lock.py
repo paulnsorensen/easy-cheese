@@ -58,7 +58,7 @@ PHASE = "age"
 SCRATCH_DIR = ".cheese"
 LOCK_SUFFIX = ".review-lock.json"
 BODY_SUFFIX = "-body.md"
-_LOCK_COMMAND = "python3 skills/age/scripts/age.pyz review-lock --slug"
+_LOCK_COMMAND = "python3 skills/age/scripts/age review-lock --slug"
 _GIT_CHUNK_SIZE = 128 * 1024
 _OUTPUT_PREFIX = f"{SCRATCH_DIR}/{PHASE}/"
 # Git can run repository-configured commands during a diff (textconv filters,
