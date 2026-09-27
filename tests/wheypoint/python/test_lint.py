@@ -33,6 +33,7 @@ from easy_cheese.shared.wheypoint import (
     lint_freshness,
     projection,
     records,
+    refs,
     storage,
 )
 
@@ -812,8 +813,8 @@ def test_artifact_digest_in_hashes_relative_paths(tmp_path: Path) -> None:
     _ = (tmp_path / "cook" / "report.md").write_text("body", encoding="utf-8")
     digest = lint_freshness.artifact_digest_in(tmp_path)
 
-    assert digest("cook/report.md") == canonical.digest_text("body")
-    assert digest("cook/absent.md") is None
+    assert digest("repo:cook/report.md") == canonical.digest_text("body")
+    assert digest("repo:cook/absent.md") is None
 
 
 def test_artifact_digest_in_rejects_absolute_paths(tmp_path: Path) -> None:
@@ -822,7 +823,7 @@ def test_artifact_digest_in_rejects_absolute_paths(tmp_path: Path) -> None:
     outside = tmp_path / "outside.md"
     _ = outside.write_text("body", encoding="utf-8")
 
-    assert lint_freshness.artifact_digest_in(root)(str(outside)) is None
+    assert lint_freshness.artifact_digest_in(root)(f"repo:{outside}") is None
 
 
 def test_artifact_digest_in_rejects_parent_traversal(tmp_path: Path) -> None:
@@ -830,7 +831,7 @@ def test_artifact_digest_in_rejects_parent_traversal(tmp_path: Path) -> None:
     root.mkdir()
     _ = (tmp_path / "outside.md").write_text("body", encoding="utf-8")
 
-    assert lint_freshness.artifact_digest_in(root)("../outside.md") is None
+    assert lint_freshness.artifact_digest_in(root)("repo:../outside.md") is None
 
 
 def test_artifact_digest_in_rejects_symlink_escapes(tmp_path: Path) -> None:
@@ -840,7 +841,7 @@ def test_artifact_digest_in_rejects_symlink_escapes(tmp_path: Path) -> None:
     _ = outside.write_text("body", encoding="utf-8")
     (root / "link.md").symlink_to(outside)
 
-    assert lint_freshness.artifact_digest_in(root)("link.md") is None
+    assert lint_freshness.artifact_digest_in(root)("repo:link.md") is None
 
 
 def test_artifact_digest_in_rejects_non_regular_paths(tmp_path: Path) -> None:
@@ -848,7 +849,7 @@ def test_artifact_digest_in_rejects_non_regular_paths(tmp_path: Path) -> None:
     root.mkdir()
     (root / "reports").mkdir()
 
-    assert lint_freshness.artifact_digest_in(root)("reports") is None
+    assert lint_freshness.artifact_digest_in(root)("repo:reports") is None
 
 
 def test_ac16_a_future_record_this_reader_cannot_structure_reports_runtime_behind_only(
@@ -934,6 +935,56 @@ def test_ac16_a_store_from_a_newer_runtime_reports_runtime_behind_only(
     assert f"schema version {SCHEMA_VERSION + 1}" in report.findings[0].detail
     assert lint.gates_continuation(report.findings[0])
 
+
+def test_ac18_a_schema_3_reader_reports_runtime_behind_for_a_schema_4_store(
+    corpus_root: Path,
+    make_promotion: Callable[..., _PromotionLike],
+    make_record: Callable[..., WheypointRecord],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from easy_cheese_schemas import compat
+
+    store = make_store(corpus_root)
+    promotion = make_promotion(
+        record=make_record(
+            schema_version=4,
+            artifact_links=[ArtifactLink(path="a.md", ref="https://example.dev/a")],
+        )
+    )
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+    monkeypatch.setattr(compat, "SCHEMA_VERSION", 3)
+    monkeypatch.setattr(lint, "SCHEMA_VERSION", 3)
+
+    report = check(store)
+
+    assert report.codes == (lint.LintCode.RUNTIME_BEHIND,)
+    assert lint.LintCode.STORE_INCONSISTENT not in report.codes
+    assert "schema version 4" in report.findings[0].detail
+    assert "reads up to 3" in report.findings[0].detail
+
+
+def test_stale_artifact_link_covers_xdg_refs_and_skips_unpinnable_ones(
+    tmp_path: Path, make_record: Callable[..., WheypointRecord]
+) -> None:
+    home = tmp_path / "home"
+    (home / PROJECT).mkdir(parents=True)
+    doc = home / PROJECT / "plan.md"
+    _ = doc.write_text("v1", encoding="utf-8")
+    pinned = canonical.digest_text("v1")
+    record = make_record(
+        artifact_links=[
+            ArtifactLink(path="plan.md", ref=f"xdg:{PROJECT}/plan.md", digest=pinned),
+            ArtifactLink(path="x", ref="https://example.dev/x", digest=pinned),
+        ]
+    )
+    digest = refs.digester(tmp_path, home)
+    assert lint_freshness.artifact_link_findings(record, digest) == []
+
+    _ = doc.write_text("v2", encoding="utf-8")
+    findings = lint_freshness.artifact_link_findings(record, refs.digester(tmp_path, home))
+
+    assert [finding.code for finding in findings] == [lint.LintCode.STALE_ARTIFACT_LINK]
+    assert findings[0].detail.startswith("plan.md: linked digest")
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
 def test_stale_commit_check_swallows_an_unrunnable_git_but_says_so(
@@ -1154,7 +1205,7 @@ def test_lint_work_digests_each_artifact_path_once(
     report = check(store, artifact_digest=counting_digest)
 
     assert report.codes == ()
-    assert asked == ["cook/report.md"]
+    assert asked == ["repo:cook/report.md"]
 
 
 def test_external_pointers_in_working_context_are_not_grounded_paths(

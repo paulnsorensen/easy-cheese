@@ -25,6 +25,7 @@ from easy_cheese_schemas import (
     SCHEMA_VERSION,
     CompactionRecord,
     Durability,
+    NormalizationReceipt,
     WheypointProjection,
     WheypointRecord,
     WheypointRevision,
@@ -48,11 +49,16 @@ from .lineage import Lineage
 
 @define(frozen=True)
 class LintReport:
-    """Everything that is wrong, plus what was readable while checking."""
+    """Everything that is wrong, plus what was readable while checking.
+
+    `normalizations` holds one receipt per link the reader filled in from an
+    older schema. They are advisory data, never findings.
+    """
 
     findings: tuple[LintFinding, ...] = field(default=())
     record: WheypointRecord | None = None
     projection: WheypointProjection | None = None
+    normalizations: tuple[NormalizationReceipt, ...] = field(default=())
 
     @property
     def ok(self) -> bool:
@@ -217,7 +223,13 @@ def lint_work(
     if projection is not None:
         findings.extend(_durability_findings(projection, record))
     findings.extend(lint_freshness.grounded_path_findings(record, root))
-    return LintReport(findings=tuple(findings), record=record, projection=projection)
+    _, normalizations = records.normalize_links(record)
+    return LintReport(
+        findings=tuple(findings),
+        record=record,
+        projection=projection,
+        normalizations=normalizations,
+    )
 
 
 def _durability_findings(

@@ -61,6 +61,7 @@ from easy_cheese_schemas import (
     ProposedEntry,
     ProtectedEntry,
     RepositoryProvenance,
+    TransitionAction,
     WheypointDelta,
     WheypointProjection,
     WheypointRecord,
@@ -71,9 +72,8 @@ from easy_cheese.shared import paths
 
 from . import canonical
 from . import lineage
-from . import lint_freshness
 from . import projection as projection_mod
-from . import records, storage
+from . import records, refs, storage
 
 # A record digest deliberately excludes `revision_digest` (see records.py), so
 # the draft record can be hashed, quoted by its receipt, and only then told
@@ -171,7 +171,7 @@ def commit(
     digest_root = (
         _digest_root() if artifact_root is None else Path(artifact_root).resolve()
     )
-    digest_of = lint_freshness.artifact_digest_in(digest_root)
+    digest_of = refs.digester(digest_root, paths.corpus_home())
 
     if delta.work_id != store.work_id:
         raise CommitError(
@@ -576,36 +576,73 @@ def _merge_artifact_links(
     revision_id: str,
     digest_of: Callable[[str], str | None],
 ) -> list[ArtifactLink]:
-    """Artifact links as a set keyed by path (S3, S4).
+    """Artifact links as a set keyed by normalized reference (S3, S4).
 
-    An added link replaces the one already carried for its path and is pinned
-    to the revision being written, with the file's digest computed here when
-    the path resolves to a file. Removal names paths; an unknown path is
-    refused rather than ignored, and an empty list never reaches this point.
+    An added link replaces the one already carried for its reference and is
+    pinned to the revision being written, with the target's digest computed
+    here. A pinnable reference that does not resolve is refused; an
+    unpinnable one is linked with no digest and may cover no entry. Removal
+    names a reference or a bare repository path; an unknown one is refused
+    rather than ignored, and an empty list never reaches this point.
     """
     if add is None and remove is None:
         return current_links
-    order = [link.path for link in current_links]
-    by_path = {link.path: link for link in current_links}
+    order = [_link_key(link) for link in current_links]
+    by_ref = dict(zip(order, current_links, strict=True))
     for link in add or ():
-        # The digest is host-computed from the file (S3): a path that does not
-        # resolve to a file under the repository root carries no digest, and a
-        # caller-supplied value is never honoured.
-        if link.path not in by_path:
-            order.append(link.path)
-        digest = digest_of(link.path)
-        if digest is None:
+        try:
+            ref = refs.normalize_ref(records.effective_ref(link))
+        except ValueError as exc:
+            raise CommitError(f"add_artifact_links names an unusable ref: {exc}") from exc
+        scheme = refs.parse_ref(ref).scheme
+        # The digest is host-computed from the target (S3): a caller-supplied
+        # value is never honoured.
+        digest: str | None = None
+        if not refs.is_pinnable(scheme):
+            if link.covers_entry_ids:
+                raise CommitError(
+                    f"unpinnable-scheme: {ref!r} cannot pin a digest, so it "
+                    + "cannot cover protected entries"
+                )
+        else:
+            digest = digest_of(ref)
+            if digest is None:
+                raise CommitError(
+                    f"add_artifact_links names a ref this host cannot digest: {ref!r}"
+                )
+        if ref not in by_ref:
+            order.append(ref)
+        by_ref[ref] = evolve(
+            link,
+            ref=ref,
+            path=ref.partition(":")[2],
+            digest=digest,
+            revision_id=revision_id,
+        )
+    for value in remove or ():
+        key = _removal_key(value)
+        if key not in by_ref:
             raise CommitError(
-                f"add_artifact_links names a path this host cannot digest: {link.path!r}"
+                f"remove_artifact_links names a path this record does not carry: {value!r}"
             )
-        by_path[link.path] = evolve(link, digest=digest, revision_id=revision_id)
-    for path in remove or ():
-        if path not in by_path:
-            raise CommitError(
-                f"remove_artifact_links names a path this record does not carry: {path!r}"
-            )
-        del by_path[path]
-    return [by_path[path] for path in order if path in by_path]
+        del by_ref[key]
+    return [by_ref[key] for key in order if key in by_ref]
+
+
+def _link_key(link: ArtifactLink) -> str:
+    ref = records.effective_ref(link)
+    try:
+        return refs.normalize_ref(ref)
+    except ValueError:
+        return ref
+
+
+def _removal_key(value: str) -> str:
+    """A removal names a reference, or a bare path read as `repo:`."""
+    try:
+        return refs.normalize_ref(value)
+    except ValueError:
+        return _link_key(ArtifactLink(path=value))
 
 
 def _transitioned(
@@ -618,6 +655,11 @@ def _transitioned(
         state=transition.resulting_state,
         rationale=transition.rationale,
         superseded_by=transition.target_entry_id,
+        successor=(
+            transition.successor
+            if transition.action is TransitionAction.FORK
+            else entry.successor
+        ),
     )
 
 

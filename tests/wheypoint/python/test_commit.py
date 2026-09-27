@@ -848,7 +848,12 @@ def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
     expected_digest = storage.file_digest(repo_root / ".cheese" / "cook" / "wave-3.md")
     assert result.record.artifact_links == [
         carried,
-        evolve(added, digest=expected_digest, revision_id=result.record.revision_id),
+        evolve(
+            added,
+            ref="repo:.cheese/cook/wave-3.md",
+            digest=expected_digest,
+            revision_id=result.record.revision_id,
+        ),
     ]
 
     replaced = ArtifactLink(path=".cheese/cook/wave-2.md", covers_entry_ids=[])
