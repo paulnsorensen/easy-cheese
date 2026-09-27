@@ -12,6 +12,7 @@ from collections.abc import Sequence
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -36,6 +37,11 @@ from prompt_lab import (
     sha256_hex,
     write_json,
 )
+
+import agent_lab_candidate
+import agent_lab_mine
+import agent_lab_scoring
+import agent_lab_tilth
 
 
 MAX_RUNS = 1_000
@@ -550,6 +556,8 @@ def _run_evaluate(args: AgentArgs, root: Path) -> int:
 
 
 def _run_optimize(args: AgentArgs, root: Path) -> int:
+    if not args.seed_prompt:
+        raise PromptLabError("--seed-prompt is required for --runner claude")
     tasks_path = Path(args.tasks)
     task_set = load_task_set(tasks_path)
     seed = _read_prompt(args.seed_prompt, root)
@@ -644,6 +652,402 @@ def _run_optimize(args: AgentArgs, root: Path) -> int:
     return 0
 
 
+@dataclass(frozen=True)
+class ValidateArgs:
+    tasks: str
+
+
+def _validate_args(namespace: argparse.Namespace) -> ValidateArgs:
+    return ValidateArgs(tasks=cast(str, getattr(namespace, "tasks", "")))
+
+
+@dataclass(frozen=True)
+class CandidateBuildArgs:
+    dir: str
+    out: str
+
+
+def _candidate_build_args(namespace: argparse.Namespace) -> CandidateBuildArgs:
+    return CandidateBuildArgs(
+        dir=cast(str, getattr(namespace, "dir", "")),
+        out=cast(str, getattr(namespace, "out", "")),
+    )
+
+
+@dataclass(frozen=True)
+class TasksMineArgs:
+    repo: str
+    out: str
+    tilth_root: str
+    since: str | None
+    limit: int | None
+    gh_bin: str
+    allow_untrusted_authors: bool
+
+
+def _tasks_mine_args(namespace: argparse.Namespace) -> TasksMineArgs:
+    return TasksMineArgs(
+        repo=cast(str, getattr(namespace, "repo", "")),
+        out=cast(str, getattr(namespace, "out", "")),
+        tilth_root=cast(str, getattr(namespace, "tilth_root", "")),
+        since=cast("str | None", getattr(namespace, "since", None)),
+        limit=cast("int | None", getattr(namespace, "limit", None)),
+        gh_bin=cast(str, getattr(namespace, "gh_bin", "gh")),
+        allow_untrusted_authors=cast(bool, getattr(namespace, "allow_untrusted_authors", False)),
+    )
+
+
+# Spec AC-7 / decision F-4: graduation grades a candidate at Sonnet, Opus,
+# and Fable; a --models set missing any of the three is rejected outright.
+REQUIRED_GRADUATE_MODELS = ("sonnet", "opus", "fable")
+
+
+@dataclass(frozen=True)
+class GraduateArgs:
+    seed: str
+    candidate: str
+    holdout: str
+    tilth_root: str
+    models: str
+    output_dir: str
+    erosion_ratio: float
+    max_cells: int
+
+
+def _graduate_args(namespace: argparse.Namespace) -> GraduateArgs:
+    return GraduateArgs(
+        seed=cast(str, getattr(namespace, "seed", "current")),
+        candidate=cast(str, getattr(namespace, "candidate", "")),
+        holdout=cast(str, getattr(namespace, "holdout", "")),
+        tilth_root=cast(str, getattr(namespace, "tilth_root", "")),
+        models=cast(str, getattr(namespace, "models", "")),
+        output_dir=cast(str, getattr(namespace, "output_dir", "")),
+        erosion_ratio=cast(float, getattr(namespace, "erosion_ratio", agent_lab_tilth.DEFAULT_EROSION_RATIO)),
+        max_cells=cast(int, getattr(namespace, "max_cells", 100)),
+    )
+
+
+@dataclass(frozen=True)
+class OptimizeTilthArgs:
+    tasks: str
+    seed: str
+    tilth_root: str
+    max_cells: int
+    search_model: str
+    validation_model: str
+    erosion_ratio: float
+    reflection_model: str
+    max_metric_calls: int
+    max_runs: int
+    timeout_seconds: int
+    output_dir: str
+
+
+def _optimize_tilth_args(namespace: argparse.Namespace) -> OptimizeTilthArgs:
+    return OptimizeTilthArgs(
+        tasks=cast(str, getattr(namespace, "tasks", "")),
+        seed=cast(str, getattr(namespace, "seed", "current")),
+        tilth_root=cast(str, getattr(namespace, "tilth_root", "")),
+        max_cells=cast(int, getattr(namespace, "max_cells", 100)),
+        search_model=cast(str, getattr(namespace, "search_model", "")),
+        validation_model=cast(str, getattr(namespace, "validation_model", "")),
+        erosion_ratio=cast(float, getattr(namespace, "erosion_ratio", agent_lab_tilth.DEFAULT_EROSION_RATIO)),
+        reflection_model=cast(str, getattr(namespace, "reflection_model", "")),
+        max_metric_calls=cast(int, getattr(namespace, "max_metric_calls", 8)),
+        max_runs=cast(int, getattr(namespace, "max_runs", 32)),
+        timeout_seconds=cast(int, getattr(namespace, "timeout_seconds", 300)),
+        output_dir=cast(str, getattr(namespace, "output_dir", "")),
+    )
+
+
+def _filename_slug(text: str) -> str:
+    """Sanitise `text` for use as one path segment in an output filename."""
+    return re.sub(r"[^A-Za-z0-9._-]", "_", text)
+
+
+def _read_json_mapping(path: Path, *, label: str) -> JsonObject:
+    try:
+        raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError) as error:
+        raise PromptLabError(f"cannot read {label}: {path}") from error
+    return require_mapping(raw, label)
+
+
+def _require_task_list(root: JsonObject, *, label: str) -> list[JsonObject]:
+    """Return `root['tasks']` as a non-empty list of task mappings, or raise."""
+    tasks_raw = root.get("tasks")
+    if not isinstance(tasks_raw, list) or not tasks_raw:
+        raise PromptLabError(f"{label} tasks must be a non-empty list")
+    return [
+        require_mapping(task, f"{label}[{index}]")
+        for index, task in enumerate(cast(list[object], tasks_raw))
+    ]
+
+
+def _run_validate(args: ValidateArgs) -> int:
+    tasks_path = Path(args.tasks)
+    task_root = _read_json_mapping(tasks_path, label="task set")
+    if "repo" in task_root:
+        task_set = load_task_set(tasks_path)
+        splits = {split: len(task_set.split(split)) for split in SPLITS}
+        print(json.dumps({"tasks": len(task_set.tasks), "splits": splits, "repo": str(task_set.repo)}))
+        return 0
+    tasks_raw = _require_task_list(task_root, label="task set")
+    counts: dict[str, int] = {}
+    for index, task in enumerate(tasks_raw):
+        try:
+            agent_lab_mine.validate_mined_task(task)
+        except ValueError as error:
+            raise PromptLabError(f"tasks[{index}]: {error}") from error
+        split = cast(str, task["split"])
+        counts[split] = counts.get(split, 0) + 1
+    print(json.dumps({"counts": counts}))
+    return 0
+
+
+def _run_candidate_build(args: CandidateBuildArgs, root: Path) -> int:
+    out = Path(args.out)
+    if out.exists():
+        raise PromptLabError(f"output directory already exists: {out}")
+    candidate = agent_lab_candidate.load_candidate_dir(Path(args.dir))
+    result = agent_lab_candidate.prepare_overlay_detailed(candidate, repo_root=root, overlay_dir=out)
+    print(json.dumps({"guard": result.guard, "detail": result.detail}))
+    return 2 if result.guard else 0
+
+
+def _run_tasks_mine(args: TasksMineArgs) -> int:
+    check_task = agent_lab_mine.make_check_task(Path(args.tilth_root))
+    drops: list[tuple[int, str]] = []
+    tasks = agent_lab_mine.mine_tasks(
+        args.repo,
+        gh_bin=args.gh_bin,
+        check_task=check_task,
+        since=args.since,
+        limit=args.limit,
+        allow_untrusted_authors=args.allow_untrusted_authors,
+        drops=drops,
+    )
+    write_json(Path(args.out), {"version": 1, "tasks": tasks})
+    print(
+        json.dumps(
+            {
+                "tasks": len(tasks),
+                "drops": [{"pr": number, "reason": reason} for number, reason in drops],
+            }
+        )
+    )
+    return 0
+
+
+def _run_graduate(args: GraduateArgs, root: Path) -> int:
+    models = tuple(model.strip() for model in args.models.split(",") if model.strip())
+    missing = set(REQUIRED_GRADUATE_MODELS) - set(models)
+    if missing:
+        raise PromptLabError(
+            f"graduate --models must include {', '.join(REQUIRED_GRADUATE_MODELS)}; missing {', '.join(sorted(missing))}"
+        )
+    seed = agent_lab_candidate.load_candidate_dir(root if args.seed == "current" else Path(args.seed))
+    candidate = agent_lab_candidate.load_candidate_dir(Path(args.candidate))
+    holdout_root = _read_json_mapping(Path(args.holdout), label="holdout tasks")
+    holdout_tasks = _require_task_list(holdout_root, label="holdout tasks")
+    # The holdout file mined alongside train/validation tasks carries every
+    # split; graduation must run only the sealed split GEPA never searched.
+    holdout_ids = [
+        require_text(task.get("id"), "holdout task id") for task in holdout_tasks if task.get("split") == "holdout"
+    ]
+    if not holdout_ids:
+        raise PromptLabError("holdout tasks must include at least one task with split 'holdout'")
+    tasks_path = Path(args.holdout)
+    runner = agent_lab_tilth.TilthRunner(tilth_root=Path(args.tilth_root), max_cells=args.max_cells)
+    output_dir = Path(args.output_dir)
+    new_output_dir(output_dir)
+    overlay_cache = agent_lab_tilth.OverlayCache(
+        output_dir=output_dir, repo_root=root, prepare_overlay=agent_lab_candidate.prepare_overlay_detailed
+    )
+
+    call_count = 0
+    guard_details: dict[str, str] = {}
+
+    def evaluate(components: agent_lab_scoring.Components, model: str) -> list[JsonObject]:
+        nonlocal call_count
+        call_count += 1
+        _, records = agent_lab_tilth.evaluate_candidate(
+            runner=runner,
+            overlay_cache=overlay_cache,
+            components=components,
+            tasks_path=tasks_path,
+            task_ids=holdout_ids,
+            model=model,
+            output_path=output_dir / f"rows-{call_count}-{_filename_slug(model)}.jsonl",
+            erosion_ratio=args.erosion_ratio,
+        )
+        for record in records:
+            detail = record.get("detail")
+            if detail:
+                guard_details[cast(str, record["guard"])] = cast(str, detail)
+        return records
+
+    result = agent_lab_scoring.graduate(seed, candidate, evaluate=evaluate, models=models, output_dir=output_dir)
+    output: JsonObject = {"verdict": result["verdict"]}
+    if guard_details:
+        output["guard_details"] = guard_details
+    print(json.dumps(output))
+    return 0 if result["verdict"] == "promote" else 2
+
+
+GepaModule = tuple[Callable[..., object], Callable[..., object], Callable[..., object], Callable[..., object]]
+
+# Tests point this at a deterministic stub (EngineConfig, GEPAConfig,
+# ReflectionConfig, optimize_anything) so the CLI wiring runs without the
+# optional `gepa` dependency installed.
+_gepa_module_override: GepaModule | None = None
+
+
+def _gepa_module() -> GepaModule:
+    if _gepa_module_override is not None:
+        return _gepa_module_override
+    try:
+        module = import_module("gepa.optimize_anything")
+    except ImportError as error:
+        raise PromptLabError("install requirements/prompt-lab.txt for optimization") from error
+    return (
+        cast(Callable[..., object], getattr(module, "EngineConfig")),
+        cast(Callable[..., object], getattr(module, "GEPAConfig")),
+        cast(Callable[..., object], getattr(module, "ReflectionConfig")),
+        cast(Callable[..., object], getattr(module, "optimize_anything")),
+    )
+
+
+def _run_optimize_tilth(args: OptimizeTilthArgs, root: Path) -> int:
+    if not args.tilth_root or not args.search_model or not args.validation_model:
+        raise PromptLabError("optimize --runner tilth requires --tilth-root, --search-model, and --validation-model")
+    tasks_path = Path(args.tasks)
+    tasks_root = _read_json_mapping(tasks_path, label="task set")
+    tasks_raw = _require_task_list(tasks_root, label="task set")
+    split_by_id: dict[str, str] = {}
+    for index, task in enumerate(tasks_raw):
+        identifier = require_text(task.get("id"), f"tasks[{index}].id")
+        split_by_id[identifier] = require_text(task.get("split"), f"{identifier}.split")
+    train_ids = [task_id for task_id, split in split_by_id.items() if split == "train"]
+    validation_ids = [task_id for task_id, split in split_by_id.items() if split == "validation"]
+    if not train_ids or not validation_ids:
+        raise PromptLabError("task set must contain both train and validation tasks")
+
+    engine_config, gepa_config, reflection_config, optimize_anything = _gepa_module()
+
+    seed_candidate = agent_lab_candidate.load_candidate_dir(root if args.seed == "current" else Path(args.seed))
+    runner = agent_lab_tilth.TilthRunner(
+        tilth_root=Path(args.tilth_root), max_cells=args.max_cells, timeout_seconds=args.timeout_seconds
+    )
+    output_dir = Path(args.output_dir)
+    new_output_dir(output_dir)
+    search_model = args.search_model
+    validation_model = args.validation_model
+    overlay_cache = agent_lab_tilth.OverlayCache(
+        output_dir=output_dir, repo_root=root, prepare_overlay=agent_lab_candidate.prepare_overlay_detailed
+    )
+
+    components_by_sha: dict[str, agent_lab_scoring.Components] = {}
+    validation_vectors_by_sha: dict[str, list[tuple[float, float]]] = {}
+    models_by_sha: dict[str, list[str]] = {}
+    guard_details_by_sha: dict[str, str] = {}
+    call_count = 0
+
+    def evaluator(candidate: agent_lab_scoring.Components, example: JsonObject) -> tuple[float, JsonObject]:
+        nonlocal call_count
+        task_id = cast(str, example["id"])
+        split = split_by_id[task_id]
+        model = search_model if split == "train" else validation_model
+        if call_count >= args.max_runs:
+            raise BudgetExhausted("max-runs budget exhausted")
+        call_count += 1
+        output_path = output_dir / f"rows-{call_count}.jsonl"
+        key, records = agent_lab_tilth.evaluate_candidate(
+            runner=runner,
+            overlay_cache=overlay_cache,
+            components=candidate,
+            tasks_path=tasks_path,
+            task_ids=[task_id],
+            model=model,
+            output_path=output_path,
+            erosion_ratio=args.erosion_ratio,
+        )
+        components_by_sha[key] = dict(candidate)
+        record = records[0]
+        vector = agent_lab_scoring.score_vector(record)
+        if split == "validation":
+            validation_vectors_by_sha.setdefault(key, []).append(vector)
+        models_by_sha.setdefault(key, []).append(model)
+        side_info: JsonObject = {"scores": agent_lab_scoring.side_info_scores(record), "model": model}
+        if record.get("guard"):
+            side_info["guard"] = record["guard"]
+            detail = record.get("detail")
+            if detail:
+                side_info["detail"] = detail
+                guard_details_by_sha[key] = cast(str, detail)
+        return float(cast(bool, record["correct"])), side_info
+
+    reflection_source = os.environ.get("AGENT_LAB_FAKE_REFLECTION")
+    if reflection_source:
+        fake_root = require_mapping(
+            cast(object, json.loads(Path(reflection_source).read_text(encoding="utf-8"))), "fake reflection"
+        )
+        texts = cast(list[str], fake_root["texts"])
+        state = {"calls": 0}
+
+        def reflection_lm(_prompt: object) -> str:
+            text = texts[state["calls"] % len(texts)]
+            state["calls"] += 1
+            return f"```\n{text}\n```"
+
+        reflection_lm_value: object = reflection_lm
+    else:
+        reflection_lm_value = args.reflection_model or search_model
+
+    config = gepa_config(
+        engine=engine_config(
+            max_metric_calls=args.max_metric_calls, parallel=False, cache_evaluation=True, frontier_type="objective"
+        ),
+        reflection=reflection_config(reflection_lm=reflection_lm_value),
+    )
+    _ = optimize_anything(
+        seed_candidate=seed_candidate,
+        evaluator=evaluator,
+        dataset=[{"id": task_id} for task_id in train_ids],
+        valset=[{"id": task_id} for task_id in validation_ids],
+        objective="maximize task correctness and minimize agent token spend",
+        config=config,
+    )
+
+    # The front compares candidates only on validation vectors, over the
+    # full validation split: a candidate GEPA never fully validated cannot
+    # be compared against one that was, so it is excluded rather than
+    # averaged in on a smaller, easier subset (spec F-3).
+    mean_by_sha = {
+        key: agent_lab_scoring.mean_vector(vectors)
+        for key, vectors in validation_vectors_by_sha.items()
+        if len(vectors) == len(validation_ids)
+    }
+    front = agent_lab_scoring.pareto_front(sorted(mean_by_sha.items()))
+    for key in front:
+        agent_lab_candidate.write_components(output_dir / "candidates" / key, components_by_sha[key])
+    write_json(
+        output_dir / "result.json",
+        {
+            "pareto_front": [
+                {
+                    "candidate_sha256": key,
+                    "vector": list(mean_by_sha[key]),
+                    "models": sorted(set(models_by_sha[key])),
+                    **({"guard_detail": guard_details_by_sha[key]} if key in guard_details_by_sha else {}),
+                }
+                for key in front
+            ]
+        },
+    )
+    print(json.dumps({"pareto_front": front}))
+    return 0
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent_lab.py")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -664,9 +1068,43 @@ def _parser() -> argparse.ArgumentParser:
     _ = evaluate.add_argument("--prompt", required=True)
     _ = evaluate.add_argument("--split", choices=SPLITS, default="validation")
     optimize = subparsers.choices["optimize"]
-    _ = optimize.add_argument("--seed-prompt", required=True)
+    _ = optimize.add_argument("--seed-prompt")
     _ = optimize.add_argument("--max-metric-calls", type=int, default=8)
     _ = optimize.add_argument("--reflection-model")
+    _ = optimize.add_argument("--runner", choices=("claude", "tilth"), default="claude")
+    _ = optimize.add_argument("--tilth-root")
+    _ = optimize.add_argument("--search-model")
+    _ = optimize.add_argument("--validation-model")
+    _ = optimize.add_argument("--seed", default="current")
+    _ = optimize.add_argument("--erosion-ratio", type=float, default=agent_lab_tilth.DEFAULT_EROSION_RATIO)
+    _ = optimize.add_argument("--max-cells", type=int, default=100)
+
+    candidate = subparsers.add_parser("candidate")
+    candidate_sub = candidate.add_subparsers(dest="candidate_command", required=True)
+    build = candidate_sub.add_parser("build")
+    _ = build.add_argument("dir")
+    _ = build.add_argument("--out", required=True)
+
+    tasks_cmd = subparsers.add_parser("tasks")
+    tasks_sub = tasks_cmd.add_subparsers(dest="tasks_command", required=True)
+    mine = tasks_sub.add_parser("mine")
+    _ = mine.add_argument("--repo", required=True)
+    _ = mine.add_argument("--out", required=True)
+    _ = mine.add_argument("--tilth-root", required=True)
+    _ = mine.add_argument("--since")
+    _ = mine.add_argument("--limit", type=int)
+    _ = mine.add_argument("--gh-bin", default="gh")
+    _ = mine.add_argument("--allow-untrusted-authors", action="store_true")
+
+    graduate = subparsers.add_parser("graduate")
+    _ = graduate.add_argument("--seed", default="current")
+    _ = graduate.add_argument("--candidate", required=True)
+    _ = graduate.add_argument("--holdout", required=True)
+    _ = graduate.add_argument("--tilth-root", required=True)
+    _ = graduate.add_argument("--models", default=",".join(REQUIRED_GRADUATE_MODELS))
+    _ = graduate.add_argument("--output-dir", required=True)
+    _ = graduate.add_argument("--erosion-ratio", type=float, default=agent_lab_tilth.DEFAULT_EROSION_RATIO)
+    _ = graduate.add_argument("--max-cells", type=int, default=100)
     return parser
 
 
@@ -677,16 +1115,24 @@ def main(argv: list[str] | None = None) -> int:
     try:
         command = cast(str, getattr(args, "command", ""))
         if command == "validate":
-            task_set = load_task_set(Path(cast(str, getattr(args, "tasks", ""))))
-            counts = {split: len(task_set.split(split)) for split in SPLITS}
-            print(json.dumps({"tasks": len(task_set.tasks), "splits": counts, "repo": str(task_set.repo)}))
-            return 0
+            return _run_validate(_validate_args(args))
+        if command == "candidate":
+            return _run_candidate_build(_candidate_build_args(args), root)
+        if command == "tasks":
+            return _run_tasks_mine(_tasks_mine_args(args))
+        if command == "graduate":
+            return _run_graduate(_graduate_args(args), root)
+        if command == "optimize" and cast(str, getattr(args, "runner", "claude")) == "tilth":
+            return _run_optimize_tilth(_optimize_tilth_args(args), root)
         agent_args = _agent_args(args)
         if command == "evaluate":
             return _run_evaluate(agent_args, root)
         return _run_optimize(agent_args, root)
-    except (PromptLabError, ProviderError, BudgetExhausted) as error:
+    except (PromptLabError, ProviderError, BudgetExhausted, agent_lab_tilth.RunnerError) as error:
         print(str(error), file=sys.stderr)
+        return 2
+    except subprocess.CalledProcessError as error:
+        print(f"subprocess failed: {error}", file=sys.stderr)
         return 2
 
 
