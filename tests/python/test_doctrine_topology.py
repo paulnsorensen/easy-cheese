@@ -1,10 +1,11 @@
 """Doctrine-topology conformance: the one-skill/one-launcher boundary rules.
 
-Easy Cheese's landed doctrine forbids reintroducing a shared common.pyz or any
-checked-in archive, copying another skill's sources into a skill's own tree,
+Easy Cheese's landed doctrine forbids naming a shared common.pyz or any
+retired archive, copying another skill's sources into a skill's own tree,
 naming another skill's launcher, and flattening the src/ runtime roots. These
 tests fabricate each violation and assert scripts/runtime_gates.py (or, where
-no runtime checker exists, the repo's own layout) rejects it.
+no runtime checker exists, the repo's own layout) rejects it. A checked-in
+archive file itself is `wedge check`'s rule.
 """
 
 from __future__ import annotations
@@ -29,17 +30,6 @@ def _skill(root: Path, name: str) -> Path:
     skill_dir = root / "skills" / name
     (skill_dir / "scripts").mkdir(parents=True)
     return skill_dir
-
-
-def test_checked_in_archive_fails_the_gate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A resurrected skills/*/scripts/*.pyz must fail the gate outright."""
-    _ = (_skill(tmp_path, "demo") / "scripts" / "common.pyz").write_bytes(b"stale")
-
-    violations = _scan(tmp_path, monkeypatch)
-
-    assert any("checked-in archives are retired" in v for v in violations)
 
 
 def test_common_pyz_mentions_are_flagged(

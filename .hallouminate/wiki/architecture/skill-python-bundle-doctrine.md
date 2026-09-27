@@ -82,8 +82,8 @@ Skills declare commands only through `@bundle_command` and `derive_command` into
 
 This doctrine supersedes the split runtime roots under `src/<skill>/` and `shared/scripts/`, multi-consumer `common.pyz` archives, cross-skill archive calls, `vendor_deps.py`, the custom ZIP writer, AST-based closure inference, and, since 2026-09-27, the committed Shiv archives with their `build_pyz.py` and `check_bundles.py` pipeline. [[pyz-bundling-pipeline]] records the implemented pipeline.
 
-[^1]: AGENTS.md; skills/*/wedge.toml; scripts/wedge.py
-[^2]: scripts/wedge.py; .github/workflows/wedge.yml
+[^1]: AGENTS.md; skills/*/wedge.toml; tools/wedge/pyproject.toml
+[^2]: tools/wedge/uv.lock; .github/workflows/wedge.yml
 [^3]: src/easy_cheese/skills/; src/easy_cheese/shared/; src/easy_cheese_schemas/
 [^4]: pyproject.toml (`[dependency-groups] runtime`, `[tool.uv] default-groups`); uv.lock; skills/*/wedge.toml
 [^5]: skills/*/scripts/<skill> (generated launcher); AGENTS.md

@@ -1,6 +1,6 @@
 # Pyz bundling pipeline
 
-wedge builds every Python-backed skill as one content-addressed `.pyz` and publishes it as a GitHub release asset. The repository commits a launcher and a lock per skill, never the archive. wedge lives in `lib/` of github.com/paulnsorensen/skillz-that-grillz; `scripts/wedge.py` pins one commit of it, and `.github/workflows/wedge.yml` pins the same commit as a composite action.[^1]
+wedge builds every Python-backed skill as one content-addressed `.pyz` and publishes it as a GitHub release asset. The repository commits a launcher and a lock per skill, never the archive. wedge lives in `lib/` of github.com/paulnsorensen/skillz-that-grillz; `tools/wedge/uv.lock` pins one commit of it, and every path (`just wedge-lock`, the test archive build, `.github/workflows/wedge.yml`) runs that pin with `uv run --project tools/wedge`, so there is one pin. The pin is a project of its own because uv carries wedge's `fromargs` path source into any lock that depends on wedge, which would replace the `fromargs` wheel in the archive closure.[^1]
 
 ## Discovery and configuration
 
@@ -36,7 +36,7 @@ The same script imports every selected `commands.py` from `src/` (refusing an `e
 
 ## Tests
 
-Tests execute a skill through its built archive, never through the committed launcher: the launcher trusts only the committed lock's digest, and a test must exercise the working tree. `scripts/skill_archives.py` returns `$EASY_CHEESE_PREBUILT_PYZ/<skill>.pyz` when `just test` or CI has built the set once, and otherwise builds the requested skill once per process through the pinned wedge. Suite conftests expose it as the `bundle` fixture.[^13]
+Tests execute a skill through its built archive, never through the committed launcher: the launcher trusts only the committed lock's digest, and a test must exercise the working tree. `scripts/skill_archives.py` returns the skill's `<skill>-<digest12>.pyz` under `$EASY_CHEESE_PREBUILT_PYZ` when `just test` or CI has built the set once, and otherwise builds the whole set once per process with one `wedge build --root skills`, which shares one site directory across every skill. The root `tests/conftest.py` exposes it as `skill_archive`; suite conftests wrap it as `bundle`.[^13]
 
 ## CI and release
 
@@ -65,7 +65,7 @@ just wedge-check   # verify every lock is current and every launcher matches the
 
 Until 2026-09-27 the repository committed each archive under `skills/<skill>/scripts/<skill>.pyz`, built by `scripts/build_pyz.py` from PEP 517 wheels in a private wheelhouse, checked for currency by `scripts/check_bundles.py`, and gated by `.github/workflows/build-pyz.yml` with shiv pinned in `requirements-build.txt`. The `pyz-pipeline-contracts` ADRs record that design. wedge replaced all of it; the generated-runtime and command-surface gates moved to `scripts/runtime_gates.py` unchanged.
 
-[^1]: scripts/wedge.py; .github/workflows/wedge.yml; tests/python/test_wedge_pin.py
+[^1]: tools/wedge/pyproject.toml; tools/wedge/uv.lock; .github/workflows/wedge.yml; tests/python/test_wedge_pin.py
 [^2]: skills/*/wedge.toml; scripts/runtime_gates.py:`SKILLS`
 [^3]: pyproject.toml (`[dependency-groups]`, `[tool.uv]`); uv.lock
 [^4]: requirements/runtime.txt; tests/python/test_wedge_pin.py:`test_runtime_requirements_match_the_uv_lock`
@@ -77,7 +77,7 @@ Until 2026-09-27 the repository committed each archive under `skills/<skill>/scr
 [^10]: .github/workflows/wedge.yml; .github/workflows/validate.yml
 [^11]: .github/workflows/release.yml; scripts/stage_release.py; tests/python/test_stage_release.py
 [^12]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py; tests/python/test_bundle_commands.py
-[^13]: scripts/skill_archives.py; tests/*/python/conftest.py
+[^13]: scripts/skill_archives.py; tests/conftest.py; tests/*/python/conftest.py
 [^14]: justfile
 [^lazy-catalog]: scripts/runtime_gates.py:`_compiled_schema_catalog_source`; src/easy_cheese_schemas/schema_runtime.py:`_checked_registered_contracts`; src/easy_cheese_schemas/_contract_modules.py; tests/python/test_generated_runtime_write.py; tests/schemas/python/test_phase_contracts.py
 

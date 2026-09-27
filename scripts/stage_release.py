@@ -97,14 +97,10 @@ def _verify(out: Path) -> None:
         if not lock.is_file():
             raise SystemExit(f"stage_release: missing lock {lock}")
 
-    stray = sorted(
-        str(p.relative_to(out))
-        for pattern in ("*.py", "*.pyz")
-        for p in skills.rglob(pattern)
-    )
+    stray = sorted(str(p.relative_to(out)) for p in skills.rglob("*.py"))
     if stray:
         raise SystemExit(
-            "stage_release: raw .py sources and archives must not ship under skills/; found: "
+            "stage_release: raw .py sources must not ship under skills/; found: "
             + ", ".join(stray)
         )
 

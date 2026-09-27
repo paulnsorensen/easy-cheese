@@ -1,10 +1,13 @@
 name: wedge
 
-# `check` fails a pull request whose wedge lock is stale or whose launcher
-# drifted from the template. `publish` builds each locked skill after a merge
-# and uploads any missing content-addressed archive to the rolling `wedge`
-# release. Publication is append-only, so concurrent runs are safe; do not
-# add cancellation that could drop a pending publication.
+# `check` fails a pull request whose wedge lock is stale, whose launcher
+# drifted from the template, or that commits a .pyz beside a launcher.
+# `publish` builds each locked skill after a merge and uploads any missing
+# content-addressed archive to the rolling `wedge` release. Both run the wedge
+# commit that tools/wedge/uv.lock pins, the same one `just wedge-lock` runs
+# locally, so there is one pin. Publication is
+# append-only, so concurrent runs are safe; do not add cancellation that could
+# drop a pending publication.
 on:
   pull_request:
   push:
@@ -22,13 +25,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Pins wedge to the commit that scripts/wedge.py pins; a test keeps
-      # the two equal.
-      - name: Check wedge locks
-        uses: paulnsorensen/skillz-that-grillz/actions/wedge@db88754fb3682d2984fbba375938873c1e83bdc7
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          command: check
-          roots: skills
+          version: "0.12.5"
+          python-version: "3.12"
+
+      - name: Check wedge locks
+        run: uv run --locked --project tools/wedge wedge check --root skills
 
   publish:
     name: publish wedge assets
@@ -51,8 +55,15 @@ jobs:
             exit 1
           fi
 
-      - name: Publish wedge assets
-        uses: paulnsorensen/skillz-that-grillz/actions/wedge@db88754fb3682d2984fbba375938873c1e83bdc7
+      - name: Set up uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
-          command: publish
-          roots: skills
+          version: "0.12.5"
+          python-version: "3.12"
+
+      - name: Publish wedge assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |-
+          uv run --locked --project tools/wedge wedge publish \
+            --root skills --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA"

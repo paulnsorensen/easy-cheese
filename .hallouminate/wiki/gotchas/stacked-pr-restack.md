@@ -10,7 +10,7 @@ Recorded 2026-09-03 while restacking the r014 chain (#579 → #589, 11 branches)
 ## What works
 
 1. Rebase each branch bottom-up with `git rebase --onto <new parent tip> <old parent tip> <branch>`, where the bottom branch's old parent is the last merged commit of the old lineage. Record every local tip before a second cascade; `origin/<branch>` tips go stale after the first pass.
-2. Every replayed lock-refresh commit conflicts on `skills/*/scripts/*.wedge.json` (one `src/` change changes every skill's lock). Take the replayed side, finish the rebase, run `just wedge-lock`, and amend the branch's own refresh commit. `wedge-lock` needs only `uvx`; it pins wedge through `scripts/wedge.py` and downloads the closure fresh, so no venv or build requirements are involved. (Before 2026-09-27 the conflicts were on committed `.pyz` archives and the rebuild needed a short-path venv with shiv; that constraint is gone.)
+2. Every replayed lock-refresh commit conflicts on `skills/*/scripts/*.wedge.json` (one `src/` change changes every skill's lock). Take the replayed side, finish the rebase, run `just wedge-lock`, and amend the branch's own refresh commit. `wedge-lock` needs only `uv`; it runs the wedge commit that `tools/wedge/uv.lock` pins and downloads the closure fresh, so no venv or build requirements are involved. (Before 2026-09-27 the conflicts were on committed `.pyz` archives and the rebuild needed a short-path venv with shiv; that constraint is gone.)
 3. Adopt the rebased branches into `gh stack` with `gh stack init --base main <bottom> … <top>`; it finds the open PRs by branch name. Then `gh stack push` (per-branch `--force-with-lease`).
 
 ## Traps

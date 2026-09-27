@@ -99,10 +99,9 @@ def test_verify_rejects_missing_lock(tmp_path: Path) -> None:
         stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
 
 
-@pytest.mark.parametrize("stray", ["helper.py", "cook.pyz"])
-def test_verify_rejects_stray_source_or_archive(tmp_path: Path, stray: str) -> None:
+def test_verify_rejects_stray_source(tmp_path: Path) -> None:
     fake = _fake_tree(tmp_path / "tree")
-    _ = (fake / "skills" / "cook" / "scripts" / stray).write_bytes(b"x")
+    _ = (fake / "skills" / "cook" / "scripts" / "helper.py").write_bytes(b"x")
     with pytest.raises(SystemExit, match="must not ship under skills/"):
         stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
 

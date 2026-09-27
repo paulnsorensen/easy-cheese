@@ -37,7 +37,7 @@ wedge builds the archive itself and publishes it to the rolling `wedge` GitHub r
 The launcher downloads that archive on first run and verifies it against the lock. Users need only Python.
 
 Relock every skill after you change runtime source under `src/`, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`.
-`scripts/wedge.py` pins the wedge commit, and `uvx` fetches it; no other install is needed.
+`tools/wedge/uv.lock` pins the wedge commit, and `uv run --project tools/wedge` fetches it; no other install is needed.
 
 ```sh
 just wedge-lock
@@ -48,6 +48,7 @@ just wedge-check
 The archive closure comes from `uv.lock`: the schemas' dependencies plus the `runtime` dependency group in `pyproject.toml`.
 `requirements/runtime.txt` pins the same closure for the test and typing environments; a test keeps the two equal.
 To bump `fromargs`, update the `runtime` group in `pyproject.toml`, run `uv lock`, update `requirements/runtime.txt` and `requirements/typing.txt`, then run `just wedge-lock`.
+To bump wedge, change the commit in `tools/wedge/pyproject.toml`, run `uv lock --project tools/wedge`, then run `just wedge-lock`.
 
 Each Python skill declares its public subcommands in `commands.py`.
 Declare each handler with the `@bundle_command("<name>")` decorator at its definition site.

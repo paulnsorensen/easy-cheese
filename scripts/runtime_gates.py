@@ -10,7 +10,7 @@ Three checks run before any skill archive is built or a lock is trusted:
   `.pyz` archive or `common.pyz` reference survives.
 
 `--write-generated` rewrites the generated sources instead of checking them.
-wedge (scripts/wedge.py) builds each archive from `src/` and verifies the
+wedge (pinned under tools/wedge/) builds each archive from `src/` and verifies the
 committed locks; it does not run these gates, so `just test`, `just check`,
 and CI run this script beside `wedge check`.
 """
@@ -296,15 +296,10 @@ def check_skill_references() -> list[str]:
 
     A file naming another skill's launcher is either a stale doc (the skill was
     renamed or merged) or a real cross-skill call. Any `.pyz` token is a
-    reference to the retired checked-in archives, and a checked-in `.pyz` file
-    is one of those archives.
+    reference to the retired checked-in archives; `wedge check` rejects the
+    files themselves.
     """
     violations: list[str] = []
-    for archive in sorted(REPO_ROOT.glob("skills/*/scripts/*.pyz")):
-        violations.append(
-            f"{archive.relative_to(REPO_ROOT)}: checked-in archives are retired; "
-            + "commit the wedge launcher and lock instead"
-        )
     for path in sorted(set(_reference_roots())):
         skill = _owning_skill(path)
         if skill in _RETIRED_REDIRECT_SKILLS:

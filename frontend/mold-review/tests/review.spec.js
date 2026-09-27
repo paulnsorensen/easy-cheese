@@ -1,14 +1,12 @@
 import {test,expect} from '@playwright/test';
 import {mkdtemp,readFile,writeFile} from 'node:fs/promises';
-import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn,execFileSync} from 'node:child_process';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
-// The built mold archive, never the committed launcher: `just test` and CI export EASY_CHEESE_PREBUILT_PYZ; otherwise build it once here.
-const prebuilt=globalThis.process.env.EASY_CHEESE_PREBUILT_PYZ;
-const archive=prebuilt?join(prebuilt,'mold.pyz'):(()=>{const dir=mkdtempSync(join(tmpdir(),'mold-archive-'));execFileSync('python3',[join(root,'scripts/skill_archives.py'),'--out-dir',dir,'mold'],{cwd:root,stdio:'inherit'});return join(dir,'mold.pyz');})();
+// The built mold archive, never the committed launcher: prebuilt when `just test` or CI exported EASY_CHEESE_PREBUILT_PYZ, else built once here.
+const archive=execFileSync('python3',[join(root,'scripts/skill_archives.py'),'path','mold'],{cwd:root,encoding:'utf8'}).trim();
 async function server(){return serverAt(root);}
 async function serverAt(cwd){const state=await mkdtemp(join(tmpdir(),'mold-review-'));const input=join(state,'revision.json');await writeFile(input,JSON.stringify({questions:[{id:'q-layout',prompt:'Pick a layout',selection_mode:'single',recommended_option_id:'frontend',options:[{id:'frontend',label:'Frontend'},{id:'backend',label:'Backend'},{id:'hostile',label:'<script>window.__moldXss=1</script>'}]}]}));execFileSync('python3',[archive,'review','publish','--state-dir',state,'--input',input],{cwd});return start(state,cwd);}
 async function start(state,cwd=root){const child=spawn('python3',[archive,'review','serve','--state-dir',state,'--port','0'],{cwd,env:globalThis.process.env,stdio:['ignore','pipe','inherit']});const line=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('server did not start')),10000);child.stdout.once('data',d=>{clearTimeout(timer);resolve(JSON.parse(d.toString()))});});return {state,child,...line};}

@@ -1,5 +1,8 @@
 set dotenv-load := true
 python := "uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
+# The wedge commit that tools/wedge/uv.lock pins; the same argv that
+# scripts/skill_archives.py and .github/workflows/wedge.yml run.
+wedge := "uv run --locked --project tools/wedge wedge"
 
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
 # third-party pytest plugins happen to be globally installed. Without this a
@@ -64,7 +67,7 @@ test:
     }
     trap cleanup EXIT
 
-    python3 scripts/skill_archives.py --out-dir "$EASY_CHEESE_PREBUILT_PYZ"
+    python3 scripts/skill_archives.py build "$EASY_CHEESE_PREBUILT_PYZ"
 
     # The pytest suites are latency-bound (subprocess-heavy) and leave cores
     # idle, so run the CPU-bound independent checks (pnpm build, cargo) alongside
@@ -123,13 +126,11 @@ test-skill-overlap:
 # Rebuild every skill archive through the pinned wedge and rewrite each
 # skill's lock and launcher (scripts/<skill> and scripts/<skill>.wedge.json)
 wedge-lock:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    printf '%s\n' skills/*/wedge.toml | xargs -P 4 -I{} sh -c 'python3 scripts/wedge.py lock "$(dirname "{}")"'
+    {{wedge}} lock --root skills
 
 # Verify every skill's wedge lock is current and its launcher matches the template
 wedge-check:
-    python3 scripts/wedge.py check --root skills
+    {{wedge}} check --root skills
 
 # Write every generated runtime source that runtime_gates.py checks for staleness
 update-generated:

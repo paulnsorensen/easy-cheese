@@ -94,7 +94,7 @@ jobs:
       # committed launcher. Build the set once here through the pinned wedge.
       - name: Build skill archives once
         run: |
-          python3 scripts/skill_archives.py --out-dir "$RUNNER_TEMP/archives"
+          python3 scripts/skill_archives.py build "$RUNNER_TEMP/archives"
           echo "EASY_CHEESE_PREBUILT_PYZ=$RUNNER_TEMP/archives" >> "$GITHUB_ENV"
 
       - name: Run melt script tests

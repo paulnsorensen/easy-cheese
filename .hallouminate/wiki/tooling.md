@@ -103,7 +103,7 @@ Every Python-backed skill ships exactly one same-named wedge launcher at
 `src/easy_cheese_schemas` and dispatches only its own skill's commands.[^2]
 
 `just wedge-lock` rebuilds every archive through the wedge commit that
-`scripts/wedge.py` pins and rewrites each lock and launcher. The archive
+`tools/wedge/uv.lock` pins and rewrites each lock and launcher. The archive
 closure is the root project's non-dev export from `uv.lock`: the schemas'
 dependencies plus the `runtime` dependency group. `requirements/runtime.txt`
 pins the same closure for the test and typing environments, and a test keeps
@@ -122,7 +122,7 @@ See the [bundle pipeline](./architecture/pyz-bundling-pipeline.md) and
 [skill Python bundle doctrine](./architecture/skill-python-bundle-doctrine.md)
 for the dependency and purity contracts.
 
-[^1]: skills/*/wedge.toml; scripts/wedge.py
+[^1]: skills/*/wedge.toml; tools/wedge/pyproject.toml; tools/wedge/uv.lock
 [^2]: pyproject.toml; src/easy_cheese/shared; src/easy_cheese/skills
 [^3]: pyproject.toml; uv.lock; requirements/runtime.txt; tests/python/test_wedge_pin.py
 [^4]: .github/workflows/wedge.yml; scripts/runtime_gates.py; scripts/skill_archives.py

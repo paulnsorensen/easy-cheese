@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import importlib
-import sys
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 from typing import cast
 
 import pytest
@@ -18,18 +16,10 @@ import easy_cheese_schemas  # noqa: E402, F401  # pyright: ignore[reportUnusedIm
 Validator = Callable[[dict[str, object]], list[str]]
 
 
-def _skill_archives() -> ModuleType:
-    """Import skill_archives lazily so a break there cannot fail whole-suite collection."""
-    entry = str(REPO_ROOT / "scripts")
-    if entry not in sys.path:
-        sys.path.insert(0, entry)
-    return importlib.import_module("skill_archives")
-
-
 @pytest.fixture(scope="session")
-def bundle() -> Path:
+def bundle(skill_archive: Callable[[str], Path]) -> Path:
     """The built cook archive (see scripts/skill_archives.py)."""
-    return cast(Callable[[str], Path], _skill_archives().archive_path)("cook")
+    return skill_archive("cook")
 
 
 @pytest.fixture(scope="session")

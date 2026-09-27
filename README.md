@@ -152,7 +152,7 @@ If you change runtime source, `pyproject.toml`, `uv.lock`, a phase contract, or 
 just wedge-lock
 ```
 
-`just wedge-lock` runs [wedge](https://github.com/paulnsorensen/skillz-that-grillz/tree/main/lib), pinned by commit in `scripts/wedge.py`. wedge exports the runtime closure from `uv.lock`, vendors `src/`, builds one reproducible archive per skill, and pins a digest over the archive's contents. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The archive resolves a selected target lazily and calls it with only that command's arguments.
+`just wedge-lock` runs [wedge](https://github.com/paulnsorensen/skillz-that-grillz/tree/main/lib), pinned by commit in `tools/wedge/uv.lock`. wedge exports the runtime closure from `uv.lock`, vendors `src/`, builds one reproducible archive per skill, and pins a digest over the archive's contents. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The archive resolves a selected target lazily and calls it with only that command's arguments.
 
 `just check` runs `wedge check`, which fails on a stale lock without building. After a merge to `main`, the `wedge` workflow builds each locked skill and uploads any missing archive to the release. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
 

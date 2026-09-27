@@ -1,0 +1,13 @@
+# The wedge build tool (github.com/paulnsorensen/skillz-that-grillz, `lib/`),
+# pinned by commit through this directory's uv.lock. A project of its own so
+# wedge's closure never enters the runtime lock at the repository root: uv
+# carries wedge's `fromargs` path source into any lock that depends on it.
+# `just wedge-lock`, `just wedge-check`, scripts/skill_archives.py, and
+# .github/workflows/wedge.yml run `uv run --locked --project tools/wedge wedge`.
+[project]
+name = "easy-cheese-wedge"
+version = "0"
+requires-python = ">=3.11"
+dependencies = [
+  "skillz-that-grillz @ git+https://github.com/paulnsorensen/skillz-that-grillz@a71dfddaa37024cc11ae757d08e70494bb5c60e8#subdirectory=lib",
+]

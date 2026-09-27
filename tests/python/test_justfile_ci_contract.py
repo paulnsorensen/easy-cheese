@@ -82,7 +82,7 @@ def test_test_recipe_gates_the_runtime_and_builds_archives_once() -> None:
 
     justfile = (ROOT / "justfile").read_text(encoding="utf-8")
     gates = justfile.index("scripts/runtime_gates.py")
-    build = justfile.index('scripts/skill_archives.py --out-dir "$EASY_CHEESE_PREBUILT_PYZ"')
+    build = justfile.index('scripts/skill_archives.py build "$EASY_CHEESE_PREBUILT_PYZ"')
     suites = justfile.index("-m pytest tests/python")
     assert gates < build < suites
     assert 'export EASY_CHEESE_PREBUILT_PYZ="$prebuilt_pyz_dir"' in justfile
@@ -135,7 +135,7 @@ def test_validate_workflow_gates_the_runtime_and_builds_archives_once() -> None:
     steps = cast(list[dict[str, object]], cast(dict[str, object], jobs["test"])["steps"])
     runs = [cast(str, step["run"]) for step in steps if "run" in step]
     gates = next(i for i, run in enumerate(runs) if "scripts/runtime_gates.py" in run)
-    build = next(i for i, run in enumerate(runs) if "scripts/skill_archives.py --out-dir" in run)
+    build = next(i for i, run in enumerate(runs) if "scripts/skill_archives.py build" in run)
     suites = [i for i, run in enumerate(runs) if "-m pytest" in run]
     assert suites
     assert gates < build < min(suites)
@@ -144,8 +144,8 @@ def test_validate_workflow_gates_the_runtime_and_builds_archives_once() -> None:
 
 def test_wedge_workflow_checks_locks_on_pull_requests_and_publishes_on_main() -> None:
     """wedge.yml verifies every lock on a pull request and publishes archives
-    only after a push to main; the action pin itself is covered by
-    test_wedge_pin.py.
+    only after a push to main, both through the wedge that tools/wedge pins
+    (the pin itself is covered by test_wedge_pin.py).
     """
     jobs = cast(
         dict[str, object],
@@ -154,20 +154,16 @@ def test_wedge_workflow_checks_locks_on_pull_requests_and_publishes_on_main() ->
         )["jobs"],
     )
 
-    def wedge_step(job: str) -> dict[str, object]:
+    def wedge_run(job: str) -> str:
         steps = cast(list[dict[str, object]], cast(dict[str, object], jobs[job])["steps"])
-        matches = [
-            step
-            for step in steps
-            if cast(str, step.get("uses", "")).startswith(
-                "paulnsorensen/skillz-that-grillz/actions/wedge@"
-            )
-        ]
-        assert len(matches) == 1, (job, steps)
-        return cast(dict[str, object], matches[0]["with"])
+        runs = [cast(str, step["run"]) for step in steps if "run" in step]
+        matches = [run for run in runs if "--project tools/wedge wedge" in run]
+        assert len(matches) == 1, (job, runs)
+        return matches[0]
 
-    assert wedge_step("check") == {"command": "check", "roots": "skills"}
-    assert wedge_step("publish") == {"command": "publish", "roots": "skills"}
+    assert "wedge check --root skills" in wedge_run("check")
+    publish = wedge_run("publish")
+    assert "wedge publish" in publish and "--root skills" in publish
     assert "pull_request" in cast(str, cast(dict[str, object], jobs["check"])["if"])
     assert "push" in cast(str, cast(dict[str, object], jobs["publish"])["if"])
 
