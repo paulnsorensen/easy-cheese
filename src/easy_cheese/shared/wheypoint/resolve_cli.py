@@ -16,6 +16,7 @@ success prints the payload, and a refusal is one JSON line on stderr,
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import TextIO, cast
 
 import fromargs
@@ -42,7 +43,12 @@ def maybe_payload(obj: object) -> dict[str, object] | None:
     return None if obj is None else records.unstructure(cast(AttrsInstance, obj))
 
 
-def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, object]:
+def resolve_payload(
+    resolution: resolve_mod.Resolution,
+    ref: str,
+    *,
+    workspace_root: Path | str | None = None,
+) -> dict[str, object]:
     """Project a ``Resolution`` into the native Wheypoint JSON shape.
 
     Every outcome projects the same way, including ``error``: a reference that
@@ -51,7 +57,8 @@ def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, o
     shape usage and internal errors use. ``raise_if_error`` picks the code.
 
     ``bridge`` reports the milknado binding of a resolved record, checked
-    against the repo root that holds the working directory; it is ``None``
+    against ``workspace_root`` -- the same owning checkout `resolve` used, or
+    the working directory when the caller resolved with none; it is ``None``
     when no record resolved. It never changes ``dispatchable``.
     """
     record = resolution.record
@@ -59,7 +66,9 @@ def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, o
         None
         if record is None
         else milknado_bridge.payload(
-            milknado_bridge.bind(record, repo_root=paths.resolve_repo_root(None))
+            milknado_bridge.bind(
+                record, repo_root=paths.resolve_repo_root(workspace_root)
+            )
         )
     )
     return {
@@ -127,6 +136,7 @@ def resolve(
             require_workspace=project is not None,
         ),
         ref,
+        workspace_root=workspace_root,
     )
     raise_if_error(payload)
     return {"ok": True, "command": COMMAND, **payload}

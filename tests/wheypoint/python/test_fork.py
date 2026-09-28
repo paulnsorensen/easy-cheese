@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -22,7 +23,12 @@ from easy_cheese_schemas import (
     WheypointRecord,
     WheypointStatus,
 )
-from easy_cheese_schemas.contracts import EdgeKind, WorkEdge, WorkEdgeKey
+from easy_cheese_schemas.contracts import (
+    _MAX_ITEMS,  # pyright: ignore[reportPrivateUsage]
+    EdgeKind,
+    WorkEdge,
+    WorkEdgeKey,
+)
 
 from easy_cheese.shared.wheypoint import (
     commit,
@@ -654,3 +660,74 @@ def test_a_retried_parent_promotion_ignores_a_fork_made_since_the_pair_landed(
     assert _record(parent).revision_id == first.revision.revision_id
     assert retried.revision.applied_transitions == []
     assert [f.child_work_id for f in _lint(parent).pending_forks] == ["child"]
+
+
+def _saturated_copies(directive: str, count: int) -> tuple[fork_reconcile.PendingFork, ...]:
+    return tuple(
+        fork_reconcile.PendingFork(
+            child_ref=_ref(f"sibling-{index}"),
+            child_work_id=f"sibling-{index}",
+            child_revision_id="rev-00000000000b",
+            moved=(),
+            copied=((directive, "d-00000000000c"),),
+            dossier_titles=(),
+            link_refs=(),
+        )
+        for index in range(count)
+    )
+
+
+def _stub_pending_forks(
+    forks: tuple[fork_reconcile.PendingFork, ...],
+) -> Callable[..., tuple[fork_reconcile.PendingFork, ...]]:
+    def stub(_source: WheypointRecord, **_siblings: object) -> tuple[fork_reconcile.PendingFork, ...]:
+        return forks
+
+    return stub
+
+
+def test_fork_refuses_a_copy_that_would_overflow_the_parent_entry(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent = _parent(corpus_root)
+    _, directive, _ = _ids(_record(parent))
+    monkeypatch.setattr(
+        fork, "pending_forks", _stub_pending_forks(_saturated_copies(directive, _MAX_ITEMS))
+    )
+
+    with pytest.raises(fork.ForkError, match=r"^copy-overflow: "):
+        _ = _fork(corpus_root, copy=[directive])
+
+    record_path = storage.WorkStore.open("child", corpus_root=corpus_root).record_path
+    assert not record_path.exists()
+
+
+def test_fork_allows_a_copy_exactly_at_the_bound(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent = _parent(corpus_root)
+    _, directive, _ = _ids(_record(parent))
+    monkeypatch.setattr(
+        fork,
+        "pending_forks",
+        _stub_pending_forks(_saturated_copies(directive, _MAX_ITEMS - 1)),
+    )
+
+    result = _fork(corpus_root, copy=[directive])
+
+    assert result.record.work_id == "child"
+
+
+def test_commit_converts_a_copy_overflow_to_commit_error(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent = _parent(corpus_root)
+    _, directive, _ = _ids(_record(parent))
+    monkeypatch.setattr(
+        fork_reconcile,
+        "pending_forks",
+        _stub_pending_forks(_saturated_copies(directive, _MAX_ITEMS + 1)),
+    )
+
+    with pytest.raises(commit.CommitError, match=r"cannot add to entry"):
+        _ = _next(parent)

@@ -141,9 +141,8 @@ def test_fork_second_move_of_a_pending_entry_is_refused_then_a_raced_fork_reconc
 
     with pytest.raises(fork.ForkError, match=r"^already-forked: "):
         _ = _fork(corpus_root, "parent", "child-b", move=[question])
-    assert not storage.WorkStore.open(
-        "child-b", corpus_root=corpus_root
-    ).record_path.exists()
+    record_path = storage.WorkStore.open("child-b", corpus_root=corpus_root).record_path
+    assert not record_path.exists()
 
     def none_pending(
         _source: WheypointRecord, **_siblings: object

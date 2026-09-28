@@ -139,7 +139,7 @@ def test_the_work_graph_reference_names_every_edge_kind_and_scheme() -> None:
     """A kind or scheme the schema accepts and the reference omits is an edge
     no reader is told how to write or read."""
     body = _read(WORK_GRAPH)
-    for kind in EdgeKind:
+    for kind in EdgeKind.__members__.values():
         assert f"`{kind.value}`" in body, f"undocumented edge kind: {kind.value}"
     for scheme in REF_SCHEMES:
         assert f"`{scheme}`" in body, f"undocumented ref scheme: {scheme}"

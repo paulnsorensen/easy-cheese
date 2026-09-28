@@ -116,6 +116,33 @@ def test_ac17_resolve_reports_the_bridge_without_changing_dispatch(
     assert payload["outcome"] == baseline["outcome"]
 
 
+def test_ac17_resolve_payload_reports_the_bridge_for_the_given_workspace_root(
+    tmp_path: Path,
+    corpus_root: Path,
+    make_promotion: Callable[..., Promotion],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = _bound_record(corpus_root, make_promotion)
+    cwd_repo = tmp_path / "cwd-repo"
+    cwd_repo.mkdir()
+    other_repo = tmp_path / "other-repo"
+    other_repo.mkdir()
+    (other_repo / milknado_bridge.MILKNADO_DIRNAME).mkdir()
+    monkeypatch.chdir(cwd_repo)
+
+    payload = resolve_cli.resolve_payload(
+        resolve.resolve(WORK_ID, corpus_root=corpus_root),
+        WORK_ID,
+        workspace_root=other_repo,
+    )
+
+    assert payload["bridge"] == {
+        "state": "bound",
+        "node_ref": NODE_REF,
+        "wheypoint_ref": f"wheypoint:{PROJECT}/{WORK_ID}",
+    }
+
+
 def test_ac17_resolve_without_a_record_carries_no_bridge(corpus_root: Path) -> None:
     payload = resolve_cli.resolve_payload(
         resolve.resolve("no-such-work", corpus_root=corpus_root), "no-such-work"

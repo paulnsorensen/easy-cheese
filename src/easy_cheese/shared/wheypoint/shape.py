@@ -233,7 +233,7 @@ def _resolves(key: tuple[str, str], corpus_home: Path) -> bool:
     project, work_id = key
     try:
         store = storage.WorkStore.open(work_id, corpus_root=corpus_home / project)
-    except ValueError:
+    except (ValueError, storage.StorageError):
         return False
     return store.record_path.is_file()
 

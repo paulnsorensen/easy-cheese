@@ -264,3 +264,14 @@ def test_machine_scope_reads_every_project_corpus(corpus_root: Path) -> None:
     assert len(project.nodes) == 3
     assert "wheypoint:other-project/omega" in {node.ref for node in machine.nodes}
     assert len(machine.nodes) == 4
+
+
+def test_resolves_reports_false_for_an_unsafe_work_id_instead_of_raising(
+    corpus_root: Path,
+) -> None:
+    assert (
+        shape._resolves(  # pyright: ignore[reportPrivateUsage]
+            (PROJECT, "Not A Valid Id!"), corpus_root.parent
+        )
+        is False
+    )
