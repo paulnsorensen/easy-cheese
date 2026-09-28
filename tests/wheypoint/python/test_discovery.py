@@ -7,6 +7,7 @@ tmp_path so the real `~` is never touched (G8/G9).
 from __future__ import annotations
 
 import datetime as _dt
+import functools
 import os
 import shutil
 import subprocess
@@ -16,7 +17,17 @@ from pathlib import Path
 from typing import Callable, Protocol, TypedDict
 
 import pytest
-from easy_cheese_schemas import NextAction, NextMove, WheypointRecord, WheypointRevision
+from easy_cheese_schemas import (
+    ArtifactLink,
+    EntryKind,
+    EntryState,
+    NextAction,
+    NextMove,
+    ProtectedEntry,
+    WheypointRecord,
+    WheypointRevision,
+)
+from easy_cheese_schemas.contracts import EdgeKind, WorkEdge
 from typing_extensions import Unpack
 
 from easy_cheese.shared.wheypoint import discovery, discovery_notes, legacy, storage
@@ -237,7 +248,9 @@ def test_machine_root_flag_backends_agree_on_notes(
     if not HAS_RG:
         pytest.skip("rg is not installed; the walk fallback is already verified")
     rg_entries = [
-        entry for entry in original_path.split(os.pathsep) if Path(entry).name != "shims"
+        entry
+        for entry in original_path.split(os.pathsep)
+        if Path(entry).name != "shims"
     ]
     if not any((Path(entry) / "rg").is_file() for entry in rg_entries):
         pytest.skip("rg is only available through a shim")
@@ -428,3 +441,184 @@ def test_suggestions_offers_close_matches_and_never_picks_one(
     result = discovery.suggestions("wrk-0001", start=tmp_path, scope="machine")
 
     assert result == ("work-0001",)
+
+
+def _seed_fields(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    work_id: str,
+    **fields: object,
+) -> None:
+    record = make_record(work_id=work_id, slug=work_id, **fields)
+    promotion = make_promotion(1, "rev-0001", record=record)
+    storage.WorkStore.open(work_id, corpus_root=corpus_root).promote(
+        promotion.record, promotion.revision, promotion.markdown
+    )
+
+
+def _keys(hits: Sequence[discovery.Hit]) -> set[tuple[str, str]]:
+    return {(hit.project, hit.ref) for hit in hits}
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_ac12_linked_to_and_backlinks_return_the_same_records(
+    tmp_path: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    corpus = tmp_path / "cheese" / "proj-a"
+    target = "wheypoint:proj-a/target"
+    seed = functools.partial(_seed_fields, corpus, make_record, make_promotion)
+    seed("target")
+    seed("by-edge", edges=[WorkEdge(to=f"{target}@rev-0001", kind=EdgeKind.INFORMS)])
+    seed(
+        "by-link",
+        artifact_links=[
+            ArtifactLink(path="docs/target.md", ref="wheypoint:proj-a/target")
+        ],
+    )
+    seed(
+        "elsewhere",
+        edges=[WorkEdge(to="wheypoint:proj-a/other", kind=EdgeKind.INFORMS)],
+    )
+
+    listed = discovery.discover(
+        start=tmp_path, corpus_root=corpus, linked_to=[target]
+    ).hits
+    back = discovery.backlinks(target, start=tmp_path, corpus_root=corpus)
+
+    assert _keys(listed) == {("proj-a", "by-edge"), ("proj-a", "by-link")}
+    assert _keys(back) == _keys(listed)
+    by_ref = {
+        hit.ref: hit
+        for hit in discovery.discover(start=tmp_path, corpus_root=corpus).hits
+    }
+    assert by_ref["by-edge"].edges_out == (("informs", f"{target}@rev-0001"),)
+    assert by_ref["target"].edges_in == (("informs", "wheypoint:proj-a/by-edge"),)
+    pinned = discovery.discover(
+        start=tmp_path, corpus_root=corpus, linked_to=[f"{target}@rev-0002"]
+    ).hits
+    assert pinned == ()
+    by_path = discovery.discover(
+        start=tmp_path, corpus_root=corpus, linked_to=["repo:docs/target.md"]
+    ).hits
+    assert by_path == ()
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_ac12_linked_to_matches_a_repo_link_by_its_path(
+    tmp_path: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    corpus = tmp_path / "cheese" / "proj-a"
+    _seed_fields(
+        corpus,
+        make_record,
+        make_promotion,
+        "with-spec",
+        artifact_links=[ArtifactLink(path="docs/spec.md")],
+    )
+    _seed_fields(corpus, make_record, make_promotion, "without")
+
+    hits = discovery.backlinks(
+        "repo:./docs/spec.md", start=tmp_path, corpus_root=corpus
+    )
+
+    assert _keys(hits) == {("proj-a", "with-spec")}
+
+
+def _question(entry_id: str, state: EntryState) -> ProtectedEntry:
+    return ProtectedEntry(
+        entry_id=entry_id,
+        kind=EntryKind.QUESTION,
+        summary=f"Question {entry_id}?",
+        state=state,
+        blocks_continuation=False,
+        rationale=None if state is EntryState.ACTIVE else "Settled.",
+    )
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_ac13_entry_filters_and_gated_return_only_gated_records(
+    tmp_path: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    corpus = tmp_path / "cheese" / "proj-a"
+    seed = functools.partial(_seed_fields, corpus, make_record, make_promotion)
+    seed("gated", gating=True)
+    seed("open", questions=[_question("q-open", EntryState.ACTIVE)])
+    seed(
+        "settled",
+        questions=[_question("q-done", EntryState.RESOLVED)],
+        blockers=[
+            ProtectedEntry(
+                entry_id="b-live",
+                kind=EntryKind.BLOCKER,
+                summary="Waiting on CI.",
+                state=EntryState.ACTIVE,
+                blocks_continuation=False,
+            )
+        ],
+    )
+    seed("empty")
+
+    def keys(**filters: object) -> set[tuple[str, str]]:
+        return _keys(
+            discovery.discover(
+                start=tmp_path,
+                corpus_root=corpus,
+                **filters,  # pyright: ignore[reportArgumentType]
+            ).hits
+        )
+
+    gated = discovery.discover(
+        start=tmp_path,
+        corpus_root=corpus,
+        entry_kind=["question"],
+        entry_state=["active"],
+        gated=True,
+    ).hits
+
+    assert _keys(gated) == {("proj-a", "gated")}
+    assert gated[0].gates == ("q-durability",)
+    assert keys(entry_kind=["question"], entry_state=["active"]) == {
+        ("proj-a", "gated"),
+        ("proj-a", "open"),
+    }
+    assert keys(gated=False) == {
+        ("proj-a", "open"),
+        ("proj-a", "settled"),
+        ("proj-a", "empty"),
+    }
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_forked_from_and_edge_kind_filters_find_the_child(
+    tmp_path: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    corpus = tmp_path / "cheese" / "proj-a"
+    seed = functools.partial(_seed_fields, corpus, make_record, make_promotion)
+    seed("parent")
+    seed(
+        "child",
+        edges=[
+            WorkEdge(to="wheypoint:proj-a/parent@rev-0001", kind=EdgeKind.FORKED_FROM)
+        ],
+    )
+    seed("peer", edges=[WorkEdge(to="wheypoint:proj-a/parent", kind=EdgeKind.INFORMS)])
+
+    forked = discovery.discover(
+        start=tmp_path, corpus_root=corpus, forked_from=["parent"]
+    ).hits
+    by_kind = discovery.discover(
+        start=tmp_path, corpus_root=corpus, edge_kind=["forked_from"]
+    ).hits
+
+    assert _keys(forked) == {("proj-a", "child")}
+    assert forked[0].forked_from == "parent"
+    assert _keys(by_kind) == {("proj-a", "child")}

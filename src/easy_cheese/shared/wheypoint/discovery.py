@@ -16,8 +16,16 @@ from pathlib import Path
 
 from . import discovery_notes, discovery_stores
 from .discovery_types import Candidate, DiscoveryResult, Hit
+from .ref_grammar import parse_ref
 
-__all__ = ["Candidate", "DiscoveryResult", "Hit", "discover", "suggestions"]
+__all__ = [
+    "Candidate",
+    "DiscoveryResult",
+    "Hit",
+    "backlinks",
+    "discover",
+    "suggestions",
+]
 
 
 def _mirror_key(candidate: Candidate) -> tuple[str, str] | None:
@@ -49,6 +57,43 @@ def _hide_mirrors(
     return kept, hidden
 
 
+def _link_matcher(value: str) -> tuple[str, tuple[str, str] | None]:
+    """What `value` matches: its normalized ref, plus the work it names when a
+    `wheypoint:` ref carries no `@rev` or `#entry`, so any pin still matches."""
+    ref = discovery_stores.normalized(value)
+    try:
+        parsed = parse_ref(ref)
+    except ValueError:
+        return ref, None
+    if parsed.revision_id is not None or parsed.entry_id is not None:
+        return ref, None
+    return ref, discovery_stores.work_key(ref)
+
+
+def _links_to(
+    candidate: Candidate, matchers: list[tuple[str, tuple[str, str] | None]]
+) -> bool:
+    targets = [to for _, to in candidate.hit.edges_out] + list(candidate.links)
+    for ref, key in matchers:
+        for target in targets:
+            if target == ref or (
+                key is not None and discovery_stores.work_key(target) == key
+            ):
+                return True
+    return False
+
+
+def _entry_matches(
+    candidate: Candidate, entry_kind: Sequence[str], entry_state: Sequence[str]
+) -> bool:
+    """Whether one entry satisfies both entry filters together."""
+    return any(
+        (not entry_kind or kind in entry_kind)
+        and (not entry_state or state in entry_state)
+        for kind, state in candidate.entries
+    )
+
+
 def _apply_filters(
     candidates: list[Candidate],
     *,
@@ -57,9 +102,16 @@ def _apply_filters(
     next: Sequence[str],
     source: str | None,
     since: str | None,
+    entry_kind: Sequence[str] = (),
+    entry_state: Sequence[str] = (),
+    gated: bool | None = None,
+    edge_kind: Sequence[str] = (),
+    linked_to: Sequence[str] = (),
+    forked_from: Sequence[str] = (),
 ) -> list[Candidate]:
     needles = [term.lower() for term in grep if term]
     since_date = _dt.date.fromisoformat(since) if since else None
+    matchers = [_link_matcher(value) for value in linked_to]
     kept: list[Candidate] = []
     for candidate in candidates:
         hit = candidate.hit
@@ -75,6 +127,18 @@ def _apply_filters(
             updated_date = _dt.datetime.fromtimestamp(hit.updated).date()
             if updated_date < since_date:
                 continue
+        if (entry_kind or entry_state) and not _entry_matches(
+            candidate, entry_kind, entry_state
+        ):
+            continue
+        if gated is not None and bool(hit.gates) is not gated:
+            continue
+        if edge_kind and not any(kind in edge_kind for kind, _ in hit.edges_out):
+            continue
+        if matchers and not _links_to(candidate, matchers):
+            continue
+        if forked_from and hit.forked_from not in forked_from:
+            continue
         kept.append(candidate)
     return kept
 
@@ -93,6 +157,12 @@ def discover(
     since: str | None = None,
     limit: int | None = None,
     show_mirrors: bool = False,
+    entry_kind: Sequence[str] = (),
+    entry_state: Sequence[str] = (),
+    gated: bool | None = None,
+    edge_kind: Sequence[str] = (),
+    linked_to: Sequence[str] = (),
+    forked_from: Sequence[str] = (),
 ) -> DiscoveryResult:
     """Every store and legacy note a caller can resume from, filtered and
     sorted newest first.
@@ -102,9 +172,16 @@ def discover(
     project under `paths.corpus_home()` plus every machine search root.
     `projects` narrows either scope to the named project keys. Distinct
     filters combine with AND; the terms of one repeatable filter (`grep`,
-    `status`, `next`) combine with OR, so one call searches several terms
-    at once. A note mirroring a store slug in the same project is
-    hidden unless `show_mirrors` is set.
+    `status`, `next`, and the list filters below) combine with OR, so one
+    call searches several terms at once. A note mirroring a store slug in
+    the same project is hidden unless `show_mirrors` is set.
+
+    `entry_kind` and `entry_state` match a record when one entry satisfies
+    both together. `gated` keeps records with (True) or without (False)
+    gating entries. `edge_kind` matches a held edge's kind, `forked_from` a
+    parent work id, and `linked_to` any held edge target or artifact-link
+    ref equal to the normalized ref; a `wheypoint:` ref without `@rev` or
+    `#entry` matches the work at any pin.
     """
     machine = scope == "machine"
     store_candidates, store_searched, store_errors = discovery_stores.discover(
@@ -119,7 +196,18 @@ def discover(
         candidates = [c for c in candidates if c.hit.project in wanted]
     candidates, hidden = _hide_mirrors(candidates, show_mirrors=show_mirrors)
     candidates = _apply_filters(
-        candidates, grep=grep, status=status, next=next, source=source, since=since
+        candidates,
+        grep=grep,
+        status=status,
+        next=next,
+        source=source,
+        since=since,
+        entry_kind=entry_kind,
+        entry_state=entry_state,
+        gated=gated,
+        edge_kind=edge_kind,
+        linked_to=linked_to,
+        forked_from=forked_from,
     )
     candidates.sort(key=lambda c: (-c.hit.updated, str(c.hit.path)))
     if limit is not None:
@@ -130,6 +218,30 @@ def discover(
         hidden_mirrors=hidden,
         errors=tuple(store_errors) + tuple(note_errors),
     )
+
+
+def backlinks(
+    ref: str,
+    *,
+    start: Path | str,
+    scope: str = "project",
+    corpus_root: Path | str | None = None,
+    projects: Sequence[str] = (),
+    roots: Sequence[Path | str] = (),
+) -> tuple[Hit, ...]:
+    """Every record in scope whose edges or links name `ref`.
+
+    This is `discover(linked_to=(ref,))` by construction, so both return the
+    same set; it never picks one record.
+    """
+    return discover(
+        scope=scope,
+        start=start,
+        corpus_root=corpus_root,
+        projects=projects,
+        roots=roots,
+        linked_to=(ref,),
+    ).hits
 
 
 def suggestions(

@@ -106,7 +106,7 @@ def run_resolve(
             require_workspace=project_key is not None,
         )
     )
-    payload = resolve_cli.resolve_payload(resolution, ref)
+    payload = resolve_cli.resolve_payload(resolution, ref, workspace_root=workspace_root)
     if resolution.outcome == resolve_mod.ResolutionOutcome.NOT_FOUND:
         payload["suggestions"] = list(
             discovery.suggestions(ref, start=Path.cwd(), corpus_root=effective_corpus_root)

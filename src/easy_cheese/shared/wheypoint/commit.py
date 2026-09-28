@@ -44,7 +44,7 @@ first: an identical genesis resubmission is a replay, not a conflict.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
 
@@ -53,6 +53,7 @@ from easy_cheese_schemas import (
     SCHEMA_VERSION,
     ArtifactLink,
     CompactionRecord,
+    DecisionFork,
     Durability,
     EntryKind,
     EntryState,
@@ -61,25 +62,28 @@ from easy_cheese_schemas import (
     ProposedEntry,
     ProtectedEntry,
     RepositoryProvenance,
+    TransitionAction,
     WheypointDelta,
     WheypointProjection,
     WheypointRecord,
     WheypointRevision,
 )
+from easy_cheese_schemas.contracts import EdgeKind, WorkEdge, WorkEdgeKey
 
 from easy_cheese.shared import paths
 
 from . import canonical
-from . import lineage
-from . import lint_freshness
+from . import edges as edges_mod
+from . import fork_reconcile, lineage
 from . import projection as projection_mod
-from . import records, storage
+from . import records, refs, storage
 
 # A record digest deliberately excludes `revision_digest` (see records.py), so
 # the draft record can be hashed, quoted by its receipt, and only then told
 # which receipt quoted it. This placeholder holds that field open in between.
 _UNPINNED_DIGEST = f"{canonical.DIGEST_PREFIX}{'0' * 64}"
 _ID_HEX = 12
+_FORK_EDGE_KINDS = frozenset({EdgeKind.FORKED_FROM, EdgeKind.FORKED_TO})
 # The parent a delta names when it is asking for the *first* record. Every
 # derived revision id is `rev-<12 hex>` (see `_revision_id`), so this sentinel
 # lives outside that namespace by construction: no hash can produce it, and no
@@ -163,15 +167,44 @@ def commit(
     durability: Durability = Durability.CANONICAL_LOCAL,
     finalize: Callable[[PendingRevision], None] | None = None,
     artifact_root: Path | str | None = None,
+    origins: Mapping[int, str] | None = None,
+    fork_edge: WorkEdge | None = None,
 ) -> CommitResult:
-    """Apply `delta` to the store's current record under the record lock."""
+    """Apply `delta` to the store's current record under the record lock.
+
+    `origins` is host-only input: it maps the index of a proposed entry, in
+    `ADDITION_FIELDS` order across the delta's `add_*` lists, to the `origin`
+    the new entry carries. A delta cannot author `origin` itself.
+
+    `fork_edge` is host-only input too: the `forked_from` edge `fork()` writes
+    into a child. A delta cannot author a fork edge itself.
+    """
+    forged_edges = [
+        edge.to
+        for edge in [*(delta.add_edges or ()), *(delta.remove_edges or ())]
+        if edge.kind in _FORK_EDGE_KINDS
+    ]
+    if forged_edges:
+        raise CommitError(
+            "host-only-edge: fork edges are written by the host when it forks "
+            + f"or reconciles a fork, not on request ({', '.join(forged_edges)})"
+        )
+    forged_reciprocals = [
+        edge.to for edge in delta.add_edges or () if edges_mod.host_written(edge)
+    ]
+    if forged_reciprocals:
+        raise CommitError(
+            "host-only-edge: a reciprocal rationale is written by the host, not "
+            + f"on request ({', '.join(forged_reciprocals)})"
+        )
+    stamped = origins or {}
     repository_value: RepositoryProvenance = (
         RepositoryProvenance() if repository is None else repository
     )
     digest_root = (
         _digest_root() if artifact_root is None else Path(artifact_root).resolve()
     )
-    digest_of = lint_freshness.artifact_digest_in(digest_root)
+    digest_of = refs.digester(digest_root, paths.corpus_home())
 
     if delta.work_id != store.work_id:
         raise CommitError(
@@ -221,6 +254,8 @@ def commit(
                     project_key=paths.project_key(digest_root),
                     durability=durability,
                     digest_of=digest_of,
+                    origins=stamped,
+                    fork_edge=fork_edge,
                 ),
                 finalize=finalize,
             )
@@ -257,6 +292,9 @@ def commit(
                 repository=repository_value,
                 digest_of=digest_of,
                 durability=durability,
+                origins=stamped,
+                fork_edge=fork_edge,
+                replay=replay,
             ),
             finalize=finalize,
         )
@@ -531,20 +569,29 @@ def _proposed_entries(delta: WheypointDelta, kind: EntryKind) -> list[ProposedEn
     )
 
 
-def _additions(delta: WheypointDelta, kind: EntryKind) -> list[ProtectedEntry]:
-    proposed = _proposed_entries(delta, kind)
-    return [
-        ProtectedEntry(
-            entry_id=_entry_id(delta, entry, index),
-            kind=entry.kind,
-            summary=entry.summary,
-            state=EntryState.ACTIVE,
-            blocks_continuation=entry.blocks_continuation,
-            rationale=entry.rationale,
-            quote=entry.quote,
-        )
-        for index, entry in enumerate(proposed)
-    ]
+def _additions(
+    delta: WheypointDelta, origins: Mapping[int, str]
+) -> dict[EntryKind, list[ProtectedEntry]]:
+    """New entries by kind; `origins` is keyed by the flattened proposal index."""
+    additions: dict[EntryKind, list[ProtectedEntry]] = {}
+    offset = 0
+    for kind in ADDITION_FIELDS:
+        proposed = _proposed_entries(delta, kind)
+        additions[kind] = [
+            ProtectedEntry(
+                entry_id=_entry_id(delta, entry, index),
+                kind=entry.kind,
+                summary=entry.summary,
+                state=EntryState.ACTIVE,
+                blocks_continuation=entry.blocks_continuation,
+                rationale=entry.rationale,
+                quote=entry.quote,
+                origin=origins.get(offset + index),
+            )
+            for index, entry in enumerate(proposed)
+        ]
+        offset += len(proposed)
+    return additions
 
 
 def revision_id_for(delta: WheypointDelta) -> str:
@@ -576,36 +623,109 @@ def _merge_artifact_links(
     revision_id: str,
     digest_of: Callable[[str], str | None],
 ) -> list[ArtifactLink]:
-    """Artifact links as a set keyed by path (S3, S4).
+    """Artifact links as a set keyed by normalized reference (S3, S4).
 
-    An added link replaces the one already carried for its path and is pinned
-    to the revision being written, with the file's digest computed here when
-    the path resolves to a file. Removal names paths; an unknown path is
-    refused rather than ignored, and an empty list never reaches this point.
+    An added link replaces the one already carried for its reference and is
+    pinned to the revision being written, with the target's digest computed
+    here. A pinnable reference that does not resolve is refused; an
+    unpinnable one is linked with no digest and may cover no entry. Removal
+    names a reference or a bare repository path; an unknown one is refused
+    rather than ignored, and an empty list never reaches this point.
+
+    A `wheypoint:` ref with no `@rev` names its target at any revision: an
+    add replaces the link held for that target, and a removal deletes it. A
+    ref with an explicit `@rev` matches that pin only.
     """
     if add is None and remove is None:
         return current_links
-    order = [link.path for link in current_links]
-    by_path = {link.path: link for link in current_links}
+    order = [_link_key(link) for link in current_links]
+    by_ref = dict(zip(order, current_links, strict=True))
     for link in add or ():
-        # The digest is host-computed from the file (S3): a path that does not
-        # resolve to a file under the repository root carries no digest, and a
-        # caller-supplied value is never honoured.
-        if link.path not in by_path:
-            order.append(link.path)
-        digest = digest_of(link.path)
-        if digest is None:
+        try:
+            requested = refs.normalize_ref(records.effective_ref(link))
+            # An unpinned record link names whatever the target is now; the
+            # link pins that revision so a later read resolves the same record.
+            ref = refs.pin_record(requested, corpus_home=paths.corpus_home())
+        except ValueError as exc:
+            raise CommitError(f"add_artifact_links names an unusable ref: {exc}") from exc
+        scheme = refs.parse_ref(ref).scheme
+        # The digest is host-computed from the target (S3): a caller-supplied
+        # value is never honoured.
+        digest: str | None = None
+        if not refs.is_pinnable(scheme):
+            if link.covers_entry_ids:
+                raise CommitError(
+                    f"unpinnable-scheme: {ref!r} cannot pin a digest, so it "
+                    + "cannot cover protected entries"
+                )
+        else:
+            digest = digest_of(ref)
+            if digest is None:
+                raise CommitError(
+                    f"add_artifact_links names a ref this host cannot digest: {ref!r}"
+                )
+        target = _unpinned_record(requested)
+        if target is not None:
+            # An unpinned record ref refreshes the link it pinned earlier.
+            for key in [k for k in by_ref if k != ref and _record_target(k) == target]:
+                del by_ref[key]
+                order[order.index(key)] = ref
+        if ref not in order:
+            order.append(ref)
+        by_ref[ref] = evolve(
+            link,
+            ref=ref,
+            path=ref.partition(":")[2],
+            digest=digest,
+            revision_id=revision_id,
+        )
+    for value in remove or ():
+        key = _removal_key(value)
+        target = _unpinned_record(key)
+        matched = [
+            k for k in by_ref if k == key or (target and _record_target(k) == target)
+        ]
+        if not matched:
             raise CommitError(
-                f"add_artifact_links names a path this host cannot digest: {link.path!r}"
+                f"remove_artifact_links names a path this record does not carry: {value!r}"
             )
-        by_path[link.path] = evolve(link, digest=digest, revision_id=revision_id)
-    for path in remove or ():
-        if path not in by_path:
-            raise CommitError(
-                f"remove_artifact_links names a path this record does not carry: {path!r}"
-            )
-        del by_path[path]
-    return [by_path[path] for path in order if path in by_path]
+        for k in matched:
+            del by_ref[k]
+    return [by_ref[key] for key in dict.fromkeys(order) if key in by_ref]
+
+
+def _record_target(ref: str) -> str | None:
+    """A `wheypoint:` ref without its `@rev`, or None for any other ref."""
+    try:
+        parsed = refs.parse_ref(ref)
+    except ValueError:
+        return None
+    if parsed.scheme is not refs.Scheme.WHEYPOINT:
+        return None
+    entry = "" if parsed.entry_id is None else f"#{parsed.entry_id}"
+    return refs.normalize_ref(f"wheypoint:{parsed.project_key}/{parsed.work_id}{entry}")
+
+
+def _unpinned_record(ref: str) -> str | None:
+    """The target of a `wheypoint:` ref that names no `@rev`, else None."""
+    target = _record_target(ref)
+    return target if target == ref else None
+
+
+def _link_key(link: ArtifactLink) -> str:
+    ref = records.effective_ref(link)
+    try:
+        return refs.normalize_ref(ref)
+    except ValueError:
+        return ref
+
+
+def _removal_key(value: str) -> str:
+    """A removal names a reference, or a bare path read as `repo:`."""
+    try:
+        return refs.normalize_ref(value)
+    except ValueError:
+        return _link_key(ArtifactLink(path=value))
 
 
 def _transitioned(
@@ -618,6 +738,11 @@ def _transitioned(
         state=transition.resulting_state,
         rationale=transition.rationale,
         superseded_by=transition.target_entry_id,
+        successor=(
+            transition.successor
+            if transition.action is TransitionAction.FORK
+            else entry.successor
+        ),
     )
 
 
@@ -631,8 +756,56 @@ def _apply(
     repository: RepositoryProvenance,
     digest_of: Callable[[str], str | None],
     durability: Durability,
+    origins: Mapping[int, str],
+    fork_edge: WorkEdge | None,
+    replay: WheypointRevision | None,
 ) -> PendingRevision:
+    """The next revision of `current`, with pending forks and reciprocals.
+
+    `replay` is the receipt an interrupted promotion of this same request
+    already wrote. Its reconciliation is rebuilt from that receipt, not from a
+    new sibling scan, so the retry derives the identical triple.
+    """
     transitions = list(delta.transitions or [])
+    forged = [t.entry_id for t in transitions if t.action is TransitionAction.FORK]
+    if forged:
+        raise CommitError(
+            "fork transitions are host-derived: the host applies them when it "
+            + f"reconciles a child's fork, not on request ({', '.join(forged)})"
+        )
+    # A pending fork is reconciled host-side (F-2): the moved entries join the
+    # agent's transitions, so the receipt lists both and nothing leaves the
+    # record without a transition naming it.
+    siblings = edges_mod.sibling_records(store.corpus_root, work_id=current.work_id)
+    pending_forks = fork_reconcile.pending_forks(current, siblings=siblings)
+    if replay is None:
+        pending_reciprocals = edges_mod.pending_reciprocals(
+            current, siblings=siblings, receipts=lineage.revisions
+        )
+    else:
+        pending_reciprocals = edges_mod.replayed_reciprocals(replay)
+        replayed_forks = {
+            edges_mod.edge_key(edge)
+            for edge in replay.applied_edges
+            if edge.kind is EdgeKind.FORKED_TO
+        }
+        pending_forks = tuple(
+            item
+            for item in pending_forks
+            if edges_mod.edge_key(
+                WorkEdgeKey(
+                    to=f"{item.child_ref}@{item.child_revision_id}",
+                    kind=EdgeKind.FORKED_TO,
+                )
+            )
+            in replayed_forks
+        )
+    forks = fork_reconcile.apply_pending_forks(
+        current,
+        pending_forks,
+        agent_transitioned={t.entry_id for t in transitions},
+    )
+    transitions.extend(forks.transitions)
     problems = records.validate_transitions(current, transitions)
     if problems:
         raise CommitError("; ".join(problems))
@@ -643,13 +816,17 @@ def _apply(
     for kind in _RECORD_FIELDS:
         existing = _existing_entries(current, kind)
         kept[kind] = [
-            _transitioned(entry, by_entry.get(entry.entry_id)) for entry in existing
+            _copied(
+                _transitioned(entry, by_entry.get(entry.entry_id)),
+                forks.copies.get(entry.entry_id, ()),
+            )
+            for entry in existing
         ]
         preserved.extend(
             entry.entry_id for entry in existing if entry.entry_id not in by_entry
         )
 
-    additions = {kind: _additions(delta, kind) for kind in ADDITION_FIELDS}
+    additions = _additions(delta, origins)
     revision_id = _revision_id(delta, fingerprint)
     number = current.revision_number + 1
     draft = _draft_record(
@@ -661,6 +838,16 @@ def _apply(
         additions=additions,
         digest_of=digest_of,
     )
+    merged = _merge_edges(
+        current.edges, delta, host=fork_edge, revision_id=revision_id
+    )
+    reciprocals = edges_mod.apply_pending_reciprocals(
+        merged.edges, pending_reciprocals, revision_id=revision_id
+    )
+    forked_to = edges_mod.merge_edges(
+        reciprocals.edges, forks.edges, None, revision_id=revision_id
+    )
+    draft = _forked_away(draft, forks, edges=forked_to.edges)
     compaction = (
         None
         if delta.compaction is None
@@ -683,9 +870,55 @@ def _apply(
         additions=[entry for kind in ADDITION_FIELDS for entry in additions[kind]],
         transitions=transitions,
         preserved=preserved,
+        applied_edges=merged.applied + reciprocals.applied + forked_to.applied,
+        removed_edges=merged.removed,
         repository=repository,
         durability=durability,
     )
+
+
+def _copied(entry: ProtectedEntry, refs: tuple[str, ...]) -> ProtectedEntry:
+    if not refs:
+        return entry
+    try:
+        return evolve(entry, copies=entry.copies + refs)
+    except ValueError as exc:
+        raise CommitError(
+            f"a pending fork cannot add to entry {entry.entry_id!r}'s copies: {exc}"
+        ) from exc
+
+
+def _forked_away(
+    draft: WheypointRecord,
+    forks: fork_reconcile.AppliedFork,
+    *,
+    edges: tuple[WorkEdge, ...],
+) -> WheypointRecord:
+    """Drop the dossier forks and links a child took, and set the edges.
+
+    A dossier fork stays when dropping it would leave a remaining gate with no
+    fork to describe it: the record must stay legal for the parent to commit.
+    """
+    dossier = [
+        item
+        for item in draft.decision_dossier
+        if item.fork not in forks.dossier_removed
+    ]
+    if not dossier and draft.gating_entry_ids:
+        dossier = draft.decision_dossier
+    try:
+        return evolve(
+            draft,
+            decision_dossier=dossier,
+            artifact_links=[
+                link
+                for link in draft.artifact_links
+                if _link_key(link) not in forks.link_refs_removed
+            ],
+            edges=edges,
+        )
+    except ValueError as exc:
+        raise CommitError(f"the delta does not produce a legal record: {exc}") from exc
 
 
 def _genesis(
@@ -697,6 +930,8 @@ def _genesis(
     project_key: str,
     digest_of: Callable[[str], str | None],
     durability: Durability,
+    origins: Mapping[int, str],
+    fork_edge: WorkEdge | None,
 ) -> PendingRevision:
     """The first record for a work id, built from the delta alone.
 
@@ -736,13 +971,14 @@ def _genesis(
             + "runtime derives the record's created time rather than reading a clock"
         )
 
-    additions = {kind: _additions(delta, kind) for kind in ADDITION_FIELDS}
+    additions = _additions(delta, origins)
     if not any(additions.values()) and delta.notes is None:
         raise CommitError(
             "a first checkpoint must capture at least one decision, question, "
             + "blocker, or directive, or a notes body: orientation alone is not a record"
         )
     revision_id = _revision_id(delta, fingerprint)
+    merged = _merge_edges((), delta, host=fork_edge, revision_id=revision_id)
     try:
         draft = WheypointRecord(
             schema_version=SCHEMA_VERSION,
@@ -771,7 +1007,8 @@ def _genesis(
                 revision_id=revision_id,
                 digest_of=digest_of,
             ),
-            decision_dossier=list(delta.decision_dossier or []),
+            decision_dossier=_merged_dossier([], delta),
+            edges=merged.edges,
         )
     except ValueError as exc:
         raise CommitError(f"the delta does not produce a legal record: {exc}") from exc
@@ -787,9 +1024,28 @@ def _genesis(
         additions=[entry for kind in ADDITION_FIELDS for entry in additions[kind]],
         transitions=[],
         preserved=[],
+        applied_edges=merged.applied,
+        removed_edges=merged.removed,
         repository=repository,
         durability=durability,
     )
+
+
+def _merge_edges(
+    current: tuple[WorkEdge, ...],
+    delta: WheypointDelta,
+    *,
+    host: WorkEdge | None,
+    revision_id: str,
+) -> edges_mod.MergedEdges:
+    """The delta's edges plus the host's fork edge; `None` when both are absent."""
+    add = [*(delta.add_edges or ()), *([host] if host else [])]
+    try:
+        return edges_mod.merge_edges(
+            current, add or None, delta.remove_edges, revision_id=revision_id
+        )
+    except edges_mod.EdgeError as exc:
+        raise CommitError(str(exc)) from exc
 
 
 def _title(orientation: str) -> str:
@@ -809,6 +1065,8 @@ def _finish(
     additions: list[ProtectedEntry],
     transitions: list[EntryTransition],
     preserved: list[str],
+    applied_edges: tuple[WorkEdge, ...],
+    removed_edges: tuple[WorkEdgeKey, ...],
     repository: RepositoryProvenance,
     durability: Durability,
 ) -> PendingRevision:
@@ -825,6 +1083,8 @@ def _finish(
         applied_additions=additions,
         applied_transitions=transitions,
         preserved_entry_ids=preserved,
+        applied_edges=applied_edges,
+        removed_edges=removed_edges,
         projection_path=store.relative_projection_path(
             draft.revision_number, draft.revision_id
         ),
@@ -864,9 +1124,7 @@ def _draft_record(
             working_context=_replaced(delta.working_context, current.working_context),
             notes=_replaced(delta.notes, current.notes),
             next_action=_replaced(delta.next_action, current.next_action),
-            decision_dossier=_replaced(
-                delta.decision_dossier, current.decision_dossier
-            ),
+            decision_dossier=_merged_dossier(current.decision_dossier, delta),
             decisions=kept[EntryKind.DECISION] + additions[EntryKind.DECISION],
             questions=kept[EntryKind.QUESTION] + additions[EntryKind.QUESTION],
             blockers=kept[EntryKind.BLOCKER] + additions[EntryKind.BLOCKER],
@@ -886,3 +1144,35 @@ def _draft_record(
 def _replaced(proposed: object, carried: object) -> object:
     """`None` means unchanged; an explicit value -- including `[]` -- replaces."""
     return carried if proposed is None else proposed
+
+
+def _merged_dossier(
+    carried: list[DecisionFork], delta: WheypointDelta
+) -> list[DecisionFork]:
+    """The dossier as a set of forks keyed by title.
+
+    `remove_dossier_forks` drops carried titles first. Then each proposed fork
+    replaces the carried fork with its title in place, or appends. `None`
+    carries the dossier forward; an explicit `[]` still empties it.
+    """
+    removed = delta.remove_dossier_forks or ()
+    titles = {fork.fork for fork in carried}
+    unknown = [title for title in removed if title not in titles]
+    if unknown:
+        raise CommitError(
+            f"unknown-dossier-fork: the record carries no fork titled {unknown!r}"
+        )
+    forks = [fork for fork in carried if fork.fork not in removed]
+    if delta.decision_dossier is None:
+        return forks
+    if not delta.decision_dossier:
+        return []
+    for proposed in delta.decision_dossier:
+        index = next(
+            (i for i, fork in enumerate(forks) if fork.fork == proposed.fork), None
+        )
+        if index is None:
+            forks.append(proposed)
+        else:
+            forks[index] = proposed
+    return forks

@@ -28,21 +28,28 @@ import attrs
 from attrs import define, field
 from attrs import AttrsInstance
 from easy_cheese_schemas import (
+    SCHEMA_ROOT,
     ArtifactLink,
+    ContractVersion,
     EntryState,
     EntryTransition,
+    IngressKind,
+    NormalizationReceipt,
     ProtectedEntry,
     WheypointDelta,
     WheypointRecord,
     load,
 )
 
-from . import canonical
+from . import canonical, ref_grammar
 
 T = TypeVar("T")
 
 # The record's pointer at its own receipt: see the module docstring.
 _RECEIPT_POINTER = "revision_digest"
+# The read-side normalizer that gives a schema-3 path-only link its `repo:` ref.
+_V3_LINK_NORMALIZER = "wheypoint.refs.v3-path-to-ref"
+_RECORD_SCHEMA_URI = f"{SCHEMA_ROOT}/wheypoint-record"
 
 
 class RecordError(ValueError):
@@ -179,6 +186,45 @@ def validate_transitions(
     return tuple(problems)
 
 
+def effective_ref(link: ArtifactLink) -> str:
+    """The reference a link names: its `ref`, else `repo:` over its `path`."""
+    return link.ref if link.ref is not None else f"repo:{link.path}"
+
+
+def normalize_links(
+    record: WheypointRecord,
+) -> tuple[tuple[ArtifactLink, ...], tuple[NormalizationReceipt, ...]]:
+    """Read-side view of the links with every `ref` filled, one receipt per fill.
+
+    The view is never stored or hashed: `record_digest` covers the record as
+    written, so a schema-3 record keeps its digest under this runtime.
+    """
+    source_version = ContractVersion(
+        schema_uri=_RECORD_SCHEMA_URI,
+        major=str(record.schema_version),
+        minor="0",
+    )
+    links: list[ArtifactLink] = []
+    receipts: list[NormalizationReceipt] = []
+    for link in record.artifact_links:
+        if link.ref is not None:
+            links.append(link)
+            continue
+        normalized = attrs.evolve(link, ref=effective_ref(link))
+        links.append(normalized)
+        receipts.append(
+            NormalizationReceipt(
+                ingress_kind=IngressKind.LEGACY_ARTIFACT,
+                normalizer_id=_V3_LINK_NORMALIZER,
+                source_digest=canonical.digest_bytes(canonical_payload(link)),
+                canonical_digest=canonical.digest_bytes(canonical_payload(normalized)),
+                source_schema_uri=_RECORD_SCHEMA_URI,
+                source_version=source_version,
+            )
+        )
+    return tuple(links), tuple(receipts)
+
+
 @define(frozen=True)
 class CoverageFailure:
     """One artifact whose coverage claim cannot be trusted, and why."""
@@ -244,12 +290,19 @@ def _pin_failure(
     artifact_digest: Callable[[str], str | None],
     ancestor_revision_ids: Container[str],
 ) -> str | None:
+    ref = effective_ref(link)
+    try:
+        scheme = ref_grammar.parse_ref(ref).scheme
+    except ValueError as exc:
+        return str(exc)
+    if not ref_grammar.is_pinnable(scheme):
+        return "unpinnable-scheme"
     if link.digest is None and link.revision_id is None:
         return "coverage claim has neither a digest nor a revision to pin it"
     # Existence first: every pin says what the file was, which a deleted file
     # cannot be either way. Then each pin the claim supplies is checked, so a
     # matching digest cannot carry an unresolvable revision past the gate.
-    current = artifact_digest(link.path)
+    current = artifact_digest(ref)
     if current is None:
         return "artifact is missing"
     if link.digest is not None and current != link.digest:

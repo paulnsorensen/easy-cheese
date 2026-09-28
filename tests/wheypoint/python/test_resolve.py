@@ -1501,3 +1501,45 @@ def test_a_corpus_directory_with_an_illegal_name_never_claims_a_slug(
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.work_id == "work-0001"
     assert found.matches == ()
+
+
+def test_a_linked_target_resolves_with_its_pending_reciprocals_in_the_payload(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    from easy_cheese_schemas.contracts import EdgeKind, WorkEdge
+
+    from easy_cheese.shared.wheypoint import resolve_cli
+
+    _ = seed(corpus_root, make_record, make_promotion, work_id="beta", slug="beta")
+    source = make_record(
+        work_id="alpha",
+        slug="alpha",
+        edges=(
+            WorkEdge(
+                to=f"wheypoint:{PROJECT}/beta",
+                kind=EdgeKind.RELATES_TO,
+                revision_id="rev-0001",
+            ),
+        ),
+    )
+    promotion = make_promotion(1, "rev-0001", record=source)
+    storage.WorkStore.open("alpha", corpus_root=corpus_root).promote(
+        promotion.record, promotion.revision, promotion.markdown
+    )
+
+    found = run("beta", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert resolve_cli.resolve_payload(found, "beta")["pending"] == [
+        {
+            "source": f"wheypoint:{PROJECT}/alpha",
+            "kind": "relates_to",
+            "to": f"wheypoint:{PROJECT}/alpha",
+            "revision_id": "rev-0001",
+        }
+    ]
+    assert resolve_cli.resolve_payload(run("alpha", corpus_root), "alpha")[
+        "pending"
+    ] == []

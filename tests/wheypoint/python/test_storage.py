@@ -26,7 +26,7 @@ from easy_cheese_schemas import (
     WheypointRevision,
 )
 
-from easy_cheese.shared.wheypoint import projection, records, storage
+from easy_cheese.shared.wheypoint import projection, records, refs, storage
 
 
 class _Promotion(Protocol):
@@ -654,7 +654,7 @@ def _report(
 ) -> records.CoverageReport:
     return records.coverage_report(
         record,
-        artifact_digest=lambda path: storage.file_digest(base / path),
+        artifact_digest=refs.digester(base, base / "corpus-home"),
         ancestor_revision_ids=store.revision_ids(),
     )
 

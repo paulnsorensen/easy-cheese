@@ -733,3 +733,15 @@ def test_the_checkpoint_command_is_registered_for_the_bundle() -> None:
         *wheypoint.COMMANDS,
         "handoff",
     ]
+
+
+def test_ac15_build_delta_forwards_remove_dossier_forks(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    intent = checkpoint.CheckpointIntent(
+        work_id=WORK_ID, remove_dossier_forks=("Durability default",)
+    )
+
+    delta = checkpoint.build_delta(intent, make_record(gating=True))
+
+    assert delta.remove_dossier_forks == ("Durability default",)
