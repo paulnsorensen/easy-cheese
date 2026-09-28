@@ -34,7 +34,7 @@ from easy_cheese_schemas import (
 
 from easy_cheese.shared import paths
 
-from . import edges
+from . import edges, fork_reconcile
 from . import lineage
 from . import lint_freshness
 from .lint_types import (
@@ -55,7 +55,9 @@ class LintReport:
     `normalizations` holds one receipt per link the reader filled in from an
     older schema. They are advisory data, never findings. `pending` holds the
     reciprocal edges sibling records ask this one to add; each also appears
-    as an advisory `link-pending` finding.
+    as an advisory `link-pending` finding. `pending_forks` holds the forks
+    child records ask this one to reconcile; each also appears as an advisory
+    `fork-pending` finding.
     """
 
     findings: tuple[LintFinding, ...] = field(default=())
@@ -63,6 +65,7 @@ class LintReport:
     projection: WheypointProjection | None = None
     normalizations: tuple[NormalizationReceipt, ...] = field(default=())
     pending: tuple[edges.PendingEdge, ...] = field(default=())
+    pending_forks: tuple[fork_reconcile.PendingFork, ...] = field(default=())
 
     @property
     def ok(self) -> bool:
@@ -237,6 +240,15 @@ def lint_work(
         )
         for item in pending
     )
+    pending_forks = fork_reconcile.pending_forks(record, corpus_root=store.corpus_root)
+    findings.extend(
+        LintFinding(
+            LintCode.FORK_PENDING,
+            f"{item.child_ref}@{item.child_revision_id}: "
+            + f"moved {_parent_ids(item.moved)}; copied {_parent_ids(item.copied)}",
+        )
+        for item in pending_forks
+    )
     _, normalizations = records.normalize_links(record)
     return LintReport(
         findings=tuple(findings),
@@ -244,7 +256,12 @@ def lint_work(
         projection=projection,
         normalizations=normalizations,
         pending=pending,
+        pending_forks=pending_forks,
     )
+
+
+def _parent_ids(pairs: tuple[tuple[str, str], ...]) -> str:
+    return ", ".join(parent_id for parent_id, _ in pairs) or "none"
 
 
 def _durability_findings(

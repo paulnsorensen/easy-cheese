@@ -22,7 +22,7 @@ import fromargs
 from attrs import AttrsInstance
 
 from easy_cheese.shared import handoff
-from easy_cheese.shared.wheypoint import edges
+from easy_cheese.shared.wheypoint import edges, fork_reconcile
 from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
@@ -71,7 +71,11 @@ def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, o
             else handoff.slug_payload(resolution.phase_slug)
         ),
         "detail": resolution.detail,
-        "pending": edges.pending_payload(resolution.pending),
+        # Link entries carry their edge kind; fork entries carry `"fork"`.
+        "pending": [
+            *edges.pending_payload(resolution.pending),
+            *fork_reconcile.fork_payload(resolution.pending_forks),
+        ],
     }
 
 

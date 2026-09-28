@@ -44,7 +44,7 @@ first: an identical genesis resubmission is a replay, not a conflict.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
 
@@ -73,7 +73,7 @@ from easy_cheese.shared import paths
 
 from . import canonical
 from . import edges as edges_mod
-from . import lineage
+from . import fork_reconcile, lineage
 from . import projection as projection_mod
 from . import records, refs, storage
 
@@ -165,8 +165,15 @@ def commit(
     durability: Durability = Durability.CANONICAL_LOCAL,
     finalize: Callable[[PendingRevision], None] | None = None,
     artifact_root: Path | str | None = None,
+    origins: Mapping[int, str] | None = None,
 ) -> CommitResult:
-    """Apply `delta` to the store's current record under the record lock."""
+    """Apply `delta` to the store's current record under the record lock.
+
+    `origins` is host-only input: it maps the index of a proposed entry, in
+    `ADDITION_FIELDS` order across the delta's `add_*` lists, to the `origin`
+    the new entry carries. A delta cannot author `origin` itself.
+    """
+    stamped = origins or {}
     repository_value: RepositoryProvenance = (
         RepositoryProvenance() if repository is None else repository
     )
@@ -223,6 +230,7 @@ def commit(
                     project_key=paths.project_key(digest_root),
                     durability=durability,
                     digest_of=digest_of,
+                    origins=stamped,
                 ),
                 finalize=finalize,
             )
@@ -259,6 +267,7 @@ def commit(
                 repository=repository_value,
                 digest_of=digest_of,
                 durability=durability,
+                origins=stamped,
             ),
             finalize=finalize,
         )
@@ -533,20 +542,29 @@ def _proposed_entries(delta: WheypointDelta, kind: EntryKind) -> list[ProposedEn
     )
 
 
-def _additions(delta: WheypointDelta, kind: EntryKind) -> list[ProtectedEntry]:
-    proposed = _proposed_entries(delta, kind)
-    return [
-        ProtectedEntry(
-            entry_id=_entry_id(delta, entry, index),
-            kind=entry.kind,
-            summary=entry.summary,
-            state=EntryState.ACTIVE,
-            blocks_continuation=entry.blocks_continuation,
-            rationale=entry.rationale,
-            quote=entry.quote,
-        )
-        for index, entry in enumerate(proposed)
-    ]
+def _additions(
+    delta: WheypointDelta, origins: Mapping[int, str]
+) -> dict[EntryKind, list[ProtectedEntry]]:
+    """New entries by kind; `origins` is keyed by the flattened proposal index."""
+    additions: dict[EntryKind, list[ProtectedEntry]] = {}
+    offset = 0
+    for kind in ADDITION_FIELDS:
+        proposed = _proposed_entries(delta, kind)
+        additions[kind] = [
+            ProtectedEntry(
+                entry_id=_entry_id(delta, entry, index),
+                kind=entry.kind,
+                summary=entry.summary,
+                state=EntryState.ACTIVE,
+                blocks_continuation=entry.blocks_continuation,
+                rationale=entry.rationale,
+                quote=entry.quote,
+                origin=origins.get(offset + index),
+            )
+            for index, entry in enumerate(proposed)
+        ]
+        offset += len(proposed)
+    return additions
 
 
 def revision_id_for(delta: WheypointDelta) -> str:
@@ -675,8 +693,24 @@ def _apply(
     repository: RepositoryProvenance,
     digest_of: Callable[[str], str | None],
     durability: Durability,
+    origins: Mapping[int, str],
 ) -> PendingRevision:
     transitions = list(delta.transitions or [])
+    forged = [t.entry_id for t in transitions if t.action is TransitionAction.FORK]
+    if forged:
+        raise CommitError(
+            "fork transitions are host-derived: the host applies them when it "
+            + f"reconciles a child's fork, not on request ({', '.join(forged)})"
+        )
+    # A pending fork is reconciled host-side (F-2): the moved entries join the
+    # agent's transitions, so the receipt lists both and nothing leaves the
+    # record without a transition naming it.
+    forks = fork_reconcile.apply_pending_forks(
+        current,
+        fork_reconcile.pending_forks(current, corpus_root=store.corpus_root),
+        agent_transitioned={t.entry_id for t in transitions},
+    )
+    transitions.extend(forks.transitions)
     problems = records.validate_transitions(current, transitions)
     if problems:
         raise CommitError("; ".join(problems))
@@ -687,13 +721,17 @@ def _apply(
     for kind in _RECORD_FIELDS:
         existing = _existing_entries(current, kind)
         kept[kind] = [
-            _transitioned(entry, by_entry.get(entry.entry_id)) for entry in existing
+            _copied(
+                _transitioned(entry, by_entry.get(entry.entry_id)),
+                forks.copies.get(entry.entry_id, ()),
+            )
+            for entry in existing
         ]
         preserved.extend(
             entry.entry_id for entry in existing if entry.entry_id not in by_entry
         )
 
-    additions = {kind: _additions(delta, kind) for kind in ADDITION_FIELDS}
+    additions = _additions(delta, origins)
     revision_id = _revision_id(delta, fingerprint)
     number = current.revision_number + 1
     draft = _draft_record(
@@ -711,7 +749,10 @@ def _apply(
         edges_mod.pending_reciprocals(current, corpus_root=store.corpus_root),
         revision_id=revision_id,
     )
-    draft = evolve(draft, edges=reciprocals.edges)
+    forked_to = edges_mod.merge_edges(
+        reciprocals.edges, forks.edges, None, revision_id=revision_id
+    )
+    draft = _forked_away(draft, forks, edges=forked_to.edges)
     compaction = (
         None
         if delta.compaction is None
@@ -734,11 +775,48 @@ def _apply(
         additions=[entry for kind in ADDITION_FIELDS for entry in additions[kind]],
         transitions=transitions,
         preserved=preserved,
-        applied_edges=merged.applied + reciprocals.applied,
+        applied_edges=merged.applied + reciprocals.applied + forked_to.applied,
         removed_edges=merged.removed,
         repository=repository,
         durability=durability,
     )
+
+
+def _copied(entry: ProtectedEntry, refs: tuple[str, ...]) -> ProtectedEntry:
+    return evolve(entry, copies=entry.copies + refs) if refs else entry
+
+
+def _forked_away(
+    draft: WheypointRecord,
+    forks: fork_reconcile.AppliedFork,
+    *,
+    edges: tuple[WorkEdge, ...],
+) -> WheypointRecord:
+    """Drop the dossier forks and links a child took, and set the edges.
+
+    A dossier fork stays when dropping it would leave a remaining gate with no
+    fork to describe it: the record must stay legal for the parent to commit.
+    """
+    dossier = [
+        item
+        for item in draft.decision_dossier
+        if item.fork not in forks.dossier_removed
+    ]
+    if not dossier and draft.gating_entry_ids:
+        dossier = draft.decision_dossier
+    try:
+        return evolve(
+            draft,
+            decision_dossier=dossier,
+            artifact_links=[
+                link
+                for link in draft.artifact_links
+                if _link_key(link) not in forks.link_refs_removed
+            ],
+            edges=edges,
+        )
+    except ValueError as exc:
+        raise CommitError(f"the delta does not produce a legal record: {exc}") from exc
 
 
 def _genesis(
@@ -750,6 +828,7 @@ def _genesis(
     project_key: str,
     digest_of: Callable[[str], str | None],
     durability: Durability,
+    origins: Mapping[int, str],
 ) -> PendingRevision:
     """The first record for a work id, built from the delta alone.
 
@@ -789,7 +868,7 @@ def _genesis(
             + "runtime derives the record's created time rather than reading a clock"
         )
 
-    additions = {kind: _additions(delta, kind) for kind in ADDITION_FIELDS}
+    additions = _additions(delta, origins)
     if not any(additions.values()) and delta.notes is None:
         raise CommitError(
             "a first checkpoint must capture at least one decision, question, "

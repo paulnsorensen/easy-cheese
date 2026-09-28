@@ -43,6 +43,11 @@ RECIPROCAL: Mapping[EdgeKind, EdgeKind] = {
     EdgeKind.SUPERSEDED_BY: EdgeKind.SUPERSEDES,
     EdgeKind.RELATES_TO: EdgeKind.RELATES_TO,
 }
+# A fork is reconciled whole by `fork_reconcile.pending_forks` -- entries,
+# dossier, links, and the `forked_to` edge together -- never as a bare
+# reciprocal edge. `RECIPROCAL` still maps the fork kinds for readers that
+# only need the edge's other half.
+_FORK_KINDS = frozenset({EdgeKind.FORKED_FROM, EdgeKind.FORKED_TO})
 
 
 class EdgeError(ValueError):
@@ -124,7 +129,10 @@ def merge_edges(
 def pending_reciprocals(
     record: WheypointRecord, *, corpus_root: Path
 ) -> tuple[PendingEdge, ...]:
-    """Every reciprocal edge a sibling record's link asks `record` to add."""
+    """Every reciprocal edge a sibling record's link asks `record` to add.
+
+    Fork edges are excluded: `fork_reconcile.pending_forks` owns them.
+    """
     held = {(target, kind) for target, kind in map(_target, record.edges) if target}
     pending: list[PendingEdge] = []
     for store in storage.WorkStore.enumerate(corpus_root):
@@ -138,9 +146,10 @@ def pending_reciprocals(
             continue
         for edge in source.edges:
             reciprocal = RECIPROCAL.get(edge.kind)
-            if reciprocal is None or _target(edge)[0] != (
-                record.project_key,
-                record.work_id,
+            if (
+                reciprocal is None
+                or edge.kind in _FORK_KINDS
+                or _target(edge)[0] != (record.project_key, record.work_id)
             ):
                 continue
             if ((source.project_key, source.work_id), reciprocal) in held:
