@@ -22,7 +22,7 @@ from easy_cheese_schemas import (
     WheypointRecord,
     WheypointStatus,
 )
-from easy_cheese_schemas.contracts import EdgeKind, WorkEdge
+from easy_cheese_schemas.contracts import EdgeKind, WorkEdge, WorkEdgeKey
 
 from easy_cheese.shared.wheypoint import (
     commit,
@@ -498,6 +498,62 @@ def test_commit_refuses_a_fork_edge_in_a_delta(corpus_root: Path) -> None:
 
     assert other.record_path.read_bytes() == before
 
+
+def test_commit_refuses_a_delta_that_removes_a_fork_edge(corpus_root: Path) -> None:
+    _ = _forked(corpus_root)
+    child = storage.WorkStore.open("child", corpus_root=corpus_root)
+    [edge] = [e for e in _record(child).edges if e.kind is EdgeKind.FORKED_FROM]
+    before = child.record_path.read_bytes()
+
+    with pytest.raises(commit.CommitError, match=r"^host-only-edge: "):
+        _ = _next(child, remove_edges=[WorkEdgeKey(to=edge.to, kind=edge.kind)])
+
+    assert child.record_path.read_bytes() == before
+
+
+@pytest.mark.parametrize("title", ["Store | cache owner", "Store; cache owner"])
+def test_fork_refuses_a_dossier_title_that_holds_a_rationale_separator(
+    corpus_root: Path, title: str
+) -> None:
+    parent = _parent(corpus_root)
+    _, directive, _ = _ids(_record(parent))
+    option = DossierOption(option="x", evidence=["e"], breaks="y")
+    _ = _next(parent, decision_dossier=[DecisionFork(fork=title, options=[option])])
+
+    with pytest.raises(fork.ForkError, match=r"^fork-title: "):
+        _ = _fork(corpus_root, copy=[directive], dossier=[title])
+
+    assert not storage.WorkStore.open("child", corpus_root=corpus_root).record_path.exists()
+
+
+def test_two_pending_forks_of_one_entry_reconcile_through_commit(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent = _parent(corpus_root)
+    question, directive, _ = _ids(_record(parent))
+    _ = _fork(
+        corpus_root, child="child-a", move=[question], copy=[directive], dossier=[DOSSIER]
+    )
+    # A second fork that raced past the `already-forked` gate.
+    def none_pending(
+        _source: WheypointRecord, **_siblings: object
+    ) -> tuple[fork_reconcile.PendingFork, ...]:
+        return ()
+
+    monkeypatch.setattr(fork, "pending_forks", none_pending)
+    _ = _fork(
+        corpus_root, child="child-b", move=[question], copy=[directive], dossier=[DOSSIER]
+    )
+    monkeypatch.undo()
+
+    reconciled = _next(parent)
+
+    [entry] = [e for e in records.entries(reconciled.record) if e.entry_id == question]
+    assert entry.state is EntryState.FORKED
+    assert entry.successor is not None and entry.successor.startswith(_ref("child-a"))
+    assert [c.partition("#")[0] for c in entry.copies] == [_ref("child-b")]
+    assert [t.entry_id for t in reconciled.revision.applied_transitions] == [question]
+    assert _next(parent).revision.applied_transitions == []
 
 def test_a_forked_from_edge_whose_rationale_does_not_parse_is_no_fork(
     corpus_root: Path,

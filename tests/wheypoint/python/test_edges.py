@@ -428,17 +428,11 @@ def test_ac9_a_source_that_relinks_makes_the_reciprocal_pending_again(
     ]
 
 
-def test_a_retried_promotion_ignores_a_link_made_since_the_pair_landed(
-    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    a = _genesis(corpus_root, "alpha")
-    b = _genesis(corpus_root, "beta")
-    current = b.read_record()
-    assert current is not None
-    delta = WheypointDelta(
-        work_id="beta", expected_revision_id=current.revision_id, notes="Two."
-    )
-    old = b.record_path.read_bytes()
+def _interrupt(
+    monkeypatch: pytest.MonkeyPatch, store: storage.WorkStore, delta: WheypointDelta
+) -> commit.CommitResult:
+    """Commit `delta`, but leave the record at its old bytes: a stranded pair."""
+    old = store.record_path.read_bytes()
     real = storage.WorkStore.promote
 
     def interrupted(
@@ -451,8 +445,22 @@ def test_a_retried_promotion_ignores_a_link_made_since_the_pair_landed(
         _ = self.record_path.write_bytes(old)
 
     monkeypatch.setattr(storage.WorkStore, "promote", interrupted)
-    first = commit.commit(delta, store=b)
+    result = commit.commit(delta, store=store)
     monkeypatch.setattr(storage.WorkStore, "promote", real)
+    return result
+
+
+def test_a_retried_promotion_ignores_a_link_made_since_the_pair_landed(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    a = _genesis(corpus_root, "alpha")
+    b = _genesis(corpus_root, "beta")
+    current = b.read_record()
+    assert current is not None
+    delta = WheypointDelta(
+        work_id="beta", expected_revision_id=current.revision_id, notes="Two."
+    )
+    first = _interrupt(monkeypatch, b, delta)
     _ = _next(a, add_edges=[WorkEdge(to=_ref("beta"), kind=EdgeKind.RELATES_TO)])
 
     retried = commit.commit(delta, store=b)
@@ -544,3 +552,100 @@ def test_shape_reads_each_record_once(
     assert [(e.from_ref, e.kind) for e in report.pending] == [
         (_ref("beta"), EdgeKind.RELATES_TO)
     ]
+
+
+def test_shape_ignores_a_stranded_receipt_the_chain_does_not_walk(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, b = _linked(corpus_root)
+    _ = _next(b)
+    removal = _unlink(b, "alpha")
+    # The stranded receipt re-adds the removed key; a later delta bypasses it.
+    _ = _interrupt(
+        monkeypatch,
+        b,
+        WheypointDelta(
+            work_id="beta",
+            expected_revision_id=removal.revision.revision_id,
+            notes="Stranded.",
+            add_edges=[WorkEdge(to=_ref("alpha"), kind=EdgeKind.RELATES_TO)],
+        ),
+    )
+    _ = _next(b)
+
+    report = shape.shape(
+        scope="project", corpus_home=corpus_root.parent, project=PROJECT
+    )
+
+    assert _lint(b).pending == ()
+    assert report.pending == ()
+    assert _next(b).revision.applied_edges == ()
+
+
+def _moved_target_link(corpus_root: Path) -> tuple[storage.WorkStore, str, str]:
+    """`alpha` links `beta` unpinned, then `beta` moves; returns both pins."""
+    a = _genesis(corpus_root, "alpha")
+    b = _genesis(corpus_root, "beta")
+    first = b.read_record()
+    assert first is not None
+    _ = _next(
+        a, add_artifact_links=[ArtifactLink(path=f"{PROJECT}/beta", ref=_ref("beta"))]
+    )
+    moved = _next(b)
+    return a, first.revision_id, moved.record.revision_id
+
+
+def test_re_adding_an_unpinned_record_link_repins_the_one_link_it_holds(
+    corpus_root: Path,
+) -> None:
+    a, _, moved = _moved_target_link(corpus_root)
+
+    result = _next(
+        a, add_artifact_links=[ArtifactLink(path=f"{PROJECT}/beta", ref=_ref("beta"))]
+    )
+
+    assert [link.ref for link in result.record.artifact_links] == [
+        f"{_ref('beta')}@{moved}"
+    ]
+
+
+def test_an_unpinned_record_ref_removes_the_link_it_pinned(corpus_root: Path) -> None:
+    a, _, _ = _moved_target_link(corpus_root)
+
+    result = _next(a, remove_artifact_links=[_ref("beta")])
+
+    assert result.record.artifact_links == []
+
+
+def test_a_pinned_record_ref_removes_only_the_link_at_that_pin(
+    corpus_root: Path,
+) -> None:
+    a, _, moved = _moved_target_link(corpus_root)
+    before = a.record_path.read_bytes()
+
+    with pytest.raises(commit.CommitError, match="does not carry"):
+        _ = _next(a, remove_artifact_links=[f"{_ref('beta')}@{moved}"])
+
+    assert a.record_path.read_bytes() == before
+
+
+def test_commit_refuses_a_delta_edge_that_claims_the_reciprocal_rationale(
+    corpus_root: Path,
+) -> None:
+    a = _genesis(corpus_root, "alpha")
+    _ = _genesis(corpus_root, "beta")
+    before = a.record_path.read_bytes()
+
+    with pytest.raises(commit.CommitError, match=r"^host-only-edge: "):
+        _ = _next(
+            a,
+            add_edges=[
+                WorkEdge(
+                    to=_ref("beta"),
+                    kind=EdgeKind.RELATES_TO,
+                    rationale="reciprocal of the design thread",
+                )
+            ],
+        )
+
+    assert a.record_path.read_bytes() == before

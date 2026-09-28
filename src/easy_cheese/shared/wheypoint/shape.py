@@ -20,10 +20,10 @@ from pathlib import Path
 from typing import Literal
 
 from attrs import define, evolve
-from easy_cheese_schemas import WheypointRecord
+from easy_cheese_schemas import WheypointRecord, WheypointRevision
 from easy_cheese_schemas.contracts import EdgeKind
 
-from . import edges, fork_reconcile, records, storage
+from . import edges, fork_reconcile, lineage, records, storage
 from .discovery_stores import normalized, work_key
 
 __all__ = [
@@ -183,13 +183,28 @@ def _held(item: _Loaded) -> list[ShapeEdge]:
     ]
 
 
+def _chain(item: _Loaded) -> tuple[WheypointRevision, ...]:
+    """The receipts the current revision walks back through, as commit reads them."""
+    receipts = item.store.receipt_revisions()
+    current = next(
+        (
+            receipt
+            for receipt in receipts
+            if receipt.revision_id == item.record.revision_id
+            and receipt.revision_number == item.record.revision_number
+        ),
+        None,
+    )
+    return () if current is None else tuple(lineage.walk(receipts, current).revisions)
+
+
 def _owed(item: _Loaded, siblings: Sequence[WheypointRecord]) -> list[ShapeEdge]:
     owed_links = edges.pending_reciprocals(
         item.record, siblings=siblings, receipts=()
     )
     if owed_links:
         owed_links = edges.pending_reciprocals(
-            item.record, siblings=siblings, receipts=item.store.receipt_revisions()
+            item.record, siblings=siblings, receipts=_chain(item)
         )
     reciprocals = [
         ShapeEdge(

@@ -247,6 +247,42 @@ def test_ac1_repo_and_wheypoint_refs_pin_the_same_way(
     }
 
 
+def test_ac1_an_explicit_older_wheypoint_pin_keeps_that_revision(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    make_record: Callable[..., WheypointRecord],
+    corpus_root: Path,
+    checkout: Path,
+) -> None:
+    target_store = storage.WorkStore.open("work-0002", corpus_root=corpus_root)
+    target = make_promotion(record=make_record(work_id="work-0002"))
+    target_store.promote(target.record, target.revision, target.markdown)
+    moved = commit.commit(
+        WheypointDelta(
+            work_id="work-0002",
+            expected_revision_id=target.record.revision_id,
+            notes="The target moves on.",
+        ),
+        store=target_store,
+    )
+    assert moved.record.revision_id != target.record.revision_id
+    seed = _seed(store, make_promotion)
+    pinned = f"wheypoint:{PROJECT}/work-0002@{target.record.revision_id}"
+
+    result = commit.commit(
+        _delta(
+            seed.record.revision_id,
+            add_artifact_links=[ArtifactLink(path="x", ref=pinned)],
+        ),
+        store=store,
+        artifact_root=checkout,
+    )
+
+    [link] = result.record.artifact_links
+    assert link.ref == pinned
+    assert link.digest == target.revision.record_digest
+    assert link.digest != moved.revision.record_digest
+
 def test_ac1_a_wheypoint_ref_naming_an_unknown_revision_is_refused(
     store: storage.WorkStore,
     make_promotion: Callable[..., Promotion],

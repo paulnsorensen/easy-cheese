@@ -38,6 +38,7 @@ __all__ = [
     "PendingEdge",
     "apply_pending_reciprocals",
     "edge_key",
+    "host_written",
     "merge_edges",
     "pending_payload",
     "pending_reciprocals",
@@ -141,6 +142,11 @@ def merge_edges(
     )
 
 
+def host_written(edge: WorkEdge) -> bool:
+    """True when `edge` carries the rationale prefix only the host writes."""
+    return (edge.rationale or "").startswith(_RECIPROCAL_PREFIX)
+
+
 def _reciprocal_rationale(item: PendingEdge) -> str:
     """The rationale the host writes on the reciprocal edge it applies."""
     return (
@@ -195,7 +201,7 @@ def pending_reciprocals(
             if (
                 reciprocal is None
                 or edge.kind in _FORK_KINDS
-                or (edge.rationale or "").startswith(_RECIPROCAL_PREFIX)
+                or host_written(edge)
                 or _target(edge)[0] != (record.project_key, record.work_id)
             ):
                 continue

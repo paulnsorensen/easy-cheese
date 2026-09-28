@@ -42,6 +42,9 @@ from .ref_grammar import normalize_ref
 __all__ = ["ForkError", "fork"]
 
 _MOVED_BY_DEFAULT = (EntryKind.QUESTION, EntryKind.BLOCKER)
+# `fork_rationale` joins titles and link refs with ` | ` and ends each field
+# with `; `, so a selected item that holds either would mis-parse at reconcile.
+_RATIONALE_SEPARATORS = (" | ", "; ")
 
 
 class ForkError(ValueError):
@@ -98,13 +101,20 @@ def fork(
                 + "at the parent's next checkpoint"
             )
     titles = list(dict.fromkeys(dossier))
+    link_refs = list(dict.fromkeys(_normalized(ref) for ref in links))
+    for text in [*titles, *link_refs]:
+        if any(separator in text for separator in _RATIONALE_SEPARATORS):
+            raise ForkError(
+                f"fork-title: {text!r} holds a separator the fork rationale "
+                + f"uses ({' or '.join(map(repr, _RATIONALE_SEPARATORS))})"
+            )
     rationale = fork_rationale(
         parent,
         source.revision_id,
         moved=move,
         copied=copy,
         dossier=titles,
-        links=list(dict.fromkeys(_normalized(ref) for ref in links)),
+        links=link_refs,
     )
     if len(rationale) > FORK_RATIONALE_LIMIT:
         raise ForkError(

@@ -180,12 +180,22 @@ def commit(
     into a child. A delta cannot author a fork edge itself.
     """
     forged_edges = [
-        edge.to for edge in delta.add_edges or () if edge.kind in _FORK_EDGE_KINDS
+        edge.to
+        for edge in [*(delta.add_edges or ()), *(delta.remove_edges or ())]
+        if edge.kind in _FORK_EDGE_KINDS
     ]
     if forged_edges:
         raise CommitError(
             "host-only-edge: fork edges are written by the host when it forks "
             + f"or reconciles a fork, not on request ({', '.join(forged_edges)})"
+        )
+    forged_reciprocals = [
+        edge.to for edge in delta.add_edges or () if edges_mod.host_written(edge)
+    ]
+    if forged_reciprocals:
+        raise CommitError(
+            "host-only-edge: a reciprocal rationale is written by the host, not "
+            + f"on request ({', '.join(forged_reciprocals)})"
         )
     stamped = origins or {}
     repository_value: RepositoryProvenance = (
@@ -621,6 +631,10 @@ def _merge_artifact_links(
     unpinnable one is linked with no digest and may cover no entry. Removal
     names a reference or a bare repository path; an unknown one is refused
     rather than ignored, and an empty list never reaches this point.
+
+    A `wheypoint:` ref with no `@rev` names its target at any revision: an
+    add replaces the link held for that target, and a removal deletes it. A
+    ref with an explicit `@rev` matches that pin only.
     """
     if add is None and remove is None:
         return current_links
@@ -628,10 +642,10 @@ def _merge_artifact_links(
     by_ref = dict(zip(order, current_links, strict=True))
     for link in add or ():
         try:
-            ref = refs.normalize_ref(records.effective_ref(link))
+            requested = refs.normalize_ref(records.effective_ref(link))
             # An unpinned record link names whatever the target is now; the
             # link pins that revision so a later read resolves the same record.
-            ref = refs.pin_record(ref, corpus_home=paths.corpus_home())
+            ref = refs.pin_record(requested, corpus_home=paths.corpus_home())
         except ValueError as exc:
             raise CommitError(f"add_artifact_links names an unusable ref: {exc}") from exc
         scheme = refs.parse_ref(ref).scheme
@@ -650,7 +664,13 @@ def _merge_artifact_links(
                 raise CommitError(
                     f"add_artifact_links names a ref this host cannot digest: {ref!r}"
                 )
-        if ref not in by_ref:
+        target = _unpinned_record(requested)
+        if target is not None:
+            # An unpinned record ref refreshes the link it pinned earlier.
+            for key in [k for k in by_ref if k != ref and _record_target(k) == target]:
+                del by_ref[key]
+                order[order.index(key)] = ref
+        if ref not in order:
             order.append(ref)
         by_ref[ref] = evolve(
             link,
@@ -661,12 +681,35 @@ def _merge_artifact_links(
         )
     for value in remove or ():
         key = _removal_key(value)
-        if key not in by_ref:
+        target = _unpinned_record(key)
+        matched = [
+            k for k in by_ref if k == key or (target and _record_target(k) == target)
+        ]
+        if not matched:
             raise CommitError(
                 f"remove_artifact_links names a path this record does not carry: {value!r}"
             )
-        del by_ref[key]
-    return [by_ref[key] for key in order if key in by_ref]
+        for k in matched:
+            del by_ref[k]
+    return [by_ref[key] for key in dict.fromkeys(order) if key in by_ref]
+
+
+def _record_target(ref: str) -> str | None:
+    """A `wheypoint:` ref without its `@rev`, or None for any other ref."""
+    try:
+        parsed = refs.parse_ref(ref)
+    except ValueError:
+        return None
+    if parsed.scheme is not refs.Scheme.WHEYPOINT:
+        return None
+    entry = "" if parsed.entry_id is None else f"#{parsed.entry_id}"
+    return refs.normalize_ref(f"wheypoint:{parsed.project_key}/{parsed.work_id}{entry}")
+
+
+def _unpinned_record(ref: str) -> str | None:
+    """The target of a `wheypoint:` ref that names no `@rev`, else None."""
+    target = _record_target(ref)
+    return target if target == ref else None
 
 
 def _link_key(link: ArtifactLink) -> str:
