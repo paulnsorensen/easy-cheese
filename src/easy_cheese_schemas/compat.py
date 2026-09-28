@@ -27,12 +27,12 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from enum import Enum, auto
-from typing import Generic, TypeVar, cast, get_origin
+from typing import Generic, TypeVar, cast, get_args, get_origin
 
 import attrs
 import cattrs
 from attrs import Attribute, define, field
-from cattrs.cols import list_structure_factory
+from cattrs.cols import homogenous_tuple_structure_factory, list_structure_factory
 from cattrs.errors import (
     AttributeValidationNote,
     ForbiddenExtraKeysError,
@@ -141,6 +141,25 @@ def _is_list_annotation(type_: object) -> bool:
     return get_origin(type_) is list
 
 
+def _is_variadic_tuple_annotation(type_: object) -> bool:
+    args = get_args(type_)
+    return get_origin(type_) is tuple and len(args) == 2 and args[1] is Ellipsis
+
+
+def _guarded_tuple(type_: object, converter: cattrs.BaseConverter) -> _StructureHook:
+    """cattrs structures any iterable into a tuple, which turns a bare string
+    into its characters. Require an actual list, then structure elements the
+    ordinary way so per-index attribution survives."""
+    structure = homogenous_tuple_structure_factory(cast(type, type_), converter)
+
+    def hook(value: object, _type: object = type_) -> object:
+        if not isinstance(value, list):
+            raise TypeError(f"must be a list, not {type(value).__name__}")
+        return cast(object, structure(value, _type))
+
+    return hook
+
+
 def _guarded_class_strict(
     type_: object, converter: cattrs.BaseConverter
 ) -> _StructureHook:
@@ -168,6 +187,9 @@ _converter.register_structure_hook(int, _exact(int, "an integer"))
 _converter.register_structure_hook(float, _exact((int, float), "a number"))
 _ = _converter.register_structure_hook_factory(attrs.has, _guarded_class)
 _ = _converter.register_structure_hook_factory(_is_list_annotation, _guarded_list)
+_ = _converter.register_structure_hook_factory(
+    _is_variadic_tuple_annotation, _guarded_tuple
+)
 
 # A second converter for the write path (S6): identical primitive handling,
 # but an unknown key on any nested class is a refused write, not an ignored

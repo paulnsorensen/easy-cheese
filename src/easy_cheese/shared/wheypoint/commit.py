@@ -1109,10 +1109,18 @@ def _draft_record(
     additions: dict[EntryKind, list[ProtectedEntry]],
     digest_of: Callable[[str], str | None],
 ) -> WheypointRecord:
-    """The next record: replacements where the delta spoke, carry-forward else."""
+    """The next record: replacements where the delta spoke, carry-forward else.
+
+    Every committed revision restamps `schema_version` at the runtime's
+    current version, not just the genesis record. A carried-forward record
+    that keeps an older stamp would let this runtime write content only a
+    newer schema allows while still claiming the older version, which a
+    reader that trusts the stamp cannot detect.
+    """
     try:
         return evolve(
             current,
+            schema_version=SCHEMA_VERSION,
             revision_id=revision_id,
             revision_number=number,
             revision_digest=_UNPINNED_DIGEST,

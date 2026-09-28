@@ -160,7 +160,7 @@ values flattened to their strings.
 ## The `schema_version` contract
 
 ```python
-SCHEMA_VERSION = 1   # what this package writes and fully understands
+SCHEMA_VERSION = 4   # what this package writes and fully understands
 MIN_READABLE = 1     # oldest stamp still readable; widens as the schema evolves
 STAMP_KEY = "schema_version"
 ```

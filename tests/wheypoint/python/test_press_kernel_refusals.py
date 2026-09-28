@@ -148,7 +148,7 @@ def test_checkpoint_add_edges_forked_from_refuses_host_only_edge(
     )
 
     assert status == 1
-    assert payload_at(payload, "error", "code") == "host-only-edge"
+    assert payload_at(payload, "error", "code") == "invalid-intent"
     assert _record_path(corpus_root, "w-edge-1").read_bytes() == before
 
 
@@ -171,7 +171,7 @@ def test_checkpoint_add_edges_forked_to_refuses_host_only_edge(
     )
 
     assert status == 1
-    assert payload_at(payload, "error", "code") == "host-only-edge"
+    assert payload_at(payload, "error", "code") == "invalid-intent"
     assert _record_path(corpus_root, "w-edge-2").read_bytes() == before
 
 
@@ -192,7 +192,7 @@ def test_checkpoint_remove_edges_forked_from_refuses_host_only_edge(
     )
 
     assert status == 1
-    assert payload_at(payload, "error", "code") == "host-only-edge"
+    assert payload_at(payload, "error", "code") == "invalid-intent"
     assert _record_path(corpus_root, "w-edge-3").read_bytes() == before
 
 
@@ -219,7 +219,7 @@ def test_checkpoint_add_edges_relates_to_with_reciprocal_rationale_refuses_host_
     )
 
     assert status == 1
-    assert payload_at(payload, "error", "code") == "host-only-edge"
+    assert payload_at(payload, "error", "code") == "invalid-intent"
     assert _record_path(corpus_root, "w-edge-4").read_bytes() == before
 
 
@@ -243,7 +243,7 @@ def test_checkpoint_flag_link_forked_from_kind_refuses_host_only_edge(
     )
 
     assert status == 1
-    assert payload_at(payload, "error", "code") == "host-only-edge"
+    assert payload_at(payload, "error", "code") == "invalid-intent"
     assert _record_path(corpus_root, "w-edge-5").read_bytes() == before
 
 
@@ -257,5 +257,5 @@ def test_unlink_forked_to_kind_refuses_host_only_edge(corpus_root: Path) -> None
     )
 
     assert status == 1
-    assert payload_at(payload, "error", "code") == "host-only-edge"
+    assert payload_at(payload, "error", "code") == "invalid-intent"
     assert _record_path(corpus_root, "w-edge-6").read_bytes() == before

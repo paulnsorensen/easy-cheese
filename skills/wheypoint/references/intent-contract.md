@@ -63,7 +63,7 @@ Run `validate` for a schema-only dry run that never opens the store.
 - An unpinned `wheypoint:` link is pinned to the target's current revision at commit.
 - **`remove_artifact_links`** names carried paths to drop; an unknown path is refused.
 - An empty `artifact_links` or `remove_artifact_links` list is refused.
-- **`add_edges`** holds `{to, kind, rationale?}`; the host stamps `revision_id` at commit and ignores a supplied value.
+- **`add_edges`** holds `{to, kind, rationale?}`; the host stamps `revision_id` at commit and refuses a supplied value.
 - **`remove_edges`** holds `{to, kind}` keys of carried edges to drop.
 - Edges are a set keyed by `(to, kind)`; [`work-graph.md`](work-graph.md) lists each `kind`.
 - An intent never adds or removes a `forked_from` or `forked_to` edge; `fork` and the host own them.
@@ -198,4 +198,5 @@ Each refusal names a `code`:
 - `transcript-missing`: no transcript file exists at the resolved path.
 - `invalid-reference`: `resolve` could not interpret the given reference.
 - `flag-pairing`, `flag-kind`, `flag-link`, `flag-conflict`, `notes-unreadable`: the flag form refused; see [Flag form](#flag-form).
-- `unpinnable-scheme`, `unknown-edge`, `host-only-edge`, `unknown-dossier-fork`: the commit kernel refused a ref, an edge, or a dossier title.
+- `unpinnable-scheme`, `unknown-edge`, `unknown-dossier-fork`: the commit kernel refused a ref, an edge, or a dossier title.
+- A host-only edge kind on `add_edges` or `remove_edges`, or a reciprocal-marker rationale on `add_edges`, is refused at intent validation as `invalid-intent`, before the commit kernel runs.

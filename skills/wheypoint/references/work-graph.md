@@ -43,8 +43,8 @@ The host stamps `revision_id` at commit.
 | `relates_to` | `relates_to` | the records relate |
 
 - `forked_from` and `forked_to` are host-only.
-- An intent, `link`, or `unlink` that names a host-only kind is refused as `host-only-edge`.
-- An added edge whose rationale copies the host's reciprocal marker is also refused as `host-only-edge`.
+- An intent, `link`, or `unlink` that names a host-only kind is refused at intent validation as `invalid-intent`.
+- An added edge whose rationale copies the host's reciprocal marker is also refused at intent validation as `invalid-intent`.
 - A `link` to a `wheypoint:` target owes the target a reciprocal edge when the kind has one.
 
 ## `fork`

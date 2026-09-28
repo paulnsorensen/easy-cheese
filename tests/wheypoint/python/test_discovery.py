@@ -507,6 +507,34 @@ def test_ac12_linked_to_and_backlinks_return_the_same_records(
 
 
 @pytest.mark.usefixtures("isolated_home")
+def test_grep_matches_edge_rationale(
+    tmp_path: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    """Grep finds a record by its edges' rationale text, not just kind/to."""
+    corpus = tmp_path / "cheese" / "proj-a"
+    seed = functools.partial(_seed_fields, corpus, make_record, make_promotion)
+    seed("target")
+    seed(
+        "rationale-bearer",
+        edges=[
+            WorkEdge(
+                to="wheypoint:proj-a/target@rev-0001",
+                kind=EdgeKind.INFORMS,
+                rationale="unique-rationale-marker",
+            )
+        ],
+    )
+
+    hits = discovery.discover(
+        start=tmp_path, corpus_root=corpus, grep=["unique-rationale-marker"]
+    ).hits
+
+    assert {hit.ref for hit in hits} == {"rationale-bearer"}
+
+
+@pytest.mark.usefixtures("isolated_home")
 def test_ac12_linked_to_matches_a_repo_link_by_its_path(
     tmp_path: Path,
     make_record: Callable[..., WheypointRecord],
