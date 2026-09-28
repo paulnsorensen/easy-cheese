@@ -14,6 +14,7 @@ import pytest
 from attrs import evolve
 from attrs import Attribute
 from easy_cheese_schemas import (
+    SCHEMA_VERSION,
     ArtifactLink,
     CompactionRecord,
     DecisionFork,
@@ -146,6 +147,26 @@ def test_narrowed_delta_preserves_omitted_protected_state(
     assert result.record.artifact_links == parent.artifact_links
     assert result.revision.preserved_entry_ids == ["d-keep", "q-keep", "b-keep"]
     assert result.revision.applied_additions == []
+
+
+def test_a_stale_schema_version_stamp_is_refreshed_on_commit(
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., Promotion],
+) -> None:
+    """A record an older runtime wrote carries an old stamp. A commit against
+    it must restamp the record with the current schema version, or v4-only
+    content (e.g. long notes) would sit under a v3 stamp and later read back
+    as store-inconsistent rather than runtime-behind."""
+    parent = make_record(schema_version=3)
+    seed = _seed(store, make_promotion, record=parent)
+
+    result = commit.commit(
+        _delta(seed.record.revision_id, orientation="Refresh the stamp."),
+        store=store,
+    )
+
+    assert result.record.schema_version == SCHEMA_VERSION
 
 
 def test_resolving_the_last_gate_must_clear_the_dossier_it_carried(

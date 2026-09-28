@@ -230,6 +230,22 @@ Dispatch all independent tasks in the same turn.
 For `status: ok`, auto-dispatch `next: briesearch` or `next: culture`.
 These kickoff skills are read-only.
 
+## Work-graph keys
+
+Read `bridge` and `pending` from the resolve payload.
+Neither key changes the outcome or the dispatch decision.
+
+- When `bridge.state` is `bound`, report `bridge.node_ref`.
+  Scope the next milknado to-do call to that node.
+- When `bridge.state` is `bridge-inactive` or `unbound`, dispatch unchanged.
+  Put the state in the reply.
+- When `pending` holds a `fork` entry, print one `fork-pending` line beside the gate line.
+- When `pending` holds a link entry, print one `link-pending` line beside the gate line.
+
+A pending fork or link never changes dispatch.
+The resolved record applies it at its own next checkpoint.
+The `fork-pending` line format is in [`../../wheypoint/references/delta-contract.md`](../../wheypoint/references/delta-contract.md).
+
 ## --reground
 
 A handoff records earlier facts.

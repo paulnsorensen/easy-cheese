@@ -78,6 +78,7 @@ def _store_candidate(
             *(entry.summary for entry in records.entries(record)),
             record.notes or "",
             *(f"{kind} {to}" for kind, to in edges_out),
+            *(edge.rationale for edge in record.edges if edge.rationale),
             *links,
         ]
     ).lower()

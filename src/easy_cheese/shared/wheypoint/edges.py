@@ -26,7 +26,12 @@ from pathlib import Path
 
 from attrs import define, evolve
 from easy_cheese_schemas import WheypointRecord, WheypointRevision
-from easy_cheese_schemas.contracts import EdgeKind, WorkEdge, WorkEdgeKey
+from easy_cheese_schemas.contracts import (
+    RECIPROCAL_RATIONALE_PREFIX,
+    EdgeKind,
+    WorkEdge,
+    WorkEdgeKey,
+)
 
 from . import storage
 from .ref_grammar import Scheme, normalize_ref, parse_ref
@@ -46,7 +51,7 @@ __all__ = [
     "sibling_records",
 ]
 
-_RECIPROCAL_PREFIX = "reciprocal of "
+_RECIPROCAL_PREFIX = RECIPROCAL_RATIONALE_PREFIX
 _RECIPROCAL_RATIONALE_RE = re.compile(
     re.escape(_RECIPROCAL_PREFIX)
     + r"(?P<kind>\S+) from (?P<source>[^@\s]+)@(?P<revision>\S+)"

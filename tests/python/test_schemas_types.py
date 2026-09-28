@@ -1147,6 +1147,50 @@ class TestWheypointSchemaFour:
 
         assert delta.transitions == [_fork_transition()]
 
+    def test_intent_refuses_a_forked_from_add_edge(self) -> None:
+        with pytest.raises(ValueError, match="host derives fork edges"):
+            _ = wc.CheckpointIntent(
+                work_id="parent",
+                add_edges=[
+                    wc.WorkEdge(to="wheypoint:project/child", kind=wc.EdgeKind.FORKED_FROM)
+                ],
+            )
+
+    def test_intent_refuses_a_forked_to_remove_edge(self) -> None:
+        with pytest.raises(ValueError, match="host derives fork edges"):
+            _ = wc.CheckpointIntent(
+                work_id="parent",
+                remove_edges=[
+                    wc.WorkEdgeKey(to="wheypoint:project/child", kind=wc.EdgeKind.FORKED_TO)
+                ],
+            )
+
+    def test_intent_refuses_a_host_reciprocal_rationale(self) -> None:
+        with pytest.raises(ValueError, match="reciprocal rationale is written by the host"):
+            _ = wc.CheckpointIntent(
+                work_id="parent",
+                add_edges=[
+                    wc.WorkEdge(
+                        to="wheypoint:project/child",
+                        kind=wc.EdgeKind.INFORMS,
+                        rationale="reciprocal of informs from parent@rev-0001",
+                    )
+                ],
+            )
+
+    def test_intent_refuses_a_pinned_revision_id_on_add_edges(self) -> None:
+        with pytest.raises(ValueError, match="revision_id is host-stamped"):
+            _ = wc.CheckpointIntent(
+                work_id="parent",
+                add_edges=[
+                    wc.WorkEdge(
+                        to="wheypoint:project/child",
+                        kind=wc.EdgeKind.INFORMS,
+                        revision_id="rev-0001",
+                    )
+                ],
+            )
+
     def test_fork_transition_must_name_its_successor(self) -> None:
         with pytest.raises(ValueError, match="successor must name the entry"):
             _ = wc.EntryTransition(
@@ -1291,12 +1335,12 @@ class TestWheypointSchemaFour:
     @pytest.mark.parametrize(
         ("name", "value", "message"),
         [
-            ("add_edges", (), "add_edges must not be an empty list"),
-            ("remove_edges", (), "remove_edges must not be an empty list"),
+            ("add_edges", (), "add_edges must be a non-empty list"),
+            ("remove_edges", (), "remove_edges must be a non-empty list"),
             (
                 "remove_dossier_forks",
                 (),
-                "remove_dossier_forks must not be an empty list",
+                "remove_dossier_forks must be a non-empty list",
             ),
             ("remove_dossier_forks", ("f", "f"), "must not contain duplicate 'f'"),
             (

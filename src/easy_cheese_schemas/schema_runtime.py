@@ -388,19 +388,37 @@ def _type_schema(
     if origin is types.UnionType:
         members = cast("tuple[object, ...]", get_args(annotation))
         # Field metadata such as `min_items` applies to the array member of an
-        # optional array, so the union passes it through unchanged.
-        schema: dict[str, object] = {
-            "anyOf": [
-                _type_schema(
-                    member,
-                    definitions,
-                    field_name=field_name,
-                    owner=owner,
-                    metadata=metadata,
-                )
-                for member in members
+        # optional array, so the union passes it through unchanged. The item
+        # validator's own constraints (`__schema_item_constraints__`) target
+        # the array member's `items` sub-schema the same way; `_type_schema`
+        # only reads them off a `validator` it is given, so the array member
+        # gets them patched in after the fact rather than by threading the
+        # whole validator into every member, which would also misapply
+        # `constraints` (e.g. `min_items`) to the non-array members.
+        member_schemas = [
+            _type_schema(
+                member,
+                definitions,
+                field_name=field_name,
+                owner=owner,
+                metadata=metadata,
+            )
+            for member in members
+        ]
+        if item_constraints:
+            member_schemas = [
+                {
+                    **member_schema,
+                    "items": _apply_schema_constraints(
+                        cast("dict[str, object]", member_schema["items"]),
+                        item_constraints,
+                    ),
+                }
+                if member_schema.get("type") == "array"
+                else member_schema
+                for member_schema in member_schemas
             ]
-        }
+        schema: dict[str, object] = {"anyOf": member_schemas}
     elif origin in {list, tuple}:
         item_type, *remainder = cast("tuple[object, ...]", get_args(annotation))
         if origin is tuple and remainder != [Ellipsis]:

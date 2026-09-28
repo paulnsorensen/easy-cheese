@@ -15,7 +15,7 @@ already moves cannot move again.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from easy_cheese_schemas import (
@@ -69,9 +69,11 @@ def fork(
     context: Sequence[str] = (),
     notes: str | None = None,
     next: NextMove | None = None,  # noqa: A002 -- the `--next` verb flag
+    artifact: str | None = None,
     repository: RepositoryProvenance | None = None,
     durability: Durability = Durability.CANONICAL_LOCAL,
     artifact_root: Path | str | None = None,
+    finalize: Callable[[commit.PendingRevision], None] | None = None,
 ) -> commit.CommitResult:
     """Write the child genesis for a fork of `parent`, and nothing else.
 
@@ -160,7 +162,9 @@ def fork(
         working_context=list(context),
         notes=notes,
         next_action=NextAction(
-            move=NextMove.HOLD if next is None else next, orientation=orientation
+            move=NextMove.HOLD if next is None else next,
+            orientation=orientation,
+            artifact=artifact,
         ),
         decision_dossier=_dossier(source, titles),
         add_decisions=_proposals(proposed[EntryKind.DECISION]),
@@ -180,6 +184,7 @@ def fork(
             index: f"{origin}#{entry.entry_id}" for index, entry in enumerate(ordered)
         },
         fork_edge=WorkEdge(to=origin, kind=EdgeKind.FORKED_FROM, rationale=rationale),
+        finalize=finalize,
     )
 
 

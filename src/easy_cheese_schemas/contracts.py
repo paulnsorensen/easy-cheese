@@ -392,12 +392,6 @@ def _tuple_sequence(value: list[_ItemT] | tuple[_ItemT, ...]) -> tuple[_ItemT, .
     )
 
 
-def _optional_tuple_sequence(
-    value: list[_ItemT] | tuple[_ItemT, ...] | None,
-) -> tuple[_ItemT, ...] | None:
-    return None if value is None else _tuple_sequence(value)
-
-
 @schema_constraints(pattern=_URI_RE.pattern, minLength=1)
 def _uri(_instance: object, attribute: _NamedAttribute, value: object) -> None:
     if not isinstance(value, str) or _URI_RE.fullmatch(value) is None:
@@ -3335,7 +3329,7 @@ _notes_text = _text_within(_MAX_NOTES)
 
 # A since-4 reference names another record, document, or node. `_uri` alone is
 # unbounded, so the wheypoint bound applies here too.
-@schema_constraints(pattern=_URI_RE.pattern, minLength=1, maxLength=_MAX_TEXT)
+@schema_constraints(_constraints_of(_uri), maxLength=_MAX_TEXT)
 def _ref(instance: object, attribute: _NamedAttribute, value: object) -> None:
     _uri(instance, attribute, value)
     if isinstance(value, str) and len(value) > _MAX_TEXT:
@@ -3556,31 +3550,47 @@ class NextAction:
     parallel: ParallelPlan | None = field(default=None, metadata={"since": 3})
 
 
-def _successor_rule(
-    instance: ProtectedEntry, attribute: _NamedAttribute, value: object
-) -> None:
-    if instance.state is EntryState.SUPERSEDED and value is None:
-        raise ValueError(f"{attribute.name} must name the entry that replaced this one")
-    if instance.state is not EntryState.SUPERSEDED and value is not None:
-        raise ValueError(
-            f"{attribute.name} must be null unless the entry is superseded, "
-            + f"not {value!r}"
-        )
-    if value is not None:
-        _lower_identifier(instance, attribute, value)
+def _required_when(
+    condition: Callable[[object], bool],
+    required_message: Callable[[_NamedAttribute], str],
+    null_message: Callable[[object, _NamedAttribute, object], str],
+    inner: Validator | None = None,
+) -> Validator:
+    # Required exactly when `condition(instance)` holds; null otherwise.
+    def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
+        active = condition(instance)
+        if active and value is None:
+            raise ValueError(required_message(attribute))
+        if not active and value is not None:
+            raise ValueError(null_message(instance, attribute, value))
+        if value is not None and inner is not None:
+            inner(instance, attribute, value)
+
+    return validate
 
 
-def _fork_successor_rule(
-    instance: ProtectedEntry, attribute: _NamedAttribute, value: object
-) -> None:
-    if instance.state is EntryState.FORKED and value is None:
-        raise ValueError(f"{attribute.name} must name the entry this one moved to")
-    if instance.state is not EntryState.FORKED and value is not None:
-        raise ValueError(
+_successor_rule = _required_when(
+    lambda instance: cast("ProtectedEntry", instance).state is EntryState.SUPERSEDED,
+    lambda attribute: f"{attribute.name} must name the entry that replaced this one",
+    lambda instance, attribute, value: (
+        f"{attribute.name} must be null unless the entry is superseded, "
+        + f"not {value!r}"
+    ),
+    inner=_lower_identifier,
+)
+
+
+_fork_successor_rule = schema_constraints(_constraints_of(_ref))(
+    _required_when(
+        lambda instance: cast("ProtectedEntry", instance).state is EntryState.FORKED,
+        lambda attribute: f"{attribute.name} must name the entry this one moved to",
+        lambda instance, attribute, value: (
             f"{attribute.name} must be null unless the entry is forked, "
             + f"not {value!r}"
-        )
-    _optional_ref(instance, attribute, value)
+        ),
+        inner=_optional_ref,
+    )
+)
 
 
 def _rationale_rule(
@@ -3667,37 +3677,36 @@ class ProposedEntry:
             )
 
 
-def _target_rule(
-    instance: EntryTransition, attribute: _NamedAttribute, value: object
-) -> None:
-    supersede = instance.action is TransitionAction.SUPERSEDE
-    if supersede and value is None:
-        raise ValueError(
-            f"{attribute.name} must name the superseding entry for a "
-            + f"{TransitionAction.SUPERSEDE.value} transition"
-        )
-    if not supersede and value is not None:
-        raise ValueError(
-            f"{attribute.name} must be null for a {instance.action.value} transition"
-        )
-    if value is not None:
-        _lower_identifier(instance, attribute, value)
+_target_rule = _required_when(
+    lambda instance: cast("EntryTransition", instance).action
+    is TransitionAction.SUPERSEDE,
+    lambda attribute: (
+        f"{attribute.name} must name the superseding entry for a "
+        + f"{TransitionAction.SUPERSEDE.value} transition"
+    ),
+    lambda instance, attribute, value: (
+        f"{attribute.name} must be null for a "
+        + f"{cast('EntryTransition', instance).action.value} transition"
+    ),
+    inner=_lower_identifier,
+)
 
 
-def _fork_target_rule(
-    instance: EntryTransition, attribute: _NamedAttribute, value: object
-) -> None:
-    fork = instance.action is TransitionAction.FORK
-    if fork and value is None:
-        raise ValueError(
+_fork_target_rule = schema_constraints(_constraints_of(_ref))(
+    _required_when(
+        lambda instance: cast("EntryTransition", instance).action
+        is TransitionAction.FORK,
+        lambda attribute: (
             f"{attribute.name} must name the entry this one moved to for a "
             + f"{TransitionAction.FORK.value} transition"
-        )
-    if not fork and value is not None:
-        raise ValueError(
-            f"{attribute.name} must be null for a {instance.action.value} transition"
-        )
-    _optional_ref(instance, attribute, value)
+        ),
+        lambda instance, attribute, value: (
+            f"{attribute.name} must be null for a "
+            + f"{cast('EntryTransition', instance).action.value} transition"
+        ),
+        inner=_optional_ref,
+    )
+)
 
 
 @define(frozen=True)
@@ -3764,10 +3773,12 @@ class WorkEdgeKey:
     kind: EdgeKind = field(validator=validators.instance_of(EdgeKind))
 
 
-# The since-4 collections are tuples, not the `list` of their neighbours, so a
-# frozen instance stays hashable and immutable all the way down.
-def _edge_set(item: type[WorkEdge] | type[WorkEdgeKey]) -> Validator:
-    items = _list_of(item, limit=_MAX_ITEMS)
+# Since-4 collections are tuples because `_list_of` and `_string_list` accept
+# only tuples; the `_tuple_sequence` converter turns a loaded list into one.
+def _edge_set(
+    item: type[WorkEdge] | type[WorkEdgeKey], *, non_empty: bool = False
+) -> Validator:
+    items = _list_of(item, non_empty=non_empty, limit=_MAX_ITEMS)
 
     def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
         items(instance, attribute, value)
@@ -3781,10 +3792,49 @@ def _edge_set(item: type[WorkEdge] | type[WorkEdgeKey]) -> Validator:
                 )
             seen.add(key)
 
-    setattr(
-        validate, "__schema_constraints__", getattr(items, "__schema_constraints__")
-    )
+    validate = schema_constraints(_constraints_of(items))(validate)
     return validate
+
+
+# The host derives these edges (fork bookkeeping and reciprocal rationale) and
+# stamps `revision_id` itself; edges.py reuses this prefix rather than
+# defining its own, so the kernel and the intent-layer refusal agree on the
+# one spelling that marks a host-written reciprocal.
+RECIPROCAL_RATIONALE_PREFIX = "reciprocal of "
+_HOST_ONLY_EDGE_KINDS = frozenset({EdgeKind.FORKED_FROM, EdgeKind.FORKED_TO})
+
+
+def _refuse_host_only_add_edges(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    for edge in cast("tuple[WorkEdge, ...]", value or ()):
+        if edge.kind in _HOST_ONLY_EDGE_KINDS:
+            raise ValueError(
+                f"{attribute.name} must not carry a {edge.kind.value} edge to "
+                + f"{edge.to!r}: the host derives fork edges"
+            )
+        if (edge.rationale or "").startswith(RECIPROCAL_RATIONALE_PREFIX):
+            raise ValueError(
+                f"{attribute.name} must not carry a rationale for "
+                + f"{edge.to!r} that starts with {RECIPROCAL_RATIONALE_PREFIX!r}: "
+                + "a reciprocal rationale is written by the host, not on request"
+            )
+        if edge.revision_id is not None:
+            raise ValueError(
+                f"{attribute.name} must not pin revision_id for {edge.to!r}: "
+                + "revision_id is host-stamped and always overwritten"
+            )
+
+
+def _refuse_host_only_remove_edges(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    for key in cast("tuple[WorkEdgeKey, ...]", value or ()):
+        if key.kind in _HOST_ONLY_EDGE_KINDS:
+            raise ValueError(
+                f"{attribute.name} must not carry a {key.kind.value} edge to "
+                + f"{key.to!r}: the host derives fork edges"
+            )
 
 
 @define(frozen=True)
@@ -4090,19 +4140,19 @@ class WheypointDelta:
     )
     add_edges: tuple[WorkEdge, ...] | None = field(
         default=None,
-        converter=_optional_tuple_sequence,
+        converter=attrs.converters.optional(_tuple_sequence),
         validator=validators.optional(_edge_set(WorkEdge)),
         metadata={"since": 4},
     )
     remove_edges: tuple[WorkEdgeKey, ...] | None = field(
         default=None,
-        converter=_optional_tuple_sequence,
+        converter=attrs.converters.optional(_tuple_sequence),
         validator=validators.optional(_edge_set(WorkEdgeKey)),
         metadata={"since": 4},
     )
     remove_dossier_forks: tuple[str, ...] | None = field(
         default=None,
-        converter=_optional_tuple_sequence,
+        converter=attrs.converters.optional(_tuple_sequence),
         validator=validators.optional(
             _string_list(limit=_MAX_ITEMS, item_validator=_bounded_text)
         ),
@@ -4219,23 +4269,6 @@ def _optional_non_empty_bounded_list(
         raise ValueError(f"{attribute.name} must not be an empty list")
 
 
-def _not_empty(inner: Validator) -> Validator:
-    def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
-        if value == ():
-            raise ValueError(f"{attribute.name} must not be an empty list")
-        inner(instance, attribute, value)
-
-    constraints = cast("dict[str, object]", getattr(inner, "__schema_constraints__"))
-    setattr(validate, "__schema_constraints__", {**constraints, "minItems": 1})
-    if hasattr(inner, "__schema_item_constraints__"):
-        setattr(
-            validate,
-            "__schema_item_constraints__",
-            getattr(inner, "__schema_item_constraints__"),
-        )
-    return validate
-
-
 @contract("checkpoint-intent")
 @define(frozen=True)
 class CheckpointIntent:
@@ -4282,21 +4315,31 @@ class CheckpointIntent:
     )
     add_edges: tuple[WorkEdge, ...] | None = field(
         default=None,
-        converter=_optional_tuple_sequence,
-        validator=validators.optional(_not_empty(_edge_set(WorkEdge))),
+        converter=attrs.converters.optional(_tuple_sequence),
+        validator=validators.optional(
+            validators.and_(
+                _edge_set(WorkEdge, non_empty=True), _refuse_host_only_add_edges
+            )
+        ),
         metadata={"since": 4},
     )
     remove_edges: tuple[WorkEdgeKey, ...] | None = field(
         default=None,
-        converter=_optional_tuple_sequence,
-        validator=validators.optional(_not_empty(_edge_set(WorkEdgeKey))),
+        converter=attrs.converters.optional(_tuple_sequence),
+        validator=validators.optional(
+            validators.and_(
+                _edge_set(WorkEdgeKey, non_empty=True), _refuse_host_only_remove_edges
+            )
+        ),
         metadata={"since": 4},
     )
     remove_dossier_forks: tuple[str, ...] | None = field(
         default=None,
-        converter=_optional_tuple_sequence,
+        converter=attrs.converters.optional(_tuple_sequence),
         validator=validators.optional(
-            _not_empty(_string_list(limit=_MAX_ITEMS, item_validator=_bounded_text))
+            _string_list(
+                non_empty=True, limit=_MAX_ITEMS, item_validator=_bounded_text
+            )
         ),
         metadata={"since": 4},
     )
