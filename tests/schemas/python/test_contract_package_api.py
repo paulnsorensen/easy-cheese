@@ -127,7 +127,7 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
     assert "SUPPORTED_CONTRACT_VERSIONS" not in schemas.__all__
     assert not hasattr(schemas, "REGISTERED_CONTRACTS")
     assert not hasattr(schemas, "SUPPORTED_CONTRACT_VERSIONS")
-    assert schemas.__version__ == "1.1.0"
+    assert schemas.__version__ == "2.0.0"
 
 
 def test_canonical_plan_digest_is_verified_by_strict_runtime() -> None:
@@ -197,7 +197,7 @@ def test_installed_wheel_exposes_exact_bundled_fixtures(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
-    wheel = next(wheel_dir.glob("easy_cheese_schemas-1.1.0-*.whl"))
+    wheel = next(wheel_dir.glob("easy_cheese_schemas-2.0.0-*.whl"))
     environment = tmp_path / "venv"
     venv.EnvBuilder(with_pip=True).create(environment)
     python = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
@@ -230,8 +230,8 @@ from importlib import metadata
 from pathlib import Path
 import easy_cheese_schemas as schemas
 
-assert schemas.__version__ == "1.1.0"
-assert metadata.version("easy-cheese-schemas") == "1.1.0"
+assert schemas.__version__ == "2.0.0"
+assert metadata.version("easy-cheese-schemas") == "2.0.0"
 assert Path(schemas.__file__).resolve().is_relative_to(Path(__import__("sys").prefix))
 for name in ("AGENTS.md", "CLAUDE.md"):
     assert not Path(schemas.__file__).with_name(name).exists(), name

@@ -289,12 +289,15 @@ def build_delta(
             notes=intent.notes,
             next_action=next_action,
             decision_dossier=intent.decision_dossier,
+            remove_dossier_forks=intent.remove_dossier_forks,
             add_decisions=grouped.get("add_decisions"),
             add_questions=grouped.get("add_questions"),
             add_blockers=grouped.get("add_blockers"),
             add_directives=grouped.get("add_directives"),
             add_artifact_links=intent.artifact_links,
             remove_artifact_links=intent.remove_artifact_links,
+            add_edges=intent.add_edges,
+            remove_edges=intent.remove_edges,
             transitions=intent.transitions,
             session_provenance=_provenance(
                 intent, genesis=current is None, now=clock

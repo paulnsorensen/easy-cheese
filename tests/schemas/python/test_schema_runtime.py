@@ -341,6 +341,7 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         f"{SCHEMA_ROOT}/review-result",
         f"{SCHEMA_ROOT}/wheypoint-record",
         f"{SCHEMA_ROOT}/wheypoint-revision",
+        f"{SCHEMA_ROOT}/work-edge",
     }
     first = {uri: schema_bytes(uri) for uri in REGISTERED_CONTRACT_SCHEMA_URIS}
     second = {
@@ -420,6 +421,32 @@ def test_field_metadata_min_items_reaches_an_optional_array() -> None:
         as_dict(m) for m in members if as_dict(m).get("type") == "array"
     )
     assert array_member["minItems"] == 1
+
+
+def test_validator_item_constraints_reach_an_optional_array() -> None:
+    """An optional array keeps its item validator's constraints on the array
+    member of the union, the same way `min_items` metadata does."""
+
+    @attrs.define(frozen=True)
+    class _OptionalRefs:
+        items: tuple[str, ...] | None = attrs.field(
+            default=None,
+            validator=attrs.validators.optional(
+                contracts_module._string_list(path=True)  # pyright: ignore[reportPrivateUsage]
+            ),
+        )
+
+    definitions: dict[str, object] = {}
+    _ = _definition(_OptionalRefs, definitions)
+    properties = as_dict(as_dict(definitions["_OptionalRefs"])["properties"])
+    members = cast("list[object]", as_dict(properties["items"])["anyOf"])
+    array_member = next(
+        as_dict(m) for m in members if as_dict(m).get("type") == "array"
+    )
+    assert (
+        as_dict(array_member["items"])["pattern"]
+        == contracts_module._REPOSITORY_RELATIVE_PATH_PATTERN  # pyright: ignore[reportPrivateUsage]
+    )
 
 
 def _remediation_properties(schema_slug: str, definition: str) -> dict[str, object]:

@@ -4,13 +4,18 @@
 
 | Command | Purpose | Subcommands |
 | --- | --- | --- |
+| `backlinks` | List every record whose edges or links name a ref |  |
 | `checkpoint` | Checkpoint a semantic intent onto the current record |  |
+| `fork` | Fork a child record from a parent; only the child is written |  |
 | `handoff` | Render, parse, and dispatch-split handoff preambles | `render`, `parse`, `dispatch` |
+| `link` | Add one typed edge from a record to a work item or document |  |
 | `lint` | Lint a generated projection against the record |  |
 | `list` | List and search work items and notes across worktrees |  |
 | `log` | Walk the revisions of one work id, oldest first |  |
 | `resolve` | Resolve a slug, work id, or path to the current record |  |
 | `schema` | Print the JSON Schema for a registered contract slug |  |
+| `shape` | Print the work graph as JSON, with a Graphviz string in dot |  |
 | `show` | Print the current record for a work id |  |
 | `turns` | Print the user's own turns from a session transcript |  |
+| `unlink` | Remove the edge a record holds to a ref under one kind |  |
 | `validate` | Validate an intent against its schema without opening the store |  |

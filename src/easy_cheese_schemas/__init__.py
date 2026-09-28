@@ -113,6 +113,7 @@ from easy_cheese_schemas.contracts import (  # wheypoint continuity types
     DiagnosisResultWriterView,
     DossierOption,
     Durability,
+    EdgeKind,
     EntryKind,
     EntryState,
     EntryTransition,
@@ -181,6 +182,8 @@ from easy_cheese_schemas.contracts import (  # wheypoint continuity types
     WheypointRecord,
     WheypointRevision,
     WheypointStatus,
+    WorkEdge,
+    WorkEdgeKey,
     WorktreeStrategy,
     WriterPayload,
     WriterViewKind,
@@ -271,7 +274,7 @@ from easy_cheese_schemas.schema_runtime import (
     validate_curd_plan,
 )
 
-__version__ = "1.1.0"
+__version__ = "2.0.0"
 
 __all__ = [
     "AcceptedArtifact",
@@ -351,6 +354,7 @@ __all__ = [
     "DossierOption",
     "DuplicateAdapterError",
     "Durability",
+    "EdgeKind",
     "Effort",
     "EntryKind",
     "EntryState",
@@ -484,6 +488,8 @@ __all__ = [
     "WheypointStatus",
     "WiringRow",
     "WiringType",
+    "WorkEdge",
+    "WorkEdgeKey",
     "WorkStatus",
     "WorktreeStrategy",
     "WriterPayload",

@@ -43,6 +43,7 @@ Run `validate` for a schema-only dry run that never opens the store.
 - **`orientation`** is free text; its first line becomes the title at genesis.
 - **`working_context`** is a list of pointers, not a paragraph.
 - **`notes`** is the Markdown body the projection renders under `## Notes`; omission carries it forward.
+- `notes` holds at most 6000 characters; `lint` warns `notes-long` above 4000.
 - **`next`** accepts `mold`, `cut`, `cook`, `press`, `age`, `cure`, `affinage`, `briesearch`, `culture`, `hold`, `tasks`, or `done`.
 - **`artifact`** rides beside `next`; `affinage` needs `PR#<n>` or a PR URL, and `cook` or `cut` need a path.
 - **`entries`** holds `ProposedEntry` values of kind `decision`, `question`, `blocker`, or `directive`.
@@ -52,10 +53,20 @@ Run `validate` for a schema-only dry run that never opens the store.
 - The runtime derives each `entry_id` from the parent and the proposal.
 - **`decision_dossier`** holds forks `{fork, options: [{option, evidence, breaks}], prior_leaning}`.
 - A fork may describe any active question; every gating entry needs a covering fork.
-- **`artifact_links`** holds `{path, covers_entry_ids?}`; the runtime computes the digest and pins the revision.
-- A link replaces the carried link with the same path; links are a set keyed by path.
+- A `decision_dossier` merges into the carried dossier by fork title; a fork with a carried title replaces that fork in place.
+- **`remove_dossier_forks`** names carried fork titles to drop before the merge; an unknown title is refused as `unknown-dossier-fork`.
+- **`artifact_links`** holds `{path, ref?, covers_entry_ids?}`; the runtime computes the digest and pins the revision.
+- `ref` is a typed ref; see the scheme table in [`work-graph.md`](work-graph.md).
+- A link without `ref` reads as `repo:<path>`.
+- A link replaces the carried link with the same normalized ref; links are a set keyed by that ref.
+- A `milknado:` or `https:` link carries no digest; a `covers_entry_ids` on it is refused as `unpinnable-scheme`.
+- An unpinned `wheypoint:` link is pinned to the target's current revision at commit.
 - **`remove_artifact_links`** names carried paths to drop; an unknown path is refused.
 - An empty `artifact_links` or `remove_artifact_links` list is refused.
+- **`add_edges`** holds `{to, kind, rationale?}`; the host stamps `revision_id` at commit and refuses a supplied value.
+- **`remove_edges`** holds `{to, kind}` keys of carried edges to drop.
+- Edges are a set keyed by `(to, kind)`; [`work-graph.md`](work-graph.md) lists each `kind`.
+- An intent never adds or removes a `forked_from` or `forked_to` edge; `fork` and the host own them.
 - **`transitions`** holds `{entry_id, action, rationale, target_entry_id}`; `action` is `resolve`, `supersede`, or `withdraw`.
 - Only a transition changes a protected entry's state; no operation removes one.
 - **`tasks`** and **`parallel`** carry independent moves when `next` is `tasks`; see [`parallel-handoffs.md`](parallel-handoffs.md).
@@ -65,9 +76,10 @@ Run `validate` for a schema-only dry run that never opens the store.
 ## Rules
 
 - Omission carries data forward; `null` means unchanged.
-- An explicit empty `working_context` or `decision_dossier` replaces the carried value.
+- An explicit empty `working_context` or `decision_dossier` replaces the carried value with nothing.
 - Identifiers match `[a-z0-9][a-z0-9._-]{0,63}`.
-- Text fields contain at most 2000 characters; lists at most 64 items.
+- Text fields contain at most 2000 characters, `notes` at most 6000; lists at most 64 items.
+- References (`to`, `ref`) are absolute URIs of at most 2000 characters.
 - A first checkpoint must carry at least one entry or a `notes` body.
 - An unknown key at any depth is refused and named by path.
 - Text that matches a credential pattern is refused and named by field.
@@ -86,16 +98,54 @@ The proof is a `CompactionRecord`: `{rehydrated_from_revision_id, rehydrated_rec
 
 The runtime derives `prior_compaction_revision_id` from stored receipts and refuses a supplied value.
 
+## Flag form
+
+`checkpoint` and `validate` build or overlay the intent from flags.
+With an intent file, each flag extends or replaces the matching key of that file.
+Without an intent file, the flags build the whole intent.
+With flags, a positional that names no existing path is a work id.
+Flags ignore stdin unless the intent argument is `-`.
+
+- `--work-id`, `--orientation`, `--next`, `--artifact`, and `--notes-file` set one scalar each.
+- `--question` and `--blocker` add entries; `--gates` makes every one of them in the call block continuation.
+- `--decision` adds a decision, and `--directive` adds a directive with the paired `--quote`.
+- `--resolve` and `--withdraw` add transitions for carried entry ids.
+- `--rationale` values pair in order with each `--decision`, then each `--resolve`, then each `--withdraw`.
+- `--context` adds a `working_context` path.
+- `--link` adds an edge with the paired `--kind`; a pinnable ref also adds an artifact link.
+- `--covers` applies to every pinnable `--link` in the call.
+- `--covers` omitted keeps the stored coverage of a flag-built link; a link from the intent file keeps the coverage it states.
+
+The flag form refuses with these codes:
+
+- `flag-pairing`: the `--rationale` count differs from the decisions, resolves, and withdraws, a `--quote` or `--kind` count differs from its pair, `--gates` has no question or blocker, or `--covers` has no pinnable `--link`.
+- `flag-kind`: a `--kind` names no edge kind.
+- `flag-link`: a `--link` is not a valid typed ref.
+- `flag-conflict`: the intent file holds a non-list value at a key a flag extends.
+- `notes-unreadable`: the `--notes-file` could not be read.
+- `intent-ambiguous`: the positional work id differs from `--work-id`.
+- `intent-unreadable`: the positional is neither an intent file nor a work id, names a missing `.json` file or a path, or names a directory.
+
+## `next:` values
+
+- `mold`, `cut`, `cook`, `press`, `age`, `cure`: the next pipeline phase.
+  `next: cook` on a standalone checkpoint names the phase to resume; it does not publish a Cook→Cook phase artifact.
+- `affinage`: PR review comments or failing CI; `artifact` names the PR.
+- `briesearch`, `culture`: a read-only next move that `/cheese --continue` dispatches.
+- `tasks`: independent moves; see [`parallel-handoffs.md`](parallel-handoffs.md).
+- `hold`: restore orientation and wait for instructions.
+- `done`: the work is complete; the checkpoint is a record, not a baton.
 ## Reply envelope
 
 A success reply prints one indented JSON document to stdout: `{"ok": true, "command": "<name>", ...fields}`.
 A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error": "<code>: <message>", "exit_code": 1}`.
 
-- **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`.
+- **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`, `derived_entry_ids`, `applied_transitions`, `applied_edges`, and `removed_edges`.
 - **`validate`** returns `valid` and `work_id`.
 - **`schema`** returns `slug` and `schema`.
-- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `detail`.
-- **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`.
+- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `pending`, `bridge`.
+- **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`, `pending`, `bridge`.
+- **`fork`**, **`link`**, **`unlink`**, **`shape`**, and **`backlinks`** replies are in [`work-graph.md`](work-graph.md).
 - **`lint`** returns `path`, `clean`, `findings`, `projection`.
 - **`list`** returns `corpus_root`, `items`, and `lines`.
 - **`log`** returns `work_id`, `revisions`, `lines`, and `unreadable`.
@@ -147,3 +197,6 @@ Each refusal names a `code`:
 - `invalid-session`: the given `--session` id was not a safe file-name segment.
 - `transcript-missing`: no transcript file exists at the resolved path.
 - `invalid-reference`: `resolve` could not interpret the given reference.
+- `flag-pairing`, `flag-kind`, `flag-link`, `flag-conflict`, `notes-unreadable`: the flag form refused; see [Flag form](#flag-form).
+- `unpinnable-scheme`, `unknown-edge`, `unknown-dossier-fork`: the commit kernel refused a ref, an edge, or a dossier title.
+- A host-only edge kind on `add_edges` or `remove_edges`, or a reciprocal-marker rationale on `add_edges`, is refused at intent validation as `invalid-intent`, before the commit kernel runs.

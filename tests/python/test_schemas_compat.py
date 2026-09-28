@@ -121,6 +121,12 @@ class Ledger:
     entries: list[Entry] = field(factory=list)
 
 
+@define
+class Tagged:
+    name: str
+    copies: tuple[str, ...] = field(factory=tuple)
+
+
 class TestClassifyStamp:
     def test_matching_stamp_is_current(self) -> None:
         assert classify_stamp(SCHEMA_VERSION) is Provenance.CURRENT
@@ -381,14 +387,53 @@ class TestForbidUnknown:
         assert result.problems == ("CheckpointIntent.bogus: unknown field",)
 
 
+class TestVariadicTupleFields:
+    """A bare string is iterable, so an unguarded tuple[X, ...] hook would
+    silently structure it into a tuple of characters instead of refusing it."""
+
+    def test_lenient_load_refuses_a_string_for_a_tuple_field(self) -> None:
+        result = load({"name": "a", "copies": "abc"}, Tagged, strict=False)
+
+        assert result.value is not None
+        assert result.value.copies == ()
+        assert any(
+            "copies must be present; using default" in problem
+            or "copies must be a list" in problem
+            for problem in result.problems
+        )
+
+    def test_strict_load_refuses_a_string_for_a_tuple_field(self) -> None:
+        result = load({"name": "a", "copies": "abc"}, Tagged, strict=True)
+
+        assert result.value is None
+        assert result.problems == ("Tagged.copies must be a list, not str",)
+
+    def test_strict_forbid_unknown_load_refuses_a_string_for_a_tuple_field(
+        self,
+    ) -> None:
+        result = load(
+            {"name": "a", "copies": "abc"}, Tagged, strict=True, forbid_unknown=True
+        )
+
+        assert result.value is None
+        assert result.problems == ("Tagged.copies must be a list, not str",)
+
+    def test_strict_load_accepts_a_list_for_a_tuple_field(self) -> None:
+        result = load({"name": "a", "copies": ["x", "y"]}, Tagged, strict=True)
+
+        assert result.value is not None
+        assert result.value.copies == ("x", "y")
+        assert result.problems == ()
+
+
 class TestSchemaVersionBump:
-    def test_schema_version_is_3(self) -> None:
-        assert SCHEMA_VERSION == 3
+    def test_schema_version_is_4(self) -> None:
+        assert SCHEMA_VERSION == 4
 
     def test_classify_stamp_prior_current_future(self) -> None:
-        assert classify_stamp(2) is Provenance.PRIOR
-        assert classify_stamp(3) is Provenance.CURRENT
-        assert classify_stamp(4) is Provenance.FUTURE
+        assert classify_stamp(3) is Provenance.PRIOR
+        assert classify_stamp(4) is Provenance.CURRENT
+        assert classify_stamp(5) is Provenance.FUTURE
 
 
 class TestLoadedShape:

@@ -25,11 +25,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from easy_cheese_schemas import WheypointRecord
-from easy_cheese_schemas.validate import is_relative_path
 
-from easy_cheese.shared import git_utils
+from easy_cheese.shared import git_utils, paths
 
-from . import grounded, storage
+from . import grounded, records, refs
 from .lint_types import LintCode, LintFinding
 
 
@@ -105,22 +104,8 @@ def git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
 
 
 def artifact_digest_in(root: Path | str) -> Callable[[str], str | None]:
-    """Digest a regular artifact file contained by `root`."""
-    resolved_root = Path(root).resolve()
-
-    def digest(path: str) -> str | None:
-        if not is_relative_path(path):
-            return None
-        candidate = Path(path)
-        try:
-            resolved = (resolved_root / candidate).resolve()
-            if not resolved.is_relative_to(resolved_root) or not resolved.is_file():
-                return None
-            return storage.file_digest(resolved)
-        except (OSError, RuntimeError):
-            return None
-
-    return digest
+    """Digest a reference, with `repo:` paths contained by `root`."""
+    return refs.digester(Path(root), paths.corpus_home())
 
 
 def stale_commit_findings(
@@ -160,12 +145,19 @@ def artifact_link_findings(
     record: WheypointRecord,
     artifact_digest: Callable[[str], str | None],
 ) -> list[LintFinding]:
-    """Re-check each digest-bearing artifact link against its current file."""
+    """Re-check each digest-bearing artifact link against its current target."""
     findings: list[LintFinding] = []
     for link in record.artifact_links:
         if link.digest is None:
             continue
-        actual = artifact_digest(link.path)
+        ref = records.effective_ref(link)
+        try:
+            pinnable = refs.is_pinnable(refs.parse_ref(ref).scheme)
+        except ValueError:
+            pinnable = True
+        if not pinnable:
+            continue
+        actual = artifact_digest(ref)
         if actual == link.digest:
             continue
         current = "missing" if actual is None else repr(actual)

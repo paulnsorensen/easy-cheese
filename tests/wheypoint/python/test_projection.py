@@ -24,6 +24,8 @@ from easy_cheese_schemas import (
 
 from easy_cheese.shared.wheypoint import projection, records
 
+from conftest import Promotion
+
 SRC = Path(__file__).resolve().parents[3] / "src/easy_cheese/shared/wheypoint"
 
 
@@ -355,6 +357,8 @@ def test_ac15_projection_body_renders_the_record_as_markdown_and_lints_clean(
         "## Notes",
         "## Context",
         "## Artifacts",
+        "## Links",
+        "## Lineage",
         "## Decision dossier",
     ]
     assert "```json" not in markdown
@@ -367,6 +371,109 @@ def test_ac15_projection_body_renders_the_record_as_markdown_and_lints_clean(
         assert f"- {decision.entry_id} (decision) \u2014 {decision.summary}" in markdown
     assert projection.parse(markdown) == built
     assert lint.lint_projection_text(markdown).findings == ()
+
+
+def _ref(work_id: str, suffix: str = "") -> str:
+    return f"wheypoint:paulnsorensen-easy-cheese/{work_id}{suffix}"
+
+
+def _edged_record(make_record: Callable[..., WheypointRecord]) -> WheypointRecord:
+    from easy_cheese_schemas import EntryKind, EntryState, ProtectedEntry
+    from easy_cheese_schemas.contracts import EdgeKind, WorkEdge
+
+    moved_in = ProtectedEntry(
+        entry_id="q-000000000003",
+        kind=EntryKind.QUESTION,
+        summary="Which store owns the fork?",
+        state=EntryState.ACTIVE,
+        blocks_continuation=False,
+        origin=_ref("parent", "@rev-0009#q-000000000001"),
+    )
+    copied = ProtectedEntry(
+        entry_id="d-000000000004",
+        kind=EntryKind.DECISION,
+        summary="Edges are a keyed set.",
+        state=EntryState.ACTIVE,
+        blocks_continuation=False,
+        copies=(_ref("child", "#d-000000000005"),),
+    )
+    return make_record(
+        questions=[moved_in],
+        decisions=[copied],
+        edges=(
+            WorkEdge(
+                to=_ref("parent", "@rev-0009"),
+                kind=EdgeKind.FORKED_FROM,
+                revision_id="rev-0001",
+            ),
+            WorkEdge(
+                to=_ref("sibling"),
+                kind=EdgeKind.RELATES_TO,
+                revision_id="rev-0001",
+                rationale="shares the ref grammar",
+            ),
+        ),
+    )
+
+
+def test_ac11_links_and_lineage_render_and_the_document_still_parses(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    from easy_cheese.shared.wheypoint import lint
+
+    built, markdown = projection.build_projection(
+        _edged_record(make_record), durability=Durability.CANONICAL_LOCAL
+    )
+    lines = markdown.splitlines()
+
+    links = lines.index("## Links")
+    lineage = lines.index("## Lineage")
+    assert lines.index("## Artifacts") < links < lineage
+    assert lineage < lines.index("## Decision dossier")
+    assert lines[links + 2 : lineage - 1] == [
+        f"- forked_from {_ref('parent', '@rev-0009')} @rev-0001",
+        f"- relates_to {_ref('sibling')} @rev-0001",
+        "  rationale: shares the ref grammar",
+    ]
+    assert lines[lineage + 2 : lines.index("## Decision dossier") - 1] == [
+        f"- forked_from {_ref('parent', '@rev-0009')}",
+        f"- d-000000000004 copies {_ref('child', '#d-000000000005')}",
+        f"- q-000000000003 origin {_ref('parent', '@rev-0009#q-000000000001')}",
+    ]
+    assert projection.parse(markdown) == built
+    assert lint.lint_projection_text(markdown).findings == ()
+
+
+def test_ac11_lint_work_rederives_the_digest_of_a_projection_with_edges(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., Promotion],
+) -> None:
+    from easy_cheese.shared.wheypoint import lint, storage
+
+    record = _edged_record(make_record)
+    promotion = make_promotion(record=record)
+    store = storage.WorkStore.open(record.work_id, corpus_root=corpus_root)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = lint.lint_work(
+        store,
+        project_key=record.project_key,
+        git_object_exists=lambda _obj: True,
+        artifact_digest=lambda _path: None,
+    )
+
+    assert "## Links" in promotion.markdown
+    assert report.codes == ()
+
+
+def test_an_edgeless_record_renders_none_under_links_and_lineage(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    _, markdown = projection.build_projection(
+        make_record(), durability=Durability.CANONICAL_LOCAL
+    )
+    assert "## Links\n\nnone\n\n## Lineage\n\nnone\n" in markdown
 
 
 def test_the_dossier_renders_as_markdown_and_parses_back(
@@ -605,3 +712,33 @@ def test_cure_the_task_and_plan_field_tables_name_real_schema_attributes() -> No
         assert attr in task_attrs, f"{attr!r} is not a HandoffTask field"
     for attr, _required in plan_fields:
         assert attr in plan_attrs, f"{attr!r} is not a ParallelPlan field"
+
+
+def test_artifacts_render_the_ref_of_a_non_repo_link_and_the_path_of_a_repo_link(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    from easy_cheese_schemas import ArtifactLink
+
+    record = evolve(
+        make_record(),
+        artifact_links=[
+            ArtifactLink(
+                path="paulnsorensen-easy-cheese/doc.md",
+                ref="xdg:paulnsorensen-easy-cheese/doc.md",
+            ),
+            ArtifactLink(path="docs/a.md", ref="repo:docs/a.md"),
+            ArtifactLink(path="docs/b.md"),
+        ],
+    )
+
+    _, markdown = projection.build_projection(
+        record, durability=Durability.CANONICAL_LOCAL
+    )
+
+    lines = markdown.splitlines()
+    start = lines.index("## Artifacts") + 2
+    assert lines[start : start + 3] == [
+        "- xdg:paulnsorensen-easy-cheese/doc.md",
+        "- docs/a.md",
+        "- docs/b.md",
+    ]

@@ -913,6 +913,55 @@ def test_checkpoint_intent_schema_carries_the_runtime_constraints() -> None:
     assert properties["entries"]["maxItems"] == contracts._MAX_ITEMS  # pyright: ignore[reportPrivateUsage]
 
 
+def test_every_since_4_ref_property_carries_the_ref_pattern_and_length() -> None:
+    """`origin`, `successor`, `copies` items, `WorkEdge.to`, and
+    `ArtifactLink.ref` all validate through `_ref` at runtime, so the
+    published schema must publish the same pattern and length bound for
+    each of them -- not just for the ones that happened to be decorated."""
+    ref_pattern = contracts._URI_RE.pattern  # pyright: ignore[reportPrivateUsage]
+    ref_max_length = contracts._MAX_TEXT  # pyright: ignore[reportPrivateUsage]
+
+    def _assert_ref_bounds(prop: dict[str, object]) -> None:
+        assert prop["pattern"] == ref_pattern, prop
+        assert prop["maxLength"] == ref_max_length, prop
+        assert prop["minLength"] == 1, prop
+
+    record_document = cast(
+        dict[str, object], json.loads(schema_runtime.schema_bytes(WheypointRecord))
+    )
+    record_defs = cast(dict[str, dict[str, object]], record_document["$defs"])
+    entry_properties = cast(
+        dict[str, dict[str, object]], record_defs["ProtectedEntry"]["properties"]
+    )
+    # A `str | None` ref field publishes its pattern/length bound on the
+    # property dict itself, alongside the `anyOf` the union produces --
+    # not on one member inside it.
+    _assert_ref_bounds(entry_properties["origin"])
+    _assert_ref_bounds(entry_properties["successor"])
+    _assert_ref_bounds(
+        cast(dict[str, object], entry_properties["copies"]["items"])
+    )
+
+    edge_properties = cast(
+        dict[str, dict[str, object]], record_defs["WorkEdge"]["properties"]
+    )
+    _assert_ref_bounds(edge_properties["to"])
+
+    artifact_link_properties = cast(
+        dict[str, dict[str, object]], record_defs["ArtifactLink"]["properties"]
+    )
+    _assert_ref_bounds(artifact_link_properties["ref"])
+
+    intent_document = cast(
+        dict[str, object], json.loads(schema_runtime.schema_bytes(CheckpointIntent))
+    )
+    intent_defs = cast(dict[str, dict[str, object]], intent_document["$defs"])
+    transition_properties = cast(
+        dict[str, dict[str, object]], intent_defs["EntryTransition"]["properties"]
+    )
+    _assert_ref_bounds(transition_properties["successor"])
+
+
 def test_a_directive_entry_carries_a_quote_and_cannot_gate() -> None:
     value = structured(
         checkpoint_intent(

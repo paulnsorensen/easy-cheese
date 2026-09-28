@@ -17,9 +17,11 @@ import pytest
 from attrs import evolve
 from easy_cheese_schemas import (
     EntryKind,
+    EntryState,
     NextAction,
     NextMove,
     ProposedEntry,
+    TransitionAction,
     WheypointDelta,
     WheypointRecord,
     WheypointRevision,
@@ -235,7 +237,7 @@ def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
     import json
     from pathlib import Path
 
-    from easy_cheese_schemas import SCHEMA_VERSION, WheypointRevision
+    from easy_cheese_schemas import WheypointRevision
 
     fixtures = Path(__file__).resolve().parents[1] / "fixtures"
     raw = (fixtures / "golden-record-v3.json").read_bytes()
@@ -250,6 +252,42 @@ def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
         cast(object, json.loads((fixtures / "golden-revision-v3.json").read_bytes())),
         WheypointRevision,
     )
+    regression = (
+        "v3 canonical bytes changed: this is a digest regression, not a version bump"
+    )
+    # v3 is a historical golden: its bytes and digests stay pinned forever.
+    assert record.schema_version == 3
+    assert records.canonical_payload(record) == raw, regression
+    assert records.record_digest(record) == pins["record_digest"], regression
+    assert records.revision_digest(revision) == pins["revision_digest"], regression
+    mutated = raw.replace(b"Golden v3 record.", b"Golden v3 record!")
+    assert (
+        records.record_digest(
+            records.structure(cast(object, json.loads(mutated)), WheypointRecord)
+        )
+        != pins["record_digest"]
+    )
+
+
+def test_the_v4_golden_record_pins_canonical_bytes_and_digests() -> None:
+    import json
+    from pathlib import Path
+
+    from easy_cheese_schemas import SCHEMA_VERSION, WheypointRevision
+
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures"
+    raw = (fixtures / "golden-record-v4.json").read_bytes()
+    pins = cast(
+        dict[str, object],
+        json.loads(
+            (fixtures / "golden-record-v4.pins.json").read_text(encoding="utf-8")
+        ),
+    )
+    record = records.structure(cast(object, json.loads(raw)), WheypointRecord)
+    revision = records.structure(
+        cast(object, json.loads((fixtures / "golden-revision-v4.json").read_bytes())),
+        WheypointRevision,
+    )
     bump = (
         f"canonical bytes changed for schema_version {SCHEMA_VERSION}: bump SCHEMA_VERSION "
         + f"to {SCHEMA_VERSION + 1}, regenerate the golden, and mark the new fields metadata={{'since': N}}"
@@ -258,10 +296,14 @@ def test_ac17_the_v3_golden_record_pins_canonical_bytes_and_digests() -> None:
     assert records.canonical_payload(record) == raw, bump
     assert records.record_digest(record) == pins["record_digest"], bump
     assert records.revision_digest(revision) == pins["revision_digest"], bump
-    mutated = raw.replace(b"Golden v3 record.", b"Golden v3 record!")
-    assert (
-        records.record_digest(
-            records.structure(cast(object, json.loads(mutated)), WheypointRecord)
-        )
-        != pins["record_digest"]
-    )
+    # The pinned bytes exercise every since-4 field.
+    assert len({edge.kind for edge in record.edges}) >= 2
+    assert all(link.ref is not None for link in record.artifact_links)
+    assert any(entry.origin is not None for entry in record.decisions)
+    assert any(entry.copies for entry in record.decisions)
+    forked = [e for e in record.questions if e.state is EntryState.FORKED]
+    assert forked and forked[0].successor is not None and forked[0].rationale
+    assert record.notes is not None and len(record.notes) > 2000
+    assert revision.applied_edges and revision.removed_edges
+    fork = revision.applied_transitions[0]
+    assert fork.action is TransitionAction.FORK and fork.successor is not None

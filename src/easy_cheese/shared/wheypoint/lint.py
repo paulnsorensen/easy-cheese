@@ -25,6 +25,7 @@ from easy_cheese_schemas import (
     SCHEMA_VERSION,
     CompactionRecord,
     Durability,
+    NormalizationReceipt,
     WheypointProjection,
     WheypointRecord,
     WheypointRevision,
@@ -33,10 +34,12 @@ from easy_cheese_schemas import (
 
 from easy_cheese.shared import paths
 
+from . import edges, fork_reconcile
 from . import lineage
 from . import lint_freshness
 from .lint_types import (
     ADVISORY_CODES as ADVISORY_CODES,
+    NOTES_WARN_LIMIT as NOTES_WARN_LIMIT,
     LintCode as LintCode,
     LintFinding as LintFinding,
     gates_continuation as gates_continuation,
@@ -48,11 +51,22 @@ from .lineage import Lineage
 
 @define(frozen=True)
 class LintReport:
-    """Everything that is wrong, plus what was readable while checking."""
+    """Everything that is wrong, plus what was readable while checking.
+
+    `normalizations` holds one receipt per link the reader filled in from an
+    older schema. They are advisory data, never findings. `pending` holds the
+    reciprocal edges sibling records ask this one to add; each also appears
+    as an advisory `link-pending` finding. `pending_forks` holds the forks
+    child records ask this one to reconcile; each also appears as an advisory
+    `fork-pending` finding.
+    """
 
     findings: tuple[LintFinding, ...] = field(default=())
     record: WheypointRecord | None = None
     projection: WheypointProjection | None = None
+    normalizations: tuple[NormalizationReceipt, ...] = field(default=())
+    pending: tuple[edges.PendingEdge, ...] = field(default=())
+    pending_forks: tuple[fork_reconcile.PendingFork, ...] = field(default=())
 
     @property
     def ok(self) -> bool:
@@ -193,6 +207,7 @@ def lint_work(
     # No receipt for the current revision means no proven ancestry, so every
     # revision pin is unresolved rather than resolved against the whole store.
     ancestry: frozenset[str] = frozenset()
+    receipts: tuple[WheypointRevision, ...] = ()
     if current is None:
         findings.append(
             LintFinding(
@@ -207,6 +222,7 @@ def lint_work(
         projection = projection_report.projection
         chain = lineage.walk(survey.revisions, current)
         ancestry = chain.revision_ids
+        receipts = tuple(chain.revisions)
         findings.extend(_lineage_finding(issue) for issue in chain.issues)
         findings.extend(_compaction_findings(chain))
         findings.extend(_conservation_findings(chain, record))
@@ -217,7 +233,48 @@ def lint_work(
     if projection is not None:
         findings.extend(_durability_findings(projection, record))
     findings.extend(lint_freshness.grounded_path_findings(record, root))
-    return LintReport(findings=tuple(findings), record=record, projection=projection)
+    siblings = edges.sibling_records(store.corpus_root, work_id=record.work_id)
+    pending = edges.pending_reciprocals(record, siblings=siblings, receipts=receipts)
+    findings.extend(
+        LintFinding(
+            LintCode.LINK_PENDING,
+            f"{item.source_work_id}@{item.source_revision_id} "
+            + f"{edges.RECIPROCAL[item.kind].value} -> reciprocal "
+            + f"{item.kind.value} pending",
+        )
+        for item in pending
+    )
+    pending_forks = fork_reconcile.pending_forks(record, siblings=siblings)
+    findings.extend(
+        LintFinding(
+            LintCode.FORK_PENDING,
+            f"{item.child_ref}@{item.child_revision_id}: "
+            + f"moved {_parent_ids(item.moved)}; copied {_parent_ids(item.copied)}",
+        )
+        for item in pending_forks
+    )
+    notes_length = len(record.notes or "")
+    if notes_length > NOTES_WARN_LIMIT:
+        findings.append(
+            LintFinding(
+                LintCode.NOTES_LONG,
+                f"notes hold {notes_length} characters; the advisory limit is "
+                + f"{NOTES_WARN_LIMIT}",
+            )
+        )
+    _, normalizations = records.normalize_links(record)
+    return LintReport(
+        findings=tuple(findings),
+        record=record,
+        projection=projection,
+        normalizations=normalizations,
+        pending=pending,
+        pending_forks=pending_forks,
+    )
+
+
+def _parent_ids(pairs: tuple[tuple[str, str], ...]) -> str:
+    return ", ".join(parent_id for parent_id, _ in pairs) or "none"
 
 
 def _durability_findings(

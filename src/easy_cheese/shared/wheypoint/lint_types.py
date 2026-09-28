@@ -36,6 +36,14 @@ class LintCode(str, Enum):
     ENTRY_DROPPED = "entry-dropped"
     DURABILITY_LOCAL_ONLY = "durability-local-only"
     COMPACTION_PARENT_UNRESOLVED = "compaction-parent-unresolved"
+    LINK_PENDING = "link-pending"
+    FORK_PENDING = "fork-pending"
+    NOTES_LONG = "notes-long"
+
+
+# The schema caps `notes` at 6000 characters; above this a record still
+# validates, but a cold reader is better served by a linked document.
+NOTES_WARN_LIMIT = 4000
 
 
 # Findings that describe the store's surroundings rather than the authority of
@@ -50,12 +58,20 @@ class LintCode(str, Enum):
 # problem: the record is exactly as valid as it says it is. What is at risk is
 # the human-owed state it holds, which no commit or publish has carried
 # anywhere. That is a choice for the operator, so it warns and does not block.
+#
+# A pending reciprocal edge is owed by this record's next checkpoint, which
+# applies it host-side; the record itself is as valid as it says it is.
+#
+# Long notes are a readability advice, not an authority problem.
 ADVISORY_CODES = frozenset(
     {
         LintCode.REVISION_INCOMPLETE,
         LintCode.DURABILITY_LOCAL_ONLY,
         LintCode.STALE_COMMIT,
         LintCode.GROUNDED_PATH_MISSING,
+        LintCode.LINK_PENDING,
+        LintCode.FORK_PENDING,
+        LintCode.NOTES_LONG,
     }
 )
 

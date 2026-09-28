@@ -14,6 +14,7 @@ import pytest
 from attrs import evolve
 from attrs import Attribute
 from easy_cheese_schemas import (
+    SCHEMA_VERSION,
     ArtifactLink,
     CompactionRecord,
     DecisionFork,
@@ -146,6 +147,26 @@ def test_narrowed_delta_preserves_omitted_protected_state(
     assert result.record.artifact_links == parent.artifact_links
     assert result.revision.preserved_entry_ids == ["d-keep", "q-keep", "b-keep"]
     assert result.revision.applied_additions == []
+
+
+def test_a_stale_schema_version_stamp_is_refreshed_on_commit(
+    store: storage.WorkStore,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., Promotion],
+) -> None:
+    """A record an older runtime wrote carries an old stamp. A commit against
+    it must restamp the record with the current schema version, or v4-only
+    content (e.g. long notes) would sit under a v3 stamp and later read back
+    as store-inconsistent rather than runtime-behind."""
+    parent = make_record(schema_version=3)
+    seed = _seed(store, make_promotion, record=parent)
+
+    result = commit.commit(
+        _delta(seed.record.revision_id, orientation="Refresh the stamp."),
+        store=store,
+    )
+
+    assert result.record.schema_version == SCHEMA_VERSION
 
 
 def test_resolving_the_last_gate_must_clear_the_dossier_it_carried(
@@ -848,7 +869,12 @@ def test_added_artifact_links_upsert_by_path_and_pin_the_new_revision(
     expected_digest = storage.file_digest(repo_root / ".cheese" / "cook" / "wave-3.md")
     assert result.record.artifact_links == [
         carried,
-        evolve(added, digest=expected_digest, revision_id=result.record.revision_id),
+        evolve(
+            added,
+            ref="repo:.cheese/cook/wave-3.md",
+            digest=expected_digest,
+            revision_id=result.record.revision_id,
+        ),
     ]
 
     replaced = ArtifactLink(path=".cheese/cook/wave-2.md", covers_entry_ids=[])
@@ -1409,3 +1435,107 @@ def test_committing_a_new_revision_never_reads_projection_files(
 
     assert fourth.record.revision_number == 4
     assert not any("projections" in path.parts for path in reads)
+
+
+def _fork(title: str, leaning: str = "a") -> DecisionFork:
+    return DecisionFork(
+        fork=title,
+        options=[DossierOption(option="a", evidence=["e"], breaks="b")],
+        prior_leaning=leaning,
+    )
+
+
+FIVE_TITLES = ["fork-1", "fork-2", "fork-3", "fork-4", "fork-5"]
+
+
+@pytest.fixture
+def five_forks(
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    make_record: Callable[..., WheypointRecord],
+) -> WheypointRecord:
+    record = make_record(
+        gating=True, decision_dossier=[_fork(title) for title in FIVE_TITLES]
+    )
+    return _seed(store, make_promotion, record=record).record
+
+
+def _titles(record: WheypointRecord) -> list[str]:
+    return [fork.fork for fork in record.decision_dossier]
+
+
+def test_ac15_a_one_fork_delta_merges_into_five_forks_to_give_six(
+    store: storage.WorkStore, five_forks: WheypointRecord
+) -> None:
+    result = commit.commit(
+        _delta(five_forks.revision_id, decision_dossier=[_fork("fork-6")]),
+        store=store,
+    )
+
+    assert _titles(result.record) == [*FIVE_TITLES, "fork-6"]
+
+
+def test_ac15_a_fork_with_a_carried_title_replaces_it_in_place(
+    store: storage.WorkStore, five_forks: WheypointRecord
+) -> None:
+    result = commit.commit(
+        _delta(five_forks.revision_id, decision_dossier=[_fork("fork-3", "b")]),
+        store=store,
+    )
+
+    assert _titles(result.record) == FIVE_TITLES
+    assert [fork.prior_leaning for fork in result.record.decision_dossier] == [
+        "a",
+        "a",
+        "b",
+        "a",
+        "a",
+    ]
+
+
+def test_ac15_remove_dossier_forks_removes_by_title(
+    store: storage.WorkStore, five_forks: WheypointRecord
+) -> None:
+    result = commit.commit(
+        _delta(five_forks.revision_id, remove_dossier_forks=("fork-2", "fork-4")),
+        store=store,
+    )
+
+    assert _titles(result.record) == ["fork-1", "fork-3", "fork-5"]
+
+
+def test_ac15_an_unknown_fork_title_is_refused(
+    store: storage.WorkStore, five_forks: WheypointRecord
+) -> None:
+    with pytest.raises(commit.CommitError, match="^unknown-dossier-fork: .*fork-9"):
+        _ = commit.commit(
+            _delta(five_forks.revision_id, remove_dossier_forks=("fork-9",)),
+            store=store,
+        )
+
+
+def test_ac15_an_explicit_empty_dossier_still_empties_it(
+    store: storage.WorkStore, five_forks: WheypointRecord
+) -> None:
+    resolve = EntryTransition(
+        entry_id="q-durability",
+        action=TransitionAction.RESOLVE,
+        rationale="answered",
+    )
+
+    result = commit.commit(
+        _delta(five_forks.revision_id, transitions=[resolve], decision_dossier=[]),
+        store=store,
+    )
+
+    assert result.record.decision_dossier == []
+
+
+def test_ac15_removing_every_fork_of_a_gated_record_is_refused(
+    store: storage.WorkStore, five_forks: WheypointRecord
+) -> None:
+    with pytest.raises(commit.CommitError, match="does not produce a legal record"):
+        _ = commit.commit(
+            _delta(five_forks.revision_id, remove_dossier_forks=tuple(FIVE_TITLES)),
+            store=store,
+        )

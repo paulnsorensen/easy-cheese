@@ -3200,6 +3200,9 @@ class MoldSpecDocument:
 # pressure, so "as much text as you like" is a denial-of-service on the next
 # cold reader as much as on the store.
 _MAX_TEXT = 2000
+# Notes carry the session narrative a cold reader resumes from, so they get a
+# wider bound than every other text field.
+_MAX_NOTES = 6000
 _MAX_ITEMS = 64
 # A ledger is an aggregate over the three protected lists, not a peer of one of
 # them: a receipt has to be able to name every entry a legal record can hold,
@@ -3254,14 +3257,20 @@ class EntryState(str, Enum):
     RESOLVED = "resolved"
     SUPERSEDED = "superseded"
     WITHDRAWN = "withdrawn"
+    # Moved to another record; `successor` names where it went. Never gates.
+    FORKED = "forked"
 
 
 class TransitionAction(str, Enum):
-    """The only ways a delta may move an entry out of `ACTIVE`."""
+    """The only ways a delta may move an entry out of `ACTIVE`.
+
+    `FORK` is host-only: the host applies it when it reconciles a fork, and a
+    `CheckpointIntent` may not carry it."""
 
     RESOLVE = "resolve"
     SUPERSEDE = "supersede"
     WITHDRAW = "withdraw"
+    FORK = "fork"
 
 
 class Durability(str, Enum):
@@ -3273,23 +3282,66 @@ class Durability(str, Enum):
     PUBLISHED = "published"
 
 
-_SETTLED = {EntryState.RESOLVED, EntryState.SUPERSEDED, EntryState.WITHDRAWN}
+class EdgeKind(str, Enum):
+    """How a record relates to the work item or document an edge names."""
+
+    FORKED_FROM = "forked_from"
+    FORKED_TO = "forked_to"
+    SUPERSEDES = "supersedes"
+    SUPERSEDED_BY = "superseded_by"
+    IMPLEMENTS = "implements"
+    INFORMS = "informs"
+    CHECKPOINTS = "checkpoints"
+    BLOCKED_BY = "blocked_by"
+    RELATES_TO = "relates_to"
+
+
+_SETTLED = {
+    EntryState.RESOLVED,
+    EntryState.SUPERSEDED,
+    EntryState.WITHDRAWN,
+    EntryState.FORKED,
+}
 _TRANSITION_STATE = {
     TransitionAction.RESOLVE: EntryState.RESOLVED,
     TransitionAction.SUPERSEDE: EntryState.SUPERSEDED,
     TransitionAction.WITHDRAW: EntryState.WITHDRAWN,
+    TransitionAction.FORK: EntryState.FORKED,
 }
 
 
-@schema_constraints(minLength=1, maxLength=_MAX_TEXT)
-def _bounded_text(_instance: object, attribute: _NamedAttribute, value: object) -> None:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{attribute.name} must be a non-empty string")
-    if len(value) > _MAX_TEXT:
+def _text_within(limit: int) -> Validator:
+    @schema_constraints(minLength=1, maxLength=limit)
+    def validate(_instance: object, attribute: _NamedAttribute, value: object) -> None:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{attribute.name} must be a non-empty string")
+        if len(value) > limit:
+            raise ValueError(
+                f"{attribute.name} must be at most {limit} characters, not {len(value)}"
+            )
+
+    return validate
+
+
+_bounded_text = _text_within(_MAX_TEXT)
+_notes_text = _text_within(_MAX_NOTES)
+
+
+# A since-4 reference names another record, document, or node. `_uri` alone is
+# unbounded, so the wheypoint bound applies here too.
+@schema_constraints(_constraints_of(_uri), maxLength=_MAX_TEXT)
+def _ref(instance: object, attribute: _NamedAttribute, value: object) -> None:
+    _uri(instance, attribute, value)
+    if isinstance(value, str) and len(value) > _MAX_TEXT:
         raise ValueError(
             f"{attribute.name} must be at most {_MAX_TEXT} characters, not {len(value)}"
         )
 
+
+@schema_constraints(_constraints_of(_ref))
+def _optional_ref(instance: object, attribute: _NamedAttribute, value: object) -> None:
+    if value is not None:
+        _ref(instance, attribute, value)
 
 def _single_line_text(
     instance: object, attribute: _NamedAttribute, value: object
@@ -3498,18 +3550,47 @@ class NextAction:
     parallel: ParallelPlan | None = field(default=None, metadata={"since": 3})
 
 
-def _successor_rule(
-    instance: ProtectedEntry, attribute: _NamedAttribute, value: object
-) -> None:
-    if instance.state is EntryState.SUPERSEDED and value is None:
-        raise ValueError(f"{attribute.name} must name the entry that replaced this one")
-    if instance.state is not EntryState.SUPERSEDED and value is not None:
-        raise ValueError(
-            f"{attribute.name} must be null unless the entry is superseded, "
+def _required_when(
+    condition: Callable[[object], bool],
+    required_message: Callable[[_NamedAttribute], str],
+    null_message: Callable[[object, _NamedAttribute, object], str],
+    inner: Validator | None = None,
+) -> Validator:
+    # Required exactly when `condition(instance)` holds; null otherwise.
+    def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
+        active = condition(instance)
+        if active and value is None:
+            raise ValueError(required_message(attribute))
+        if not active and value is not None:
+            raise ValueError(null_message(instance, attribute, value))
+        if value is not None and inner is not None:
+            inner(instance, attribute, value)
+
+    return validate
+
+
+_successor_rule = _required_when(
+    lambda instance: cast("ProtectedEntry", instance).state is EntryState.SUPERSEDED,
+    lambda attribute: f"{attribute.name} must name the entry that replaced this one",
+    lambda instance, attribute, value: (
+        f"{attribute.name} must be null unless the entry is superseded, "
+        + f"not {value!r}"
+    ),
+    inner=_lower_identifier,
+)
+
+
+_fork_successor_rule = schema_constraints(_constraints_of(_ref))(
+    _required_when(
+        lambda instance: cast("ProtectedEntry", instance).state is EntryState.FORKED,
+        lambda attribute: f"{attribute.name} must name the entry this one moved to",
+        lambda instance, attribute, value: (
+            f"{attribute.name} must be null unless the entry is forked, "
             + f"not {value!r}"
-        )
-    if value is not None:
-        _lower_identifier(instance, attribute, value)
+        ),
+        inner=_optional_ref,
+    )
+)
 
 
 def _rationale_rule(
@@ -3553,6 +3634,20 @@ class ProtectedEntry:
         validator=validators.optional(_bounded_text),
         metadata={"since": 3},
     )
+    # Cross-record lineage: the entry this one was forked from, the entry a
+    # forked entry moved to, and the entries copied from this one.
+    origin: str | None = field(
+        default=None, validator=_optional_ref, metadata={"since": 4}
+    )
+    successor: str | None = field(
+        default=None, validator=_fork_successor_rule, metadata={"since": 4}
+    )
+    copies: tuple[str, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_string_list(limit=_MAX_ITEMS, item_validator=_ref),
+        metadata={"since": 4},
+    )
 
 
 @define(frozen=True)
@@ -3582,21 +3677,36 @@ class ProposedEntry:
             )
 
 
-def _target_rule(
-    instance: EntryTransition, attribute: _NamedAttribute, value: object
-) -> None:
-    supersede = instance.action is TransitionAction.SUPERSEDE
-    if supersede and value is None:
-        raise ValueError(
-            f"{attribute.name} must name the superseding entry for a "
-            + f"{TransitionAction.SUPERSEDE.value} transition"
-        )
-    if not supersede and value is not None:
-        raise ValueError(
-            f"{attribute.name} must be null for a {instance.action.value} transition"
-        )
-    if value is not None:
-        _lower_identifier(instance, attribute, value)
+_target_rule = _required_when(
+    lambda instance: cast("EntryTransition", instance).action
+    is TransitionAction.SUPERSEDE,
+    lambda attribute: (
+        f"{attribute.name} must name the superseding entry for a "
+        + f"{TransitionAction.SUPERSEDE.value} transition"
+    ),
+    lambda instance, attribute, value: (
+        f"{attribute.name} must be null for a "
+        + f"{cast('EntryTransition', instance).action.value} transition"
+    ),
+    inner=_lower_identifier,
+)
+
+
+_fork_target_rule = schema_constraints(_constraints_of(_ref))(
+    _required_when(
+        lambda instance: cast("EntryTransition", instance).action
+        is TransitionAction.FORK,
+        lambda attribute: (
+            f"{attribute.name} must name the entry this one moved to for a "
+            + f"{TransitionAction.FORK.value} transition"
+        ),
+        lambda instance, attribute, value: (
+            f"{attribute.name} must be null for a "
+            + f"{cast('EntryTransition', instance).action.value} transition"
+        ),
+        inner=_optional_ref,
+    )
+)
 
 
 @define(frozen=True)
@@ -3609,6 +3719,9 @@ class EntryTransition:
     action: TransitionAction
     rationale: str = field(validator=_bounded_text)
     target_entry_id: str | None = field(default=None, validator=_target_rule)
+    successor: str | None = field(
+        default=None, validator=_fork_target_rule, metadata={"since": 4}
+    )
 
     @property
     def resulting_state(self) -> EntryState:
@@ -3627,6 +3740,101 @@ class ArtifactLink:
         default=None, validator=validators.optional(_lower_identifier)
     )
     covers_entry_ids: list[str] = field(factory=list, validator=_lower_identifier_list)
+    ref: str | None = field(
+        default=None, validator=_optional_ref, metadata={"since": 4}
+    )
+
+
+@contract("work-edge")
+@define(frozen=True)
+class WorkEdge:
+    """One typed relation from the owning record to a work item or document.
+    A record holds its edges as a set keyed by `(to, kind)`.
+
+    `revision_id` names the owning record's revision that wrote the edge. The
+    host stamps it at commit, as it does for `ArtifactLink.revision_id`; a
+    caller-supplied value is never honoured."""
+
+    to: str = field(validator=_ref)
+    kind: EdgeKind = field(validator=validators.instance_of(EdgeKind))
+    revision_id: str | None = field(
+        default=None, validator=validators.optional(_lower_identifier)
+    )
+    rationale: str | None = field(
+        default=None, validator=validators.optional(_bounded_text)
+    )
+
+
+@define(frozen=True)
+class WorkEdgeKey:
+    """The `(to, kind)` identity that addresses one edge for removal."""
+
+    to: str = field(validator=_ref)
+    kind: EdgeKind = field(validator=validators.instance_of(EdgeKind))
+
+
+# Since-4 collections are tuples because `_list_of` and `_string_list` accept
+# only tuples; the `_tuple_sequence` converter turns a loaded list into one.
+def _edge_set(
+    item: type[WorkEdge] | type[WorkEdgeKey], *, non_empty: bool = False
+) -> Validator:
+    items = _list_of(item, non_empty=non_empty, limit=_MAX_ITEMS)
+
+    def validate(instance: object, attribute: _NamedAttribute, value: object) -> None:
+        items(instance, attribute, value)
+        seen: set[tuple[str, EdgeKind]] = set()
+        for edge in cast("tuple[WorkEdge | WorkEdgeKey, ...]", value):
+            key = (edge.to, edge.kind)
+            if key in seen:
+                raise ValueError(
+                    f"{attribute.name} must not repeat the {edge.kind.value} "
+                    + f"edge to {edge.to!r}"
+                )
+            seen.add(key)
+
+    validate = schema_constraints(_constraints_of(items))(validate)
+    return validate
+
+
+# The host derives these edges (fork bookkeeping and reciprocal rationale) and
+# stamps `revision_id` itself; edges.py reuses this prefix rather than
+# defining its own, so the kernel and the intent-layer refusal agree on the
+# one spelling that marks a host-written reciprocal.
+RECIPROCAL_RATIONALE_PREFIX = "reciprocal of "
+_HOST_ONLY_EDGE_KINDS = frozenset({EdgeKind.FORKED_FROM, EdgeKind.FORKED_TO})
+
+
+def _refuse_host_only_add_edges(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    for edge in cast("tuple[WorkEdge, ...]", value or ()):
+        if edge.kind in _HOST_ONLY_EDGE_KINDS:
+            raise ValueError(
+                f"{attribute.name} must not carry a {edge.kind.value} edge to "
+                + f"{edge.to!r}: the host derives fork edges"
+            )
+        if (edge.rationale or "").startswith(RECIPROCAL_RATIONALE_PREFIX):
+            raise ValueError(
+                f"{attribute.name} must not carry a rationale for "
+                + f"{edge.to!r} that starts with {RECIPROCAL_RATIONALE_PREFIX!r}: "
+                + "a reciprocal rationale is written by the host, not on request"
+            )
+        if edge.revision_id is not None:
+            raise ValueError(
+                f"{attribute.name} must not pin revision_id for {edge.to!r}: "
+                + "revision_id is host-stamped and always overwritten"
+            )
+
+
+def _refuse_host_only_remove_edges(
+    _instance: object, attribute: _NamedAttribute, value: object
+) -> None:
+    for key in cast("tuple[WorkEdgeKey, ...]", value or ()):
+        if key.kind in _HOST_ONLY_EDGE_KINDS:
+            raise ValueError(
+                f"{attribute.name} must not carry a {key.kind.value} edge to "
+                + f"{key.to!r}: the host derives fork edges"
+            )
 
 
 @define(frozen=True)
@@ -3796,7 +4004,7 @@ class WheypointRecord:
     decision_dossier: list[DecisionFork] = field(validator=_record_dossier)
     notes: str | None = field(
         default=None,
-        validator=validators.optional(_bounded_text),
+        validator=validators.optional(_notes_text),
         metadata={"since": 3},
     )
     directives: list[ProtectedEntry] = field(
@@ -3805,6 +4013,12 @@ class WheypointRecord:
             EntryKind.DIRECTIVE, "decisions", "questions", "blockers"
         ),
         metadata={"since": 3},
+    )
+    edges: tuple[WorkEdge, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_edge_set(WorkEdge),
+        metadata={"since": 4},
     )
 
     @property
@@ -3846,6 +4060,19 @@ def _one_transition_per_entry(
         seen.add(transition.entry_id)
 
 
+def _agent_transitions(
+    instance: object, attribute: _NamedAttribute, value: list[EntryTransition] | None
+) -> None:
+    _one_transition_per_entry(instance, attribute, value)
+    for transition in value or ():
+        if transition.action is TransitionAction.FORK:
+            raise ValueError(
+                f"{attribute.name} must not carry a "
+                + f"{TransitionAction.FORK.value} transition for "
+                + f"{transition.entry_id!r}: the host derives fork transitions"
+            )
+
+
 @schema_constraints(maxItems=_MAX_ITEMS)
 def _optional_bounded_list(
     instance: object, attribute: _NamedAttribute, value: object
@@ -3882,7 +4109,7 @@ class WheypointDelta:
     )
     notes: str | None = field(
         default=None,
-        validator=validators.optional(_bounded_text),
+        validator=validators.optional(_notes_text),
         metadata={"since": 3},
     )
     next_action: NextAction | None = None
@@ -3910,6 +4137,26 @@ class WheypointDelta:
         default=None,
         validator=_optional_bounded_list,
         metadata={"since": 3},
+    )
+    add_edges: tuple[WorkEdge, ...] | None = field(
+        default=None,
+        converter=attrs.converters.optional(_tuple_sequence),
+        validator=validators.optional(_edge_set(WorkEdge)),
+        metadata={"since": 4},
+    )
+    remove_edges: tuple[WorkEdgeKey, ...] | None = field(
+        default=None,
+        converter=attrs.converters.optional(_tuple_sequence),
+        validator=validators.optional(_edge_set(WorkEdgeKey)),
+        metadata={"since": 4},
+    )
+    remove_dossier_forks: tuple[str, ...] | None = field(
+        default=None,
+        converter=attrs.converters.optional(_tuple_sequence),
+        validator=validators.optional(
+            _string_list(limit=_MAX_ITEMS, item_validator=_bounded_text)
+        ),
+        metadata={"since": 4},
     )
     transitions: list[EntryTransition] | None = field(
         default=None, validator=_one_transition_per_entry
@@ -3973,6 +4220,18 @@ class WheypointRevision:
     )
     compaction: CompactionRecord | None = None
     session_provenance: SessionProvenance | None = None
+    applied_edges: tuple[WorkEdge, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_edge_set(WorkEdge),
+        metadata={"since": 4},
+    )
+    removed_edges: tuple[WorkEdgeKey, ...] = field(
+        factory=tuple,
+        converter=_tuple_sequence,
+        validator=_edge_set(WorkEdgeKey),
+        metadata={"since": 4},
+    )
 
 
 @define(frozen=True)
@@ -4032,7 +4291,7 @@ class CheckpointIntent:
     )
     notes: str | None = field(
         default=None,
-        validator=validators.optional(_bounded_text),
+        validator=validators.optional(_notes_text),
         metadata={"since": 3},
     )
     next: NextMove | None = None
@@ -4054,11 +4313,41 @@ class CheckpointIntent:
         validator=_optional_non_empty_bounded_list,
         metadata={"since": 3},
     )
+    add_edges: tuple[WorkEdge, ...] | None = field(
+        default=None,
+        converter=attrs.converters.optional(_tuple_sequence),
+        validator=validators.optional(
+            validators.and_(
+                _edge_set(WorkEdge, non_empty=True), _refuse_host_only_add_edges
+            )
+        ),
+        metadata={"since": 4},
+    )
+    remove_edges: tuple[WorkEdgeKey, ...] | None = field(
+        default=None,
+        converter=attrs.converters.optional(_tuple_sequence),
+        validator=validators.optional(
+            validators.and_(
+                _edge_set(WorkEdgeKey, non_empty=True), _refuse_host_only_remove_edges
+            )
+        ),
+        metadata={"since": 4},
+    )
+    remove_dossier_forks: tuple[str, ...] | None = field(
+        default=None,
+        converter=attrs.converters.optional(_tuple_sequence),
+        validator=validators.optional(
+            _string_list(
+                non_empty=True, limit=_MAX_ITEMS, item_validator=_bounded_text
+            )
+        ),
+        metadata={"since": 4},
+    )
     decision_dossier: list[DecisionFork] | None = field(
         default=None, validator=_optional_bounded_list
     )
     transitions: list[EntryTransition] | None = field(
-        default=None, validator=_one_transition_per_entry
+        default=None, validator=_agent_transitions
     )
     base_revision_id: str | None = field(
         default=None, validator=validators.optional(_lower_identifier)
@@ -4181,6 +4470,7 @@ __all__ = [
     "DecisionFork",
     "DossierOption",
     "Durability",
+    "EdgeKind",
     "EntryKind",
     "EntryState",
     "EntryTransition",
@@ -4198,5 +4488,7 @@ __all__ = [
     "WheypointRecord",
     "WheypointRevision",
     "WheypointStatus",
+    "WorkEdge",
+    "WorkEdgeKey",
     "WorktreeStrategy",
 ]

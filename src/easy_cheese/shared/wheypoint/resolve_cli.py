@@ -16,12 +16,14 @@ success prints the payload, and a refusal is one JSON line on stderr,
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import TextIO, cast
 
 import fromargs
 from attrs import AttrsInstance
 
-from easy_cheese.shared import handoff
+from easy_cheese.shared import handoff, paths
+from easy_cheese.shared.wheypoint import edges, fork_reconcile, milknado_bridge
 from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
@@ -41,14 +43,34 @@ def maybe_payload(obj: object) -> dict[str, object] | None:
     return None if obj is None else records.unstructure(cast(AttrsInstance, obj))
 
 
-def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, object]:
+def resolve_payload(
+    resolution: resolve_mod.Resolution,
+    ref: str,
+    *,
+    workspace_root: Path | str | None = None,
+) -> dict[str, object]:
     """Project a ``Resolution`` into the native Wheypoint JSON shape.
 
     Every outcome projects the same way, including ``error``: a reference that
     could not be interpreted is still an answer about the corpus, so the caller
     emits this payload with ``ok: false`` rather than the ``{code, message}``
     shape usage and internal errors use. ``raise_if_error`` picks the code.
+
+    ``bridge`` reports the milknado binding of a resolved record, checked
+    against ``workspace_root`` -- the same owning checkout `resolve` used, or
+    the working directory when the caller resolved with none; it is ``None``
+    when no record resolved. It never changes ``dispatchable``.
     """
+    record = resolution.record
+    bridge = (
+        None
+        if record is None
+        else milknado_bridge.payload(
+            milknado_bridge.bind(
+                record, repo_root=paths.resolve_repo_root(workspace_root)
+            )
+        )
+    )
     return {
         "ref": ref,
         "outcome": resolution.outcome.value,
@@ -70,6 +92,12 @@ def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, o
             else handoff.slug_payload(resolution.phase_slug)
         ),
         "detail": resolution.detail,
+        # Link entries carry their edge kind; fork entries carry `"fork"`.
+        "pending": [
+            *edges.pending_payload(resolution.pending),
+            *fork_reconcile.fork_payload(resolution.pending_forks),
+        ],
+        "bridge": bridge,
     }
 
 
@@ -108,6 +136,7 @@ def resolve(
             require_workspace=project is not None,
         ),
         ref,
+        workspace_root=workspace_root,
     )
     raise_if_error(payload)
     return {"ok": True, "command": COMMAND, **payload}

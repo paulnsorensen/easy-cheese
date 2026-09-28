@@ -1,4 +1,4 @@
-"""The eight read-only commands: show, resolve, lint, validate, schema, list, log, turns."""
+"""The read-only commands: show, resolve, lint, validate, schema, list, log, turns."""
 
 from __future__ import annotations
 
@@ -10,13 +10,17 @@ from typing import Literal, TextIO, cast
 
 import fromargs
 
-from easy_cheese_schemas import CheckpointIntent, load
+from easy_cheese_schemas import CheckpointIntent, EntryKind, EntryState, load
+from easy_cheese_schemas.contracts import EdgeKind
 from easy_cheese_schemas import schema_runtime
 
 from easy_cheese.shared import paths
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
 from easy_cheese.shared.wheypoint import discovery
+from easy_cheese.shared.wheypoint import edges
+from easy_cheese.shared.wheypoint import fork_reconcile
 from easy_cheese.shared.wheypoint import lint as lint_mod
+from easy_cheese.shared.wheypoint import milknado_bridge
 from easy_cheese.shared.wheypoint import projection
 from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
@@ -25,10 +29,15 @@ from easy_cheese.shared.wheypoint import storage
 from easy_cheese.shared.wheypoint import transcript as transcript_mod
 from easy_cheese.shared.wheypoint.resolve_cli import findings_payload, maybe_payload
 
-from easy_cheese.cli.wheypoint.checkpoint import open_store, read_intent
+from easy_cheese.cli.wheypoint.checkpoint import (
+    IntentFlags,
+    enum_values,
+    open_store,
+    read_intent,
+)
 
 
-def _project_key(value: str) -> str:
+def project_key(value: str) -> str:
     """Reject anything that is not one filesystem path segment (G9, G10)."""
     if not value or value in (".", "..") or "/" in value or "\\" in value:
         raise fromargs.CliError(f"--project: must be one path segment, not {value!r}")
@@ -54,8 +63,8 @@ def _positive_int(value: int) -> int:
 
 
 def run_show(work_id: str, *, project: str | None = None) -> dict[str, object]:
-    project_key = _project_key(project) if project is not None else None
-    corpus_root = None if project_key is None else paths.corpus_home() / project_key
+    project_key_ = project_key(project) if project is not None else None
+    corpus_root = None if project_key_ is None else paths.corpus_home() / project_key_
     store = open_store(work_id, corpus_root=corpus_root)
     try:
         record = store.read_record()
@@ -66,12 +75,24 @@ def run_show(work_id: str, *, project: str | None = None) -> dict[str, object]:
             f"record-missing: work {work_id!r} has no record at {store.record_path}",
             exit_code=1,
         )
+    siblings = edges.sibling_records(store.corpus_root, work_id=record.work_id)
+    pending = edges.pending_reciprocals(
+        record, siblings=siblings, receipts=store.receipt_revisions()
+    )
+    bridge = milknado_bridge.bind(record, repo_root=paths.resolve_repo_root(None))
     return {
         "work_id": record.work_id,
         "status": record.status.value,
         "revision_id": record.revision_id,
         "revision_number": record.revision_number,
         "record": records.unstructure(record),
+        "pending": [
+            *edges.pending_payload(pending),
+            *fork_reconcile.fork_payload(
+                fork_reconcile.pending_forks(record, siblings=siblings)
+            ),
+        ],
+        "bridge": milknado_bridge.payload(bridge),
     }
 
 
@@ -92,8 +113,8 @@ def run_resolve(
     ]
     if len(chosen) > 1:
         raise fromargs.CliError(f"{chosen[0]}: not allowed with {chosen[1]}")
-    project_key = _project_key(project) if project is not None else None
-    corpus_root_path = None if project_key is None else paths.corpus_home() / project_key
+    project_key_ = project_key(project) if project is not None else None
+    corpus_root_path = None if project_key_ is None else paths.corpus_home() / project_key_
     effective_corpus_root = str(corpus_root_path) if corpus_root_path is not None else corpus_root
     resolution = (
         resolve_mod.resolve_legacy(ref, start=Path.cwd())
@@ -101,12 +122,12 @@ def run_resolve(
         else resolve_mod.resolve(
             ref,
             corpus_root=effective_corpus_root,
-            project_key=project_key,
+            project_key=project_key_,
             workspace_root=workspace_root,
-            require_workspace=project_key is not None,
+            require_workspace=project_key_ is not None,
         )
     )
-    payload = resolve_cli.resolve_payload(resolution, ref)
+    payload = resolve_cli.resolve_payload(resolution, ref, workspace_root=workspace_root)
     if resolution.outcome == resolve_mod.ResolutionOutcome.NOT_FOUND:
         payload["suggestions"] = list(
             discovery.suggestions(ref, start=Path.cwd(), corpus_root=effective_corpus_root)
@@ -125,9 +146,14 @@ def run_lint(path: str) -> dict[str, object]:
     }
 
 
-def run_validate(intent: str | None, stdin: TextIO) -> dict[str, object]:
-    """Schema-only dry run: every problem, no store opened (AC-11)."""
-    payload = read_intent(intent, stdin)
+def run_validate(
+    intent: str | None, stdin: TextIO, flags: IntentFlags | None = None
+) -> dict[str, object]:
+    """Schema-only dry run: every problem, no store opened (AC-11).
+
+    The same flags `checkpoint` takes overlay the intent before it is checked.
+    """
+    payload = read_intent(intent, stdin, flags)
     if not isinstance(payload, dict):
         raise fromargs.CliError(
             "invalid-intent: a checkpoint intent must be a JSON object, not "
@@ -198,8 +224,12 @@ def _iso(epoch: float) -> str:
     )
 
 
-def _hit_item(hit: discovery.Hit) -> dict[str, object]:
-    """A discovery hit as a `list` item: the old store keys, plus G9's new ones."""
+def hit_item(hit: discovery.Hit) -> dict[str, object]:
+    """A discovery hit as a `list` item: the old store keys, plus G9's new ones.
+
+    Every item names its graph neighbourhood: `edges_out`, `edges_in`, and
+    `forked_from`, plus the gating entry ids in `gates` (G6).
+    """
     item: dict[str, object] = {
         "source": hit.source,
         "project": hit.project,
@@ -210,6 +240,10 @@ def _hit_item(hit: discovery.Hit) -> dict[str, object]:
         "path": str(hit.path),
         "resume": str(hit.resume),
         "updated": _iso(hit.updated),
+        "edges_out": [{"kind": kind, "to": to} for kind, to in hit.edges_out],
+        "edges_in": [{"kind": kind, "source": source} for kind, source in hit.edges_in],
+        "forked_from": hit.forked_from,
+        "gates": list(hit.gates),
     }
     if hit.source == "store":
         item["work_id"] = hit.ref
@@ -249,14 +283,23 @@ def run_list(
     since: str | None = None,
     limit: int | None = None,
     mirrors: bool = False,
+    entry_kind: list[str] | None = None,
+    entry_state: list[str] | None = None,
+    gated: bool | None = None,
+    edge_kind: list[str] | None = None,
+    linked_to: list[str] | None = None,
+    forked_from: list[str] | None = None,
 ) -> dict[str, object]:
     """Every store and legacy note a caller can resume from (AC-13, G9)."""
     root_arg = Path(corpus_root) if corpus_root is not None else paths.project_corpus_root()
-    projects = [_project_key(key) for key in (project or [])]
+    projects = [project_key(key) for key in (project or [])]
     if since is not None:
         since = _iso_date(since)
     if limit is not None:
         limit = _positive_int(limit)
+    _ = enum_values("--edge-kind", edge_kind or (), EdgeKind, "flag-kind")
+    _ = enum_values("--entry-kind", entry_kind or (), EntryKind, "flag-entry")
+    _ = enum_values("--entry-state", entry_state or (), EntryState, "flag-entry")
     effective_scope = "machine" if projects else scope
     result = discovery.discover(
         scope=effective_scope,
@@ -271,8 +314,14 @@ def run_list(
         since=since,
         limit=limit,
         show_mirrors=mirrors,
+        entry_kind=entry_kind or (),
+        entry_state=entry_state or (),
+        gated=gated,
+        edge_kind=edge_kind or (),
+        linked_to=linked_to or (),
+        forked_from=forked_from or (),
     )
-    items = [_hit_item(hit) for hit in result.hits]
+    items = [hit_item(hit) for hit in result.hits]
     lines = _tsv_lines(
         items, ("source", "project", "ref", "status", "next", "orientation")
     )
@@ -291,8 +340,8 @@ def run_log(
     work_id: str, *, corpus_root: str | None = None, project: str | None = None
 ) -> dict[str, object]:
     """One line per complete revision, oldest first (AC-14)."""
-    project_key = _project_key(project) if project is not None else None
-    root = None if project_key is None else paths.corpus_home() / project_key
+    project_key_ = project_key(project) if project is not None else None
+    root = None if project_key_ is None else paths.corpus_home() / project_key_
     if root is None:
         root = Path(corpus_root) if corpus_root is not None else paths.project_corpus_root()
     store = open_store(work_id, corpus_root=root)

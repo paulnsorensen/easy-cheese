@@ -246,3 +246,24 @@ def run_cli(argv: list[str], *, stdin: str = "") -> tuple[int, dict[str, object]
         **envelope,
         "error": {"code": code, "message": message, "text": text},
     }
+
+
+def payload_at(container: object, *path: str) -> object:
+    """Walk `path` through the nested JSON objects of a CLI payload."""
+    value = container
+    for key in path:
+        value = cast(dict[str, object], value)[key]
+    return value
+
+
+def git_marker_ancestor(path: Path) -> Path | None:
+    """Return the nearest ancestor of `path` that holds a `.git` entry.
+
+    Checks `path.parents` only, never `path` itself; returns `None` when no
+    such ancestor exists. Project-scope `list` sweeps notes under that
+    ancestor, so a test that runs below one is not hermetic.
+    """
+    for ancestor in path.parents:
+        if (ancestor / ".git").exists():
+            return ancestor
+    return None
