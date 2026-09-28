@@ -53,6 +53,7 @@ from easy_cheese_schemas import (
     SCHEMA_VERSION,
     ArtifactLink,
     CompactionRecord,
+    DecisionFork,
     Durability,
     EntryKind,
     EntryState,
@@ -904,7 +905,7 @@ def _genesis(
                 revision_id=revision_id,
                 digest_of=digest_of,
             ),
-            decision_dossier=list(delta.decision_dossier or []),
+            decision_dossier=_merged_dossier([], delta),
             edges=merged.edges,
         )
     except ValueError as exc:
@@ -1015,9 +1016,7 @@ def _draft_record(
             working_context=_replaced(delta.working_context, current.working_context),
             notes=_replaced(delta.notes, current.notes),
             next_action=_replaced(delta.next_action, current.next_action),
-            decision_dossier=_replaced(
-                delta.decision_dossier, current.decision_dossier
-            ),
+            decision_dossier=_merged_dossier(current.decision_dossier, delta),
             decisions=kept[EntryKind.DECISION] + additions[EntryKind.DECISION],
             questions=kept[EntryKind.QUESTION] + additions[EntryKind.QUESTION],
             blockers=kept[EntryKind.BLOCKER] + additions[EntryKind.BLOCKER],
@@ -1037,3 +1036,35 @@ def _draft_record(
 def _replaced(proposed: object, carried: object) -> object:
     """`None` means unchanged; an explicit value -- including `[]` -- replaces."""
     return carried if proposed is None else proposed
+
+
+def _merged_dossier(
+    carried: list[DecisionFork], delta: WheypointDelta
+) -> list[DecisionFork]:
+    """The dossier as a set of forks keyed by title.
+
+    `remove_dossier_forks` drops carried titles first. Then each proposed fork
+    replaces the carried fork with its title in place, or appends. `None`
+    carries the dossier forward; an explicit `[]` still empties it.
+    """
+    removed = delta.remove_dossier_forks or ()
+    titles = {fork.fork for fork in carried}
+    unknown = [title for title in removed if title not in titles]
+    if unknown:
+        raise CommitError(
+            f"unknown-dossier-fork: the record carries no fork titled {unknown!r}"
+        )
+    forks = [fork for fork in carried if fork.fork not in removed]
+    if delta.decision_dossier is None:
+        return forks
+    if not delta.decision_dossier:
+        return []
+    for proposed in delta.decision_dossier:
+        index = next(
+            (i for i, fork in enumerate(forks) if fork.fork == proposed.fork), None
+        )
+        if index is None:
+            forks.append(proposed)
+        else:
+            forks[index] = proposed
+    return forks

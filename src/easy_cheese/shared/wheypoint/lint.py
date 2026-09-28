@@ -39,6 +39,7 @@ from . import lineage
 from . import lint_freshness
 from .lint_types import (
     ADVISORY_CODES as ADVISORY_CODES,
+    NOTES_WARN_LIMIT as NOTES_WARN_LIMIT,
     LintCode as LintCode,
     LintFinding as LintFinding,
     gates_continuation as gates_continuation,
@@ -249,6 +250,15 @@ def lint_work(
         )
         for item in pending_forks
     )
+    notes_length = len(record.notes or "")
+    if notes_length > NOTES_WARN_LIMIT:
+        findings.append(
+            LintFinding(
+                LintCode.NOTES_LONG,
+                f"notes hold {notes_length} characters; the advisory limit is "
+                + f"{NOTES_WARN_LIMIT}",
+            )
+        )
     _, normalizations = records.normalize_links(record)
     return LintReport(
         findings=tuple(findings),

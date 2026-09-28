@@ -289,6 +289,7 @@ def build_delta(
             notes=intent.notes,
             next_action=next_action,
             decision_dossier=intent.decision_dossier,
+            remove_dossier_forks=intent.remove_dossier_forks,
             add_decisions=grouped.get("add_decisions"),
             add_questions=grouped.get("add_questions"),
             add_blockers=grouped.get("add_blockers"),

@@ -1288,3 +1288,25 @@ def test_a_sibling_link_reports_an_advisory_link_pending_on_the_target(
     assert [(p.source_work_id, p.kind) for p in report.pending] == [
         ("work-0002", EdgeKind.SUPERSEDED_BY)
     ]
+
+
+@pytest.mark.parametrize(("length", "warns"), [(4000, False), (4001, True)])
+def test_ac16_notes_above_the_advisory_limit_warn_without_blocking(
+    length: int,
+    warns: bool,
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    store = make_store(corpus_root)
+    promotion = make_promotion(record=make_record(notes="n" * length))
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    report = check(store)
+
+    assert report.codes == ((lint.LintCode.NOTES_LONG,) if warns else ())
+    assert not any(lint.gates_continuation(finding) for finding in report.findings)
+    if warns:
+        assert report.findings[0].detail == (
+            "notes hold 4001 characters; the advisory limit is 4000"
+        )

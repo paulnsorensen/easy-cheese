@@ -38,6 +38,12 @@ class LintCode(str, Enum):
     COMPACTION_PARENT_UNRESOLVED = "compaction-parent-unresolved"
     LINK_PENDING = "link-pending"
     FORK_PENDING = "fork-pending"
+    NOTES_LONG = "notes-long"
+
+
+# The schema caps `notes` at 6000 characters; above this a record still
+# validates, but a cold reader is better served by a linked document.
+NOTES_WARN_LIMIT = 4000
 
 
 # Findings that describe the store's surroundings rather than the authority of
@@ -55,6 +61,8 @@ class LintCode(str, Enum):
 #
 # A pending reciprocal edge is owed by this record's next checkpoint, which
 # applies it host-side; the record itself is as valid as it says it is.
+#
+# Long notes are a readability advice, not an authority problem.
 ADVISORY_CODES = frozenset(
     {
         LintCode.REVISION_INCOMPLETE,
@@ -63,6 +71,7 @@ ADVISORY_CODES = frozenset(
         LintCode.GROUNDED_PATH_MISSING,
         LintCode.LINK_PENDING,
         LintCode.FORK_PENDING,
+        LintCode.NOTES_LONG,
     }
 )
 

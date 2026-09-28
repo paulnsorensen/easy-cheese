@@ -21,8 +21,8 @@ from typing import TextIO, cast
 import fromargs
 from attrs import AttrsInstance
 
-from easy_cheese.shared import handoff
-from easy_cheese.shared.wheypoint import edges, fork_reconcile
+from easy_cheese.shared import handoff, paths
+from easy_cheese.shared.wheypoint import edges, fork_reconcile, milknado_bridge
 from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
@@ -49,7 +49,20 @@ def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, o
     could not be interpreted is still an answer about the corpus, so the caller
     emits this payload with ``ok: false`` rather than the ``{code, message}``
     shape usage and internal errors use. ``raise_if_error`` picks the code.
+    shape usage and internal errors use. ``raise_if_error`` picks the code.
+
+    ``bridge`` reports the milknado binding of a resolved record, checked
+    against the repo root that holds the working directory; it is ``None``
+    when no record resolved. It never changes ``dispatchable``.
     """
+    record = resolution.record
+    bridge = (
+        None
+        if record is None
+        else milknado_bridge.payload(
+            milknado_bridge.bind(record, repo_root=paths.resolve_repo_root(None))
+        )
+    )
     return {
         "ref": ref,
         "outcome": resolution.outcome.value,
@@ -76,6 +89,7 @@ def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, o
             *edges.pending_payload(resolution.pending),
             *fork_reconcile.fork_payload(resolution.pending_forks),
         ],
+        "bridge": bridge,
     }
 
 
