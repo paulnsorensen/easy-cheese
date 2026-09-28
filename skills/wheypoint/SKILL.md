@@ -103,8 +103,7 @@ The projection is never the authority; never edit it and never resume from it by
 
 ## `next:` values
 
-- `mold`, `cut`, `cook`, `press`, `age`, `cure`: the next pipeline phase.
-  `next: cook` on a standalone checkpoint names the phase to resume; it does not publish a Cook→Cook phase artifact.
+- `mold`, `cut`, `cook`, `press`, `age`, `cure`: the next pipeline phase; on a standalone checkpoint, `next: cook` names the phase to resume and does not publish a Cook→Cook phase artifact.
 - `affinage`: PR review comments or failing CI; `artifact` names the PR.
 - `briesearch`, `culture`: a read-only next move that `/cheese --continue` dispatches.
 - `tasks`: independent moves; see [`references/parallel-handoffs.md`](references/parallel-handoffs.md).

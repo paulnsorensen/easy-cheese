@@ -1,6 +1,6 @@
 # ADR: Use browser layouts for frontend TUI and backend reviews
 
-Status: accepted design (2026-09-16); implementation pending.
+Status: superseded (2026-09-27) by [mold-review-canvas-008](./mold-review-canvas-008.md); shape views and pins replace subject layouts.
 
 ## Context
 

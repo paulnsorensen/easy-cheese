@@ -1,0 +1,204 @@
+{
+  "goal": "Give the agent CLI a file-only database: no server, one directory, safe under concurrent agent writes.",
+  "goal_emphasis": "file-only",
+  "tier": "light",
+  "stage": "sketch",
+  "agent_status": "agent listening",
+  "summary": "Three shapes survive the shape check. A facade keeps the crust to two exports; per-entity repositories add one export per kind; a raw connection leaks sqlite into every caller.",
+  "revisions": [
+    {
+      "label": "r1 · bounds pass",
+      "note": "goal pinned"
+    },
+    {
+      "label": "r2 · shape",
+      "note": "F-1, F-2 settled"
+    },
+    {
+      "label": "r3 · sketch",
+      "note": "placement block, F-3 asked"
+    }
+  ],
+  "ledger": [
+    {
+      "label": "decided",
+      "items": [
+        {
+          "id": "F-1",
+          "text": "SQLite, one file at `.cheese/db/store.sqlite`"
+        },
+        {
+          "id": "F-2",
+          "text": "WAL mode plus a single writer lock file"
+        }
+      ]
+    },
+    {
+      "label": "asking",
+      "items": [
+        {
+          "id": "F-3",
+          "text": "Shape of the public interface"
+        }
+      ]
+    },
+    {
+      "label": "agent-decided",
+      "text": "Python stdlib only, no ORM · schema version in a `meta` table"
+    }
+  ],
+  "placement": {
+    "badge": "r3",
+    "rows": [
+      {
+        "key": "slice",
+        "value": "NEW SLICE store"
+      },
+      {
+        "key": "spine step",
+        "value": "infra"
+      },
+      {
+        "key": "public",
+        "value": "Store.open(path)\nStore.put(kind, id, doc)\nStore.get(kind, id)\nStore.query(kind, **where)",
+        "highlight": true
+      },
+      {
+        "key": "private",
+        "value": "lock file, WAL pragmas"
+      },
+      {
+        "key": "arrows",
+        "value": "cli → store → sqlite3"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "write-path",
+      "type": "mermaid",
+      "title": "Write path",
+      "source": "graph LR\n  cli[agent CLI] --> store[Store facade]\n  store --> lock[store.lock]\n  lock --> db[(store.sqlite · WAL)]"
+    }
+  ],
+  "gates": {
+    "items": [
+      {
+        "label": "problem statement",
+        "state": "met"
+      },
+      {
+        "label": "grounding recorded",
+        "state": "met"
+      },
+      {
+        "label": "options weighed",
+        "state": "met"
+      },
+      {
+        "label": "option grounded",
+        "state": "met"
+      },
+      {
+        "label": "exploration delegated",
+        "state": "met"
+      },
+      {
+        "label": "interface sketches",
+        "state": "current"
+      },
+      {
+        "label": "public interfaces only",
+        "state": "open"
+      },
+      {
+        "label": "identity nouns",
+        "state": "met"
+      },
+      {
+        "label": "non-goals audit",
+        "state": "met"
+      },
+      {
+        "label": "goal coverage 2/4",
+        "state": "open"
+      },
+      {
+        "label": "validate cycles",
+        "state": "open"
+      },
+      {
+        "label": "grilled",
+        "state": "open"
+      },
+      {
+        "label": "open questions marked",
+        "state": "open"
+      },
+      {
+        "label": "quality gates",
+        "state": "open"
+      },
+      {
+        "label": "durable writes",
+        "state": "open"
+      },
+      {
+        "label": "fork taste test",
+        "state": "open"
+      },
+      {
+        "label": "spec format",
+        "state": "open"
+      },
+      {
+        "label": "reproduction",
+        "state": "na"
+      }
+    ]
+  },
+  "trail": [
+    {
+      "label": "F-2 · WAL + writer lock",
+      "state": "answered",
+      "position": "before"
+    },
+    {
+      "label": "F-4 · migration strategy",
+      "state": "waiting",
+      "note": "waits on F-3",
+      "position": "after"
+    }
+  ],
+  "questions": [
+    {
+      "id": "F-3",
+      "prompt": "Which shape does the public interface take?",
+      "meta": "moves the Store seam, AC-4",
+      "selection_mode": "single",
+      "recommended_option_id": "facade",
+      "options": [
+        {
+          "id": "facade",
+          "label": "Store facade",
+          "tradeoff": "two exports, one lock owner"
+        },
+        {
+          "id": "repos",
+          "label": "Repository per entity",
+          "tradeoff": "one export per kind"
+        },
+        {
+          "id": "raw",
+          "label": "Raw sqlite3 connection",
+          "tradeoff": "every caller owns the lock"
+        },
+        {
+          "id": "none",
+          "label": "Do nothing",
+          "tradeoff": "keep flat files"
+        }
+      ]
+    }
+  ]
+}
