@@ -39,3 +39,4 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | review-result | ReviewResult | — | — |
 | wheypoint-record | WheypointRecord | — | — |
 | wheypoint-revision | WheypointRevision | — | — |
+| work-edge | WorkEdge | — | — |
