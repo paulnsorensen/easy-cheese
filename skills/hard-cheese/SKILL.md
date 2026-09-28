@@ -225,7 +225,7 @@ Then print one applicable message:
 - Pass the user's explanation to the judge unchanged.
 - Always run the freshness check. A changed `HEAD` requires a new attempt sequence.
 - Record every ERROR attempt. Show a warning for each judge failure.
-- Do not call `/gh` or a specific pull request tool. The gate operates before code enters review.
+- Do not call a GitHub tool or a pull request tool. The gate operates before code enters review.
 - Apply the shared voice rules from `../age/references/voice.md`. Report the result. Classify the residual risk as `certain | speculating | don't know`.
 - Do not describe FAILED as `"almost passing"`.
 

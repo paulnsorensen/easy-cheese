@@ -146,9 +146,24 @@ def test_plate_loads_one_reference_at_a_time_in_a_named_sequence() -> None:
     execution = flat.index("Load `references/ordinary-pr.md` for single topology")
     provider = flat.index("Load exactly one provider reference")
     assert topology < execution < provider
-    # Stack inspection without a requested change belongs to `/gh`.
+    # Stack inspection without a requested change leaves Plate for the `gh` CLI.
     assert "Create, sync, restack, submit, recover, or explicitly ship a stack" in skill
-    assert "Route a stack inspection request without a requested change to `/gh`" in flat
+    assert (
+        "Route a stack inspection request without a requested change out of `/plate` to the `gh` CLI."
+        in flat
+    )
+
+
+def test_plate_sends_github_only_work_to_the_gh_cli_not_a_gh_skill() -> None:
+    """No `/gh` skill ships; GitHub-only work leaves Plate for the `gh` CLI."""
+    retired_skill = re.compile(r"(?<![\w$./-])/gh\b")
+    for path in sorted((ROOT / "skills" / "plate").rglob("*.md")):
+        assert not retired_skill.search(path.read_text()), path
+    skill = read("skills/plate/SKILL.md")
+    guard = skill.split("## Routing guard", maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
+    flat_guard = " ".join(guard.split())
+    assert "are outside `/plate`" in flat_guard
+    assert "Use the `gh` CLI directly when no local publication transaction is necessary." in flat_guard
 
 
 def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
@@ -507,7 +522,10 @@ def test_plate_routes_review_to_age_from_both_sides() -> None:
     assert "`/plate` never performs code-quality review." in guard
     assert "It never computes a review surface for its own sake." in guard
     assert "Review is `/age`" in guard
-    assert "Work for `/age` or `/gh` is a Plate-owned routing error" in skill
+    assert (
+        "Review work for `/age` or GitHub work outside publication is a Plate-owned routing error"
+        in skill
+    )
 
     # Consumer: Age owns the review and defaults to the current working diff.
     assert "name: age" in age
