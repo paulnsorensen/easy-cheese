@@ -24,7 +24,8 @@ from easy_cheese.shared.wheypoint import commit, records, resolve_cli, storage
 from easy_cheese.cli import wheypoint
 from easy_cheese.cli.wheypoint import queries as queries_mod
 
-from conftest import WORK_ID, Promotion, run_cli
+from conftest import WORK_ID, Promotion, git_marker_ancestor, run_cli
+from conftest import payload_at as _get
 
 CAPTURED_AT = "2026-08-02T00:00:00Z"
 
@@ -32,13 +33,6 @@ CAPTURED_AT = "2026-08-02T00:00:00Z"
 def _run(command: str, *args: str, stdin: str = "") -> tuple[int, dict[str, object]]:
     """Invoke the CLI the way the bundle does; see `conftest.run_cli`."""
     return run_cli([command, *args], stdin=stdin)
-
-
-def _get(container: object, *path: str) -> object:
-    value = container
-    for key in path:
-        value = cast(dict[str, object], value)[key]
-    return value
 
 
 @pytest.fixture(autouse=True)
@@ -50,9 +44,14 @@ def _cwd_outside_a_repository(  # pyright: ignore[reportUnusedFunction]
     `commit` mirrors its projection into the repository it is invoked from, so
     a suite that stayed in the checkout would write notes into the working tree
     it is testing. Outside a repository there is no default mirror at all,
-    which is also the state the durability assertions below are about.
+    which is also the state the durability assertions below are about. It also
+    refuses to run when a `.git` entry sits above `tmp_path`, because that
+    would make project-scope note discovery sweep sibling test directories.
     """
     monkeypatch.chdir(tmp_path)
+    ancestor = git_marker_ancestor(tmp_path)
+    if ancestor is not None:
+        pytest.fail(f"{ancestor} holds a .git entry above tmp_path; list is not hermetic")
 
 
 @pytest.fixture
