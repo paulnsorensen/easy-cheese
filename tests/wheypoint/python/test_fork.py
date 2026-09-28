@@ -378,7 +378,9 @@ def test_fork_refuses_an_unknown_entry(corpus_root: Path) -> None:
     with pytest.raises(fork.ForkError, match=r"^unknown-entry: "):
         _ = _fork(corpus_root, move=["q-000000000000"])
 
-    assert not storage.WorkStore.open("child", corpus_root=corpus_root).record_path.exists()
+    record_path = storage.WorkStore.open("child", corpus_root=corpus_root).record_path
+
+    assert not record_path.exists()
 
 
 def test_fork_refuses_an_entry_already_forked(corpus_root: Path) -> None:
@@ -450,7 +452,9 @@ def test_fork_refuses_an_entry_a_pending_fork_already_moves(corpus_root: Path) -
     with pytest.raises(fork.ForkError, match=r"^already-forked: "):
         _ = _fork(corpus_root, child="second", move=[question], dossier=[DOSSIER])
 
-    assert not storage.WorkStore.open("second", corpus_root=corpus_root).record_path.exists()
+    record_path = storage.WorkStore.open("second", corpus_root=corpus_root).record_path
+
+    assert not record_path.exists()
     assert [f.child_work_id for f in _lint(parent).pending_forks] == ["child"]
 
 
@@ -523,7 +527,9 @@ def test_fork_refuses_a_dossier_title_that_holds_a_rationale_separator(
     with pytest.raises(fork.ForkError, match=r"^fork-title: "):
         _ = _fork(corpus_root, copy=[directive], dossier=[title])
 
-    assert not storage.WorkStore.open("child", corpus_root=corpus_root).record_path.exists()
+    record_path = storage.WorkStore.open("child", corpus_root=corpus_root).record_path
+
+    assert not record_path.exists()
 
 
 def test_two_pending_forks_of_one_entry_reconcile_through_commit(
@@ -611,7 +617,9 @@ def test_fork_refuses_to_move_a_gate_without_a_dossier_fork(corpus_root: Path) -
     with pytest.raises(fork.ForkError, match=r"^dossier-required: "):
         _ = _fork(corpus_root, move=[question])
 
-    assert not storage.WorkStore.open("child", corpus_root=corpus_root).record_path.exists()
+    record_path = storage.WorkStore.open("child", corpus_root=corpus_root).record_path
+
+    assert not record_path.exists()
 
 
 def test_a_retried_parent_promotion_ignores_a_fork_made_since_the_pair_landed(
