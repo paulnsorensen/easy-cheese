@@ -19,9 +19,7 @@ from easy_cheese.shared.fanout import phase_decision
 from easy_cheese.shared.fanout.phase_decision import Verdict
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_ROOT / "scripts") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import skill_archives  # noqa: E402
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 class TestSpawnPhases:
@@ -261,7 +259,7 @@ class TestUnknownStatusStillContractError:
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(skill_archives.archive_path("cook")), "phase_decision", *args],
+        [sys.executable, str(COOK_ARCHIVE), "phase_decision", *args],
         capture_output=True,
         text=True,
     )

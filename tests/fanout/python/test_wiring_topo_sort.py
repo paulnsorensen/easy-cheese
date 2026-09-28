@@ -14,9 +14,7 @@ import yaml
 from easy_cheese_schemas.wiring_graph import WiringCycleError, compute_waves, cycle_errors
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_ROOT / "scripts") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import skill_archives  # noqa: E402
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 def _wiring(*entries: tuple[str, list[str]]) -> list[dict[str, str | list[str]]]:
@@ -29,7 +27,7 @@ def _write_manifest(path: Path, wiring: list[dict[str, str | list[str]]]) -> Non
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(skill_archives.archive_path("cook")), "wiring_topo_sort", *args],
+        [sys.executable, str(COOK_ARCHIVE), "wiring_topo_sort", *args],
         capture_output=True,
         text=True,
     )

@@ -5,9 +5,8 @@ must stop a hung reproduction command. See
 `.cheese/notes/r014-megamerge/review-pasteurize.md` and
 `.cheese/notes/r014-megamerge/edge-affinage-pasteurize.md`.
 
-The bundle-level tests drive the pasteurize archive that scripts/skill_archives.py
-builds from the working tree. Strict contract coverage runs against the module
-and its in-process `main()`.
+Bundle-level tests drive the committed pasteurize archive. Strict contract
+coverage runs against the module and its in-process `main()`.
 """
 
 from __future__ import annotations
@@ -22,9 +21,7 @@ from typing import Protocol, TypedDict, cast
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_ROOT / "scripts") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import skill_archives  # noqa: E402
+PASTEURIZE_ARCHIVE = REPO_ROOT / "skills" / "pasteurize" / "scripts" / "pasteurize.pyz"
 
 
 class _RunRecord(TypedDict):
@@ -325,7 +322,7 @@ class TestMainCli:
 
 def _invoke(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(skill_archives.archive_path("pasteurize")), "repro-rerun", *args],
+        [sys.executable, str(PASTEURIZE_ARCHIVE), "repro-rerun", *args],
         capture_output=True,
         text=True,
     )

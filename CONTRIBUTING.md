@@ -28,15 +28,16 @@ corepack enable
 just check
 ```
 
-`just check` uses `uv` to resolve the Python tools temporarily. It runs `just wedge-check`, which verifies every committed skill archive.
+`just check` uses `uv` to resolve the Python tools temporarily. It verifies every committed skill archive before any archive executes.
 
 ## Build skill archives
 
 Each Python skill commits one executable archive at `skills/<skill>/scripts/<skill>.pyz`.
 Wedge builds self-contained archives at build time. It is not a runtime dependency.
-Users run the archive directly with Python; no loader, lock, or first-run download exists.
+Users run the archive directly with Python; no loader or first-run download exists.
 
-Rebuild every affected skill after changing runtime source under `src/`, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`.
+Run `just wedge-build` after changing runtime source under `src/`, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`.
+Run `just wedge-check` before focused tests that execute an archive.
 
 ```sh
 just wedge-build
@@ -65,7 +66,7 @@ Do not modify `sys.argv`. Do not run the target through `runpy`.
 See `src/easy_cheese/skills/affinage/commands.py` for a complete manifest.
 
 Commit each regenerated `.pyz` archive with the source change.
-`just wedge-check` runs `wedge bundle --check` on every pull request and verifies every committed archive.
+`just wedge-check` verifies every committed archive against a temporary Wedge build.
 
 ## Documentation style
 
@@ -81,7 +82,7 @@ Edit root documents such as `README.md` and `CONTRIBUTING.md`. The documentation
 # Run every suite: skill validators, Python, JavaScript, Bash, and Rust.
 just test
 
-# Run the full gate: format, lint, types, tests, documentation, and wedge locks.
+# Run the full gate: format, lint, types, tests, documentation, and archives.
 just check
 ```
 

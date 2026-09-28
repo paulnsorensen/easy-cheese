@@ -90,12 +90,8 @@ jobs:
       - name: Gate the checked-in runtime
         run: python3 scripts/runtime_gates.py
 
-      # Every suite that executes a skill runs its built archive, not the
-      # committed launcher. Build the set once here through the pinned wedge.
-      - name: Build skill archives once
-        run: |
-          python3 scripts/skill_archives.py build "$RUNNER_TEMP/archives"
-          echo "EASY_CHEESE_PREBUILT_PYZ=$RUNNER_TEMP/archives" >> "$GITHUB_ENV"
+      - name: Check committed skill archives
+        run: just wedge-check
 
       - name: Run melt script tests
         run: python3 -m pytest tests/python -q

@@ -1,11 +1,11 @@
 # Pyz bundling pipeline
 
-Wedge builds self-contained skill archives committed at `skills/<skill>/scripts/<skill>.pyz`.
+The pyz bundling pipeline uses Wedge to build committed, self-contained `skills/<skill>/scripts/<skill>.pyz` archives.
 Running a skill does not download its archive.
 The same files ship in branch installs, commit installs, and staged releases.[^1]
 
 `tools/wedge/uv.lock` pins one Wedge commit.
-Local builds, test builds, and CI use that tool project.
+Local builds, freshness checks, and CI use that tool project.
 The separate tool project prevents Wedge's development dependency sources from replacing the published runtime dependencies.[^2]
 
 ## Discovery and source selection
@@ -76,14 +76,16 @@ The catalog gate imports contract modules normally so stale generated catalogs r
 
 ## Tests and release staging
 
-Tests execute archives built from the current working tree.
-`scripts/skill_archives.py` locates the prebuilt set under `EASY_CHEESE_PREBUILT_PYZ`.
-Without that set, it builds archives into temporary storage.
-The test-only `wedge build` path retains content-addressed output names.[^9]
+Tests execute the committed archives that users install.
+`just test` checks runtime inputs, then runs `just wedge-check` before any archive test.
+The fixtures resolve stable archive paths; they do not build, cache, or select temporary archives.[^9]
 
-`.github/workflows/wedge.yml` checks committed archive freshness on pull requests and main.
-It does not publish rolling archive assets.
-The normal validation workflow checks runtime inputs and builds the test archive set.[^10]
+The validation workflow performs the same pre-test freshness check on pull requests and main.
+There is no separate archive workflow or rolling archive publication.
+`just check` and `just ci` inherit freshness verification through `test`, without a second build at the end.[^10]
+
+Focused pytest or browser commands use committed archives without rebuilding them.
+After changing archive inputs, run `just wedge-build` and `just wedge-check` before focused tests.[^9]
 
 `scripts/stage_release.py` copies skill instructions, resources, and committed archives into the release tree.
 It excludes runtime source and build configuration.
@@ -120,8 +122,8 @@ Option B, release-only self-contained archives, remains an assessment in [issue 
 [^6]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py
 [^7]: justfile:`wedge-build`, `wedge-check`, `check`, `ci`
 [^8]: scripts/runtime_gates.py; src/easy_cheese_schemas/_contract_modules.py; tests/python/test_generated_runtime_write.py
-[^9]: scripts/skill_archives.py; tests/conftest.py
-[^10]: .github/workflows/wedge.yml; .github/workflows/validate.yml
+[^9]: tests/conftest.py; CONTRIBUTING.md; frontend/mold-review/tests/review.spec.js
+[^10]: .github/workflows/validate.yml; justfile
 [^11]: scripts/stage_release.py; tests/python/test_stage_release.py; .github/workflows/release.yml
 
-_Source: user-approved A correction to PR #729 · Updated: 2026-09-28 · Supersedes: proposed launcher-and-lock pipeline; the custom wheelhouse builder remains retired._
+_Source: user-approved A correction to PR #729 · Updated: 2026-09-28 · Supersedes: launcher-and-lock distribution and the temporary test-archive pipeline; the custom wheelhouse builder remains retired._

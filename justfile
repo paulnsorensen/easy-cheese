@@ -1,7 +1,6 @@
 set dotenv-load := true
 python := "uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
-# The wedge commit that tools/wedge/uv.lock pins; the same argv that
-# scripts/skill_archives.py and .github/workflows/wedge.yml run.
+# The wedge commit that tools/wedge/uv.lock pins.
 wedge := "uv run --locked --project tools/wedge wedge"
 
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
@@ -44,15 +43,10 @@ test:
     {{python}} .github/scripts/validate_wiki.py
     {{python}} scripts/render_generated_regions.py --check
 
-    # Generated runtime sources and command surfaces must be current before
-    # any archive is built from them.
+    # Generated runtime sources, command surfaces, and committed archives must
+    # be current before any archive executes.
     {{python}} scripts/runtime_gates.py
-
-    # Build every skill archive once through the pinned wedge; every suite
-    # reuses the set instead of rebuilding it (see scripts/skill_archives.py).
-    prebuilt_pyz_dir="$(mktemp -d)"
-    export EASY_CHEESE_PREBUILT_PYZ="$prebuilt_pyz_dir"
-
+    just wedge-check
     background_pids=()
     # Reap every background check on every exit path, including an early `set -e`
     # exit from a foreground suite, so no orphan survives the recipe. The trap
@@ -63,11 +57,9 @@ test:
             kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
         done
-        rm -rf "$prebuilt_pyz_dir"
     }
     trap cleanup EXIT
 
-    python3 scripts/skill_archives.py build "$EASY_CHEESE_PREBUILT_PYZ"
 
     # The pytest suites are latency-bound (subprocess-heavy) and leave cores
     # idle, so run the CPU-bound independent checks (pnpm build, cargo) alongside
@@ -192,10 +184,10 @@ update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
 
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build wedge-check
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build wedge-check
+ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build
 
 # Install docs build dependencies
 docs-install:

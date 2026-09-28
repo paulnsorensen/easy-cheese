@@ -25,9 +25,7 @@ from typing import Protocol, cast
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_ROOT / "scripts") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import skill_archives  # noqa: E402
+HARD_CHEESE_ARCHIVE = REPO_ROOT / "skills" / "hard-cheese" / "scripts" / "hard-cheese.pyz"
 
 
 class _FromargsNamespace(Protocol):
@@ -45,7 +43,7 @@ def _run(env_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HARD_CHEESE_ARTIFACT_DIR"] = str(env_dir)
     return subprocess.run(
-        [sys.executable, str(skill_archives.archive_path("hard-cheese")), "append-attempt", *args],
+        [sys.executable, str(HARD_CHEESE_ARCHIVE), "append-attempt", *args],
         capture_output=True, text=True, env=env, cwd=str(REPO_ROOT),
     )
 
@@ -54,7 +52,7 @@ def _run_bundle(*args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     _ = env.pop("PYTHONPATH", None)
     return subprocess.run(
-        [sys.executable, str(skill_archives.archive_path("hard-cheese")), *args],
+        [sys.executable, str(HARD_CHEESE_ARCHIVE), *args],
         capture_output=True,
         text=True,
         env=env,
@@ -238,7 +236,7 @@ class TestConcurrency:
         rewrite atomic. Without either, the second writer could read the
         pre-first-write state and clobber it.
         """
-        bundle = str(skill_archives.archive_path("hard-cheese"))
+        bundle = str(HARD_CHEESE_ARCHIVE)
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=2) as pool:
             codes = pool.map(
@@ -260,7 +258,7 @@ class TestConcurrency:
         read-modify-write isn't actually atomic some rows will be lost.
         """
         N = 8
-        bundle = str(skill_archives.archive_path("hard-cheese"))
+        bundle = str(HARD_CHEESE_ARCHIVE)
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=N) as pool:
             codes = pool.map(

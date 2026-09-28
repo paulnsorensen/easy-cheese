@@ -33,8 +33,8 @@ MINI_SPEC = (SPEC_FIXTURES / "valid_mini_spec.md").read_text(encoding="utf-8")
 RED_MINI_SPEC = (SPEC_FIXTURES / "valid_red_required_mini_spec.md").read_text(
     encoding="utf-8"
 )
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import skill_archives  # noqa: E402
+MOLD_ARCHIVE = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 class _RunFn(Protocol):
@@ -51,7 +51,7 @@ def _run_direct(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
 
 
 def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
-    mold_pyz = skill_archives.archive_path("mold")
+    mold_pyz = MOLD_ARCHIVE
     return subprocess.run(
         [sys.executable, str(mold_pyz), "validate-spec", *flags, str(path)],
         capture_output=True,
@@ -60,7 +60,7 @@ def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
 
 
 def _run_cook(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
-    cook_pyz = skill_archives.archive_path("cook")
+    cook_pyz = COOK_ARCHIVE
     return subprocess.run(
         [
             sys.executable,

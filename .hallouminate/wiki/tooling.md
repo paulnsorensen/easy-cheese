@@ -106,7 +106,8 @@ The `runtime` group and schema dependencies define the third-party closure in `u
 
 `just wedge-check` rebuilds temporarily and compares committed archive contents.
 Run `just wedge-build` after changing archive inputs, then run `just check`.
-Tests use current-source archives through `scripts/skill_archives.py`.
+`just test` checks archive freshness before tests execute the committed artifacts.
+Focused test commands do not build archives; run `just wedge-build` and `just wedge-check` after source changes.
 Release staging copies the committed archives without a separate publication dependency.[^3]
 
 See the [bundle pipeline](./architecture/pyz-bundling-pipeline.md) and
@@ -114,7 +115,7 @@ See the [bundle pipeline](./architecture/pyz-bundling-pipeline.md) and
 
 [^1]: AGENTS.md; skills/*/scripts/*.pyz
 [^2]: skills/wedge.toml; skills/*/wedge.toml; pyproject.toml; uv.lock; tools/wedge/uv.lock
-[^3]: justfile; scripts/skill_archives.py; scripts/stage_release.py; .github/workflows/wedge.yml
+[^3]: justfile; tests/conftest.py; scripts/stage_release.py; .github/workflows/validate.yml; CONTRIBUTING.md
 
 ## CI workflows
 
@@ -122,8 +123,7 @@ Under `.github/workflows/`:
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `validate.yml` | push main, all PRs | frontmatter validation, pytest, install.sh bats + smoke, lint |
-| `wedge.yml` | PRs + push main | rebuild and verify committed skill archives; no rolling asset publication |
+| `validate.yml` | push main, all PRs | frontmatter validation, archive freshness before pytest, install.sh bats + smoke, lint |
 | `release.yml` | tag `v[0-9]*` | stage slim tree, force-push `release` branch, GitHub release |
 | `publish-pypi.yml` | push main touching `pyproject.toml`, dispatch | publish `easy-cheese-schemas` to PyPI |
 | `docs.yml` | push/PR on docs paths, dispatch | `pnpm run docs:build` (Astro/Starlight), deploy Pages on main |
@@ -140,4 +140,4 @@ Under `.github/workflows/`:
 `markdownlint-cli2`, `shellcheck`, and `bats` — see `README.md` for
 install hints (`AGENTS.md:18-21`).
 
-_Source: [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729), approved A correction · Updated: 2026-09-28 · Supersedes: proposed runtime loaders and release-only archive assets._
+_Source: [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729), approved A correction · Updated: 2026-09-28 · Supersedes: runtime loaders, release-only archive assets, temporary test archives, and the separate archive workflow._

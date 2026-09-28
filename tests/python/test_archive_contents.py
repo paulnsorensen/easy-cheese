@@ -7,16 +7,48 @@ import subprocess
 import sys
 import textwrap
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from easy_cheese.shared.bundle_command_index import COMMAND_BUNDLES
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import runtime_gates  # noqa: E402
 import stage_release  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILLS = runtime_gates.SKILLS
+COMMAND_HELP_CASES = tuple(
+    (skill, command)
+    for command, skills in COMMAND_BUNDLES.items()
+    for skill in skills
+)
+
+
+_AUDITED_RUNNER = textwrap.dedent(
+    """
+    import runpy
+    import sys
+
+    def reject_network(event, args):
+        if event in {"socket.__new__", "socket.connect", "socket.getaddrinfo"}:
+            raise RuntimeError(event)
+
+    sys.addaudithook(reject_network)
+    sys.argv = sys.argv[1:]
+    runpy.run_path(sys.argv[0], run_name="__main__")
+    """
+)
+
+
+def test_skill_archive_uses_committed_path(
+    skill_archive: Callable[[str], Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("EASY_CHEESE_PREBUILT_PYZ", str(tmp_path))
+    assert skill_archive("mold") == ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
 
 
 @pytest.fixture(scope="module")
@@ -26,6 +58,38 @@ def staged(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 def archive(staged_root: Path, skill: str) -> Path:
     return staged_root / "skills" / skill / "scripts" / f"{skill}.pyz"
+
+
+def isolated_archive_run(
+    staged_root: Path, skill: str, args: tuple[str, ...], tmp_path: Path
+) -> subprocess.CompletedProcess[str]:
+    cold = tmp_path / "cold"
+    cold.mkdir(exist_ok=True)
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(tmp_path / "home"),
+            "SHIV_ROOT": str(tmp_path / "shiv"),
+            "PYTHONPATH": "",
+            "PATH": "/usr/bin:/bin",
+        }
+    )
+    return subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            "-c",
+            _AUDITED_RUNNER,
+            str(archive(staged_root, skill)),
+            *args,
+        ],
+        cwd=cold,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 @pytest.mark.parametrize("skill", SKILLS)
@@ -56,40 +120,57 @@ def test_archive_contains_own_namespace_and_support(skill: str, staged: Path) ->
 def test_archive_executes_help_without_repository_source(
     skill: str, staged: Path, tmp_path: Path
 ) -> None:
-    cold = tmp_path / "cold"
-    cold.mkdir()
-    env = os.environ.copy()
-    env.update(
-        {
-            "HOME": str(tmp_path / "home"),
-            "SHIV_ROOT": str(tmp_path / "shiv"),
-            "PYTHONPATH": "",
-        }
-    )
-    env["PATH"] = "/usr/bin:/bin"
-    audit = textwrap.dedent(
-        """
-        import runpy
-        import sys
-
-        def reject_network(event, args):
-            if event in {"socket.connect", "socket.getaddrinfo"}:
-                raise RuntimeError(event)
-
-        sys.addaudithook(reject_network)
-        sys.argv = [sys.argv[1], "--help"]
-        runpy.run_path(sys.argv[0], run_name="__main__")
-        """
-    )
-    result = subprocess.run(
-        [sys.executable, "-I", "-c", audit, str(archive(staged, skill))],
-        cwd=cold,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = isolated_archive_run(staged, skill, ("--help",), tmp_path)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("skill", "command"),
+    COMMAND_HELP_CASES,
+)
+def test_archive_command_executes_help_in_isolation(
+    skill: str, command: str, staged: Path, tmp_path: Path
+) -> None:
+    result = isolated_archive_run(staged, skill, (command, "--help"), tmp_path)
+    if (skill, command) == ("mold", "review"):
+        assert result.returncode == 2
+        assert result.stderr == "usage: review {serve|publish|poll|close} [args...]\n"
+    else:
+        assert result.returncode == 0, f"{skill} {command}: {result.stderr}"
+
+
+def test_archive_fails_without_bundled_dependency(staged: Path, tmp_path: Path) -> None:
+    isolated = tmp_path / "missing-dependency"
+    broken = archive(isolated, "plate")
+    broken.parent.mkdir(parents=True)
+    with zipfile.ZipFile(archive(staged, "plate")) as source, zipfile.ZipFile(
+        broken, "w"
+    ) as target:
+        for member in source.infolist():
+            if not member.filename.startswith("site-packages/fromargs/"):
+                target.writestr(member, source.read(member))
+
+    result = isolated_archive_run(
+        isolated, "plate", ("validate-publication", "--help"), tmp_path
+    )
+    assert result.returncode != 0
+    assert "No module named 'fromargs'" in result.stderr
+
+
+def test_audited_runner_rejects_udp_socket_creation(tmp_path: Path) -> None:
+    isolated = tmp_path / "network-control"
+    target = archive(isolated, "plate")
+    target.parent.mkdir(parents=True)
+    with zipfile.ZipFile(target, "w") as bundle:
+        bundle.writestr(
+            "__main__.py",
+            "import socket\n\nsocket.socket(socket.AF_INET, socket.SOCK_DGRAM).close()\n",
+        )
+
+    result = isolated_archive_run(isolated, "plate", (), tmp_path)
+
+    assert result.returncode != 0
+    assert result.stderr.splitlines()[-1] == "RuntimeError: socket.__new__"
 
 
 def test_archive_shebang_executes_directly(staged: Path, tmp_path: Path) -> None:

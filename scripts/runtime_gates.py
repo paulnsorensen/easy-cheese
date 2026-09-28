@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
-"""Gate the checked-in runtime that wedge packages.
+"""Gate the checked-in runtime that Wedge packages.
 
-Three checks run before any skill archive is built or a lock is trusted:
+Three checks run before any committed skill archive executes:
 
-- every generated runtime source (phase registry, schema catalog, document
-  rules, bundle command index) is current with its compiler inputs;
+- every generated runtime source is current with its compiler inputs;
 - every skill's `COMMANDS` manifest agrees with its `@bundle_command` surface;
-- skill documents and sources name only their own launcher, and no checked-in
-  `.pyz` archive or `common.pyz` reference survives.
+- skill documents and sources name only their own archive and never an obsolete
+  extensionless launcher.
 
 `--write-generated` rewrites the generated sources instead of checking them.
-wedge (pinned under tools/wedge/) builds each archive from `src/` and verifies the
-committed locks; it does not run these gates, so `just test`, `just check`,
-and CI run this script beside `wedge check`.
+Wedge is pinned under tools/wedge and separately verifies committed archives.
 """
 
 from __future__ import annotations
@@ -264,7 +261,7 @@ _SELF_PATH = Path(__file__).resolve()
 
 
 def _owning_skill(path: Path) -> str | None:
-    """The skill whose launcher a file may name, or None if none applies."""
+    """Return the skill whose archive a file may name, if one applies."""
     parts = path.relative_to(REPO_ROOT).parts
     if parts[0] == "skills":
         return parts[1]
@@ -278,7 +275,7 @@ def _owning_skill(path: Path) -> str | None:
 def _reference_roots() -> list[Path]:
     return [
         *REPO_ROOT.glob("skills/**/*.md"),
-        # Runtime files, excluding binary archives and sidecar locks.
+        # Text runtime files; archives and metadata are not reference inputs.
         *(
             p
             for p in REPO_ROOT.glob("skills/*/scripts/*")
@@ -295,10 +292,7 @@ def _reference_roots() -> list[Path]:
 
 
 def check_skill_references() -> list[str]:
-    """Skill docs and sources may name only their own archive or launcher.
-
-    A file naming another skill's launcher or archive is either stale or a
-    cross-skill call. Shared and foreign archives remain prohibited."""
+    """Reject foreign archives and obsolete extensionless launchers."""
     violations: list[str] = []
     for path in sorted(set(_reference_roots())):
         skill = _owning_skill(path)

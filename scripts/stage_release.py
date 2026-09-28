@@ -87,9 +87,10 @@ def _verify(out: Path) -> None:
     }
     expected.add("skills/mold/scripts/mold.dot")
     actual = {
-        str(path.relative_to(out))
+        str(relative)
         for path in skills.rglob("*")
-        if path.is_file() and "scripts" in path.parts
+        if path.is_file()
+        and "scripts" in (relative := path.relative_to(out)).parts
     }
     unexpected = sorted(actual - expected)
     if unexpected:

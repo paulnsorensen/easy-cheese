@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 @pytest.fixture(scope="session")
 def bundle(skill_archive: Callable[[str], Path]) -> Path:
-    """The built pasteurize archive (see scripts/skill_archives.py)."""
+    """Return the committed pasteurize archive."""
     return skill_archive("pasteurize")
 
 

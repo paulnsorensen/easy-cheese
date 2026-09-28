@@ -22,9 +22,7 @@ from typing import Protocol, cast
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_ROOT / "scripts") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import skill_archives  # noqa: E402
+HARD_CHEESE_ARCHIVE = REPO_ROOT / "skills" / "hard-cheese" / "scripts" / "hard-cheese.pyz"
 
 
 class _FreshnessCheckModule(Protocol):
@@ -113,7 +111,7 @@ def _run_cli(repo: Path, slug: str, *extra: str) -> subprocess.CompletedProcess[
     return subprocess.run(
         [
             sys.executable,
-            str(skill_archives.archive_path("hard-cheese")),
+            str(HARD_CHEESE_ARCHIVE),
             "freshness-check",
             "--slug",
             slug,
@@ -267,7 +265,7 @@ class TestMalformedLog:
 class TestArgHandling:
     def test_missing_slug_exits_2(self, repo: Path) -> None:
         result = subprocess.run(
-            [sys.executable, str(skill_archives.archive_path("hard-cheese")), "freshness-check"],
+            [sys.executable, str(HARD_CHEESE_ARCHIVE), "freshness-check"],
             cwd=str(repo),
             capture_output=True,
             text=True,

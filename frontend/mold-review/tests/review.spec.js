@@ -5,8 +5,7 @@ import {dirname,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn,execFileSync} from 'node:child_process';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
-// The temporary mold archive: use the prebuilt cache when `just test` or CI exports EASY_CHEESE_PREBUILT_PYZ; otherwise build once here.
-const archive=execFileSync('python3',[join(root,'scripts/skill_archives.py'),'path','mold'],{cwd:root,encoding:'utf8'}).trim();
+const archive=join(root,'skills/mold/scripts/mold.pyz');
 async function server(){return serverAt(root);}
 async function serverAt(cwd){const state=await mkdtemp(join(tmpdir(),'mold-review-'));const input=join(state,'revision.json');await writeFile(input,JSON.stringify({questions:[{id:'q-layout',prompt:'Pick a layout',selection_mode:'single',recommended_option_id:'frontend',options:[{id:'frontend',label:'Frontend'},{id:'backend',label:'Backend'},{id:'hostile',label:'<script>window.__moldXss=1</script>'}]}]}));execFileSync('python3',[archive,'review','publish','--state-dir',state,'--input',input],{cwd});return start(state,cwd);}
 async function start(state,cwd=root){const child=spawn('python3',[archive,'review','serve','--state-dir',state,'--port','0'],{cwd,env:globalThis.process.env,stdio:['ignore','pipe','inherit']});const line=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('server did not start')),10000);child.stdout.once('data',d=>{clearTimeout(timer);resolve(JSON.parse(d.toString()))});});return {state,child,...line};}

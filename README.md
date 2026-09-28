@@ -54,7 +54,7 @@ Each `SKILL.md` is self-contained markdown with YAML frontmatter. There are no n
 
 Content shared _across_ skills lives in the `cheese` skill's `references/` directory (for example, `skills/cheese/references/handoff-gate.md`). Full installs include `cheese`. When you install one workflow skill, install `cheese` with it. Skills reference shared material by sibling-relative path (`../cheese/references/<file>.md` from a `SKILL.md`, `../../cheese/references/<file>.md` from a `references/*.md`) so links resolve in both the repository and an installed skills directory.
 
-A Python-backed skill ships exactly one executable archive at `skills/<skill>/scripts/<skill>`. Runtime source lives under `src/easy_cheese/`; Python source does not live under `skills/`. A skill that does not execute Python ships no archive.
+A Python-backed skill ships exactly one executable archive at `skills/<skill>/scripts/<skill>.pyz`. Runtime source lives under `src/easy_cheese/`; Python source does not live under `skills/`. A skill that does not execute Python ships no archive.
 
 ## Skills
 

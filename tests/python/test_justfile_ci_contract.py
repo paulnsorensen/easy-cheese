@@ -37,8 +37,8 @@ def test_check_and_ci_depend_on_dead_code() -> None:
 
 
 @needs_just
-def test_check_and_ci_verify_the_wedge_archives() -> None:
-    """Both aggregate recipes verify every committed skill archive."""
+def test_check_and_ci_do_not_repeat_wedge_check() -> None:
+    """The test recipe owns archive freshness before archive execution."""
     result = subprocess.run(
         ["just", "--dump", "--dump-format", "json"],
         cwd=ROOT,
@@ -48,22 +48,17 @@ def test_check_and_ci_verify_the_wedge_archives() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     recipes = cast(dict[str, object], json.loads(result.stdout)["recipes"])
-
-    def dependencies(name: str) -> set[str]:
+    for name in ("check", "ci"):
         recipe = cast(dict[str, object], recipes[name])
         deps = cast(list[dict[str, object]], recipe["dependencies"])
-        return {cast(str, dependency["recipe"]) for dependency in deps}
-
-    assert "wedge-check" in dependencies("check")
-    assert "wedge-check" in dependencies("ci")
+        dependencies = {cast(str, dependency["recipe"]) for dependency in deps}
+        assert "wedge-check" not in dependencies
+        assert "test" in dependencies
 
 
 @needs_just
-def test_test_recipe_gates_the_runtime_and_builds_archives_once() -> None:
-    """The test interpreter carries only the runtime closure; the recipe runs
-    the runtime gates, then builds every skill archive once through the pinned
-    wedge and exports the set for every suite (scripts/skill_archives.py).
-    """
+def test_test_recipe_gates_runtime_and_committed_archives_before_suites() -> None:
+    """The test recipe validates committed archives before executing them."""
     result = subprocess.run(
         ["just", "--dump", "--dump-format", "json"],
         cwd=ROOT,
@@ -82,10 +77,14 @@ def test_test_recipe_gates_the_runtime_and_builds_archives_once() -> None:
 
     justfile = (ROOT / "justfile").read_text(encoding="utf-8")
     gates = justfile.index("scripts/runtime_gates.py")
-    build = justfile.index('scripts/skill_archives.py build "$EASY_CHEESE_PREBUILT_PYZ"')
-    suites = justfile.index("-m pytest tests/python")
-    assert gates < build < suites
-    assert 'export EASY_CHEESE_PREBUILT_PYZ="$prebuilt_pyz_dir"' in justfile
+    freshness = justfile.index("just wedge-check")
+    python_suite = justfile.index("-m pytest tests/python")
+    browser_suite = justfile.index("just test-mold-review")
+    assert gates < freshness < min(python_suite, browser_suite)
+    assert "skill_archives.py" not in justfile
+    assert "EASY_CHEESE_PREBUILT_PYZ" not in justfile
+    assert "prebuilt_pyz_dir" not in justfile
+    assert '{{wedge}} bundle --root skills --check' in justfile
 
 
 def test_docs_workflow_matches_the_package_build_command() -> None:
@@ -121,39 +120,27 @@ def test_docs_workflow_matches_the_package_build_command() -> None:
     assert "refs/heads/main" in cast(str, deploy["if"])
 
 
-def test_validate_workflow_gates_the_runtime_and_builds_archives_once() -> None:
-    """validate.yml's test job runs the runtime gates, then builds every skill
-    archive once through the pinned wedge and exports the set before any
-    pytest suite executes a skill.
-    """
-    jobs = cast(
-        dict[str, object],
-        yaml.safe_load(
-            (ROOT / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
-        )["jobs"],
-    )
+def test_validate_workflow_gates_committed_archives_before_suites() -> None:
+    """validate.yml checks committed archives before executing them."""
+    workflow_path = ROOT / ".github" / "workflows" / "validate.yml"
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    workflow = cast(dict[str, object], yaml.safe_load(workflow_text))
+    jobs = cast(dict[str, object], workflow["jobs"])
     steps = cast(list[dict[str, object]], cast(dict[str, object], jobs["test"])["steps"])
     runs = [cast(str, step["run"]) for step in steps if "run" in step]
     gates = next(i for i, run in enumerate(runs) if "scripts/runtime_gates.py" in run)
-    build = next(i for i, run in enumerate(runs) if "scripts/skill_archives.py build" in run)
+    freshness = next(i for i, run in enumerate(runs) if "just wedge-check" in run)
     suites = [i for i, run in enumerate(runs) if "-m pytest" in run]
     assert suites
-    assert gates < build < min(suites)
-    assert 'EASY_CHEESE_PREBUILT_PYZ=$RUNNER_TEMP/archives" >> "$GITHUB_ENV"' in runs[build]
-
-
-def test_wedge_workflow_checks_archives_on_pull_requests_and_main() -> None:
-    """wedge.yml checks committed archives on pull requests and main pushes."""
-    workflow = (ROOT / ".github" / "workflows" / "wedge.yml").read_text(encoding="utf-8")
-    assert workflow.count("\non:") == 1
-    assert workflow.count("\npermissions:") == 1
-    assert "pull_request:" in workflow
-    assert "push:" in workflow
-    assert "branches: [main]" in workflow
-    assert "if: github.event_name" not in workflow
-    assert "name: check wedge archives" in workflow
-    assert "wedge bundle --root skills --check" in workflow
-    assert "publish" not in workflow
+    assert gates < freshness < min(suites)
+    assert workflow_text.count("\non:") == 1
+    assert "pull_request:" in workflow_text
+    assert "push:" in workflow_text
+    assert "branches: [main]" in workflow_text
+    assert workflow["permissions"] == {"contents": "read"}
+    assert "skill_archives.py" not in workflow_text
+    assert "EASY_CHEESE_PREBUILT_PYZ" not in workflow_text
+    assert not (ROOT / ".github" / "workflows" / "wedge.yml").exists()
 
 
 def test_ci_jobs_pin_tools() -> None:

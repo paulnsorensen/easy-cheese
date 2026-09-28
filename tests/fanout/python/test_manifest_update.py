@@ -16,9 +16,7 @@ import yaml
 from fromargs import CliError
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_ROOT / "scripts") not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import skill_archives  # noqa: E402
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 def _d(value: object) -> dict[str, object]:
@@ -100,7 +98,7 @@ def _write_fixture(tmp_path: Path) -> Path:
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(skill_archives.archive_path("cook")), "manifest_update", *args],
+        [sys.executable, str(COOK_ARCHIVE), "manifest_update", *args],
         capture_output=True,
         text=True,
     )
@@ -112,7 +110,7 @@ def _err(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
 
 def _validate(path: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(skill_archives.archive_path("cook")), "validate_manifest", str(path)],
+        [sys.executable, str(COOK_ARCHIVE), "validate_manifest", str(path)],
         capture_output=True,
         text=True,
     )
@@ -447,7 +445,7 @@ class TestConcurrentWrites:
     def test_parallel_updates_never_corrupt_file(self, tmp_path: Path) -> None:
         path = _write_fixture(tmp_path)
         n_curds = len(_curds())
-        bundle = str(skill_archives.archive_path("cook"))
+        bundle = str(COOK_ARCHIVE)
         jobs = [(bundle, str(path), i + 1) for i in range(n_curds)]
         # Repeat the volley to widen the race window.
         for _ in range(3):
@@ -486,7 +484,7 @@ class TestConcurrentWrites:
 
         # All jobs target distinct curd ids with the same manifest file — genuine
         # concurrent contention with no serialisation at the test level.
-        bundle = str(skill_archives.archive_path("cook"))
+        bundle = str(COOK_ARCHIVE)
         jobs = [(bundle, str(path), i + 1) for i in range(n)]
         with multiprocessing.Pool(processes=n) as pool:
             results = pool.map(_worker, jobs)

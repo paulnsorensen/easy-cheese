@@ -16,7 +16,7 @@ REFERENCES_DIR = UC_DIR / "references"
 
 @pytest.fixture(scope="session")
 def bundle(skill_archive: Callable[[str], Path]) -> Path:
-    """The built cook archive (see scripts/skill_archives.py)."""
+    """Return the committed cook archive."""
     return skill_archive("cook")
 
 

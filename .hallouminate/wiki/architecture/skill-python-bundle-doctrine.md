@@ -81,7 +81,8 @@ Selected source files and complete schema resources feed the build.
 No easy-cheese custom ZIP writer, import-closure walker, or runtime loader is required.[^4]
 
 `scripts/runtime_gates.py` checks generated sources, command surfaces, and skill-owned archive references.
-Tests inspect archive membership and run staged archives without repository imports.
+Tests execute committed archives after a Wedge freshness check.
+They inspect archive membership and run staged archives without repository imports.
 Release staging copies committed archives; it does not depend on a separate asset publication job.[^7]
 
 ## Command discovery and generated sources
@@ -114,9 +115,9 @@ The [Pyz bundling pipeline](./pyz-bundling-pipeline.md) records the current buil
 [^3]: pyproject.toml; src/easy_cheese/; src/easy_cheese_schemas/
 [^4]: skills/wedge.toml; skills/*/wedge.toml; tools/wedge/pyproject.toml
 [^5]: pyproject.toml; uv.lock; requirements/runtime.txt; tests/python/test_wedge_pin.py
-[^6]: justfile:`wedge-build`, `wedge-check`; .github/workflows/wedge.yml
-[^7]: scripts/runtime_gates.py; scripts/skill_archives.py; scripts/stage_release.py; tests/python/test_stage_release.py
+[^6]: justfile:`wedge-build`, `wedge-check`, `test`; .github/workflows/validate.yml
+[^7]: scripts/runtime_gates.py; tests/conftest.py; scripts/stage_release.py; tests/python/test_stage_release.py
 [^8]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py
 [^9]: https://github.com/paulnsorensen/easy-cheese/pull/729; https://github.com/paulnsorensen/easy-cheese/issues/732
 
-_Source: user-approved A correction to PR #729 · Updated: 2026-09-28 · Supersedes: proposed launcher-and-lock deployment and whole-runtime vendoring; the custom builder remains retired._
+_Source: user-approved A correction to PR #729 · Updated: 2026-09-28 · Supersedes: launcher-and-lock deployment, whole-runtime vendoring, and temporary test archives; the custom builder remains retired._

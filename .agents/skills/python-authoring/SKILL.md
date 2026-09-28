@@ -82,9 +82,8 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 
 - Test observable behavior and the reason it matters; do not add assertions that can pass when the implementation is broken.
 - Keep filesystem tests inside `tmp_path` or an equivalent temporary directory. Do not depend on user paths, repository-external state, network access, or auto-loaded pytest plugins.
-- For archive changes, exercise the built archive from `scripts/skill_archives.py` with repository imports unavailable; never run a test through the committed launcher.
-- Run the most focused affected tests first.
-- Run `just wedge-build` when archive inputs changed, and `just update-generated` when generated runtime sources changed.
+- Run the most focused affected tests first. Focused pytest and browser commands execute committed `skills/<skill>/scripts/<skill>.pyz` archives without rebuilding them. Keep repository imports unavailable when testing archive isolation.
+- After archive inputs change, run `just wedge-build`, then `just wedge-check` before focused tests execute an archive. Run `just update-generated` when generated runtime sources change.
 - Run `just check` as the final project gate.
 
 ## Completion check
@@ -94,7 +93,7 @@ Confirm:
 - Runtime imports obey the stdlib-first, surface-specific dependency policy.
 - Boundary input is validated once and converted into an appropriate trusted representation.
 - Code lives in the owning skill source or a justified shared module.
-- Command registration, generated runtime sources, and wedge locks match their sources when applicable (`scripts/runtime_gates.py`, `just wedge-check`).
+- Command registration, generated runtime sources, and committed archives match their inputs when applicable (`scripts/runtime_gates.py`, `just wedge-check`).
 - CLI and validator failures remain loud, read-only validators remain read-only, and tests are hermetic.
 - No silent failures, speculative abstractions, narration comments, unnecessary local annotations, or unrelated cleanup remain.
 - Changed Python files pass basedpyright with zero errors and warnings.

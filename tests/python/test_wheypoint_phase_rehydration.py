@@ -34,8 +34,6 @@ from tests.python.test_mold_cook_producer import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import skill_archives  # noqa: E402
 
 SLUG = "phase-rehydration-tracer"
 
@@ -60,7 +58,7 @@ def _run(
     return subprocess.run(
         [
             sys.executable,
-            str(skill_archives.archive_path(bundle)),
+            str(REPO_ROOT / "skills" / bundle / "scripts" / f"{bundle}.pyz"),
             *args,
         ],
         cwd=str(cwd),

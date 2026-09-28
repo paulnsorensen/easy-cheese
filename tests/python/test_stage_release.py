@@ -120,6 +120,12 @@ def test_verify_accepts_a_complete_tree(tmp_path: Path) -> None:
     stage_release._verify(_fake_tree(tmp_path / "tree"))  # pyright: ignore[reportPrivateUsage]
 
 
+def test_verify_accepts_output_beneath_scripts_ancestor(tmp_path: Path) -> None:
+    stage_release._verify(  # pyright: ignore[reportPrivateUsage]
+        _fake_tree(tmp_path / "scripts" / "tree")
+    )
+
+
 def test_relative_refs_resolve_in_staged_tree(staged: Path) -> None:
     """The sibling-skills-ship-wholesale layout means every relative markdown
     ref under skills/**/*.md must resolve from its own file's directory, with
@@ -164,8 +170,7 @@ def test_release_workflow_validates_staged_tree_after_transformations() -> None:
 
 
 def test_release_workflow_builds_nothing() -> None:
-    """Archives come from the wedge release the merge-to-main job fills, so the
-    tag workflow installs no build tooling and runs no build."""
+    """The tag workflow publishes committed archives without build tooling."""
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert "requirements-build.txt" not in workflow
     assert "build_pyz" not in workflow

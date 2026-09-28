@@ -97,3 +97,6 @@
 
 - 2026-09-28 · pr-729-direct-archives-a · merged · architecture/skill-python-bundle-doctrine.md, architecture/pyz-bundling-pipeline.md, tooling.md, architecture.md and deployment references · User-approved A keeps committed per-skill .pyz archives. Wedge is build-time only. Remove proposed loaders, sidecar locks, and first-run downloads. Issue #732 assesses release-only option B separately.
 
+
+- 2026-09-28 · 274eda970621f14a · merged · architecture/pyz-bundling-pipeline.md, architecture/skill-python-bundle-doctrine.md, tooling.md, red-gate-environment-gotchas.md · PR #729 ownership correction removes the temporary test-archive pipeline and duplicate workflow. Tests execute committed archives after Wedge checks freshness. Focused tests require an explicit rebuild after source changes.
+

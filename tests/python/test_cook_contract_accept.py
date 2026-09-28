@@ -36,8 +36,8 @@ from easy_cheese.skills.cook.contract_handlers import accept_main
 
 from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-import skill_archives  # noqa: E402
+ROOT = Path(__file__).resolve().parents[2]
+COOK_ARCHIVE = ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 def _write_ref(
@@ -230,7 +230,7 @@ def test_local_dialogue_requires_the_question_and_exact_response(
 def _run(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     _ = env.pop("PYTHONPATH", None)
-    archive = skill_archives.archive_path("cook")
+    archive = COOK_ARCHIVE
     return subprocess.run(
         [sys.executable, str(archive), *args],
         cwd=str(archive.parent if cwd is None else cwd),

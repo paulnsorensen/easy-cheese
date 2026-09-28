@@ -26,10 +26,9 @@ from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COOK_SKILL = REPO_ROOT / "skills" / "cook" / "SKILL.md"
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 QUALITY_GATES = REPO_ROOT / "skills" / "cook" / "references" / "quality-gates.md"
 MANIFEST_SCHEMA = REPO_ROOT / "skills" / "ultracook" / "references" / "manifest-schema.json"
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-import skill_archives  # noqa: E402
 
 
 def read(path: Path) -> str:
@@ -117,14 +116,14 @@ class TestBaselineCaptureExampleDispatches:
         )
 
     def test_documented_baseline_subcommand_actually_dispatches(self) -> None:
-        # Run the built cook archive (scripts/skill_archives.py)
+        # Run the committed cook archive
         # and invoke it exactly as the doc's example prescribes: subcommand
         # `baseline`, gate failures as JSON on stdin. If a future edit
         # unregisters baseline.py from the bundle (as it was before the
         # wiring commit landed), this fails instead of the doc silently
         # documenting a dead command.
 
-        bundle = skill_archives.archive_path("cook")
+        bundle = COOK_ARCHIVE
         payload = {
             "baseline": [{"suite": "unit", "test_id": "test_a", "signature": "boom"}],
             "current": [{"suite": "unit", "test_id": "test_a", "signature": "boom"}],
@@ -207,7 +206,7 @@ class TestCookWorktreeSubcommandDispatches:
         )
 
     def test_cook_worktree_create_actually_dispatches(self, tmp_path: Path) -> None:
-        # Run the built cook archive (scripts/skill_archives.py) and
+        # Run the committed cook archive and
         # invoke `worktree create` exactly as the doc's example prescribes.
         # If cook's SKILLS registry doesn't wire the shared worktree.py module
         # in, this fails instead of the doc silently documenting a dead command.
@@ -223,7 +222,7 @@ class TestCookWorktreeSubcommandDispatches:
         _ = sp.run(["git", "-C", str(repo), "add", "-A"], check=True)
         _ = sp.run(["git", "-C", str(repo), "commit", "-q", "-m", "init"], check=True)
 
-        bundle = skill_archives.archive_path("cook")
+        bundle = COOK_ARCHIVE
         result = sp.run(
             [sys.executable, str(bundle), "worktree", "create", "--slug", "repair-x", "--base", "main", "--repo", str(repo)],
             capture_output=True,
