@@ -76,6 +76,40 @@ def _turns(argv: list[str]) -> int:
     return wheypoint.main(["turns", *argv])
 
 
+@bundle_command("fork")
+def _fork(argv: list[str]) -> int:
+    from easy_cheese.cli import wheypoint
+
+    return wheypoint.main(["fork", *argv])
+
+
+@bundle_command("link")
+def _link(argv: list[str]) -> int:
+    from easy_cheese.cli import wheypoint
+
+    return wheypoint.main(["link", *argv])
+
+
+@bundle_command("unlink")
+def _unlink(argv: list[str]) -> int:
+    from easy_cheese.cli import wheypoint
+
+    return wheypoint.main(["unlink", *argv])
+
+
+@bundle_command("shape")
+def _shape(argv: list[str]) -> int:
+    from easy_cheese.cli import wheypoint
+
+    return wheypoint.main(["shape", *argv])
+
+
+@bundle_command("backlinks")
+def _backlinks(argv: list[str]) -> int:
+    from easy_cheese.cli import wheypoint
+
+    return wheypoint.main(["backlinks", *argv])
+
 @bundle_command("handoff")
 def _handoff(argv: list[str]) -> int:
     from easy_cheese.shared.handoff import main
@@ -93,6 +127,11 @@ COMMANDS = (
     derive_command(_list, "List and search work items and notes across worktrees"),
     derive_command(_log, "Walk the revisions of one work id, oldest first"),
     derive_command(_turns, "Print the user's own turns from a session transcript"),
+    derive_command(_fork, "Fork a child record from a parent; only the child is written"),
+    derive_command(_link, "Add one typed edge from a record to a work item or document"),
+    derive_command(_unlink, "Remove the edge a record holds to a ref under one kind"),
+    derive_command(_shape, "Print the work graph as JSON, with a Graphviz string in dot"),
+    derive_command(_backlinks, "List every record whose edges or links name a ref"),
     derive_command(
         _handoff,
         "Render, parse, and dispatch-split handoff preambles",

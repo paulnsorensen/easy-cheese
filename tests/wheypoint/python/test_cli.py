@@ -613,7 +613,7 @@ def test_every_reply_is_one_document_of_indented_json() -> None:
     assert json.dumps(payload, indent=2) + "\n" == text
 
 
-def test_the_command_surface_is_exactly_nine_commands() -> None:
+def test_the_command_surface_is_exactly_fourteen_commands() -> None:
     assert wheypoint.COMMANDS == (
         "checkpoint",
         "validate",
@@ -624,6 +624,11 @@ def test_the_command_surface_is_exactly_nine_commands() -> None:
         "list",
         "log",
         "turns",
+        "fork",
+        "link",
+        "unlink",
+        "shape",
+        "backlinks",
     )
     assert "commit" not in wheypoint.COMMANDS and "create" not in wheypoint.COMMANDS
 
@@ -942,6 +947,11 @@ def test_ac10_commit_is_no_longer_a_listed_command() -> None:
         "list",
         "log",
         "turns",
+        "fork",
+        "link",
+        "unlink",
+        "shape",
+        "backlinks",
         "handoff",
     ]
 
@@ -1994,3 +2004,331 @@ def test_resolve_miss_lists_close_suggestions() -> None:
     assert status == 0
     assert payload["outcome"] == "not-found"
     assert WORK_ID in cast(list[str], payload["suggestions"])
+
+
+# --------------------------------------------------------------------------
+# Work graph surface (spec wheypoint-work-graph, curd surface).
+# --------------------------------------------------------------------------
+
+PROJECT = "paulnsorensen-easy-cheese"
+OTHER = "other-work"
+OTHER_REF = f"wheypoint:{PROJECT}/{OTHER}"
+# A gating entry needs a dossier fork on the record before it can commit.
+DOSSIER = [
+    {
+        "fork": "Store backing",
+        "options": [{"option": "local", "evidence": ["no git"], "breaks": "nothing"}],
+        "prior_leaning": "local",
+    }
+]
+
+
+def _seed(work_id: str = WORK_ID, **fields: object) -> dict[str, object]:
+    """A genesis checkpoint with a fixed clock and a title unique to `work_id`."""
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            work_id=work_id, orientation=f"Work {work_id}.\nSeeded.", **fields
+        ),
+    )
+    assert status == 0, payload
+    return payload
+
+
+def _edge_pairs(items: object) -> list[tuple[str, str]]:
+    return [
+        (cast(str, edge["to"]), cast(str, edge["kind"]))
+        for edge in cast(list[dict[str, object]], items)
+    ]
+
+
+def _hit_keys(payload: dict[str, object]) -> set[tuple[str, str]]:
+    return {
+        (cast(str, item["project"]), cast(str, item["ref"]))
+        for item in cast(list[dict[str, object]], payload["items"])
+    }
+
+
+def test_ac4_fork_writes_only_the_child_genesis(corpus_root: Path) -> None:
+    seeded = _seed(
+        entries=[
+            {"kind": "question", "summary": "Which store backs forks?"},
+            {"kind": "directive", "summary": "Keep forks small.", "quote": "small"},
+        ]
+    )
+    record = cast(dict[str, object], seeded["record"])
+    question = cast(list[dict[str, str]], record["questions"])[0]["entry_id"]
+    directive = cast(list[dict[str, str]], record["directives"])[0]["entry_id"]
+    parent_revision = cast(str, seeded["revision_id"])
+    parent = storage.WorkStore.open(WORK_ID, corpus_root=corpus_root)
+    parent_bytes = parent.record_path.read_bytes()
+
+    status, payload = _run(
+        "fork",
+        WORK_ID,
+        "child-work",
+        "--move",
+        question,
+        "--copy",
+        directive,
+        "--orientation",
+        "Child work.\nSplit off the parent.",
+    )
+
+    assert status == 0, payload
+    assert payload["command"] == "fork"
+    assert (payload["work_id"], payload["revision_number"]) == ("child-work", 1)
+    child = storage.WorkStore.open("child-work", corpus_root=corpus_root)
+    assert [r.revision_id for r in child.receipt_revisions()] == [payload["revision_id"]]
+    origins = cast(dict[str, str], payload["origins"])
+    assert sorted(ref.rpartition("#")[2] for ref in origins.values()) == sorted(
+        [question, directive]
+    )
+    assert all(
+        ref.startswith("wheypoint:") and f"@{parent_revision}#" in ref
+        for ref in origins.values()
+    )
+    forked_from = [
+        to for to, kind in _edge_pairs(payload["edges"]) if kind == "forked_from"
+    ]
+    assert len(forked_from) == 1
+    assert forked_from[0].endswith(f"{WORK_ID}@{parent_revision}")
+    assert parent.record_path.read_bytes() == parent_bytes
+    assert len(parent.receipt_revisions()) == 1
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac4_fork_refusals_surface_their_own_code() -> None:
+    _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
+
+    status, payload = _run("fork", "no-such-work", "child", "--orientation", "C.")
+    assert (status, _error(payload)[0]) == (1, "unknown-parent")
+
+    status, payload = _run(
+        "fork", WORK_ID, "child", "--move", "q-missing", "--orientation", "C."
+    )
+    assert (status, _error(payload)[0]) == (1, "unknown-entry")
+
+    assert _run("fork", WORK_ID, "child", "--orientation", "C.")[0] == 0
+    status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
+    assert (status, _error(payload)[0]) == (1, "fork-exists")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac8_link_is_pending_on_the_target_until_its_next_checkpoint() -> None:
+    _ = _seed()
+    _ = _seed(OTHER)
+
+    status, payload = _run("link", WORK_ID, OTHER_REF, "--kind", "relates_to")
+    assert status == 0, payload
+    assert payload["revision_number"] == 2
+    assert [kind for _, kind in _edge_pairs(payload["applied_edges"])] == ["relates_to"]
+    assert _edge_pairs(payload["applied_edges"])[0][0].startswith(OTHER_REF)
+
+    status, shown = _run("show", OTHER)
+    assert status == 0
+    pending = cast(list[dict[str, object]], shown["pending"])
+    assert [(item["kind"], cast(str, item["source"]).endswith(WORK_ID)) for item in pending] == [
+        ("relates_to", True)
+    ]
+
+    status, receipt = _run("checkpoint", stdin=json.dumps({"work_id": OTHER, "notes": "Next."}))
+    assert status == 0, receipt
+    applied = _edge_pairs(receipt["applied_edges"])
+    assert [(to.startswith(f"wheypoint:{PROJECT}/{WORK_ID}"), kind) for to, kind in applied] == [
+        (True, "relates_to")
+    ]
+    assert _run("show", OTHER)[1]["pending"] == []
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac9_unlink_removes_the_edge_by_target_and_kind() -> None:
+    _ = _seed()
+    _ = _seed(OTHER)
+    assert _run("link", WORK_ID, OTHER_REF, "--kind", "informs")[0] == 0
+
+    status, payload = _run("unlink", WORK_ID, OTHER_REF, "--kind", "informs")
+    assert status == 0, payload
+    assert [kind for _, kind in _edge_pairs(payload["removed_edges"])] == ["informs"]
+    assert cast(dict[str, object], payload["record"]).get("edges", []) == []
+
+    status, payload = _run("unlink", WORK_ID, OTHER_REF, "--kind", "informs")
+    assert (status, _error(payload)[0]) == (1, "unknown-edge")
+
+
+def test_ac10_shape_returns_nodes_edges_dot_and_dangling(corpus_root: Path) -> None:
+    for work_id in (WORK_ID, OTHER, "third-work"):
+        _ = _seed(work_id)
+    # `other-work` links first: a later commit on it would apply the reciprocal
+    # of `work-0001`'s link and make a third held edge.
+    assert _run("link", OTHER, f"wheypoint:{PROJECT}/third-work", "--kind", "blocked_by")[0] == 0
+    assert _run("link", WORK_ID, OTHER_REF, "--kind", "relates_to")[0] == 0
+
+    status, payload = _run("shape", "--scope", "project")
+    assert status == 0, payload
+    assert len(cast(list[object], payload["nodes"])) == 3
+    edges = cast(list[dict[str, object]], payload["edges"])
+    assert sorted((cast(str, e["from"]).rpartition("/")[2], e["kind"]) for e in edges) == [
+        (OTHER, "blocked_by"),
+        (WORK_ID, "relates_to"),
+    ]
+    assert payload["dangling"] == []
+    dot = cast(str, payload["dot"])
+    assert dot == _run("shape", "--scope", "project")[1]["dot"]
+    if shutil.which("dot"):
+        rendered = subprocess.run(
+            ["dot", "-Tsvg"], input=dot, capture_output=True, text=True, check=False
+        )
+        assert rendered.returncode == 0, rendered.stderr
+
+    shutil.rmtree(storage.WorkStore.open("third-work", corpus_root=corpus_root).record_path.parent)
+    status, payload = _run("shape", "--scope", "project")
+    assert status == 0, payload
+    assert [e["kind"] for e in cast(list[dict[str, object]], payload["dangling"])] == [
+        "blocked_by"
+    ]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac12_list_linked_to_and_backlinks_return_the_same_records() -> None:
+    for work_id in (WORK_ID, OTHER, "third-work"):
+        _ = _seed(work_id)
+    assert _run("link", WORK_ID, OTHER_REF, "--kind", "relates_to")[0] == 0
+    assert _run("link", "third-work", OTHER_REF, "--kind", "informs")[0] == 0
+
+    status, listed = _run("list", "--linked-to", OTHER_REF)
+    assert status == 0, listed
+    status, back = _run("backlinks", OTHER_REF)
+    assert status == 0, back
+    assert _hit_keys(listed) == _hit_keys(back) == {(PROJECT, WORK_ID), (PROJECT, "third-work")}
+    item = next(
+        i for i in cast(list[dict[str, object]], back["items"]) if i["ref"] == WORK_ID
+    )
+    assert [pair[0] for pair in cast(list[list[str]], item["edges_out"])] == ["relates_to"]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac13_list_filters_gated_records_by_entry_kind_and_state() -> None:
+    _ = _seed(entries=[{"kind": "question", "summary": "Open but not gating?"}])
+    _ = _seed(OTHER, decision_dossier=DOSSIER)
+    status, gated = _run("checkpoint", "--work-id", OTHER, "--question", "Gate?", "--gates")
+    assert status == 0, gated
+
+    status, payload = _run(
+        "list", "--entry-kind", "question", "--entry-state", "active", "--gated"
+    )
+    assert status == 0, payload
+    items = cast(list[dict[str, object]], payload["items"])
+    assert [item["ref"] for item in items] == [OTHER]
+    assert items[0]["gates"] == gated["derived_entry_ids"]
+
+
+def test_ac14_checkpoint_flags_commit_the_same_revision_as_the_intent_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", PROJECT)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "flags"))
+    _ = _seed(decision_dossier=DOSSIER)
+    status, by_flags = _run(
+        "checkpoint",
+        "--work-id",
+        WORK_ID,
+        "--question",
+        "Q",
+        "--gates",
+        "--directive",
+        "D",
+        "--quote",
+        "d",
+    )
+    assert status == 0, by_flags
+
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "file"))
+    _ = _seed(decision_dossier=DOSSIER)
+    intent = tmp_path / "intent.json"
+    _ = intent.write_text(
+        _intent_json(
+            entries=[
+                {"kind": "question", "summary": "Q", "blocks_continuation": True},
+                {"kind": "directive", "summary": "D", "quote": "d"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    status, by_file = _run("checkpoint", str(intent))
+    assert status == 0, by_file
+
+    assert by_flags["revision_id"] == by_file["revision_id"]
+    assert by_flags["revision"] == by_file["revision"]
+    added = cast(list[dict[str, str]], _get(by_flags, "revision", "applied_additions"))
+    assert by_flags["derived_entry_ids"] == [entry["entry_id"] for entry in added]
+    assert len(added) == 2
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac14_validate_accepts_the_same_flags_and_names_pairing_errors() -> None:
+    status, payload = _run("validate", "--work-id", WORK_ID, "--directive", "D", "--quote", "d")
+    assert (status, payload["valid"]) == (0, True)
+
+    status, payload = _run("validate", "--work-id", WORK_ID, "--directive", "D")
+    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+
+
+def test_ac17_a_milknado_checkpoints_edge_binds_only_when_milknado_is_present(
+    tmp_path: Path, corpus_root: Path
+) -> None:
+    del corpus_root
+    _ = _seed()
+    before = _run("resolve", WORK_ID)[1]
+    node = f"milknado:{PROJECT}/node-7"
+
+    status, payload = _run("link", WORK_ID, node, "--kind", "checkpoints")
+    assert status == 0, payload
+
+    status, inactive = _run("resolve", WORK_ID)
+    assert status == 0, inactive
+    assert _get(inactive, "bridge", "state") == "bridge-inactive"
+    assert (inactive["outcome"], inactive["dispatchable"]) == (
+        before["outcome"],
+        before["dispatchable"],
+    )
+
+    (tmp_path / ".milknado").mkdir()
+    status, bound = _run("resolve", WORK_ID)
+    assert status == 0, bound
+    assert _get(bound, "bridge") == {
+        "state": "bound",
+        "node_ref": node,
+        "wheypoint_ref": f"wheypoint:{PROJECT}/{WORK_ID}",
+    }
+    assert bound["dispatchable"] == before["dispatchable"]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_graph_an_unpinnable_link_that_covers_entries_is_refused() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "S.", "rationale": "R."}])
+    decision = cast(list[dict[str, str]], _get(seeded, "record", "decisions"))[0]["entry_id"]
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_intent_json(
+            artifact_links=[
+                {"path": "example.com", "ref": "https://example.com", "covers_entry_ids": [decision]}
+            ]
+        ),
+    )
+    assert (status, _error(payload)[0]) == (1, "unpinnable-scheme")
+
+    status, payload = _run(
+        "link", WORK_ID, "https://example.com", "--kind", "informs", "--covers", decision
+    )
+    assert (status, _error(payload)[0]) == (1, "unpinnable-scheme")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_graph_show_reports_bridge_and_an_empty_pending_list() -> None:
+    _ = _seed()
+    status, payload = _run("show", WORK_ID)
+    assert status == 0
+    assert payload["pending"] == []
+    assert _get(payload, "bridge", "state") == "unbound"

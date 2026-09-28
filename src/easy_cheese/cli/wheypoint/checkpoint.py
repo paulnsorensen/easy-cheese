@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TextIO, cast
 
@@ -28,9 +29,86 @@ from easy_cheese.shared import paths
 from easy_cheese.shared.wheypoint import canonical
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
 from easy_cheese.shared.wheypoint import commit as commit_mod
+from easy_cheese.shared.wheypoint import fork as fork_mod
+from easy_cheese.shared.wheypoint import intent_flags
 from easy_cheese.shared.wheypoint import legacy as legacy_mod
 from easy_cheese.shared.wheypoint import records
 from easy_cheese.shared.wheypoint import storage
+
+# A kernel refusal that names its own code: `<word>-<word>...: <message>`.
+_CODED_REFUSAL = re.compile(r"[a-z]+(?:-[a-z]+)+: ")
+
+
+@define(frozen=True, kw_only=True)
+class IntentFlags:
+    """The `checkpoint` and `validate` flags that build or overlay an intent (G7)."""
+
+    work_id: str | None = None
+    question: Sequence[str] = ()
+    blocker: Sequence[str] = ()
+    gates: bool = False
+    decision: Sequence[str] = ()
+    rationale: Sequence[str] = ()
+    directive: Sequence[str] = ()
+    quote: Sequence[str] = ()
+    resolve: Sequence[str] = ()
+    withdraw: Sequence[str] = ()
+    orientation: str | None = None
+    next: str | None = None
+    artifact: str | None = None
+    context: Sequence[str] = ()
+    notes_file: str | None = None
+    link: Sequence[str] = ()
+    kind: Sequence[str] = ()
+    covers: Sequence[str] = ()
+
+    def given(self) -> bool:
+        return self != IntentFlags()
+
+    def apply(self, payload: object) -> dict[str, object]:
+        """`payload` with the flags overlaid by the kernel's one builder."""
+        if not isinstance(payload, dict):
+            raise fromargs.CliError(
+                "invalid-intent: flags overlay a JSON object intent, not "
+                + f"{type(payload).__name__}",
+                exit_code=1,
+            )
+        try:
+            return intent_flags.overlay(
+                cast(dict[str, object], payload),
+                work_id=self.work_id,
+                question=self.question,
+                blocker=self.blocker,
+                gates=self.gates,
+                decision=self.decision,
+                rationale=self.rationale,
+                directive=self.directive,
+                quote=self.quote,
+                resolve=self.resolve,
+                withdraw=self.withdraw,
+                orientation=self.orientation,
+                next=self.next,
+                artifact=self.artifact,
+                context=self.context,
+                notes=read_notes_file(self.notes_file),
+                link=self.link,
+                kind=self.kind,
+                covers=self.covers,
+            )
+        except intent_flags.IntentFlagError as exc:
+            raise refusal_for(exc) from exc
+
+
+def read_notes_file(path_arg: str | None) -> str | None:
+    """The text of `--notes-file`, or None when the flag is absent."""
+    if path_arg is None:
+        return None
+    try:
+        return Path(path_arg).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise fromargs.CliError(
+            f"notes-unreadable: {path_arg}: {exc}", exit_code=1
+        ) from exc
 
 
 @define(frozen=True)
@@ -69,8 +147,17 @@ def read_payload(stdin: TextIO) -> object:
         ) from exc
 
 
-def read_intent(intent_arg: str | None, stdin: TextIO) -> object:
-    """The JSON intent from a path argument, `-`, or stdin when neither (G6)."""
+def read_intent(
+    intent_arg: str | None, stdin: TextIO, flags: IntentFlags | None = None
+) -> object:
+    """The JSON intent from a path argument, `-`, or stdin when neither (G6).
+
+    Flags overlay that intent; flags with no intent argument start from an
+    empty intent rather than waiting on stdin (G7).
+    """
+    if flags is not None and flags.given():
+        base: object = {} if intent_arg is None else read_intent(intent_arg, stdin)
+        return flags.apply(base)
     if intent_arg is None or intent_arg == "-":
         return read_payload(stdin)
     path = Path(intent_arg)
@@ -102,6 +189,7 @@ def run_checkpoint(
     compacted: str | None,
     note_dir: str | None,
     no_note: bool,
+    flags: IntentFlags | None = None,
 ) -> dict[str, object]:
     """A semantic intent, bound to the current record and committed.
 
@@ -109,7 +197,22 @@ def run_checkpoint(
     re-checks the parent under the lock and refuses a delta whose record has
     moved on. This command shortens the authoring, not the checking.
     """
-    payload = read_intent(intent_arg, stdin)
+    return commit_intent(
+        read_intent(intent_arg, stdin, flags),
+        compacted=compacted,
+        note_dir=note_dir,
+        no_note=no_note,
+    )
+
+
+def commit_intent(
+    payload: object,
+    *,
+    compacted: str | None = None,
+    note_dir: str | None = None,
+    no_note: bool = False,
+) -> dict[str, object]:
+    """Structure, bind, and commit one intent payload; the one write path."""
     reserved = checkpoint_mod.commit_only_fields(payload)
     if reserved:
         raise fromargs.CliError(
@@ -192,13 +295,21 @@ def _compaction_proof(path_arg: str | None) -> CompactionRecord | None:
         raise fromargs.CliError(f"invalid-compaction-proof: {exc}", exit_code=1) from exc
 
 
-def _refusal_for(exc: Exception) -> fromargs.CliError:
-    """The one mapping from a kernel/storage error to a reply code, both paths."""
+def refusal_for(exc: Exception) -> fromargs.CliError:
+    """The one mapping from a kernel/storage error to a reply code, every path.
+
+    A fork, flag, or commit refusal whose message starts with its own code
+    surfaces that code; any other commit refusal is `commit-refused`.
+    """
     if isinstance(exc, commit_mod.GenesisConflictError):
         return fromargs.CliError(f"genesis-conflict: {exc}", exit_code=1)
     if isinstance(exc, commit_mod.StaleParentError):
         return fromargs.CliError(f"stale-parent: {exc}", exit_code=1)
-    if isinstance(exc, commit_mod.CommitError):
+    if isinstance(
+        exc, (commit_mod.CommitError, fork_mod.ForkError, intent_flags.IntentFlagError)
+    ):
+        if _CODED_REFUSAL.match(str(exc)):
+            return fromargs.CliError(str(exc), exit_code=1)
         return fromargs.CliError(f"commit-refused: {exc}", exit_code=1)
     return fromargs.CliError(f"storage-error: {exc}", exit_code=1)
 
@@ -218,8 +329,8 @@ def _promote(
                 durability=Durability.CANONICAL_LOCAL,
             )
         except (commit_mod.CommitError, storage.StorageError) as exc:
-            raise _refusal_for(exc) from exc
-        return _result_payload(result, None)
+            raise refusal_for(exc) from exc
+        return result_payload(result, None)
 
     try:
         note_dir.mkdir(parents=True, exist_ok=True)
@@ -250,7 +361,7 @@ def _promote(
                 )
             resume_target = note_dir / pending.target
             result = _resume_mirror(store, revision.revision_id, resume_target, pending)
-            return _result_payload(result, str(resume_target))
+            return result_payload(result, str(resume_target))
         try:
             store.remove_pending(request_identity)
         except OSError as exc:
@@ -281,9 +392,9 @@ def _promote(
         raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         _drop_uncommitted_pending(store, pending)
-        raise _refusal_for(exc) from exc
+        raise refusal_for(exc) from exc
     _clear_pending(store, request_identity)
-    return _result_payload(result, str(target))
+    return result_payload(result, str(target))
 
 
 def _mirror_finalizer(
@@ -397,14 +508,16 @@ def _resume_mirror(
     except _MirrorError as exc:
         raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
-        raise _refusal_for(exc) from exc
+        raise refusal_for(exc) from exc
     _clear_pending(store, pending.request_identity)
     return result
 
 
-def _result_payload(
+def result_payload(
     result: commit_mod.CommitResult, note_path: str | None
 ) -> dict[str, object]:
+    """The commit reply every write verb shares, with each derived id named."""
+    revision = result.revision
     return {
         "note_path": note_path,
         "replayed": result.replayed,
@@ -418,4 +531,10 @@ def _result_payload(
         "record": records.unstructure(result.record),
         "revision": records.unstructure(result.revision),
         "markdown": result.markdown,
+        "derived_entry_ids": [entry.entry_id for entry in revision.applied_additions],
+        "applied_transitions": [
+            records.unstructure(item) for item in revision.applied_transitions
+        ],
+        "applied_edges": [records.unstructure(edge) for edge in revision.applied_edges],
+        "removed_edges": [records.unstructure(key) for key in revision.removed_edges],
     }
