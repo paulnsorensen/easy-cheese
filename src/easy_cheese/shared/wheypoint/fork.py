@@ -33,7 +33,11 @@ from easy_cheese_schemas import (
     WheypointDelta,
     WheypointRecord,
 )
-from easy_cheese_schemas.contracts import EdgeKind, WorkEdge
+from easy_cheese_schemas.contracts import (
+    _MAX_ITEMS,  # pyright: ignore[reportPrivateUsage]
+    EdgeKind,
+    WorkEdge,
+)
 
 from . import commit, edges, records, storage
 from .fork_reconcile import FORK_RATIONALE_LIMIT, fork_rationale, pending_forks
@@ -87,12 +91,11 @@ def fork(
         copy = [e.entry_id for e in active if e.kind not in _MOVED_BY_DEFAULT]
         if not dossier:
             dossier = [item.fork for item in source.decision_dossier]
+    forks_pending = pending_forks(
+        source, siblings=edges.sibling_records(corpus_root, work_id=parent)
+    )
     taken = {
-        parent_id: item.child_ref
-        for item in pending_forks(
-            source, siblings=edges.sibling_records(corpus_root, work_id=parent)
-        )
-        for parent_id, _ in item.moved
+        parent_id: item.child_ref for item in forks_pending for parent_id, _ in item.moved
     }
     for entry_id in move:
         if entry_id in taken:
@@ -100,6 +103,10 @@ def fork(
                 f"already-forked: entry {entry_id!r} moves to {taken[entry_id]} "
                 + "at the parent's next checkpoint"
             )
+    pending_copies: dict[str, int] = {}
+    for item in forks_pending:
+        for parent_id, _ in item.copied:
+            pending_copies[parent_id] = pending_copies.get(parent_id, 0) + 1
     titles = list(dict.fromkeys(dossier))
     link_refs = list(dict.fromkeys(_normalized(ref) for ref in links))
     for text in [*titles, *link_refs]:
@@ -124,6 +131,16 @@ def fork(
     selected = _selected(source, [*move, *copy])
     if not selected:
         raise ForkError(f"fork-empty: work {parent!r} has no entry to move or copy")
+    by_id = {entry.entry_id: entry for entry in selected}
+    for entry_id in dict.fromkeys(copy):
+        entry = by_id[entry_id]
+        incoming = pending_copies.get(entry_id, 0) + 1
+        if len(entry.copies) + incoming > _MAX_ITEMS:
+            raise ForkError(
+                f"copy-overflow: entry {entry_id!r} already carries "
+                + f"{len(entry.copies)} of {_MAX_ITEMS} allowed copies; this fork "
+                + "would add to the pending forks the parent has not reconciled yet"
+            )
     gates = [e.entry_id for e in selected if e.entry_id in source.gating_entry_ids]
     if gates and not titles:
         raise ForkError(

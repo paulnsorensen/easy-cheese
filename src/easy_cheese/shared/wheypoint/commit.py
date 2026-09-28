@@ -878,7 +878,14 @@ def _apply(
 
 
 def _copied(entry: ProtectedEntry, refs: tuple[str, ...]) -> ProtectedEntry:
-    return evolve(entry, copies=entry.copies + refs) if refs else entry
+    if not refs:
+        return entry
+    try:
+        return evolve(entry, copies=entry.copies + refs)
+    except ValueError as exc:
+        raise CommitError(
+            f"a pending fork cannot add to entry {entry.entry_id!r}'s copies: {exc}"
+        ) from exc
 
 
 def _forked_away(
