@@ -9,19 +9,19 @@ The mold spec format was prose-template-only; nothing mechanically checked front
 
 ## Decision
 
-Declare the spec format as decorator-marked models (`@document_contract`, extending the existing `@contract` pattern at `contracts.py:40-86`). A build-only compiler projects them into a generated dependency-free `_document_rules.py` staged into `mold.pyz`, consumed by a hand-rolled `validate-spec` subcommand with SAP posture: lenient syntax repair (heading case/punctuation, table whitespace, fence dialects), strict semantic rejection (AC coverage exactly-once, tracer/matrix cell rules, gate-applicability coherence) with accumulated `ERROR:` lines. The validator blocks curdle via a new handshake checklist item derived by `COHERENCE_GATES`/`gate_id()` into the `spec-format-valid` gate node. Applying SAP to file artifacts has no external precedent — it is this repo's deliberate extrapolation.
+Declare the spec format as decorator-marked models (`@document_contract`, extending the existing `@contract` pattern at `contracts.py:40-86`). A build-only compiler projects them into a generated dependency-free `_document_rules.py` staged into the mold archive, consumed by a hand-rolled `validate-spec` subcommand with SAP posture: lenient syntax repair (heading case/punctuation, table whitespace, fence dialects), strict semantic rejection (AC coverage exactly-once, tracer/matrix cell rules, gate-applicability coherence) with accumulated `ERROR:` lines. The validator blocks curdle via a new handshake checklist item derived by `COHERENCE_GATES`/`gate_id()` into the `spec-format-valid` gate node. Applying SAP to file artifacts has no external precedent — it is this repo's deliberate extrapolation.
 
 ## Alternatives
 
 - **mdschema (Go)** — rejected: declarative shape only, cannot express conditional cross-field contract rules or fenced-block content schemas; adds a Go toolchain dependency.
 - **PyMarkdown custom rules** — rejected: same effort as hand-rolling behind a plugin API, plus a dependency.
 - **Vendoring BAML's jsonish** — rejected: not exposed as a standalone library (BoundaryML/baml issue #998).
-- **Vendoring attrs into mold.pyz** — rejected in favor of the dependency-free generated rules module, mirroring `_schema_catalog.py`. Superseded in part — see the amendment below.
+- **Vendoring attrs into the mold archive** — rejected in favor of the dependency-free generated rules module, mirroring `_schema_catalog.py`. Superseded in part — see the amendment below.
 
 ## Amendment (2026-08-30): schemas-package seam for the spec-format policy
 
 **Status:** superseded in part (2026-08-30). The Decision above stands; the
-fourth Alternative — "Vendoring attrs into mold.pyz — rejected" — no longer
+fourth Alternative — "Vendoring attrs into the mold archive — rejected" — no longer
 governs where the *acceptance policy* lives.
 
 v0.13-era specs must stay readable forever, so `validate-spec` gained a
@@ -38,7 +38,7 @@ Rationale for accepting that cost:
   attrs-backed models. The validator adds no new dependency to any archive.
 - **Channel portability is the point.** The read-side legacy grace has to hold
   identically for every release channel that reads a spec, not just for
-  `mold.pyz`. Putting the policy in the published schemas package makes every
+  the mold archive. Putting the policy in the published schemas package makes every
   channel inherit one definition of "what a legacy spec is" instead of
   re-deriving it.
 - **Measured cost:** ~124 ms of import time on a `validate-spec` invocation.

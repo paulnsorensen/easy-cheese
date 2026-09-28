@@ -356,7 +356,7 @@ ec_install_mcp_hallouminate() {
 # runs once against a single resolved harness, not once per harness. Never
 # aborts the installer -- resolution or registration failures are warnings.
 ec_setup_cheese_corpus() {
-    local harnesses="$1" gh="${EC_GH:-gh}" harness pyz_dir bundle
+    local harnesses="$1" gh="${EC_GH:-gh}" harness skill_dir launcher
     if ! ec_cmd_exists "$gh"; then
         ec_warn "cheese corpus: gh CLI not found; skipping corpus registration."
         return 0
@@ -366,16 +366,17 @@ ec_setup_cheese_corpus() {
         ec_log "cheese corpus: would resolve the easy-cheese-setup skill via '$gh skill list --agent $harness --scope user --json path,skillName' then run 'python3 <resolved-path>/scripts/easy-cheese-setup.pyz global --apply'"
         return 0
     fi
-    pyz_dir="$("$gh" skill list --agent "$harness" --scope user --json path,skillName \
+    skill_dir="$("$gh" skill list --agent "$harness" --scope user --json path,skillName \
         --jq '.[] | select(.skillName=="easy-cheese-setup") | .path' 2>/dev/null)"
-    if [[ -z "$pyz_dir" ]]; then
+    if [[ -z "$skill_dir" ]]; then
         ec_warn "cheese corpus: could not resolve the easy-cheese-setup skill path via gh skill list; skipping."
         return 0
     fi
-    bundle="$pyz_dir/scripts/easy-cheese-setup.pyz"
+    # The self-contained skill archive runs directly with Python.
+    launcher="$skill_dir/scripts/easy-cheese-setup.pyz"
     ec_log "cheese corpus: registering cheese-durable corpus"
-    if ! python3 "$bundle" global --apply; then
-        ec_warn "cheese corpus: failed to register cheese-durable corpus via $bundle"
+    if ! python3 "$launcher" global --apply; then
+        ec_warn "cheese corpus: failed to register cheese-durable corpus via $launcher"
     fi
     return 0
 }

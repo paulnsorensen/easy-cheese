@@ -2692,7 +2692,7 @@ class LandingShape(str, Enum):
     """PR landing topology; values mirror ``pr_plan.PrShape`` by design.
 
     Do not alias ``PrShape`` here. ``validate_spec._load_local_module`` and
-    ``scripts/build_pyz.py`` exec this file standalone; any
+    ``scripts/runtime_gates.py`` exec this file standalone; any
     ``easy_cheese_schemas.*`` import runs the package ``__init__``, which
     imports ``compat`` and fails without ``cattrs``
     (``test_standalone_validator_falls_back_when_cattrs_is_missing``).
@@ -3316,25 +3316,38 @@ _TRANSITION_STATE = {
 }
 
 
-@schema_constraints(minLength=1, maxLength=_MAX_TEXT)
-def _bounded_text(_instance: object, attribute: _NamedAttribute, value: object) -> None:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{attribute.name} must be a non-empty string")
-    if len(value) > _MAX_TEXT:
+def _text_within(limit: int) -> Validator:
+    @schema_constraints(minLength=1, maxLength=limit)
+    def validate(_instance: object, attribute: _NamedAttribute, value: object) -> None:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{attribute.name} must be a non-empty string")
+        if len(value) > limit:
+            raise ValueError(
+                f"{attribute.name} must be at most {limit} characters, not {len(value)}"
+            )
+
+    return validate
+
+
+_bounded_text = _text_within(_MAX_TEXT)
+_notes_text = _text_within(_MAX_NOTES)
+
+
+# A since-4 reference names another record, document, or node. `_uri` alone is
+# unbounded, so the wheypoint bound applies here too.
+@schema_constraints(pattern=_URI_RE.pattern, minLength=1, maxLength=_MAX_TEXT)
+def _ref(instance: object, attribute: _NamedAttribute, value: object) -> None:
+    _uri(instance, attribute, value)
+    if isinstance(value, str) and len(value) > _MAX_TEXT:
         raise ValueError(
             f"{attribute.name} must be at most {_MAX_TEXT} characters, not {len(value)}"
         )
 
 
-@schema_constraints(minLength=1, maxLength=_MAX_NOTES)
-def _notes_text(_instance: object, attribute: _NamedAttribute, value: object) -> None:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{attribute.name} must be a non-empty string")
-    if len(value) > _MAX_NOTES:
-        raise ValueError(
-            f"{attribute.name} must be at most {_MAX_NOTES} characters, not {len(value)}"
-        )
-
+@schema_constraints(_constraints_of(_ref))
+def _optional_ref(instance: object, attribute: _NamedAttribute, value: object) -> None:
+    if value is not None:
+        _ref(instance, attribute, value)
 
 def _single_line_text(
     instance: object, attribute: _NamedAttribute, value: object
@@ -3567,7 +3580,7 @@ def _fork_successor_rule(
             f"{attribute.name} must be null unless the entry is forked, "
             + f"not {value!r}"
         )
-    _optional_uri(instance, attribute, value)
+    _optional_ref(instance, attribute, value)
 
 
 def _rationale_rule(
@@ -3614,7 +3627,7 @@ class ProtectedEntry:
     # Cross-record lineage: the entry this one was forked from, the entry a
     # forked entry moved to, and the entries copied from this one.
     origin: str | None = field(
-        default=None, validator=_optional_uri, metadata={"since": 4}
+        default=None, validator=_optional_ref, metadata={"since": 4}
     )
     successor: str | None = field(
         default=None, validator=_fork_successor_rule, metadata={"since": 4}
@@ -3622,7 +3635,7 @@ class ProtectedEntry:
     copies: tuple[str, ...] = field(
         factory=tuple,
         converter=_tuple_sequence,
-        validator=_uri_list(limit=_MAX_ITEMS),
+        validator=_string_list(limit=_MAX_ITEMS, item_validator=_ref),
         metadata={"since": 4},
     )
 
@@ -3684,7 +3697,7 @@ def _fork_target_rule(
         raise ValueError(
             f"{attribute.name} must be null for a {instance.action.value} transition"
         )
-    _optional_uri(instance, attribute, value)
+    _optional_ref(instance, attribute, value)
 
 
 @define(frozen=True)
@@ -3719,7 +3732,7 @@ class ArtifactLink:
     )
     covers_entry_ids: list[str] = field(factory=list, validator=_lower_identifier_list)
     ref: str | None = field(
-        default=None, validator=_optional_uri, metadata={"since": 4}
+        default=None, validator=_optional_ref, metadata={"since": 4}
     )
 
 
@@ -3733,7 +3746,7 @@ class WorkEdge:
     host stamps it at commit, as it does for `ArtifactLink.revision_id`; a
     caller-supplied value is never honoured."""
 
-    to: str = field(validator=_uri)
+    to: str = field(validator=_ref)
     kind: EdgeKind = field(validator=validators.instance_of(EdgeKind))
     revision_id: str | None = field(
         default=None, validator=validators.optional(_lower_identifier)
@@ -3747,7 +3760,7 @@ class WorkEdge:
 class WorkEdgeKey:
     """The `(to, kind)` identity that addresses one edge for removal."""
 
-    to: str = field(validator=_uri)
+    to: str = field(validator=_ref)
     kind: EdgeKind = field(validator=validators.instance_of(EdgeKind))
 
 

@@ -21,7 +21,8 @@ from typing import Protocol, cast
 
 import pytest
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-cheese.pyz"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+HARD_CHEESE_ARCHIVE = REPO_ROOT / "skills" / "hard-cheese" / "scripts" / "hard-cheese.pyz"
 
 
 class _FreshnessCheckModule(Protocol):
@@ -110,7 +111,7 @@ def _run_cli(repo: Path, slug: str, *extra: str) -> subprocess.CompletedProcess[
     return subprocess.run(
         [
             sys.executable,
-            str(BUNDLE),
+            str(HARD_CHEESE_ARCHIVE),
             "freshness-check",
             "--slug",
             slug,
@@ -128,8 +129,6 @@ def _run_cli(repo: Path, slug: str, *extra: str) -> subprocess.CompletedProcess[
 
 class TestStateNew:
     def test_unknown_slug_state_new(self, repo: Path) -> None:
-        # pending-rebuild: hard-cheese.pyz still runs the pre-fromargs CLI;
-        # hand-verified via PYTHONPATH=src against source (see report).
         result = _run_cli(repo, "never-seen")
         assert result.returncode == 0
         assert json.loads(result.stdout)["state"] == "new"
@@ -266,7 +265,7 @@ class TestMalformedLog:
 class TestArgHandling:
     def test_missing_slug_exits_2(self, repo: Path) -> None:
         result = subprocess.run(
-            [sys.executable, str(BUNDLE), "freshness-check"],
+            [sys.executable, str(HARD_CHEESE_ARCHIVE), "freshness-check"],
             cwd=str(repo),
             capture_output=True,
             text=True,

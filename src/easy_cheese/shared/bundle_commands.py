@@ -198,7 +198,7 @@ def _unknown_command_message(mapping: dict[str, Command], token: str) -> str:
         )
         bundles = _lookup(command_bundles, token)
         if bundles:
-            joined = ", ".join(f"{bundle}.pyz" for bundle in bundles)
+            joined = ", ".join(f"scripts/{bundle}.pyz" for bundle in bundles)
             lines.append(f"'{name}' is a command of {joined}.")
         # This bundle already names its own parents. Do not repeat them.
         by_parent: dict[str, list[str]] = {}
@@ -206,7 +206,7 @@ def _unknown_command_message(mapping: dict[str, Command], token: str) -> str:
             if parent not in local_parents:
                 by_parent.setdefault(parent, []).append(bundle)
         for parent, bundles_for_parent in sorted(by_parent.items()):
-            joined = ", ".join(f"{bundle}.pyz" for bundle in sorted(bundles_for_parent))
+            joined = ", ".join(f"scripts/{bundle}.pyz" for bundle in sorted(bundles_for_parent))
             lines.append(f"'{name}' is '{parent} {name}' in {joined}.")
     if len(lines) == 1:
         pool = sorted(set(mapping) | set(leaf_parents))

@@ -1,7 +1,7 @@
 set dotenv-load := true
-# Includes requirements-build.txt so tests/python/test_pyz_bundle.py runs its
-# bundle integration seam instead of skipping it.
-python := "uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
+python := "uv run --no-project --with-requirements requirements/runtime.txt --with pip==26.2.1 --with pytest==9.0.3 --with pytest-xdist==3.8.0 --with pyyaml==6.0.2 python3"
+# The wedge commit that tools/wedge/uv.lock pins.
+wedge := "uv run --locked --project tools/wedge wedge"
 
 # Keep pytest hermetic: only load plugins the suite declares, never whatever
 # third-party pytest plugins happen to be globally installed. Without this a
@@ -43,11 +43,10 @@ test:
     {{python}} .github/scripts/validate_wiki.py
     {{python}} scripts/render_generated_regions.py --check
 
-    # Build every bundle once; the xdist workers reuse it instead of each
-    # rebuilding the whole set (see tests/python/conftest.py prebuilt_bundle_dir).
-    prebuilt_pyz_dir="$(mktemp -d)"
-    export EASY_CHEESE_PREBUILT_PYZ="$prebuilt_pyz_dir"
-
+    # Generated runtime sources, command surfaces, and committed archives must
+    # be current before any archive executes.
+    {{python}} scripts/runtime_gates.py
+    just wedge-check
     background_pids=()
     # Reap every background check on every exit path, including an early `set -e`
     # exit from a foreground suite, so no orphan survives the recipe. The trap
@@ -58,11 +57,9 @@ test:
             kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
         done
-        rm -rf "$prebuilt_pyz_dir"
     }
     trap cleanup EXIT
 
-    {{python}} scripts/build_pyz.py --out-dir "$EASY_CHEESE_PREBUILT_PYZ"
 
     # The pytest suites are latency-bound (subprocess-heavy) and leave cores
     # idle, so run the CPU-bound independent checks (pnpm build, cargo) alongside
@@ -118,15 +115,19 @@ test-workflow-browser:
 test-skill-overlap:
     cargo test --manifest-path tools/skill-overlap/Cargo.toml
 
-# Build one self-contained Shiv .pyz archive per Python skill
-bundle:
-    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt python3 scripts/build_pyz.py
+# Build one executable archive per Python skill through the pinned wedge.
+wedge-build:
+    {{wedge}} bundle --root skills
 
-# Write every generated runtime source the bundle build checks for staleness
+# Verify committed archives against temporary pinned wedge builds.
+wedge-check:
+    {{wedge}} bundle --root skills --check
+
+# Write every generated runtime source that runtime_gates.py checks for staleness
 update-generated:
-    uv run --no-project --with-requirements requirements/runtime.txt --with-requirements requirements-build.txt python3 scripts/build_pyz.py --write-generated
+    {{python}} scripts/runtime_gates.py --write-generated
 
-# Preview the exact tree a release ships (skills + .pyz only, no sources)
+# Preview the exact tree a release ships (skills + archives, no sources)
 release-preview:
     python3 scripts/stage_release.py --out .release-preview
     @echo "Staged release tree at .release-preview — inspect with: find .release-preview -type f"
@@ -182,19 +183,11 @@ lint-py-dead-code *paths="src scripts .github/scripts tests":
 update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
 
-# Verify committed .pyz bundles match the staged index (local/pre-commit)
-check-bundles:
-    python3 scripts/check_bundles.py --against index
-
-# Verify committed .pyz bundles match HEAD after a fresh rebuild (CI)
-check-bundles-ci: bundle
-    python3 scripts/check_bundles.py --against head
-
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build check-bundles
+check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build
 
 # CI-mode verification (no autofixes)
-ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build check-bundles-ci
+ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build
 
 # Install docs build dependencies
 docs-install:

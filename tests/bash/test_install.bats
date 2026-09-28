@@ -606,7 +606,7 @@ STUB
     EC_GH="$STUB_BIN/gh" run ec_setup_cheese_corpus claude-code
     [ "$status" -eq 0 ]
     grep -q "^gh skill list --agent claude-code --scope user --json path,skillName" "$STUB_LOG"
-    grep -q "^python3 /fake/skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz global --apply$" "$STUB_LOG"
+    grep -q "^python3 /fake/skills/easy-cheese-setup/scripts/easy-cheese-setup\.pyz global --apply$" "$STUB_LOG"
 }
 
 @test "ec_setup_cheese_corpus warns and returns 0 when gh skill list resolves nothing" {
@@ -615,7 +615,7 @@ STUB
     EC_GH="$STUB_BIN/gh" run ec_setup_cheese_corpus claude-code
     [ "$status" -eq 0 ]
     [[ "$output" == *"could not resolve the easy-cheese-setup skill"* ]]
-    ! grep -q "easy-cheese-setup.pyz" "$STUB_LOG" || false
+    ! grep -q "scripts/easy-cheese-setup global" "$STUB_LOG" || false
 }
 
 @test "ec_setup_cheese_corpus dry-run logs the plan and never invokes gh" {

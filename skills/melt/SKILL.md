@@ -140,7 +140,7 @@ The Melt text tools refuse a binary file.
 They never decode, edit, or stage it.
 For an ordinary binary file, select one side with `git checkout --ours -- <path>` or `git checkout --theirs -- <path>`.
 Then run `git add <path>`.
-A generated archive, such as a `.pyz` bundle, has no correct side.
+A generated archive, such as a Python zipapp, has no correct side.
 Resolve the source conflicts first, then rebuild the archive with the project build command.
 
 ### 3. Resolve remaining conflicts

@@ -1,17 +1,21 @@
 # Skill Python bundle doctrine
 
-Every Python-backed skill ships one same-named Shiv archive built from standard package metadata. Runtime source lives under `src/`; checked-in skill directories contain deployment artifacts, not Python source. The repository conforms to this contract for every packaged Python skill.[^1]
+Every Python-backed skill ships one committed, same-named `.pyz` archive.
+Wedge builds the archive; it adds no runtime launcher, sidecar lock, or first-run download.
+Runtime source stays under `src/`; skill archives are generated deployment files.[^1]
 
 ## Skill deployment contract
 
-- A skill that executes Python ships exactly `skills/<skill>/scripts/<skill>.pyz`.
-- A skill that does not execute Python ships no `.pyz`.
-- Skill prose invokes only its own archive. It never invokes loose source, repository automation, `common.pyz`, or another skill's archive.
-- Python source never lives under `skills/`. Checked-in archives are generated release artifacts.
-- Markdown, schemas, templates, and other non-executable resources remain ordinary skill files.
-- Shiv is a build dependency only. Running an archive requires Python, not Shiv or pip.[^2]
+- A Python skill ships exactly `skills/<skill>/scripts/<skill>.pyz`.
+- A skill without Python ships no Python archive.
+- Skill prose invokes only its own archive, never loose source, repository automation, `common.pyz`, or another skill's archive.
+- Hand-written Python never lives under `skills/`.
+- Build configuration lives in each skill's `wedge.toml`, over shared `skills/wedge.toml`.
+- Installed skill trees need the archive, not the build configuration.
+- Markdown, templates, and other non-executable skill resources remain ordinary files.
+- Wedge and Shiv are build dependencies only. Archive startup needs Python, not pip, uv, or network access.[^2]
 
-## Source and distribution layout
+## Source and package layout
 
 Runtime Python uses two import packages:
 
@@ -25,76 +29,95 @@ src/
 └── easy_cheese_schemas/
 ```
 
-- `easy_cheese_schemas` is the independently published distribution.
-- `easy-cheese-shared` is a repository-internal distribution containing the cohesive shared runtime package and the `cli` presentation layer.
-- Each Python skill is a separate internal application distribution named `easy-cheese-<skill>`.
-- Skill slugs stay kebab-case; Python package segments use underscores.
-- Skill-owned code lives in `src/easy_cheese/skills/<python_skill_name>/`; its `commands.py` declares the console surface as an immutable tuple of `Command(name, "module:callable")` values.[^8]
-- Every command target accepts only its command arguments as `list[str]`, writes result text to stdout or diagnostics to stderr, and returns an integer process status. Dispatch resolves the target lazily and calls it directly; it does not mutate `sys.argv`, execute a module through `runpy`, or depend on decorator registration.[^9]
-- Shared code lives in `src/easy_cheese/shared/`.
-- `src/easy_cheese/cli/` holds command surfaces and the JSON reply envelope. It may import `shared` and schemas. `shared` code must not import `cli`, except `resolve_cli`'s re-export of the envelope names.
-- Tests stay under `tests/`; build, release, generation, and maintenance programs may live under `scripts/`.[^3]
+`easy_cheese_schemas` is the independently published distribution.
+Wedge copies selected local runtime packages directly; this build does not create internal application or shared-runtime wheels.[^3]
 
-Distribution dependencies carry the runtime relationship: each application depends on `easy-cheese-shared`, and shared depends on `easy-cheese-schemas`. Pip resolves that graph inside a private wheelhouse; no hand-maintained source closure map remains.[^4]
+Skill slugs use kebab-case. Python package segments use underscores.
+Skill-owned code lives in `src/easy_cheese/skills/<python_skill_name>/`.
+Shared code lives in `src/easy_cheese/shared/`.
+The `cli/` package owns command surfaces and reply presentation.
+Tests stay under `tests/`; repository build and maintenance programs may live under `scripts/`.[^3]
+
+## Per-skill runtime contents
+
+Each archive contains:
+
+1. its own skill package and immutable resources;
+2. `easy_cheese.shared`, `easy_cheese.cli`, and required package initializers;
+3. `easy_cheese_schemas`;
+4. the pure-Python dependencies pinned by `uv.lock`.
+
+Each manifest's `source_paths` selects local files beneath `src/easy_cheese` without flattening package paths.
+It explicitly includes initializers, shared support, CLI support, and its own skill.
+It does not include other skill packages or infer an import closure.[^4]
+
+The root project's schema dependencies and `runtime` dependency group define the third-party closure.
+`requirements/runtime.txt` pins the same closure for tests; a repository test detects drift.[^5]
 
 ## Zip-safe runtime
 
-Bundles may contain Python modules, bytecode, immutable package resources, and distribution metadata. All dependency wheels must be platform-independent pure Python.
+Archives may contain Python modules, bytecode, immutable package resources, and distribution metadata.
+Dependencies must be platform-independent, pure Python, and zip-importable.
 
 The following remain prohibited:
 
-- native extension modules such as `.so`, `.pyd`, and `.dylib`;
-- platform-specific wheels;
-- required external executables;
-- runtime package installation or downloads;
-- caller-managed extraction before a skill can run.
+- native extensions and platform-specific libraries;
+- required external executables as bundled dependencies;
+- runtime package installation or archive downloads;
+- caller-managed extraction before execution.
 
-Shiv's transparent cache extraction is part of the archive runtime contract, not a caller responsibility. The archive launches itself, selects its cached environment, and runs the packaged console script.[^5]
-
-## Runtime closure
-
-Each bundle contains:
-
-1. one skill application distribution;
-2. the cohesive internal shared distribution, which carries `easy_cheese.shared` and `easy_cheese.cli`;
-3. the schema distribution;
-4. approved pure-Python third-party distributions.
-
-Shipping the full shared distribution is intentional. Shared is one internal dependency boundary, and metadata-driven installation removes the custom AST scanner, exception registries, and repeated closure maintenance that previously selected individual shared modules. Other skill application distributions remain excluded, and tests assert that boundary.[^6]
+Shiv may extract its bundled environment into its transparent cache.
+This local extraction does not download code or require caller-managed setup.[^2]
 
 ## Build enforcement
 
-The build must:
+`just wedge-build` runs the pinned `wedge bundle` command.
+It writes executable archives directly into their skill directories.
+`just wedge-check` rebuilds temporarily and compares normalized archive contents without rewriting committed files.[^6]
 
-- construct every internal distribution through PEP 517;
-- resolve dependencies only from the private wheelhouse;
-- require hashes from the committed external lock when populating the wheelhouse and from an ephemeral complete closure when assembling each bundle;
-- reject non-`py3-none-any` wheels, false `Root-Is-Purelib` metadata, and native members;
-- produce one same-named archive per discovered `commands.py`;
-- verify checked-in generated schema/runtime sources;
-- exercise bundled interfaces without repository imports or ambient site packages;
-- compare rebuilt archive member names, CRCs, and sizes with the committed artifacts.[^7]
+Wedge exports the locked dependency closure, verifies wheel hashes, and builds reproducible archives.
+The content comparison ignores compressor differences.
+Selected source files and complete schema resources feed the build.
+No easy-cheese custom ZIP writer, import-closure walker, or runtime loader is required.[^4]
 
+`scripts/runtime_gates.py` checks generated sources, command surfaces, and skill-owned archive references.
+Tests execute committed archives after a Wedge freshness check.
+They inspect archive membership and run staged archives without repository imports.
+Release staging copies committed archives; it does not depend on a separate asset publication job.[^7]
 
+## Command discovery and generated sources
 
-### Command discovery and generated regions (r014)
+Each skill declares its public surface in an immutable `COMMANDS` tuple.
+Handlers use `@bundle_command`; `derive_command` produces the command records.
+Dispatch imports the selected target lazily and passes command-local arguments.
+Command targets return integer process statuses.[^8]
 
-Skills declare commands only through `@bundle_command` and `derive_command` into an immutable `COMMANDS` tuple (`src/easy_cheese/shared/bundle_commands.py:20-58,108-127`); `validate_command_surface` rejects an undeclared or unreferenced name. Literal `Command(...)` construction is a rejected pattern. `scripts/check_bundles.py:461-499` once discovered only literal `Command(...)` calls and found zero commands in 11 of 13 archives, including every Wheypoint handler; it now imports the decorator path. The `build_pyz.SKILLS` roster is still a hand-maintained list, not a scan of `src/easy_cheese/skills/*/` (#477 wave A1).
+The runtime gate derives the skill roster from `src/easy_cheese/skills/*/commands.py`.
+A test compares that roster with the skill manifests.
+`just update-generated` repairs generated runtime modules.
+`scripts/render_generated_regions.py` generates command inventories and schema-backed prose.
+Edit generator inputs instead of generated regions.[^7]
 
-`src/easy_cheese_schemas` is the source of truth for catalog URIs, phase contracts, and document rules. `_schema_catalog_compiler.py` and `_phase_registry_compiler.py` compile them into `_schema_catalog.py` and `_compiled_phase_registry.py`; `scripts/render_generated_regions.py` projects the same models into `skills/mold/references/curdle.md`, `skills/cook/references/writer-views.md`, and `skills/cheese/references/schema-intertwine.md`. Never hand-edit a generated region; fix the generator and rerun it. `build_pyz.py --check` exits `1` on stale or missing generated output, and `package.json` chains the docs generator before Astro with `&&`, so a generator error blocks the docs deploy. Two known renderer gaps: `writer-views.md` does not mark which fields have defaults, and `_ContractVersion.major`/`.minor` are declared `int` while the registry emits `str`. `document_rules.py` has no regeneration CLI; regenerate with `python3 -c "...b._compiled_document_rules_source()..."` because `just bundle` only detects staleness.
+## Decision and migration boundary
 
-## Superseded topology
+PR #729 replaces the repository's custom builder with Wedge, not its self-contained deployment model.
+The approved A correction keeps archives in the main repository so branch and commit installs remain complete.
+It rejects the proposed extensionless launchers, sidecar locks, rolling release assets, and first-run downloads.[^9]
 
-This doctrine supersedes the split runtime roots under `src/<skill>/` and `shared/scripts/`, multi-consumer `common.pyz` archives, cross-skill archive calls, `vendor_deps.py`, the custom ZIP writer, and AST-based closure inference. [[pyz-bundling-pipeline]] records the implemented pipeline.
+Option B would keep archives only in versioned release trees.
+[Issue #732](https://github.com/paulnsorensen/easy-cheese/issues/732) assesses B; it does not authorize migration.
 
-[^1]: AGENTS.md; scripts/build_pyz.py
-[^2]: requirements-build.txt; .github/workflows/build-pyz.yml
-[^3]: src/easy_cheese/skills/; src/easy_cheese/shared/; src/easy_cheese_schemas/
-[^4]: scripts/build_pyz.py:`_project_toml`, `_build_shared_wheel`, `_build_skill_wheel`
-[^5]: scripts/build_pyz.py:`_shiv_command`; AGENTS.md
-[^6]: tests/python/test_pyz_bundle.py:`test_bundle_carries_only_its_own_skill_package`, `test_briesearch_bundle_uses_internal_distributions`
-[^7]: scripts/build_pyz.py:`validate_pure_wheel`; scripts/check_bundles.py; tests/python/test_pyz_bundle.py
-[^8]: src/easy_cheese/shared/bundle_commands.py:`Command`; src/easy_cheese/skills/*/commands.py
-[^9]: src/easy_cheese/shared/bundle_commands.py:`dispatch`; tests/python/test_bundle_commands.py
+The old private-wheelhouse builder remains retired.
+The [Pyz bundling pipeline](./pyz-bundling-pipeline.md) records the current build and release flow.
 
-_Source: implemented repository architecture; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for the command-discovery section · Updated: 2026-09-24 · Supersedes: committed internal-wheel hashes, split runtime roots, custom closure inference, vendored trees, shared common archives, and literal `Command(...)` discovery in `check_bundles.py`_
+[^1]: AGENTS.md; skills/*/wedge.toml
+[^2]: skills/*/scripts/*.pyz; tools/wedge/uv.lock; AGENTS.md
+[^3]: pyproject.toml; src/easy_cheese/; src/easy_cheese_schemas/
+[^4]: skills/wedge.toml; skills/*/wedge.toml; tools/wedge/pyproject.toml
+[^5]: pyproject.toml; uv.lock; requirements/runtime.txt; tests/python/test_wedge_pin.py
+[^6]: justfile:`wedge-build`, `wedge-check`, `test`; .github/workflows/validate.yml
+[^7]: scripts/runtime_gates.py; tests/conftest.py; scripts/stage_release.py; tests/python/test_stage_release.py
+[^8]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py
+[^9]: https://github.com/paulnsorensen/easy-cheese/pull/729; https://github.com/paulnsorensen/easy-cheese/issues/732
+
+_Source: user-approved A correction to PR #729 · Updated: 2026-09-28 · Supersedes: launcher-and-lock deployment, whole-runtime vendoring, and temporary test archives; the custom builder remains retired._

@@ -93,8 +93,8 @@ This workflow omits the git-history/precedent dimension.
 
 1. Identify the diff, scope, and relevant specification or issue.
    Read `references/fan-out.md` for the context checklist and deterministic planning contract.
-   Collect instruction sources, build context, and run `age.pyz age-route` through its bundle path.
-   Use the returned assignments, effort, dispatch batches, and explicit capability restrictions.
+   Collect instruction sources, build context, and run `scripts/age.pyz age-route` through its bundle path.
+   Use the assignments, effort, dispatch batches, and capability restrictions.
    Assemble shared evidence and the plan before the lock; do not launch a separate classifier agent.
    The lock covers the packet, because the packet is review evidence.
    Then run `python3 skills/age/scripts/age.pyz review-lock --slug <slug>` to lock the production tree.
@@ -180,7 +180,7 @@ Set `durable_flags:` to `none` by default, as in cook's gate.
 When the plan or host restricts coverage, record the actual restriction in `durable_flags` and `## Confidence`, not a size-only warning.
 Record the resolved worker types under `## Agent resolution` in the body.
 Record dispatch metadata for every topology. Use the fields in [report-example.md](references/report-example.md).
-Check supplied dispatch observations with `age.pyz review-plan-check` before writing; absent observations remain explicitly unobserved.
+Check supplied dispatch observations with `scripts/age.pyz review-plan-check` before writing; absent observations remain explicitly unobserved.
 
 Print `Age report: .cheese/age/<slug>.md`.
 When `press: skipped` is set, print the following warning:

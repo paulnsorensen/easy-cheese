@@ -1,6 +1,6 @@
 # Cross-skill work contract implementation gaps
 
-Status: open as of 2026-07-26
+Status: open as of 2026-07-26 (bundle-builder citations below predate the 2026-09-27 wedge migration)
 Spec: [Cross-skill work contract](./cross-skill-work-contract.md)
 Review stack tip: `feat/cross-skill-work-contract` / PR #331
 
@@ -8,7 +8,7 @@ The reconstructed stack preserves the implementation from PR #331 for review, bu
 
 ## 1. Replace runtime YAML with JSON frontmatter
 
-The current handoff parser imports PyYAML at runtime, WorkRecord rendering calls the same YAML helper, and the bundle builder vendors PyYAML plus its license into `cheese.pyz`.[^1] That implements the superseded serialization decision.
+The current handoff parser imports PyYAML at runtime, WorkRecord rendering calls the same YAML helper, and the bundle builder vendors PyYAML plus its license into the cheese archive.[^1] That implements the superseded serialization decision.
 
 Required closure:
 
@@ -69,7 +69,7 @@ Required closure:
 - exercise CLI entry → persistence → continuation → task claim → phase handoff → task completion end to end;
 - exercise crash recovery at every transaction boundary and changed-content operation-ID rejection;
 - keep `just check` green on each corrected stack layer;
-- finish with `python3 -S skills/cheese/scripts/cheese.pyz contract-registry validate` and archive inspection proving no PyYAML ships.
+- finish with `python3 -S skills/cheese/scripts/cheese contract-registry validate` and archive inspection proving no PyYAML ships.
 
 ## Closure order
 

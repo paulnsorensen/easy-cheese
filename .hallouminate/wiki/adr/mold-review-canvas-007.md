@@ -1,6 +1,6 @@
 # ADR: Keep the local review transport bounded
 
-Status: implemented (2026-09-19); the bounded local review transport and Mold canvas are available through `mold.pyz`. Remaining prerequisites are typed-plan approval and the existing project quality gates.
+Status: implemented (2026-09-19); the bounded local review transport and Mold canvas are available through the Mold archive. Remaining prerequisites are typed-plan approval and the existing project quality gates.
 
 ## Context
 
@@ -8,7 +8,7 @@ A browser-accessible localhost server still needs an explicit access and file bo
 
 ## Decision
 
-Use localhost, a launch token, host/origin checks, and declared copied assets. Expose serve, publish, poll, and close through mold.pyz.[^1]
+Use localhost, a launch token, host/origin checks, and declared copied assets. Expose serve, publish, poll, and close through the Mold archive.[^1]
 
 ## Alternatives
 
@@ -28,3 +28,5 @@ This decision does not waive implementation gates or claim the feature exists.
 - [Skill Python bundle doctrine](../architecture/skill-python-bundle-doctrine.md)
 
 [^1]: Approved design spec: /Users/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-review-canvas.md; Decisions and Approved scope audit. User confirms extraction overrides on 2026-09-16.
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

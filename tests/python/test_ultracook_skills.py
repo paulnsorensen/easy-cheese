@@ -1277,7 +1277,7 @@ class TestUltracookModeGate:
             "cook must name the canonical PARALLEL_THRESHOLD constant"
         )
         # The mode subcommand picks linear|parallel deterministically.
-        assert "cook.pyz mode" in body or "pyz mode --count" in body, (
+        assert "scripts/cook.pyz mode" in body, (
             "cook must invoke the deterministic mode selector"
         )
 
@@ -1375,7 +1375,7 @@ class TestUltracookMilknadoSeam:
         assert "engine" in body_lower and "tracker" in body_lower, (
             "the milknado seam must name the engine and tracker roles"
         )
-        assert "cook.pyz milknado" in body, (
+        assert "scripts/cook.pyz milknado" in body, (
             "cook must invoke the deterministic milknado probe"
         )
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 
@@ -11,12 +12,12 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 UC_DIR = REPO_ROOT / "skills" / "ultracook"
 REFERENCES_DIR = UC_DIR / "references"
-_BUNDLE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 @pytest.fixture(scope="session")
-def bundle() -> Path:
-    return _BUNDLE
+def bundle(skill_archive: Callable[[str], Path]) -> Path:
+    """Return the committed cook archive."""
+    return skill_archive("cook")
 
 
 @pytest.fixture(scope="session")

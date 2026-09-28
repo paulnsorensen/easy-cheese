@@ -38,3 +38,5 @@ Mold invariants existed three times: `contracts.py`, `validate_spec.py`, and `ta
 A grounding tool with several global corpora must match the corpus to the current repository or use the workspace default. A first-match fallback copies private rationale across repositories; record ambiguity as `unavailable`.
 
 _Source: r014 skill-review round notes (ingest hash 499c49c7b67d5eb6), verified against `research_layout.py` on 2026-09-04 · Updated: 2026-09-18 · Supersedes: the former publish/direct-spec handoff route and the review-time claim that slug word count was unenforced_
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

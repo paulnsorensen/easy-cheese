@@ -82,7 +82,7 @@ Scope audit:
 Review the defaults; Mold may save the draft. Rows marked `needs your verb` block execution until you name a verb for each.
 ```
 
-Finalization runs the table as the execution backstop: every `needs your verb` row and unresolved coherence box is a named entry in `execution_holds:`, and `mold.pyz finalize` blocks ready while the list is non-empty. It remains the chokepoint that downstream skills trust (RC3).
+Finalization runs the table as the execution backstop: every `needs your verb` row and unresolved coherence box is a named entry in `execution_holds:`, and `scripts/mold.pyz finalize` blocks ready while the list is non-empty. It remains the chokepoint that downstream skills trust (RC3).
 
 ## Agent-introduced scope
 

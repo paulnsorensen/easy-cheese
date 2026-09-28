@@ -78,7 +78,8 @@ Run `validate` for a schema-only dry run that never opens the store.
 - Omission carries data forward; `null` means unchanged.
 - An explicit empty `working_context` or `decision_dossier` replaces the carried value with nothing.
 - Identifiers match `[a-z0-9][a-z0-9._-]{0,63}`.
-- Text fields other than `notes` contain at most 2000 characters; lists at most 64 items.
+- Text fields contain at most 2000 characters, `notes` at most 6000; lists at most 64 items.
+- References (`to`, `ref`) are absolute URIs of at most 2000 characters.
 - A first checkpoint must carry at least one entry or a `notes` body.
 - An unknown key at any depth is refused and named by path.
 - Text that matches a credential pattern is refused and named by field.

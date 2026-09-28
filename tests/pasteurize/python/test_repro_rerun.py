@@ -5,10 +5,8 @@ must stop a hung reproduction command. See
 `.cheese/notes/r014-megamerge/review-pasteurize.md` and
 `.cheese/notes/r014-megamerge/edge-affinage-pasteurize.md`.
 
-The bundle-level tests keep shape-agnostic assertions on purpose: this worktree
-never rebuilds `pasteurize.pyz`, so the archive can lag the source until the
-integration barrier rebuilds it. Strict contract coverage runs against the
-module and its in-process `main()`.
+Bundle-level tests drive the committed pasteurize archive. Strict contract
+coverage runs against the module and its in-process `main()`.
 """
 
 from __future__ import annotations
@@ -21,6 +19,9 @@ from pathlib import Path
 from typing import Protocol, TypedDict, cast
 
 import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PASTEURIZE_ARCHIVE = REPO_ROOT / "skills" / "pasteurize" / "scripts" / "pasteurize.pyz"
 
 
 class _RunRecord(TypedDict):
@@ -57,8 +58,6 @@ class _ReproRerunModule(Protocol):
     ) -> _RerunVerdict: ...
 
     def main(self, argv: list[str] | None = None) -> int: ...
-
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/pasteurize/scripts/pasteurize.pyz"
 
 
 def _flake_command(counter: Path, failing_runs: int) -> str:
@@ -323,7 +322,7 @@ class TestMainCli:
 
 def _invoke(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "repro-rerun", *args],
+        [sys.executable, str(PASTEURIZE_ARCHIVE), "repro-rerun", *args],
         capture_output=True,
         text=True,
     )

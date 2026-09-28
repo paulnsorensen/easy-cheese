@@ -124,13 +124,13 @@ def test_the_documented_command_set_is_exactly_the_fourteen_the_spec_fixes() -> 
     assert len(COMMANDS) == 14
     corpus = "\n".join(_read(path) for path in (WHEYPOINT, CHEESE, CONTINUE_RESUME))
     for command in COMMANDS:
-        marker = f"wheypoint.pyz {command}"
+        marker = f"scripts/wheypoint.pyz {command}"
         portable_marker = f"/wheypoint {command}"
         assert marker in corpus or portable_marker in corpus, f"undocumented command: {command}"
-    assert "wheypoint.pyz create" not in corpus, (
+    assert "scripts/wheypoint.pyz create" not in corpus, (
         "genesis is an intent the runtime binds, not a separate command"
     )
-    assert "wheypoint.pyz commit" not in corpus, (
+    assert "scripts/wheypoint.pyz commit" not in corpus, (
         "the raw-delta surface is host-internal since the wheypoint-ergonomics spec"
     )
 
@@ -150,7 +150,7 @@ def test_wheypoint_invokes_only_its_repo_relative_archive() -> None:
 
     assert "${CLAUDE_SKILL_DIR}" not in body
     assert "bundle fallback" not in body
-    assert "wheypoint.pyz " not in body.replace(command, "")
+    assert "scripts/wheypoint.pyz " not in body.replace(command, "")
 
 
 def test_the_genesis_sentinel_is_documented_as_the_way_work_starts() -> None:

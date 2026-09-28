@@ -2,11 +2,11 @@
 
 <certain> The Wheypoint kernel exposes one dedicated portable runtime while preserving existing shared handoff and path APIs.[^spec]
 
-## ADR-002: Ship a dedicated wheypoint.pyz [status: accepted]
+## ADR-002: Ship a dedicated wheypoint archive [status: accepted]
 
 - **Context:** <certain> Before PR #384, main had no Wheypoint bundle, the vendored dependency bundle list named only `ultracook`, and existing consumers called `parse_handoff_slug()` directly.[^code]
 - **Decision:** Build `skills/wheypoint/scripts/wheypoint.pyz` with stable JSON `commit`, `resolve`, `show`, and `lint` commands. Stage the private Wheypoint runtime, `easy_cheese_schemas`, and currently vendored attrs/cattrs dependencies into it. Reuse `project_corpus_root()` without changing its semantics.
-- **Alternatives:** Create a broader `cheese.pyz` now, or widen the legacy phase-report parser into the continuity authority.
+- **Alternatives:** Create a broader cheese archive now, or widen the legacy phase-report parser into the continuity authority.
 - **Consequences:** `/wheypoint` owns writes, `/cheese --continue` consumes validated results, and the child remains independently dispatchable. A later cross-skill runtime can consume the same public JSON contract rather than reach into private modules.
 
 ## Verification gotcha
@@ -16,6 +16,8 @@
 ## References
 
 [^spec]: `/home/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/wheypoint-continuity-kernel.md`, approved 2026-08-02.
-[^code]: `scripts/build_pyz.py:83-90,162-175`, `src/wheypoint/wheypoint.py:47-263`, and `shared/scripts/paths.py:223-225`, verified 2026-08-08.
+[^code]: `scripts/build_pyz.py:83-90,162-175` (Shiv builder, retired for wedge on 2026-09-27), `src/wheypoint/wheypoint.py:47-263`, and `shared/scripts/paths.py:223-225`, verified 2026-08-08.
 
 [^python-version]: `.github/workflows/build-pyz.yml:52-55` pins bundle builds to Python 3.12; local `just check` comparison observed 2026-08-02.
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

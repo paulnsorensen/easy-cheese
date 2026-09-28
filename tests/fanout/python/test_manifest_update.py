@@ -15,7 +15,8 @@ import yaml
 
 from fromargs import CliError
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 def _d(value: object) -> dict[str, object]:
@@ -97,7 +98,7 @@ def _write_fixture(tmp_path: Path) -> Path:
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "manifest_update", *args],
+        [sys.executable, str(COOK_ARCHIVE), "manifest_update", *args],
         capture_output=True,
         text=True,
     )
@@ -109,7 +110,7 @@ def _err(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
 
 def _validate(path: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "validate_manifest", str(path)],
+        [sys.executable, str(COOK_ARCHIVE), "validate_manifest", str(path)],
         capture_output=True,
         text=True,
     )
@@ -415,12 +416,16 @@ class TestCheckFiles:
         assert report["1"] == ["src/feature_0.ts"]
 
 
-def _worker(args: tuple[str, int]) -> tuple[int, str]:
-    manifest_path, curd_id = args
+def _worker(args: tuple[str, str, int]) -> tuple[int, str]:
+    """Run one status update; the archive path travels in ``args``.
+
+    A pool child must not resolve (and possibly build) the archive itself.
+    """
+    bundle, manifest_path, curd_id = args
     result = subprocess.run(
         [
             sys.executable,
-            str(BUNDLE),
+            bundle,
             "manifest_update",
             "set-curd-status",
             "--manifest",
@@ -440,7 +445,8 @@ class TestConcurrentWrites:
     def test_parallel_updates_never_corrupt_file(self, tmp_path: Path) -> None:
         path = _write_fixture(tmp_path)
         n_curds = len(_curds())
-        jobs = [(str(path), i + 1) for i in range(n_curds)]
+        bundle = str(COOK_ARCHIVE)
+        jobs = [(bundle, str(path), i + 1) for i in range(n_curds)]
         # Repeat the volley to widen the race window.
         for _ in range(3):
             with multiprocessing.Pool(processes=min(4, n_curds)) as pool:
@@ -478,7 +484,8 @@ class TestConcurrentWrites:
 
         # All jobs target distinct curd ids with the same manifest file — genuine
         # concurrent contention with no serialisation at the test level.
-        jobs = [(str(path), i + 1) for i in range(n)]
+        bundle = str(COOK_ARCHIVE)
+        jobs = [(bundle, str(path), i + 1) for i in range(n)]
         with multiprocessing.Pool(processes=n) as pool:
             results = pool.map(_worker, jobs)
 

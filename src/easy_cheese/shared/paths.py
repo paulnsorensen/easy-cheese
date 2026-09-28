@@ -133,7 +133,7 @@ def slugify(text: str, *, max_words: int = 5) -> str:
     - **Non-``[a-z0-9]`` characters are deleted, never transliterated** — a
       general slugifier turns ``"über"`` into ``uber``; here it becomes ``ber``.
       Deleting keeps the output inside ``KEBAB_SLUG`` for every input without a
-      Unicode table riding along in every ``.pyz`` bundle.
+      Unicode table riding along in every skill archive.
     - **Hard-truncated to 64 characters** to match ``KEBAB_SLUG``.
 
     Swapping in a standard slugifier would change the output of all four, and

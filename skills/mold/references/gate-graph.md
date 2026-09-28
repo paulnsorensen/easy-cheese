@@ -1,7 +1,7 @@
 # The gate graph
 
 `GATE_MODEL` in `src/easy_cheese/skills/mold/gate_graph.py` holds the one
-canonical model of Mold's runnable Cook handoff gate. Draft spec writes happen before this gate. `mold.pyz` bundles it as the
+canonical model of Mold's runnable Cook handoff gate. Draft spec writes happen before this gate. The mold archive bundles it as the
 `gate-graph` subcommand. Both render targets derive from that one model, so
 they cannot drift. See ADR-001. The model is also the gate-prose-sync source.
 Question transport stays in [`ask-user-question.md`](../../cheese/references/ask-user-question.md). One test asserts that the handshake coherence-checklist items equal the model's
