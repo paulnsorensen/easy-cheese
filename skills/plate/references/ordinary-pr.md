@@ -45,7 +45,7 @@ Publication-relevant GitHub operations remain here:
   commits make existing metadata inaccurate.
 - Use `gh pr ready <number>` only when asked to publish a draft.
 - Use `gh pr checks` to verify publication context. CI triage, review, comments,
-  and merge remain `/gh`.
+  and merge stay outside `/plate`. Use the `gh` CLI directly for that work.
 
 Query the current head for an existing PR before creation.
 If a PR exists, switch to the existing-PR path. Do not rely on a failed create call.

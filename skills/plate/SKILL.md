@@ -5,7 +5,8 @@ description: >
   Use this skill to commit changes or to publish a branch. Use it to open or update a pull request.
   Use it to create, sync, restack, or submit a pull request stack. You can also run /plate.
   This skill owns all staging, commits, pushes, pull request creation, and stack changes.
-  /gh owns GitHub inspection, reviews, comments, CI, issues, releases, and repository administration.
+  GitHub inspection, reviews, comments, CI, issues, releases, and repository administration are outside this skill.
+  Use the gh CLI directly for that work.
 license: MIT
 ---
 
@@ -29,8 +30,9 @@ Check ownership before you select a mode.
 `/plate` owns staging, commits, pushes, ordinary pull request changes, and pull request stack changes.
 
 - `/plate` never performs code-quality review. It never computes a review surface for its own sake. Review is `/age`.
-- `/gh` owns GitHub inspection, reviews, comments, CI, merges, issues, workflows, releases, search, and administration.
-  Use `/gh` when no local publication transaction is necessary.
+- GitHub inspection, reviews, comments, CI, merges, issues, workflows, releases, search, and administration are outside `/plate`.
+  Use the `gh` CLI directly when no local publication transaction is necessary.
+  Use `/affinage` to act on pull request feedback or CI failures.
 - A request that only reads or assesses GitHub or diff state leaves `/plate` before any mode is selected.
   Thus, routing it here is a plate-owned failure.
 - Destructive deletion, history rewrites, unsafe force-pushes, and protected-branch changes require explicit user authorization.
@@ -47,7 +49,7 @@ Classify every invocation into exactly one mode. Load one reference at a time. D
 | Existing PR | Update a PR while preserving its current topology | [`references/ordinary-pr.md`](references/ordinary-pr.md) |
 | Stack maintenance | Create, sync, restack, submit, recover, or explicitly ship a stack | [`references/stacks.md`](references/stacks.md) |
 
-Inspect a stack only as a step of a requested stack change. Route a stack inspection request without a requested change to `/gh`.
+Inspect a stack only as a step of a requested stack change. Route a stack inspection request without a requested change out of `/plate` to the `gh` CLI.
 
 New-PR work loads its references in this sequence. Load each reference alone. Close it before you load the next one.
 
@@ -149,7 +151,7 @@ Apply the shared voice rules from [`../age/references/voice.md`](../age/referenc
 - **Plate-owned** — This skill selected an incorrect call shape or route.
   Examples include a malformed write, stale write, skipped read, or unnamed staging path.
   A full-tree staging path is also Plate-owned. A mismatch between the mode and reference is also Plate-owned.
-  Work for `/age` or `/gh` is a Plate-owned routing error.
+  Review work for `/age` or GitHub work outside publication is a Plate-owned routing error.
   Use this recovery rule: `Fix the call shape or the routing, then retry that step`.
 - **Environment-owner** — Authentication, permission, hooks, network, provider enablement, or a shared backend caused the failure.
   Name the owning system in the report. Never retry it as if the call shape were wrong.

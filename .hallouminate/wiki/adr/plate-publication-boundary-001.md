@@ -1,6 +1,6 @@
 # ADR: plate owns the commit-to-PR publication boundary
 
-**Status:** accepted (2026-07-14)
+**Status:** accepted (2026-07-14); amended 2026-09-28
 
 The publishing boundary previously spanned an external `/commit` skill, an external
 `/pr-stack` skill, and raw `/gh` handoffs. That split left no single phase responsible
@@ -56,6 +56,14 @@ explicit choice or obviously cohesive single PR, but pause before mutation for a
 recommendation or ambiguous shape. Commit-only calls and existing-PR updates avoid that
 question.
 
+## Amendment (2026-09-28): the `gh` CLI replaces the retired `/gh` skill
+
+The `/gh` skill from skillz-that-grillz no longer exists. The boundary above does not
+change. GitHub inspection, review, CI, merge, issue, release, and administration work
+stays outside `/plate`. Agents do that work with the `gh` CLI directly. `/affinage` acts
+on pull request feedback and CI failures, and `/age` owns review.[^7] The historical
+text above keeps its `/gh` references as a record of the original decision.
+
 Related: [[architecture]], [[workflow-invariants]].
 
 [^1]: skills/plate/SKILL.md:93-147,172-202
@@ -64,3 +72,4 @@ Related: [[architecture]], [[workflow-invariants]].
 [^4]: skills/ultracook/SKILL.md:34-45,149-176
 [^5]: skills/plate/SKILL.md:128-147
 [^6]: skills/plate/SKILL.md § Repair-worktree topology; skills/cook/references/quality-gates.md § Repair pathway, Merge-time topology.
+[^7]: skills/plate/SKILL.md § Routing guard; skills/plate/references/ordinary-pr.md § Metadata and lifecycle.
