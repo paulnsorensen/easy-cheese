@@ -706,6 +706,9 @@ def _record_target(ref: str) -> str | None:
     return refs.normalize_ref(f"wheypoint:{parsed.project_key}/{parsed.work_id}{entry}")
 
 
+record_target = _record_target
+
+
 def _unpinned_record(ref: str) -> str | None:
     """The target of a `wheypoint:` ref that names no `@rev`, else None."""
     target = _record_target(ref)

@@ -2437,18 +2437,102 @@ def test_cure_a_positional_that_is_neither_file_nor_work_id_names_both_forms() -
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_cure_flags_refuse_a_piped_intent_without_the_dash() -> None:
+def test_cure_flags_leave_stdin_unread_unless_the_intent_is_dash() -> None:
     _ = _seed()
-    piped = json.dumps({"work_id": WORK_ID, "notes": "Dropped?"})
+    piped = json.dumps({"work_id": WORK_ID, "notes": "Piped."})
 
-    status, payload = _run("checkpoint", "--work-id", WORK_ID, "--question", "Q", stdin=piped)
-    assert (status, _error(payload)[0]) == (1, "intent-ambiguous")
-    status, payload = _run("validate", WORK_ID, "--question", "Q", stdin=piped)
-    assert (status, _error(payload)[0]) == (1, "intent-ambiguous")
+    for argv in (
+        ["checkpoint", "--work-id", WORK_ID, "--question", "Q1"],
+        ["checkpoint", WORK_ID, "--question", "Q2"],
+        ["validate", WORK_ID, "--question", "Q3"],
+    ):
+        stdin, out = io.StringIO(piped), io.StringIO()
+        assert wheypoint.main(argv, stdin=stdin, stdout=out) == 0, argv
+        assert stdin.tell() == 0, argv
+        assert "Piped." not in out.getvalue(), argv
 
-    status, payload = _run("checkpoint", "-", "--question", "Q", stdin=piped)
+    status, payload = _run("checkpoint", "-", "--question", "Q4", stdin=piped)
     assert status == 0, payload
-    assert _get(payload, "record", "notes") == "Dropped?"
+    assert _get(payload, "record", "notes") == "Piped."
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_a_positional_work_id_that_differs_from_work_id_is_ambiguous() -> None:
+    _ = _seed()
+    status, payload = _run("checkpoint", WORK_ID, "--work-id", OTHER, "--question", "Q")
+    assert (status, _error(payload)[0]) == (1, "intent-ambiguous")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_a_missing_intent_file_or_a_directory_is_never_a_work_id(
+    tmp_path: Path,
+) -> None:
+    status, payload = _run(
+        "checkpoint", "new.json", "--orientation", "New.\nWork.", "--question", "Q",
+        "--next", "hold", "--context", "x",
+    )
+    assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+    assert "new.json" in _error(payload)[1]
+    status, _ = _run("show", "new.json")
+    assert status != 0
+
+    (tmp_path / OTHER).mkdir()
+    status, payload = _run("checkpoint", OTHER, "--question", "Q")
+    assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+    assert "Errno" not in _error(payload)[1]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_a_file_link_keeps_its_explicit_empty_coverage_beside_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = _git_checkout(tmp_path, monkeypatch)
+    seeded = _seed(entries=[{"kind": "decision", "summary": "First.", "rationale": "R."}])
+    (first,) = (
+        entry["entry_id"]
+        for entry in cast(list[dict[str, str]], _get(seeded, "record", "decisions"))
+    )
+    ref = "repo:README.md"
+    status, payload = _run("link", WORK_ID, ref, "--kind", "informs", "--covers", first)
+    assert status == 0, payload
+    assert _covers(payload, ref) == [first]
+
+    _ = (checkout / "clear.json").write_text(
+        json.dumps(
+            {
+                "work_id": WORK_ID,
+                "artifact_links": [
+                    {"path": "README.md", "ref": ref, "covers_entry_ids": []}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    status, payload = _run("checkpoint", "clear.json", "--question", "QX")
+    assert status == 0, payload
+    assert _covers(payload, ref) == []
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_a_pinned_link_does_not_take_another_revisions_coverage() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "First.", "rationale": "R."}])
+    (first,) = (
+        entry["entry_id"]
+        for entry in cast(list[dict[str, str]], _get(seeded, "record", "decisions"))
+    )
+    old = cast(str, _seed(OTHER)["revision_id"])
+    status, payload = _run("checkpoint", OTHER, "--question", "Later?")
+    assert status == 0, payload
+    new = cast(str, payload["revision_id"])
+    old_ref, new_ref = f"{OTHER_REF}@{old}", f"{OTHER_REF}@{new}"
+
+    status, payload = _run("link", WORK_ID, new_ref, "--kind", "informs", "--covers", first)
+    assert status == 0, payload
+    assert _covers(payload, new_ref) == [first]
+
+    status, payload = _run("checkpoint", WORK_ID, "--link", old_ref, "--kind", "relates_to")
+    assert status == 0, payload
+    assert (_covers(payload, old_ref), _covers(payload, new_ref)) == ([], [first])
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -2459,6 +2543,22 @@ def test_cure_fork_from_an_unreadable_parent_is_refused(corpus_root: Path) -> No
 
     status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
     assert (status, _error(payload)[0]) == (1, "record-unreadable")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_fork_input_errors_are_invalid_intent_not_record_unreadable() -> None:
+    seeded = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
+    (first,) = (
+        entry["entry_id"]
+        for entry in cast(list[dict[str, str]], _get(seeded, "record", "questions"))
+    )
+    status, payload = _run("fork", WORK_ID, "child", "--move", first, "--orientation", "")
+    assert (status, _error(payload)[0]) == (1, "invalid-intent")
+    status, payload = _run(
+        "fork", WORK_ID, "child", "--move", first, "--orientation", "C.",
+        "--next", "cook", "--artifact", "",
+    )
+    assert (status, _error(payload)[0]) == (1, "invalid-intent")
 
 
 @pytest.mark.usefixtures("corpus_root")

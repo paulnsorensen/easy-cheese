@@ -34,6 +34,7 @@ from easy_cheese.cli.wheypoint.checkpoint import (
     enum_values,
     mirror_finalizer,
     note_dir_for,
+    open_store,
     parsed_ref,
     read_notes_file,
     refusal_for,
@@ -81,6 +82,15 @@ def run_fork(
     repository, except under `--project`: another corpus has no home here.
     """
     next_move = _next_move(next, artifact)
+    corpus_root = _corpus_root(project)
+    try:
+        _ = open_store(parent, corpus_root=corpus_root).read_record()
+    except ValueError as exc:
+        raise fromargs.CliError(
+            f"record-unreadable: work {parent!r} has a record that cannot be read, "
+            + f"so no fork can be taken from it: {exc}",
+            exit_code=1,
+        ) from exc
     captured_at = _dt.datetime.now(_dt.timezone.utc).strftime(
         checkpoint_mod.TIMESTAMP_FORMAT
     )
@@ -98,7 +108,7 @@ def run_fork(
         result = fork_mod.fork(
             parent=parent,
             child=child,
-            corpus_root=_corpus_root(project),
+            corpus_root=corpus_root,
             session_provenance=SessionProvenance(
                 harness=None, session_id=None, captured_at=captured_at
             ),
@@ -121,11 +131,7 @@ def run_fork(
     except (fork_mod.ForkError, commit_mod.CommitError, storage.StorageError) as exc:
         raise refusal_for(exc) from exc
     except ValueError as exc:
-        raise fromargs.CliError(
-            f"record-unreadable: work {parent!r} has a record that cannot be read, "
-            + f"so no fork can be taken from it: {exc}",
-            exit_code=1,
-        ) from exc
+        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
     return {
         **result_payload(result, None if target is None else str(target)),
         "origins": {
@@ -163,7 +169,7 @@ def run_link(
             payload.setdefault("artifact_links", [{"path": ref.partition(":")[2], "ref": ref}]),
         )
         links[0]["covers_entry_ids"] = list(covers)
-    reply = commit_intent(payload, keep_coverage=True)
+    reply = commit_intent(payload, carry_from=0)
     return {**reply, "link": {"to": ref, "kind": kind}}
 
 

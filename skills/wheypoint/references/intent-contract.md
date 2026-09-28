@@ -102,8 +102,8 @@ The runtime derives `prior_compaction_revision_id` from stored receipts and refu
 `checkpoint` and `validate` build or overlay the intent from flags.
 With an intent file, each flag extends or replaces the matching key of that file.
 Without an intent file, the flags build the whole intent.
-With flags, the positional may be a work id instead of an intent file.
-With flags and no intent argument, a piped intent needs `-`; otherwise the command refuses `intent-ambiguous`.
+With flags, a positional that names no existing path is a work id.
+Flags ignore stdin unless the intent argument is `-`.
 
 - `--work-id`, `--orientation`, `--next`, `--artifact`, and `--notes-file` set one scalar each.
 - `--question` and `--blocker` add entries; `--gates` makes every one of them in the call block continuation.
@@ -113,7 +113,7 @@ With flags and no intent argument, a piped intent needs `-`; otherwise the comma
 - `--context` adds a `working_context` path.
 - `--link` adds an edge with the paired `--kind`; a pinnable ref also adds an artifact link.
 - `--covers` applies to every pinnable `--link` in the call.
-- `--covers` omitted keeps the stored coverage.
+- `--covers` omitted keeps the stored coverage of a flag-built link; a link from the intent file keeps the coverage it states.
 
 The flag form refuses with these codes:
 
@@ -122,8 +122,8 @@ The flag form refuses with these codes:
 - `flag-link`: a `--link` is not a valid typed ref.
 - `flag-conflict`: the intent file holds a non-list value at a key a flag extends.
 - `notes-unreadable`: the `--notes-file` could not be read.
-- `intent-ambiguous`: the positional work id differs from `--work-id`, or flags without an intent argument meet a piped intent.
-- `intent-unreadable`: the positional is neither an intent file nor a work id.
+- `intent-ambiguous`: the positional work id differs from `--work-id`.
+- `intent-unreadable`: the positional is neither an intent file nor a work id, names a missing `.json` file or a path, or names a directory.
 
 ## `next:` values
 

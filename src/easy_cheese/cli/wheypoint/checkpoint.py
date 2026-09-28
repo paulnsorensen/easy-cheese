@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import re
 from collections.abc import Callable, Sequence
 from enum import Enum
@@ -176,22 +177,36 @@ def read_payload(stdin: TextIO) -> object:
 def read_intent(
     intent_arg: str | None, stdin: TextIO, flags: IntentFlags | None = None
 ) -> object:
-    """The JSON intent from a path argument, `-`, or stdin when neither (G6).
+    """The JSON intent from a path argument, `-`, or stdin when neither (G6)."""
+    return _read_overlaid(intent_arg, stdin, flags)[0]
 
-    Flags overlay that intent (G7). With flags, a positional that is not `-`
-    and not an existing file names the work id, and flags with no intent
-    start from an empty one; a piped intent then needs an explicit `-`.
+
+def _read_overlaid(
+    intent_arg: str | None, stdin: TextIO, flags: IntentFlags | None
+) -> tuple[object, int | None]:
+    """The intent, and the index of its first flag-built artifact link.
+
+    Flags overlay that intent (G7). With flags, a positional that names no
+    existing path is the work id, and flags with no intent start from an
+    empty one: they never read stdin unless the intent argument is `-`.
+    The index is None when no flag is given.
     """
     if flags is not None and flags.given():
-        if intent_arg is not None and intent_arg != "-" and not Path(intent_arg).exists():
-            flags = _positional_work_id(intent_arg, flags)
-            intent_arg = None
-        base: object = (
-            _flag_base(stdin) if intent_arg is None else read_intent(intent_arg, stdin)
-        )
-        return flags.apply(base)
+        if intent_arg is not None and intent_arg != "-":
+            path = Path(intent_arg)
+            if not path.exists():
+                flags = _positional_work_id(intent_arg, flags)
+                intent_arg = None
+            elif not path.is_file():
+                raise fromargs.CliError(
+                    f"intent-unreadable: {intent_arg!r} is not a file: pass "
+                    + "--work-id to write to a work id that shares its name",
+                    exit_code=1,
+                )
+        base: object = {} if intent_arg is None else read_intent(intent_arg, stdin)
+        return flags.apply(base), _link_count(base)
     if intent_arg is None or intent_arg == "-":
-        return read_payload(stdin)
+        return read_payload(stdin), None
     path = Path(intent_arg)
     try:
         raw = path.read_text(encoding="utf-8")
@@ -200,15 +215,27 @@ def read_intent(
             f"intent-unreadable: {intent_arg}: {exc}", exit_code=1
         ) from exc
     try:
-        return cast(object, json.loads(raw))
+        return cast(object, json.loads(raw)), None
     except ValueError as exc:
         raise fromargs.CliError(
             f"invalid-json: {intent_arg} is not one JSON value: {exc}", exit_code=1
         ) from exc
 
 
+def _link_count(payload: object) -> int:
+    """How many artifact links `payload` names before the flags add theirs."""
+    if not isinstance(payload, dict):
+        return 0
+    links = cast(dict[str, object], payload).get("artifact_links")
+    return len(cast(list[object], links)) if isinstance(links, list) else 0
+
+
 def _positional_work_id(value: str, flags: IntentFlags) -> IntentFlags:
     """`flags` writing to the work id `value`, the AC-14 positional form."""
+    if value.endswith(".json") or "/" in value or os.sep in value:
+        raise fromargs.CliError(
+            f"intent-unreadable: {value}: no such intent file", exit_code=1
+        )
     if not LOWER_IDENTIFIER_RE.fullmatch(value):
         raise fromargs.CliError(
             f"intent-unreadable: {value!r} is neither an intent file nor a work id: "
@@ -222,15 +249,6 @@ def _positional_work_id(value: str, flags: IntentFlags) -> IntentFlags:
             exit_code=1,
         )
     return evolve(flags, work_id=value)
-
-
-def _flag_base(stdin: TextIO) -> dict[str, object]:
-    """The empty intent flags start from; a piped intent is never dropped silently."""
-    if not stdin.isatty() and stdin.read().strip():
-        raise fromargs.CliError(
-            "intent-ambiguous: pass - to overlay flags on a piped intent", exit_code=1
-        )
-    return {}
 
 
 def open_store(work_id: str, *, corpus_root: Path | None = None) -> storage.WorkStore:
@@ -255,12 +273,13 @@ def run_checkpoint(
     re-checks the parent under the lock and refuses a delta whose record has
     moved on. This command shortens the authoring, not the checking.
     """
+    payload, carry_from = _read_overlaid(intent_arg, stdin, flags)
     return commit_intent(
-        read_intent(intent_arg, stdin, flags),
+        payload,
         compacted=compacted,
         note_dir=note_dir,
         no_note=no_note,
-        keep_coverage=flags is not None and flags.given(),
+        carry_from=carry_from,
     )
 
 
@@ -270,12 +289,13 @@ def commit_intent(
     compacted: str | None = None,
     note_dir: str | None = None,
     no_note: bool = False,
-    keep_coverage: bool = False,
+    carry_from: int | None = None,
 ) -> dict[str, object]:
     """Structure, bind, and commit one intent payload; the one write path.
 
-    `keep_coverage` is for flag-built links: one that names no coverage keeps
-    the coverage the record already holds for its target.
+    `carry_from` is the index of the first flag-built artifact link: from it
+    on, a link that names no coverage keeps the coverage the record already
+    holds for it. None carries nothing.
     """
     reserved = checkpoint_mod.commit_only_fields(payload)
     if reserved:
@@ -306,8 +326,8 @@ def commit_intent(
             + f"be read, so no checkpoint can be bound to it: {exc}",
             exit_code=1,
         ) from exc
-    if keep_coverage:
-        intent = carry_coverage(intent, current)
+    if carry_from is not None:
+        intent = carry_coverage(intent, current, carry_from)
     # The proof is part of the request: an identical intent with and without a
     # proof must not share a pending-mirror ledger entry.
     request_identity = request_identity_for(intent, proof)
@@ -326,45 +346,51 @@ def commit_intent(
 
 
 def carry_coverage(
-    intent: CheckpointIntent, current: WheypointRecord | None
+    intent: CheckpointIntent, current: WheypointRecord | None, start: int
 ) -> CheckpointIntent:
-    """`intent` with each uncovering link given the coverage `current` holds for it.
+    """`intent` with each uncovering link from index `start` on given the
+    coverage `current` holds for it.
 
-    Links match as the kernel merges them: by normalized ref, and a
-    `wheypoint:` ref by its target at any revision.
+    Links match as the kernel merges them: a ref matches itself once
+    normalized, and an unpinned `wheypoint:` ref also matches its target
+    pinned at any revision.
     """
     if current is None or not intent.artifact_links:
         return intent
-    held = {
-        _link_target(records.effective_ref(link)): link.covers_entry_ids
+    held = [
+        (_normalized(records.effective_ref(link)), link.covers_entry_ids)
         for link in current.artifact_links
-    }
+    ]
     return evolve(
         intent,
         artifact_links=[
             link
-            if link.covers_entry_ids
+            if index < start or link.covers_entry_ids
             else evolve(
-                link,
-                covers_entry_ids=list(
-                    held.get(_link_target(records.effective_ref(link)), [])
-                ),
+                link, covers_entry_ids=_held_covers(held, records.effective_ref(link))
             )
-            for link in intent.artifact_links
+            for index, link in enumerate(intent.artifact_links)
         ],
     )
 
 
-def _link_target(ref: str) -> str:
+def _held_covers(held: Sequence[tuple[str, Sequence[str]]], ref: str) -> list[str]:
+    key = _normalized(ref)
+    target = commit_mod.record_target(key)
+    unpinned = target is not None and target == key
+    matches = [
+        covers
+        for held_ref, covers in held
+        if held_ref == key or (unpinned and commit_mod.record_target(held_ref) == target)
+    ]
+    return list(matches[-1]) if matches else []
+
+
+def _normalized(ref: str) -> str:
     try:
-        parsed = ref_grammar.parse_ref(ref)
-        normalized = ref_grammar.normalize_ref(ref)
+        return ref_grammar.normalize_ref(ref)
     except ValueError:
         return ref
-    if parsed.scheme is not ref_grammar.Scheme.WHEYPOINT:
-        return normalized
-    entry = "" if parsed.entry_id is None else f"#{parsed.entry_id}"
-    return ref_grammar.normalize_ref(f"wheypoint:{parsed.project_key}/{parsed.work_id}{entry}")
 
 
 def request_identity_for(

@@ -98,6 +98,7 @@ An agent-authored `fork` transition is refused.
 - `unknown-link`: the parent carries no link with that ref.
 - `dossier-required`: a moved gating entry has no `--dossier` fork.
 - `record-unreadable`: the parent record could not be read.
+- `invalid-intent`: an empty `--orientation`, a bad `--next`, or an `--artifact` that `--next` cannot use.
 - `note-unwritable`: the child projection mirror could not be written.
 
 ## `link` and `unlink`
