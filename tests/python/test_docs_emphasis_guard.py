@@ -111,18 +111,18 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
         # commands now live one hop under cook's fan-pathway reference. Legacy
         # phase-state and decomposition commands are intentionally not live.
         REPO_ROOT / "skills/cook/SKILL.md": (
-            "cook.pyz artifact-path",
-            "cook.pyz read-handoff-slug",
-            "cook.pyz mode",
-            "cook.pyz milknado",
-            "cook.pyz worktree create",
-            "cook.pyz worktree harvest",
-            "cook.pyz worktree teardown",
+            "scripts/cook.pyz artifact-path",
+            "scripts/cook.pyz read-handoff-slug",
+            "scripts/cook.pyz mode",
+            "scripts/cook.pyz milknado",
+            "scripts/cook.pyz worktree create",
+            "scripts/cook.pyz worktree harvest",
+            "scripts/cook.pyz worktree teardown",
         ),
         REPO_ROOT / "skills/age/SKILL.md": (
-            "age.pyz read-handoff-slug",
-            "age.pyz write-handoff-artifact",
-            "age.pyz html-report",
+            "scripts/age.pyz read-handoff-slug",
+            "scripts/age.pyz write-handoff-artifact",
+            "scripts/age.pyz html-report",
         ),
         REPO_ROOT / "skills/affinage/SKILL.md": (
             "python3 skills/affinage/scripts/affinage.pyz pr-status",
@@ -133,8 +133,8 @@ def test_harness_portability_reference_is_linked_from_workflow_docs():
             "python3 skills/hard-cheese/scripts/hard-cheese.pyz append-attempt",
         ),
         REPO_ROOT / "skills/mold/SKILL.md": (
-            "mold.pyz artifact-path",
-            "mold.pyz gate-graph",
+            "scripts/mold.pyz artifact-path",
+            "scripts/mold.pyz gate-graph",
         ),
         REPO_ROOT / "skills/pasteurize/SKILL.md": (
             "python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun",

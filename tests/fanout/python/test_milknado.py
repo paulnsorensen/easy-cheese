@@ -16,7 +16,7 @@ import pytest
 from easy_cheese.shared.fanout import milknado
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BUNDLE = REPO_ROOT / "skills/cook/scripts/cook.pyz"
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 ENGINE = ["milknado_todo_claim", "milknado_node_verify"]
 ENGINE_PREFIXED = [
@@ -71,12 +71,11 @@ class TestProbeEnvFallback:
 
 
 class TestCli:
-    """Drives the checked-in cook.pyz bundle; pending-rebuild until the
-    orchestrator regenerates bundles with the fromargs-based milknado.py."""
+    """Drives the built cook archive."""
 
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(BUNDLE), "milknado", *args],
+            [sys.executable, str(COOK_ARCHIVE), "milknado", *args],
             capture_output=True,
             text=True,
         )

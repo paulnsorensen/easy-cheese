@@ -47,6 +47,7 @@ from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
 
 ROOT = Path(__file__).resolve().parents[2]
+COOK_ARCHIVE = ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 pytestmark = pytest.mark.skipif(  # noqa: V107
     os.environ.get("MOLD_COOK_BROWSER") != "1",
@@ -66,9 +67,7 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
     repository = tmp_path / "repository"
     _ = repository.mkdir()
     spec = make_spec(repository)
-    cook_pyz = ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
-    if not cook_pyz.is_file():
-        raise AssertionError(f"generated Cook bundle is missing: {cook_pyz}")
+    cook_pyz = COOK_ARCHIVE
 
     browser_node_modules = Path(os.environ.get("MOLD_COOK_BROWSER_NODE_MODULES", ""))
     browser_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "")

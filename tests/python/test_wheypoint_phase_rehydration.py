@@ -34,6 +34,7 @@ from tests.python.test_mold_cook_producer import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
 SLUG = "phase-rehydration-tracer"
 
 

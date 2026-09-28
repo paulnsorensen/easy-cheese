@@ -1,6 +1,6 @@
 """CLI contract tests for the `remediation-decision` bundle command.
 
-Exercises both events end-to-end through the built cook.pyz bundle: a review
+Exercises both events end-to-end through the built cook archive: a review
 event, the review -> cure chain, the zero-applied remediate stop, and the
 fail-closed error paths (mini-spec Sec13, AC-1..AC-5, AC-21).
 """
@@ -37,7 +37,8 @@ from easy_cheese_schemas import (
     canonical_bytes,
 )
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 DIGEST = f"sha256:{'a' * 64}"
 CURE_SCHEMA = "https://schemas.easy-cheese.dev/remediation-cure-observation"
 REVIEW_SCHEMA = "https://schemas.easy-cheese.dev/review-result"
@@ -46,7 +47,7 @@ STATE_SCHEMA = "https://schemas.easy-cheese.dev/remediation-state"
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "remediation_decision", *args],
+        [sys.executable, str(COOK_ARCHIVE), "remediation_decision", *args],
         capture_output=True,
         text=True,
     )

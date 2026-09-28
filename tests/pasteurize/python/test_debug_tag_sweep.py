@@ -19,8 +19,8 @@ from typing import Protocol, TypedDict, cast
 import fromargs
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/pasteurize/scripts/pasteurize.pyz"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PASTEURIZE_ARCHIVE = REPO_ROOT / "skills" / "pasteurize" / "scripts" / "pasteurize.pyz"
 
 
 class _SweepResult(TypedDict):
@@ -44,7 +44,7 @@ class _DebugTagSweepModule(Protocol):
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "debug-tag-sweep", *args],
+        [sys.executable, str(PASTEURIZE_ARCHIVE), "debug-tag-sweep", *args],
         capture_output=True,
         text=True,
     )

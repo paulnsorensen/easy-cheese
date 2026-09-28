@@ -19,7 +19,7 @@ import fromargs
 import pytest
 
 from easy_cheese.shared import bundle_commands as bc
-from scripts import build_pyz as _build_pyz
+from scripts import runtime_gates as _runtime_gates
 
 _CommandHandler = Callable[[list[str]], int]
 _CommandFactory = Callable[[str, str, str], bc.Command]
@@ -190,9 +190,9 @@ def test_dispatch_rejects_non_integer_status(
 
 
 def test_every_skill_declares_a_static_manifest() -> None:
-    from scripts import build_pyz
+    from scripts import runtime_gates
 
-    for skill in build_pyz.SKILLS:
+    for skill in runtime_gates.SKILLS:
         package = skill.replace("-", "_")
         module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
         commands = cast(tuple[bc.Command, ...], module.COMMANDS)
@@ -241,7 +241,7 @@ def test_validate_command_surface_rejects_undeclared_reference() -> None:
         )
 
 
-@pytest.mark.parametrize("skill", _build_pyz.SKILLS)
+@pytest.mark.parametrize("skill", _runtime_gates.SKILLS)
 def test_validate_command_surface_passes_for_every_skill(skill: str) -> None:
     package = skill.replace("-", "_")
     module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
@@ -250,9 +250,9 @@ def test_validate_command_surface_passes_for_every_skill(skill: str) -> None:
 
 
 def test_skill_manifests_are_literal_tuples() -> None:
-    from scripts import build_pyz
+    from scripts import runtime_gates
 
-    for skill in build_pyz.SKILLS:
+    for skill in runtime_gates.SKILLS:
         package = skill.replace("-", "_")
         module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
         tree = ast.parse(inspect.getsource(module))
@@ -309,24 +309,24 @@ def test_render_skill_commands_projects_the_manifest_verbatim(
 def test_rendering_command_docs_never_resolves_targets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from scripts import build_pyz
+    from scripts import runtime_gates
     from scripts import render_generated_regions as rgr
 
     def explode(target: str) -> bc.CommandHandler:
         raise AssertionError(f"doc rendering resolved command target {target!r}")
 
     monkeypatch.setattr(bc, "_handler", explode)
-    for skill in build_pyz.SKILLS:
+    for skill in runtime_gates.SKILLS:
         assert rgr.render_skill_commands(skill).startswith(
             f"# `/{skill}` bundle commands\n"
         )
 
 
 def test_checked_in_command_docs_match_the_manifests() -> None:
-    from scripts import build_pyz
+    from scripts import runtime_gates
     from scripts import render_generated_regions as rgr
 
-    for skill in build_pyz.SKILLS:
+    for skill in runtime_gates.SKILLS:
         path = rgr.commands_doc_path(skill)
         assert path.read_text(encoding="utf-8") == rgr.render_skill_commands(skill), (
             f"{path} is stale; run scripts/render_generated_regions.py"
@@ -334,10 +334,10 @@ def test_checked_in_command_docs_match_the_manifests() -> None:
 
 
 def test_command_doc_slugs_match_the_bundled_skills() -> None:
-    from scripts import build_pyz
+    from scripts import runtime_gates
     from scripts import render_generated_regions as rgr
 
-    assert rgr.SKILL_SLUGS == build_pyz.SKILLS
+    assert rgr.SKILL_SLUGS == runtime_gates.SKILLS
 
 
 def _underscore_long_options(source: str) -> list[str]:
@@ -395,7 +395,7 @@ def _subparser_names(handler: _CommandHandler) -> set[str]:
     return set(_PLAIN_COMMAND_RE.findall(section))
 
 
-@pytest.mark.parametrize("skill", _build_pyz.SKILLS)
+@pytest.mark.parametrize("skill", _runtime_gates.SKILLS)
 def test_declared_leaves_match_the_handlers_subparsers(skill: str) -> None:
     package = skill.replace("-", "_")
     module = importlib.import_module(f"easy_cheese.skills.{package}.commands")
@@ -463,7 +463,7 @@ def test_dispatch_unknown_cross_bundle_command_names_the_owning_bundle(
     commands = (command("go"),)
     assert bc.dispatch(commands, ["worktree"]) == 2
     err = capsys.readouterr().err
-    assert "'worktree' is a command of cook.pyz." in err
+    assert "'worktree' is a command of scripts/cook." in err
 
 
 def test_dispatch_unknown_cross_bundle_leaf_names_the_owning_parent_and_bundle(
@@ -478,7 +478,7 @@ def test_dispatch_unknown_cross_bundle_leaf_names_the_owning_parent_and_bundle(
     commands = (command("go"),)
     assert bc.dispatch(commands, ["create"]) == 2
     err = capsys.readouterr().err
-    assert "'create' is 'worktree create' in cook.pyz." in err
+    assert "'create' is 'worktree create' in scripts/cook." in err
 
 
 def test_dispatch_close_match_suggests_without_running(
@@ -557,7 +557,7 @@ def test_dispatch_applies_the_underscore_alias_to_cross_bundle_guidance(
     fake_index.LEAF_OWNERS = {}  # pyright: ignore[reportAttributeAccessIssue]
     monkeypatch.setitem(sys.modules, fake_index.__name__, fake_index)
     assert bc.dispatch((command("go"),), ["stack_tools"]) == 2
-    assert "'stack-tools' is a command of plate.pyz." in capsys.readouterr().err
+    assert "'stack-tools' is a command of scripts/plate." in capsys.readouterr().err
 
 
 def test_dispatch_applies_the_underscore_alias_to_leaf_guidance(

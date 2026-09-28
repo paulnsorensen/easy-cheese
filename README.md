@@ -24,7 +24,7 @@ A portable, harness-agnostic Agent Skills toolkit for any [Agent Skills](https:/
 - [Skills](#skills)
 - [Scope](#scope)
 - [Python package](#python-package)
-- [Build skill archives](#build-skill-archives)
+- [Run and build skill archives](#run-and-build-skill-archives)
 - [Optional tools](#optional-tools)
 - [Install](#install)
 - [Validate](#validate)
@@ -123,7 +123,7 @@ before review.
 
 Easy-cheese is intentionally a small surface. What that means in practice:
 
-- **Skills only.** The repository publishes no custom agents, commands, eta templates, or harness-specific bundles. `SKILL.md` defines each capability, and Python-backed skills include a portable `.pyz` runtime archive.
+- **Skills only.** The repository publishes no custom agents, commands, eta templates, or harness-specific bundles. `SKILL.md` defines each capability, and Python-backed skills include one committed self-contained `.pyz` archive.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. Source-code work follows the shared routing contract: prefer tilth when present, use equivalent native AST/LSP/anchored-edit backends when available, and report any precision loss from bounded fallbacks.
 - **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while approved file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
@@ -138,24 +138,24 @@ pip install easy-cheese-schemas
 
 For the stability policy, `schema_version` contract, and strictness tiers, see [Easy-cheese schemas](https://github.com/paulnsorensen/easy-cheese/blob/main/docs/easy-cheese-schemas.md).
 
-## Build skill archives
+## Run and build skill archives
 
-You don't need Shiv or pip to run a checked-in skill archive. Run an archive with Python:
+You need only Python 3.11 or newer to run a skill. Each Python-backed skill commits one self-contained executable archive at `skills/<skill>/scripts/<skill>.pyz`:
 
 ```sh
 python3 skills/<skill>/scripts/<skill>.pyz <subcommand>
 ```
 
-If you change runtime source, build inputs, a phase contract, or a committed archive, install the pinned build tools and rebuild every archive:
+If you change runtime source, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`, rebuild every affected archive:
 
 ```sh
-python3 -m pip install --requirement requirements-build.txt
-just bundle
+just wedge-build
+just wedge-check
 ```
 
-`just bundle` builds each application from PEP 517 wheels in a private wheelhouse and resolves the complete external and internal dependency closure into an ephemeral hash-locked requirements file beside that wheelhouse. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The bundle resolves a selected target lazily and calls it with only that command's arguments.
+`just wedge-build` runs [wedge](https://github.com/paulnsorensen/skillz-that-grillz/tree/main/lib) at build time. It vendors `src/`, builds one reproducible archive per skill, and keeps archive metadata in `wedge.toml`. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The archive resolves a selected target lazily and calls it with only that command's arguments.
 
-The external runtime pins in `requirements/runtime.txt` are the sole committed hash lock. That lock includes the `fromargs` CLI library, installed from its PyPI release. `just check` validates the repository but does not rebuild the archives. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
+`just check` runs `just wedge-check`, which executes `wedge bundle --check` and fails on a missing, corrupt, or stale committed archive. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
 
 ## Optional tools
 

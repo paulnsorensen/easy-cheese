@@ -37,8 +37,8 @@ def test_check_and_ci_depend_on_dead_code() -> None:
 
 
 @needs_just
-def test_check_and_ci_depend_on_bundle_currency() -> None:
-    """check runs the index-mode bundle check; ci runs the head-mode one."""
+def test_check_and_ci_do_not_repeat_wedge_check() -> None:
+    """The test recipe owns archive freshness before archive execution."""
     result = subprocess.run(
         ["just", "--dump", "--dump-format", "json"],
         cwd=ROOT,
@@ -48,24 +48,17 @@ def test_check_and_ci_depend_on_bundle_currency() -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     recipes = cast(dict[str, object], json.loads(result.stdout)["recipes"])
-
-    def dependencies(name: str) -> set[str]:
+    for name in ("check", "ci"):
         recipe = cast(dict[str, object], recipes[name])
         deps = cast(list[dict[str, object]], recipe["dependencies"])
-        return {cast(str, dependency["recipe"]) for dependency in deps}
-
-    assert "check-bundles" in dependencies("check")
-    assert "check-bundles-ci" in dependencies("ci")
-    assert "bundle" in dependencies("check-bundles-ci")
+        dependencies = {cast(str, dependency["recipe"]) for dependency in deps}
+        assert "wedge-check" not in dependencies
+        assert "test" in dependencies
 
 
 @needs_just
-def test_test_environment_installs_the_build_requirements() -> None:
-    """The test interpreter carries the build tools the bundle seam needs.
-
-    Without them, tests/python/test_pyz_bundle.py skips every bundle
-    integration test in a clean environment.
-    """
+def test_test_recipe_gates_runtime_and_committed_archives_before_suites() -> None:
+    """The test recipe validates committed archives before executing them."""
     result = subprocess.run(
         ["just", "--dump", "--dump-format", "json"],
         cwd=ROOT,
@@ -79,8 +72,19 @@ def test_test_environment_installs_the_build_requirements() -> None:
     )
     value = cast(str, assignments["python"]["value"])
 
-    assert "--with-requirements requirements-build.txt" in value
     assert "--with-requirements requirements/runtime.txt" in value
+    assert "requirements-build.txt" not in value
+
+    justfile = (ROOT / "justfile").read_text(encoding="utf-8")
+    gates = justfile.index("scripts/runtime_gates.py")
+    freshness = justfile.index("just wedge-check")
+    python_suite = justfile.index("-m pytest tests/python")
+    browser_suite = justfile.index("just test-mold-review")
+    assert gates < freshness < min(python_suite, browser_suite)
+    assert "skill_archives.py" not in justfile
+    assert "EASY_CHEESE_PREBUILT_PYZ" not in justfile
+    assert "prebuilt_pyz_dir" not in justfile
+    assert '{{wedge}} bundle --root skills --check' in justfile
 
 
 def test_docs_workflow_matches_the_package_build_command() -> None:
@@ -116,29 +120,27 @@ def test_docs_workflow_matches_the_package_build_command() -> None:
     assert "refs/heads/main" in cast(str, deploy["if"])
 
 
-def test_build_pyz_workflow_runs_the_bundle_currency_matrix() -> None:
-    """build-pyz.yml's matrix job runs check_bundles.py -- the full
-    isolated-execution + command-dispatch conformance matrix -- across every
-    pinned Python, not just the justfile's local convenience recipes.
-    """
-    jobs = cast(
-        dict[str, object],
-        yaml.safe_load(
-            (ROOT / ".github" / "workflows" / "build-pyz.yml").read_text(encoding="utf-8")
-        )["jobs"],
-    )
-    build = cast(dict[str, object], jobs["build"])
-    matrix = cast(
-        list[dict[str, str]],
-        cast(dict[str, object], cast(dict[str, object], build["strategy"])["matrix"])[
-            "include"
-        ],
-    )
-    assert {entry["python"] for entry in matrix} >= {"3.12", "3.14"}
-    steps = cast(list[dict[str, object]], build["steps"])
+def test_validate_workflow_gates_committed_archives_before_suites() -> None:
+    """validate.yml checks committed archives before executing them."""
+    workflow_path = ROOT / ".github" / "workflows" / "validate.yml"
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    workflow = cast(dict[str, object], yaml.safe_load(workflow_text))
+    jobs = cast(dict[str, object], workflow["jobs"])
+    steps = cast(list[dict[str, object]], cast(dict[str, object], jobs["test"])["steps"])
     runs = [cast(str, step["run"]) for step in steps if "run" in step]
-    assert any("scripts/check_bundles.py" in run for run in runs)
-    assert any("scripts/build_pyz.py" in run for run in runs)
+    gates = next(i for i, run in enumerate(runs) if "scripts/runtime_gates.py" in run)
+    freshness = next(i for i, run in enumerate(runs) if "just wedge-check" in run)
+    suites = [i for i, run in enumerate(runs) if "-m pytest" in run]
+    assert suites
+    assert gates < freshness < min(suites)
+    assert workflow_text.count("\non:") == 1
+    assert "pull_request:" in workflow_text
+    assert "push:" in workflow_text
+    assert "branches: [main]" in workflow_text
+    assert workflow["permissions"] == {"contents": "read"}
+    assert "skill_archives.py" not in workflow_text
+    assert "EASY_CHEESE_PREBUILT_PYZ" not in workflow_text
+    assert not (ROOT / ".github" / "workflows" / "wedge.yml").exists()
 
 
 def test_ci_jobs_pin_tools() -> None:

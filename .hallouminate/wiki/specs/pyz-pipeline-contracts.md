@@ -25,9 +25,11 @@ entity_referent_bindings:
 
 # pyz pipeline contracts: closure gate, currency enforcement, discoverability, skill↔bundle equality
 
+> Superseded pipeline: Wedge builds each committed skill archive under the approved A correction. The custom wheelhouse builder remains retired. See [[architecture/pyz-bundling-pipeline]] for the current pipeline. This spec is kept as history.
+
 ## Problem
 
-The .pyz build pipeline has four drift classes with no local gate: (1) cross-directory
+The archive build pipeline has four drift classes with no local gate: (1) cross-directory
 imports ride on the hand-maintained EXTRA_MODULES dict and a missing entry ships a
 bundle that fails only at runtime on a lazy import; (2) nothing local enforces bundle
 currency, so "bundles stale" CI failures recur (PR #424); (3) source layout is opaque —
@@ -44,7 +46,7 @@ common.pyz fallback for cook that is never built).
 - tests/python/test_pyz_bundle.py:24-66 — hand-copied SKILL_SUBCOMMANDS, missing press red-gate, ultracook curd-block, ultracook age-route (the three dead registrations).
 - skills/cook/references/fan-pathway.md:33-35 — documents `common.pyz read_handoff_slug` fallback; COMMON_CONSUMERS excludes cook.
 - astro.config.mjs — default srcDir ./src; src/components, src/pages, src/styles, src/content are Astro; the rest is Python.
-- Dead registrations (3), no caller in src/**, shared/**, scripts/**, tests/**: press red-gate (registered scripts/build_pyz.py:116; absent from tests/python/test_pyz_bundle.py:55; all red-gate tests target cut.pyz — tests/cut/python/test_cook_red_gate.py:244); ultracook curd-block (registered scripts/build_pyz.py:134; tests/fanout/python/test_curd_block.py:21 imports the module directly; skills/mold/references/curdle.md:269 forbids invoking it); ultracook age-route (registered scripts/build_pyz.py:133; tests/fanout/python/test_age_route_cli.py:24,34 imports the module directly).
+- Dead registrations (3), no caller in src/**, shared/**, scripts/**, tests/**: press red-gate (registered scripts/build_pyz.py:116; absent from tests/python/test_pyz_bundle.py:55; all red-gate tests target the cut archive — tests/cut/python/test_cook_red_gate.py:244); ultracook curd-block (registered scripts/build_pyz.py:134; tests/fanout/python/test_curd_block.py:21 imports the module directly; skills/mold/references/curdle.md:269 forbids invoking it); ultracook age-route (registered scripts/build_pyz.py:133; tests/fanout/python/test_age_route_cli.py:24,34 imports the module directly).
 - Test-only subcommands (9), invoked solely by tests: mold render_html, ultracook artifact-path/phase_decision/manifest_update/wiring_topo_sort, common slugify/handoff_cli/paths_cli/render_html — each exercised only via tests/python/test_pyz_bundle.py:24-66 (SKILL_SUBCOMMANDS smoke test) or direct module imports (tests/fanout/python/test_manifest_update.py:80, tests/shared/python/test_handoff_cli.py:24-27, tests/shared/python/test_paths_cli.py:22-26, tests/python/test_pyz_bundle.py:627-640).
 
 ## Options considered
@@ -123,7 +125,7 @@ In tests/python/test_skill_contract.py (contract-strictness, cook-common-consume
 
 ```python
 def referenced_subcommands() -> dict[str, frozenset[str]]:
-    """Parse skills/**/*.md for '<bundle>.pyz <subcommand>' invocations."""
+    """Parse skills/**/*.md for 'scripts/<bundle> <subcommand>' invocations."""
 
 def test_registry_equals_prose(): ...          strict equality, both directions
 def test_common_consumers_cover_prose(): ...   a common.pyz reference implies consumer membership
@@ -143,9 +145,9 @@ website/, and src/ is pure Python.
 | acceptance id | interface | seam | expected_failure | mode |
 | --- | --- | --- | --- | --- |
 | AC-1 | python3 scripts/build_pyz.py (import-closure-check) | build subprocess exit code and stderr | On main, staging a script whose function-body imports an undeclared cross-directory module builds cleanly; the closure gate must exit nonzero naming the unresolved module and its importer | tracer |
-| AC-2 | pytest tests/python/test_skill_contract.py (contract-strictness) | pytest run against build_pyz registries and skills markdown | On main the equality assertion fails: 12 registered subcommands, including press.pyz red-gate, have no skill-markdown reference | tracer |
+| AC-2 | pytest tests/python/test_skill_contract.py (contract-strictness) | pytest run against build_pyz registries and skills markdown | On main the equality assertion fails: 12 registered subcommands, including press red-gate, have no skill-markdown reference | tracer |
 | AC-3 | python3 skills/cook/scripts/common.pyz read_handoff_slug (cook-common-consumer) | bundle-dispatch subprocess on a bundle-only layout | On main the invocation fails because skills/cook/scripts/common.pyz is never built; after cook joins COMMON_CONSUMERS it resolves and exits 0 on --help | tracer |
-| AC-4 | python3 skills/press/scripts/press.pyz red-gate (contract-strictness) | dispatcher usage-rejection exit code | On main press.pyz red-gate dispatches successfully; asserting exit 2 usage-rejection fails until the dead registration is pruned | tracer |
+| AC-4 | python3 skills/press/scripts/press.pyz red-gate (contract-strictness) | dispatcher usage-rejection exit code | On main press red-gate dispatches successfully; asserting exit 2 usage-rejection fails until the dead registration is pruned | tracer |
 | AC-5 | python3 scripts/build_pyz.py (discoverability-surfaces) | build gate RuntimeError on stale generated file | On main no src/PYTHON_SCRIPTS.md exists; the gate must fail the build until the checked-in map byte-matches the registries | tracer |
 | AC-6 | just check (currency-enforcement) | recipe exit code with a deliberately stale committed bundle | On main just check passes with a stale bundle because check_bundles.py is not wired into the recipe | tracer |
 | AC-7 | pytest banner assertion in test_skill_contract.py (discoverability-surfaces) | pytest run over registered source files | On main the banner test fails: src/age/age-html-report.py has no ships-as header line | tracer |
@@ -177,3 +179,5 @@ Host-validated `plan-pyz-pipeline-contracts-001`: 5 curds / 3 waves — wave 1: 
 
 - Decorator-based subcommand self-registration — tracked as [#437](https://github.com/paulnsorensen/easy-cheese/issues/437), not in this spec (user disposition).
 - Gitignoring/relocating the untracked site/ build output — tracked as [#438](https://github.com/paulnsorensen/easy-cheese/issues/438) (user disposition).
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

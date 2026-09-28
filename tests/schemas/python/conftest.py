@@ -12,14 +12,14 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 import easy_cheese_schemas  # noqa: E402, F401  # pyright: ignore[reportUnusedImport]
-_BUNDLE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 Validator = Callable[[dict[str, object]], list[str]]
 
 
 @pytest.fixture(scope="session")
-def bundle() -> Path:
-    return _BUNDLE
+def bundle(skill_archive: Callable[[str], Path]) -> Path:
+    """Return the committed cook archive."""
+    return skill_archive("cook")
 
 
 @pytest.fixture(scope="session")

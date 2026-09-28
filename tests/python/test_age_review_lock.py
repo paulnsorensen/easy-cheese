@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -357,8 +358,10 @@ def test_lock_slug_rejects_path_traversal(repo: Path) -> None:
     assert review_lock.main(["--slug", "../escape", "--root", str(repo)]) == 2
 
 
-def test_committed_age_bundle_exposes_the_review_lock_gate(repo: Path) -> None:
-    bundle = Path(__file__).resolve().parents[2] / "skills" / "age" / "scripts" / "age.pyz"
+def test_built_age_archive_exposes_the_review_lock_gate(
+    repo: Path, skill_archive: Callable[[str], Path]
+) -> None:
+    bundle = skill_archive("age")
     capture = subprocess.run(
         ["python3", str(bundle), "review-lock", "--slug", "demo", "--root", str(repo)],
         capture_output=True, text=True, cwd=str(repo),

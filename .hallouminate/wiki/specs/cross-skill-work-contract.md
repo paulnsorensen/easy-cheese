@@ -3,7 +3,7 @@
 Status: approved; YAML serialization restoration accepted 2026-07-27; persistence format for continuity records superseded by [wheypoint-continuity-kernel-004](../adr/wheypoint-continuity-kernel-004.md) (canonical JSON, 2026-08-11)
 Source: promoted from the Mold artifact at `$XDG_DATA_HOME/cheese/paulnsorensen-easy-cheese/specs/cross-skill-work-contract.md`
 
-This specification makes one `WorkRecord` the deterministic continuation authority for a user work item. Phase artifacts become validated, operation-scoped evidence around that record. Persisted runtime state and human-authored phase contracts use YAML; the released `cheese.pyz` bundles pinned pure-Python PyYAML and its license so users install no libraries separately.
+This specification makes one `WorkRecord` the deterministic continuation authority for a user work item. Phase artifacts become validated, operation-scoped evidence around that record. Persisted runtime state and human-authored phase contracts use YAML; the released cheese archive bundles pinned pure-Python PyYAML and its license so users install no libraries separately.
 
 ## Problem
 
@@ -19,7 +19,7 @@ PR #331 implemented part of the earlier design but left public task lifecycle op
 - Make bare continuation deterministic without session identity, foreground pointers, timestamps, or model inference.
 - Preserve freeform working context, decisions, parked items, open questions, research links, and interruption history.
 - Make artifact and work-record updates concurrency-safe, idempotent, and recoverable.
-- Keep the released runtime as one self-contained `cheese.pyz` requiring only Python 3.10+; users install no libraries separately.
+- Keep the released runtime as one self-contained cheese archive requiring only Python 3.10+; users install no libraries separately.
 - Use one exact pinned PyYAML implementation for source-authored `PhaseContract` declarations and persisted YAML, bundled as pure Python with its license.
 - Migrate unambiguous legacy artifacts conservatively while preserving originals.
 
@@ -57,7 +57,7 @@ provenance:
 
 This is schema-bounded YAML, not arbitrary object deserialization. `safe_load` parses the mapping, then the HandoffEnvelope or WorkRecord validator rejects unknown keys and unsupported values. The exact pinned PyYAML version and ordered render mappings make emitted documents deterministic.
 
-Human-authored `skills/<phase>/references/handoff-contract.yaml` declarations use the same parser. Build tooling installs the pinned PyYAML version, validates and compiles those declarations into a JSON-compatible registry, and copies the pure-Python `yaml` package plus its license into `skills/cheese/scripts/cheese.pyz`. The released archive must contain no native extension, bytecode cache, package metadata, or ambient PyYAML dependency.
+Human-authored `skills/<phase>/references/handoff-contract.yaml` declarations use the same parser. Build tooling installs the pinned PyYAML version, validates and compiles those declarations into a JSON-compatible registry, and copies the pure-Python `yaml` package plus its license into `skills/cheese/scripts/cheese`. The released archive must contain no native extension, bytecode cache, package metadata, or ambient PyYAML dependency.
 
 ## Storage and identity
 
@@ -274,9 +274,9 @@ Duplicate imported records are preferable to silently combining unrelated work.
 
 ## Packaging
 
-`/cheese` is the mandatory companion runtime for contract-aware workflow skills. Other skills invoke sibling `skills/cheese/scripts/cheese.pyz`; absence fails with the exact instruction: `Cheese contract runtime is required; install easy-cheese's Cheese companion runtime`.
+`/cheese` is the mandatory companion runtime for contract-aware workflow skills. Other skills invoke sibling `skills/cheese/scripts/cheese`; absence fails with the exact instruction: `Cheese contract runtime is required; install easy-cheese's Cheese companion runtime`.
 
-Maintainers and CI install the exact pinned PyYAML build dependency. The bundler uses it to validate source `handoff-contract.yaml` files, compile the global registry, and copy only PyYAML's pure-Python package plus its license into the released `cheese.pyz`. `python3 -S` proves HandoffEnvelope and WorkRecord YAML round trips and registry loading without ambient packages.
+Maintainers and CI install the exact pinned PyYAML build dependency. The bundler uses it to validate source `handoff-contract.yaml` files, compile the global registry, and copy only PyYAML's pure-Python package plus its license into the released cheese archive. `python3 -S` proves HandoffEnvelope and WorkRecord YAML round trips and registry loading without ambient packages.
 
 The shared companion intentionally replaces per-consumer `common.pyz` duplication. Bundling its pinned libraries inside the same executable preserves one user installation contract: copy the Easy Cheese skills and run them with a compatible Python interpreter.
 
@@ -312,7 +312,7 @@ The shared companion intentionally replaces per-consumer `common.pyz` duplicatio
 - WHEN a nested phase receives a work ID THE SYSTEM SHALL patch it without inferring foreground/background caller identity.
 - WHEN a legacy artifact is malformed, structurally unrecognized, or ambiguously related THE SYSTEM SHALL preserve it and decline migration.
 - WHEN phase contracts compile THE SYSTEM SHALL reject duplicate phases, unknown destinations, malformed schemas, and unsupported payload constructs.
-- WHEN `cheese.pyz` runs under `python3 -S` THE SYSTEM SHALL load the compiled registry and round-trip persisted YAML frontmatter without ambient packages.
+- WHEN the cheese archive runs under `python3 -S` THE SYSTEM SHALL load the compiled registry and round-trip persisted YAML frontmatter without ambient packages.
 - WHEN the release archive is inspected THE SYSTEM SHALL contain the pinned pure-Python `yaml` package and PyYAML license, and SHALL contain no native extension, bytecode cache, or package metadata.
 - WHEN a contract-aware phase cannot locate `/cheese` THE SYSTEM SHALL fail with the exact companion installation instruction.
 - WHEN two harnesses share an XDG data root THE SYSTEM SHALL observe the same WorkRecords regardless of phase availability.
@@ -367,7 +367,7 @@ The implementation is split in dependency order. Every layer must pass `just che
 ## Quality gates
 
 - `just check` passes for every cumulative stack layer.
-- `python3 -S skills/cheese/scripts/cheese.pyz contract-registry validate` passes.
+- `python3 -S skills/cheese/scripts/cheese contract-registry validate` passes.
 - Core work, handoff, migration, transaction, packaging, and workflow adoption tests map to every acceptance statement above.
 
 ## Decisions
@@ -381,7 +381,7 @@ The implementation is split in dependency order. Every layer must pass `just che
 - Register destination-only workflows and reserve `done`, `hold`, and `tasks` as structured non-phase outcomes.
 - Use conservative migration and explicit reconciliation rather than inferred joins or merges.
 - Use schema-bounded YAML frontmatter for persisted runtime state rather than JSON frontmatter, sidecar JSON, SQLite, or a custom YAML subset.
-- Keep human-authored PhaseContracts in YAML and bundle the exact pinned pure-Python PyYAML package plus its license inside `cheese.pyz`.
+- Keep human-authored PhaseContracts in YAML and bundle the exact pinned pure-Python PyYAML package plus its license inside the cheese archive.
 - Make `/cheese` the required shared runtime rather than duplicating runtime code into every phase.
 - Treat repo-local work files as optional portable snapshots, not co-authoritative stores.
 

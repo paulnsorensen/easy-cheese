@@ -39,12 +39,8 @@ jobs:
           sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
           gh --version
 
-      # The bundle build imports each skill's commands.py, which needs fromargs.
-      - name: Install pinned build tooling and runtime deps
-        run: |
-          python3 -m pip install --disable-pip-version-check --no-cache-dir --requirement requirements-build.txt
-          python3 -m pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
-
+      # stage_release copies each skill's SKILL.md and executable self-contained
+      # archive; it builds nothing and needs only the standard library.
       - name: Stage shippable release tree
         run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/release"
 
@@ -54,13 +50,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh skill publish --dry-run
 
-      # `gh skill install` reads the git tree at the resolved tag, so the tag must
-      # point at a commit that actually contains the built .pyz. main carries the
-      # bundles (build-pyz.yml keeps them in sync), but we still publish a slim
-      # `release` branch — SKILL.md + .pyz + top-level metadata, no src/shared/
-      # tests/docs — and force the version tag onto THAT commit so releases ship
-      # only the runtime surface. Pushes use GITHUB_TOKEN, which by design does
-      # not re-trigger this tag-push workflow.
+      # gh skill install reads the git tree at the resolved tag. Each skill carries
+      # its executable archive and immutable metadata, so the release tree contains
+      # no loose source, build configuration, or rolling archive dependency.
       - name: Publish release branch and retarget tag
         env:
           GH_TOKEN: ${{ github.token }}

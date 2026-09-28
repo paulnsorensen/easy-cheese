@@ -10,7 +10,7 @@ A curd is ready to mint only when its scope, acceptance checks, test applicabili
 
 ## Composition
 
-Resolve the parent and child paths with `mold.pyz artifact-path specs <slug>`; read `path` from each JSON reply. Use a distinct child slug. The child uses `source: mold-curd-mini-spec`, `status: draft`, the mini-spec schema in `mini-spec-mode.md`, and a required `## Parent` section:
+Resolve the parent and child paths with `scripts/mold.pyz artifact-path specs <slug>`; read `path` from each JSON reply. Use a distinct child slug. The child uses `source: mold-curd-mini-spec`, `status: draft`, the mini-spec schema in `mini-spec-mode.md`, and a required `## Parent` section:
 
 ```markdown
 ## Parent
@@ -20,7 +20,7 @@ Resolve the parent and child paths with `mold.pyz artifact-path specs <slug>`; r
 - Frozen decisions: F-1, F-2
 ```
 
-The parent `## Curds` section lists each child slug, its resolved spec path, covered `G-n` clauses, dependencies, selected route, and state: `draft | cooking | cooked | integrated | superseded`. Keep unresolved parent goals and forks in the parent. Do not claim that a cooked child completes the parent. Do not copy a child's acceptance text into the parent; the child is the contract for that slice. Validate each child with `mold.pyz validate-spec --strict`, then read it back. A failed check leaves the child unminted.
+The parent `## Curds` section lists each child slug, its resolved spec path, covered `G-n` clauses, dependencies, selected route, and state: `draft | cooking | cooked | integrated | superseded`. Keep unresolved parent goals and forks in the parent. Do not claim that a cooked child completes the parent. Do not copy a child's acceptance text into the parent; the child is the contract for that slice. Validate each child with `scripts/mold.pyz validate-spec --strict`, then read it back. A failed check leaves the child unminted.
 
 A changed child contract gets a new revision and a new execution decision. Do not overwrite an already cooking or cooked child. Recheck parent decisions and file overlap before integrating a Cook result. A conflicting result returns to Mold for reconciliation; it does not silently rewrite either contract.
 
@@ -34,7 +34,7 @@ Show the child contract, dependencies, changed files or intended footprint, and 
 
 A direct `cook it` or `cook this` selection is execution consent only when the displayed child and route are unambiguous. The approval envelope binds the scope or plan, not the dispatch route. Record the selected route beside the child in the parent `## Curds` section. Execute only that route. A route change needs a new user selection, even when the scope and plan stay unchanged.
 
-For **Cook here in isolation**, mark only that child's lifecycle `approved`. Follow [`curdle.md`](curdle.md) § Finalization for the approve-then-finalize sequence. Bind the literal response with `mold.pyz approve --kind scope --curd-id <curd-id>`. Then run `mold.pyz finalize --mode light`, passing `--taste-result` and `--ledger`. Dispatch only a `ready` consumer-valid pointer. If finalization returns `saved-not-ready`, show its holds. Do not dispatch when a hold remains. A new plan or changed scope needs a new Cook selection.
+For **Cook here in isolation**, mark only that child's lifecycle `approved`. Follow [`curdle.md`](curdle.md) § Finalization for the approve-then-finalize sequence. Bind the literal response with `scripts/mold.pyz approve --kind scope --curd-id <curd-id>`. Then run `scripts/mold.pyz finalize --mode light`, passing `--taste-result` and `--ledger`. Dispatch only a `ready` consumer-valid pointer. If finalization returns `saved-not-ready`, show its holds. Do not dispatch when a hold remains. A new plan or changed scope needs a new Cook selection.
 
 For **Cook in another worktree**, provide the validated spec and command without starting local Cook or publishing a local execution pointer. The destination binds the user's Cook request to its own proposal before execution. `--auto` may chain phases after Cook begins; it never starts Cook by itself.
 

@@ -9,8 +9,8 @@ Covers the four spec quality gates that the module backs:
     gate nodes (a gate cannot be silently dropped from prose);
   - portability: no hardcoded corpus name in mold's runtime source.
 
-The module is imported from the built mold.pyz via the `gate_graph` fixture, so
-these also exercise the bundled artifact, not just the source tree.
+The `gate_graph` fixture imports the source module; TestBuiltArchiveFreshness runs
+the built mold archive so the packaged artifact is exercised too.
 """
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HANDSHAKE = REPO_ROOT / "skills" / "mold" / "references" / "handshake.md"
 MOLD_DOT = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.dot"
-MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
 MOLD_SRC_DIR = REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold"
 
 
@@ -711,27 +710,27 @@ class TestSpecFormatValidGatePresence:
         )
 
 
-class TestCommittedPyzFreshness:
+class TestBuiltArchiveFreshness:
     """The `gate_graph` fixture imports the source module, and TestDotSnapshot
     compares mold.dot to that source model's fresh to_dot(). Neither exercises
-    the COMMITTED skills/mold/scripts/mold.pyz — the
-    artifact the SKILL actually invokes (`mold.pyz gate-graph --render dot`). A src
-    edit that regenerates mold.dot but leaves the committed .pyz stale would pass
-    every other test. This closes the fourth-artifact freshness loop: the committed
-    bundle's own render must byte-match the committed snapshot."""
+    the packaged mold archive — the artifact the SKILL actually invokes
+    (`scripts/mold gate-graph --render dot`). This closes the freshness loop
+    through the packaging seam: the built archive's own render must byte-match
+    the committed snapshot."""
 
-    def test_committed_pyz_renders_byte_identical_to_dot(self) -> None:
-        assert MOLD_PYZ.exists(), f"missing committed bundle: {MOLD_PYZ}"
+    def test_built_archive_renders_byte_identical_to_dot(
+        self, skill_archive: Callable[[str], Path]
+    ) -> None:
+        archive = skill_archive("mold")
         assert MOLD_DOT.exists(), f"missing committed snapshot: {MOLD_DOT}"
         result = subprocess.run(
-            [sys.executable, str(MOLD_PYZ), "gate-graph", "--render", "dot"],
+            [sys.executable, str(archive), "gate-graph", "--render", "dot"],
             capture_output=True,
             check=True,
         )
         parsed = cast(dict[str, object], json.loads(result.stdout))
         assert parsed["text"] == MOLD_DOT.read_text(encoding="utf-8"), (
-            "committed mold.pyz renders a .dot differing from committed mold.dot — "
-            "the bundle is stale; rebuild it from src/mold/ so all four lockstep "
-            "artifacts (handshake checklist, gate-graph.py, mold.dot, mold.pyz) "
-            "stay in sync"
+            "the built mold archive renders a .dot differing from committed mold.dot — "
+            "regenerate mold.dot from src/easy_cheese/skills/mold so the lockstep "
+            "artifacts (handshake checklist, gate_graph.py, mold.dot) stay in sync"
         )

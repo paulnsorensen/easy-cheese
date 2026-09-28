@@ -2686,7 +2686,7 @@ class LandingShape(str, Enum):
     """PR landing topology; values mirror ``pr_plan.PrShape`` by design.
 
     Do not alias ``PrShape`` here. ``validate_spec._load_local_module`` and
-    ``scripts/build_pyz.py`` exec this file standalone; any
+    ``scripts/runtime_gates.py`` exec this file standalone; any
     ``easy_cheese_schemas.*`` import runs the package ``__init__``, which
     imports ``compat`` and fails without ``cattrs``
     (``test_standalone_validator_falls_back_when_cattrs_is_missing``).

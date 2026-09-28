@@ -25,9 +25,9 @@ landing:
 
 `easy_cheese_schemas.contracts.parse_landing_mapping(raw) -> Landing` is the only closed-class decoder. Every error starts with the rule id `landing-closed-class`, reports all unknown keys in one message, and escapes echoed values and keys with `repr` so a spec cannot forge an `ERROR:` line. The three consumers are thin adapters:
 
-- `mold.pyz validate-spec --strict` (`validate_spec._typed_landing`) and the cook handoff digest (`taste_test.parse_landing`, front matter only; `curd-count` emits a top-level `landing` key and `handoff.metadata.landing`).
-- `cook.pyz accept <pointer> --spec <spec-path>`: `landing_layer_errors(plan, landing)` refuses a plan whose `dependencies` cross the declared layers with three tokens: `landing-layer-order`, `landing-layer-missing-curd`, `landing-layer-unknown-curd`. Without `--spec` the gate does not run and `accept` prints `NOTE: landing layers not checked (no --spec)` on stderr; Mold's hand-off passes `--spec "$SPEC"`.
-- `plate.pyz validate-publication` accepts a `landing` key and refuses `landing-topology-mismatch` when `topology` disagrees with the shape; explicit `landing: null` is refused like any non-mapping.
+- `scripts/mold.pyz validate-spec --strict` (`validate_spec._typed_landing`) and the cook handoff digest (`taste_test.parse_landing`, front matter only; `curd-count` emits a top-level `landing` key and `handoff.metadata.landing`).
+- `scripts/cook.pyz accept <pointer> --spec <spec-path>`: `landing_layer_errors(plan, landing)` refuses a plan whose `dependencies` cross the declared layers with three tokens: `landing-layer-order`, `landing-layer-missing-curd`, `landing-layer-unknown-curd`. Without `--spec` the gate does not run and `accept` prints `NOTE: landing layers not checked (no --spec)` on stderr; Mold's hand-off passes `--spec "$SPEC"`.
+- `scripts/plate.pyz validate-publication` accepts a `landing` key and refuses `landing-topology-mismatch` when `topology` disagrees with the shape; explicit `landing: null` is refused like any non-mapping.
 
 ## Gotchas
 
@@ -35,3 +35,5 @@ landing:
 - No handoff fabricates a landing default: an absent key means `single` by rule, so consumers can distinguish "declared single" from "not declared".
 - The `landing_layer_errors` check reads declared `dependencies` only; final-state behavior embedded in code stays a review problem.
 - Deferred by the spec's non-goals: repo hook exceptions (issue #653 ask 4) and affinage worktree-branch resolution.
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

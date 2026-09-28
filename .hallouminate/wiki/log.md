@@ -2,6 +2,7 @@
 
 ## Log
 
+- 2026-09-27 · wedge-migration · merged · architecture/pyz-bundling-pipeline.md, architecture/skill-python-bundle-doctrine.md, tooling.md, architecture.md, architecture/bundle-command-dispatch.md, architecture/ultracook-runtime-retirement.md, gotchas/stacked-pr-restack.md · wedge replaces the committed Shiv archives: launcher + lock per skill, assets on the `wedge` release, gates in scripts/runtime_gates.py; pyz-pipeline-contracts ADRs and spec marked superseded
 - 2026-07-22 · cook+age:baseline-repair-pathway · merged · adr/baseline-repair-pathway-004.md · dispatch-brief-level override (chain forward with `--auto --open-pr` via prompt instruction, not a SKILL.md edit) added to the Decision bullet.
 - 2026-07-22 · cook+age:baseline-repair-pathway · merged · adr/plate-publication-boundary-001.md · new pre-check ahead of New-PR topology policy: a `worktree-agent-repair-*` branch resolves through the repair pathway's mechanical file-overlap check first.
 
@@ -85,10 +86,17 @@
 - 2026-09-10 · session-analytics:fan-out · new-page · analytics/fanout-patterns-2026-09-10.md · no parallel fan-out, coder chains are continuations, age absorbs cure (67 coders), reviewer mode gate never fires, taste-test fix-rate parity → `reviewer (taste-test)` and `gate-runner` tier rows; time-ordered attribution gotcha.
 
 
-- 2026-09-19 · pr-702-forgiving-cli · new-page · architecture/bundle-command-dispatch.md · runtime dispatch of `.pyz` bundles: top-level help, exact-name and close-match guidance with the `_` alias, the `--json`/`--full`-only hoist rule, the quote-repair rule and its `cli.run` boundary, one argv for the age gate, `LEAVES`, and the generated `bundle_command_index`.
+- 2026-09-19 · pr-702-forgiving-cli · new-page · architecture/bundle-command-dispatch.md · runtime dispatch of skill archives: top-level help, exact-name and close-match guidance with the `_` alias, the `--json`/`--full`-only hoist rule, the quote-repair rule and its `cli.run` boundary, one argv for the age gate, `LEAVES`, and the generated `bundle_command_index`.
 
 - 2026-09-20 · cdfe10a30b682635 · merged · gotchas/wheypoint-resume-traps.md · PR710 recovery publication ownership, serialized idempotency, immutable first-checkpoint evidence, and explicit-root corpus selection.
 
 - 2026-09-20 · 4a9b7570d7f195e2 · merged · architecture/ultracook-agent-topology.md · replace legacy fan ordering and manifest authority with progress-aware scope identity, OS run locking, completed-observation replay, and contained-low selection.
 
 - 2026-09-20 · 4045ae852414459a · merged · gotchas/age-review-lock-invariants.md · record source/evidence identity separation, narrow late-packet refresh, stable snapshots, and streaming no-follow evidence hashing.
+
+
+- 2026-09-28 · pr-729-direct-archives-a · merged · architecture/skill-python-bundle-doctrine.md, architecture/pyz-bundling-pipeline.md, tooling.md, architecture.md and deployment references · User-approved A keeps committed per-skill .pyz archives. Wedge is build-time only. Remove proposed loaders, sidecar locks, and first-run downloads. Issue #732 assesses release-only option B separately.
+
+
+- 2026-09-28 · 274eda970621f14a · merged · architecture/pyz-bundling-pipeline.md, architecture/skill-python-bundle-doctrine.md, tooling.md, red-gate-environment-gotchas.md · PR #729 ownership correction removes the temporary test-archive pipeline and duplicate workflow. Tests execute committed archives after Wedge checks freshness. Focused tests require an explicit rebuild after source changes.
+

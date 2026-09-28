@@ -23,7 +23,7 @@ Cook joined `COMMON_CONSUMERS`, shipped
 ## Supersession
 
 Each Python-backed skill now owns exactly one
-`skills/<skill>/scripts/<skill>.pyz` Shiv archive. Package metadata resolves
+`skills/<skill>/scripts/<skill>` Shiv archive. Package metadata resolves
 the skill application's dependency on the cohesive shared distribution and the
 schemas package, so cook receives `read_handoff_slug` without a separate
 shared archive.[^2] Do not restore `COMMON_CONSUMERS` or `common.pyz`; follow

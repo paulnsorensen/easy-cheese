@@ -86,7 +86,7 @@ def test_local_leaf_is_not_repeated_from_the_index(
     lines = capsys.readouterr().err.splitlines()
     assert len(lines) == len(set(lines))
     assert sum("severity compute" in line for line in lines) == 1
-    assert "'compute' is 'cost compute' in cook.pyz." in lines
+    assert "'compute' is 'cost compute' in scripts/cook.pyz." in lines
 
 
 def test_hoist_accepts_the_underscore_alias(

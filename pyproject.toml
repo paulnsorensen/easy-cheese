@@ -107,3 +107,10 @@ ignore_decorators = [
   "@contract",
   "@document_contract",
 ]
+
+# The wedge runtime closure. Every skill's wedge.toml names this group, so
+# fromargs (and its Cyclopts closure) enters each archive without joining the
+# published easy-cheese-schemas wheel's own dependencies. Keep the pin equal
+# to requirements/runtime.txt; a test compares the two.
+[dependency-groups]
+runtime = ["fromargs==0.1.0"]

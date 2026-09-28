@@ -1,6 +1,6 @@
 ---
 name: python-authoring
-description: Write, edit, refactor, or review Python in easy-cheese with concise stdlib-first code, Python 3.12, Shiv .pyz packaging, and repository test and validation conventions. Use for Python changes under src/, scripts/, .github/scripts/, or tests/, especially when the user asks for Pythonic, succinct, de-slopped, dataclass-based, CLI, validator, or bundled-helper code.
+description: Write, edit, refactor, or review Python in easy-cheese with concise stdlib-first code, Python 3.12, wedge .pyz packaging, and repository test and validation conventions. Use for Python changes under src/, scripts/, .github/scripts/, or tests/, especially when the user asks for Pythonic, succinct, de-slopped, dataclass-based, CLI, validator, or bundled-helper code.
 ---
 
 # Authoring Python
@@ -39,10 +39,10 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 ## Preserve skill package boundaries
 
 - Keep skill runtime under `src/easy_cheese/skills/<skill_name>/` and declare its CLI surface in `commands.py`.
-- Move code to `src/easy_cheese/shared/` only when multiple existing skills need the same behavior; consume it through the `easy-cheese-shared` internal distribution.
-- Do not import another skill's internals. Wheel metadata, pip resolution, and the ephemeral hash-locked requirements file own each bundle's complete runtime dependency closure.
+- Move code to `src/easy_cheese/shared/` only when multiple existing skills need the same behavior; bundle it into each owning archive.
+- Do not import another skill's internals. Each archive carries its complete pure-Python runtime closure.
 - Keep cross-skill orchestration in the owning workflow seam, not a leaf helper. Communicate through public or persisted contracts to avoid reverse dependencies and cycles.
-- Never edit `skills/<skill>/scripts/*.pyz` by hand. Install `requirements-build.txt`, then run `just bundle` after changing bundle inputs and commit the regenerated archives.
+- Never edit `skills/<skill>/scripts/<skill>.pyz` by hand. Run `just wedge-build` after changing archive inputs and `just wedge-check` to verify committed archives.
 - Keep CLI modules thin: accept `argv`, return an integer status, print diagnostics to stderr, and propagate failure through a nonzero exit.
 - Keep `.github/scripts/` validators read-only. They inspect and report; they do not mutate the workspace.
 
@@ -82,9 +82,8 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 
 - Test observable behavior and the reason it matters; do not add assertions that can pass when the implementation is broken.
 - Keep filesystem tests inside `tmp_path` or an equivalent temporary directory. Do not depend on user paths, repository-external state, network access, or auto-loaded pytest plugins.
-- For bundle changes, exercise the generated `.pyz` with repository imports unavailable and verify no other skill package is present.
-- Run the most focused affected tests first.
-- Run `just bundle` when bundle inputs changed.
+- Run the most focused affected tests first. Focused pytest and browser commands execute committed `skills/<skill>/scripts/<skill>.pyz` archives without rebuilding them. Keep repository imports unavailable when testing archive isolation.
+- After archive inputs change, run `just wedge-build`, then `just wedge-check` before focused tests execute an archive. Run `just update-generated` when generated runtime sources change.
 - Run `just check` as the final project gate.
 
 ## Completion check
@@ -94,7 +93,7 @@ Confirm:
 - Runtime imports obey the stdlib-first, surface-specific dependency policy.
 - Boundary input is validated once and converted into an appropriate trusted representation.
 - Code lives in the owning skill source or a justified shared module.
-- Bundle registration and generated `.pyz` files match their sources when applicable.
+- Command registration, generated runtime sources, and committed archives match their inputs when applicable (`scripts/runtime_gates.py`, `just wedge-check`).
 - CLI and validator failures remain loud, read-only validators remain read-only, and tests are hermetic.
 - No silent failures, speculative abstractions, narration comments, unnecessary local annotations, or unrelated cleanup remain.
 - Changed Python files pass basedpyright with zero errors and warnings.

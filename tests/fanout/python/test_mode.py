@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BUNDLE = REPO_ROOT / "skills/cook/scripts/cook.pyz"
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 # Imported directly (not via the `mode` fixture) so DECOMPOSE_FIRST_THRESHOLD
 # is available at collection time for parametrize -- fixtures only resolve
@@ -48,12 +48,11 @@ class TestSelectMode:
 
 
 class TestCli:
-    """Drives the checked-in cook.pyz bundle; pending-rebuild until the
-    orchestrator regenerates bundles with the fromargs-based mode.py."""
+    """Drives the built cook archive."""
 
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(BUNDLE), "mode", *args],
+            [sys.executable, str(COOK_ARCHIVE), "mode", *args],
             capture_output=True,
             text=True,
         )

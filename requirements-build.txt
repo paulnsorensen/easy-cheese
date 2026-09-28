@@ -1,4 +1,0 @@
-# CI-only tooling for PEP 517 wheels and Shiv application archives.
-build==1.6.0
-hatchling==1.32.0
-shiv==1.0.8

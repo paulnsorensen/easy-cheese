@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(  # noqa: V107
 
 import attrs  # noqa: E402
 
-import build_pyz  # noqa: E402
+import runtime_gates  # noqa: E402
 from easy_cheese_schemas import schema_runtime  # noqa: E402
 from easy_cheese_schemas._contract_modules import (  # noqa: E402
     CONTRACT_MODULES,
@@ -36,28 +36,28 @@ from easy_cheese_schemas.pr_plan import PrPlan  # noqa: E402
 
 def test_write_generated_runtime_leaves_current_sources_unchanged() -> None:
     """A repository whose generated sources are current needs no write."""
-    build_pyz._validate_generated_runtime()  # pyright: ignore[reportPrivateUsage]
+    runtime_gates._validate_generated_runtime()  # pyright: ignore[reportPrivateUsage]
 
-    assert build_pyz.write_generated_runtime() == []
+    assert runtime_gates.write_generated_runtime() == []
 
 
 def test_write_generated_runtime_restores_a_stale_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The writer produces exactly what the staleness check demands."""
-    source, artifact_name, render = build_pyz.GENERATED_RUNTIME_SOURCES[0]
+    source, artifact_name, render = runtime_gates.GENERATED_RUNTIME_SOURCES[0]
     stale = tmp_path / source.name
     _ = stale.write_bytes(b"# stale\n")
     monkeypatch.setattr(
-        build_pyz, "GENERATED_RUNTIME_SOURCES", ((stale, artifact_name, render),)
+        runtime_gates, "GENERATED_RUNTIME_SOURCES", ((stale, artifact_name, render),)
     )
 
     with pytest.raises(RuntimeError, match=r"is stale"):
-        build_pyz._validate_generated_runtime()  # pyright: ignore[reportPrivateUsage]
+        runtime_gates._validate_generated_runtime()  # pyright: ignore[reportPrivateUsage]
 
-    assert build_pyz.write_generated_runtime() == [stale]
+    assert runtime_gates.write_generated_runtime() == [stale]
     assert stale.read_bytes() == source.read_bytes()
-    build_pyz._validate_generated_runtime()  # pyright: ignore[reportPrivateUsage]
+    runtime_gates._validate_generated_runtime()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_stale_catalog_raises_on_first_use_not_import(
@@ -92,7 +92,7 @@ def test_write_generated_command_reports_success(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The command exits successfully and builds no archive."""
-    assert build_pyz.main(["build_pyz.py", "--write-generated"]) == 0
+    assert runtime_gates.main(["runtime_gates.py", "--write-generated"]) == 0
     assert "built " not in capsys.readouterr().out
 
 
@@ -126,11 +126,11 @@ def test_stale_catalog_on_disk_survives_import_and_write_generated_repairs_it(
             "    assert 'catalog is stale' in str(exc), exc",
             "else:",
             "    raise SystemExit('lazy check did not fire')",
-            "import build_pyz",
-            "build_pyz.GENERATED_RUNTIME_SOURCES = (",
-            "    (catalog, 'schema catalog', build_pyz._compiled_schema_catalog_source),",
+            "import runtime_gates",
+            "runtime_gates.GENERATED_RUNTIME_SOURCES = (",
+            "    (catalog, 'schema catalog', runtime_gates._compiled_schema_catalog_source),",
             ")",
-            "changed = build_pyz.write_generated_runtime()",
+            "changed = runtime_gates.write_generated_runtime()",
             "assert changed == [catalog], changed",
             "print('repaired')",
         ]

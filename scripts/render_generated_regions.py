@@ -38,7 +38,7 @@ for _extra in (
 
 import attrs  # noqa: E402
 
-import build_pyz  # noqa: E402
+import runtime_gates  # noqa: E402
 from easy_cheese.shared.bundle_commands import Command, command_map  # noqa: E402
 from easy_cheese_schemas import contracts  # noqa: E402
 from easy_cheese_schemas._contract_modules import CONTRACT_MODULES  # noqa: E402
@@ -84,7 +84,7 @@ PR_PLAN_SCHEMA_PATH = (
 )
 
 # Keep the command inventory aligned with the bundle builder instead of maintaining a second discovery rule here.
-SKILL_SLUGS = build_pyz.SKILLS
+SKILL_SLUGS = runtime_gates.SKILLS
 
 MOLD_SPEC_TAG = "mold-spec-schema"
 WRITER_VIEWS_TAG = "cook-writer-views"
