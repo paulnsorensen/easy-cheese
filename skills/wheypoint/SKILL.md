@@ -42,14 +42,13 @@ python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] 
 python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
 ```
 
-Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term.
+Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call, never one call per term; a hit matching any value of one flag is kept, and distinct flags combine with AND.
 
 `resolve`, `lint`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
 `/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
 Foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
-The parent delegates persistence as one structured checkpoint task to this capability and runs `validate` before `checkpoint`; workers never invoke either command at a hard limit.
-Phase skills use their own `wheypoint-resolve --ref <slug>` command for resolution.
-The command returns `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, or `error`.
+The parent delegates persistence to this capability as one structured checkpoint task and runs `validate` before `checkpoint`; workers never invoke either command at a hard limit.
+Phase skills resolve with their own `wheypoint-resolve --ref <slug>` command, which returns `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, or `error`.
 Use authoritative `working_context` as the first batched `tilth_read`; follow [`references/delta-contract.md`](references/delta-contract.md) for all outcomes and findings.
 `phase-artifact` is fallback context, and the handoff parser exposes its `phase_slug`.
 

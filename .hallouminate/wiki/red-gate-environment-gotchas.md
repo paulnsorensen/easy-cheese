@@ -16,10 +16,15 @@ A durable fix would add `node_modules` to `_EXCLUDED_SNAPSHOT_DIRS` in `src/cut/
 Everything outside `production_paths` is frozen as an oracle dependency; `validate --state green` flags any drift. Two classes of paths are easy to under-declare:
 
 - **`.gitignore`** — any restructure that moves gitignored generated outputs (e.g. Astro `src/` → `website/`) must rename ignore rules, so declare `.gitignore` whenever a spec moves directories.
-- **Every test suite that imports `build_pyz`, calls `build_bundles`, or opens a checked-in skill archive** — pruning a registry entry affects bundle and schema tests. Search for `import build_pyz`, `build_bundles(`, and `skills/<skill>/scripts/<skill>.pyz` across `tests/**` before fixing the path list.
+- **Every test suite that executes a committed skill archive** — pruning a registry entry affects archive and schema tests.
+  Search for the shared `skill_archive` fixture and direct `.pyz` paths across `tests/**` and browser tests before fixing the path list.[^archives]
 
 The pyz-pipeline-contracts receipt carries exactly four green-validation variances from this (`.gitignore` + three `tests/schemas/python` files), each documented in `.cheese/cook/pyz-pipeline-contracts.md`.
 
 ## Pruning a subcommand is not pruning a module
 
-`press.pyz red-gate` was removed as a *dispatchable subcommand*, but `src/fanout/press_route.py` still imports `cut.red_gate` at runtime, so `EXTRA_MODULES["press"]` must keep staging `red_gate.py` + `gate_receipts.py` + `taste_test.py` as plain modules. Before deleting a registry entry, distinguish its two roles: dispatcher surface (what the SKILLS map grants) vs staged import graph (what other staged files need).
+`press red-gate` was removed as a *dispatchable subcommand*, but `src/fanout/press_route.py` still imports `cut.red_gate` at runtime, so `EXTRA_MODULES["press"]` must keep staging `red_gate.py` + `gate_receipts.py` + `taste_test.py` as plain modules. Before deleting a registry entry, distinguish its two roles: dispatcher surface (what the SKILLS map grants) vs staged import graph (what other staged files need).
+
+[^archives]: tests/conftest.py; frontend/mold-review/tests/review.spec.js; justfile
+
+_Source: PR #729 packaging ownership correction · Updated: 2026-09-28 · Supersedes: temporary archive helper and environment-override caller guidance._

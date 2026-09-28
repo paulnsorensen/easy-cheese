@@ -4,7 +4,7 @@ Status: accepted (2026-08-24)
 
 ## Decision
 
-<certain> Runtime ownership derives from `src/easy_cheese/skills/<skill>`, with shared runtime under `src/easy_cheese/shared`. No runtime ownership manifest is added. Each Python-owning skill produces one `skills/<skill>/scripts/<skill>.pyz`.[^doctrine]
+<certain> Runtime ownership derives from `src/easy_cheese/skills/<skill>`, with shared runtime under `src/easy_cheese/shared`. No runtime ownership manifest is added. Each Python-owning skill produces one `skills/<skill>/scripts/<skill>`.[^doctrine]
 
 Decorator-declared `@bundle_command` functions compile at build time into the owning archive dispatcher and generated command guidance. Payload models remain schema authority; `phase-contract.yaml` remains route authority.
 

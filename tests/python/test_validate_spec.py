@@ -1,9 +1,9 @@
-"""Direct-invocation and pyz-dispatcher coverage for
+"""Direct-invocation and archive-dispatcher coverage for
 src/easy_cheese/skills/mold/validate_spec.py (curd-ssfe-2).
 
 Exercises the dispatcher argv contract (`validate-spec <spec-path>`) that
-mold.pyz's `__main__.py` dispatches, at both entry-point seams: the direct
-script (fast local seam) and the built mold.pyz (the seam AC-1/AC-2 declare).
+the mold archive's `__main__.py` dispatches, at both entry-point seams: the direct
+script (fast local seam) and the built mold archive (the seam AC-1/AC-2 declare).
 Covers the committed lenient syntax-repair classes and the strict
 semantic-rejection rules.
 """
@@ -33,8 +33,8 @@ MINI_SPEC = (SPEC_FIXTURES / "valid_mini_spec.md").read_text(encoding="utf-8")
 RED_MINI_SPEC = (SPEC_FIXTURES / "valid_red_required_mini_spec.md").read_text(
     encoding="utf-8"
 )
-MOLD_PYZ = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
-COOK_PYZ = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
+MOLD_ARCHIVE = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 class _RunFn(Protocol):
@@ -51,7 +51,7 @@ def _run_direct(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
 
 
 def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
-    mold_pyz = MOLD_PYZ
+    mold_pyz = MOLD_ARCHIVE
     return subprocess.run(
         [sys.executable, str(mold_pyz), "validate-spec", *flags, str(path)],
         capture_output=True,
@@ -60,7 +60,7 @@ def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
 
 
 def _run_cook(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
-    cook_pyz = COOK_PYZ
+    cook_pyz = COOK_ARCHIVE
     return subprocess.run(
         [
             sys.executable,
@@ -76,7 +76,7 @@ def _run_cook(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.fixture(  # noqa: V103 -- registered under name="_run", injected by pytest
-    params=[_run_direct, _run_pyz], ids=["direct-script", "mold-pyz"], name="_run"
+    params=[_run_direct, _run_pyz], ids=["direct-script", "mold-archive"], name="_run"
 )
 def run_fixture(request: pytest.FixtureRequest) -> _RunFn:
     return cast(_RunFn, request.param)

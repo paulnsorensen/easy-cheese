@@ -1,6 +1,6 @@
 """Build-only compiler for the marker-derived mold-spec document rules.
 
-This module is intentionally excluded from wheels and runtime bundles.  mold.pyz
+This module is intentionally excluded from wheels and runtime bundles.  the mold archive
 imports only the generated ``_document_rules`` projection, which is
 dependency-free (stdlib-only), unlike this compiler which reaches the
 attrs-decorated models in ``contracts.py``.

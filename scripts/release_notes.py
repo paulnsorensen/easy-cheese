@@ -3,7 +3,7 @@
 
 `gh release create --generate-notes` is useless here: the release workflow
 force-retargets each version tag onto a single-commit orphan `release`-branch
-snapshot (so `gh skill install` can read the built .pyz from the tag tree).
+snapshot (so `gh skill install` reads each skill's launcher and lock from the tag tree).
 That orphan has no main history, so GitHub has nothing to diff and emits empty
 notes.
 

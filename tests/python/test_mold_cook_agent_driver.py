@@ -13,8 +13,8 @@ from tests.python.mold_cook_agent_driver import AgentScenarioError, run_agent_sc
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "mold_cook_agent"
 ROOT = Path(__file__).resolve().parents[2]
-MOLD_PYZ = ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
-COOK_PYZ = ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
+MOLD_ARCHIVE = ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
+COOK_ARCHIVE = ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 def test_fixture_agent_uses_harness_responses_and_writes_trace(tmp_path: Path) -> None:
@@ -24,8 +24,8 @@ def test_fixture_agent_uses_harness_responses_and_writes_trace(tmp_path: Path) -
     report = run_agent_scenario(
         [sys.executable, str(FIXTURE / "task_agent.py")],
         fixture_repository=repository,
-        mold_bundle=MOLD_PYZ,
-        cook_bundle=COOK_PYZ,
+        mold_bundle=MOLD_ARCHIVE,
+        cook_bundle=COOK_ARCHIVE,
         responses=FIXTURE / "responses.json",
         output=output,
     )
@@ -55,10 +55,10 @@ def test_fixture_agent_uses_harness_responses_and_writes_trace(tmp_path: Path) -
     assert events[7]["outcome"] == "ready"
     assert events[9]["ready"] is True
     assert [event["tool"] for event in events if "tool" in event] == [
-        "cook.pyz prepare",
-        "cook.pyz resubmit",
-        "mold.pyz finalize",
-        "cook.pyz accept",
+        "scripts/cook.pyz prepare",
+        "scripts/cook.pyz resubmit",
+        "scripts/mold.pyz finalize",
+        "scripts/cook.pyz accept",
     ]
     assert output.is_file()
     pointer = repository / "artifacts" / "pointers" / "agent.json"
@@ -81,8 +81,8 @@ def test_refused_scope_response_holds_cook_and_writes_no_feature(
         _ = run_agent_scenario(
             [sys.executable, str(FIXTURE / "task_agent.py")],
             fixture_repository=repository,
-            mold_bundle=MOLD_PYZ,
-            cook_bundle=COOK_PYZ,
+            mold_bundle=MOLD_ARCHIVE,
+            cook_bundle=COOK_ARCHIVE,
             responses=FIXTURE / "responses-refusal.json",
             output=output,
         )

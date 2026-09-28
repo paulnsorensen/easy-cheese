@@ -1,0 +1,5 @@
+# Build this skill's direct archive from the shared runtime package.
+# The selected paths preserve package namespaces while excluding foreign skills.
+name = "mold"
+entry = "easy_cheese.skills.mold.commands:main"
+source_paths = ["__init__.py", "skills/__init__.py", "skills/mold", "shared", "cli"]

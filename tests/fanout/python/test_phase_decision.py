@@ -2,7 +2,7 @@
 
 Covers the 7-entry phase table, halt short-circuit, terminal stop, and the
 age-only early-stop signal. The unit tests take the `phase_decision` module
-from the conftest fixture; CLI tests invoke the owning cook.pyz bundle.
+from the conftest fixture; CLI tests invoke the built cook archive.
 """
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ import pytest
 from easy_cheese.shared.fanout import phase_decision
 from easy_cheese.shared.fanout.phase_decision import Verdict
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 class TestSpawnPhases:
@@ -258,7 +259,7 @@ class TestUnknownStatusStillContractError:
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "phase_decision", *args],
+        [sys.executable, str(COOK_ARCHIVE), "phase_decision", *args],
         capture_output=True,
         text=True,
     )

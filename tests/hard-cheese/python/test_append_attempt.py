@@ -25,8 +25,7 @@ from typing import Protocol, cast
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/hard-cheese/scripts/hard-cheese.pyz"
+HARD_CHEESE_ARCHIVE = REPO_ROOT / "skills" / "hard-cheese" / "scripts" / "hard-cheese.pyz"
 
 
 class _FromargsNamespace(Protocol):
@@ -44,7 +43,7 @@ def _run(env_dir: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HARD_CHEESE_ARTIFACT_DIR"] = str(env_dir)
     return subprocess.run(
-        [sys.executable, str(BUNDLE), "append-attempt", *args],
+        [sys.executable, str(HARD_CHEESE_ARCHIVE), "append-attempt", *args],
         capture_output=True, text=True, env=env, cwd=str(REPO_ROOT),
     )
 
@@ -53,7 +52,7 @@ def _run_bundle(*args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     _ = env.pop("PYTHONPATH", None)
     return subprocess.run(
-        [sys.executable, str(BUNDLE), *args],
+        [sys.executable, str(HARD_CHEESE_ARCHIVE), *args],
         capture_output=True,
         text=True,
         env=env,
@@ -174,8 +173,6 @@ class TestCli:
         assert "--slug" in result.stderr
 
     def test_traversal_slug_rejected_via_cli(self, tmp_path: Path) -> None:
-        # pending-rebuild: hard-cheese.pyz still runs the pre-fromargs CLI;
-        # hand-verified via PYTHONPATH=src against source (see report).
         result = _run(
             tmp_path,
             "--slug", "../escape",
@@ -208,14 +205,18 @@ class TestCli:
         assert "PASS" in rows[1]
 
 
-def _spawn_one(args: tuple[str, str, int]) -> int:
-    """Top-level so multiprocessing can pickle it."""
-    artifact_dir, slug, idx = args
+def _spawn_one(args: tuple[str, str, str, int]) -> int:
+    """Top-level so multiprocessing can pickle it.
+
+    The archive path travels in ``args``: a spawned child must not resolve
+    (and possibly build) the archive on its own.
+    """
+    bundle, artifact_dir, slug, idx = args
     env = os.environ.copy()
     env["HARD_CHEESE_ARTIFACT_DIR"] = artifact_dir
     result = subprocess.run(
         [
-            sys.executable, str(BUNDLE), "append-attempt",
+            sys.executable, bundle, "append-attempt",
             "--slug", slug,
             "--status", "FAIL" if idx % 2 == 0 else "PASS",
             "--score", str(2 + (idx % 3)),
@@ -235,11 +236,12 @@ class TestConcurrency:
         rewrite atomic. Without either, the second writer could read the
         pre-first-write state and clobber it.
         """
+        bundle = str(HARD_CHEESE_ARCHIVE)
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=2) as pool:
             codes = pool.map(
                 _spawn_one,
-                [(str(tmp_path), "concurrent", i) for i in range(2)],
+                [(bundle, str(tmp_path), "concurrent", i) for i in range(2)],
             )
         assert codes == [0, 0]
         rows = _read_rows(tmp_path / "concurrent.md")
@@ -256,11 +258,12 @@ class TestConcurrency:
         read-modify-write isn't actually atomic some rows will be lost.
         """
         N = 8
+        bundle = str(HARD_CHEESE_ARCHIVE)
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=N) as pool:
             codes = pool.map(
                 _spawn_one,
-                [(str(tmp_path), "stress", i) for i in range(N)],
+                [(bundle, str(tmp_path), "stress", i) for i in range(N)],
             )
         assert all(c == 0 for c in codes), codes
         rows = _read_rows(tmp_path / "stress.md")

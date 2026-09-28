@@ -191,3 +191,5 @@ _Source: `src/easy_cheese/shared/fanout/age_route.py`,
 `src/easy_cheese/shared/fanout/review_surface.py`,
 `skills/age/references/fan-out.md`, and approved spec
 `age-contextual-review-parity`; updated for the contextual policy._
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

@@ -496,20 +496,20 @@ The agent drives the transitions with three bundle commands. Use one
 `ARTIFACT_ROOT` for the whole loop; for a Mold pointer, use the root that Mold
 used.
 
-1. Run `cook.pyz prepare <source> --artifact-root "$ARTIFACT_ROOT"` and save the
+1. Run `skills/cook/scripts/cook.pyz prepare <source> --artifact-root "$ARTIFACT_ROOT"` and save the
    JSON result. Name the source with `--spec`, `--pointer`, `--slug`, or `--task`.
-2. Read `outcome`, act, then run `cook.pyz resubmit <saved result> --source
+2. Read `outcome`, act, then run `skills/cook/scripts/cook.pyz resubmit <saved result> --source
    <source>` with every evidence flag that you supplied before plus the new one.
    Save each new result.
 
 | `outcome` | Action | New evidence flag |
 | --- | --- | --- |
-| `needs-approval` | Show the retained `proposal_ref` content. Ask the user once through the [question transport](../../cheese/references/ask-user-question.md). Run `cook.pyz approve` with the literal reply. Accept the reply forms named in [`handshake.md`](../../mold/references/handshake.md) § User key. | `--scope-approval` or `--plan-approval`, as `approval_kind` names |
+| `needs-approval` | Show the retained `proposal_ref` content. Ask the user once through the [question transport](../../cheese/references/ask-user-question.md). Run `skills/cook/scripts/cook.pyz approve` with the literal reply. Accept the reply forms named in [`handshake.md`](../../mold/references/handshake.md) § User key. | `--scope-approval` or `--plan-approval`, as `approval_kind` names |
 | `needs-planning` | Dispatch a fresh-context planner on `planner_request`. Normalize its writer view on the host. | `--planner-result` |
 | `needs-preparation` | Follow the setup authorization rules below. The host records the runner approval; `approve` does not. | `--runner-approval`, `--setup-authorization`, `--setup-evidence` |
 | `blocked` | Show each hold. Only a fresh user dialogue clears a hold. | `--clear-hold HOLD_ID=DIALOGUE_JSON` |
 | `invalid` | Stop and show the findings. | none |
-| `ready` | Run `cook.pyz accept <pointer> --spec <spec>` on `handoff_ref`, then execute. | none |
+| `ready` | Run `skills/cook/scripts/cook.pyz accept <pointer> --spec <spec>` on `handoff_ref`, then execute. | none |
 
 ```bash
 python3 skills/cook/scripts/cook.pyz approve "$SPEC" \

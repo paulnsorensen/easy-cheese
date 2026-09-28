@@ -18,7 +18,7 @@ from pathlib import Path
 
 import fromargs
 
-# git_utils is co-staged in the bundled .pyz alongside this module
+# git_utils is co-staged in the skill archive alongside this module
 from easy_cheese.shared import git_utils
 
 WORKTREE_DIR = ".claude/worktrees"

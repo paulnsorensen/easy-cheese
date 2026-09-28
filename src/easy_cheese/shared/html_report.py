@@ -19,7 +19,7 @@ cannot inject markup or a `javascript:` href into the document.
 Why not a Markdown library (decided in #517, recorded in
 `docs/adr/html-report-renderer-001.md`): the input is report artifacts our own
 skills author against the subset above, not arbitrary Markdown, so CommonMark
-fidelity buys nothing today -- while a dependency lands in every `.pyz` that
+fidelity buys nothing today -- while a dependency lands in every skill archive that
 stages this module and puts committed-bundle bytes at the mercy of upstream
 output changes. Revisit if externally authored Markdown ever reaches `render()`.
 `TestClosedSubsetContract` in tests/shared/python/test_html_report.py pins the

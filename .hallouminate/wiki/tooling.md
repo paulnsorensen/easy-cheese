@@ -94,36 +94,28 @@ gate.
   operation, and report the precision loss.
 - **Workflow skills stay portable.** There is no repo-wide MCP requirement.
 
-## `.pyz` bundles
+## `.pyz` archives
 
-Every Python-backed skill ships exactly one same-named Shiv archive at
-`skills/<skill>/scripts/<skill>.pyz`; there is no `common.pyz` or
-`COMMON_CONSUMERS` fan-out.[^1] Runtime source lives under
-`src/easy_cheese/`: each skill application depends on the cohesive shared
-distribution and the published schemas package through package metadata.[^2]
+Each Python skill commits one executable `skills/<skill>/scripts/<skill>.pyz`.
+The archive contains its own skill code, shared support, CLI support, schemas, and pinned dependencies.
+No launcher, sidecar lock, or first-run download is required.[^1]
 
-`just bundle` rebuilds every archive from PEP 517 wheels in a private
-wheelhouse. `requirements/runtime.txt` is the sole committed hash lock and
-admits only external wheels. Each build uses pip's resolved-install report to
-write the complete external-plus-internal closure beside the temporary
-wheelhouse, then gives that ephemeral file to Shiv under `--require-hashes`.
-Locally built wheel hashes are verified during assembly but never versioned.[^3]
+`just wedge-build` runs the Wedge commit pinned in `tools/wedge/uv.lock`.
+Each manifest's `source_paths` preserves package paths while excluding other skill packages.
+The `runtime` group and schema dependencies define the third-party closure in `uv.lock`.[^2]
 
-The archives are committed deployment artifacts. `build-pyz.yml` rebuilds them
-in a read-only CI job, compares canonical archive-member content against
-`HEAD`, and runs isolation tests; it never commits generated changes. Changes
-to runtime source, build inputs, the external runtime lock, manifests, or
-committed archives must therefore be followed by `just bundle` before
-publication.[^4]
+`just wedge-check` rebuilds temporarily and compares committed archive contents.
+Run `just wedge-build` after changing archive inputs, then run `just check`.
+`just test` checks archive freshness before tests execute the committed artifacts.
+Focused test commands do not build archives; run `just wedge-build` and `just wedge-check` after source changes.
+Release staging copies the committed archives without a separate publication dependency.[^3]
 
 See the [bundle pipeline](./architecture/pyz-bundling-pipeline.md) and
-[skill Python bundle doctrine](./architecture/skill-python-bundle-doctrine.md)
-for the dependency and purity contracts.
+[skill Python bundle doctrine](./architecture/skill-python-bundle-doctrine.md).
 
-[^1]: scripts/build_pyz.py
-[^2]: pyproject.toml; src/easy_cheese/shared; src/easy_cheese/skills
-[^3]: scripts/build_pyz.py; requirements/runtime.txt
-[^4]: .github/workflows/build-pyz.yml; scripts/check_bundles.py
+[^1]: AGENTS.md; skills/*/scripts/*.pyz
+[^2]: skills/wedge.toml; skills/*/wedge.toml; pyproject.toml; uv.lock; tools/wedge/uv.lock
+[^3]: justfile; tests/conftest.py; scripts/stage_release.py; .github/workflows/validate.yml; CONTRIBUTING.md
 
 ## CI workflows
 
@@ -131,8 +123,7 @@ Under `.github/workflows/`:
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `validate.yml` | push main, all PRs | frontmatter validation, pytest, install.sh bats + smoke, lint |
-| `build-pyz.yml` | PRs + push main (runtime source, bundle build/check code, locks, manifests, committed archives) | rebuild committed targets, verify canonical archive-member content against `HEAD`, and run bundle isolation tests — never commits |
+| `validate.yml` | push main, all PRs | frontmatter validation, archive freshness before pytest, install.sh bats + smoke, lint |
 | `release.yml` | tag `v[0-9]*` | stage slim tree, force-push `release` branch, GitHub release |
 | `publish-pypi.yml` | push main touching `pyproject.toml`, dispatch | publish `easy-cheese-schemas` to PyPI |
 | `docs.yml` | push/PR on docs paths, dispatch | `pnpm run docs:build` (Astro/Starlight), deploy Pages on main |
@@ -148,3 +139,5 @@ Under `.github/workflows/`:
 `just`, `uv` (for `uvx ruff`), plus `yamllint`, `yamlfmt`,
 `markdownlint-cli2`, `shellcheck`, and `bats` — see `README.md` for
 install hints (`AGENTS.md:18-21`).
+
+_Source: [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729), approved A correction · Updated: 2026-09-28 · Supersedes: runtime loaders, release-only archive assets, temporary test archives, and the separate archive workflow._

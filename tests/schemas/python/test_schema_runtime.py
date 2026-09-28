@@ -20,7 +20,7 @@ from _schema_catalog_compiler import (
 from _schema_catalog_compiler import (
     render as render_schema_catalog,
 )
-from build_pyz import _compiled_schema_catalog_source  # pyright: ignore[reportPrivateUsage]
+from runtime_gates import _compiled_schema_catalog_source  # pyright: ignore[reportPrivateUsage]
 
 from easy_cheese_schemas.contracts import (
     MAX_CONTRACT_BYTES,

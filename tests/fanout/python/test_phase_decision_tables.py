@@ -14,7 +14,8 @@ from typing import cast
 from easy_cheese.shared.fanout import phase_decision
 from easy_cheese.shared.fanout.phase_decision import Verdict
 
-BUNDLE = Path(__file__).resolve().parents[3] / "skills/cook/scripts/cook.pyz"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 def _verdict(stdout: str) -> Verdict:
@@ -91,7 +92,7 @@ class TestNotApplicableTables:
 class TestCliTableFlag:
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(BUNDLE), "phase_decision", *args],
+            [sys.executable, str(COOK_ARCHIVE), "phase_decision", *args],
             capture_output=True,
             text=True,
         )

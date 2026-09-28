@@ -28,25 +28,27 @@ corepack enable
 just check
 ```
 
-`just check` uses `uv` to resolve the Python tools temporarily. It does not install Shiv. It does not rebuild the committed skill archives.
+`just check` uses `uv` to resolve the Python tools temporarily. It verifies every committed skill archive before any archive executes.
 
-## Rebuild skill archives
+## Build skill archives
 
-Each Python skill includes one Shiv archive at `skills/<skill>/scripts/<skill>.pyz`.
-Install the build dependencies only when you rebuild these archives. Users can run the archives with Python alone.
+Each Python skill commits one executable archive at `skills/<skill>/scripts/<skill>.pyz`.
+Wedge builds self-contained archives at build time. It is not a runtime dependency.
+Users run the archive directly with Python; no loader or first-run download exists.
 
-Rebuild every archive after you change runtime source under `src/easy_cheese/`, a phase contract, build configuration, or a committed archive.
+Run `just wedge-build` after changing runtime source under `src/`, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`.
+Run `just wedge-check` before focused tests that execute an archive.
 
 ```sh
-python3 -m pip install --requirement requirements-build.txt
-just bundle
+just wedge-build
+just wedge-check
 ```
 
-`just bundle` resolves each application from PEP 517 wheels in a private wheelhouse.
-It writes the complete external and internal hash-locked closure to a temporary requirements file beside that wheelhouse.
-Then it invokes Shiv. The external runtime pins in `requirements/runtime.txt` are the only committed hash lock.
-`fromargs`, the CLI library, and its Cyclopts closure are PyPI releases hash-locked in that file.
-To bump `fromargs`, update its version and hash in `requirements/runtime.txt` and `requirements/typing.txt`, then rebuild the bundles.
+`just wedge-build` builds each skill through the pinned Wedge and rewrites its archive.
+The archive closure comes from `uv.lock`: the schemas' dependencies plus the `runtime` dependency group in `pyproject.toml`.
+`requirements/runtime.txt` pins the same closure for the test and typing environments; a test keeps the two equal.
+To bump `fromargs`, update the `runtime` group in `pyproject.toml`, run `uv lock`, update `requirements/runtime.txt` and `requirements/typing.txt`, then run `just wedge-build`.
+To bump Wedge, change the commit in `tools/wedge/pyproject.toml`, run `uv lock --project tools/wedge`, then run `just wedge-build`.
 
 Each Python skill declares its public subcommands in `commands.py`.
 Declare each handler with the `@bundle_command("<name>")` decorator at its definition site.
@@ -63,8 +65,8 @@ Write diagnostics to stderr. Return an integer process status.
 Do not modify `sys.argv`. Do not run the target through `runpy`.
 See `src/easy_cheese/skills/affinage/commands.py` for a complete manifest.
 
-Commit the regenerated `skills/*/scripts/*.pyz` archives with the source change.
-CI rebuilds the archives and compares their canonical member content with the committed artifacts.
+Commit each regenerated `.pyz` archive with the source change.
+`just wedge-check` verifies every committed archive against a temporary Wedge build.
 
 ## Documentation style
 
