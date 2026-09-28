@@ -2,13 +2,15 @@
 
 `fork` writes only the child (F-2). It reads the parent without its lock and
 writes nothing to it. The child's `forked_from` edge pins the parent revision
-the fork read, and its rationale records the move/copy split in the form
+the fork read, and its rationale records the fork-time selection in the form
 `fork_reconcile.fork_rationale` writes and `fork_reconcile.pending_forks`
-parses. Each re-proposed entry carries `origin`, a host-only commit input.
+parses. The edge and each re-proposed entry's `origin` are host-only commit
+inputs.
 
 When no entry is named, questions and blockers move, directives and decisions
 copy, and every dossier fork moves with them. The parent reconciles at its
-own next checkpoint (see `fork_reconcile`).
+own next checkpoint (see `fork_reconcile`), so an entry that a pending fork
+already moves cannot move again.
 """
 
 from __future__ import annotations
@@ -33,8 +35,8 @@ from easy_cheese_schemas import (
 )
 from easy_cheese_schemas.contracts import EdgeKind, WorkEdge
 
-from . import commit, records, storage
-from .fork_reconcile import FORK_RATIONALE_LIMIT, fork_rationale
+from . import commit, edges, records, storage
+from .fork_reconcile import FORK_RATIONALE_LIMIT, fork_rationale, pending_forks
 from .ref_grammar import normalize_ref
 
 __all__ = ["ForkError", "fork"]
@@ -82,16 +84,42 @@ def fork(
         copy = [e.entry_id for e in active if e.kind not in _MOVED_BY_DEFAULT]
         if not dossier:
             dossier = [item.fork for item in source.decision_dossier]
-    rationale = fork_rationale(parent, source.revision_id, move, copy)
+    taken = {
+        parent_id: item.child_ref
+        for item in pending_forks(
+            source, siblings=edges.sibling_records(corpus_root, work_id=parent)
+        )
+        for parent_id, _ in item.moved
+    }
+    for entry_id in move:
+        if entry_id in taken:
+            raise ForkError(
+                f"already-forked: entry {entry_id!r} moves to {taken[entry_id]} "
+                + "at the parent's next checkpoint"
+            )
+    titles = list(dict.fromkeys(dossier))
+    rationale = fork_rationale(
+        parent,
+        source.revision_id,
+        moved=move,
+        copied=copy,
+        dossier=titles,
+        links=list(dict.fromkeys(_normalized(ref) for ref in links)),
+    )
     if len(rationale) > FORK_RATIONALE_LIMIT:
         raise ForkError(
-            f"fork-too-large: the move/copy split needs {len(rationale)} "
+            f"fork-too-large: the fork selection needs {len(rationale)} "
             + f"characters; the edge rationale holds {FORK_RATIONALE_LIMIT}"
         )
     selected = _selected(source, [*move, *copy])
     if not selected:
         raise ForkError(f"fork-empty: work {parent!r} has no entry to move or copy")
-
+    gates = [e.entry_id for e in selected if e.entry_id in source.gating_entry_ids]
+    if gates and not titles:
+        raise ForkError(
+            f"dossier-required: entries {', '.join(gates)} gate continuation, so "
+            + "the fork must take the dossier fork that describes them"
+        )
     proposed = {
         kind: [entry for entry in selected if entry.kind is kind]
         for kind in commit.ADDITION_FIELDS
@@ -107,15 +135,12 @@ def fork(
         next_action=NextAction(
             move=NextMove.HOLD if next is None else next, orientation=orientation
         ),
-        decision_dossier=_dossier(source, dossier),
+        decision_dossier=_dossier(source, titles),
         add_decisions=_proposals(proposed[EntryKind.DECISION]),
         add_questions=_proposals(proposed[EntryKind.QUESTION]),
         add_blockers=_proposals(proposed[EntryKind.BLOCKER]),
         add_directives=_proposals(proposed[EntryKind.DIRECTIVE]),
         add_artifact_links=_links(source, links),
-        add_edges=(
-            WorkEdge(to=origin, kind=EdgeKind.FORKED_FROM, rationale=rationale),
-        ),
         session_provenance=session_provenance,
     )
     return commit.commit(
@@ -127,6 +152,7 @@ def fork(
         origins={
             index: f"{origin}#{entry.entry_id}" for index, entry in enumerate(ordered)
         },
+        fork_edge=WorkEdge(to=origin, kind=EdgeKind.FORKED_FROM, rationale=rationale),
     )
 
 

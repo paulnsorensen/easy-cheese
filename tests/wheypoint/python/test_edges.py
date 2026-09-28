@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from easy_cheese_schemas import (
+    ArtifactLink,
     NextAction,
     NextMove,
     SessionProvenance,
@@ -20,6 +22,9 @@ from easy_cheese.shared.wheypoint import (
     commit,
     edges,
     lint,
+    lint_freshness,
+    resolve as resolve_mod,
+    shape,
     storage,
 )
 
@@ -365,3 +370,177 @@ def test_build_delta_forwards_edge_additions_and_removals(
 
     assert delta.add_edges == add
     assert delta.remove_edges == remove
+
+
+def _unlink(store: storage.WorkStore, work_id: str) -> commit.CommitResult:
+    return _next(
+        store, remove_edges=[WorkEdgeKey(to=_ref(work_id), kind=EdgeKind.RELATES_TO)]
+    )
+
+
+def test_ac9_a_target_that_unlinks_its_reciprocal_keeps_it_unlinked(
+    corpus_root: Path,
+) -> None:
+    _, b = _linked(corpus_root)
+    _ = _next(b)
+    _ = _unlink(b, "alpha")
+
+    first = _next(b)
+    second = _next(b)
+
+    record = b.read_record()
+    assert record is not None and record.edges == ()
+    assert (first.revision.applied_edges, second.revision.applied_edges) == ((), ())
+    assert _lint(b).pending == ()
+
+
+def test_ac9_a_source_that_unlinks_does_not_get_the_link_back(
+    corpus_root: Path,
+) -> None:
+    a, b = _linked(corpus_root)
+    _ = _next(b)
+    _ = _unlink(a, "beta")
+
+    result = _next(a)
+
+    record = a.read_record()
+    assert record is not None and record.edges == ()
+    assert result.revision.applied_edges == ()
+    assert _lint(a).pending == ()
+
+
+def test_ac9_a_source_that_relinks_makes_the_reciprocal_pending_again(
+    corpus_root: Path,
+) -> None:
+    a, b = _linked(corpus_root)
+    _ = _next(b)
+    _ = _unlink(b, "alpha")
+
+    relinked = _next(a, add_edges=[WorkEdge(to=_ref("beta"), kind=EdgeKind.RELATES_TO)])
+    result = _next(b)
+
+    assert [(e.to, e.rationale) for e in result.revision.applied_edges] == [
+        (
+            _ref("alpha"),
+            f"reciprocal of relates_to from {_ref('alpha')}@"
+            + relinked.revision.revision_id,
+        )
+    ]
+
+
+def test_a_retried_promotion_ignores_a_link_made_since_the_pair_landed(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    a = _genesis(corpus_root, "alpha")
+    b = _genesis(corpus_root, "beta")
+    current = b.read_record()
+    assert current is not None
+    delta = WheypointDelta(
+        work_id="beta", expected_revision_id=current.revision_id, notes="Two."
+    )
+    old = b.record_path.read_bytes()
+    real = storage.WorkStore.promote
+
+    def interrupted(
+        self: storage.WorkStore,
+        record: WheypointRecord,
+        revision: object,
+        markdown: str,
+    ) -> None:
+        real(self, record, revision, markdown)  # pyright: ignore[reportArgumentType]
+        _ = self.record_path.write_bytes(old)
+
+    monkeypatch.setattr(storage.WorkStore, "promote", interrupted)
+    first = commit.commit(delta, store=b)
+    monkeypatch.setattr(storage.WorkStore, "promote", real)
+    _ = _next(a, add_edges=[WorkEdge(to=_ref("beta"), kind=EdgeKind.RELATES_TO)])
+
+    retried = commit.commit(delta, store=b)
+
+    record = b.read_record()
+    assert retried.revision.revision_id == first.revision.revision_id
+    assert record is not None and record.revision_id == first.revision.revision_id
+    assert retried.revision.applied_edges == ()
+    assert [p.source_work_id for p in _lint(b).pending] == ["alpha"]
+
+
+def test_ac8_an_unpinned_wheypoint_artifact_link_pins_the_target_revision(
+    corpus_root: Path,
+) -> None:
+    a = _genesis(corpus_root, "alpha")
+    b = _genesis(corpus_root, "beta")
+    target = b.read_record()
+    assert target is not None
+    digest = lint_freshness.artifact_digest_in(corpus_root)
+
+    _ = _next(
+        a,
+        add_edges=[WorkEdge(to=_ref("beta"), kind=EdgeKind.RELATES_TO)],
+        add_artifact_links=[ArtifactLink(path=f"{PROJECT}/beta", ref=_ref("beta"))],
+    )
+    _ = _next(b)
+
+    record = a.read_record()
+    assert record is not None
+    assert [link.ref for link in record.artifact_links] == [
+        f"{_ref('beta')}@{target.revision_id}"
+    ]
+    assert [edge.to for edge in record.edges] == [_ref("beta")]
+    report = lint.lint_work(
+        a, project_key=PROJECT, git_object_exists=lambda _o: True, artifact_digest=digest
+    )
+    assert report.codes == ()
+    resolution = resolve_mod.resolve(
+        "alpha",
+        corpus_root=corpus_root,
+        project_key=PROJECT,
+        git_object_exists=lambda _o: True,
+        artifact_digest=digest,
+    )
+    assert resolution.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+
+
+def _counted_reads(monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
+    reads: Counter[str] = Counter()
+    real = storage.WorkStore.read_record
+
+    def counting(self: storage.WorkStore) -> WheypointRecord | None:
+        reads[self.work_id] += 1
+        return real(self)
+
+    monkeypatch.setattr(storage.WorkStore, "read_record", counting)
+    return reads
+
+
+def test_a_commit_and_a_lint_read_each_sibling_record_once(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, b = _linked(corpus_root)
+    _ = _genesis(corpus_root, "gamma")
+    reads = _counted_reads(monkeypatch)
+
+    _ = _next(b)
+
+    assert (reads["alpha"], reads["gamma"]) == (1, 1)
+    reads.clear()
+
+    _ = _lint(b)
+
+    assert (reads["alpha"], reads["gamma"]) == (1, 1)
+
+
+def test_shape_reads_each_record_once(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _ = _linked(corpus_root)
+    _ = _genesis(corpus_root, "gamma")
+    reads = _counted_reads(monkeypatch)
+
+    report = shape.shape(
+        scope="project", corpus_home=corpus_root.parent, project=PROJECT
+    )
+
+    assert dict(reads) == {"alpha": 1, "beta": 1, "gamma": 1}
+    assert [(e.from_ref, e.kind) for e in report.pending] == [
+        (_ref("beta"), EdgeKind.RELATES_TO)
+    ]

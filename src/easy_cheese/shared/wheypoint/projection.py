@@ -52,6 +52,7 @@ from easy_cheese_schemas.handback_status import (
 from easy_cheese_schemas.contracts import EdgeKind
 
 from . import canonical, records
+from .ref_grammar import Scheme
 
 # The shared handoff preamble: three keyed lines, then the orientation.
 _HEAD_KEYS = ("status", "next", "artifact")
@@ -241,7 +242,9 @@ def _body(record: WheypointRecord) -> list[str]:
             f"covers: {', '.join(link.covers_entry_ids)}" if link.covers_entry_ids else "",
         ]
         detail_text = ", ".join(part for part in detail if part)
-        lines.append(f"- {escape(link.path)}" + (f" ({detail_text})" if detail_text else ""))
+        ref = records.effective_ref(link)
+        shown = link.path if ref.partition(":")[0] == Scheme.REPO.value else ref
+        lines.append(f"- {escape(shown)}" + (f" ({detail_text})" if detail_text else ""))
     if not record.artifact_links:
         lines.append(_NONE)
     lines += ["", _LINKS_HEADING, ""]

@@ -712,3 +712,33 @@ def test_cure_the_task_and_plan_field_tables_name_real_schema_attributes() -> No
         assert attr in task_attrs, f"{attr!r} is not a HandoffTask field"
     for attr, _required in plan_fields:
         assert attr in plan_attrs, f"{attr!r} is not a ParallelPlan field"
+
+
+def test_artifacts_render_the_ref_of_a_non_repo_link_and_the_path_of_a_repo_link(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    from easy_cheese_schemas import ArtifactLink
+
+    record = evolve(
+        make_record(),
+        artifact_links=[
+            ArtifactLink(
+                path="paulnsorensen-easy-cheese/doc.md",
+                ref="xdg:paulnsorensen-easy-cheese/doc.md",
+            ),
+            ArtifactLink(path="docs/a.md", ref="repo:docs/a.md"),
+            ArtifactLink(path="docs/b.md"),
+        ],
+    )
+
+    _, markdown = projection.build_projection(
+        record, durability=Durability.CANONICAL_LOCAL
+    )
+
+    lines = markdown.splitlines()
+    start = lines.index("## Artifacts") + 2
+    assert lines[start : start + 3] == [
+        "- xdg:paulnsorensen-easy-cheese/doc.md",
+        "- docs/a.md",
+        "- docs/b.md",
+    ]

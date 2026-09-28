@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from attrs import evolve
 from easy_cheese_schemas import (
     ArtifactLink,
     DecisionFork,
@@ -29,6 +30,7 @@ from easy_cheese.shared.wheypoint import (
     fork_reconcile,
     lint,
     projection,
+    records,
     resolve as resolve_mod,
     resolve_cli,
     storage,
@@ -203,7 +205,7 @@ def test_ac4_fork_writes_only_the_child_genesis(corpus_root: Path) -> None:
             revision_id=result.revision.revision_id,
             rationale=(
                 f"fork of parent@{before.revision_id}; moved: {question}; "
-                + f"copied: {directive}"
+                + f"copied: {directive}; dossier: {DOSSIER}; links: none"
             ),
         ),
     )
@@ -357,7 +359,8 @@ def test_fork_defaults_move_questions_and_blockers_and_copy_the_rest(
     assert record.next_action.move is NextMove.HOLD
     assert record.edges[0].rationale is not None
     assert record.edges[0].rationale.endswith(
-        f"moved: {question}; copied: {decision}, {directive}"
+        f"moved: {question}; copied: {decision}, {directive}; "
+        + f"dossier: {DOSSIER}; links: none"
     )
 
 
@@ -437,3 +440,153 @@ def test_commit_refuses_an_agent_authored_fork_transition(corpus_root: Path) -> 
         )
 
     assert parent.record_path.read_bytes() == before
+
+
+def test_fork_refuses_an_entry_a_pending_fork_already_moves(corpus_root: Path) -> None:
+    parent = _parent(corpus_root)
+    question, directive, _ = _ids(_record(parent))
+    _ = _fork(corpus_root, move=[question], copy=[directive], dossier=[DOSSIER])
+
+    with pytest.raises(fork.ForkError, match=r"^already-forked: "):
+        _ = _fork(corpus_root, child="second", move=[question], dossier=[DOSSIER])
+
+    assert not storage.WorkStore.open("second", corpus_root=corpus_root).record_path.exists()
+    assert [f.child_work_id for f in _lint(parent).pending_forks] == ["child"]
+
+
+def test_two_pending_forks_of_one_entry_transition_it_once(corpus_root: Path) -> None:
+    parent = _parent(corpus_root)
+    current = _record(parent)
+    question, _, _ = _ids(current)
+    moved_to = "q-00000000000a"
+    pending = tuple(
+        fork_reconcile.PendingFork(
+            child_ref=_ref(child),
+            child_work_id=child,
+            child_revision_id="rev-00000000000b",
+            moved=((question, moved_to),),
+            copied=(),
+            dossier_titles=(),
+            link_refs=(),
+        )
+        for child in ("child-a", "child-b")
+    )
+
+    applied = fork_reconcile.apply_pending_forks(current, pending)
+
+    assert [(t.entry_id, t.successor) for t in applied.transitions] == [
+        (question, f"{_ref('child-a')}#{moved_to}")
+    ]
+    assert applied.copies == {question: (f"{_ref('child-b')}#{moved_to}",)}
+    assert [edge.to for edge in applied.edges] == [
+        f"{_ref('child-a')}@rev-00000000000b",
+        f"{_ref('child-b')}@rev-00000000000b",
+    ]
+
+
+def test_commit_refuses_a_fork_edge_in_a_delta(corpus_root: Path) -> None:
+    _ = _parent(corpus_root)
+    other = _parent(corpus_root, "other")
+    before = other.record_path.read_bytes()
+
+    for kind in (EdgeKind.FORKED_FROM, EdgeKind.FORKED_TO):
+        with pytest.raises(commit.CommitError, match=r"^host-only-edge: "):
+            _ = _next(
+                other,
+                add_edges=[WorkEdge(to=_ref("parent"), kind=kind, rationale="related")],
+            )
+
+    assert other.record_path.read_bytes() == before
+
+
+def test_a_forked_from_edge_whose_rationale_does_not_parse_is_no_fork(
+    corpus_root: Path,
+) -> None:
+    parent = _parent(corpus_root)
+    other = _parent(corpus_root, "other")
+    stray = evolve(
+        _record(other),
+        edges=(
+            WorkEdge(
+                to=_ref("parent"),
+                kind=EdgeKind.FORKED_FROM,
+                revision_id=_record(other).revision_id,
+                rationale="just related",
+            ),
+        ),
+    )
+
+    assert fork_reconcile.pending_forks(_record(parent), siblings=[stray]) == ()
+
+
+def test_reconcile_drops_only_the_links_and_dossier_selected_at_fork_time(
+    corpus_root: Path,
+) -> None:
+    parent = _parent(corpus_root)
+    question, directive, _ = _ids(_record(parent))
+    _ = _next(
+        parent,
+        transitions=[
+            EntryTransition(
+                entry_id=question, action=TransitionAction.RESOLVE, rationale="done"
+            )
+        ],
+    )
+    _ = _fork(corpus_root, copy=[directive])
+    child = storage.WorkStore.open("child", corpus_root=corpus_root)
+    _ = _next(
+        child,
+        add_artifact_links=[ArtifactLink(path=LINK, ref=LINK)],
+        decision_dossier=_record(parent).decision_dossier,
+    )
+
+    _ = _next(parent)
+
+    record = _record(parent)
+    assert [records.effective_ref(link) for link in record.artifact_links] == [LINK]
+    assert [item.fork for item in record.decision_dossier] == [DOSSIER]
+    assert record.directives[0].copies != ()
+
+
+def test_fork_refuses_to_move_a_gate_without_a_dossier_fork(corpus_root: Path) -> None:
+    parent = _parent(corpus_root)
+    question, _, _ = _ids(_record(parent))
+
+    with pytest.raises(fork.ForkError, match=r"^dossier-required: "):
+        _ = _fork(corpus_root, move=[question])
+
+    assert not storage.WorkStore.open("child", corpus_root=corpus_root).record_path.exists()
+
+
+def test_a_retried_parent_promotion_ignores_a_fork_made_since_the_pair_landed(
+    corpus_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    parent = _parent(corpus_root)
+    current = _record(parent)
+    question, directive, _ = _ids(current)
+    delta = WheypointDelta(
+        work_id="parent", expected_revision_id=current.revision_id, notes="Two."
+    )
+    old = parent.record_path.read_bytes()
+    real = storage.WorkStore.promote
+
+    def interrupted(
+        self: storage.WorkStore,
+        record: WheypointRecord,
+        revision: object,
+        markdown: str,
+    ) -> None:
+        real(self, record, revision, markdown)  # pyright: ignore[reportArgumentType]
+        _ = self.record_path.write_bytes(old)
+
+    monkeypatch.setattr(storage.WorkStore, "promote", interrupted)
+    first = commit.commit(delta, store=parent)
+    monkeypatch.setattr(storage.WorkStore, "promote", real)
+    _ = _fork(corpus_root, move=[question], copy=[directive], dossier=[DOSSIER])
+
+    retried = commit.commit(delta, store=parent)
+
+    assert retried.revision.revision_id == first.revision.revision_id
+    assert _record(parent).revision_id == first.revision.revision_id
+    assert retried.revision.applied_transitions == []
+    assert [f.child_work_id for f in _lint(parent).pending_forks] == ["child"]

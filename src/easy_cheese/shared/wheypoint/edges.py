@@ -6,19 +6,26 @@ cannot author that pin.
 
 A link writes only the record that makes it (F-2). A `wheypoint:` target
 learns of the link on read, as a pending reciprocal edge, and the target's
-own next checkpoint adds that reciprocal host-side. `pending_reciprocals`
-reads sibling records without their locks: one flock per record is the whole
+own next checkpoint adds that reciprocal host-side. `sibling_records` reads
+the corpus without the siblings' locks: one flock per record is the whole
 concurrency contract, and a stale read only defers the reciprocal to a later
 checkpoint.
+
+A host-written reciprocal carries the rationale `_reciprocal_rationale`
+writes. It is never the source of another reciprocal, so either side can
+unlink. An explicit removal sticks: a reciprocal that the record's own
+receipts applied from source revision R and later removed is not pending
+again while the source edge still carries R.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from attrs import define, evolve
-from easy_cheese_schemas import WheypointRecord
+from easy_cheese_schemas import WheypointRecord, WheypointRevision
 from easy_cheese_schemas.contracts import EdgeKind, WorkEdge, WorkEdgeKey
 
 from . import storage
@@ -34,7 +41,15 @@ __all__ = [
     "merge_edges",
     "pending_payload",
     "pending_reciprocals",
+    "replayed_reciprocals",
+    "sibling_records",
 ]
+
+_RECIPROCAL_PREFIX = "reciprocal of "
+_RECIPROCAL_RATIONALE_RE = re.compile(
+    re.escape(_RECIPROCAL_PREFIX)
+    + r"(?P<kind>\S+) from (?P<source>[^@\s]+)@(?P<revision>\S+)"
+)
 
 RECIPROCAL: Mapping[EdgeKind, EdgeKind] = {
     EdgeKind.FORKED_FROM: EdgeKind.FORKED_TO,
@@ -126,46 +141,127 @@ def merge_edges(
     )
 
 
+def _reciprocal_rationale(item: PendingEdge) -> str:
+    """The rationale the host writes on the reciprocal edge it applies."""
+    return (
+        f"{_RECIPROCAL_PREFIX}{RECIPROCAL[item.kind].value} from "
+        + f"{item.source_ref}@{item.source_revision_id}"
+    )
+
+
+def _parsed_reciprocal(text: str | None) -> tuple[str, str] | None:
+    """`(source_ref, source_revision_id)` of a host-written reciprocal, or None."""
+    match = None if text is None else _RECIPROCAL_RATIONALE_RE.fullmatch(text)
+    return None if match is None else (match["source"], match["revision"])
+
+
+def sibling_records(corpus_root: Path, *, work_id: str) -> tuple[WheypointRecord, ...]:
+    """Every readable record in the corpus except `work_id`, each read once."""
+    siblings: list[WheypointRecord] = []
+    for store in storage.WorkStore.enumerate(corpus_root):
+        if store.work_id == work_id:
+            continue
+        try:
+            record = store.read_record()
+        except (ValueError, OSError):
+            continue
+        if record is not None:
+            siblings.append(record)
+    return tuple(siblings)
+
+
 def pending_reciprocals(
-    record: WheypointRecord, *, corpus_root: Path
+    record: WheypointRecord,
+    *,
+    siblings: Iterable[WheypointRecord],
+    receipts: Iterable[WheypointRevision],
 ) -> tuple[PendingEdge, ...]:
     """Every reciprocal edge a sibling record's link asks `record` to add.
 
-    Fork edges are excluded: `fork_reconcile.pending_forks` owns them.
+    `siblings` are the other records of the corpus (see `sibling_records`).
+    `receipts` are `record`'s own receipts in any order; they carry the
+    removals that stick. Fork edges are excluded: `fork_reconcile.pending_forks`
+    owns them. A host-written reciprocal is never a source.
     """
     held = {(target, kind) for target, kind in map(_target, record.edges) if target}
+    removed = _removed_reciprocals(receipts)
     pending: list[PendingEdge] = []
-    for store in storage.WorkStore.enumerate(corpus_root):
-        if store.work_id == record.work_id:
+    for source in siblings:
+        if (source.project_key, source.work_id) == (record.project_key, record.work_id):
             continue
-        try:
-            source = store.read_record()
-        except (ValueError, OSError):
-            continue
-        if source is None:
-            continue
+        source_ref = f"wheypoint:{source.project_key}/{source.work_id}"
         for edge in source.edges:
             reciprocal = RECIPROCAL.get(edge.kind)
             if (
                 reciprocal is None
                 or edge.kind in _FORK_KINDS
+                or (edge.rationale or "").startswith(_RECIPROCAL_PREFIX)
                 or _target(edge)[0] != (record.project_key, record.work_id)
             ):
                 continue
             if ((source.project_key, source.work_id), reciprocal) in held:
                 continue
+            revision = edge.revision_id or source.revision_id
+            if removed.get((source_ref, reciprocal)) == revision:
+                continue
             pending.append(
                 PendingEdge(
-                    source_ref=f"wheypoint:{source.project_key}/{source.work_id}",
+                    source_ref=source_ref,
                     source_work_id=source.work_id,
-                    source_revision_id=edge.revision_id or source.revision_id,
+                    source_revision_id=revision,
                     kind=reciprocal,
-                    to=f"wheypoint:{source.project_key}/{source.work_id}",
+                    to=source_ref,
                 )
             )
     return tuple(
         sorted(pending, key=lambda item: (item.source_work_id, item.kind.value))
     )
+
+
+def _removed_reciprocals(
+    receipts: Iterable[WheypointRevision],
+) -> dict[tuple[str, EdgeKind], str]:
+    """Each reciprocal key the record removed, mapped to its source revision."""
+    applied_from: dict[tuple[str, EdgeKind], str] = {}
+    removed: dict[tuple[str, EdgeKind], str] = {}
+    for receipt in sorted(receipts, key=lambda item: item.revision_number):
+        for edge in receipt.applied_edges:
+            key = edge_key(edge)
+            _ = removed.pop(key, None)
+            parsed = _parsed_reciprocal(edge.rationale)
+            if parsed is None:
+                _ = applied_from.pop(key, None)
+            else:
+                applied_from[key] = parsed[1]
+        for value in receipt.removed_edges:
+            key = edge_key(value)
+            if key in applied_from:
+                removed[key] = applied_from.pop(key)
+    return removed
+
+
+def replayed_reciprocals(receipt: WheypointRevision) -> tuple[PendingEdge, ...]:
+    """The reciprocals a receipt applied, as the pending edges that produced them.
+
+    A retried promotion rebuilds its revision from these, not from a new
+    sibling scan, so the retry derives the same triple.
+    """
+    pending: list[PendingEdge] = []
+    for edge in receipt.applied_edges:
+        parsed = _parsed_reciprocal(edge.rationale)
+        target = _target(edge)[0]
+        if parsed is None or target is None:
+            continue
+        pending.append(
+            PendingEdge(
+                source_ref=parsed[0],
+                source_work_id=target[1],
+                source_revision_id=parsed[1],
+                kind=edge.kind,
+                to=edge.to,
+            )
+        )
+    return tuple(pending)
 
 
 def apply_pending_reciprocals(
@@ -182,10 +278,7 @@ def apply_pending_reciprocals(
             to=item.to,
             kind=item.kind,
             revision_id=revision_id,
-            rationale=(
-                f"reciprocal of {RECIPROCAL[item.kind].value} from "
-                + f"{item.source_ref}@{item.source_revision_id}"
-            ),
+            rationale=_reciprocal_rationale(item),
         )
         key = edge_key(edge)
         if key in by_key:

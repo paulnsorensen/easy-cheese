@@ -7,8 +7,9 @@ record: `resolve` remains the only authority. A node ref is
 directory name. The `dot` string is deterministic: nodes sort by ref and
 edges by `(from, to, kind)`, and it carries no timestamp.
 
-Every record's pending reciprocals and forks come from a scan of its own
-corpus, so a report costs one read per record pair in each project.
+Pending reciprocals and forks come from the records already loaded, so a
+report reads each record once. Only a record that owes a reciprocal also
+reads its own receipts, to drop the removals that stick.
 """
 
 from __future__ import annotations
@@ -97,6 +98,7 @@ class _Loaded:
     node: ShapeNode
     record: WheypointRecord
     corpus_root: Path
+    store: storage.WorkStore
 
 
 def _node_ref(project: str, work_id: str) -> str:
@@ -163,7 +165,9 @@ def _load(corpus_root: Path) -> list[_Loaded]:
             updated=updated,
             gates=record.gating_entry_ids,
         )
-        loaded.append(_Loaded(node=node, record=record, corpus_root=corpus_root))
+        loaded.append(
+            _Loaded(node=node, record=record, corpus_root=corpus_root, store=store)
+        )
     return loaded
 
 
@@ -179,7 +183,14 @@ def _held(item: _Loaded) -> list[ShapeEdge]:
     ]
 
 
-def _owed(item: _Loaded) -> list[ShapeEdge]:
+def _owed(item: _Loaded, siblings: Sequence[WheypointRecord]) -> list[ShapeEdge]:
+    owed_links = edges.pending_reciprocals(
+        item.record, siblings=siblings, receipts=()
+    )
+    if owed_links:
+        owed_links = edges.pending_reciprocals(
+            item.record, siblings=siblings, receipts=item.store.receipt_revisions()
+        )
     reciprocals = [
         ShapeEdge(
             from_ref=item.node.ref,
@@ -188,7 +199,7 @@ def _owed(item: _Loaded) -> list[ShapeEdge]:
             revision_id=None,
             pending=True,
         )
-        for owed in edges.pending_reciprocals(item.record, corpus_root=item.corpus_root)
+        for owed in owed_links
     ]
     forks = [
         ShapeEdge(
@@ -198,9 +209,7 @@ def _owed(item: _Loaded) -> list[ShapeEdge]:
             revision_id=None,
             pending=True,
         )
-        for owed in fork_reconcile.pending_forks(
-            item.record, corpus_root=item.corpus_root
-        )
+        for owed in fork_reconcile.pending_forks(item.record, siblings=siblings)
     ]
     return reciprocals + forks
 
@@ -278,12 +287,15 @@ def shape(
         for item in _load(root)
     ]
     known = {(item.node.project, item.node.work_id) for item in loaded}
+    by_corpus: defaultdict[Path, list[WheypointRecord]] = defaultdict(list)
+    for item in loaded:
+        by_corpus[item.corpus_root].append(item.record)
     all_held = [edge for item in loaded for edge in _held(item)]
     held = [edge for edge in all_held if not kinds or edge.kind in kinds]
     owed = [
         edge
         for item in loaded
-        for edge in _owed(item)
+        for edge in _owed(item, by_corpus[item.corpus_root])
         if not kinds or edge.kind in kinds
     ]
     if work_id is not None:

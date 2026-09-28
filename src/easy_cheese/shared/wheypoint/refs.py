@@ -37,6 +37,7 @@ __all__ = [
     "is_pinnable",
     "normalize_ref",
     "parse_ref",
+    "pin_record",
     "resolve_ref",
 ]
 
@@ -82,6 +83,31 @@ def digester(checkout: Path, corpus_home: Path) -> Callable[[str], str | None]:
             return None
 
     return digest
+
+
+def pin_record(ref: str, *, corpus_home: Path) -> str:
+    """`ref` pinned to its target's current revision when it names none.
+
+    Only a `wheypoint:` reference with no `@<rev>` whose target record exists
+    changes; every other reference comes back unchanged.
+    """
+    parsed = parse_ref(ref)
+    if parsed.scheme is not Scheme.WHEYPOINT or parsed.revision_id is not None:
+        return ref
+    store = storage.WorkStore.open(
+        _required(parsed.work_id),
+        corpus_root=Path(corpus_home) / _required(parsed.project_key),
+    )
+    try:
+        record = store.read_record()
+    except (OSError, ValueError):
+        return ref
+    if record is None:
+        return ref
+    entry = "" if parsed.entry_id is None else f"#{parsed.entry_id}"
+    return normalize_ref(
+        f"wheypoint:{parsed.project_key}/{parsed.work_id}@{record.revision_id}{entry}"
+    )
 
 
 def _required(value: str | None) -> str:

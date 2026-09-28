@@ -207,6 +207,7 @@ def lint_work(
     # No receipt for the current revision means no proven ancestry, so every
     # revision pin is unresolved rather than resolved against the whole store.
     ancestry: frozenset[str] = frozenset()
+    receipts: tuple[WheypointRevision, ...] = ()
     if current is None:
         findings.append(
             LintFinding(
@@ -221,6 +222,7 @@ def lint_work(
         projection = projection_report.projection
         chain = lineage.walk(survey.revisions, current)
         ancestry = chain.revision_ids
+        receipts = tuple(chain.revisions)
         findings.extend(_lineage_finding(issue) for issue in chain.issues)
         findings.extend(_compaction_findings(chain))
         findings.extend(_conservation_findings(chain, record))
@@ -231,7 +233,8 @@ def lint_work(
     if projection is not None:
         findings.extend(_durability_findings(projection, record))
     findings.extend(lint_freshness.grounded_path_findings(record, root))
-    pending = edges.pending_reciprocals(record, corpus_root=store.corpus_root)
+    siblings = edges.sibling_records(store.corpus_root, work_id=record.work_id)
+    pending = edges.pending_reciprocals(record, siblings=siblings, receipts=receipts)
     findings.extend(
         LintFinding(
             LintCode.LINK_PENDING,
@@ -241,7 +244,7 @@ def lint_work(
         )
         for item in pending
     )
-    pending_forks = fork_reconcile.pending_forks(record, corpus_root=store.corpus_root)
+    pending_forks = fork_reconcile.pending_forks(record, siblings=siblings)
     findings.extend(
         LintFinding(
             LintCode.FORK_PENDING,

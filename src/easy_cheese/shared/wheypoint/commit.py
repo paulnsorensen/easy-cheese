@@ -68,7 +68,7 @@ from easy_cheese_schemas import (
     WheypointRecord,
     WheypointRevision,
 )
-from easy_cheese_schemas.contracts import WorkEdge, WorkEdgeKey
+from easy_cheese_schemas.contracts import EdgeKind, WorkEdge, WorkEdgeKey
 
 from easy_cheese.shared import paths
 
@@ -83,6 +83,7 @@ from . import records, refs, storage
 # which receipt quoted it. This placeholder holds that field open in between.
 _UNPINNED_DIGEST = f"{canonical.DIGEST_PREFIX}{'0' * 64}"
 _ID_HEX = 12
+_FORK_EDGE_KINDS = frozenset({EdgeKind.FORKED_FROM, EdgeKind.FORKED_TO})
 # The parent a delta names when it is asking for the *first* record. Every
 # derived revision id is `rev-<12 hex>` (see `_revision_id`), so this sentinel
 # lives outside that namespace by construction: no hash can produce it, and no
@@ -167,13 +168,25 @@ def commit(
     finalize: Callable[[PendingRevision], None] | None = None,
     artifact_root: Path | str | None = None,
     origins: Mapping[int, str] | None = None,
+    fork_edge: WorkEdge | None = None,
 ) -> CommitResult:
     """Apply `delta` to the store's current record under the record lock.
 
     `origins` is host-only input: it maps the index of a proposed entry, in
     `ADDITION_FIELDS` order across the delta's `add_*` lists, to the `origin`
     the new entry carries. A delta cannot author `origin` itself.
+
+    `fork_edge` is host-only input too: the `forked_from` edge `fork()` writes
+    into a child. A delta cannot author a fork edge itself.
     """
+    forged_edges = [
+        edge.to for edge in delta.add_edges or () if edge.kind in _FORK_EDGE_KINDS
+    ]
+    if forged_edges:
+        raise CommitError(
+            "host-only-edge: fork edges are written by the host when it forks "
+            + f"or reconciles a fork, not on request ({', '.join(forged_edges)})"
+        )
     stamped = origins or {}
     repository_value: RepositoryProvenance = (
         RepositoryProvenance() if repository is None else repository
@@ -232,6 +245,7 @@ def commit(
                     durability=durability,
                     digest_of=digest_of,
                     origins=stamped,
+                    fork_edge=fork_edge,
                 ),
                 finalize=finalize,
             )
@@ -269,6 +283,8 @@ def commit(
                 digest_of=digest_of,
                 durability=durability,
                 origins=stamped,
+                fork_edge=fork_edge,
+                replay=replay,
             ),
             finalize=finalize,
         )
@@ -613,6 +629,9 @@ def _merge_artifact_links(
     for link in add or ():
         try:
             ref = refs.normalize_ref(records.effective_ref(link))
+            # An unpinned record link names whatever the target is now; the
+            # link pins that revision so a later read resolves the same record.
+            ref = refs.pin_record(ref, corpus_home=paths.corpus_home())
         except ValueError as exc:
             raise CommitError(f"add_artifact_links names an unusable ref: {exc}") from exc
         scheme = refs.parse_ref(ref).scheme
@@ -695,7 +714,15 @@ def _apply(
     digest_of: Callable[[str], str | None],
     durability: Durability,
     origins: Mapping[int, str],
+    fork_edge: WorkEdge | None,
+    replay: WheypointRevision | None,
 ) -> PendingRevision:
+    """The next revision of `current`, with pending forks and reciprocals.
+
+    `replay` is the receipt an interrupted promotion of this same request
+    already wrote. Its reconciliation is rebuilt from that receipt, not from a
+    new sibling scan, so the retry derives the identical triple.
+    """
     transitions = list(delta.transitions or [])
     forged = [t.entry_id for t in transitions if t.action is TransitionAction.FORK]
     if forged:
@@ -706,9 +733,33 @@ def _apply(
     # A pending fork is reconciled host-side (F-2): the moved entries join the
     # agent's transitions, so the receipt lists both and nothing leaves the
     # record without a transition naming it.
+    siblings = edges_mod.sibling_records(store.corpus_root, work_id=current.work_id)
+    pending_forks = fork_reconcile.pending_forks(current, siblings=siblings)
+    if replay is None:
+        pending_reciprocals = edges_mod.pending_reciprocals(
+            current, siblings=siblings, receipts=lineage.revisions
+        )
+    else:
+        pending_reciprocals = edges_mod.replayed_reciprocals(replay)
+        replayed_forks = {
+            edges_mod.edge_key(edge)
+            for edge in replay.applied_edges
+            if edge.kind is EdgeKind.FORKED_TO
+        }
+        pending_forks = tuple(
+            item
+            for item in pending_forks
+            if edges_mod.edge_key(
+                WorkEdgeKey(
+                    to=f"{item.child_ref}@{item.child_revision_id}",
+                    kind=EdgeKind.FORKED_TO,
+                )
+            )
+            in replayed_forks
+        )
     forks = fork_reconcile.apply_pending_forks(
         current,
-        fork_reconcile.pending_forks(current, corpus_root=store.corpus_root),
+        pending_forks,
         agent_transitioned={t.entry_id for t in transitions},
     )
     transitions.extend(forks.transitions)
@@ -744,11 +795,11 @@ def _apply(
         additions=additions,
         digest_of=digest_of,
     )
-    merged = _merge_edges(current.edges, delta, revision_id=revision_id)
+    merged = _merge_edges(
+        current.edges, delta, host=fork_edge, revision_id=revision_id
+    )
     reciprocals = edges_mod.apply_pending_reciprocals(
-        merged.edges,
-        edges_mod.pending_reciprocals(current, corpus_root=store.corpus_root),
-        revision_id=revision_id,
+        merged.edges, pending_reciprocals, revision_id=revision_id
     )
     forked_to = edges_mod.merge_edges(
         reciprocals.edges, forks.edges, None, revision_id=revision_id
@@ -830,6 +881,7 @@ def _genesis(
     digest_of: Callable[[str], str | None],
     durability: Durability,
     origins: Mapping[int, str],
+    fork_edge: WorkEdge | None,
 ) -> PendingRevision:
     """The first record for a work id, built from the delta alone.
 
@@ -876,7 +928,7 @@ def _genesis(
             + "blocker, or directive, or a notes body: orientation alone is not a record"
         )
     revision_id = _revision_id(delta, fingerprint)
-    merged = _merge_edges((), delta, revision_id=revision_id)
+    merged = _merge_edges((), delta, host=fork_edge, revision_id=revision_id)
     try:
         draft = WheypointRecord(
             schema_version=SCHEMA_VERSION,
@@ -930,11 +982,17 @@ def _genesis(
 
 
 def _merge_edges(
-    current: tuple[WorkEdge, ...], delta: WheypointDelta, *, revision_id: str
+    current: tuple[WorkEdge, ...],
+    delta: WheypointDelta,
+    *,
+    host: WorkEdge | None,
+    revision_id: str,
 ) -> edges_mod.MergedEdges:
+    """The delta's edges plus the host's fork edge; `None` when both are absent."""
+    add = [*(delta.add_edges or ()), *([host] if host else [])]
     try:
         return edges_mod.merge_edges(
-            current, delta.add_edges, delta.remove_edges, revision_id=revision_id
+            current, add or None, delta.remove_edges, revision_id=revision_id
         )
     except edges_mod.EdgeError as exc:
         raise CommitError(str(exc)) from exc

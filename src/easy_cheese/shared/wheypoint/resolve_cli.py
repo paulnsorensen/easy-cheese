@@ -49,7 +49,6 @@ def resolve_payload(resolution: resolve_mod.Resolution, ref: str) -> dict[str, o
     could not be interpreted is still an answer about the corpus, so the caller
     emits this payload with ``ok: false`` rather than the ``{code, message}``
     shape usage and internal errors use. ``raise_if_error`` picks the code.
-    shape usage and internal errors use. ``raise_if_error`` picks the code.
 
     ``bridge`` reports the milknado binding of a resolved record, checked
     against the repo root that holds the working directory; it is ``None``

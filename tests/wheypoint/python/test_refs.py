@@ -227,18 +227,21 @@ def test_ac1_repo_and_wheypoint_refs_pin_the_same_way(
             add_artifact_links=[
                 ArtifactLink(path="docs/a.md", ref="repo:./docs/a.md"),
                 ArtifactLink(path="x", ref=f"wheypoint:{PROJECT}/work-0002"),
-                ArtifactLink(path="x", ref=f"wheypoint:{PROJECT}/work-0002@rev-0001"),
             ],
         ),
         store=store,
         artifact_root=checkout,
     )
 
-    repo_link, current_link, pinned_link = result.record.artifact_links
+    repo_link, record_link = result.record.artifact_links
     assert (repo_link.ref, repo_link.path) == ("repo:docs/a.md", "docs/a.md")
     assert repo_link.digest == canonical.digest_text("a")
-    assert current_link.digest == records.record_digest(target.record)
-    assert pinned_link.digest == target.revision.record_digest
+    # An unpinned record link is pinned to the target's current revision.
+    assert record_link.ref == (
+        f"wheypoint:{PROJECT}/work-0002@{target.record.revision_id}"
+    )
+    assert record_link.digest == target.revision.record_digest
+    assert record_link.digest == records.record_digest(target.record)
     assert {link.revision_id for link in result.record.artifact_links} == {
         result.record.revision_id
     }

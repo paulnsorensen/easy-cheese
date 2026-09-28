@@ -1,11 +1,13 @@
 """The parent side of a fork: what a child asks its parent to reconcile.
 
 `fork` writes only the child (F-2). The child's `forked_from` edge names the
-parent at the revision it forked from, and its rationale records which parent
-entries moved and which were copied. The parent learns of the fork on read,
-as a pending fork, and its own next checkpoint applies it host-side: moved
-entries transition to `forked`, copied entries gain `copies`, the moved
+parent at the revision it forked from, and its rationale records the fork-time
+selection: which parent entries moved, which were copied, and which dossier
+forks and links the child took. The parent learns of the fork on read, as a
+pending fork, and its own next checkpoint applies it host-side: moved
+entries transition to `forked`, copied entries gain `copies`, the selected
 dossier forks and links leave, and a `forked_to` edge closes the pending fork.
+A `forked_from` edge whose rationale does not parse is not a fork.
 
 `commit` imports this module, so it must not import `commit` or `fork`.
 """
@@ -14,7 +16,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Collection, Iterable, Sequence
-from pathlib import Path
 
 from attrs import define
 from easy_cheese_schemas import (
@@ -25,7 +26,7 @@ from easy_cheese_schemas import (
 )
 from easy_cheese_schemas.contracts import EdgeKind, WorkEdge
 
-from . import records, storage
+from . import records
 from .ref_grammar import Scheme, normalize_ref, parse_ref
 
 __all__ = [
@@ -40,9 +41,13 @@ __all__ = [
 
 FORK_RATIONALE_LIMIT = 2000
 _NONE = "none"
+# Dossier titles may hold commas, so titles and link refs use this separator.
+_LIST_SEPARATOR = " | "
 _RATIONALE_RE = re.compile(
     r"fork of (?P<parent>[^@\s]+)@(?P<revision>[^;\s]+); "
-    + r"moved: (?P<moved>[^;]*); copied: (?P<copied>[^;]*)"
+    + r"moved: (?P<moved>[^;]*); copied: (?P<copied>[^;]*); "
+    + r"dossier: (?P<dossier>.*); links: (?P<links>.*)",
+    re.DOTALL,
 )
 
 
@@ -51,6 +56,7 @@ class PendingFork:
     """A child's fork its parent has not yet reconciled.
 
     Each pair in `moved` and `copied` is `(parent_entry_id, child_entry_id)`.
+    `dossier_titles` and `link_refs` are the fork-time selection.
     """
 
     child_ref: str
@@ -81,26 +87,47 @@ class AppliedFork:
     edges: tuple[WorkEdge, ...]
 
 
+@define(frozen=True)
+class _Selection:
+    moved: tuple[str, ...]
+    copied: tuple[str, ...]
+    dossier: tuple[str, ...]
+    links: tuple[str, ...]
+
+
 def fork_rationale(
-    parent: str, revision_id: str, moved: Sequence[str], copied: Sequence[str]
+    parent: str,
+    revision_id: str,
+    *,
+    moved: Sequence[str],
+    copied: Sequence[str],
+    dossier: Sequence[str],
+    links: Sequence[str],
 ) -> str:
     """The machine-readable rationale a child's `forked_from` edge carries."""
     return (
         f"fork of {parent}@{revision_id}; moved: {', '.join(moved) or _NONE}; "
-        + f"copied: {', '.join(copied) or _NONE}"
+        + f"copied: {', '.join(copied) or _NONE}; "
+        + f"dossier: {_LIST_SEPARATOR.join(dossier) or _NONE}; "
+        + f"links: {_LIST_SEPARATOR.join(links) or _NONE}"
     )
 
 
-def _split_ids(text: str) -> tuple[str, ...]:
-    ids = tuple(part.strip() for part in text.split(",") if part.strip())
-    return () if ids == (_NONE,) else ids
+def _split(text: str, separator: str) -> tuple[str, ...]:
+    items = tuple(part.strip() for part in text.split(separator) if part.strip())
+    return () if items == (_NONE,) else items
 
 
-def _parsed_rationale(text: str | None) -> tuple[tuple[str, ...], tuple[str, ...]]:
+def _parsed_rationale(text: str | None) -> _Selection | None:
     match = None if text is None else _RATIONALE_RE.fullmatch(text)
     if match is None:
-        return (), ()
-    return _split_ids(match["moved"]), _split_ids(match["copied"])
+        return None
+    return _Selection(
+        moved=_split(match["moved"], ","),
+        copied=_split(match["copied"], ","),
+        dossier=_split(match["dossier"], _LIST_SEPARATOR),
+        links=_split(match["links"], _LIST_SEPARATOR),
+    )
 
 
 def _wheypoint_target(ref: str | None) -> tuple[str, str, str | None] | None:
@@ -124,12 +151,13 @@ def _link_ref(ref: str) -> str:
 
 
 def pending_forks(
-    record: WheypointRecord, *, corpus_root: Path
+    record: WheypointRecord, *, siblings: Iterable[WheypointRecord]
 ) -> tuple[PendingFork, ...]:
     """Every child whose `forked_from` names `record` without a `forked_to` back.
 
-    Sibling records are read without their locks, as `pending_reciprocals`
-    reads them: a stale read only defers the fork to a later checkpoint.
+    `siblings` are the other records of the corpus, read without their locks
+    (see `edges.sibling_records`): a stale read only defers the fork to a
+    later checkpoint.
     """
     this = (record.project_key, record.work_id)
     reconciled = {
@@ -139,58 +167,51 @@ def pending_forks(
         and (target := _wheypoint_target(edge.to)) is not None
     }
     pending: list[PendingFork] = []
-    for store in storage.WorkStore.enumerate(corpus_root):
-        if store.work_id == record.work_id:
+    for child in siblings:
+        key = (child.project_key, child.work_id)
+        if key == this or key in reconciled:
             continue
-        try:
-            child = store.read_record()
-        except (ValueError, OSError):
-            continue
-        if child is None or (child.project_key, child.work_id) in reconciled:
-            continue
-        edge = next(
+        found = next(
             (
-                edge
+                (edge, selection)
                 for edge in child.edges
                 if edge.kind is EdgeKind.FORKED_FROM
                 and (target := _wheypoint_target(edge.to)) is not None
                 and target[:2] == this
+                and (selection := _parsed_rationale(edge.rationale)) is not None
             ),
             None,
         )
-        if edge is None:
+        if found is None:
             continue
-        pending.append(_pending_fork(record, child, edge))
+        pending.append(_pending_fork(record, child, *found))
     return tuple(sorted(pending, key=lambda item: item.child_work_id))
 
 
 def _pending_fork(
-    parent: WheypointRecord, child: WheypointRecord, edge: WorkEdge
+    parent: WheypointRecord,
+    child: WheypointRecord,
+    edge: WorkEdge,
+    selection: _Selection,
 ) -> PendingFork:
-    moved, copied = _parsed_rationale(edge.rationale)
     child_of: dict[str, str] = {}
     for entry in records.entries(child):
         origin = _wheypoint_target(entry.origin)
         if origin is not None and origin[:2] == (parent.project_key, parent.work_id):
             if origin[2] is not None:
                 child_of[origin[2]] = entry.entry_id
-    parent_titles = {fork.fork for fork in parent.decision_dossier}
-    parent_links = {
-        _link_ref(records.effective_ref(link)) for link in parent.artifact_links
-    }
-    child_links = (
-        _link_ref(records.effective_ref(link)) for link in child.artifact_links
-    )
     return PendingFork(
         child_ref=f"wheypoint:{child.project_key}/{child.work_id}",
         child_work_id=child.work_id,
         child_revision_id=edge.revision_id or child.revision_id,
-        moved=tuple((item, child_of[item]) for item in moved if item in child_of),
-        copied=tuple((item, child_of[item]) for item in copied if item in child_of),
-        dossier_titles=tuple(
-            fork.fork for fork in child.decision_dossier if fork.fork in parent_titles
+        moved=tuple(
+            (item, child_of[item]) for item in selection.moved if item in child_of
         ),
-        link_refs=tuple(ref for ref in child_links if ref in parent_links),
+        copied=tuple(
+            (item, child_of[item]) for item in selection.copied if item in child_of
+        ),
+        dossier_titles=selection.dossier,
+        link_refs=tuple(_link_ref(ref) for ref in selection.links),
     )
 
 
@@ -204,23 +225,36 @@ def apply_pending_forks(
 
     A moved entry transitions only while it is still active and the agent's
     own delta does not transition it: an entry already `forked`, or settled
-    since the fork, keeps its state.
+    since the fork, keeps its state. When two pending forks move one entry,
+    the first in `pending` order moves it and each later one gains a copy.
     """
     by_id = {entry.entry_id: entry for entry in records.entries(current)}
     transitions: list[EntryTransition] = []
+    moved_ids: set[str] = set()
     copies: dict[str, tuple[str, ...]] = {}
     dossier: list[str] = []
     links: list[str] = []
     forked_to: list[WorkEdge] = []
+
+    def copy(parent_id: str, ref: str) -> None:
+        entry = by_id.get(parent_id)
+        if entry is None or ref in entry.copies + copies.get(parent_id, ()):
+            return
+        copies[parent_id] = (*copies.get(parent_id, ()), ref)
+
     for item in pending:
         for parent_id, child_id in item.moved:
             entry = by_id.get(parent_id)
+            if parent_id in moved_ids:
+                copy(parent_id, item.successor(child_id))
+                continue
             if (
                 entry is None
                 or entry.state is not EntryState.ACTIVE
                 or parent_id in agent_transitioned
             ):
                 continue
+            moved_ids.add(parent_id)
             transitions.append(
                 EntryTransition(
                     entry_id=parent_id,
@@ -230,11 +264,7 @@ def apply_pending_forks(
                 )
             )
         for parent_id, child_id in item.copied:
-            entry = by_id.get(parent_id)
-            ref = item.successor(child_id)
-            if entry is None or ref in entry.copies + copies.get(parent_id, ()):
-                continue
-            copies[parent_id] = (*copies.get(parent_id, ()), ref)
+            copy(parent_id, item.successor(child_id))
         dossier.extend(item.dossier_titles)
         links.extend(item.link_refs)
         forked_to.append(

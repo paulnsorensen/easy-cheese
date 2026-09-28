@@ -198,7 +198,17 @@ def test_shape_roots_exclude_records_that_are_forked_or_superseded(
 ) -> None:
     stores = _chain(corpus_root)
     _link(stores["gamma"], _ref("alpha"), EdgeKind.SUPERSEDED_BY)
-    _link(stores["beta"], _ref("alpha"), EdgeKind.FORKED_FROM)
+    beta = stores["beta"].read_record()
+    assert beta is not None
+    _ = commit.commit(
+        WheypointDelta(
+            work_id="beta",
+            expected_revision_id=beta.revision_id,
+            notes="Forked from alpha.",
+        ),
+        store=stores["beta"],
+        fork_edge=WorkEdge(to=_ref("alpha"), kind=EdgeKind.FORKED_FROM),
+    )
 
     report = _shape(corpus_root)
 
