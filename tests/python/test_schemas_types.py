@@ -1081,6 +1081,31 @@ def _notes_holders(notes: str) -> tuple[object, ...]:
     )
 
 
+# Every since-4 reference field, keyed by case id: (field name, builder).
+_REF_HOLDERS: dict[str, tuple[str, Callable[[str], object]]] = {
+    "edge": ("to", lambda ref: wc.WorkEdge(to=ref, kind=wc.EdgeKind.INFORMS)),
+    "edge-key": ("to", lambda ref: wc.WorkEdgeKey(to=ref, kind=wc.EdgeKind.INFORMS)),
+    "artifact": ("ref", lambda ref: wc.ArtifactLink(path="p.md", ref=ref)),
+    "origin": ("origin", lambda ref: _entry(origin=ref)),
+    "copies": ("copies", lambda ref: _entry(copies=(ref,))),
+    "entry": (
+        "successor",
+        lambda ref: _entry(
+            state=wc.EntryState.FORKED, rationale="Moved.", successor=ref
+        ),
+    ),
+    "transition": (
+        "successor",
+        lambda ref: wc.EntryTransition(
+            entry_id="q-1",
+            action=wc.TransitionAction.FORK,
+            rationale="Moved.",
+            successor=ref,
+        ),
+    ),
+}
+
+
 class TestWheypointSchemaFour:
     def test_ac7_forked_gating_question_derives_ok(self) -> None:
         record = _wheypoint_record(
@@ -1181,6 +1206,15 @@ class TestWheypointSchemaFour:
     def test_ac16_other_text_keeps_the_2000_bound(self) -> None:
         with pytest.raises(ValueError, match="orientation must be at most 2000"):
             _ = wc.CheckpointIntent(work_id="parent", orientation="o" * 2001)
+
+    @pytest.mark.parametrize("case", sorted(_REF_HOLDERS))
+    def test_references_keep_the_2000_bound(self, case: str) -> None:
+        field, build = _REF_HOLDERS[case]
+        prefix = "repo:"
+        _ = build(prefix + "r" * (2000 - len(prefix)))
+
+        with pytest.raises(ValueError, match=rf"{field}.*at most 2000"):
+            _ = build(prefix + "r" * (2001 - len(prefix)))
 
     def test_edges_refuse_a_repeated_target_and_kind(self) -> None:
         edge = wc.WorkEdge(

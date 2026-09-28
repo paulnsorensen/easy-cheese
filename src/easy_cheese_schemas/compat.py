@@ -49,7 +49,7 @@ from easy_cheese_schemas.validate import is_int
 # hook that names the offending value, not just the allowed set. 4 adds work
 # edges, the forked entry state, typed refs, and a wider notes bound.
 SCHEMA_VERSION = 4
-MIN_READABLE = 1  # N-1 tolerance; widens as the schema evolves
+MIN_READABLE = 1  # oldest readable schema version; raise it to drop old records
 STAMP_KEY = "schema_version"
 
 T = TypeVar("T")
