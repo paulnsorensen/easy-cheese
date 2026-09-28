@@ -22,8 +22,7 @@ Workers at a hard limit return observations; the parent, not the worker, runs ch
 ## Inputs
 
 - The conversation is the primary input.
-- The optional argument shapes only the orientation line.
-- The focus never removes a decision, question, blocker, or directive.
+- The optional argument shapes only the orientation line; the focus never removes a decision, question, blocker, or directive.
 
 ## Runtime commands
 
@@ -35,23 +34,27 @@ python3 skills/wheypoint/scripts/wheypoint.pyz turns [--session <id> | --transcr
 python3 skills/wheypoint/scripts/wheypoint.pyz show <work-id> [--project <key>]
 python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json]
 python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [--compacted <proof.json>] [intent.json]
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint --work-id <id> --question "<q>" --gates --decision "<d>" --rationale "<why>" --directive "<d>" --quote "<words>" --link <ref> --kind <edge-kind>
 python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
 python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
 python3 skills/wheypoint/scripts/wheypoint.pyz lint <projection-path>
-python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]...
+python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]... [--entry-kind <k>]... [--entry-state <s>]... [--gated | --no-gated] [--edge-kind <k>]... [--linked-to <ref>]... [--forked-from <work-id>]...
 python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
+python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--move <id>]... [--copy <id>]... [--dossier <fork title>]... [--link <ref>]...
+python3 skills/wheypoint/scripts/wheypoint.pyz link <work-id> <ref> --kind <edge-kind> [--covers <id>]... [--rationale "<why>"]
+python3 skills/wheypoint/scripts/wheypoint.pyz unlink <work-id> <ref> --kind <edge-kind>
+python3 skills/wheypoint/scripts/wheypoint.pyz shape [<work-id>] [--scope project | machine] [--depth <n>] [--kind <edge-kind>]...
+python3 skills/wheypoint/scripts/wheypoint.pyz backlinks <ref> [--scope project | machine]
 ```
 
 Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term.
-
-`resolve`, `lint`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
+`fork`, `link`, and `unlink` write only the named record; [`references/work-graph.md`](references/work-graph.md) gives refs, edge kinds, pending reconciliation, and the `list` graph filters.
+The counterpart record reports `fork-pending` or `link-pending` until its next `checkpoint` applies the change.
+`resolve`, `lint`, `list`, `log`, `show`, `shape`, `backlinks`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
 `/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
 Foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
-The parent delegates persistence as one structured checkpoint task to this capability and runs `validate` before `checkpoint`; workers never invoke either command at a hard limit.
-Phase skills use their own `wheypoint-resolve --ref <slug>` command for resolution.
-The command returns `authoritative`, `not-found`, `legacy`, `gated`, `ambiguous`, or `error`.
-Use authoritative `working_context` as the first batched `tilth_read`; follow [`references/delta-contract.md`](references/delta-contract.md) for all outcomes and findings.
-`phase-artifact` is fallback context, and the handoff parser exposes its `phase_slug`.
+The parent delegates persistence to this capability as one structured checkpoint task and runs `validate` before `checkpoint`; workers never invoke either command at a hard limit.
+Phase skills resolve with their own `wheypoint-resolve --ref <slug>` command; follow [`references/delta-contract.md`](references/delta-contract.md) for its outcomes, `working_context`, and findings.
 
 ## Flow
 
@@ -84,6 +87,8 @@ The runtime refuses an intent instead of dropping data.
 - It refuses a `baseline` key rather than drop it; a Cook baseline stays in the Cook handoff.
 - It requires a dossier fork for each gating entry.
 - It derives every identifier, digest, and revision.
+- It refuses an agent-authored `fork` transition and a `forked_from` or `forked_to` edge in a delta.
+- It refuses `notes` over 6000 characters.
 
 Fix a refused intent and run `checkpoint` again.
 
@@ -104,13 +109,8 @@ The projection is never the authority; never edit it and never resume from it by
 
 ## `next:` values
 
-- `mold`, `cut`, `cook`, `press`, `age`, `cure`: the next pipeline phase; on a standalone checkpoint, `next: cook` names the phase to resume and does not publish a Cook→Cook phase artifact.
-- `affinage`: PR review comments or failing CI; `artifact` names the PR.
-- `briesearch`, `culture`: a read-only next move that `/cheese --continue` dispatches.
-- `tasks`: independent moves; see [`references/parallel-handoffs.md`](references/parallel-handoffs.md).
-- `hold`: restore orientation and wait for instructions.
-- `done`: the work is complete; the checkpoint is a record, not a baton.
-- A missing `next:` makes the handoff malformed; use `hold` when no action follows.
+The meaning of each `next:` value is in [`references/intent-contract.md`](references/intent-contract.md); `briesearch` and `culture` are read-only kickoffs, and `tasks` follows [`references/parallel-handoffs.md`](references/parallel-handoffs.md).
+A missing `next:` makes the handoff malformed; use `hold` when no action follows.
 Derive `next:` and `status:` from the open questions and blockers, not from expected success.
 
 Use `status: gated:` for every human decision; the resumed agent asks through the shared [handoff gate](../cheese/references/handoff-gate.md) before it dispatches.
@@ -127,4 +127,3 @@ Handwritten notes, their legacy values, and their provenance fields are in [`ref
 ## Handoff
 
 End with the orientation and this link: `Wheypoint dropped: [.cheese/notes/<slug>.md](<absolute-note-path>)`.
-For foreign continuation, follow [the owning-checkout resume protocol](../cheese/references/continue-resume.md).

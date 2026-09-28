@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from easy_cheese_schemas import NextMove
+from easy_cheese_schemas.contracts import EdgeKind
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "skills"
@@ -21,12 +22,30 @@ WHEYPOINT = SKILLS_DIR / "wheypoint" / "SKILL.md"
 CHEESE = SKILLS_DIR / "cheese" / "SKILL.md"
 CONTINUE_RESUME = SKILLS_DIR / "cheese" / "references" / "continue-resume.md"
 PROVENANCE = SKILLS_DIR / "wheypoint" / "references" / "provenance-fields.md"
+WORK_GRAPH = SKILLS_DIR / "wheypoint" / "references" / "work-graph.md"
 
-# `checkpoint` is the only write path (the wheypoint-ergonomics spec made the
-# kernel's `commit` host-internal); `validate` is its dry run, `schema` prints a
-# contract, and the rest are read-only. Genesis is a parent the runtime binds,
+# `checkpoint` is the only intent write path (the wheypoint-ergonomics spec made
+# the kernel's `commit` host-internal); `validate` is its dry run, `schema`
+# prints a contract, and `fork`, `link`, and `unlink` each write one record of
+# the work graph. The rest are read-only. Genesis is a parent the runtime binds,
 # so neither a `create` nor a `commit` command may appear.
-COMMANDS = ("checkpoint", "validate", "schema", "resolve", "show", "lint", "list", "log", "turns")
+COMMANDS = (
+    "checkpoint",
+    "validate",
+    "schema",
+    "resolve",
+    "show",
+    "lint",
+    "list",
+    "log",
+    "turns",
+    "fork",
+    "link",
+    "unlink",
+    "shape",
+    "backlinks",
+)
+REF_SCHEMES = ("repo:", "xdg:", "wheypoint:", "milknado:", "https:")
 
 
 def _read(path: Path) -> str:
@@ -96,11 +115,13 @@ def test_legacy_runtime_gates_cannot_be_waived_by_manual_resume() -> None:
     assert "never this halt gate or any other runtime integrity gate" in body
     assert "explicit permission to dispatch the next phase" not in body
 
-def test_the_documented_command_set_is_exactly_the_nine_the_spec_fixes() -> None:
+def test_the_documented_command_set_is_exactly_the_fourteen_the_spec_fixes() -> None:
     """Documented across the continuity docs as a whole: /wheypoint owns the
-    write path (checkpoint, validate) and the read path (schema, show, list,
-    log, turns), the resume flow owns resolve and lint. All nine are reachable
-    and neither `create` nor the retired `commit` exists."""
+    write path (checkpoint, validate, fork, link, unlink) and the read path
+    (schema, show, list, log, turns, shape, backlinks), the resume flow owns
+    resolve and lint. All fourteen are reachable and neither `create` nor the
+    retired `commit` exists."""
+    assert len(COMMANDS) == 14
     corpus = "\n".join(_read(path) for path in (WHEYPOINT, CHEESE, CONTINUE_RESUME))
     for command in COMMANDS:
         marker = f"wheypoint.pyz {command}"
@@ -113,6 +134,15 @@ def test_the_documented_command_set_is_exactly_the_nine_the_spec_fixes() -> None
         "the raw-delta surface is host-internal since the wheypoint-ergonomics spec"
     )
 
+
+def test_the_work_graph_reference_names_every_edge_kind_and_scheme() -> None:
+    """A kind or scheme the schema accepts and the reference omits is an edge
+    no reader is told how to write or read."""
+    body = _read(WORK_GRAPH)
+    for kind in EdgeKind:
+        assert f"`{kind.value}`" in body, f"undocumented edge kind: {kind.value}"
+    for scheme in REF_SCHEMES:
+        assert f"`{scheme}`" in body, f"undocumented ref scheme: {scheme}"
 
 def test_wheypoint_invokes_only_its_repo_relative_archive() -> None:
     body = _read(WHEYPOINT)

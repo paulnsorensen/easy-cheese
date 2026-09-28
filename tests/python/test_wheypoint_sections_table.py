@@ -54,3 +54,9 @@ def test_notes_replaced_the_document_chapter() -> None:
     body = _read(WHEYPOINT_SKILL)
     assert "## Document" not in body and "Required body sections by state" not in body
     assert "Put the report a cold reader needs in `notes`." in body
+
+
+def test_skill_md_points_at_the_work_graph_reference() -> None:
+    body = _read(WHEYPOINT_SKILL)
+    assert "(references/work-graph.md)" in body
+    assert (WHEYPOINT_SKILL.parent / "references" / "work-graph.md").is_file()

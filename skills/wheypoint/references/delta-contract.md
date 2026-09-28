@@ -65,3 +65,33 @@ Display the code and detail with the resolved payload, but do not stop solely fo
 
 Advisory findings never hide the outcome.
 A gating finding remains a stop even when advisory findings are also present.
+
+`link-pending` is advisory.
+It means a sibling record holds an edge to this record whose reciprocal this record does not hold yet.
+The next `checkpoint` of this record applies the reciprocal edge host-side.
+
+`fork-pending` is advisory.
+It means a child record was forked from this record and this record has not reconciled the fork yet.
+The next `checkpoint` of this record applies the fork host-side; see [`work-graph.md`](work-graph.md).
+
+`notes-long` is advisory.
+It means `notes` holds more than 4000 characters; the hard limit is 6000.
+
+## Work-graph keys in the resolve payload
+
+The resolve payload carries two work-graph keys beside the outcome.
+
+- `pending` lists the pending reciprocal links, then the pending forks; [`work-graph.md`](work-graph.md) gives both shapes.
+- `bridge` is `{state, node_ref, wheypoint_ref}`, or `null` when no record resolved.
+- `bridge.state` is `bound`, `bridge-inactive`, or `unbound`, and it never changes `dispatchable`.
+
+A schema-3 link that holds only `path` reads as `repo:<path>`.
+The kernel lint report records one receipt per such link in `normalizations`.
+These receipts are data, never findings, and the resolve payload does not carry them.
+
+A pending entry never changes the outcome or dispatch.
+When the outcome is `gated` and `pending` holds a fork entry, `/cheese --continue` prints one line beside the gate:
+
+```text
+fork-pending: <child ref> takes <entry ids> at this record's next checkpoint
+```
