@@ -26,7 +26,7 @@ classifiers = [
 # compat.py reaches cattrs.cols.list_structure_factory and the structural
 # AttributeValidationNote / IterableValidationNote, so a lower floor would be an
 # untested claim rather than a supported configuration.
-dependencies = ["attrs>=26.1.0", "cattrs>=26.1.0"]
+dependencies = ["attrs>=26.1.0", "cattrs>=26.2.0"]
 
 [project.urls]
 Homepage = "https://github.com/paulnsorensen/easy-cheese"
