@@ -110,6 +110,7 @@ def _backlinks(argv: list[str]) -> int:
 
     return wheypoint.main(["backlinks", *argv])
 
+
 @bundle_command("handoff")
 def _handoff(argv: list[str]) -> int:
     from easy_cheese.shared.handoff import main

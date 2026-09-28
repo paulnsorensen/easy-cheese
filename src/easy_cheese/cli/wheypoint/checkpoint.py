@@ -12,17 +12,20 @@ import contextlib
 import json
 import re
 from collections.abc import Callable, Sequence
+from enum import Enum
 from pathlib import Path
-from typing import TextIO, cast
+from typing import TextIO, TypeVar, cast
 
 import fromargs
 from attrs import define, evolve
 
 from easy_cheese_schemas import (
+    LOWER_IDENTIFIER_RE,
     CheckpointIntent,
     CompactionRecord,
     Durability,
     WheypointDelta,
+    WheypointRecord,
 )
 
 from easy_cheese.shared import paths
@@ -33,10 +36,33 @@ from easy_cheese.shared.wheypoint import fork as fork_mod
 from easy_cheese.shared.wheypoint import intent_flags
 from easy_cheese.shared.wheypoint import legacy as legacy_mod
 from easy_cheese.shared.wheypoint import records
+from easy_cheese.shared.wheypoint import ref_grammar
 from easy_cheese.shared.wheypoint import storage
 
 # A kernel refusal that names its own code: `<word>-<word>...: <message>`.
 _CODED_REFUSAL = re.compile(r"[a-z]+(?:-[a-z]+)+: ")
+
+_E = TypeVar("_E", bound=Enum)
+
+
+def enum_values(
+    flag: str, values: Sequence[str], choices: type[_E], code: str
+) -> tuple[_E, ...]:
+    """Each flag value as a member of `choices`, or a `code` refusal naming the known ones."""
+    try:
+        return tuple(choices(value) for value in values)
+    except ValueError as exc:
+        known = ", ".join(cast(str, item.value) for item in choices)
+        raise fromargs.CliError(f"{code}: {flag} {exc}; known: {known}", exit_code=1) from exc
+
+
+def parsed_ref(ref: str) -> str:
+    """`ref` when the ref grammar can read it, else a `flag-link` refusal."""
+    try:
+        _ = ref_grammar.parse_ref(ref)
+    except ValueError as exc:
+        raise fromargs.CliError(f"flag-link: {exc}", exit_code=1) from exc
+    return ref
 
 
 @define(frozen=True, kw_only=True)
@@ -121,7 +147,7 @@ class _PendingMirror:
     target: str
 
 
-def _note_dir(*, note_dir: str | None, no_note: bool) -> Path | None:
+def note_dir_for(*, note_dir: str | None, no_note: bool) -> Path | None:
     """Where the readable mirror goes, or None when none is to be written.
 
     `--no-note` refuses one outright; an explicit `--note-dir` is taken as
@@ -152,11 +178,17 @@ def read_intent(
 ) -> object:
     """The JSON intent from a path argument, `-`, or stdin when neither (G6).
 
-    Flags overlay that intent; flags with no intent argument start from an
-    empty intent rather than waiting on stdin (G7).
+    Flags overlay that intent (G7). With flags, a positional that is not `-`
+    and not an existing file names the work id, and flags with no intent
+    start from an empty one; a piped intent then needs an explicit `-`.
     """
     if flags is not None and flags.given():
-        base: object = {} if intent_arg is None else read_intent(intent_arg, stdin)
+        if intent_arg is not None and intent_arg != "-" and not Path(intent_arg).exists():
+            flags = _positional_work_id(intent_arg, flags)
+            intent_arg = None
+        base: object = (
+            _flag_base(stdin) if intent_arg is None else read_intent(intent_arg, stdin)
+        )
         return flags.apply(base)
     if intent_arg is None or intent_arg == "-":
         return read_payload(stdin)
@@ -173,6 +205,32 @@ def read_intent(
         raise fromargs.CliError(
             f"invalid-json: {intent_arg} is not one JSON value: {exc}", exit_code=1
         ) from exc
+
+
+def _positional_work_id(value: str, flags: IntentFlags) -> IntentFlags:
+    """`flags` writing to the work id `value`, the AC-14 positional form."""
+    if not LOWER_IDENTIFIER_RE.fullmatch(value):
+        raise fromargs.CliError(
+            f"intent-unreadable: {value!r} is neither an intent file nor a work id: "
+            + "pass `<intent-file|-> --<flag>` or `<work-id> --<flag>`",
+            exit_code=1,
+        )
+    if flags.work_id not in (None, value):
+        raise fromargs.CliError(
+            f"intent-ambiguous: the positional work id {value!r} and --work-id "
+            + f"{flags.work_id!r} differ",
+            exit_code=1,
+        )
+    return evolve(flags, work_id=value)
+
+
+def _flag_base(stdin: TextIO) -> dict[str, object]:
+    """The empty intent flags start from; a piped intent is never dropped silently."""
+    if not stdin.isatty() and stdin.read().strip():
+        raise fromargs.CliError(
+            "intent-ambiguous: pass - to overlay flags on a piped intent", exit_code=1
+        )
+    return {}
 
 
 def open_store(work_id: str, *, corpus_root: Path | None = None) -> storage.WorkStore:
@@ -202,6 +260,7 @@ def run_checkpoint(
         compacted=compacted,
         note_dir=note_dir,
         no_note=no_note,
+        keep_coverage=flags is not None and flags.given(),
     )
 
 
@@ -211,8 +270,13 @@ def commit_intent(
     compacted: str | None = None,
     note_dir: str | None = None,
     no_note: bool = False,
+    keep_coverage: bool = False,
 ) -> dict[str, object]:
-    """Structure, bind, and commit one intent payload; the one write path."""
+    """Structure, bind, and commit one intent payload; the one write path.
+
+    `keep_coverage` is for flag-built links: one that names no coverage keeps
+    the coverage the record already holds for its target.
+    """
     reserved = checkpoint_mod.commit_only_fields(payload)
     if reserved:
         raise fromargs.CliError(
@@ -233,9 +297,6 @@ def commit_intent(
             exit_code=1,
         )
     proof = _compaction_proof(compacted)
-    # The proof is part of the request: an identical intent with and without a
-    # proof must not share a pending-mirror ledger entry.
-    request_identity = request_identity_for(intent, proof)
     store = open_store(intent.work_id)
     try:
         current = store.read_record()
@@ -245,6 +306,11 @@ def commit_intent(
             + f"be read, so no checkpoint can be bound to it: {exc}",
             exit_code=1,
         ) from exc
+    if keep_coverage:
+        intent = carry_coverage(intent, current)
+    # The proof is part of the request: an identical intent with and without a
+    # proof must not share a pending-mirror ledger entry.
+    request_identity = request_identity_for(intent, proof)
     try:
         delta = checkpoint_mod.build_delta(intent, current)
     except checkpoint_mod.IntentError as exc:
@@ -254,9 +320,51 @@ def commit_intent(
     return _promote(
         delta,
         store,
-        note_dir=_note_dir(note_dir=note_dir, no_note=no_note),
+        note_dir=note_dir_for(note_dir=note_dir, no_note=no_note),
         request_identity=request_identity,
     )
+
+
+def carry_coverage(
+    intent: CheckpointIntent, current: WheypointRecord | None
+) -> CheckpointIntent:
+    """`intent` with each uncovering link given the coverage `current` holds for it.
+
+    Links match as the kernel merges them: by normalized ref, and a
+    `wheypoint:` ref by its target at any revision.
+    """
+    if current is None or not intent.artifact_links:
+        return intent
+    held = {
+        _link_target(records.effective_ref(link)): link.covers_entry_ids
+        for link in current.artifact_links
+    }
+    return evolve(
+        intent,
+        artifact_links=[
+            link
+            if link.covers_entry_ids
+            else evolve(
+                link,
+                covers_entry_ids=list(
+                    held.get(_link_target(records.effective_ref(link)), [])
+                ),
+            )
+            for link in intent.artifact_links
+        ],
+    )
+
+
+def _link_target(ref: str) -> str:
+    try:
+        parsed = ref_grammar.parse_ref(ref)
+        normalized = ref_grammar.normalize_ref(ref)
+    except ValueError:
+        return ref
+    if parsed.scheme is not ref_grammar.Scheme.WHEYPOINT:
+        return normalized
+    entry = "" if parsed.entry_id is None else f"#{parsed.entry_id}"
+    return ref_grammar.normalize_ref(f"wheypoint:{parsed.project_key}/{parsed.work_id}{entry}")
 
 
 def request_identity_for(
@@ -385,9 +493,9 @@ def _promote(
             delta,
             store=store,
             durability=Durability.REPO_SNAPSHOT,
-            finalize=_mirror_finalizer(target),
+            finalize=mirror_finalizer(target),
         )
-    except _MirrorError as exc:
+    except MirrorError as exc:
         _drop_uncommitted_pending(store, pending)
         raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
@@ -397,7 +505,7 @@ def _promote(
     return result_payload(result, str(target))
 
 
-def _mirror_finalizer(
+def mirror_finalizer(
     target: Path,
 ) -> Callable[[commit_mod.PendingRevision], None]:
     """The mirror finalizer: the durability this projection claims lands
@@ -408,12 +516,12 @@ def _mirror_finalizer(
         try:
             storage.write_atomic(target, pending_revision.markdown.encode("utf-8"))
         except OSError as exc:
-            raise _MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
+            raise MirrorError(f"mirror {target} cannot be finalized: {exc}") from exc
 
     return finalize
 
 
-class _MirrorError(OSError):
+class MirrorError(OSError):
     """Raised when the durability finalizer cannot publish the mirror."""
 
 
@@ -503,9 +611,9 @@ def _resume_mirror(
         result = commit_mod.resume_revision(
             revision_id,
             store=store,
-            finalize=_mirror_finalizer(target),
+            finalize=mirror_finalizer(target),
         )
-    except _MirrorError as exc:
+    except MirrorError as exc:
         raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         raise refusal_for(exc) from exc

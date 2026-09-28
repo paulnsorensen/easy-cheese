@@ -50,7 +50,7 @@ The host stamps `revision_id` at commit.
 ## `fork`
 
 ```bash
-python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--move <id>]... [--copy <id>]... [--dossier <fork title>]... [--link <ref>]... [--context <path>]... [--notes-file <file>] [--next <move>] [--project <key>]
+python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--move <id>]... [--copy <id>]... [--dossier <fork title>]... [--link <ref>]... [--context <path>]... [--notes-file <file>] [--next <move>] [--artifact <artifact>] [--project <key>]
 ```
 
 - `fork` writes exactly one revision: the child genesis.
@@ -64,6 +64,8 @@ python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientati
 - A moved gating entry needs a `--dossier` fork that describes it.
 - The child holds a `forked_from` edge pinned to the parent's current revision.
 - The reply adds `origins` (child entry id to origin ref) and `edges` to the checkpoint result.
+- `--next` follows the same artifact rule as `checkpoint`; a missing `--artifact` for `cook`, `cut`, or `affinage` is refused as `invalid-intent`.
+- `fork` mirrors the child projection to `.cheese/notes` and reports `repo-snapshot`, like `checkpoint`; under `--project` it writes no mirror and reports `canonical-local`.
 
 ### `fork-pending` and host-side reconciliation
 
@@ -95,6 +97,8 @@ An agent-authored `fork` transition is refused.
 - `unknown-dossier`: the parent has no dossier fork with that title.
 - `unknown-link`: the parent carries no link with that ref.
 - `dossier-required`: a moved gating entry has no `--dossier` fork.
+- `record-unreadable`: the parent record could not be read.
+- `note-unwritable`: the child projection mirror could not be written.
 
 ## `link` and `unlink`
 
@@ -106,6 +110,7 @@ python3 skills/wheypoint/scripts/wheypoint.pyz unlink <work-id> <ref> --kind <ed
 - `link` adds one edge on `<work-id>` and commits one revision.
 - For a pinnable ref, `link` also adds or refreshes the artifact link with the current digest and revision pin.
 - `--covers` names entry ids that the pinned link covers.
+- Omitting `--covers` keeps the stored coverage; `--covers` replaces it.
 - The reply is the checkpoint result plus `link: {to, kind}`.
 - `link` writes only the source record.
 - A `wheypoint:` target reports `link-pending` on read and applies the reciprocal edge at its next `checkpoint`.
@@ -150,6 +155,8 @@ python3 skills/wheypoint/scripts/wheypoint.pyz backlinks <ref> [--scope project 
 
 `list --linked-to <ref>` and `backlinks <ref>` return the same set of records.
 Each `list` item adds `edges_out`, `edges_in`, `forked_from`, and `gates`.
+`edges_out` items are `{kind, to}`, and `edges_in` items are `{kind, source}`.
+A bad `--kind` or `--edge-kind` refuses `flag-kind`, a bad `--entry-kind` or `--entry-state` refuses `flag-entry`, and an unparseable `backlinks` ref refuses `flag-link`.
 
 ## The `pending` and `bridge` payloads
 

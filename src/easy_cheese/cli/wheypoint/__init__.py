@@ -98,8 +98,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
         Parameters
         ----------
         intent
-            path to a JSON intent file, or - for stdin (default: stdin, or an
-            empty intent when flags are given)
+            path to a JSON intent file, or - for stdin (default: stdin); with
+            flags it may name the work id, and when absent the intent starts empty
         compacted
             path to a caller-authored CompactionRecord proving the session
             rehydrated from the current revision before writing
@@ -207,8 +207,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
         Parameters
         ----------
         intent
-            path to a JSON intent file, or - for stdin (default: stdin, or an
-            empty intent when flags are given)
+            path to a JSON intent file, or - for stdin (default: stdin); with
+            flags it may name the work id, and when absent the intent starts empty
         work_id
             the work id the flags write to (default: the intent's work_id)
         question
@@ -465,6 +465,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         context: list[str] | None = None,
         notes_file: str | None = None,
         next: str | None = None,
+        artifact: str | None = None,
         project: str | None = None,
     ) -> dict[str, object]:
         """Fork a child record from a parent; only the child is written.
@@ -493,8 +494,11 @@ def build_app(stdin: TextIO) -> fromargs.App:
             a file whose text becomes the child notes
         next
             the child's next move
+        artifact
+            the artifact the child's next move works on
         project
-            fork within another project's corpus (corpus_home()/KEY)
+            fork within another project's corpus (corpus_home()/KEY); no mirror
+            is written
         """
         return _ok(
             "fork",
@@ -509,6 +513,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
                 context=context or (),
                 notes_file=notes_file,
                 next=next,
+                artifact=artifact,
                 project=project,
             ),
         )
@@ -528,7 +533,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         work_id
             the work id that holds the edge
         ref
-            the typed target ref, e.g. wheypoint:<project>/<work_id>
+            the typed target ref, e.g. wheypoint:acme-app/wg-1
         kind
             the edge kind, e.g. relates_to, informs, or checkpoints
         covers
@@ -603,7 +608,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         Parameters
         ----------
         ref
-            the typed ref, e.g. wheypoint:<project>/<work_id>
+            the typed ref, e.g. wheypoint:acme-app/wg-1
         corpus_root
             the per-project corpus root (default: the project's own corpus)
         scope

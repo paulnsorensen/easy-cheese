@@ -10,7 +10,8 @@ from typing import Literal, TextIO, cast
 
 import fromargs
 
-from easy_cheese_schemas import CheckpointIntent, load
+from easy_cheese_schemas import CheckpointIntent, EntryKind, EntryState, load
+from easy_cheese_schemas.contracts import EdgeKind
 from easy_cheese_schemas import schema_runtime
 
 from easy_cheese.shared import paths
@@ -28,7 +29,12 @@ from easy_cheese.shared.wheypoint import storage
 from easy_cheese.shared.wheypoint import transcript as transcript_mod
 from easy_cheese.shared.wheypoint.resolve_cli import findings_payload, maybe_payload
 
-from easy_cheese.cli.wheypoint.checkpoint import IntentFlags, open_store, read_intent
+from easy_cheese.cli.wheypoint.checkpoint import (
+    IntentFlags,
+    enum_values,
+    open_store,
+    read_intent,
+)
 
 
 def project_key(value: str) -> str:
@@ -234,8 +240,8 @@ def hit_item(hit: discovery.Hit) -> dict[str, object]:
         "path": str(hit.path),
         "resume": str(hit.resume),
         "updated": _iso(hit.updated),
-        "edges_out": [list(pair) for pair in hit.edges_out],
-        "edges_in": [list(pair) for pair in hit.edges_in],
+        "edges_out": [{"kind": kind, "to": to} for kind, to in hit.edges_out],
+        "edges_in": [{"kind": kind, "source": source} for kind, source in hit.edges_in],
         "forked_from": hit.forked_from,
         "gates": list(hit.gates),
     }
@@ -291,6 +297,9 @@ def run_list(
         since = _iso_date(since)
     if limit is not None:
         limit = _positive_int(limit)
+    _ = enum_values("--edge-kind", edge_kind or (), EdgeKind, "flag-kind")
+    _ = enum_values("--entry-kind", entry_kind or (), EntryKind, "flag-entry")
+    _ = enum_values("--entry-state", entry_state or (), EntryState, "flag-entry")
     effective_scope = "machine" if projects else scope
     result = discovery.discover(
         scope=effective_scope,

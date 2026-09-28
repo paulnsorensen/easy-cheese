@@ -34,13 +34,13 @@ python3 skills/wheypoint/scripts/wheypoint.pyz turns [--session <id> | --transcr
 python3 skills/wheypoint/scripts/wheypoint.pyz show <work-id> [--project <key>]
 python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json]
 python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [--compacted <proof.json>] [intent.json]
-python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint --work-id <id> --question "<q>" --gates --decision "<d>" --rationale "<why>" --directive "<d>" --quote "<words>" --link <ref> --kind <edge-kind>
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint <work-id> --question "<q>" --gates --decision "<d>" --rationale "<why>" --directive "<d>" --quote "<words>" --link <ref> --kind <edge-kind>
 python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
 python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
 python3 skills/wheypoint/scripts/wheypoint.pyz lint <projection-path>
 python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]... [--entry-kind <k>]... [--entry-state <s>]... [--gated | --no-gated] [--edge-kind <k>]... [--linked-to <ref>]... [--forked-from <work-id>]...
 python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
-python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--move <id>]... [--copy <id>]... [--dossier <fork title>]... [--link <ref>]...
+python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--move <id>]... [--copy <id>]... [--dossier <fork title>]... [--link <ref>]... [--next <move> [--artifact <a>]]
 python3 skills/wheypoint/scripts/wheypoint.pyz link <work-id> <ref> --kind <edge-kind> [--covers <id>]... [--rationale "<why>"]
 python3 skills/wheypoint/scripts/wheypoint.pyz unlink <work-id> <ref> --kind <edge-kind>
 python3 skills/wheypoint/scripts/wheypoint.pyz shape [<work-id>] [--scope project | machine] [--depth <n>] [--kind <edge-kind>]...
