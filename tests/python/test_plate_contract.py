@@ -179,8 +179,8 @@ def test_plate_routes_tools_and_reports_a_scannable_completion_record() -> None:
     assert gate["result"] == "pass"
     assert "Topology preflight" in completion
     assert 'gate: {"command": "n/a", "result": "n/a"}' in completion
-    assert "scripts/plate validate-publication" in completion
-    assert "scripts/plate stack-tools" in skill
+    assert "scripts/plate.pyz validate-publication" in completion
+    assert "scripts/plate.pyz stack-tools" in skill
 
 
 def test_plate_stack_references_preserve_absorbed_behavior_and_safety() -> None:

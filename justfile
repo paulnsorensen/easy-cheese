@@ -123,20 +123,19 @@ test-workflow-browser:
 test-skill-overlap:
     cargo test --manifest-path tools/skill-overlap/Cargo.toml
 
-# Rebuild every skill archive through the pinned wedge and rewrite each
-# skill's lock and launcher (scripts/<skill> and scripts/<skill>.wedge.json)
-wedge-lock:
-    {{wedge}} lock --root skills
+# Build one executable archive per Python skill through the pinned wedge.
+wedge-build:
+    {{wedge}} bundle --root skills
 
-# Verify every skill's wedge lock is current and its launcher matches the template
+# Verify committed archives against temporary pinned wedge builds.
 wedge-check:
-    {{wedge}} check --root skills
+    {{wedge}} bundle --root skills --check
 
 # Write every generated runtime source that runtime_gates.py checks for staleness
 update-generated:
     {{python}} scripts/runtime_gates.py --write-generated
 
-# Preview the exact tree a release ships (skills + launchers + locks, no sources)
+# Preview the exact tree a release ships (skills + archives, no sources)
 release-preview:
     python3 scripts/stage_release.py --out .release-preview
     @echo "Staged release tree at .release-preview — inspect with: find .release-preview -type f"

@@ -110,7 +110,7 @@ Do not infer cost from missing data.
 Render the brief from the locked ids before any dispatch:
 
 ```text
-python3 skills/cure/scripts/cure findings render-brief --report <path> --selection "<ids>"
+python3 skills/cure/scripts/cure.pyz findings render-brief --report <path> --selection "<ids>"
 ```
 
 The brief carries each finding's location, claim, `recommendation (locked)`, and `invariants` line.

@@ -2,7 +2,7 @@
 
 Status: superseded (2026-09-27)
 
-wedge replaced the committed Shiv archives and the `build_pyz.py`/`check_bundles.py` pipeline this record governed. The generated-runtime and command-surface gates it relied on live on in `scripts/runtime_gates.py`; see [[architecture/pyz-bundling-pipeline]].
+Wedge replaces the `build_pyz.py`/`check_bundles.py` pipeline this record governed. Archives remain committed under the approved A correction. The generated-runtime and command-surface gates it relied on live on in `scripts/runtime_gates.py`; see [[architecture/pyz-bundling-pipeline]].
 
 Spec: pyz-pipeline-contracts (durable specs corpus).
 
@@ -17,3 +17,5 @@ After staging each bundle, build_pyz AST-scans every staged file and requires ea
 ## Consequences
 
 Registry omissions become build failures instead of runtime ImportErrors on rare code paths.
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

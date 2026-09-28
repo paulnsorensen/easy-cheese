@@ -363,7 +363,7 @@ ec_setup_cheese_corpus() {
     fi
     harness="${harnesses%%$'\n'*}"
     if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
-        ec_log "cheese corpus: would resolve the easy-cheese-setup skill via '$gh skill list --agent $harness --scope user --json path,skillName' then run 'python3 <resolved-path>/scripts/easy-cheese-setup global --apply'"
+        ec_log "cheese corpus: would resolve the easy-cheese-setup skill via '$gh skill list --agent $harness --scope user --json path,skillName' then run 'python3 <resolved-path>/scripts/easy-cheese-setup.pyz global --apply'"
         return 0
     fi
     skill_dir="$("$gh" skill list --agent "$harness" --scope user --json path,skillName \
@@ -372,8 +372,8 @@ ec_setup_cheese_corpus() {
         ec_warn "cheese corpus: could not resolve the easy-cheese-setup skill path via gh skill list; skipping."
         return 0
     fi
-    # The wedge launcher: it fetches the skill archive on first run.
-    launcher="$skill_dir/scripts/easy-cheese-setup"
+    # The self-contained skill archive runs directly with Python.
+    launcher="$skill_dir/scripts/easy-cheese-setup.pyz"
     ec_log "cheese corpus: registering cheese-durable corpus"
     if ! python3 "$launcher" global --apply; then
         ec_warn "cheese corpus: failed to register cheese-durable corpus via $launcher"

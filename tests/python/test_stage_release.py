@@ -1,13 +1,7 @@
-"""The staged release tree is exactly the shippable surface: every skill carries
-its wedge launcher, its lock, and its SKILL.md; no raw .py source, archive, or
-wedge build configuration leaks in; and dev-only scaffolding (src/, shared/,
-scripts/, tests/, docs/, .github/) is left behind. These are the invariants
-that, when violated silently, shipped the empty v0.5.1.
-"""
+"""The staged release tree contains one executable archive per Python skill."""
 
 from __future__ import annotations
 
-import json
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -27,40 +21,36 @@ def staged(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
     yield stage_release.stage(tmp_path_factory.mktemp("release") / "tree")
 
 
-def _fake_tree(root: Path, *, without_lock: str | None = None) -> Path:
-    """A minimal tree that passes _verify unless one lock is withheld."""
+def _fake_tree(root: Path, *, without_archive: str | None = None) -> Path:
+    """A minimal tree that passes _verify unless one archive is withheld."""
     for skill in runtime_gates.SKILLS:
         scripts = root / "skills" / skill / "scripts"
         scripts.mkdir(parents=True)
         _ = (root / "skills" / skill / "SKILL.md").write_text(f"# {skill}\n")
-        _ = (scripts / skill).write_text("#!/usr/bin/env python3\n")
-        if skill != without_lock:
-            _ = (scripts / f"{skill}.wedge.json").write_text("{}\n")
+        if skill != without_archive:
+            archive = scripts / f"{skill}.pyz"
+            _ = archive.write_bytes(b"#!/usr/bin/env python3\n")
+            archive.chmod(0o755)
     return root
 
 
-def test_every_skill_ships_its_launcher_and_lock(staged: Path) -> None:
+def test_every_skill_ships_its_archive(staged: Path) -> None:
     for skill in runtime_gates.SKILLS:
-        scripts = staged / "skills" / skill / "scripts"
-        launcher = scripts / skill
-        lock = scripts / f"{skill}.wedge.json"
-        assert launcher.is_file(), f"missing launcher for {skill}"
-        assert launcher.stat().st_mode & 0o111, f"launcher for {skill} is not executable"
-        assert lock.is_file(), f"missing lock for {skill}"
-        assert json.loads(lock.read_text(encoding="utf-8"))["name"] == skill
+        archive = staged / "skills" / skill / "scripts" / f"{skill}.pyz"
+        assert archive.is_file(), f"missing archive for {skill}"
+        assert archive.stat().st_mode & 0o111, f"archive for {skill} is not executable"
 
 
 def test_skill_metadata_ships(staged: Path) -> None:
     for skill in runtime_gates.SKILLS:
         assert (staged / "skills" / skill / "SKILL.md").is_file()
+    assert (staged / "skills/mold/scripts/mold.dot").is_file()
 
 
-def test_no_source_archive_or_build_config_under_skills(staged: Path) -> None:
-    """The release ships the launcher and lock, never loose .py, a local
-    archive, or the wedge build configuration."""
+def test_no_source_or_build_config_under_skills(staged: Path) -> None:
     stray = sorted(
         str(p.relative_to(staged))
-        for pattern in ("*.py", "*.pyz", "wedge.toml")
+        for pattern in ("*.py", "wedge.toml")
         for p in (staged / "skills").rglob(pattern)
     )
     assert stray == [], f"build inputs leaked into release: {stray}"
@@ -84,25 +74,45 @@ def test_stage_refuses_to_wipe_dangerous_paths(danger: str) -> None:
         _ = stage_release.stage(Path(danger))
 
 
-def test_verify_rejects_missing_launcher(tmp_path: Path) -> None:
-    """_verify is the publish gate; it must reject a tree without a launcher."""
+def test_verify_rejects_missing_archive(tmp_path: Path) -> None:
+    """_verify is the publish gate; it must reject a tree without an archive."""
     fake = tmp_path / "tree"
     (fake / "skills" / "affinage").mkdir(parents=True)
     _ = (fake / "skills" / "affinage" / "SKILL.md").write_text("# affinage\n")
-    with pytest.raises(SystemExit, match="missing launcher"):
+    with pytest.raises(SystemExit, match="missing archive"):
         stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
 
 
-def test_verify_rejects_missing_lock(tmp_path: Path) -> None:
-    fake = _fake_tree(tmp_path / "tree", without_lock="cook")
-    with pytest.raises(SystemExit, match=r"missing lock .*cook\.wedge\.json"):
+def test_verify_rejects_missing_skill_archive(tmp_path: Path) -> None:
+    fake = _fake_tree(tmp_path / "tree", without_archive="cook")
+    with pytest.raises(SystemExit, match=r"missing archive .*cook\.pyz"):
         stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
 
 
 def test_verify_rejects_stray_source(tmp_path: Path) -> None:
     fake = _fake_tree(tmp_path / "tree")
     _ = (fake / "skills" / "cook" / "scripts" / "helper.py").write_bytes(b"x")
-    with pytest.raises(SystemExit, match="must not ship under skills/"):
+    with pytest.raises(SystemExit, match="unexpected generated artifacts"):
+        stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
+
+
+
+@pytest.mark.parametrize(
+    ("relative", "message"),
+    [
+        ("skills/cook/scripts/cook", "unexpected generated artifacts"),
+        ("skills/cook/scripts/cook.wedge.json", "unexpected generated artifacts"),
+        ("skills/cook/scripts/extra.pyz", "unexpected generated artifacts"),
+    ],
+)
+def test_verify_rejects_legacy_or_extra_artifacts(
+    tmp_path: Path, relative: str, message: str
+) -> None:
+    fake = _fake_tree(tmp_path / "tree")
+    artifact = fake / relative
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    _ = artifact.write_bytes(b"legacy")
+    with pytest.raises(SystemExit, match=message):
         stage_release._verify(fake)  # pyright: ignore[reportPrivateUsage]
 
 

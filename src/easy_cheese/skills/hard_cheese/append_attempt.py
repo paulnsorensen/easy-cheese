@@ -7,7 +7,7 @@ retried gate) cannot clobber the attempt log.
 
 Usage:
 
-    python3 skills/hard-cheese/scripts/hard-cheese append-attempt \\
+    python3 skills/hard-cheese/scripts/hard-cheese.pyz append-attempt \\
         --slug <slug> --status PASS --score 4 \\
         --feedback "diff-grounded, names invariants" \\
         --explanation "<user explanation verbatim>"

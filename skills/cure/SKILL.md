@@ -11,7 +11,7 @@ Use this skill after `/age`, failed validation, or a request to fix selected rev
 
 ## Phase entry
 
-Run `python3 skills/cure/scripts/cure wheypoint-resolve --ref <slug>`.
+Run `python3 skills/cure/scripts/cure.pyz wheypoint-resolve --ref <slug>`.
 `authoritative` uses the record; its `working_context` is the first batched `tilth_read`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
@@ -64,7 +64,7 @@ Slash commands are host renderings, not the control model.
    Expand a user verb with this command:
 
    ```text
-   python3 skills/cure/scripts/cure findings parse-selection --report <path> --selection "<verb>"
+   python3 skills/cure/scripts/cure.pyz findings parse-selection --report <path> --selection "<verb>"
    ```
 
    Use the same bundle command when the host only ships the bundle.
@@ -143,7 +143,7 @@ The agent judges the gate values.
 The CLI maps those values to a readiness verdict:
 
 ```text
-python3 skills/cure/scripts/cure gates classify \
+python3 skills/cure/scripts/cure.pyz gates classify \
   --press-status <label> \
   [--hard-floor-met] [--has-open-level-1-or-2] [--has-open-level-3] [--has-open-level-4-or-5] [--any-spinning]
 ```
@@ -173,7 +173,7 @@ Then let the canonical writer create `.cheese/cure/<slug>.md` once.
 Pass every optional field that this run has.
 
 ```text
-python3 skills/cure/scripts/cure write-handoff-artifact \
+python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cure --next age \
   --artifact <consumed-report-path> --orientation "<one-line orientation>" \
   --baseline "<copied baseline block>" --durable-flags "<one line per flag>" \
@@ -186,7 +186,7 @@ Use a second command for the terminal state.
 Omit `--payload-schema`, because a terminal transition rejects a payload schema.
 
 ```text
-python3 skills/cure/scripts/cure write-handoff-artifact \
+python3 skills/cure/scripts/cure.pyz write-handoff-artifact \
   --slug <slug> --status <status> --phase cure --next done \
   --artifact <consumed-report-path> --orientation "<one-line orientation>" \
   --baseline "<copied baseline block>" --grounded <path[#start-end]> \

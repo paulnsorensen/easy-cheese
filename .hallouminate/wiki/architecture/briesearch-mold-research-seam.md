@@ -23,7 +23,7 @@ Never persist a credential-bearing URL. Canonical identity comes from hostname a
 
 ## The finalizer is the Mold-to-Cook boundary
 
-`python3 skills/mold/scripts/mold finalize` is the single Mold publication path. It validates the bounded spec and readiness evidence, publishes the referenced artifacts, and reveals the canonical `HandoffPointer` under `pointers/<operation-id>.json`. Cook consumes that pointer through the shared handoff validator, which resolves and digest-checks the references, approval, and landing before readiness. Cook no longer performs the removed optional-spec landing lookup or emits its legacy stderr note.
+`python3 skills/mold/scripts/mold.pyz finalize` is the single Mold publication path. It validates the bounded spec and readiness evidence, publishes the referenced artifacts, and reveals the canonical `HandoffPointer` under `pointers/<operation-id>.json`. Cook consumes that pointer through the shared handoff validator, which resolves and digest-checks the references, approval, and landing before readiness. Cook no longer performs the removed optional-spec landing lookup or emits its legacy stderr note.
 
 ## Grounding rows must be real
 
@@ -38,3 +38,5 @@ Mold invariants existed three times: `contracts.py`, `validate_spec.py`, and `ta
 A grounding tool with several global corpora must match the corpus to the current repository or use the workspace default. A first-match fallback copies private rationale across repositories; record ambiguity as `unavailable`.
 
 _Source: r014 skill-review round notes (ingest hash 499c49c7b67d5eb6), verified against `research_layout.py` on 2026-09-04 · Updated: 2026-09-18 · Supersedes: the former publish/direct-spec handoff route and the review-time claim that slug word count was unenforced_
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

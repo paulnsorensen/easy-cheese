@@ -14,13 +14,13 @@ Mergiraf changes its language support between releases.
 
 ```bash
 # Select ours for every hunk.
-python3 skills/melt/scripts/melt conflict-pick hooks/session-start.sh --ours
+python3 skills/melt/scripts/melt.pyz conflict-pick hooks/session-start.sh --ours
 
 # Select theirs for every hunk.
-python3 skills/melt/scripts/melt conflict-pick .gitignore --theirs
+python3 skills/melt/scripts/melt.pyz conflict-pick .gitignore --theirs
 
 # Select ours only for hunks that match the regular expression.
-python3 skills/melt/scripts/melt conflict-pick config.yaml --grep "timeout" --ours
+python3 skills/melt/scripts/melt.pyz conflict-pick config.yaml --grep "timeout" --ours
 ```
 
 The command leaves unmatched hunks unresolved.
@@ -32,13 +32,13 @@ Select one side and regenerate the lockfile from its manifest.
 
 ```bash
 # Detect lockfile conflicts, select theirs, regenerate each lockfile, and stage it.
-python3 skills/melt/scripts/melt lockfile-resolve
+python3 skills/melt/scripts/melt.pyz lockfile-resolve
 
 # Preview the changes.
-python3 skills/melt/scripts/melt lockfile-resolve --dry-run
+python3 skills/melt/scripts/melt.pyz lockfile-resolve --dry-run
 
 # Select ours instead.
-python3 skills/melt/scripts/melt lockfile-resolve --strategy ours
+python3 skills/melt/scripts/melt.pyz lockfile-resolve --strategy ours
 ```
 
 The command supports these files:

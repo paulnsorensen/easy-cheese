@@ -601,7 +601,7 @@ def _phase_entry_section(phase: str) -> str:
 @pytest.mark.parametrize("phase", ENTRY_SKILLS)
 def test_curd_4_phase_skill_documents_wheypoint_resolve_entry(phase: str) -> None:
     section = _phase_entry_section(phase)
-    assert f"skills/{phase}/scripts/{phase} wheypoint-resolve" in section, phase
+    assert f"skills/{phase}/scripts/{phase}.pyz wheypoint-resolve" in section, phase
     for outcome in PHASE_ENTRY_OUTCOMES:
         assert f"`{outcome}`" in section, (phase, outcome)
     assert "`working_context` is the first batched `tilth_read`" in section, phase

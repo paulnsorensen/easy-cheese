@@ -11,12 +11,14 @@ The tool probe never creates stack metadata or invokes provider mutations. Optio
 
 ## Skill boundary
 
-Plate prose invokes only `skills/plate/scripts/plate`. Source lives in `src/easy_cheese/skills/plate/`; the build resolves Plate's complete hash-locked closure ephemerally from the committed external lock, and the checked-in archive is generated deployment output.[^5]
+Plate prose invokes only `skills/plate/scripts/plate.pyz`. Source lives in `src/easy_cheese/skills/plate/`; the build resolves Plate's complete hash-locked closure ephemerally from the committed external lock, and the checked-in archive is generated deployment output.[^5]
 
 [^1]: skills/plate/SKILL.md:130-141; skills/plate/SKILL.md:238-254
 [^2]: src/easy_cheese/skills/plate/publication.py; tests/python/test_plate_runtime.py
 [^3]: src/easy_cheese/skills/plate/stack_tools.py; skills/plate/SKILL.md:238-254
 [^4]: architecture/skill-python-bundle-doctrine.md:37-49
-[^5]: src/easy_cheese/skills/plate/commands.py; uv.lock; skills/plate/wedge.toml; skills/plate/scripts/plate
+[^5]: src/easy_cheese/skills/plate/commands.py; uv.lock; skills/plate/wedge.toml; skills/plate/scripts/plate.pyz
 
 _Source: implemented repository behavior · Updated: 2026-08-28_
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

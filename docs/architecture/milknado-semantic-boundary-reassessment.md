@@ -70,9 +70,7 @@ a third package would add a release boundary without reducing semantic coupling.
 
 The locally built `easy_cheese_schemas-1.0.0-py3-none-any.whl` is 81,549 bytes.
 It contains the data-only `_compiled_phase_registry.py` and
-`_schema_catalog.py`, but not `_phase_registry_compiler.py`. Cook and Cure bundle
-smoke tests imported the same package from their built archives
-(built by the Shiv builder of that time; wedge now builds them through `just wedge-lock`).
+`_schema_catalog.py`, but not `_phase_registry_compiler.py`. Cook and Cure bundle smoke tests imported the same package from their built archives. Wedge now builds them at build time.
 
 ### Representative contract benchmark
 

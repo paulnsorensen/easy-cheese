@@ -5,7 +5,7 @@ It gives exact commands, exit codes, and grading rules.
 
 ## Step 2 — Fetch PR status
 
-Run `python3 skills/affinage/scripts/affinage pr-status <pr>`.
+Run `python3 skills/affinage/scripts/affinage.pyz pr-status <pr>`.
 The command returns JSON with build status, failed check summaries, failed test names, and merge state.
 Each failed check summary includes approximately 10 final log lines.
 
@@ -22,7 +22,7 @@ Each failed check summary includes approximately 10 final log lines.
 ## Step 3 — Fresh review
 
 Score the PR diff with the `review-surface` command.
-Run `python3 skills/affinage/scripts/affinage review-surface --repo . <base>...HEAD`.
+Run `python3 skills/affinage/scripts/affinage.pyz review-surface --repo . <base>...HEAD`.
 Use the complete PR range against its base branch.
 After checkout, use `origin/<base>...HEAD`.
 Do not use the bare `HEAD` default because it scores only uncommitted changes.
@@ -33,7 +33,7 @@ Use `entry="affinage"`, `comments=<unresolved-thread-count>`, and `ci_class=<"pa
 The router preserves comment-count and CI workload escalation.
 Use normal review effort unless the user explicitly selects quick or deep.
 
-Run `python3 skills/affinage/scripts/affinage age-route <request.json>`.
+Run `python3 skills/affinage/scripts/affinage.pyz age-route <request.json>`.
 The command reads the contextual request and emits a deterministic subject plan.
 Pass the complete plan and its evidence to `/age`, not the old dimension-lens tuple.
 Then treat each `/age` finding as an additional claim.
@@ -67,7 +67,7 @@ Use these report sections:
 
 ## Step 9 — Reply rules
 
-Post approved replies with `python3 skills/affinage/scripts/affinage post-reply`.
+Post approved replies with `python3 skills/affinage/scripts/affinage.pyz post-reply`.
 Do not post with `gh api` because it omits the required attribution.
 
 - Post the prepared push-back for `Reviewer-rejected` claims.

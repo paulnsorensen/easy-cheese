@@ -1,84 +1,127 @@
 # Pyz bundling pipeline
 
-wedge builds every Python-backed skill as one content-addressed `.pyz` and publishes it as a GitHub release asset. The repository commits a launcher and a lock per skill, never the archive. wedge lives in `lib/` of github.com/paulnsorensen/skillz-that-grillz; `tools/wedge/uv.lock` pins one commit of it, and every path (`just wedge-lock`, the test archive build, `.github/workflows/wedge.yml`) runs that pin with `uv run --project tools/wedge`, so there is one pin. The pin is a project of its own because uv carries wedge's `fromargs` path source into any lock that depends on wedge, which would replace the `fromargs` wheel in the archive closure.[^1]
+Wedge builds self-contained skill archives committed at `skills/<skill>/scripts/<skill>.pyz`.
+Running a skill does not download its archive.
+The same files ship in branch installs, commit installs, and staged releases.[^1]
 
-## Discovery and configuration
+`tools/wedge/uv.lock` pins one Wedge commit.
+Local builds, test builds, and CI use that tool project.
+The separate tool project prevents Wedge's development dependency sources from replacing the published runtime dependencies.[^2]
 
-Each Python-backed skill carries `skills/<skill>/wedge.toml` with only `name` (the launcher file name) and `entry` (`easy_cheese.skills.<package>.commands:main`). `skills/wedge.toml` supplies the shared settings for every skill beside it: `source` (`src/easy_cheese`), `include` (`src/easy_cheese_schemas`), `project` (the repository root, which holds `pyproject.toml` and `uv.lock`), `groups` (`runtime`, the dependency group that carries the CLI closure), and `repo` (`paulnsorensen/easy-cheese`); both files join each skill's key. `scripts/runtime_gates.py` derives `SKILLS` from `src/easy_cheese/skills/*/commands.py`, and a test keeps that roster equal to the set of `wedge.toml` files.[^2]
+## Discovery and source selection
 
-Each `commands.py` declares the application's public subcommands as an immutable `COMMANDS` tuple: every handler is a `@bundle_command("name")`-decorated function that imports its target lazily, and `derive_command(handler, summary)` compiles it into a `Command(name, "module:callable", summary)`. Dispatch validates unique command names, imports only the selected target, passes it a command-local `list[str]`, and requires an integer status return. Command targets write result text to stdout or diagnostics to stderr; dispatch does not mutate `sys.argv` or execute modules through `runpy`.[^12]
+Each Python-backed skill has a `wedge.toml` with `name`, `entry`, and `source_paths`.
+Shared `skills/wedge.toml` supplies `source`, `include`, `project`, `groups`, and repository metadata.
+Paths resolve relative to the skill directory; source selectors resolve beneath the source package.[^3]
 
-## Runtime closure
+Each source selection includes package initializers, `shared/`, `cli/`, and `skills/<own_python_slug>/`.
+Wedge preserves those paths beneath `easy_cheese/`, including immutable resources.
+Other skill packages do not enter the archive.
+The schemas remain a complete included package.
+There is no import-graph inference or private wheelhouse.[^3]
 
-The root `pyproject.toml` is the published `easy-cheese-schemas` project. Its own dependencies (`attrs`, `cattrs`) plus the `runtime` dependency group (`fromargs`, which pulls the Cyclopts closure: `cyclopts`, `rich`, `rich-rst`, `pygments`, `markdown-it-py`, `mdurl`, `docstring-parser`) are pinned with hashes in `uv.lock`. `[tool.uv] default-groups = ["runtime"]` makes wedge's export (`uv export --frozen --no-dev --no-emit-project --no-emit-local`) include the group without adding it to the published wheel's dependencies. wedge refuses any wheel that is not `py3-none-any` and any dependency edge with a platform marker, then installs the closure with `uv pip install --no-cache --require-hashes --no-deps --target`, so every build downloads and hash-checks its wheels and a modified uv cache cannot reach an archive.[^3]
+The runtime gate discovers Python skills from `src/easy_cheese/skills/*/commands.py`.
+A test keeps this roster equal to the configured manifests.[^4]
 
-`requirements/runtime.txt` pins the same closure for the test and typing environments; `tests/python/test_wedge_pin.py` fails when the two drift.[^4]
+## Dependencies and commands
 
-Each archive vendors the whole `src/easy_cheese` package (`shared`, `cli`, and every skill package) beside `src/easy_cheese_schemas` and the third-party closure. It dispatches only its own skill's `COMMANDS`. Because the key covers every file under both trees, one change under `src/` changes every skill's lock.[^5]
+The root project publishes `easy-cheese-schemas`.
+Its schema dependencies and the `runtime` dependency group define the archive's third-party closure.
+`uv.lock` pins that closure with hashes.
+Wedge rejects incompatible wheels and installs with hash verification into a temporary build environment.[^5]
 
-## Build, key, and content digest
+`requirements/runtime.txt` pins the corresponding test environment.
+A test detects divergence from the exported lock.[^4]
 
-wedge runs shiv in reproducible mode with a fixed `SOURCE_DATE_EPOCH`, strips volatile install metadata (`RECORD`, `INSTALLER`, `REQUESTED`, `direct_url.json`, `__pycache__`, installed `bin/`), sorts and normalizes every ZIP member, and deflates the result. The lock pins two digests: the key, a sha256 over `wedge.toml`, `uv.lock`, and every file under `source` and `include`; and `content_sha256`, a sha256 over each member's name and uncompressed bytes. The content digest ignores the compressor, so a lock written on macOS matches the asset a Linux runner builds. The asset name embeds the digest: `<skill>-<content12>.pyz`.[^6]
+Each archive dispatches only its own `COMMANDS`.
+Dispatch resolves a selected command lazily, passes command-local arguments, and requires an integer status.
+It does not mutate `sys.argv` or run source modules through `runpy`.[^6]
 
-`wedge lock` builds once, writes `skills/<skill>/scripts/<skill>.wedge.json`, and regenerates the launcher `skills/<skill>/scripts/<skill>` from wedge's template. `wedge check` recomputes the key and compares the launcher to the template without building; a stale lock or an edited launcher fails.
+## Build and freshness check
 
-## Launcher
+`just wedge-build` invokes `wedge bundle --root skills`.
+Wedge reuses its existing archive builder and writes executable `scripts/<name>.pyz` files.
+It writes no launcher or sidecar lock.[^7]
 
-The launcher is stdlib-only Python. It reads the lock beside it, looks for the asset under `${WEDGE_CACHE:-${XDG_CACHE_HOME:-~/.cache}/wedge}/`, downloads it from `https://github.com/paulnsorensen/easy-cheese/releases/download/wedge/<asset>` when missing, verifies the content sha256, renames the download into the cache, and execs the archive with the same Python. Every later run verifies the cached copy before it runs. `WEDGE_PYZ` runs a local archive instead, still verified. Any mismatch prints one JSON line on stderr and exits 3 without running anything. Running a skill needs Python 3.11 or newer and network on first run; it needs neither shiv, pip, nor uv.[^7]
+`just wedge-check` invokes `wedge bundle --check --root skills`.
+The check rebuilds into temporary storage and compares normalized archive contents.
+Missing, invalid, or stale archives fail the check.
+Check mode does not modify committed artifacts.[^7]
+
+Wedge uses reproducible Shiv output, strips volatile installation metadata, and normalizes ZIP members.
+Its content digest covers member names and uncompressed bytes, not compressor-specific output.
+Source-selection keys and build copies use the same selected files.[^2]
+
+## Runtime startup
+
+Run a skill directly:
+
+```sh
+python3 skills/<skill>/scripts/<skill>.pyz <subcommand>
+```
+
+The archive carries its runtime code and Python dependencies.
+Shiv's transparent local cache extraction remains part of startup.
+No Wedge launcher, sidecar lock, runtime package installation, or archive download is involved.[^1]
 
 ## Generated-runtime gates
 
-`scripts/runtime_gates.py` owns the checks that used to run inside the Shiv build. Before any archive is built it recompiles the phase registry, schema catalog, document rules, and bundle command index in memory; any mismatch with the checked-in runtime modules fails with the path to regenerate. `--write-generated` (`just update-generated`) writes them instead. Compiler modules live under `scripts/` and never enter an archive.[^8]
+`scripts/runtime_gates.py` checks generated phase registries, schema catalogs, document rules, and the bundle command index.
+`just update-generated` rewrites those generated modules from their authoritative inputs.
+Compiler programs remain under `scripts/` and do not enter archives.[^8]
 
-The catalog recompile imports the contract modules normally. `easy_cheese_schemas._contract_modules.CONTRACT_MODULES` is the one inventory that both the runtime registry and the gate read. `schema_runtime` checks catalog staleness lazily: a cached accessor compares the registered contracts with `REGISTERED_CONTRACT_SCHEMA_URIS` on first catalog use, not at package import. This lets `runtime_gates.py --write-generated` import the package and repair a stale catalog. To add a contract module, add its dotted name to `CONTRACT_MODULES`; the gate needs no change.[^lazy-catalog]
+The same gate validates every skill's declared command surface.
+It also rejects obsolete shared-bundle references and cross-skill archive invocations.
+The catalog gate imports contract modules normally so stale generated catalogs remain repairable.[^8]
 
-The same script imports every selected `commands.py` from `src/` (refusing an `easy_cheese` that resolves anywhere else) and runs the dispatcher's own `validate_command_surface` and `command_map`, so an unreferenced declaration, an undeclared manifest entry, a duplicate name, or a manifest that fails to import stops the gate naming the skill. It also owns the cross-skill reference scan: a skill document or source that names another skill's launcher, any `<name>.pyz` token, a `common.pyz` mention, or a checked-in `skills/*/scripts/*.pyz` file is a violation.[^9]
+## Tests and release staging
 
-## Tests
+Tests execute archives built from the current working tree.
+`scripts/skill_archives.py` locates the prebuilt set under `EASY_CHEESE_PREBUILT_PYZ`.
+Without that set, it builds archives into temporary storage.
+The test-only `wedge build` path retains content-addressed output names.[^9]
 
-Tests execute a skill through its built archive, never through the committed launcher: the launcher trusts only the committed lock's digest, and a test must exercise the working tree. `scripts/skill_archives.py` returns the skill's `<skill>-<digest12>.pyz` under `$EASY_CHEESE_PREBUILT_PYZ` when `just test` or CI has built the set once, and otherwise builds the whole set once per process with one `wedge build --root skills`, which shares one site directory across every skill. The root `tests/conftest.py` exposes it as `skill_archive`; suite conftests wrap it as `bundle`.[^13]
+`.github/workflows/wedge.yml` checks committed archive freshness on pull requests and main.
+It does not publish rolling archive assets.
+The normal validation workflow checks runtime inputs and builds the test archive set.[^10]
 
-## CI and release
-
-`.github/workflows/wedge.yml` runs `wedge check` on every pull request and, after a push to `main`, builds each locked skill, compares the digest to the lock, and uploads any missing asset to the rolling `wedge` prerelease. Publication is append-only, so concurrent runs converge on one asset and the workflow carries no cancelling concurrency group. `validate.yml` runs `runtime_gates.py` and builds the archive set once before the pytest jobs.[^10]
-
-The release workflow stages each skill's `SKILL.md`, launcher, and lock (no archive, no `wedge.toml`) onto the `release` branch through `scripts/stage_release.py`, which builds nothing. `gh skill install` receives the launcher; the asset it names was published when the commit landed on `main`.[^11]
+`scripts/stage_release.py` copies skill instructions, resources, and committed archives into the release tree.
+It excludes runtime source and build configuration.
+Staged execution tests use fresh caches outside the checkout.
+A tagged release does not depend on a separate archive upload completing first.[^11]
 
 ## Local workflow
 
-Running skills needs no setup beyond Python:
+After changing archive inputs:
 
 ```sh
-python3 skills/<skill>/scripts/<skill> <subcommand>
+just update-generated  # when generated runtime inputs change
+just wedge-build
+just check
 ```
 
-Relocking is explicit:
+Commit the regenerated archives with their source changes.
+Both `just check` and `just ci` include archive freshness verification.[^7]
 
-```sh
-just wedge-lock    # rebuild every skill through the pinned wedge; rewrite locks and launchers
-just wedge-check   # verify every lock is current and every launcher matches the template
-```
+## Superseded alternatives
 
-`just check` and `just ci` run `wedge-check`; `just test` runs `runtime_gates.py`, builds the archive set once, and points every suite at it.[^14]
+PR #729 retires `scripts/build_pyz.py`, `scripts/check_bundles.py`, and the private-wheelhouse build pipeline.
+The approved A correction restores committed archives without restoring that custom machinery.[^1]
 
-## Superseded pipeline
+The initial Wedge migration proposed launchers, sidecar locks, and first-run downloads.
+That deployment choice is rejected.
+Option B, release-only self-contained archives, remains an assessment in [issue #732](https://github.com/paulnsorensen/easy-cheese/issues/732).
 
-Until 2026-09-27 the repository committed each archive under `skills/<skill>/scripts/<skill>.pyz`, built by `scripts/build_pyz.py` from PEP 517 wheels in a private wheelhouse, checked for currency by `scripts/check_bundles.py`, and gated by `.github/workflows/build-pyz.yml` with shiv pinned in `requirements-build.txt`. The `pyz-pipeline-contracts` ADRs record that design. wedge replaced all of it; the generated-runtime and command-surface gates moved to `scripts/runtime_gates.py` unchanged.
-
-[^1]: tools/wedge/pyproject.toml; tools/wedge/uv.lock; .github/workflows/wedge.yml; tests/python/test_wedge_pin.py
-[^2]: skills/*/wedge.toml; scripts/runtime_gates.py:`SKILLS`
-[^3]: pyproject.toml (`[dependency-groups]`, `[tool.uv]`); uv.lock
-[^4]: requirements/runtime.txt; tests/python/test_wedge_pin.py:`test_runtime_requirements_match_the_uv_lock`
-[^5]: skills/wedge.toml (`source`, `include`)
-[^6]: skills/*/scripts/*.wedge.json
-[^7]: skills/*/scripts/<skill> (generated launcher)
-[^8]: scripts/runtime_gates.py:`GENERATED_RUNTIME_SOURCES`, `write_generated_runtime`
-[^9]: scripts/runtime_gates.py:`validate_command_surfaces`, `check_skill_references`; tests/python/test_doctrine_topology.py
+[^1]: AGENTS.md; https://github.com/paulnsorensen/easy-cheese/pull/729
+[^2]: tools/wedge/pyproject.toml; tools/wedge/uv.lock
+[^3]: skills/wedge.toml; skills/*/wedge.toml
+[^4]: scripts/runtime_gates.py:`SKILLS`; tests/python/test_wedge_pin.py
+[^5]: pyproject.toml; uv.lock
+[^6]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py
+[^7]: justfile:`wedge-build`, `wedge-check`, `check`, `ci`
+[^8]: scripts/runtime_gates.py; src/easy_cheese_schemas/_contract_modules.py; tests/python/test_generated_runtime_write.py
+[^9]: scripts/skill_archives.py; tests/conftest.py
 [^10]: .github/workflows/wedge.yml; .github/workflows/validate.yml
-[^11]: .github/workflows/release.yml; scripts/stage_release.py; tests/python/test_stage_release.py
-[^12]: src/easy_cheese/shared/bundle_commands.py; src/easy_cheese/skills/*/commands.py; tests/python/test_bundle_commands.py
-[^13]: scripts/skill_archives.py; tests/conftest.py; tests/*/python/conftest.py
-[^14]: justfile
-[^lazy-catalog]: scripts/runtime_gates.py:`_compiled_schema_catalog_source`; src/easy_cheese_schemas/schema_runtime.py:`_checked_registered_contracts`; src/easy_cheese_schemas/_contract_modules.py; tests/python/test_generated_runtime_write.py; tests/schemas/python/test_phase_contracts.py
+[^11]: scripts/stage_release.py; tests/python/test_stage_release.py; .github/workflows/release.yml
 
-_Source: implemented repository architecture · Updated: 2026-09-27 · Supersedes: the committed Shiv archives and the `build_pyz.py`/`check_bundles.py`/`build-pyz.yml` pipeline, committed internal-wheel hashes, inaccurate bundle-comparison wording, implicit command registration, and the literal `Command(...)` manifest form_
+_Source: user-approved A correction to PR #729 · Updated: 2026-09-28 · Supersedes: proposed launcher-and-lock pipeline; the custom wheelhouse builder remains retired._

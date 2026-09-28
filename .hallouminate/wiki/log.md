@@ -93,3 +93,7 @@
 - 2026-09-20 · 4a9b7570d7f195e2 · merged · architecture/ultracook-agent-topology.md · replace legacy fan ordering and manifest authority with progress-aware scope identity, OS run locking, completed-observation replay, and contained-low selection.
 
 - 2026-09-20 · 4045ae852414459a · merged · gotchas/age-review-lock-invariants.md · record source/evidence identity separation, narrow late-packet refresh, stable snapshots, and streaming no-follow evidence hashing.
+
+
+- 2026-09-28 · pr-729-direct-archives-a · merged · architecture/skill-python-bundle-doctrine.md, architecture/pyz-bundling-pipeline.md, tooling.md, architecture.md and deployment references · User-approved A keeps committed per-skill .pyz archives. Wedge is build-time only. Remove proposed loaders, sidecar locks, and first-run downloads. Issue #732 assesses release-only option B separately.
+

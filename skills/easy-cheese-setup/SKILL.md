@@ -19,13 +19,13 @@ Register the durable `cheese-durable` Hallouminate corpus. The corpus makes each
 
 Register the current repository as a Hallouminate tenant when the user requests it. This process is idempotent. It does not delete data.
 
-The engine is a self-contained bundle at `skills/easy-cheese-setup/scripts/easy-cheese-setup`. It has four commands. Each command changes data only with `--apply`. Without this option, each command only reports.
+The engine is a self-contained bundle at `skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz`. It has four commands. Each command changes data only with `--apply`. Without this option, each command only reports.
 
 ```
-python3 skills/easy-cheese-setup/scripts/easy-cheese-setup global    [--apply]                     # durable-corpus registration/repair
-python3 skills/easy-cheese-setup/scripts/easy-cheese-setup local     [--apply]                     # per-repository tenant registration
-python3 skills/easy-cheese-setup/scripts/easy-cheese-setup artifacts [--apply] [--root PATH ...]    # register every .cheese dir as one corpus
-python3 skills/easy-cheese-setup/scripts/easy-cheese-setup doctor    [--apply]                     # all three legs
+python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz global    [--apply]                     # durable-corpus registration/repair
+python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz local     [--apply]                     # per-repository tenant registration
+python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz artifacts [--apply] [--root PATH ...]    # register every .cheese dir as one corpus
+python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz doctor    [--apply]                     # all three legs
 ```
 
 At installation, `install.sh` calls `global --apply` when `--mcp` includes `hallouminate`. This skill controls the interactive process.
@@ -48,7 +48,7 @@ Run `doctor` without `--apply` first. It reports the planned actions for all thr
 - **Legacy migration requires user interaction.** An unmarked `cheese-global → ~/.cheese` block is stale. Show the report. Ask the user for confirmation. Then use the explicit migration option. The installer never uses this option:
 
   ```bash
-  python3 skills/easy-cheese-setup/scripts/easy-cheese-setup global --migrate-legacy --apply
+  python3 skills/easy-cheese-setup/scripts/easy-cheese-setup.pyz global --migrate-legacy --apply
   ```
 
   Leave a `cheese-global` block unchanged if it points anywhere except `~/.cheese`.

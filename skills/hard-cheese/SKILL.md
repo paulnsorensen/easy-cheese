@@ -47,7 +47,7 @@ The handoff blocks define the portable contract because slash commands are host 
    Run the freshness check before you run the gate:
 
    ```
-   python3 skills/hard-cheese/scripts/hard-cheese freshness-check \
+   python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check \
      --slug <slug> --passing-score <n>
    ```
 
@@ -61,7 +61,7 @@ The handoff blocks define the portable contract because slash commands are host 
    Run `rank-hunks` before you compose the prompt:
 
    ```
-   python3 skills/hard-cheese/scripts/hard-cheese rank-hunks \
+   python3 skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks \
      --base origin/main --head HEAD
    ```
 
@@ -97,7 +97,7 @@ The handoff blocks define the portable contract because slash commands are host 
    Append the attempt row:
 
    ```
-   python3 skills/hard-cheese/scripts/hard-cheese append-attempt \
+   python3 skills/hard-cheese/scripts/hard-cheese.pyz append-attempt \
      --slug <slug> --status <PASS|FAIL|ERROR> --score <n> \
      --feedback "<judge feedback>" --explanation "<user explanation>"
    ```

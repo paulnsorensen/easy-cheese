@@ -1,12 +1,4 @@
-"""The wedge pin and the committed wedge configuration agree with each other.
-
-tools/wedge/uv.lock pins one wedge commit for local runs, the test archive
-build, and CI. The runtime closure is pinned twice (uv.lock for the archives,
-requirements/runtime.txt for the test and typing environments) and must not
-drift. skills/wedge.toml holds the shared build settings; every Python skill
-commits a wedge.toml that names only itself and its command entry point.
-`wedge check` verifies the locks and launchers.
-"""
+"""The pinned wedge and direct archive configuration agree."""
 
 from __future__ import annotations
 
@@ -81,4 +73,14 @@ def test_every_python_skill_has_a_consistent_wedge_config() -> None:
         assert config == {
             "name": skill,
             "entry": f"easy_cheese.skills.{skill.replace('-', '_')}.commands:main",
+            "source_paths": [
+                "__init__.py",
+                "skills/__init__.py",
+                f"skills/{skill.replace('-', '_')}",
+                "shared",
+                "cli",
+            ],
         }
+        source_root = REPO_ROOT / "src" / "easy_cheese"
+        for selected in cast(list[str], config["source_paths"]):
+            assert (source_root / selected).exists(), selected

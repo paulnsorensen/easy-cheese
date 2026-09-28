@@ -29,13 +29,10 @@ This is a skills-only collection following the [Agent Skills spec](https://agent
 This is the target contract. Existing violations are migration work; do not expand
 them while enforcement is implemented separately.
 
-- A skill that executes Python ships exactly the wedge launcher
-  `skills/<skill>/scripts/<skill>` and its lock
-  `skills/<skill>/scripts/<skill>.wedge.json`, built from
+- A skill that executes Python ships exactly one executable archive at
+  `skills/<skill>/scripts/<skill>.pyz`, built by Wedge from
   `skills/<skill>/wedge.toml` over the shared `skills/wedge.toml`; a skill
-  with no Python ships no launcher.
-  Skill prose invokes only its own launcher—never loose source,
-  `common.pyz`, repository automation, or another skill's launcher.
+  with no Python ships no archive. Skill prose invokes only its own archive.
 - Runtime Python lives under `src/`. Tests remain under `tests/`; repository
   build, release, generation, and maintenance programs may live under
   `scripts/`.
@@ -49,17 +46,16 @@ them while enforcement is implemented separately.
   resources. Dependencies must be pure Python and zip-importable. Native
   extensions, platform-specific libraries, required external executables,
   runtime package installation, and caller-managed extraction are prohibited.
-  The launcher's first-run download of the skill's own locked archive, and
-  Shiv's transparent cache extraction, are part of the archive runtime contract.
-- Each archive contains the whole `easy_cheese` package, `easy_cheese_schemas`,
-  and the pure-Python closure that `uv.lock` pins (the schemas' dependencies
-  plus the `runtime` dependency group). It dispatches only its own skill's
-  `COMMANDS`.
-- The launcher and lock are generated deployment files, never source of
-  truth: `just wedge-lock` regenerates them after any change under `src/`,
-  `pyproject.toml`, `uv.lock`, or a `wedge.toml`, and `just wedge-check` fails
-  on a stale lock or an edited launcher. Hand-written Python never lives under
-  `skills/`. The archive itself is a `wedge` release asset, never a committed file.
+- Each archive contains its own skill package and immutable resources, the
+  shared and CLI support it uses, published schemas, and the pure-Python
+  dependency closure pinned by `uv.lock`. It dispatches only its own skill's
+  `COMMANDS`. Runtime use performs no archive download, loader lookup, or
+  sidecar-lock verification. Shiv's transparent cache extraction remains
+  part of the archive runtime; caller-managed extraction is prohibited.
+- Wedge is a build-time dependency only. `just wedge-build` regenerates
+  committed archives after source changes, and `just wedge-check` fails on a
+  missing, corrupt, stale, or non-executable archive. Hand-written Python never
+  lives under `skills/`; archive metadata remains in `wedge.toml`.
 
 The durable rationale and migration boundary live in
 [the skill Python bundle doctrine](.hallouminate/wiki/architecture/skill-python-bundle-doctrine.md).

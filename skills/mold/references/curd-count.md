@@ -28,8 +28,8 @@ script and read the JSON digest into context. `<path>` is the `path` field of
 the `artifact-path` reply:
 
 ```bash
-python3 skills/mold/scripts/mold artifact-path specs <slug>
-python3 skills/mold/scripts/mold curd-count <path> \
+python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>
+python3 skills/mold/scripts/mold.pyz curd-count <path> \
   --blast-radius <low|medium|high>
 ```
 

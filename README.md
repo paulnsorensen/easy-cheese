@@ -24,7 +24,7 @@ A portable, harness-agnostic Agent Skills toolkit for any [Agent Skills](https:/
 - [Skills](#skills)
 - [Scope](#scope)
 - [Python package](#python-package)
-- [Run and relock skill archives](#run-and-relock-skill-archives)
+- [Run and build skill archives](#run-and-build-skill-archives)
 - [Optional tools](#optional-tools)
 - [Install](#install)
 - [Validate](#validate)
@@ -123,7 +123,7 @@ before review.
 
 Easy-cheese is intentionally a small surface. What that means in practice:
 
-- **Skills only.** The repository publishes no custom agents, commands, eta templates, or harness-specific bundles. `SKILL.md` defines each capability, and Python-backed skills include a small launcher that fetches their portable `.pyz` runtime archive from a GitHub release.
+- **Skills only.** The repository publishes no custom agents, commands, eta templates, or harness-specific bundles. `SKILL.md` defines each capability, and Python-backed skills include one committed self-contained `.pyz` archive.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. Source-code work follows the shared routing contract: prefer tilth when present, use equivalent native AST/LSP/anchored-edit backends when available, and report any precision loss from bounded fallbacks.
 - **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while approved file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
@@ -138,23 +138,24 @@ pip install easy-cheese-schemas
 
 For the stability policy, `schema_version` contract, and strictness tiers, see [Easy-cheese schemas](https://github.com/paulnsorensen/easy-cheese/blob/main/docs/easy-cheese-schemas.md).
 
-## Run and relock skill archives
+## Run and build skill archives
 
-You need only Python 3.11 or newer to run a skill. Each Python-backed skill commits a small launcher and a lock; the launcher downloads the skill's content-addressed `.pyz` from this repository's `wedge` release on first run, verifies it against the lock, caches it, and runs it:
-
-```sh
-python3 skills/<skill>/scripts/<skill> <subcommand>
-```
-
-If you change runtime source, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`, relock every skill and commit the regenerated locks and launchers:
+You need only Python 3.11 or newer to run a skill. Each Python-backed skill commits one self-contained executable archive at `skills/<skill>/scripts/<skill>.pyz`:
 
 ```sh
-just wedge-lock
+python3 skills/<skill>/scripts/<skill>.pyz <subcommand>
 ```
 
-`just wedge-lock` runs [wedge](https://github.com/paulnsorensen/skillz-that-grillz/tree/main/lib), pinned by commit in `tools/wedge/uv.lock`. wedge exports the runtime closure from `uv.lock`, vendors `src/`, builds one reproducible archive per skill, and pins a digest over the archive's contents. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The archive resolves a selected target lazily and calls it with only that command's arguments.
+If you change runtime source, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`, rebuild every affected archive:
 
-`just check` runs `wedge check`, which fails on a stale lock without building. After a merge to `main`, the `wedge` workflow builds each locked skill and uploads any missing archive to the release. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
+```sh
+just wedge-build
+just wedge-check
+```
+
+`just wedge-build` runs [wedge](https://github.com/paulnsorensen/skillz-that-grillz/tree/main/lib) at build time. It vendors `src/`, builds one reproducible archive per skill, and keeps archive metadata in `wedge.toml`. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The archive resolves a selected target lazily and calls it with only that command's arguments.
+
+`just check` runs `just wedge-check`, which executes `wedge bundle --check` and fails on a missing, corrupt, or stale committed archive. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
 
 ## Optional tools
 

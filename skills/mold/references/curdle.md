@@ -4,7 +4,7 @@ Curdle saves a validated draft and may run while Mold continues shaping its pare
 
 ## Artifact types
 
-Resolve the spec path: run `python3 skills/mold/scripts/mold artifact-path specs <slug>` and read `path` from its JSON reply — it anchors at the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location). Issues stay repo-local: write them as `.cheese/issues/<slug>-NNN.md`.
+Resolve the spec path: run `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` and read `path` from its JSON reply — it anchors at the per-project durable corpus (see `../../cheese/references/formatting.md` § Corpus location). Issues stay repo-local: write them as `.cheese/issues/<slug>-NNN.md`.
 
 | Type | When | Path |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ A spec is the rich container. It absorbs problem framing, requirements, approach
 ## Slug rules
 
 - Lowercase the working problem statement, drop stopwords, kebab-case, cap at 5 words.
-- **Validate every slug before any Curdle write.** Run `python3 skills/mold/scripts/mold artifact-path specs <slug>`. The command applies `validate_slug` and returns a nonzero status for an invalid slug. Stop on a nonzero status.
+- **Validate every slug before any Curdle write.** Run `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>`. The command applies `validate_slug` and returns a nonzero status for an invalid slug. Stop on a nonzero status.
 - Accept a user-passed slug only after that command returns status zero. A slug can otherwise contain `..` or `/` and write outside `.cheese`.
 - Reuse the validated slug for every repo-local path. Repo-local paths include `.cheese/issues/`, `.cheese/glossary/`, and `.cheese/.out-of-scope/`. Never interpolate a raw slug into a path.
 - Match the spec's parent slug for issues (`<slug>-001.md`, `-002.md`).
@@ -38,7 +38,7 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 
 **Fork-id tags.** Every settled consequential fork in the decision ledger must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`. Each line that reflects a fork carries the fork id in parentheses, for example `- AC-3: WHEN ... THE SYSTEM SHALL ... (F-3)` or `public interface: parse(...) -> Result  (F-2)`. The taste test matches the fork id literally, or every 3+ letter word of the decision text; the tag is the reliable form.
 
-**Goal-clause tags.** Every `G-n` clause from the ledger's `goal_clauses` carries its tag on at least one Acceptance line, or on exactly one disposition line: a `Non-goals` bullet, a `Deferred follow-ups` entry, or a `[TBD]` item under `Open questions`. The pre-check fails `goal-coverage:G-n` for an untagged clause and `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses reach Acceptance. See `handshake.md` § Goal coverage. Run `python3 skills/mold/scripts/mold taste-test --precheck --draft <draft> --ledger <ledger>` before the reviewer dispatch; fix every reported gap first.
+**Goal-clause tags.** Every `G-n` clause from the ledger's `goal_clauses` carries its tag on at least one Acceptance line, or on exactly one disposition line: a `Non-goals` bullet, a `Deferred follow-ups` entry, or a `[TBD]` item under `Open questions`. The pre-check fails `goal-coverage:G-n` for an untagged clause and `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses reach Acceptance. See `handshake.md` § Goal coverage. Run `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` before the reviewer dispatch; fix every reported gap first.
 
 ```markdown
 ---
@@ -357,7 +357,7 @@ The `Avoid` column records losing synonyms that the Ground phase rejected in fav
 During the same atomic step as the spec, ADRs, and per-slug glossary, merge the session's resolved terms with their **Avoid synonyms**. Merge them into the project-level domain model. After the Hallouminate probe, resolve the target through the Mold bundle command:
 
 ```text
-python3 skills/mold/scripts/mold domain-model-target \
+python3 skills/mold/scripts/mold.pyz domain-model-target \
   --probe <unavailable|no-match|match> \
   [--corpus repo:<repo>:wiki --model <present|absent|unknown>]
 ```
@@ -446,7 +446,7 @@ Finalize the approved spec and plan before the hand-off. The host owns three val
 After the user selects Cook for the displayed scope or plan, record the literal response. Only for an affirmative response, set the selected spec's lifecycle to `approved`, then bind the response to its exact bytes. For any other response, keep `status: draft` and bind the response as a rejection:
 
 ```bash
-python3 skills/mold/scripts/mold approve "$SPEC" \
+python3 skills/mold/scripts/mold.pyz approve "$SPEC" \
   --artifact-root "$ARTIFACT_ROOT" \
   --request-id "$REQUEST_ID" \
   --kind plan \
@@ -457,7 +457,7 @@ python3 skills/mold/scripts/mold approve "$SPEC" \
 Use `--kind partial_plan` for a partial planner disposition. On the Light path, use `--kind scope --curd-id <curd-id>` and omit `--planner-result`. The command prints `approval_path`. Then finalize:
 
 ```bash
-python3 skills/mold/scripts/mold finalize "$SPEC" \
+python3 skills/mold/scripts/mold.pyz finalize "$SPEC" \
   --approval "$APPROVAL_PATH" \
   --artifact-root "$ARTIFACT_ROOT" \
   --operation-id "<slug>-<ordinal>" \

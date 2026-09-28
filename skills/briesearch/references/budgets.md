@@ -48,7 +48,7 @@ An extension names the gap that the extra calls must close. If the calls do not 
 ## Check it
 
 ```bash
-python3 skills/briesearch/scripts/briesearch budget-check <research-dir>
+python3 skills/briesearch/scripts/briesearch.pyz budget-check <research-dir>
 ```
 
 The command prints the run metrics to stdout, including invocation class, counts, spent counts, duplicates, cache hits, and failures. Read the `findings` field for `DUPLICATE_SEARCH`, `DUPLICATE_EXTRACT`, `FAILED_EVIDENCE`, `EXTENSION_GAP`, `BUDGET_UNDECLARED`, or `BUDGET`. `EXTENSION_GAP` identifies a value outside the five allowed values. `BUDGET_UNDECLARED` identifies a used call kind with no declared limit. `BUDGET` identifies overspend without a recognized extension. Run this command with `ground-check` before you finish a deep report.

@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""Locate or build the skill archives that tests execute.
+"""Locate or build temporary skill archives for tests.
 
-A test runs a skill through its built archive, not through the committed
-launcher: the launcher trusts only the digest in the committed lock, and a
-test must exercise the working tree's source. `EASY_CHEESE_PREBUILT_PYZ`
-names a directory that `just test` and CI fill once with `build`; without
-it, the first request builds the whole set into a per-process temporary
-directory. One `wedge build --root skills` builds every skill from one
-shared site directory, so the set costs little more than one skill.
+Tests execute temporary archives built from the working tree. Committed release
+archives live at skills/<skill>/scripts/<skill>.pyz and need no launcher or lock.
 
-    python3 scripts/skill_archives.py build DIR    # every archive into DIR
-    python3 scripts/skill_archives.py path SKILL   # print SKILL's archive
+EASY_CHEESE_PREBUILT_PYZ names a directory that test and CI jobs fill once.
+Without it, the first request builds the whole set into a temporary directory.
+
+    python3 scripts/skill_archives.py build DIR
+    python3 scripts/skill_archives.py path SKILL
 """
 
 from __future__ import annotations

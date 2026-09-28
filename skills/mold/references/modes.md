@@ -30,7 +30,7 @@ Mold has no fixed entry point. Inspect the input shape and pick a starting mode.
 **On Ground entry:** after the Hallouminate probe, resolve and load the project's cumulative domain model through the Mold bundle command:
 
 ```text
-python3 skills/mold/scripts/mold domain-model-target \
+python3 skills/mold/scripts/mold.pyz domain-model-target \
   --probe <unavailable|no-match|match> \
   [--corpus repo:<repo>:wiki --model <present|absent|unknown>]
 ```

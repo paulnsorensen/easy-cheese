@@ -74,7 +74,7 @@ An absence claim is easy to infer from silence. It is also difficult to disprove
 
 Before you finish a deep report, run the grounding gate. Then compare the conclusion with the captured evidence.
 
-1. **Run `ground-check`.** Run `python3 skills/briesearch/scripts/briesearch ground-check "$ROOT/research/<slug>/<slug>.md"`. Read the `violations` field for an unsupported claim, invalid confidence label, or remote citation without a recorded retrieval. It reports an `ADVISORY` for each `certain` absence claim. Correct each error before you return the report. For each advisory, add exclusion evidence or reduce confidence.
+1. **Run `ground-check`.** Run `python3 skills/briesearch/scripts/briesearch.pyz ground-check "$ROOT/research/<slug>/<slug>.md"`. Read the `violations` field for an unsupported claim, invalid confidence label, or remote citation without a recorded retrieval. It reports an `ADVISORY` for each `certain` absence claim. Correct each error before you return the report. For each advisory, add exclusion evidence or reduce confidence.
 2. **Compare the conclusion with the raw capture.** A conclusion must not conflict with a recorded fact. Read the cited `raw/NN-host.md` lines for each material claim. Correct a conflicting Finding or stop. Do not return the conflict.
 
 ## Output shape
@@ -111,6 +111,6 @@ Short form (always returned to the caller):
 
 Long form (when the question warranted a deep look):
 
-- Resolve each path with `python3 skills/briesearch/scripts/briesearch research-layout <slug>`. Use a slug with four to six kebab-case words. The command prints `corpus_root`, `dir`, `report`, `raw_dir`, `manifest`, and `artifact`. Write the complete report to `report`. Write raw bodies under `raw_dir`. Give `report` to a caller that records a link in another durable document. Keep `artifact` only as the corpus-relative storage identity. Do not construct these paths manually.
+- Resolve each path with `python3 skills/briesearch/scripts/briesearch.pyz research-layout <slug>`. Use a slug with four to six kebab-case words. The command prints `corpus_root`, `dir`, `report`, `raw_dir`, `manifest`, and `artifact`. Write the complete report to `report`. Write raw bodies under `raw_dir`. Give `report` to a caller that records a link in another durable document. Keep `artifact` only as the corpus-relative storage identity. Do not construct these paths manually.
 - Include the complete claim table and the verification log. Cite each raw body with a path relative to `raw_dir`, such as `raw/01-example.md#Lstart-end`. Never put URL user information, query values, or a fragment in a persisted citation.
 - Return one summary paragraph, the report path, and the confidence line in chat. Do not paste the complete report in chat.

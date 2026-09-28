@@ -127,7 +127,7 @@ Aim for a loop that completes in less than five seconds.
 Run the loop five times.
 
 ```bash
-python3 skills/pasteurize/scripts/pasteurize repro-rerun \
+python3 skills/pasteurize/scripts/pasteurize.pyz repro-rerun \
   --cmd "<repro-command>" --runs 5 \
   --expect-output "<expected failure text>" --threshold 0.5 --timeout 30
 ```
@@ -240,7 +240,7 @@ Complete this checklist before you write the handoff slug:
 Run the instrumentation sweep with your session tag:
 
 ```bash
-python3 skills/pasteurize/scripts/pasteurize debug-tag-sweep \
+python3 skills/pasteurize/scripts/pasteurize.pyz debug-tag-sweep \
   --session-tag a4f2 --changed-only --root .
 ```
 
@@ -293,7 +293,7 @@ Review them when real runs exist.
 Bundle-only hosts can call the policy with this command:
 
 ```bash
-python3 skills/pasteurize/scripts/pasteurize pasteurize-route <request.json>
+python3 skills/pasteurize/scripts/pasteurize.pyz pasteurize-route <request.json>
 ```
 
 The command reads JSON and writes JSON.

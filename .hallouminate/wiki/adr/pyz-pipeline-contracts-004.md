@@ -2,7 +2,7 @@
 
 Status: superseded (2026-09-27)
 
-wedge replaced the committed Shiv archives and the `build_pyz.py`/`check_bundles.py` pipeline this record governed. The generated-runtime and command-surface gates it relied on live on in `scripts/runtime_gates.py`; see [[architecture/pyz-bundling-pipeline]].
+Wedge replaces the `build_pyz.py`/`check_bundles.py` pipeline this record governed. Archives remain committed under the approved A correction. The generated-runtime and command-surface gates it relied on live on in `scripts/runtime_gates.py`; see [[architecture/pyz-bundling-pipeline]].
 
 Spec: pyz-pipeline-contracts (durable specs corpus).
 
@@ -17,3 +17,5 @@ Registry equals prose: the 3 dead registrations are removed, the 9 test-only sub
 ## Consequences
 
 The registry means exactly one thing; bundle bloat and doc rot both fail tests.
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

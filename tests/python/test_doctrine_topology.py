@@ -56,7 +56,7 @@ def test_retired_archive_tokens_are_flagged(
 
     violations = _scan(tmp_path, monkeypatch)
 
-    assert any("references retired archive other-skill.pyz" in v for v in violations)
+    assert any("references foreign archive other-skill.pyz" in v for v in violations)
 
 
 def test_cross_skill_launcher_reference_is_flagged(
@@ -84,11 +84,55 @@ def test_mismatched_launcher_path_is_flagged(
     assert any("which is not that skill's launcher" in v for v in violations)
 
 
-def test_own_launcher_reference_passes(
+def test_own_launcher_reference_is_flagged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _ = (_skill(tmp_path, "cook") / "SKILL.md").write_text(
-        "Run `python3 skills/cook/scripts/cook paths list` or `scripts/cook paths`.\n"
+        "Run python3 skills/cook/scripts/cook paths list or scripts/cook paths.\\n"
+    )
+
+    violations = _scan(tmp_path, monkeypatch)
+
+    assert any("obsolete extensionless launcher" in v for v in violations)
+
+
+
+def test_dot_resource_is_not_a_launcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scripts = _skill(tmp_path, "mold") / "scripts"
+    _ = (scripts / "mold.dot").write_text("digraph mold {}\n")
+
+    assert _scan(tmp_path, monkeypatch) == []
+
+
+def test_canonical_archive_directory_mismatch_is_flagged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = (_skill(tmp_path, "cook") / "SKILL.md").write_text(
+        "Run skills/other/scripts/cook.pyz.\n"
+    )
+
+    violations = _scan(tmp_path, monkeypatch)
+
+    assert any("not that skill's archive" in v for v in violations)
+
+
+def test_dotted_own_archive_reference_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = (_skill(tmp_path, "cook") / "SKILL.md").write_text(
+        "Run skills/cook/scripts/cook.pyz.\n"
+    )
+
+    assert _scan(tmp_path, monkeypatch) == []
+
+
+def test_own_archive_reference_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = (_skill(tmp_path, "cook") / "SKILL.md").write_text(
+        "Run skills/cook/scripts/cook.pyz.\n"
     )
 
     assert _scan(tmp_path, monkeypatch) == []

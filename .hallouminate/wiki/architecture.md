@@ -16,7 +16,7 @@ A skill is a directory whose shape encodes progressive disclosure
 skills/<skill-name>/
 ├── SKILL.md          # required: YAML frontmatter (name + description) + body
 ├── references/       # optional: detail pulled in on demand
-├── scripts/          # optional: executable helpers (often a wedge launcher + lock)
+├── scripts/          # optional: self-contained executable .pyz archive
 └── assets/           # optional: templates / static resources
 ```
 
@@ -39,14 +39,12 @@ is referenced by sibling-relative path (`../cheese/references/<file>.md`
 from a `SKILL.md`, `../../cheese/references/<file>.md` from a
 `references/*.md`) (`README.md:53`).
 
-Python skills ship a wedge launcher and lock, invoked as
-`python3 skills/<skill>/scripts/<skill> <subcommand>`
-(`skills/mold/SKILL.md:23`); the launcher fetches the skill's content-addressed
-archive from the `wedge` release on first run. Applications start at
-`src/easy_cheese/skills/<skill>/commands.py`; `skills/<skill>/wedge.toml`
-names that entry point, and wedge vendors the whole `src/easy_cheese` package.
-`SKILLS` in `scripts/runtime_gates.py` discovers that layout. See
-[tooling](./tooling.md) for how locks, launchers, and release assets relate.
+Python skills ship one self-contained archive, invoked as
+`python3 skills/<skill>/scripts/<skill>.pyz <subcommand>`.
+Wedge builds that archive; startup does not download it.
+Applications start at `src/easy_cheese/skills/<skill>/commands.py`.
+Each manifest selects its own skill package, shared support, CLI support, schemas, and pinned dependencies.
+See [tooling](./tooling.md) and the [bundle doctrine](./architecture/skill-python-bundle-doctrine.md) for the build contract.
 
 
 
@@ -123,4 +121,6 @@ the other pipeline invariants.
 
 
 _Source: /briesearch on Agent Skill sizing (progressive-disclosure load levels) · Updated: 2026-07-27_
+
+_Source: [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729), approved A correction · Updated: 2026-09-28 · Supersedes: proposed runtime loaders and release-only archive assets._
 

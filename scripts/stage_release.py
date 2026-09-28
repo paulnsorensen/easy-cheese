@@ -1,15 +1,8 @@
 #!/usr/bin/env python3
-"""Assemble the shippable release tree: each skill's SKILL.md, wedge launcher,
-and lock, plus top-level project metadata. Everything a consumer does NOT
-need — runtime sources (src/), build/test tooling, docs, CI config — is left
-behind.
+"""Assemble the shippable release tree with one executable archive per skill.
 
-The release workflow commits this tree to the `release` branch and points the
-version tag at it, so `gh skill install` (which reads the git tree at the tag)
-pulls a minimal skill: the launcher and its lock, never the loose .py. The
-launcher downloads the skill's content-addressed archive from the rolling
-`wedge` release on first run; wedge.yml publishes that archive after every
-merge to main, so this script builds nothing.
+Only skill metadata and committed scripts/<skill>.pyz archives ship.
+Build configuration, source, and test tooling remain outside the release tree.
 """
 
 from __future__ import annotations
@@ -37,8 +30,8 @@ SHIP = [
     ".claude-plugin",
 ]
 
-# Build configuration and any stray local archive stay out of the tree.
-SKILL_IGNORE = shutil.ignore_patterns("wedge.toml", "*.pyz")
+# Build configuration stays out of the tree; committed archives are release assets.
+SKILL_IGNORE = shutil.ignore_patterns("wedge.toml")
 
 
 def _copy(
@@ -89,21 +82,32 @@ def _verify(out: Path) -> None:
     if not any(skills.glob("*/SKILL.md")):
         raise SystemExit(f"stage_release: no skills found under {skills}")
 
+    expected = {
+        f"skills/{skill}/scripts/{skill}.pyz" for skill in runtime_gates.SKILLS
+    }
+    expected.add("skills/mold/scripts/mold.dot")
+    actual = {
+        str(path.relative_to(out))
+        for path in skills.rglob("*")
+        if path.is_file() and "scripts" in path.parts
+    }
+    unexpected = sorted(actual - expected)
+    if unexpected:
+        raise SystemExit(
+            "stage_release: unexpected generated artifacts: " + ", ".join(unexpected)
+        )
     for skill in runtime_gates.SKILLS:
-        launcher = skills / skill / "scripts" / skill
-        lock = skills / skill / "scripts" / f"{skill}.wedge.json"
-        if not launcher.is_file():
-            raise SystemExit(f"stage_release: missing launcher {launcher}")
-        if not lock.is_file():
-            raise SystemExit(f"stage_release: missing lock {lock}")
-
+        archive = skills / skill / "scripts" / f"{skill}.pyz"
+        if not archive.is_file():
+            raise SystemExit(f"stage_release: missing archive {archive}")
+        if not archive.stat().st_mode & 0o111:
+            raise SystemExit(f"stage_release: archive is not executable {archive}")
     stray = sorted(str(p.relative_to(out)) for p in skills.rglob("*.py"))
     if stray:
         raise SystemExit(
             "stage_release: raw .py sources must not ship under skills/; found: "
             + ", ".join(stray)
         )
-
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Stage the shippable release tree.")

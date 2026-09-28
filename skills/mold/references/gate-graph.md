@@ -10,7 +10,7 @@ gate nodes. No gate can therefore disappear from the prose without a failure.
 ## Subcommand
 
 ```bash
-python3 skills/mold/scripts/mold gate-graph \
+python3 skills/mold/scripts/mold.pyz gate-graph \
   [--state <state.json>] [--render dot|svg|png|mermaid] [--out <path>]
 ```
 
@@ -55,7 +55,7 @@ it byte-matches `to_dot()`, so the snapshot can never go stale against the model
 Regenerate it whenever the model changes:
 
 ```bash
-python3 skills/mold/scripts/mold gate-graph --render dot \
+python3 skills/mold/scripts/mold.pyz gate-graph --render dot \
   --out skills/mold/scripts/mold.dot
 ```
 

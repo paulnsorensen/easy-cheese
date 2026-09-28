@@ -39,10 +39,10 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 ## Preserve skill package boundaries
 
 - Keep skill runtime under `src/easy_cheese/skills/<skill_name>/` and declare its CLI surface in `commands.py`.
-- Move code to `src/easy_cheese/shared/` only when multiple existing skills need the same behavior; consume it through the `easy-cheese-shared` internal distribution.
-- Do not import another skill's internals. Wheel metadata, pip resolution, and the ephemeral hash-locked requirements file own each bundle's complete runtime dependency closure.
+- Move code to `src/easy_cheese/shared/` only when multiple existing skills need the same behavior; bundle it into each owning archive.
+- Do not import another skill's internals. Each archive carries its complete pure-Python runtime closure.
 - Keep cross-skill orchestration in the owning workflow seam, not a leaf helper. Communicate through public or persisted contracts to avoid reverse dependencies and cycles.
-- Never edit `skills/<skill>/scripts/*` by hand. Run `just wedge-lock` after changing archive inputs (`src/`, `pyproject.toml`, `uv.lock`, a `wedge.toml`) and commit the regenerated locks and launchers.
+- Never edit `skills/<skill>/scripts/<skill>.pyz` by hand. Run `just wedge-build` after changing archive inputs and `just wedge-check` to verify committed archives.
 - Keep CLI modules thin: accept `argv`, return an integer status, print diagnostics to stderr, and propagate failure through a nonzero exit.
 - Keep `.github/scripts/` validators read-only. They inspect and report; they do not mutate the workspace.
 
@@ -84,7 +84,7 @@ This is a repository-local skill. Keep it under `.agents/skills/python-authoring
 - Keep filesystem tests inside `tmp_path` or an equivalent temporary directory. Do not depend on user paths, repository-external state, network access, or auto-loaded pytest plugins.
 - For archive changes, exercise the built archive from `scripts/skill_archives.py` with repository imports unavailable; never run a test through the committed launcher.
 - Run the most focused affected tests first.
-- Run `just wedge-lock` when archive inputs changed, and `just update-generated` when generated runtime sources changed.
+- Run `just wedge-build` when archive inputs changed, and `just update-generated` when generated runtime sources changed.
 - Run `just check` as the final project gate.
 
 ## Completion check

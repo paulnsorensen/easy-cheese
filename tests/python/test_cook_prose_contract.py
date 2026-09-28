@@ -80,7 +80,7 @@ def test_the_harvest_step_names_the_bundled_command() -> None:
     gates = _read(REFERENCES / "quality-gates.md")
 
     assert "worktree_harvest(" not in gates
-    assert "scripts/cook worktree harvest \\" in gates
+    assert "scripts/cook.pyz worktree harvest \\" in gates
     assert "--branch <repair-branch> --onto <run-branch> --repo <run-worktree>" in gates
 
 

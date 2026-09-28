@@ -25,7 +25,7 @@ entity_referent_bindings:
 
 # pyz pipeline contracts: closure gate, currency enforcement, discoverability, skill↔bundle equality
 
-> Superseded 2026-09-27: wedge builds and publishes every skill archive; the repository commits a launcher and a lock, not the archive. See [[architecture/pyz-bundling-pipeline]] for the current pipeline. This spec is kept as history.
+> Superseded pipeline: Wedge builds each committed skill archive under the approved A correction. The custom wheelhouse builder remains retired. See [[architecture/pyz-bundling-pipeline]] for the current pipeline. This spec is kept as history.
 
 ## Problem
 
@@ -147,7 +147,7 @@ website/, and src/ is pure Python.
 | AC-1 | python3 scripts/build_pyz.py (import-closure-check) | build subprocess exit code and stderr | On main, staging a script whose function-body imports an undeclared cross-directory module builds cleanly; the closure gate must exit nonzero naming the unresolved module and its importer | tracer |
 | AC-2 | pytest tests/python/test_skill_contract.py (contract-strictness) | pytest run against build_pyz registries and skills markdown | On main the equality assertion fails: 12 registered subcommands, including press red-gate, have no skill-markdown reference | tracer |
 | AC-3 | python3 skills/cook/scripts/common.pyz read_handoff_slug (cook-common-consumer) | bundle-dispatch subprocess on a bundle-only layout | On main the invocation fails because skills/cook/scripts/common.pyz is never built; after cook joins COMMON_CONSUMERS it resolves and exits 0 on --help | tracer |
-| AC-4 | python3 skills/press/scripts/press red-gate (contract-strictness) | dispatcher usage-rejection exit code | On main press red-gate dispatches successfully; asserting exit 2 usage-rejection fails until the dead registration is pruned | tracer |
+| AC-4 | python3 skills/press/scripts/press.pyz red-gate (contract-strictness) | dispatcher usage-rejection exit code | On main press red-gate dispatches successfully; asserting exit 2 usage-rejection fails until the dead registration is pruned | tracer |
 | AC-5 | python3 scripts/build_pyz.py (discoverability-surfaces) | build gate RuntimeError on stale generated file | On main no src/PYTHON_SCRIPTS.md exists; the gate must fail the build until the checked-in map byte-matches the registries | tracer |
 | AC-6 | just check (currency-enforcement) | recipe exit code with a deliberately stale committed bundle | On main just check passes with a stale bundle because check_bundles.py is not wired into the recipe | tracer |
 | AC-7 | pytest banner assertion in test_skill_contract.py (discoverability-surfaces) | pytest run over registered source files | On main the banner test fails: src/age/age-html-report.py has no ships-as header line | tracer |
@@ -179,3 +179,5 @@ Host-validated `plan-pyz-pipeline-contracts-001`: 5 curds / 3 waves — wave 1: 
 
 - Decorator-based subcommand self-registration — tracked as [#437](https://github.com/paulnsorensen/easy-cheese/issues/437), not in this spec (user disposition).
 - Gitignoring/relocating the untracked site/ build output — tracked as [#438](https://github.com/paulnsorensen/easy-cheese/issues/438) (user disposition).
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

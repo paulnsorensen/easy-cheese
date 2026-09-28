@@ -35,7 +35,7 @@ or `refs/remotes/origin/main` to `--base`.
 Run the executable preflight before `init`, `link`, or any recovery mutation:
 
 ```bash
-python3 skills/plate/scripts/plate gh-stack-preflight \
+python3 skills/plate/scripts/plate.pyz gh-stack-preflight \
   --trunk <github-branch-name> --remote origin
 ```
 
@@ -67,7 +67,7 @@ exit zero. A zero exit is therefore provisional. Run mutations through Plate's
 guard so a warning, HTTP failure, or non-zero exit fails publication:
 
 ```bash
-python3 skills/plate/scripts/plate gh-stack-run -- \
+python3 skills/plate/scripts/plate.pyz gh-stack-run -- \
   gh stack <operation> <arguments>
 ```
 
@@ -80,7 +80,7 @@ commands do not support `--remote`; do not add it to those commands.
 Resolve every title and body before publication. Submit the complete chain:
 
 ```bash
-python3 skills/plate/scripts/plate gh-stack-run -- \
+python3 skills/plate/scripts/plate.pyz gh-stack-run -- \
   gh stack submit --auto --open --remote origin
 ```
 
@@ -94,7 +94,7 @@ without PR metadata changes. Never use a bare single-branch push.
 After `submit`, `push`, or `link`, run terminal validation:
 
 ```bash
-python3 skills/plate/scripts/plate gh-stack-verify \
+python3 skills/plate/scripts/plate.pyz gh-stack-verify \
   --trunk <github-branch-name> --remote origin
 ```
 
@@ -136,7 +136,7 @@ Classify the response by HTTP status, not by process exit:
 | other | Service failure | Halt and preserve the status and stderr |
 | none | Indeterminate repository or network failure | Halt and report the unresolved remote check |
 
-`python3 skills/plate/scripts/plate stack-tools` runs this preflight. It
+`python3 skills/plate/scripts/plate.pyz stack-tools` runs this preflight. It
 reports `available`, `not-enabled`, `auth-required`, `service-error`,
 `remote-check-required`, or `not-installed`. Proceed only with `available`.
 The report preserves `http_status`, `exit_status`, and `stderr`.

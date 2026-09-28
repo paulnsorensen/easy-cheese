@@ -16,7 +16,7 @@ of the exit code:
 
 Usage:
 
-    python3 skills/hard-cheese/scripts/hard-cheese freshness-check --slug <slug>
+    python3 skills/hard-cheese/scripts/hard-cheese.pyz freshness-check --slug <slug>
 
 Output is one JSON document: `{"state": ..., "diff_head": ...}`.
 """

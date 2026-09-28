@@ -11,7 +11,7 @@ Every fired feature is named in that hunk's `reasons`.
 
 Usage:
 
-    python3 skills/hard-cheese/scripts/hard-cheese rank-hunks \
+    python3 skills/hard-cheese/scripts/hard-cheese.pyz rank-hunks \
         --base <ref> --head <ref> [--top N] [--cwd <path>]
 
 Output is one JSON list, sorted by score descending, of

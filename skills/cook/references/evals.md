@@ -7,7 +7,7 @@ Run these trace scenarios against a fresh OMP task agent in an isolated fixture 
 1. Give the agent a canonical Mold `HandoffPointer` and its retained artifacts.
 2. Supply scope, plan, and runner approvals as scripted host events.
 3. Supply setup authorization before any package or browser setup.
-4. Require `scripts/cook prepare` or `resubmit` before `accept`.
+4. Require `skills/cook/scripts/cook.pyz prepare` or `resubmit` before `accept`.
 5. Capture the routed input kind, approval events, setup evidence, tool calls, and final artifact references.
 
 The trace passes only when preparation reports `ready`, the real consumer loads every reference, and execution produces the requested artifact.

@@ -37,8 +37,8 @@ def test_check_and_ci_depend_on_dead_code() -> None:
 
 
 @needs_just
-def test_check_and_ci_verify_the_wedge_locks() -> None:
-    """Both aggregate recipes verify every skill's wedge lock and launcher."""
+def test_check_and_ci_verify_the_wedge_archives() -> None:
+    """Both aggregate recipes verify every committed skill archive."""
     result = subprocess.run(
         ["just", "--dump", "--dump-format", "json"],
         cwd=ROOT,
@@ -142,31 +142,18 @@ def test_validate_workflow_gates_the_runtime_and_builds_archives_once() -> None:
     assert 'EASY_CHEESE_PREBUILT_PYZ=$RUNNER_TEMP/archives" >> "$GITHUB_ENV"' in runs[build]
 
 
-def test_wedge_workflow_checks_locks_on_pull_requests_and_publishes_on_main() -> None:
-    """wedge.yml verifies every lock on a pull request and publishes archives
-    only after a push to main, both through the wedge that tools/wedge pins
-    (the pin itself is covered by test_wedge_pin.py).
-    """
-    jobs = cast(
-        dict[str, object],
-        yaml.safe_load(
-            (ROOT / ".github" / "workflows" / "wedge.yml").read_text(encoding="utf-8")
-        )["jobs"],
-    )
-
-    def wedge_run(job: str) -> str:
-        steps = cast(list[dict[str, object]], cast(dict[str, object], jobs[job])["steps"])
-        runs = [cast(str, step["run"]) for step in steps if "run" in step]
-        matches = [run for run in runs if "--project tools/wedge wedge" in run]
-        assert len(matches) == 1, (job, runs)
-        return matches[0]
-
-    assert "wedge check --root skills" in wedge_run("check")
-    publish = wedge_run("publish")
-    assert "wedge publish" in publish and "--root skills" in publish
-    assert "--branch main" in publish, "publish refuses a commit that main does not contain"
-    assert "pull_request" in cast(str, cast(dict[str, object], jobs["check"])["if"])
-    assert "push" in cast(str, cast(dict[str, object], jobs["publish"])["if"])
+def test_wedge_workflow_checks_archives_on_pull_requests_and_main() -> None:
+    """wedge.yml checks committed archives on pull requests and main pushes."""
+    workflow = (ROOT / ".github" / "workflows" / "wedge.yml").read_text(encoding="utf-8")
+    assert workflow.count("\non:") == 1
+    assert workflow.count("\npermissions:") == 1
+    assert "pull_request:" in workflow
+    assert "push:" in workflow
+    assert "branches: [main]" in workflow
+    assert "if: github.event_name" not in workflow
+    assert "name: check wedge archives" in workflow
+    assert "wedge bundle --root skills --check" in workflow
+    assert "publish" not in workflow
 
 
 def test_ci_jobs_pin_tools() -> None:

@@ -40,7 +40,7 @@ If any box is unchecked, name it and propose the smallest move to fill it. The d
 
 The last box — **Durable writes** — is a commitment checked before the handshake. It does not claim that the write already occurred. It confirms that the ADR + domain-model targets are resolved. It also locks in the write → read-back → completion-record protocol for the atomic-write step (`curdle.md` § Atomic write). The read-back verification and visible completion record occur during that step. Note the hallouminate-absent fallback clearly, never silently.
 
-These checklist items match the gates in Mold's machine-readable gate model. See `gate-graph.md`. A passing `fork_taste_test_passed` verdict opens the typed planner stage. A stale, partial, contradictory, or blocker-bearing verdict keeps typed planning closed. A test compares this checklist with the model nodes. Edit both sources together. Render the flow with `python3 skills/mold/scripts/mold gate-graph`.
+These checklist items match the gates in Mold's machine-readable gate model. See `gate-graph.md`. A passing `fork_taste_test_passed` verdict opens the typed planner stage. A stale, partial, contradictory, or blocker-bearing verdict keeps typed planning closed. A test compares this checklist with the model nodes. Edit both sources together. Render the flow with `python3 skills/mold/scripts/mold.pyz gate-graph`.
 
 ## Mandatory gates
 
@@ -82,7 +82,7 @@ Scope audit:
 Review the defaults; Mold may save the draft. Rows marked `needs your verb` block execution until you name a verb for each.
 ```
 
-Finalization runs the table as the execution backstop: every `needs your verb` row and unresolved coherence box is a named entry in `execution_holds:`, and `scripts/mold finalize` blocks ready while the list is non-empty. It remains the chokepoint that downstream skills trust (RC3).
+Finalization runs the table as the execution backstop: every `needs your verb` row and unresolved coherence box is a named entry in `execution_holds:`, and `scripts/mold.pyz finalize` blocks ready while the list is non-empty. It remains the chokepoint that downstream skills trust (RC3).
 
 ## Agent-introduced scope
 
@@ -123,8 +123,8 @@ Procedure:
 
 1. **Decompose in the bounds pass.** Split the pinned goal into 2–6 outcome clauses, `G-1` … `G-n`. Each clause names one observable outcome the user asked for. Print the clauses under the `Goal:` ledger line in round one, and repeat them each round. Only an explicit user fork adds, removes, or rewords a clause. Record them in the ledger JSON as `goal_clauses: [{id: G-n, text: ...}, ...]`.
 2. **Tag the draft.** Every Acceptance line that delivers a clause carries its tag, for example `- AC-2: WHEN ... THE SYSTEM SHALL ... (F-1, G-2)`. A clause the spec does not deliver carries its tag on exactly one disposition line instead: a `Non-goals` bullet, a `Deferred follow-ups` entry, or an `Open questions` item marked `[TBD]`. Acceptance wins when a tag appears in more than one place.
-3. **Run the check.** `python3 skills/mold/scripts/mold taste-test --precheck --draft <draft> --ledger <ledger>` fails `goal-coverage:G-n` for each clause with no tag in any of those four sections. It fails `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses are covered by Acceptance. Both codes also fail the digest-bound verdict.
-4. **Print the narrowing delta.** Before offering Cook, run `python3 skills/mold/scripts/mold taste-test --coverage --draft <draft> --ledger <ledger>` and print one line: `Original ask: G-1..G-n. This spec ships: <covered>. Deferred: <G-n (follow-up)>, <G-n (non-goal)>, <G-n (tbd)>.` The delta is the visible cut list. A spec with no deferred clause prints `Deferred: none`.
+3. **Run the check.** `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` fails `goal-coverage:G-n` for each clause with no tag in any of those four sections. It fails `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses are covered by Acceptance. Both codes also fail the digest-bound verdict.
+4. **Print the narrowing delta.** Before offering Cook, run `python3 skills/mold/scripts/mold.pyz taste-test --coverage --draft <draft> --ledger <ledger>` and print one line: `Original ask: G-1..G-n. This spec ships: <covered>. Deferred: <G-n (follow-up)>, <G-n (non-goal)>, <G-n (tbd)>.` The delta is the visible cut list. A spec with no deferred clause prints `Deferred: none`.
 5. **Respect the cap.** When `goal-coverage-cap` fires, the spec is a slice of the goal. Do not proceed. Put one fork to the user: **re-pin** the goal to the slice (the ledger `Goal:` line and clauses change through an explicit user fork), or **widen** the spec until at least half the clauses are covered. Never rename a slice as the whole.
 6. **No override.** `curdle anyway` accepts unchecked coherence items. It does not waive an uncovered clause or the cap, for the same reason it does not waive a leverage row: downstream skills trust the spec and never re-check.
 

@@ -1,9 +1,6 @@
-# Defaults for every skill beside this file (see each skill's wedge.toml,
-# which names only the skill and its entry point). All paths are relative
-# to the skill directory.
-#
-# The whole runtime package: each archive carries every skill's package
-# beside shared and cli, and dispatches only its own commands.
+# Defaults for every skill beside this file (see each skill's wedge.toml).
+# Paths are relative to the skill directory. Each archive selects its own
+# package plus shared and CLI support, while schemas remain fully included.
 source = "../../src/easy_cheese"
 include = ["../../src/easy_cheese_schemas"]
 # The repository project: its uv.lock pins the runtime closure, and the

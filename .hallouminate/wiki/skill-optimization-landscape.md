@@ -109,7 +109,7 @@ consequences:
   reflection step may move prose into code, add a subcommand, or delete a
   reference; that is the code-over-prose directive from the rebuild
   exercise applied by the optimizer. A code candidate must pass
-  `just wedge-lock` and the skill's own tests before it earns an agent run, so
+  `just wedge-build` and the skill's own tests before it earns an agent run, so
   the fitness function runs the build and test gate first and scores a
   broken build as 0 without spending inference.
 - **Token accounting needs the harness, not the transcript.** Count
@@ -166,3 +166,5 @@ Sep 23 summary cites. Locate it by date if needed.
 6. Weekly holdout eval routine (PR #570 sketches the job); `optimize` stays
    manual and budgeted.
 7. `/mold` and routing last.
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._

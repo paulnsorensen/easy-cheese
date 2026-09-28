@@ -6,7 +6,7 @@ Each per-curd press pass hardened its own file in isolation:
   (skills/cook/references/quality-gates.md). A future edit to one without
   the other would silently drift and no test would catch it.
 - W2 (curd 6) added `_cmd_classify` unit coverage and curd 1 documented the
-  `python3 skills/cook/scripts/cook baseline` example in cook's corpus,
+  `python3 skills/cook/scripts/cook.pyz baseline` example in cook's corpus,
   but nothing ties that documented example command to the actual subcommand
   dispatch table -- the class of bug this run actually hit.
 - curd 4 asserted every consumer's handoff-slug fence carries a bare
@@ -110,9 +110,9 @@ class TestBaselineCaptureExampleDispatches:
         # (and the documented example) now live under cook's own corpus --
         # SKILL.md or one of its references/*.md files.
         body = _cook_corpus()
-        assert "scripts/cook baseline" in body, (
+        assert "scripts/cook.pyz baseline" in body, (
             "cook's corpus (SKILL.md + references/*.md) must document the "
-            "`scripts/cook baseline` invocation this test then verifies "
+            "`scripts/cook.pyz baseline` invocation this test then verifies "
             "actually dispatches"
         )
 
@@ -201,9 +201,9 @@ class TestBaselineBlockShapeAgreesWithSchema:
 class TestCookWorktreeSubcommandDispatches:
     def test_cook_skill_documents_worktree_subcommand(self) -> None:
         body = _cook_corpus()
-        assert "scripts/cook worktree" in body, (
+        assert "scripts/cook.pyz worktree" in body, (
             "cook's corpus (SKILL.md + references/*.md) must document the "
-            "`scripts/cook worktree` invocation this test then verifies actually dispatches"
+            "`scripts/cook.pyz worktree` invocation this test then verifies actually dispatches"
         )
 
     def test_cook_worktree_create_actually_dispatches(self, tmp_path: Path) -> None:

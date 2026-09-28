@@ -31,15 +31,15 @@ Run every command through this skill's archive by its resolved installed bundle 
 When the consumer repository lacks `skills/`, resolve the installed bundle path before execution; never assume the easy-cheese checkout or current working directory.
 
 ```bash
-python3 skills/wheypoint/scripts/wheypoint turns [--session <id> | --transcript <path>]
-python3 skills/wheypoint/scripts/wheypoint show <work-id> [--project <key>]
-python3 skills/wheypoint/scripts/wheypoint validate [intent.json]
-python3 skills/wheypoint/scripts/wheypoint checkpoint [--compacted <proof.json>] [intent.json]
-python3 skills/wheypoint/scripts/wheypoint schema checkpoint-intent
-python3 skills/wheypoint/scripts/wheypoint resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
-python3 skills/wheypoint/scripts/wheypoint lint <projection-path>
-python3 skills/wheypoint/scripts/wheypoint list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]...
-python3 skills/wheypoint/scripts/wheypoint log <work-id> [--project <key>]
+python3 skills/wheypoint/scripts/wheypoint.pyz turns [--session <id> | --transcript <path>]
+python3 skills/wheypoint/scripts/wheypoint.pyz show <work-id> [--project <key>]
+python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json]
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [--compacted <proof.json>] [intent.json]
+python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
+python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
+python3 skills/wheypoint/scripts/wheypoint.pyz lint <projection-path>
+python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]...
+python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
 ```
 
 Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call, never one call per term; a hit matching any value of one flag is kept, and distinct flags combine with AND.

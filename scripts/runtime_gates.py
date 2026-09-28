@@ -248,11 +248,14 @@ def validate_command_surfaces(skills: Iterable[str]) -> None:
             raise ValueError(f"{skill}: {exc}") from exc
 
 
-# Any `<name>.pyz` token. Checked-in archives are retired; a skill's prose
-# invokes its launcher, `python3 skills/<skill>/scripts/<skill>`.
+# Canonical archive and extensionless launcher references.
 _ARCHIVE_REFERENCE = re.compile(r"[\w-]+\.pyz")
-# A launcher path. Group 1 is the skill directory when the path is complete.
-_LAUNCHER_REFERENCE = re.compile(r"(?:skills/([\w-]+)/)?scripts/([\w-]+)\b")
+_ARCHIVE_PATH_REFERENCE = re.compile(
+    r"(?:skills/(?P<directory>[\w-]+)/)?scripts/(?P<launcher>[\w-]+)\.pyz(?![\w-])"
+)
+_LAUNCHER_REFERENCE = re.compile(
+    r"(?:skills/(?P<launcher_directory>[\w-]+)/)?scripts/(?P<launcher_name>[\w-]+)(?![\w.-])"
+)
 # ultracook is a retired skill: its SKILL.md documents that no ultracook
 # archive is published and that its runtime moved into cook, purely as
 # retirement guidance.
@@ -275,11 +278,11 @@ def _owning_skill(path: Path) -> str | None:
 def _reference_roots() -> list[Path]:
     return [
         *REPO_ROOT.glob("skills/**/*.md"),
-        # Launchers, but not the locks: a lock names its own .pyz asset.
+        # Runtime files, excluding binary archives and sidecar locks.
         *(
             p
             for p in REPO_ROOT.glob("skills/*/scripts/*")
-            if p.is_file() and not p.name.endswith(".wedge.json")
+            if p.is_file() and p.suffix not in {".pyz", ".json"}
         ),
         *(
             p
@@ -292,13 +295,10 @@ def _reference_roots() -> list[Path]:
 
 
 def check_skill_references() -> list[str]:
-    """Skill docs and sources may name only their own launcher.
+    """Skill docs and sources may name only their own archive or launcher.
 
-    A file naming another skill's launcher is either a stale doc (the skill was
-    renamed or merged) or a real cross-skill call. Any `.pyz` token is a
-    reference to the retired checked-in archives; `wedge check` rejects the
-    files themselves.
-    """
+    A file naming another skill's launcher or archive is either stale or a
+    cross-skill call. Shared and foreign archives remain prohibited."""
     violations: list[str] = []
     for path in sorted(set(_reference_roots())):
         skill = _owning_skill(path)
@@ -314,25 +314,38 @@ def check_skill_references() -> list[str]:
             # rather than letting the gate go green on it.
             violations.append(f"{relative}: unreadable ({exc.strerror or exc})")
             continue
+        for match in _ARCHIVE_PATH_REFERENCE.finditer(text):
+            directory = match.group("directory")
+            launcher = match.group("launcher")
+            if directory is not None and directory != launcher:
+                violations.append(
+                    f"{relative}: names {match.group(0)}, which is not that skill's archive"
+                )
         for match in _ARCHIVE_REFERENCE.finditer(text):
-            if match.group(0) == "common.pyz":
+            archive = match.group(0)
+            if archive == "common.pyz":
                 violations.append(
                     f"{relative}: references obsolete shared bundle common.pyz"
                 )
-            else:
+            elif skill is not None and archive != f"{skill}.pyz":
                 violations.append(
-                    f"{relative}: references retired archive {match.group(0)}; "
-                    + "name the launcher scripts/<skill> instead"
+                    f"{relative}: references foreign archive {archive}; "
+                    + "name the owning skill archive instead"
                 )
         for match in _LAUNCHER_REFERENCE.finditer(text):
-            directory, launcher = match.group(1), match.group(2)
+            directory = match.group("launcher_directory")
+            launcher = match.group("launcher_name")
             if launcher not in SKILLS:
                 continue
             if directory is not None and directory != launcher:
                 violations.append(
                     f"{relative}: names {match.group(0)}, which is not that skill's launcher"
                 )
-            elif skill is not None and launcher != skill:
+            elif skill == launcher:
+                violations.append(
+                    f"{relative}: references obsolete extensionless launcher {match.group(0)}"
+                )
+            elif skill is not None:
                 violations.append(
                     f"{relative}: references {launcher}'s launcher, not its own scripts/{skill}"
                 )

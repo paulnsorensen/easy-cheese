@@ -83,7 +83,7 @@ class TestBaselineCaptureSection:
         # Classification must route through the tested helper, never get
         # eyeballed by the agent — this is what quality-gates.md mandates,
         # and the guarantee is worthless if the section stops naming it.
-        assert "scripts/cook baseline" in section
+        assert "scripts/cook.pyz baseline" in section
 
     def test_manifest_baseline_block_referenced_for_parallel_mode(self) -> None:
         section = _quality_gates()

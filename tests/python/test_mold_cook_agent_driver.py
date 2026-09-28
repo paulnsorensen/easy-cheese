@@ -55,10 +55,10 @@ def test_fixture_agent_uses_harness_responses_and_writes_trace(tmp_path: Path) -
     assert events[7]["outcome"] == "ready"
     assert events[9]["ready"] is True
     assert [event["tool"] for event in events if "tool" in event] == [
-        "scripts/cook prepare",
-        "scripts/cook resubmit",
-        "scripts/mold finalize",
-        "scripts/cook accept",
+        "scripts/cook.pyz prepare",
+        "scripts/cook.pyz resubmit",
+        "scripts/mold.pyz finalize",
+        "scripts/cook.pyz accept",
     ]
     assert output.is_file()
     pointer = repository / "artifacts" / "pointers" / "agent.json"

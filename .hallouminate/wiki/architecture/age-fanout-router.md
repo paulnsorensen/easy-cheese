@@ -90,7 +90,7 @@ Its current weights remain the safe default: zero for lockfiles, bytecode,
 fixtures, snapshots, and vendored trees; `0.25` for README/changelog,
 documentation, content, and `.hallouminate`; and `1.0` for everything else.
 Unknown extensions are reviewed. Use
-`python3 skills/age/scripts/age review-surface --repo . <base>...HEAD`
+`python3 skills/age/scripts/age.pyz review-surface --repo . <base>...HEAD`
 for a committed range, or the working diff when that is the target.
 
 The score supplies ordinary workload allowances. It does not choose effort,
@@ -158,7 +158,7 @@ explicitly incomplete review, never a success claim.
 it as `age-route`. Invoke the packaged command:
 
 ```text
-python3 skills/age/scripts/age age-route [request.json]
+python3 skills/age/scripts/age.pyz age-route [request.json]
 ```
 
 The wrapper reads an optional JSON path or stdin. The source path is a source
@@ -191,3 +191,5 @@ _Source: `src/easy_cheese/shared/fanout/age_route.py`,
 `src/easy_cheese/shared/fanout/review_surface.py`,
 `skills/age/references/fan-out.md`, and approved spec
 `age-contextual-review-parity`; updated for the contextual policy._
+
+_Source: deployment reference correction for [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729) · Updated: 2026-09-28 · Supersedes: extensionless launcher references from the initial Wedge proposal._
