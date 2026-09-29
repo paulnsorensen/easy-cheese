@@ -330,6 +330,21 @@ Wiring rows exist in the manifest, not the curd block.
   The published `write-handoff-artifact` remains `--phase cook --next age`; the checkpoint is not that terminal phase artifact.
   The host finalizes the blocked `CurdResult` and continues to harvest the other results.
 
+- **Coder out of context.**
+  A coder that returns `status: blocked: out of context` names a resume brief at `artifact:` (`.cheese/notes/<slug>.md`).
+  The brief carries the sections *Already read*, *Read next*, *Gates*, and *Locked decisions*.
+  Do not re-dispatch with "read the note".
+  A resumed coder given only a path re-reads the tree and spends about a third of its window before its first edit.
+  Read the brief yourself and build the next dispatch from it.
+  Paste *Read next* as `Sites:`.
+  Paste *Already read* as `Known-false leads` marked `do not re-read`.
+  Paste *Gates* as `Done means` with the recorded result and SHA.
+  Carry *Locked decisions* forward.
+  Tell the resumed coder to start at the first site and to skip the gates until it has changed something.
+  A second out-of-context return on the same brief means the dispatch is oversized.
+  Split it at the brief's remaining sites instead of a further retry.
+  This rule applies to the single-coder pathway and to curd workers.
+
 - **Aggregate-gate conflict.**
   After you harvest all wave results, run the project gates over the merged tree.
   When the gate output exceeds one screen, dispatch a `gate-runner` (`cheap` / `low`, no-write) and read its failures-plus-counts digest instead of the log.
