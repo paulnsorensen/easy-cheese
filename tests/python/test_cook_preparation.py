@@ -7,6 +7,7 @@ import inspect
 import shutil
 from pathlib import Path
 
+import attrs
 import pytest
 
 from easy_cheese_schemas import (
@@ -167,11 +168,15 @@ def test_slug_input_resolves_its_stored_spec_instead_of_blocking(
     )
 
     assert result.input_kind is MoldCookInputKind.SLUG
-    assert result.outcome is CookPreparationOutcome.NEEDS_APPROVAL
-    assert "spec" in {reference.role for reference in result.references}
+    assert result.outcome is CookPreparationOutcome.NEEDS_PLANNING
+    assert result.approved_scope_ref is not None
+    assert result.approved_scope_ref.role == "approved_scope"
+    assert result.approved_scope_ref.digest in {
+        reference.digest for reference in result.references if reference.role == "spec"
+    }
 
 
-def test_direct_spec_without_execution_holds_still_needs_approval(
+def test_direct_spec_without_execution_holds_reaches_planning(
     tmp_path: Path,
 ) -> None:
     """An absent `execution_holds` list must not gain a spurious hold."""
@@ -186,7 +191,7 @@ def test_direct_spec_without_execution_holds_still_needs_approval(
         explicit_kind=MoldCookInputKind.DIRECT_SPEC,
     )
 
-    assert result.outcome is CookPreparationOutcome.NEEDS_APPROVAL
+    assert result.outcome is CookPreparationOutcome.NEEDS_PLANNING
     assert result.holds == ()
 
 
@@ -646,7 +651,7 @@ def test_scope_round_previous_does_not_mis_fire_the_plan_guard(
         repository_root=tmp_path,
         artifact_root=root,
     )
-    assert scope_round.approval_kind is MoldCookApprovalKind.SCOPE
+    assert scope_round.outcome is CookPreparationOutcome.NEEDS_PLANNING
 
     carried = prepare(
         spec,
@@ -681,8 +686,8 @@ def test_scope_resubmission_without_host_coverage_advances(tmp_path: Path) -> No
         repository_root=tmp_path,
         artifact_root=root,
     )
-    assert first.outcome is CookPreparationOutcome.NEEDS_APPROVAL
-    assert first.approval_kind is MoldCookApprovalKind.SCOPE
+    assert first.outcome is CookPreparationOutcome.NEEDS_PLANNING
+    assert first.approved_scope_ref is not None
 
     resubmitted = prepare(
         spec,
@@ -693,6 +698,84 @@ def test_scope_resubmission_without_host_coverage_advances(tmp_path: Path) -> No
     )
 
     assert resubmitted.outcome is CookPreparationOutcome.NEEDS_PLANNING
+
+
+def test_old_full_scope_wait_resubmits_without_a_new_reply(tmp_path: Path) -> None:
+    root = tmp_path / "old-scope-wait"
+    spec = _landing_spec(root)
+    first = prepare(
+        spec,
+        request_id="cook-request",
+        repository_root=tmp_path,
+        artifact_root=root,
+    )
+    coverage = MoldCookCoverage(curd_ids=("root",))
+    proposal = canonical_mold_cook_proposal(
+        request_id="cook-request",
+        kind=MoldCookApprovalKind.SCOPE,
+        spec_digest=_digest(spec.read_bytes()),
+        coverage=coverage,
+    )
+    proposal_ref = _write_artifact(
+        root,
+        proposal,
+        artifact_id="old-scope-proposal",
+        role="proposal",
+        filename="old-scope-proposal.json",
+    )
+    old_wait = attrs.evolve(
+        first,
+        outcome=CookPreparationOutcome.NEEDS_APPROVAL,
+        references=(*first.references, proposal_ref),
+        approved_scope_ref=None,
+        planner_request=None,
+        approval_kind=MoldCookApprovalKind.SCOPE,
+        proposal_ref=proposal_ref,
+        proposal_digest=proposal_ref.digest,
+        missing_decision="explicit scope approval",
+    )
+
+    resumed = pipeline.resubmit(
+        old_wait,
+        source=spec,
+        repository_root=tmp_path,
+        artifact_root=root,
+    )
+    assert resumed.outcome is CookPreparationOutcome.NEEDS_PLANNING
+    assert resumed.approved_scope_ref is not None
+    assert resumed.approved_scope_ref.digest == _digest(spec.read_bytes())
+
+    _ = spec.write_text(spec.read_text(encoding="utf-8") + "\nChanged scope.\n")
+    changed = pipeline.resubmit(
+        old_wait,
+        source=spec,
+        repository_root=tmp_path,
+        artifact_root=root,
+    )
+    assert changed.outcome is CookPreparationOutcome.INVALID
+    assert b"changed the displayed scope proposal" in canonical_bytes(changed)
+
+
+def test_full_resubmission_rejects_changed_bound_spec(tmp_path: Path) -> None:
+    root = tmp_path / "changed-bound-spec"
+    spec = _landing_spec(root)
+    first = prepare(
+        spec,
+        request_id="cook-request",
+        repository_root=tmp_path,
+        artifact_root=root,
+    )
+    assert first.outcome is CookPreparationOutcome.NEEDS_PLANNING
+
+    _ = spec.write_text(spec.read_text(encoding="utf-8") + "\nChanged scope.\n")
+    changed = pipeline.resubmit(
+        first,
+        source=spec,
+        repository_root=tmp_path,
+        artifact_root=root,
+    )
+    assert changed.outcome is CookPreparationOutcome.INVALID
+    assert b"changed the bound spec" in canonical_bytes(changed)
 
 
 def test_response_source_may_name_the_response_uri(tmp_path: Path) -> None:

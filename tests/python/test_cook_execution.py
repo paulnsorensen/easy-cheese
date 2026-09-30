@@ -448,7 +448,7 @@ def _full_fixture(
     }
 
 
-def test_full_preparation_is_scope_first_and_reuses_unchanged_approval(
+def test_full_preparation_skips_scope_gate_and_keeps_explicit_approval(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "scope-first"
@@ -460,7 +460,7 @@ def test_full_preparation_is_scope_first_and_reuses_unchanged_approval(
 
     def forbidden_planner(request: object) -> object:
         dispatches.append(request)
-        raise AssertionError("scope approval must precede planning")
+        raise AssertionError("planning still needs host planner output")
 
     before_scope = prepare(
         fixture["spec"],
@@ -469,7 +469,9 @@ def test_full_preparation_is_scope_first_and_reuses_unchanged_approval(
         artifact_root=root,
         evidence=PreparationEvidence(planner_dispatch=forbidden_planner),
     )
-    assert before_scope.outcome is CookPreparationOutcome.NEEDS_APPROVAL
+    assert before_scope.outcome is CookPreparationOutcome.NEEDS_PLANNING
+    assert before_scope.approved_scope_ref is not None
+    assert before_scope.approved_scope_ref.digest == fixture["spec_ref"].digest
     assert not dispatches
 
     after_scope = prepare(
@@ -518,6 +520,38 @@ def test_full_preparation_is_scope_first_and_reuses_unchanged_approval(
     assert ready.outcome is CookPreparationOutcome.READY
     assert resumed.outcome is CookPreparationOutcome.READY
     assert resumed.coverage == ready.coverage
+
+
+def test_full_plan_reaches_accepted_handoff_without_scope_approval(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "no-scope-approval"
+    fixture = _full_fixture(root, partial=False, coverage_ids=("root", "leaf"))
+    ready = prepare(
+        fixture["spec"],
+        request_id="cook-request",
+        repository_root=tmp_path,
+        artifact_root=root,
+        evidence=PreparationEvidence(
+            planner_result=fixture["planner"],
+            plan_approval=fixture["plan_approval_ref"],
+        ),
+    )
+
+    assert ready.outcome is CookPreparationOutcome.READY
+    assert ready.handoff_ref is not None
+    assert any(
+        ref.role == "approved_scope" and ref.digest == fixture["spec_ref"].digest
+        for ref in ready.references
+    )
+    accepted = contract_handlers.accept(
+        urlsplit(ready.handoff_ref.uri).path,
+        spec=str(fixture["spec"]),
+        artifact_root=str(root),
+    )
+    handoff = cast(dict[str, object], accepted["value"])
+    assert handoff["mode"] == "full"
+    assert handoff["coverage"] is not None
 
 
 def test_plan_approval_must_match_displayed_plan_proposal(

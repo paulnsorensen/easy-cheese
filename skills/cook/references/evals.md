@@ -5,16 +5,16 @@ Run these trace scenarios against a fresh OMP task agent in an isolated fixture 
 ## Canonical handoff reaches execution
 
 1. Give the agent a canonical Mold `HandoffPointer` and its retained artifacts.
-2. Supply scope, plan, and runner approvals as scripted host events.
+2. Supply plan and runner approvals as scripted host events. Full Cook needs no scope reply.
 3. Supply setup authorization before any package or browser setup.
 4. Require `skills/cook/scripts/cook.pyz prepare` or `resubmit` before `accept`.
 5. Capture the routed input kind, approval events, setup evidence, tool calls, and final artifact references.
 
 The trace passes only when preparation reports `ready`, the real consumer loads every reference, and execution produces the requested artifact.
 
-## Direct spec stays gated
+## Direct spec reaches planning without a scope reply
 
-Give the agent a strict spec with no approvals. Preparation must report `needs-approval`; the agent must not execute work. Supply each requested approval in a later scripted host event and require `resubmit` to forward it.
+Give the agent a strict Full spec with no approvals. Preparation must report `needs-planning`; the agent must not execute work. Supply planner output, then require plan approval through a later scripted host event. Reject changed scope on resubmission.
 
 ## User hold stays locked
 

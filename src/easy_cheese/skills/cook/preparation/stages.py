@@ -115,7 +115,7 @@ def stage_scope_approval(
     spec: SpecStage,
     resolved: ResolvedPreparationSource,
 ) -> CookPreparationResult | ArtifactRef | None:
-    """Bind explicit scope approval, or return the scope proposal round."""
+    """Bind explicit scope approval, or use the Full request's unchanged spec."""
 
     if resolved.legacy_mode:
         return None
@@ -136,6 +136,21 @@ def stage_scope_approval(
     # Round one displays these bytes and round two compares against them, so
     # both rounds must render the proposal the same way.
     displayed_proposal = spec.spec_raw if scope_envelope is None else scope_envelope
+    if ctx.evidence.scope_approval is None and request.mode is MoldCookMode.FULL:
+        check_previous_proposal(
+            ctx.previous,
+            kind=MoldCookApprovalKind.SCOPE,
+            expected_proposal=displayed_proposal,
+            artifacts=ctx.artifacts,
+        )
+        if ctx.previous is not None and any(
+            ref.role == "spec" and ref.digest != spec.spec_ref.digest
+            for ref in ctx.previous.references
+        ):
+            raise CookEvidenceError("resubmission changed the bound spec")
+        approved_scope_ref = attrs.evolve(spec.spec_ref, role="approved_scope")
+        refs.append(approved_scope_ref)
+        return approved_scope_ref
     if ctx.evidence.scope_approval is None:
         proposal_ref = persist_proposal(
             request,

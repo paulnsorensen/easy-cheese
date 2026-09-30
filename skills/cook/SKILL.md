@@ -284,7 +284,7 @@ Generated bundle command inventory: [`references/commands.md`](references/comman
 ## Mold-to-Cook ingress and preparation
 
 Classify and prepare every input before execution; only the standalone fast-path skips this step.
-A spec needs no strict Mold format and no Mold handoff, because Cook asks for each missing plan and approval.
+A spec needs no Mold format or handoff. Full Cook binds its unchanged scope and asks for plan approval.
 Only a freshly accepted `ready` Full handoff may reach `workflow.cook`.
 Follow [`references/fan-pathway.md`](references/fan-pathway.md) § Classified Mold-to-Cook ingress and § Preparation loop.
 Run the fresh-agent regression scenarios in [`references/evals.md`](references/evals.md) when this boundary changes.
