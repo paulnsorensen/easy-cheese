@@ -37,26 +37,18 @@ def test_fixture_agent_uses_harness_responses_and_writes_trace(tmp_path: Path) -
         "prepare",
         "approval_requested",
         "approval_recorded",
-        "prepare",
-        "approval_requested",
-        "approval_recorded",
         "plan_materialized",
         "handoff_published",
         "consumer_accept",
     ]
     assert report.mode == "full"
-    assert events[1]["outcome"] == "needs-approval"
-    assert events[1]["approval_kind"] == "scope"
-    assert events[3]["response"] == "approve"
+    assert events[1]["outcome"] == "needs-planning"
+    assert events[3]["response"] == "approved"
     assert events[3]["decision"] == "approved"
-    assert events[4]["returncode"] == 0
-    assert events[6]["response"] == "approved"
-    assert events[6]["decision"] == "approved"
-    assert events[7]["outcome"] == "ready"
-    assert events[9]["ready"] is True
+    assert events[4]["outcome"] == "ready"
+    assert events[6]["ready"] is True
     assert [event["tool"] for event in events if "tool" in event] == [
         "scripts/cook.pyz prepare",
-        "scripts/cook.pyz resubmit",
         "scripts/mold.pyz finalize",
         "scripts/cook.pyz accept",
     ]
@@ -70,7 +62,7 @@ def test_fixture_agent_uses_harness_responses_and_writes_trace(tmp_path: Path) -
     assert pointer_value["destination_phase"] == "cook"
 
 
-def test_refused_scope_response_holds_cook_and_writes_no_feature(
+def test_supplied_refused_scope_response_holds_cook_and_writes_no_feature(
     tmp_path: Path,
 ) -> None:
     repository = tmp_path / "repository"

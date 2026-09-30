@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -226,6 +229,52 @@ def test_documented_finalize_flow_reaches_cook_accept(
     assert (code, err) == (0, "")
 
 
+def test_full_cook_archive_plans_without_scope_reply(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path)
+    artifacts = tmp_path / "artifacts"
+    archive = Path(__file__).resolve().parents[2] / "skills/cook/scripts/cook.pyz"
+    roots = ["--repository-root", str(tmp_path), "--artifact-root", str(artifacts)]
+    environment = {"PATH": os.environ["PATH"], "HOME": str(tmp_path)}
+    prepared = subprocess.run(
+        [sys.executable, str(archive), "prepare", "--spec", str(spec), *roots],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert prepared.returncode == 0, prepared.stderr
+    first = cast(dict[str, object], json.loads(prepared.stdout))
+    assert first["outcome"] == "needs-planning"
+    assert first["approved_scope_ref"] is not None
+
+    previous = tmp_path / "previous.json"
+    _ = previous.write_text(prepared.stdout, encoding="utf-8")
+    planner = tmp_path / "planner.json"
+    _ = planner.write_bytes(canonical_bytes(make_planner_result()))
+    resumed = subprocess.run(
+        [
+            sys.executable,
+            str(archive),
+            "resubmit",
+            str(previous),
+            "--source",
+            str(spec),
+            *roots,
+            "--planner-result",
+            str(planner),
+        ],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert resumed.returncode == 0, resumed.stderr
+    second = cast(dict[str, object], json.loads(resumed.stdout))
+    assert (second["outcome"], second["approval_kind"]) == ("needs-approval", "plan")
+
+
 def test_direct_spec_scope_approval_advances_cook_preparation(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -237,8 +286,9 @@ def test_direct_spec_scope_approval_advances_cook_preparation(
         cook_commands.main, ["prepare", "--spec", str(spec), *roots], capsys
     )
     assert (code, err) == (0, "")
-    assert prepared["outcome"] == "needs-approval"
-    assert prepared["approval_kind"] == "scope"
+    assert prepared["outcome"] == "needs-planning"
+    scope_ref = cast(dict[str, object], prepared["approved_scope_ref"])
+    assert scope_ref["role"] == "approved_scope"
     prepared_path = tmp_path / "prepare.json"
     _ = prepared_path.write_text(json.dumps(prepared))
 

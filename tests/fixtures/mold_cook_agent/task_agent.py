@@ -51,11 +51,12 @@ responses = cast(object, json.loads(os.environ["MOLD_COOK_HARNESS_RESPONSES"]))
 if not isinstance(responses, Mapping):
     raise SystemExit("missing harness approval responses")
 response_map = cast(Mapping[str, object], responses)
-if not all(isinstance(response_map.get(name), str) for name in ("scope", "plan")):
-    raise SystemExit("missing harness approval responses")
-scope_response = cast(str, response_map["scope"])
+if not isinstance(response_map.get("plan"), str):
+    raise SystemExit("missing harness plan response")
+scope_response = response_map.get("scope")
+if scope_response is not None and not isinstance(scope_response, str):
+    raise SystemExit("invalid harness scope response")
 plan_response = cast(str, response_map["plan"])
-scope_decision = response_decision(scope_response)
 plan_decision = response_decision(plan_response)
 
 repository = Path(os.environ["MOLD_COOK_FIXTURE_REPOSITORY"])
@@ -78,87 +79,87 @@ prepare, prepare_code = _call(
     "--artifact-root",
     str(artifacts),
 )
-if (
-    prepare.get("outcome") != "needs-approval"
-    or prepare.get("approval_kind") != "scope"
-):
-    raise SystemExit(f"Cook preparation did not request scope approval: {prepare}")
+if prepare.get("outcome") != "needs-planning":
+    raise SystemExit(f"Cook preparation did not reach planning: {prepare}")
 request_id = prepare.get("request_id")
 if not isinstance(request_id, str):
     raise SystemExit("Cook preparation did not name a request id")
 
-scope_approval, _ = _call(
-    cook,
-    repository,
-    "approve",
-    str(spec),
-    "--artifact-root",
-    str(artifacts),
-    "--request-id",
-    request_id,
-    "--kind",
-    "scope",
-    "--response",
-    scope_response,
-    "--curd-id",
-    "curd-1",
-)
-prepare_path = repository / "prepare.json"
-_ = prepare_path.write_text(json.dumps(prepare), encoding="utf-8")
-scope_approval_path = Path(cast(str, scope_approval["approval_path"]))
-resubmitted, resubmit_code = _call(
-    cook,
-    repository,
-    "resubmit",
-    str(prepare_path),
-    "--source",
-    str(spec),
-    "--repository-root",
-    str(repository),
-    "--artifact-root",
-    str(artifacts),
-    "--scope-approval",
-    str(scope_approval_path),
-    check=False,
-)
-resubmit_outcome = str(resubmitted.get("outcome", "refused"))
 events: list[dict[str, object]] = [
     {"type": "input_classified", "input_kind": "direct_spec"},
     {
         "type": "prepare",
         "mode": "full",
         "outcome": prepare["outcome"],
-        "approval_kind": prepare["approval_kind"],
         "tool": "scripts/cook.pyz prepare",
         "returncode": prepare_code,
     },
-    {"type": "approval_requested", "kind": "scope"},
-    {
-        "type": "approval_recorded",
-        "kind": "scope",
-        "source": "harness",
-        "decision": scope_decision.value,
-        "response": scope_response,
-    },
-    {
-        "type": "prepare",
-        "mode": "full",
-        "outcome": resubmit_outcome,
-        "tool": "scripts/cook.pyz resubmit",
-        "returncode": resubmit_code,
-    },
 ]
 
-if scope_decision is not MoldCookApprovalDecision.APPROVED:
-    if resubmit_code != 0 or resubmit_outcome not in {"blocked", "invalid"}:
-        raise SystemExit(
-            f"Cook did not hold a refused scope approval: {resubmit_outcome}",
-        )
-    print(json.dumps({"scenario": "fixture-agent", "events": events}))
-    raise SystemExit(0)
-
-if resubmit_code != 0:
-    raise SystemExit("Cook refused the approved scope approval")
+if scope_response is not None:
+    scope_decision = response_decision(scope_response)
+    scope_approval, _ = _call(
+        cook,
+        repository,
+        "approve",
+        str(spec),
+        "--artifact-root",
+        str(artifacts),
+        "--request-id",
+        request_id,
+        "--kind",
+        "scope",
+        "--response",
+        scope_response,
+        "--curd-id",
+        "curd-1",
+    )
+    prepare_path = repository / "prepare.json"
+    _ = prepare_path.write_text(json.dumps(prepare), encoding="utf-8")
+    scope_approval_path = Path(cast(str, scope_approval["approval_path"]))
+    resubmitted, resubmit_code = _call(
+        cook,
+        repository,
+        "resubmit",
+        str(prepare_path),
+        "--source",
+        str(spec),
+        "--repository-root",
+        str(repository),
+        "--artifact-root",
+        str(artifacts),
+        "--scope-approval",
+        str(scope_approval_path),
+        check=False,
+    )
+    resubmit_outcome = str(resubmitted.get("outcome", "refused"))
+    events.extend(
+        [
+            {
+                "type": "approval_recorded",
+                "kind": "scope",
+                "source": "harness",
+                "decision": scope_decision.value,
+                "response": scope_response,
+            },
+            {
+                "type": "prepare",
+                "mode": "full",
+                "outcome": resubmit_outcome,
+                "tool": "scripts/cook.pyz resubmit",
+                "returncode": resubmit_code,
+            },
+        ]
+    )
+    if scope_decision is not MoldCookApprovalDecision.APPROVED:
+        if resubmit_code != 0 or resubmit_outcome not in {"blocked", "invalid"}:
+            raise SystemExit(
+                f"Cook did not hold a refused scope approval: {resubmit_outcome}",
+            )
+        print(json.dumps({"scenario": "fixture-agent", "events": events}))
+        raise SystemExit(0)
+    if resubmit_code != 0:
+        raise SystemExit("Cook refused the approved scope approval")
 
 planner_path = repository / "planner.json"
 plan_path = repository / "plan.json"

@@ -166,7 +166,7 @@ than only a helper function:
 
 - classify explicit mode before inference and reject malformed declared
   pointers/projections without task fallback;
-- return `needs-approval` before planning when scope evidence is absent;
+- plan Full work without another scope reply, but require bounded Light scope authority;
 - materialize a Full plan once, reuse unchanged approval, and renew it when
   coverage or the acknowledged remainder changes;
 - keep holds across every resubmission and permit execution only from `ready`;

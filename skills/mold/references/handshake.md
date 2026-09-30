@@ -6,7 +6,7 @@ Mold may save a draft spec without either key. A runnable Cook handoff requires 
 
 The user key shows intent to Cook the displayed scope or plan. Route selection is separate from Cook consent; picking a worktree or coder never grants execution on its own.
 
-Accept a literal reply of `approved`, `approve`, `yes`, `y`, `ok`, `lgtm`, `confirmed`, `cook it`, or `cook this` (case-insensitive, punctuation-trimmed). See `response_is_affirmative` in `src/easy_cheese/shared/mold_cook_handoff.py` for the exact set. A general approval of the design, `curdle`, `ship it`, silence, the user's original entry request, or a route label such as "Cook here in isolation" authorizes saving or a route choice only, not execution.
+Accept a literal reply of `approved`, `approve`, `yes`, `y`, `ok`, `lgtm`, `confirmed`, `cook it`, or `cook this` (case-insensitive, punctuation-trimmed). See `response_is_affirmative` in `src/easy_cheese/shared/mold_cook_handoff.py` for the exact set. A general approval of the design, `curdle`, `ship it`, silence, a Mold entry request, or a route label such as "Cook here in isolation" authorizes saving or a route choice only, not execution. A Full Cook request binds its unchanged scope, but does not approve the plan.
 
 Judge the key by intent and its displayed proposal. Do not infer execution consent from unrelated or ambiguous approval. Ask when the selected scope or Cook route is unclear. The approval record binds the user's literal response to the exact proposal.
 
