@@ -207,7 +207,7 @@ def test_split_and_join_are_marked_outside_the_continuity_contract() -> None:
     assert "commit no delta" in body
 
 def test_the_move_vocabulary_matches_the_schema_and_resume_preserves_flags() -> None:
-    """`NextMove` declares `cut`, so an authoritative record can carry it.
+    """Every `NextMove` the schema declares appears in the wheypoint prose.
 
     A record the schema accepts and the prose omits is a handoff no reader is
     told how to take. The behaviour side of this contract lives in
@@ -225,5 +225,5 @@ def test_the_move_vocabulary_matches_the_schema_and_resume_preserves_flags() -> 
     assert "GateReceipt" not in corpus
     for flag in ("mode:", "--auto", "--hard", "--open-pr", "--safe"):
         assert flag in corpus
-    assert "continue: press-corrective-cook" in corpus
-    assert "not a global Press-to-Cook dispatch" in corpus
+    assert "press-corrective-cook" not in corpus
+    assert "A Press finding hands off as a Cook correction" in corpus

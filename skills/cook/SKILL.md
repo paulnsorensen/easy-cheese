@@ -23,11 +23,9 @@ metadata: {dispatches-agents: true}
 Cook returns `next: mold` for a specification failure.
 A fan run also returns `next: mold` for a stalled remediation scope, a curd that does not pass, or partial coverage.
 
-A `red-required` gate disposition identifies behavior work.
-Run the inner RED → GREEN TDD loop against the approved spec before you change production code.
-A closed `not-applicable` disposition identifies non-behavior work.
-Use its implementation and verification path for the requested documentation, refactor, test, or appearance change.
-N/A does not remove requested work.
+Cook does not require a failing test first and does not load a gate receipt.
+For behavior work, write the test first where it fits; see `references/tdd-loop.md`.
+For documentation, refactor, test, or appearance work, change that surface and verify it directly.
 Use `correction = true` only for the active Press correction loop.
 Do not weaken an existing test.
 
@@ -74,19 +72,19 @@ Route the task to `/mold` if an ambiguity check fails.
 
 ## Flow
 
-1. **Contract** — Confirm behavior, non-goals, scope, gates, and applicability.
+1. **Contract** — Confirm behavior, non-goals, scope, and gates.
    Print the shape-check block from `../mold/references/shape-check.md` inside the Contract, or the line `shape check skipped: single-module change` per `shape-check.md` § When to skip. No block, no code.
    If `.cheese/glossary/<slug>.md` exists, use its canonical terms.
-2. **Implement** — Use inner RED → GREEN for behavior changes.
-   Use the requested non-behavior path for closed N/A work; change only the applicable surface.
+2. **Implement** — Write the test first where it fits; no gate requires it.
+   For non-behavior work, change only the applicable surface.
 3. **Validate** — Run the relevant quality gates again.
-   Read the complete gate output; for closed N/A, verify the requested non-behavior path.
+   Read the complete gate output; for non-behavior work, verify the requested path.
 4. **Taste-test** — Use a fresh-context review for multi-file or public-surface diffs.
    Otherwise use an inline review, limited to two rounds.
    Read `references/tdd-loop.md` for details.
 5. **Hand off** — Write the package report and slug.
    Route behavior work through `/press → /age → /cure`.
-   A closed N/A change has no adversarial contract for Press.
+   A non-behavior change has no adversarial contract for Press.
    Route it directly through `/age → /cure`.
 
 ## Fan pathway
@@ -188,8 +186,8 @@ In a fan run, read each phase's handoff slug file from disk.
 Do not infer the handoff from stdout.
 
 Set `next:` to the next runnable phase.
-Use `press` after red-required behavior work.
-Use `age` after closed N/A.
+Use `press` after behavior work.
+Use `age` after non-behavior work (documentation, refactor, appearance).
 Never publish `next: cook`; `needs-context` is a parent-owned same-phase retry.
 Use `mold` after a spec failure.
 Use `done` only at true completion.
@@ -225,7 +223,7 @@ Both menus retain **Checkpoint & stop** — `/wheypoint` and **Stop** — dispat
 Do not dispatch before selection.
 Run the selected command immediately.
 When the user invokes `--auto`, skip this gate.
-Take the route for the applicable disposition directly.
+Take the route for the change type directly.
 
 ## Auto mode
 
@@ -260,10 +258,9 @@ A terminal Age is publishable only with `next: done`.
 - Do not use `should`, `probably`, or `I think`.
 - State what the gate output shows.
 
-## Discipline
+## Guidance
 
-Iron Law, Red Flags, and the TDD Rationalization table are in [`references/cook-discipline.md`](references/cook-discipline.md).
-
+Write the test first where it fits; see [`references/tdd-loop.md`](references/tdd-loop.md). No gate enforces test-first order.
 ## Agent resolution
 
 Resolve through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
@@ -284,7 +281,7 @@ Generated bundle command inventory: [`references/commands.md`](references/comman
 ## Mold-to-Cook ingress and preparation
 
 Classify and prepare every input before execution; only the standalone fast-path skips this step.
-A spec needs no Mold format or handoff. Full Cook binds its unchanged scope and asks for plan approval.
+A spec needs no Mold format or handoff. Cook shows its scope or plan as information only.
 Only a freshly accepted `ready` Full handoff may reach `workflow.cook`.
 Follow [`references/fan-pathway.md`](references/fan-pathway.md) § Classified Mold-to-Cook ingress and § Preparation loop.
 Run the fresh-agent regression scenarios in [`references/evals.md`](references/evals.md) when this boundary changes.

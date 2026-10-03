@@ -16,9 +16,9 @@ Ceremony scales to the job. The Bounds pass picks one of three tiers from `refer
 3. **Dialogue** — consequential forks are the user's to pick. A fork is consequential per the leverage line in `../age/references/voice.md`. Every other fork is `[AGENT-DECIDED]`. Supply options, trade-offs, and evidence before you ask. Ground each critical claim through code, the [Validate Cycle](references/validate-cycle.md), or a [Prototype Cycle](references/prototype-cycle.md). Resolve every contradiction. Render the decision map after three consecutive fork questions, or on request.
 4. **Sketch** — For work across modules or with a new public interface, run `references/shape-check.md`. Bind identity and role nouns to code referents. Record the Placement block; no bodies.
 5. **Plan and validate** — run the fresh-context fork-coherence taste test with `python3 skills/mold/scripts/mold.pyz taste-test` and persist its digest-bound pass; a failure reopens only named forks, and the third failed verdict stops. Light with one expected curd needs no planner. Otherwise dispatch a typed `PlannerRequest`, validate its `PlannerResultWriterView` (one retry, then save without a runnable handoff), and normalize on the host. Show the semantic curds and waves before any Cook choice. See `references/curdle.md` § "Pre-approval typed planner dispatch".
-6. **Readiness check** — Before saving, the agent runs the coherence self-check and strict spec validation. Save a draft even when unresolved parent work remains; record each hold in the spec's `execution_holds:` frontmatter list, and finalize refuses ready while any entry remains. User approval is not a prerequisite for writing. Before Cook, require an explicit user selection of the exact scope and route. See `references/handshake.md` and `references/early-curds.md`.
+6. **Readiness check** — Before saving, the agent runs the coherence self-check and strict spec validation. Save a draft even when unresolved parent work remains; record each hold in the spec's `execution_holds:` frontmatter list, and finalize refuses ready while any entry remains. User approval is not a prerequisite for writing. Before Cook, require an explicit user selection of the scope and route. See `references/handshake.md` and `references/early-curds.md`.
 7. **Curdle** — Resolve the durable spec path: run `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` and read `path` from its JSON reply. Write the validated draft and read it back. Retain typed plan evidence and unresolved holds. Write local issue drafts and durable decisions; publish follow-ups only after their own approval. A concrete bounded curd may use `references/early-curds.md` now, while Mold continues shaping its parent. The resolved spec path is internal; Cook receives only a ready finalizer pointer after the user selects Cook.
-8. **Offer Cook or keep shaping** — after reconciliation, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md). A saved draft is not a handoff. If the user selects Cook, bind the exact scope or plan with `scripts/mold.pyz approve`, then run `scripts/mold.pyz finalize`. Dispatch only a ready pointer and the selected route. Otherwise keep shaping or stop without a Cook command.
+8. **Offer Cook or keep shaping** — after reconciliation, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md). A saved draft is not a handoff. If the user selects Cook, run `scripts/mold.pyz finalize`. Dispatch only a ready pointer and the selected route. Otherwise keep shaping or stop without a Cook command.
 
 Portability: [rules](../cheese/references/harness-portability.md). Slash commands are host renderings, not the control model.
 
@@ -41,7 +41,7 @@ Modes: references/modes.md. Evals: references/evals.md. Canvas: [review-canvas.m
 
 ## Agent-invoked mini-spec mode
 
-`/cheese`'s tier-1 escalation calls `/mold` after the call site passes all cook fast-path checks. The Quick tier enters the same mode without a write-approval turn. It produces a validated draft without design dialogue. Return the spec path, not a runnable pointer. After the spec validates, show it and ask one direct Cook question; bind the user's literal affirmative reply per [`references/handshake.md`](references/handshake.md) § User key. On that consent, finalize and dispatch only a ready pointer. Append `--hard` when the user passed it.
+`/cheese`'s tier-1 escalation calls `/mold` after the call site passes all cook fast-path checks. The Quick tier enters the same mode without a write-approval turn. It produces a validated draft without design dialogue. Return the spec path, not a runnable pointer. After the spec validates, show it and ask one direct Cook question. When the user selects Cook, finalize and dispatch only a ready pointer. Append `--hard` when the user passed it.
 
 The full coherence checklist does not run in this mode. The agent-introduced-scope check still runs implicitly. Every distinguishing noun must come from the user's input or tier-2 `/culture`/`/briesearch` synthesis. Never add one silently.
 
@@ -62,13 +62,13 @@ Mold-specific tools beyond source-code routing:
 
 ## Sub-agent context gate
 
-`/mold` owns the dialogue, contradictions, and approval state. Do not delegate these items. Delegate evidence-heavy code work to a fresh-context `explorer` and external research to a `researcher`. **Shape uses an explorer digest as input.** Record parent-context exploration as a degraded path. See `references/context-budget.md` for budgets and checkpoints.
+`/mold` owns the dialogue, contradictions, and save-approval state. Do not delegate these items. Delegate evidence-heavy code work to a fresh-context `explorer` and external research to a `researcher`. **Shape uses an explorer digest as input.** Record parent-context exploration as a degraded path. See `references/context-budget.md` for budgets and checkpoints.
 
 ### Gate graph
 
 `python3 skills/mold/scripts/mold.pyz gate-graph --render dot|svg|png|mermaid` renders one gate model. Image targets use Mermaid when Graphviz is unavailable. Tests keep gate nodes aligned with the handshake checklist. See `references/gate-graph.md`.
 
-### Gate applicability and Test Contracts
+### Spec provenance and Test Contracts
 
 Every Mold-produced spec carries a provenance marker in frontmatter:
 
@@ -76,29 +76,15 @@ Every Mold-produced spec carries a provenance marker in frontmatter:
 source: mold-handshake | agent-mini-spec | mold-curd-mini-spec
 ```
 
-Every spec declares `gate_applicability`:
-
-```yaml
-gate_applicability:
-  disposition: red-required | not-applicable
-  work_class: behavior | docs-only | refactor-only | test-only | appearance-only
-  ui_surface: browser | non-browser | not-applicable
-```
-
-`ui_surface` is required on the Mold production path: `browser` means every
-Test Contract names an existing browser/E2E interface and outer seam,
-`non-browser` is explicit and never inferred from prose, and `not-applicable`
-is required for closed non-behavior classes including appearance-only.
-`red-required` requires `behavior` plus a complete `## Test Contracts` table
-with one executable red row; `not-applicable` requires a closed class, a
-reason, and no contracts. Mold never infers applicability. Row-level rules:
-`references/curdle.md` § Test Contracts.
+A spec has no `disposition` field. `## Test Contracts` is optional: a spec may
+include it, and no gate requires it. Row-level rules: `references/curdle.md`
+§ Test Contracts.
 
 ### Fork taste gate
 
-`python3 skills/mold/scripts/mold.pyz taste-test` binds the verdict to draft SHA256 and each settled fork. Stale, partial, or blocked verdicts fail; a failure reopens only named forks, with two rounds. Approved `red-required` specs pass unchanged metadata and the published pointer to `/cook --auto`.
+`python3 skills/mold/scripts/mold.pyz taste-test` binds the verdict to draft SHA256 and each settled fork. Stale, partial, or blocked verdicts fail; a failure reopens only named forks, with two rounds. Approved specs pass unchanged metadata and the published pointer to `/cook --auto`.
 
-Each fork appears in Approach, Interface sketches, Acceptance, plus Test Contracts for `red-required`; none in `not-applicable` specs. Do not rename sections. Tag reflecting lines with fork id and run `taste-test --precheck` before dispatch. `goal` must survive verbatim in Problem statement (`goal-drift`); each `G-n` clause carries an Acceptance or disposition tag (`goal-coverage`). See `references/curdle.md` § Spec template and `references/gate-graph.md`.
+Each fork appears in Approach, Interface sketches, and Acceptance, plus Test Contracts when the draft has them. Do not rename sections. Tag reflecting lines with fork id and run `taste-test --precheck` before dispatch. `goal` must survive verbatim in Problem statement (`goal-drift`); each `G-n` clause carries an Acceptance or disposition tag (`goal-coverage`). See `references/curdle.md` § Spec template and `references/gate-graph.md`.
 
 ## Execution gate
 

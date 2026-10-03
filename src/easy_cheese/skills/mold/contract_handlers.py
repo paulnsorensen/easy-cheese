@@ -134,7 +134,6 @@ def _parse_enum(value: str, enum: type[_EnumT], label: str) -> _EnumT:
 def _finalize(
     spec: str,
     *,
-    approval: str | None = None,
     artifact_root: str,
     operation_id: str,
     request_id: str,
@@ -145,7 +144,7 @@ def _finalize(
     coverage: str | None = None,
     taste_result: str | None = None,
     ledger: str | None = None,
-    curdle_anyway: bool = False,
+    save_approved: bool = False,
 ) -> dict[str, object]:
     """Finalize a Mold spec and publish only a consumer-valid handoff.
 
@@ -153,8 +152,6 @@ def _finalize(
     ----------
     spec
         Path to the mold spec markdown file.
-    approval
-        Optional path to a JSON approval artifact.
     artifact_root
         Root directory for finalization artifacts.
     operation_id
@@ -175,8 +172,9 @@ def _finalize(
         Optional path to a fork taste verdict JSON artifact.
     ledger
         Optional path to a decision ledger JSON artifact.
-    curdle_anyway
-        Publish the handoff even when a taste gate would otherwise block it.
+    save_approved
+        The user approved saving the draft with unchecked coherence items.
+        The save stays not ready and publishes no pointer.
     """
     try:
         taste: object | None = (
@@ -192,7 +190,6 @@ def _finalize(
             request_id=request_id,
             input_kind=_parse_enum(input_kind, MoldCookInputKind, "input kind"),
             mode=_parse_enum(mode, MoldCookMode, "mode"),
-            approval=Path(approval) if approval is not None else None,
             planner_result=Path(planner_result) if planner_result is not None else None,
             plan=Path(plan) if plan is not None else None,
             proposed_coverage=Path(coverage) if coverage is not None else None,
@@ -200,7 +197,7 @@ def _finalize(
                 ForkTasteVerdict | Mapping[str, object] | Path | None, taste
             ),
             decision_ledger=ledger_data,
-            curdle_anyway=curdle_anyway,
+            save_approved=save_approved,
         )
     except (
         FinalizationError,

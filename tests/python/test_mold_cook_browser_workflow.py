@@ -24,26 +24,25 @@ from easy_cheese.skills.cook.preparation import (
     resubmit,
 )
 from easy_cheese.shared.mold_cook_handoff import (
+    accept_mold_cook_handoff,
     canonical_mold_cook_proposal,
     materialize_artifact_ref,
 )
-from easy_cheese_schemas import CurdPlan, canonical_bytes
+from easy_cheese_schemas import CurdPlan, MoldCookHandoff, canonical_bytes
 from easy_cheese_schemas.mold_cook import (
     MOLD_COOK_APPROVAL_SCHEMA_URI,
     CookPreparationOutcome,
     CookSetupAuthorization,
     MoldCookApprovalDecision,
-    MoldCookApprovalKind,
     MoldCookApprovalSource,
 )
 
 from tests.python.test_mold_cook_producer import (
     finalize_fixture,
-    make_approval,
     make_planner_result,
     make_spec,
 )
-from tests.python.mold_cook_helpers import bind_mold_cook_approval
+from tests.python.mold_cook_helpers import bind_mold_cook_runner_approval
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -105,22 +104,25 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
     )
     assert red.returncode == 0, red.stderr
     red_result = cast(dict[str, object], json.loads(red.stdout))
-    assert red_result["outcome"] == "needs-approval"
-    assert red_result["approval_kind"] == "scope"
+    assert red_result["outcome"] == "needs-planning"
     assert not (repository / "index.html").exists()
 
     planner = make_planner_result()
     plan = cast(CurdPlan, planner.plan)
-    plan_approval = make_approval(repository, spec, plan=planner)
     finalized = finalize_fixture(
         tmp_path=repository,
         spec_path=spec,
-        approval=plan_approval,
         planner=planner,
     )
     assert finalized.status == "ready"
     artifact_root = repository / "artifacts"
     pointer = artifact_root / "pointers" / "operation-1.json"
+    handoff = cast(
+        MoldCookHandoff,
+        accept_mold_cook_handoff(pointer, artifact_root=artifact_root).canonical.value,
+    )
+    spec_digest = handoff.spec_ref.digest
+    coverage = handoff.coverage
 
     outer = Path(__file__).resolve().parents[1] / "fixtures" / "mold_cook_browser"
     browser_fixture = repository / "tests" / "browser"
@@ -154,9 +156,8 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
     )
     runner_proposal = canonical_mold_cook_proposal(
         request_id="request-1",
-        kind=MoldCookApprovalKind.RUNNER,
-        spec_digest=plan_approval.spec_digest,
-        coverage=plan_approval.coverage,
+        spec_digest=spec_digest,
+        coverage=coverage,
         setup_authorization=authorization,
     )
     runner_proposal_path = artifact_root / "runner-proposal.json"
@@ -168,17 +169,16 @@ def test_outer_preparation_and_browser_interaction(tmp_path: Path) -> None:
         uri=runner_proposal_path.as_uri(),
         media_type="application/json",
     )
-    runner_approval = bind_mold_cook_approval(
+    runner_approval = bind_mold_cook_runner_approval(
         request_id="request-1",
-        kind=MoldCookApprovalKind.RUNNER,
         decision=MoldCookApprovalDecision.APPROVED,
         source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=plan_approval.spec_digest,
+        spec_digest=spec_digest,
         proposal_ref=runner_proposal_ref,
         response_ref=runner_response_ref,
         response_text=runner_response.decode(),
         response_source="runner-response.txt",
-        coverage=plan_approval.coverage,
+        coverage=coverage,
         setup_authorization=authorization,
     )
     runner_approval_content = canonical_bytes(runner_approval)

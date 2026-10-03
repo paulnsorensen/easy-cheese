@@ -1,22 +1,20 @@
-# The TDD loop: inner RED → implement → taste-test
+# The TDD loop: test first where it fits → implement → taste-test
 
-Cook uses a sequential TDD discipline. Each phase must have a clear exit before the next phase starts.
+TDD is recommended practice in Cook. No gate enforces it. Each phase should have a clear exit before the next phase starts.
 
-Closed `not-applicable` work routes requested docs/refactor/test/appearance work through its non-behavior implementation and verification path. N/A never means that requested work is not necessary.
+Docs, refactor, test, and appearance work uses its own implementation and verification path. It changes only the requested surface.
 
-## Inner TDD — failing tests first
+## Inner TDD — tests first where it fits
 
-When a change adds or modifies behavior, write an inner failing test before implementation. This test is Cook's vertical loop.
+When a change adds or modifies behavior, write the test before the implementation where it fits. This test is Cook's vertical loop.
 
-For behavior changes, only the inner TDD loop can modify production code. Closed N/A work must use its declared non-behavior implementation path. It can edit only the requested surface.
-
-If an inner test cannot fail for the expected reason, **stop and fix the test before implementing**. A test that passes against unimplemented code creates false-positive results.
+A test that passes against unimplemented code gives a false positive. Check that the test fails for the expected reason when that is cheap to do.
 
 ## Implement — minimal green
 
-For behavior work, make the smallest production change that makes the inner tests green.
+For behavior work, make the smallest production change that makes the tests green.
 
-For closed N/A work, make the requested docs/refactor/test/appearance change through its non-behavior path. Verify that path instead of replaying RED.
+For docs, refactor, test, or appearance work, make the requested change and verify it directly.
 
 **Implement must:**
 
@@ -159,9 +157,9 @@ Confirm every item that the package report asserts (`package-report.md` § Self-
 - [ ] Spec or acceptance criteria are clear.
 - [ ] The report documents every remaining risk and every skipped check.
 
-## Boundary-specific RED checks
+## Boundary-specific checks
 
-For Mold-to-Cook changes, the inner RED loop covers the consumer seam rather
+For Mold-to-Cook changes, the inner test loop covers the consumer seam rather
 than only a helper function:
 
 - classify explicit mode before inference and reject malformed declared

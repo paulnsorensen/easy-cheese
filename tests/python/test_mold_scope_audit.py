@@ -78,7 +78,7 @@ class TestOneTableOneConfirm:
         assert "the default destination stays non-goal only" in section
         assert "needs no approval to save" in section
 
-    def test_curdle_anyway_accepts_the_defaults(self) -> None:
+    def test_save_approved_accepts_the_defaults(self) -> None:
         body = _text(HANDSHAKE)
         assert "It accepts every other default." in body
         assert "explicit per-term approval" not in body

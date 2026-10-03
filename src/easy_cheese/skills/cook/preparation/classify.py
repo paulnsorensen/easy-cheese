@@ -33,7 +33,7 @@ _PROJECTION_MARKERS = frozenset(
     }
 )
 _HANDOFF_MARKERS = frozenset(
-    {"request_id", "input_kind", "mode", "spec_ref", "approval_ref", "coverage"}
+    {"request_id", "input_kind", "mode", "spec_ref", "coverage"}
 )
 
 

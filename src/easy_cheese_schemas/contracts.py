@@ -2663,25 +2663,6 @@ class CrossFieldRule:
     description: str
 
 
-class GateApplicabilityDisposition(str, Enum):
-    RED_REQUIRED = "red-required"
-    NOT_APPLICABLE = "not-applicable"
-
-
-class WorkClass(str, Enum):
-    BEHAVIOR = "behavior"
-    DOCS_ONLY = "docs-only"
-    REFACTOR_ONLY = "refactor-only"
-    TEST_ONLY = "test-only"
-    APPEARANCE_ONLY = "appearance-only"
-
-
-class UiSurface(str, Enum):
-    BROWSER = "browser"
-    NON_BROWSER = "non-browser"
-    NOT_APPLICABLE = "not-applicable"
-
-
 class LandingShape(str, Enum):
     """PR landing topology; values mirror ``pr_plan.PrShape`` by design.
 
@@ -2740,45 +2721,6 @@ class GroundingOutcome(str, Enum):
     HIT = "hit"
     MISS = "miss"
     UNAVAILABLE = "unavailable"
-
-
-@define(frozen=True)
-class GateApplicability:
-    disposition: GateApplicabilityDisposition = field(
-        validator=validators.instance_of(GateApplicabilityDisposition)
-    )
-    work_class: WorkClass = field(validator=validators.instance_of(WorkClass))
-    ui_surface: UiSurface = field(validator=validators.instance_of(UiSurface))
-    reason: str | None = field(default=None, validator=_optional_string)
-
-    @ui_surface.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_combination(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
-        if self.disposition is GateApplicabilityDisposition.RED_REQUIRED:
-            if self.work_class is not WorkClass.BEHAVIOR:
-                raise ValueError("red-required-work-class-must-be-behavior")
-            if value is UiSurface.NOT_APPLICABLE:
-                raise ValueError(
-                    "red-required-ui-surface-must-be-browser-or-non-browser"
-                )
-        else:
-            if self.work_class is WorkClass.BEHAVIOR:
-                raise ValueError(
-                    "not-applicable-work-class-must-be-closed-non-behavior"
-                )
-            if value is not UiSurface.NOT_APPLICABLE:
-                raise ValueError("not-applicable-ui-surface-must-be-not-applicable")
-
-    @reason.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_not_applicable_reason(
-        self, _attribute: _NamedAttribute, value: object
-    ) -> None:  # noqa: V103
-        if (
-            self.disposition is GateApplicabilityDisposition.NOT_APPLICABLE
-            and not value
-        ):
-            raise ValueError(
-                "gate_applicability.reason is required when disposition is not-applicable"
-            )
 
 
 def _landing_layers(
@@ -2931,9 +2873,6 @@ class MoldSpecFrontmatter:
     source: str = field(validator=_bounded_string)
     created: str = field(validator=_bounded_string)
     confidence: SpecConfidence = field(validator=validators.instance_of(SpecConfidence))
-    gate_applicability: GateApplicability = field(
-        validator=validators.instance_of(GateApplicability)
-    )
     gates_overridden: tuple[str, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_string_list()
     )
@@ -3043,11 +2982,6 @@ MOLD_SPEC_ENUMS: dict[str, tuple[str, ...]] = {
     "mode": tuple(mode.value for mode in TestContractMode),
     "grounding_probe": tuple(probe.value for probe in GroundingProbe),
     "grounding_outcome": tuple(outcome.value for outcome in GroundingOutcome),
-    "gate_applicability_disposition": tuple(
-        disposition.value for disposition in GateApplicabilityDisposition
-    ),
-    "work_class": tuple(work_class.value for work_class in WorkClass),
-    "ui_surface": tuple(ui_surface.value for ui_surface in UiSurface),
     "landing_shape": tuple(shape.value for shape in LandingShape),
     "per_layer_green": tuple(value.value for value in PerLayerGreen),
     "review_fixes": tuple(value.value for value in ReviewFixes),
@@ -3073,13 +3007,6 @@ MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
     CrossFieldRule(
         rule_id="delegation-digest-recorded",
         description="The Grounding table must record the explorer probe exactly once with non-empty evidence.",
-    ),
-    CrossFieldRule(
-        rule_id="not-applicable-closed-class",
-        description=(
-            "red-required requires Test Contracts; not-applicable forbids them "
-            "and requires a reason."
-        ),
     ),
     CrossFieldRule(
         rule_id="landing-closed-class",
@@ -3127,14 +3054,7 @@ class MoldSpecDocument:
     def _validate_ac_coverage(self, _attribute: _NamedAttribute, value: object) -> None:  # noqa: V103
         assert isinstance(value, tuple)
         rows = cast(tuple[TestContractRow, ...], value)
-        if (
-            self.frontmatter.gate_applicability.disposition
-            is GateApplicabilityDisposition.NOT_APPLICABLE
-        ):
-            if rows:
-                raise ValueError(
-                    "gate_applicability.disposition=not-applicable requires no Test Contracts rows"
-                )
+        if not rows:
             return
 
         counts: dict[str, int] = {}
@@ -4401,8 +4321,6 @@ __all__ = [
     "EvidenceKind",
     "EvidenceRef",
     "FixCostNow",
-    "GateApplicability",
-    "GateApplicabilityDisposition",
     "GroundingOutcome",
     "Landing",
     "LandingShape",
@@ -4459,9 +4377,7 @@ __all__ = [
     "TableRule",
     "TestContractMode",
     "TestContractRow",
-    "UiSurface",
     "UncertaintyScope",
-    "WorkClass",
     "WriterPayload",
     "WriterViewKind",
     "ArtifactLink",

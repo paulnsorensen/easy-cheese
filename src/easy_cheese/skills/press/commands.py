@@ -14,20 +14,6 @@ def _wheypoint_resolve(argv: list[str]) -> int:
     return main(argv)
 
 
-@bundle_command("press-route")
-def _press_route(argv: list[str]) -> int:
-    from easy_cheese.shared.fanout.press_route_cli import main
-
-    return main(argv)
-
-
-@bundle_command("press-telemetry")
-def _press_telemetry(argv: list[str]) -> int:
-    from easy_cheese.shared.fanout.press_telemetry_cli import main
-
-    return main(argv)
-
-
 @bundle_command("write-handoff-artifact")
 def _write_handoff_artifact(argv: list[str]) -> int:
     from easy_cheese.shared.write_handoff_artifact import main
@@ -43,13 +29,6 @@ COMMANDS = (
     derive_command(
         _write_handoff_artifact,
         "Write a handoff preamble plus optional body atomically; pass --grounded paths",
-    ),
-    derive_command(
-        _press_route,
-        "Return the Press action: continue, dispatch /age, or stop (JSON in, JSON out)",
-    ),
-    derive_command(
-        _press_telemetry, "Build the Press attempt telemetry record (JSON in, JSON out)"
     ),
 )
 

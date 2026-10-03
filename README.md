@@ -67,7 +67,7 @@ A Python-backed skill ships exactly one executable archive at `skills/<skill>/sc
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and a two-key handshake, with ceremony tiered to the size of the job (quick / light / full). |
 | `skills/culture/SKILL.md` | `/culture` | The agent's internal-thinking skill — invoked silently by `/cheese` and other workflow skills to model a problem before dispatching. Surfaces to the user only when they explicitly opted out of code writes ("no writes", "rubber-duck this"). Records the session's ideas, decisions, and info to the wiki (or tracked fallback files) and writes the `.cheese/notes/<slug>.md` handoff at session end; never code, specs, commits, or PRs. |
 | `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
-| `skills/cook/SKILL.md` | `/cook` | Single implementation orchestrator: runs a focused spec through one coder or fans an approved curd block through fresh-context phase agents. |
+| `skills/cook/SKILL.md` | `/cook` | Single implementation orchestrator: runs a focused spec through one coder or fans a file-disjoint curd block through fresh-context phase agents. |
 | `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
 | `skills/age/SKILL.md` | `/age` | Review diffs across twelve staff-engineer dimensions and produce a severity-grouped findings report. |
 | `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
@@ -125,7 +125,7 @@ Easy-cheese is intentionally a small surface. What that means in practice:
 
 - **Skills only.** The repository publishes no custom agents, commands, eta templates, or harness-specific bundles. `SKILL.md` defines each capability, and Python-backed skills include one committed self-contained `.pyz` archive.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. Source-code work follows the shared routing contract: prefer tilth when present, use equivalent native AST/LSP/anchored-edit backends when available, and report any precision loss from bounded fallbacks.
-- **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while approved file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
+- **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
 
 ## Python package

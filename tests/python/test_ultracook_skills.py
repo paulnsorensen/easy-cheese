@@ -302,13 +302,14 @@ def _mold_high_blast_handoff_menu() -> str:
 
 
 class TestMoldHighBlastHandoff:
-    def test_routes_high_blast_by_gate_disposition(self) -> None:
+    def test_routes_high_blast_by_work_type(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_high_blast_handoff_menu()
         assert "/cook --auto <pointer-path>" in body
         assert "fresh-context isolation" in menu.lower()
-        assert "Red-required behavior continues" in menu
-        assert "closed N/A skips Press" in menu
+        assert "Behavior work continues" in menu
+        assert "non-behavior work skips Press" in menu
+        assert "disposition" not in menu.lower()
 
     def test_offers_continue_flow(self) -> None:
         body = _skill_corpus("mold")
@@ -335,10 +336,11 @@ def _mold_low_medium_handoff_menu() -> str:
 
 
 class TestMoldLowMediumHandoff:
-    def test_routes_low_medium_by_gate_disposition(self) -> None:
+    def test_routes_low_medium_without_disposition(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_low_medium_handoff_menu()
-        assert "use the disposition-selected auto command" in body
+        assert "use the auto command" in body
+        assert "disposition-selected" not in body
         assert "**Implement the spec**" in menu
         assert "**Implement and auto-review**" in menu
 

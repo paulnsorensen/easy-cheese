@@ -32,9 +32,9 @@ from easy_cheese.shared.taste_test import (
     ApplicabilityError,
     TasteTestError,
     is_new_mold_spec,
-    parse_gate_applicability,
     parse_landing,
     read_spec_text,
+    typed_mold_document,
 )
 from easy_cheese_schemas.contracts import Landing, LandingShape, landing_mapping
 
@@ -110,24 +110,21 @@ def _read_spec(spec_path: Path) -> str:
         raise SpecReadError(f"could not read spec: {exc.strerror or exc}") from exc
 
 
+def _spec_document_warnings(body: str) -> list[str]:
+    """Report an invalid spec document as a sizing warning.
 
-def _gate_applicability_warnings(body: str) -> list[str]:
-    """Report a malformed ``gate_applicability`` block as a sizing warning.
-
-    Curd-count sizes work and never gates it, so a bad declaration changes no
+    Curd-count sizes work and never gates it, so a bad document changes no
     recommendation here.  Reporting it names the problem the finalize gate
     raises later, while the spec is still open.
     """
+    if not is_new_mold_spec(body):
+        return []
     try:
-        _ = parse_gate_applicability(body, require_ui_surface=True)
+        _ = typed_mold_document(body)
     except ApplicabilityError as exc:
-        if exc.problems == (
-            "gate-applicability-declaration-required",
-        ) and not is_new_mold_spec(body):
-            return []
-        return [f"gate-applicability:{problem}" for problem in exc.problems]
+        return [f"spec-document:{problem}" for problem in exc.problems]
     except TasteTestError as exc:
-        return [f"gate-applicability:{exc}"]
+        return [f"spec-document:{exc}"]
     return []
 
 
@@ -159,7 +156,7 @@ def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:
         "decomposable": candidate_curds >= PARALLEL_THRESHOLD,
         "recommended_skill": recommended,
         "landing": landing,
-        "warnings": _gate_applicability_warnings(body),
+        "warnings": _spec_document_warnings(body),
         "mode": mode,
         "rationale": rationale,
         "notes": [

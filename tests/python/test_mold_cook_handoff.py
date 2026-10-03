@@ -15,7 +15,6 @@ from easy_cheese_schemas.mold_cook import (
     CookSetupAuthorization,
     MoldCookApproval,
     MoldCookApprovalDecision,
-    MoldCookApprovalKind,
     MoldCookApprovalSource,
     MoldCookCoverage,
     MoldCookHandoff,
@@ -33,7 +32,7 @@ from easy_cheese.shared.mold_cook_handoff import (
     validate_mold_cook_handoff,
 )
 
-from tests.python.mold_cook_helpers import bind_mold_cook_approval
+from tests.python.mold_cook_helpers import bind_mold_cook_runner_approval
 
 SPEC_DIGEST = "sha256:" + ("a" * 64)
 
@@ -60,31 +59,36 @@ def _write_ref(
     )
 
 
-def _scope_approval(
+def _runner_approval(
     root: Path,
     *,
     response_text: str,
     response_ref: ArtifactRef,
     source: MoldCookApprovalSource = MoldCookApprovalSource.USER_RESPONSE,
+    decision: MoldCookApprovalDecision = MoldCookApprovalDecision.APPROVED,
 ) -> MoldCookApproval:
     coverage = MoldCookCoverage(curd_ids=["curd-1"])
+    setup_authorization = CookSetupAuthorization(
+        prerequisite_curd_id="setup",
+        allowed_paths=("src/",),
+        allowed_commands=("just build",),
+    )
     proposal_ref = _write_ref(
         root,
         canonical_mold_cook_proposal(
             request_id="request-1",
-            kind=MoldCookApprovalKind.SCOPE,
             spec_digest=SPEC_DIGEST,
             coverage=coverage,
+            setup_authorization=setup_authorization,
         ),
         artifact_id="proposal-1",
         role="proposal",
         filename="proposal.json",
         media_type="application/json",
     )
-    return bind_mold_cook_approval(
+    return bind_mold_cook_runner_approval(
         request_id="request-1",
-        kind=MoldCookApprovalKind.SCOPE,
-        decision=MoldCookApprovalDecision.APPROVED,
+        decision=decision,
         source=source,
         spec_digest=SPEC_DIGEST,
         proposal_ref=proposal_ref,
@@ -92,6 +96,7 @@ def _scope_approval(
         response_text=response_text,
         response_source=response_ref.artifact_id,
         coverage=coverage,
+        setup_authorization=setup_authorization,
     )
 
 
@@ -120,7 +125,7 @@ def test_validation_refuses_a_remote_artifact_scheme(tmp_path: Path) -> None:
         uri="https://example.invalid/response.txt",
         media_type="text/plain",
     )
-    approval = _scope_approval(
+    approval = _runner_approval(
         tmp_path, response_text="Approve", response_ref=response_ref
     )
 
@@ -128,47 +133,49 @@ def test_validation_refuses_a_remote_artifact_scheme(tmp_path: Path) -> None:
         _ = validate_mold_cook_approval(approval, tmp_path)
 
 
-@pytest.mark.parametrize(
-    "response_text", ["nope", "not yet", "hold off", "No.", "curdle", "ship it"]
-)
-def test_unrecognized_response_text_is_not_consent(
-    tmp_path: Path, response_text: str
-) -> None:
-    """Finding 3: only a recognized affirmative token approves."""
+def test_rejected_runner_approval_is_not_consent(tmp_path: Path) -> None:
+    """Only an approved decision validates; the response text never overrides it."""
 
     response_ref = _write_ref(
         tmp_path,
-        response_text.encode("utf-8"),
+        b"Approve",
         artifact_id="response-1",
         role="response",
         filename="response.txt",
         media_type="text/plain",
     )
-    approval = _scope_approval(
-        tmp_path, response_text=response_text, response_ref=response_ref
+    approval = _runner_approval(
+        tmp_path,
+        response_text="Approve",
+        response_ref=response_ref,
+        decision=MoldCookApprovalDecision.REJECTED,
     )
 
-    with pytest.raises(ContractValidationError, match="negative or unresolved"):
+    with pytest.raises(ContractValidationError, match="carries rejected response"):
         _ = validate_mold_cook_approval(approval, tmp_path)
 
 
-@pytest.mark.parametrize("affirmative", ["Approve", "approved", "yes", "LGTM.", "cook it", "cook this"])
-def test_recognized_affirmative_response_still_validates(
-    tmp_path: Path, affirmative: str
+def test_approved_runner_approval_requires_the_exact_response_text(
+    tmp_path: Path,
 ) -> None:
     response_ref = _write_ref(
         tmp_path,
-        affirmative.encode("utf-8"),
+        b"Approve",
         artifact_id="response-1",
         role="response",
         filename="response.txt",
         media_type="text/plain",
     )
-    approval = _scope_approval(
-        tmp_path, response_text=affirmative, response_ref=response_ref
+    approval = _runner_approval(
+        tmp_path, response_text="Approve", response_ref=response_ref
+    )
+    detached = _runner_approval(
+        tmp_path, response_text="Something else", response_ref=response_ref
     )
 
     assert validate_mold_cook_approval(approval, tmp_path) is approval
+    with pytest.raises(ContractValidationError, match="detached from response"):
+        _ = validate_mold_cook_approval(detached, tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -203,7 +210,7 @@ def test_dialogue_authorization_must_be_affirmative_and_explicit(
         filename="dialogue.json",
         media_type="application/json",
     )
-    approval = _scope_approval(
+    approval = _runner_approval(
         tmp_path,
         response_text="Approve",
         response_ref=response_ref,
@@ -231,7 +238,7 @@ def test_dialogue_that_names_its_cleared_holds_authorizes_execution(
         filename="dialogue.json",
         media_type="application/json",
     )
-    approval = _scope_approval(
+    approval = _runner_approval(
         tmp_path,
         response_text="Approve",
         response_ref=response_ref,
@@ -262,7 +269,6 @@ def test_runner_approval_is_bound_to_its_own_canonical_envelope(
         tmp_path,
         canonical_mold_cook_proposal(
             request_id="request-1",
-            kind=MoldCookApprovalKind.RUNNER,
             spec_digest=SPEC_DIGEST,
             coverage=coverage,
             setup_authorization=widened,
@@ -280,9 +286,8 @@ def test_runner_approval_is_bound_to_its_own_canonical_envelope(
         filename="response.txt",
         media_type="text/plain",
     )
-    approval = bind_mold_cook_approval(
+    approval = bind_mold_cook_runner_approval(
         request_id="request-1",
-        kind=MoldCookApprovalKind.RUNNER,
         decision=MoldCookApprovalDecision.APPROVED,
         source=MoldCookApprovalSource.USER_RESPONSE,
         spec_digest=SPEC_DIGEST,
@@ -305,81 +310,16 @@ def test_typed_mold_document_is_a_public_taste_test_export() -> None:
     assert taste_test.typed_mold_document is not None
 
 
-PLAN_DIGEST = "sha256:" + ("b" * 64)
-
-
-def _plan_approval(root: Path, *, proposal_bytes: bytes) -> MoldCookApproval:
-    coverage = MoldCookCoverage(curd_ids=["curd-1"])
-    proposal_ref = _write_ref(
-        root,
-        proposal_bytes,
-        artifact_id="plan-proposal-1",
-        role="proposal",
-        filename="plan-proposal.json",
-        media_type="application/json",
-    )
+def _default_approval(root: Path) -> MoldCookApproval:
     response_ref = _write_ref(
         root,
         b"Approve",
-        artifact_id="plan-response-1",
+        artifact_id="response-1",
         role="response",
-        filename="plan-response.txt",
+        filename="response.txt",
         media_type="text/plain",
     )
-    return bind_mold_cook_approval(
-        request_id="request-1",
-        kind=MoldCookApprovalKind.PLAN,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=SPEC_DIGEST,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source=response_ref.artifact_id,
-        coverage=coverage,
-        plan_digest=PLAN_DIGEST,
-    )
-
-
-def test_a_supplied_envelope_binds_a_plan_approval(tmp_path: Path) -> None:
-    """A plan approval cannot rebuild its envelope, so the caller supplies it."""
-
-    envelope = b'{"kind": "plan", "request_id": "request-1"}'
-    approval = _plan_approval(tmp_path, proposal_bytes=envelope)
-
-    assert (
-        validate_mold_cook_approval(approval, tmp_path, expected_proposal=envelope)
-        is approval
-    )
-
-
-def test_a_plan_approval_is_rejected_when_the_supplied_envelope_differs(
-    tmp_path: Path,
-) -> None:
-    """A supplied envelope binds every kind, including the plan kinds."""
-
-    approval = _plan_approval(
-        tmp_path, proposal_bytes=b'{"kind": "plan", "request_id": "request-1"}'
-    )
-
-    with pytest.raises(ContractValidationError, match="canonical envelope"):
-        _ = validate_mold_cook_approval(
-            approval,
-            tmp_path,
-            expected_proposal=b'{"kind": "plan", "request_id": "request-2"}',
-        )
-
-
-def test_a_plan_approval_stays_self_unbound_without_an_expected_envelope(
-    tmp_path: Path,
-) -> None:
-    """Omitting the envelope keeps the pre-existing self-bound kinds only."""
-
-    approval = _plan_approval(
-        tmp_path, proposal_bytes=b'{"kind": "plan", "request_id": "request-1"}'
-    )
-
-    assert validate_mold_cook_approval(approval, tmp_path) is approval
+    return _runner_approval(root, response_text="Approve", response_ref=response_ref)
 
 
 @pytest.mark.parametrize("shape", ["instance", "bytes", "mapping", "path"])
@@ -388,7 +328,7 @@ def test_resolve_contract_value_validates_every_producer_input_shape(
 ) -> None:
     """Finding 61: one seam types the four shapes a producer holds."""
 
-    approval = _plan_approval(tmp_path, proposal_bytes=b'{"kind": "plan"}')
+    approval = _default_approval(tmp_path)
     payload = canonical_bytes(approval)
     document = tmp_path / "approval.json"
     _ = document.write_bytes(payload)
@@ -416,7 +356,7 @@ def test_resolve_contract_value_reads_a_path_outside_the_artifact_root(
 ) -> None:
     """An operator names the contract path; the retention root does not bound it."""
 
-    approval = _plan_approval(tmp_path, proposal_bytes=b'{"kind": "plan"}')
+    approval = _default_approval(tmp_path)
     document = tmp_path / "approval.json"
     _ = document.write_bytes(canonical_bytes(approval))
     root = tmp_path / "artifacts"
@@ -430,7 +370,7 @@ def test_resolve_contract_value_refuses_a_symlinked_contract_path(
 ) -> None:
     """A symlink still cannot redirect the read to another file."""
 
-    approval = _plan_approval(tmp_path, proposal_bytes=b'{"kind": "plan"}')
+    approval = _default_approval(tmp_path)
     document = tmp_path / "approval.json"
     _ = document.write_bytes(canonical_bytes(approval))
     link = tmp_path / "link.json"

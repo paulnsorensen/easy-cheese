@@ -92,10 +92,10 @@ The verdict fails for a stale digest, missing reflection, contradiction, orphan,
 
 The ledger JSON may carry the pinned goal as a top-level `goal` string beside `forks`; a blank or non-string `goal` is a ledger error, `ledger-goal-empty`. The draft's goal section is the first heading, at any level, whose text after case-folding and punctuation stripping is exactly `Problem statement`, `Problem`, or `Goal`; a heading with extra words such as `## Goal alignment` or `## Problem statement (v2)` is not the goal section, and a later goal heading never overrides the first. That section must contain the pinned sentence unchanged, compared case- and whitespace-insensitively. A reworded or dropped goal fails as `goal-drift`. A missing or unrecognised goal heading fails as `missing-section:goal:problem`. A ledger without `goal` skips the check. This is the zoom-out gate: the goal the user pinned in the bounds pass is the goal the spec ships. The devil in the details changes Acceptance or an Interface sketch; cruft changes neither, and a fork that changes neither never reaches the user.
 
-The required reflection set depends on the disposition. A `red-required` draft requires Approach, Interface sketches, Acceptance, and Test Contracts. A `not-applicable` draft requires the first three reflections. The applicability gate prohibits Test Contracts in a `not-applicable` draft.
+Every draft must reflect Approach, Interface sketches, and Acceptance. A draft that includes Test Contracts must reflect them too.
 
-The lexical pre-check (`taste-test --precheck`) runs the deterministic sub-checks (section presence, fork-id or decision-text mention, goal drift, applicability) against the draft alone. It runs before the reviewer dispatch. It does not count toward the two correction rounds. The full `taste-test` with `--verdict` repeats the same checks on the digest-bound verdict.
+The lexical pre-check (`taste-test --precheck`) runs the deterministic sub-checks (section presence, fork-id or decision-text mention, goal drift) against the draft alone. It runs before the reviewer dispatch. It does not count toward the two correction rounds. The full `taste-test` with `--verdict` repeats the same checks on the digest-bound verdict.
 
 A third failure stops typed planning and a runnable Cook handoff. Mold may retain the blocked draft.
 
-Only a user-selected automatic route uses `/cook --auto <pointer path>`. It passes the published pointer and bound metadata without changes. This metadata includes applicability, contract, and taste data.
+Only a user-selected automatic route uses `/cook --auto <pointer path>`. It passes the published pointer and bound metadata without changes. This metadata includes contract and taste data.

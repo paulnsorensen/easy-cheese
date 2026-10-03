@@ -1,18 +1,10 @@
-# The two-key execution handshake
+# The execution handshake
 
-Mold may save a draft spec without either key. A runnable Cook handoff requires both keys. The user chooses the exact scope and route; the agent checks coherence. Neither key is optional for execution.
-
-## User key
-
-The user key shows intent to Cook the displayed scope or plan. Route selection is separate from Cook consent; picking a worktree or coder never grants execution on its own.
-
-Accept a literal reply of `approved`, `approve`, `yes`, `y`, `ok`, `lgtm`, `confirmed`, `cook it`, or `cook this` (case-insensitive, punctuation-trimmed). See `response_is_affirmative` in `src/easy_cheese/shared/mold_cook_handoff.py` for the exact set. A general approval of the design, `curdle`, `ship it`, silence, a Mold entry request, or a route label such as "Cook here in isolation" authorizes saving or a route choice only, not execution. A Full Cook request binds its unchanged scope, but does not approve the plan.
-
-Judge the key by intent and its displayed proposal. Do not infer execution consent from unrelated or ambiguous approval. Ask when the selected scope or Cook route is unclear. The approval record binds the user's literal response to the exact proposal.
+Mold may save a draft spec without the self-check. A runnable Cook handoff requires the agent coherence self-check. Mold shows the scope or plan as information only. The user picks the route and starts Cook; a Cook request asks for no further reply.
 
 ## Agent key — coherence self-check
 
-Print this checklist before a runnable handoff. Save a draft with named holds when a box is unresolved; write each unresolved hold into the spec's `execution_holds:` frontmatter list and remove it only when it is resolved. `curdle anyway` can save, but cannot waive execution readiness:
+Print this checklist before a runnable handoff. Save a draft with named holds when a box is unresolved; write each unresolved hold into the spec's `execution_holds:` frontmatter list and remove it only when it is resolved. User approval to save anyway can save, but cannot waive execution readiness:
 
 ```
 Coherence self-check before Cook handoff:
@@ -54,16 +46,9 @@ These are not soft suggestions. They hard-block a runnable handoff until address
 - **Agent-introduced scope:** every distinguishing noun in the spec must trace to a user-typed mention or carry an approved scope-audit row. See the full procedure in § Agent-introduced scope below. Curdle is the single chokepoint because downstream skills trust the resulting frontmatter and do not re-block.
 - **Entity-referent binding:** bind every identity noun to a code referent or mark it NEW ENTITY. Resolve each ALIAS; do not only note it. See the full procedure in § Entity-referent binding below.
 - **Non-goals audit:** every `Non-goals` bullet traces to a user-stated out-of-scope item or is marked `[AGENT-INTRODUCED]`. Full procedure in § Non-goals audit below.
-- **Goal coverage:** every `G-n` goal clause from the bounds pass is covered by an Acceptance criterion or carries an explicit disposition. At least half the clauses ship. The handshake prints the narrowing delta. `curdle anyway` does not waive this gate. Full procedure in § Goal coverage below.
+- **Goal coverage:** every `G-n` goal clause from the bounds pass is covered by an Acceptance criterion or carries an explicit disposition. At least half the clauses ship. The handshake prints the narrowing delta. Save approval does not waive this gate. Full procedure in § Goal coverage below.
 - **Fork taste test:** Require a fresh-context verdict before decomposition. Dispatch the verdict to a read-only `reviewer (taste-test)` at `default` / `medium`, resolved through `../../cheese/references/agent-resolution.md`. The verdict must match the draft SHA256. It must cover each settled consequential decision exactly once. It cannot contain contradictions, orphaned decisions, unsupported assumptions, or acceptance gaps. When the ledger pins a `goal`, the draft's Problem statement must contain it unchanged, compared case- and whitespace-insensitively, or the verdict fails as `goal-drift`. Hand the reviewer the ledger's `goal` and `goal_clauses` with the draft, so its Drift lens judges the spec against the original ask and not against the already-narrowed draft. Mold permits the initial verdict and two corrective rounds. A third failure stops the process. Before the reviewer dispatch, run `taste-test --precheck` on the draft and ledger. Fix every mechanical gap it reports; the pre-check consumes no correction round.
 - **Spec format gate:** Run `validate-spec --strict` on the draft before Curdle extracts it. The command must exit with status 0. Curdle writes only the current hardened format. It does not use the legacy read grace period.
-- **UI surface classification:** every Mold-produced spec carries a provenance
-  marker and an explicit `ui_surface` value under `gate_applicability`.
-  `browser` requires an existing browser/E2E interface and outer seam for every
-  Test Contract; `non-browser` is explicit and never inferred from prose;
-  closed non-behavior work, including appearance-only, uses
-  `not-applicable`. The taste and curd gates enforce this field without
-  changing legacy specs.
 
 ## Scope audit table
 
@@ -126,7 +111,7 @@ Procedure:
 3. **Run the check.** `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` fails `goal-coverage:G-n` for each clause with no tag in any of those four sections. It fails `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses are covered by Acceptance. Both codes also fail the digest-bound verdict.
 4. **Print the narrowing delta.** Before offering Cook, run `python3 skills/mold/scripts/mold.pyz taste-test --coverage --draft <draft> --ledger <ledger>` and print one line: `Original ask: G-1..G-n. This spec ships: <covered>. Deferred: <G-n (follow-up)>, <G-n (non-goal)>, <G-n (tbd)>.` The delta is the visible cut list. A spec with no deferred clause prints `Deferred: none`.
 5. **Respect the cap.** When `goal-coverage-cap` fires, the spec is a slice of the goal. Do not proceed. Put one fork to the user: **re-pin** the goal to the slice (the ledger `Goal:` line and clauses change through an explicit user fork), or **widen** the spec until at least half the clauses are covered. Never rename a slice as the whole.
-6. **No override.** `curdle anyway` accepts unchecked coherence items. It does not waive an uncovered clause or the cap, for the same reason it does not waive a leverage row: downstream skills trust the spec and never re-check.
+6. **No override.** Save approval accepts unchecked coherence items. It does not waive an uncovered clause or the cap, for the same reason it does not waive a leverage row: downstream skills trust the spec and never re-check.
 
 The disposition the spec records on each deferred clause feeds the scope audit table. A `non-goal` disposition enters as a `non-goal` row; a `follow-up` disposition enters as a `follow-up` row. Record the final disposition map in spec frontmatter as `goal_coverage: {G-1: covered, G-2: follow-up, ...}` so the paper trail survives downstream.
 
@@ -183,9 +168,11 @@ This gate is the referent-level sibling of Agent-introduced scope. That gate ask
 
 ## Override semantics
 
-`curdle anyway` permits one durable save when the agent coherence key is
-unchecked. It does not grant execution authority and does not disable later
-gates. Record the override and every unchecked item in the spec frontmatter.
+When coherence items are unchecked, ask the user for approval to save the draft
+anyway. Any clear affirmative reply works; no magic phrase is required. The
+approval permits one durable save. It does not grant execution authority and
+does not disable later gates. Record the override and every unchecked item in
+the spec frontmatter (`gates_overridden`).
 It accepts every other default.
 Finalization returns `saved-not-ready` with a preparation hold; it must not
 publish a pointer or an automatic Cook command until the requirements are
@@ -193,8 +180,8 @@ cleared through fresh approval. The override does not waive the scope-audit
 leverage rows, unresolved identity bindings, failed taste, stale references,
 invalid landing IDs, an uncovered `G-n` clause, the goal-coverage cap, or a
 user do-not-implement hold. Downstream skills trust the saved preparation
-result and never reinterpret the override as approval.
+result and never reinterpret the save approval as execution approval.
 
-## Why both keys
+## Why one key
 
-The user controls execution intent; the agent checks the design's coherence. Either one alone can dispatch the wrong work. Draft writing needs neither execution key.
+The agent checks the design's coherence, and it is the only execution gate. A Cook request from the user shows intent but cannot waive a failed check. Draft writing needs no execution key.

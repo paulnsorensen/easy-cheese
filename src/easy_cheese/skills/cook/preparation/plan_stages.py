@@ -1,4 +1,4 @@
-"""The planner, plan, approval, and runner stages of one preparation round."""
+"""The planner, plan, and runner stages of one preparation round."""
 
 from __future__ import annotations
 
@@ -21,30 +21,19 @@ from easy_cheese_schemas.mold_cook import (
     CookPreparationResult,
     CookRequirementKind,
     CookUnmetRequirement,
-    MoldCookApprovalKind,
     MoldCookCoverage,
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
-from easy_cheese.shared.mold_cook_handoff import canonical_mold_cook_proposal
 from easy_cheese.shared.workflow import plan as workflow_plan
 
 from ._types import (
-    ApprovedPlan,
     CookEvidenceError,
-    DependencyClosureError,
     MaterializedPlan,
     PreparationContext,
     ResolvedPreparationSource,
     SpecStage,
 )
-from .approval import (
-    approval_value,
-    build_planner_request,
-    check_approval,
-    check_previous_proposal,
-    coverage_for_plan,
-    persist_proposal,
-)
+from .approval import build_planner_request, check_plan_disposition
 from .evidence import load_contract, persist_bytes, persist_value, read_path
 from .outcomes import hold_result, publish_handoff, ready_result
 from .results import validate_preparation_result
@@ -213,117 +202,30 @@ def stage_plan_material(
             schema_uri=require_contract_version(CurdPlan).schema_uri,
         )
         refs.append(plan_ref)
+    check_plan_disposition(planner_value)
     return MaterializedPlan(
         planner_ref=planner_ref,
         plan=plan,
         plan_ref=plan_ref,
-        candidate_coverage=MoldCookCoverage(
+        coverage=MoldCookCoverage(
             curd_ids=tuple(curd.curd_id for curd in plan.curds),
             unresolved_work=planner_value.unresolved_work,
         ),
     )
 
 
-def stage_plan_approval(
-    ctx: PreparationContext,
-    spec: SpecStage,
-    planner_value: PlannerResult,
-    material: MaterializedPlan,
-    scope_ref: ArtifactRef | None,
-) -> ApprovedPlan | CookPreparationResult:
-    """Bind explicit plan approval, or return the plan proposal round."""
-
-    request = ctx.request
-    refs = ctx.refs
-    expected_kind = (
-        MoldCookApprovalKind.PARTIAL_PLAN
-        if planner_value.disposition is PlannerDisposition.PARTIAL
-        else MoldCookApprovalKind.PLAN
-    )
-    if ctx.evidence.plan_approval is None:
-        proposal_ref = persist_proposal(
-            request,
-            canonical_mold_cook_proposal(
-                request_id=request.request_id,
-                kind=expected_kind,
-                spec_digest=spec.spec_ref.digest,
-                coverage=material.candidate_coverage,
-                planner_result=planner_value,
-                plan_digest=material.plan.digest,
-            ),
-            artifact_id=f"{request.request_id}/plan-proposal",
-        )
-        references = (*refs, scope_ref) if scope_ref is not None else tuple(refs)
-        return validate_preparation_result(
-            CookPreparationResult(
-                contract_version=require_contract_version(CookPreparationResult),
-                request_id=request.request_id,
-                input_kind=ctx.classified.kind,
-                outcome=CookPreparationOutcome.NEEDS_APPROVAL,
-                references=tuple((*references, proposal_ref)),
-                approval_kind=expected_kind,
-                proposal_ref=proposal_ref,
-                proposal_digest=proposal_ref.digest,
-                missing_decision="explicit plan approval",
-            )
-        )
-    approval, approval_ref = approval_value(ctx.evidence.plan_approval, request=request)
-    expected_proposal = canonical_mold_cook_proposal(
-        request_id=request.request_id,
-        kind=expected_kind,
-        spec_digest=spec.spec_ref.digest,
-        coverage=approval.coverage,
-        planner_result=planner_value,
-        plan_digest=material.plan.digest,
-    )
-    check_previous_proposal(
-        ctx.previous,
-        kind=expected_kind,
-        expected_proposal=expected_proposal,
-        artifacts=ctx.artifacts,
-    )
-    check_approval(
-        approval,
-        approval_ref=approval_ref,
-        request=request,
-        spec_ref=spec.spec_ref,
-        expected=expected_kind,
-        expected_proposal=expected_proposal,
-    )
-    try:
-        coverage = coverage_for_plan(planner_value, material.plan, approval)
-    except DependencyClosureError:
-        planner_request = build_planner_request(
-            request,
-            "replan approval coverage with its required dependencies",
-            source_plan=planner_value,
-        )
-        return validate_preparation_result(
-            CookPreparationResult(
-                contract_version=require_contract_version(CookPreparationResult),
-                request_id=request.request_id,
-                input_kind=ctx.classified.kind,
-                outcome=CookPreparationOutcome.NEEDS_PLANNING,
-                references=tuple((*refs, approval_ref)),
-                approved_scope_ref=scope_ref,
-                planner_request=planner_request,
-            )
-        )
-    return ApprovedPlan(approval_ref=approval_ref, coverage=coverage)
 
 
 def stage_runner_setup(
     ctx: PreparationContext,
     spec: SpecStage,
     material: MaterializedPlan,
-    approved: ApprovedPlan,
 ) -> CookPreparationResult:
     """Apply runner setup and publish the handoff this round authorizes."""
 
     request = ctx.request
     classified = ctx.classified
     refs = ctx.refs
-    refs.append(approved.approval_ref)
     applied = apply_runner_setup(
         request,
         classified,
@@ -332,7 +234,7 @@ def stage_runner_setup(
         runner_approval=ctx.evidence.runner_approval,
         setup_evidence=ctx.evidence.setup_evidence,
         spec_ref=spec.spec_ref,
-        coverage=approved.coverage,
+        coverage=material.coverage,
         plan=material.plan,
         plan_ref=material.plan_ref,
     )
@@ -342,8 +244,7 @@ def stage_runner_setup(
         request,
         source=classified,
         spec_ref=spec.spec_ref,
-        approval_ref=approved.approval_ref,
-        coverage=approved.coverage,
+        coverage=material.coverage,
         planner_result_ref=material.planner_ref,
         plan_ref=material.plan_ref,
         taste_verdict_ref=(
@@ -356,5 +257,5 @@ def stage_runner_setup(
         setup_evidence_refs=applied.setup_evidence_refs,
     )
     return validate_preparation_result(
-        ready_result(request, classified, refs, handoff_ref, approved.coverage)
+        ready_result(request, classified, refs, handoff_ref, material.coverage)
     )

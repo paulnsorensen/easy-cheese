@@ -12,10 +12,9 @@ from easy_cheese_schemas import (
     canonical_bytes,
 )
 from easy_cheese_schemas.mold_cook import (
-    MOLD_COOK_APPROVAL_SCHEMA_URI,
     MOLD_COOK_HANDOFF_SCHEMA_URI,
+    CookSetupAuthorization,
     MoldCookApprovalDecision,
-    MoldCookApprovalKind,
     MoldCookApprovalSource,
     MoldCookCoverage,
     MoldCookHandoff,
@@ -27,6 +26,7 @@ from easy_cheese.shared.mold_cook_handoff import (
     canonical_mold_cook_proposal,
     materialize_artifact_ref,
     publish_mold_cook_handoff,
+    validate_mold_cook_approval,
 )
 from easy_cheese.shared.publication import (
     PayloadDigestMismatchError,
@@ -34,7 +34,7 @@ from easy_cheese.shared.publication import (
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 
-from tests.python.mold_cook_helpers import bind_mold_cook_approval
+from tests.python.mold_cook_helpers import bind_mold_cook_runner_approval
 
 
 def _write_ref(
@@ -61,11 +61,7 @@ def _write_ref(
     )
 
 
-def _published_handoff(
-    root: Path,
-    *,
-    decision: MoldCookApprovalDecision = MoldCookApprovalDecision.APPROVED,
-) -> tuple[Path, MoldCookHandoff]:
+def _published_handoff(root: Path) -> tuple[Path, MoldCookHandoff]:
     spec_ref = _write_ref(
         root,
         (
@@ -77,48 +73,6 @@ def _published_handoff(
         media_type="text/markdown",
     )
     coverage = MoldCookCoverage(curd_ids=["curd-1"])
-    proposal_ref = _write_ref(
-        root,
-        canonical_mold_cook_proposal(
-            request_id="request-1",
-            kind=MoldCookApprovalKind.SCOPE,
-            spec_digest=spec_ref.digest,
-            coverage=coverage,
-        ),
-        artifact_id="proposal-1",
-        role="proposal",
-        filename="proposal.json",
-        media_type="application/json",
-    )
-    response_ref = _write_ref(
-        root,
-        b"Approve",
-        artifact_id="response-1",
-        role="response",
-        filename="response.txt",
-        media_type="text/plain",
-    )
-    approval = bind_mold_cook_approval(
-        request_id="request-1",
-        kind=MoldCookApprovalKind.SCOPE,
-        decision=decision,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_ref.digest,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=coverage,
-    )
-    approval_ref = _write_ref(
-        root,
-        approval,
-        artifact_id="approval-1",
-        role="approval",
-        filename="approval.json",
-        media_type="application/json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
     taste_verdict_ref = _write_ref(
         root,
         b'{"verdict":"pass"}',
@@ -147,7 +101,6 @@ def _published_handoff(
         input_kind=MoldCookInputKind.DIRECT_SPEC,
         mode=MoldCookMode.LIGHT,
         spec_ref=spec_ref,
-        approval_ref=approval_ref,
         coverage=coverage,
         taste_verdict_ref=taste_verdict_ref,
         taste_ledger_ref=taste_ledger_ref,
@@ -179,16 +132,6 @@ def test_publish_and_accept_preserve_canonical_handoff_identity(tmp_path: Path) 
     assert accepted.normalization_receipt is None
 
 
-def test_accept_rejects_stale_approval_reference(tmp_path: Path) -> None:
-    pointer_path, _ = _published_handoff(tmp_path)
-    approval_path = tmp_path / "approval.json"
-    _ = approval_path.write_bytes(
-        approval_path.read_bytes().replace(b"Approve", b"Reject!")
-    )
-
-    with pytest.raises(ContractValidationError, match="stale or corrupt"):
-        _ = accept_mold_cook_handoff(pointer_path, artifact_root=tmp_path)
-
 
 def test_accept_rejects_detached_pointer_payload(tmp_path: Path) -> None:
     pointer_path, _ = _published_handoff(tmp_path)
@@ -207,11 +150,50 @@ def test_accept_rejects_detached_pointer_payload(tmp_path: Path) -> None:
         _ = accept_mold_cook_handoff(pointer_path, artifact_root=tmp_path)
 
 
-def test_publish_rejects_approval_that_does_not_authorize_execution(
+def test_runner_approval_that_does_not_authorize_execution_is_rejected(
     tmp_path: Path,
 ) -> None:
+    coverage = MoldCookCoverage(curd_ids=["curd-1"])
+    spec_digest = "sha256:" + ("a" * 64)
+    setup_authorization = CookSetupAuthorization(
+        prerequisite_curd_id="curd-1",
+        allowed_paths=("tests/",),
+        allowed_commands=("python -m pytest tests/",),
+    )
+    proposal_ref = _write_ref(
+        tmp_path,
+        canonical_mold_cook_proposal(
+            request_id="request-1",
+            spec_digest=spec_digest,
+            coverage=coverage,
+            setup_authorization=setup_authorization,
+        ),
+        artifact_id="proposal-1",
+        role="proposal",
+        filename="proposal.json",
+        media_type="application/json",
+    )
+    response_ref = _write_ref(
+        tmp_path,
+        b"Reject",
+        artifact_id="response-1",
+        role="response",
+        filename="response.txt",
+        media_type="text/plain",
+    )
+
+    approval = bind_mold_cook_runner_approval(
+        request_id="request-1",
+        decision=MoldCookApprovalDecision.REJECTED,
+        source=MoldCookApprovalSource.USER_RESPONSE,
+        spec_digest=spec_digest,
+        proposal_ref=proposal_ref,
+        response_ref=response_ref,
+        response_text="Reject",
+        response_source="response.txt",
+        coverage=coverage,
+        setup_authorization=setup_authorization,
+    )
+
     with pytest.raises(ContractValidationError, match="rejected response"):
-        _ = _published_handoff(
-            tmp_path,
-            decision=MoldCookApprovalDecision.REJECTED,
-        )
+        _ = validate_mold_cook_approval(approval, tmp_path)

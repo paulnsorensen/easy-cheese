@@ -80,7 +80,7 @@ The runtime refuses an intent instead of dropping data.
 - It refuses an unknown key and names its path.
 - It refuses a first checkpoint that carries no entry and no notes.
 - It refuses `next: affinage` without a PR reference in `artifact`.
-- It refuses `next: cook` or `next: cut` without an `artifact`.
+- It refuses `next: cook` without an `artifact`.
 - It refuses text that matches a credential pattern and names the field.
 - It refuses an empty `artifact_links` or `remove_artifact_links` list.
 - It derives `status:` from the gating entries per the [handback contract](../cheese/references/handback-contract.md); no author sets it.
@@ -98,7 +98,7 @@ The `checkpoint` command writes the shared preamble at the top of the generated 
 
 ```markdown
 status: <canonical status field>
-next: mold | cut | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
+next: mold | cook | press | age | cure | affinage | briesearch | culture | hold | tasks | done
 artifact: <path, or PR#<n> / URL when next is affinage, else empty>
 <one-line orientation: where the session is and what is mid-flight>
 ```

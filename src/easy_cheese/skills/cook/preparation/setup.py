@@ -141,7 +141,6 @@ def validate_handoff_authority(
         raise CookEvidenceError("runner approval has no setup authorization")
     expected_proposal = canonical_mold_cook_proposal(
         request_id=handoff.request_id,
-        kind=MoldCookApprovalKind.RUNNER,
         spec_digest=handoff.spec_ref.digest,
         coverage=handoff.coverage,
         setup_authorization=authorization,
@@ -211,7 +210,6 @@ def apply_runner_setup(
             raise CookEvidenceError("runner approval lacks setup authorization")
         runner_proposal = canonical_mold_cook_proposal(
             request_id=authority_request.request_id,
-            kind=MoldCookApprovalKind.RUNNER,
             spec_digest=spec_ref.digest,
             coverage=coverage,
             setup_authorization=authorization,

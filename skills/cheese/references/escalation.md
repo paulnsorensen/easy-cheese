@@ -16,7 +16,7 @@ When zero triggers fire, invoke `/mold`'s agent mode to write a mini-specificati
 `/mold` owns that write target and resolves it through `artifact-path specs <slug>`.
 Never name a literal specification path for `/mold`.
 Return the spec; do not dispatch Cook yet.
-Dispatch Cook only after the user gives Cook consent per [`../../mold/references/handshake.md`](../../mold/references/handshake.md) § User key.
+Dispatch Cook only after the user selects Cook. The coherence self-check in [`../../mold/references/handshake.md`](../../mold/references/handshake.md) is the only execution gate.
 Dispatch Cook only when finalize returns a ready pointer.
 Dispatch the exact `command` that finalize prints.
 Do not rebuild it from the spec path or a bare slug.

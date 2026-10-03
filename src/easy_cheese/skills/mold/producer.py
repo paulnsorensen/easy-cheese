@@ -2,7 +2,7 @@
 
 The planner writer speaks in keys and envelopes.  This module is the host seam:
 it materializes the writer view once, joins the resulting authority with a
-strictly validated spec, explicit taste and approval evidence, and the spec's
+strictly validated spec, explicit taste evidence, and the spec's
 landing declaration, then publishes only a canonical ``MoldCookHandoff``.
 Incomplete work is represented as a blocked ``CookPreparationResult`` and is
 never converted into a runnable pointer.
@@ -31,22 +31,17 @@ from easy_cheese_schemas.contracts import (
     IdentityLineage,
     Landing,
     LandingShape,
-    PlannerDisposition,
     PlannerRequest,
     PlannerResult,
     PlannerResultWriterView,
 )
 from easy_cheese_schemas.mold_cook import (
-    MOLD_COOK_APPROVAL_SCHEMA_URI,
     CookExecutionHold,
     CookHoldKind,
     CookPreparationOutcome,
     CookPreparationResult,
     CookRequirementKind,
     CookUnmetRequirement,
-    MoldCookApproval,
-    MoldCookApprovalDecision,
-    MoldCookApprovalKind,
     MoldCookCoverage,
     MoldCookHandoff,
     MoldCookInputKind,
@@ -75,12 +70,10 @@ from easy_cheese.shared.artifacts import (
 from easy_cheese.shared.bounded_read import BoundedReadOverflow, read_bounded_file
 from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
 from easy_cheese.shared.mold_cook_handoff import (
-    canonical_mold_cook_proposal,
     evaluate_mold_cook_spec,
     materialize_artifact_ref,
     publish_mold_cook_handoff,
     resolve_contract_value,
-    validate_mold_cook_approval,
 )
 from easy_cheese.shared.publication import PublicationError, atomic_write
 from easy_cheese.shared.taste_test import (
@@ -106,7 +99,7 @@ class FinalizationError(ValueError):
 
 
 _ALLOWED_LIFECYCLES = frozenset({"draft", "approved", "approved-with-prerequisites"})
-_ALLOWED_OVERRIDE_KEYS = frozenset({"curdle_anyway"})
+_ALLOWED_OVERRIDE_KEYS = frozenset({"save_approved"})
 _REQUEST_DIRECTIVE_KEYS = frozenset(
     {"request_directive", "execution_directive", "whole_request_directive"}
 )
@@ -514,11 +507,10 @@ def _host_coverage(
     planner: PlannerResult | None,
     plan: CurdPlan | None,
 ) -> MoldCookCoverage | None:
-    """Return the coverage Mold proposes, never the coverage an approval carries.
+    """Return the coverage Mold proposes.
 
     An explicit host value wins.  Otherwise the canonical plan and its planner
-    result are the proposal, so the approval under test supplies only one side
-    of the coverage binding.
+    result are the proposal.
     """
 
     if proposed is not None:
@@ -575,14 +567,6 @@ def _blocked_outcome(
     result_path = _save_result(artifact_root, operation_id, output)
     output["result_path"] = str(result_path)
     return FinalizationOutcome(output)
-
-
-@dataclass(frozen=True)
-class _ApprovalEvidence:
-    """Typed approval and its retained artifact, when both are available."""
-
-    approval: MoldCookApproval | None
-    persisted: _Persisted | None
 
 
 @dataclass(frozen=True)
@@ -681,9 +665,9 @@ def _gate_gate_override(ledger: _GateLedger, frontmatter: _Frontmatter) -> None:
         _append_hold(
             holds,
             _hold(
-                "curdle-anyway",
+                "save-approved",
                 CookHoldKind.PREPARATION,
-                "curdle anyway saved this design with unchecked handshake items: "
+                "user approved saving this design with unchecked handshake items: "
                 + ", ".join(frontmatter.gates_overridden),
             ),
         )
@@ -727,17 +711,17 @@ def _gate_execution_holds(ledger: _GateLedger, frontmatter: _Frontmatter) -> Non
         )
 
 
-def _gate_curdle_anyway(ledger: _GateLedger, *, curdle_anyway: bool) -> None:
-    """Hold work saved through the curdle-anyway escape hatch."""
+def _gate_save_approved(ledger: _GateLedger, *, save_approved: bool) -> None:
+    """Hold work saved after the user approved saving with unchecked items."""
     requirements = ledger.requirements
     holds = ledger.holds
-    if curdle_anyway:
+    if save_approved:
         _append_hold(
             holds,
             _hold(
-                "curdle-anyway",
+                "save-approved",
                 CookHoldKind.PREPARATION,
-                "curdle anyway is save-only and never waives execution readiness",
+                "save approval is save-only and never waives execution readiness",
             ),
         )
         _append_requirement(
@@ -776,89 +760,6 @@ def _gate_user_directive(ledger: _GateLedger, frontmatter: _Frontmatter) -> None
             ),
         )
 
-
-def _gate_approval_evidence(
-    ledger: _GateLedger,
-    *,
-    approval: MoldCookApproval | Mapping[str, object] | Path | None,
-    artifact_root: Path,
-    request_id: str,
-    spec_digest: str,
-) -> _ApprovalEvidence:
-    """Load, retain, and bind explicit approval evidence.
-
-    Missing, unreadable, or unbound approval evidence is an unmet requirement,
-    never a raised error.
-    """
-    requirements = ledger.requirements
-    references = ledger.references
-    typed_approval: MoldCookApproval | None = None
-    approval_persisted: _Persisted | None = None
-    if approval is None:
-        _append_requirement(
-            requirements,
-            _requirement(
-                "approval-evidence",
-                CookRequirementKind.APPROVAL,
-                "explicit approval evidence is required before publication",
-            ),
-        )
-    else:
-        try:
-            typed_approval = _load_contract(approval, MoldCookApproval)
-            approval_persisted = _persist(
-                artifact_root,
-                value=typed_approval,
-                role="approval",
-                media_type="application/json",
-                schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-            )
-            references.append(approval_persisted.reference)
-        except (
-            FinalizationError,
-            ContractValidationError,
-            OSError,
-            TypeError,
-            ValueError,
-        ) as exc:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "approval-evidence",
-                    CookRequirementKind.APPROVAL,
-                    f"explicit approval evidence is missing, unreadable, or stale: {exc}",
-                ),
-            )
-
-    if typed_approval is not None:
-        if typed_approval.request_id != request_id:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "approval-request",
-                    CookRequirementKind.APPROVAL,
-                    "approval request identity does not match the finalization request",
-                ),
-            )
-        if typed_approval.spec_digest != spec_digest:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "approval-spec",
-                    CookRequirementKind.INTEGRITY,
-                    "approval is bound to a different spec digest",
-                ),
-            )
-        if typed_approval.decision is not MoldCookApprovalDecision.APPROVED:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "approval-decision",
-                    CookRequirementKind.APPROVAL,
-                    "only an explicit approved response can authorize execution",
-                ),
-            )
-    return _ApprovalEvidence(typed_approval, approval_persisted)
 
 
 def _gate_planner_artifacts(
@@ -1070,20 +971,6 @@ def _gate_landing(
     return readiness.landing or Landing(shape=LandingShape.SINGLE)
 
 
-def expected_plan_approval_kind(planner: PlannerResult) -> MoldCookApprovalKind:
-    """Name the approval kind one Full-tier planner disposition requires.
-
-    The shared seam owns the same test for Cook and for the handoff validator.
-    This copy stays in Mold until a wave may edit ``shared/`` and host one.
-    """
-
-    return (
-        MoldCookApprovalKind.PARTIAL_PLAN
-        if planner.disposition is PlannerDisposition.PARTIAL
-        else MoldCookApprovalKind.PLAN
-    )
-
-
 def _gate_host_coverage(
     ledger: _GateLedger,
     *,
@@ -1114,24 +1001,13 @@ def _gate_coverage(
     *,
     mode: MoldCookMode,
     coverage: MoldCookCoverage | None,
-    approval: _ApprovalEvidence,
     planner: _PlannerArtifacts,
     landing: Landing | None,
 ) -> None:
     """Check the host-proposed coverage against the tier and the plan."""
     requirements = ledger.requirements
-    typed_approval = approval.approval
     typed_planner = planner.planner
     typed_plan = planner.plan
-    if typed_approval is None:
-        _append_requirement(
-            requirements,
-            _requirement(
-                "scope-approval",
-                CookRequirementKind.SCOPE,
-                "approved scope coverage is required before finalization",
-            ),
-        )
     if coverage is None:
         _append_requirement(
             requirements,
@@ -1142,18 +1018,6 @@ def _gate_coverage(
             ),
         )
     elif mode is MoldCookMode.LIGHT:
-        if (
-            typed_approval is not None
-            and typed_approval.kind is not MoldCookApprovalKind.SCOPE
-        ):
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "scope-approval-kind",
-                    CookRequirementKind.SCOPE,
-                    "Light-tier work requires scope approval, not plan or status approval",
-                ),
-            )
         if len(coverage.curd_ids) != 1:
             _append_requirement(
                 requirements,
@@ -1173,16 +1037,6 @@ def _gate_coverage(
                 ),
             )
     elif typed_planner is not None and typed_plan is not None:
-        expected_kind = expected_plan_approval_kind(typed_planner)
-        if typed_approval is None or typed_approval.kind is not expected_kind:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "plan-approval-kind",
-                    CookRequirementKind.APPROVAL,
-                    f"Full-tier {typed_planner.disposition.value} work requires {expected_kind.value} approval",
-                ),
-            )
         if typed_planner.plan is None or canonical_bytes(
             typed_planner.plan
         ) != canonical_bytes(typed_plan):
@@ -1229,110 +1083,6 @@ def _gate_coverage(
         )
 
 
-def _gate_coverage_binding(
-    ledger: _GateLedger,
-    *,
-    approval: _ApprovalEvidence,
-    coverage: MoldCookCoverage | None,
-) -> None:
-    """Require the approved coverage to still equal the host proposal."""
-    requirements = ledger.requirements
-    typed_approval = approval.approval
-    if (
-        typed_approval is not None
-        and coverage is not None
-        and typed_approval.coverage != coverage
-    ):
-        _append_requirement(
-            requirements,
-            _requirement(
-                "coverage-binding",
-                CookRequirementKind.INTEGRITY,
-                "approval coverage changed during finalization",
-            ),
-        )
-
-
-def _gate_approval_envelope(
-    ledger: _GateLedger,
-    *,
-    mode: MoldCookMode,
-    request_id: str,
-    spec_digest: str,
-    coverage: MoldCookCoverage | None,
-    approval: _ApprovalEvidence,
-    planner: _PlannerArtifacts,
-    artifact_root: Path,
-) -> None:
-    """Bind the approval to the canonical proposal envelope and revalidate it."""
-    requirements = ledger.requirements
-    typed_approval = approval.approval
-    if typed_approval is None:
-        return
-    typed_planner = planner.planner
-    typed_plan = planner.plan
-    expected_proposal: bytes | None = None
-    if coverage is not None:
-        proposal_kind: MoldCookApprovalKind | None = None
-        proposal_planner: PlannerResult | None = None
-        proposal_plan_digest: str | None = None
-        if mode is MoldCookMode.LIGHT:
-            proposal_kind = MoldCookApprovalKind.SCOPE
-        elif typed_planner is not None and typed_plan is not None:
-            proposal_kind = expected_plan_approval_kind(typed_planner)
-            proposal_planner = typed_planner
-            proposal_plan_digest = typed_plan.digest
-        if proposal_kind is not None:
-            try:
-                expected_proposal = canonical_mold_cook_proposal(
-                    request_id=request_id,
-                    kind=proposal_kind,
-                    spec_digest=spec_digest,
-                    coverage=coverage,
-                    planner_result=proposal_planner,
-                    plan_digest=proposal_plan_digest,
-                )
-            except (ContractValidationError, TypeError, ValueError) as exc:
-                _append_requirement(
-                    requirements,
-                    _requirement(
-                        "approval-proposal",
-                        CookRequirementKind.INTEGRITY,
-                        f"canonical approval proposal could not be built: {exc}",
-                    ),
-                )
-            else:
-                expected_digest = (
-                    "sha256:" + hashlib.sha256(expected_proposal).hexdigest()
-                )
-                if typed_approval.proposal_digest != expected_digest:
-                    _append_requirement(
-                        requirements,
-                        _requirement(
-                            "approval-proposal",
-                            CookRequirementKind.INTEGRITY,
-                            "approval proposal is not the canonical envelope for this handoff",
-                        ),
-                    )
-    # The shared validator binds the PLAN and PARTIAL_PLAN kinds only when
-    # the host hands it the envelope those kinds cannot rebuild alone.
-    try:
-        _ = validate_mold_cook_approval(
-            typed_approval,
-            artifact_root=artifact_root,
-            expected_proposal=expected_proposal,
-        )
-    except (ContractValidationError, OSError, TypeError, ValueError) as exc:
-        _append_requirement(
-            requirements,
-            _requirement(
-                "approval-evidence",
-                CookRequirementKind.APPROVAL,
-                f"explicit approval evidence is missing, unreadable, or stale: {exc}",
-            ),
-        )
-
-
 def _finalize_publication(
     artifact_root: Path,
     operation_id: str,
@@ -1342,7 +1092,6 @@ def _finalize_publication(
     mode: MoldCookMode,
     spec_path: Path,
     spec_ref: ArtifactRef,
-    approval: _ApprovalEvidence,
     planner: _PlannerArtifacts,
     taste: _TasteEvidence,
     coverage: MoldCookCoverage | None,
@@ -1354,10 +1103,6 @@ def _finalize_publication(
     raises.  Only a failed publication degrades to a blocked saved result.
     """
     requirements = ledger.requirements
-    typed_approval = approval.approval
-    approval_persisted = approval.persisted
-    if typed_approval is None or approval_persisted is None:
-        raise FinalizationError("ready finalization requires approval evidence")
     planner_ref: ArtifactRef | None = None
     plan_ref: ArtifactRef | None = None
     if mode is MoldCookMode.FULL:
@@ -1387,7 +1132,6 @@ def _finalize_publication(
         input_kind=input_kind,
         mode=mode,
         spec_ref=spec_ref,
-        approval_ref=approval_persisted.reference,
         coverage=coverage,
         planner_result_ref=planner_ref,
         plan_ref=plan_ref,
@@ -1453,13 +1197,12 @@ def finalize_mold(
     request_id: str,
     input_kind: MoldCookInputKind = MoldCookInputKind.DIRECT_SPEC,
     mode: MoldCookMode = MoldCookMode.FULL,
-    approval: MoldCookApproval | Mapping[str, object] | Path | None = None,
     planner_result: PlannerResult | Mapping[str, object] | Path | None = None,
     plan: CurdPlan | Mapping[str, object] | Path | None = None,
     proposed_coverage: MoldCookCoverage | Mapping[str, object] | Path | None = None,
     taste_result: ForkTasteVerdict | Mapping[str, object] | Path | None = None,
     decision_ledger: object | None = None,
-    curdle_anyway: bool = False,
+    save_approved: bool = False,
     overrides: Mapping[str, object] | None = None,
 ) -> FinalizationOutcome:
     """Join all Mold authority checks and publish only a ready handoff.
@@ -1474,7 +1217,7 @@ def finalize_mold(
             raise FinalizationError(
                 "unknown finalization override(s): " + ", ".join(sorted(unknown))
             )
-        curdle_anyway = bool(overrides.get("curdle_anyway", curdle_anyway))
+        save_approved = bool(overrides.get("save_approved", save_approved))
     artifact_root = artifact_root.resolve()
     snapshot = _read_spec_snapshot(spec_path)
     frontmatter = snapshot.frontmatter
@@ -1489,15 +1232,8 @@ def finalize_mold(
     _gate_lifecycle(ledger, frontmatter)
     _gate_gate_override(ledger, frontmatter)
     _gate_execution_holds(ledger, frontmatter)
-    _gate_curdle_anyway(ledger, curdle_anyway=curdle_anyway)
+    _gate_save_approved(ledger, save_approved=save_approved)
     _gate_user_directive(ledger, frontmatter)
-    approval_evidence = _gate_approval_evidence(
-        ledger,
-        approval=approval,
-        artifact_root=artifact_root,
-        request_id=request_id,
-        spec_digest=spec_ref.digest,
-    )
     planner_artifacts = _gate_planner_artifacts(
         ledger,
         mode=mode,
@@ -1527,20 +1263,8 @@ def finalize_mold(
         ledger,
         mode=mode,
         coverage=coverage,
-        approval=approval_evidence,
         planner=planner_artifacts,
         landing=landing,
-    )
-    _gate_coverage_binding(ledger, approval=approval_evidence, coverage=coverage)
-    _gate_approval_envelope(
-        ledger,
-        mode=mode,
-        request_id=request_id,
-        spec_digest=spec_ref.digest,
-        coverage=coverage,
-        approval=approval_evidence,
-        planner=planner_artifacts,
-        artifact_root=artifact_root,
     )
 
     if ledger.blocked:
@@ -1560,7 +1284,6 @@ def finalize_mold(
         mode=mode,
         spec_path=spec_path,
         spec_ref=spec_ref,
-        approval=approval_evidence,
         planner=planner_artifacts,
         taste=taste_evidence,
         coverage=coverage,

@@ -86,7 +86,7 @@ __all__ = [
     "SetupEvidence",
     "SetupEvidenceExecutionError",
     "accept_mold_cook_handoff",
-    "bind_mold_cook_approval",
+    "bind_mold_cook_runner_approval",
     "canonical_mold_cook_proposal",
     "dialogue_authorizes_execution",
     "evaluate_mold_cook_spec",
@@ -95,7 +95,6 @@ __all__ = [
     "publish_mold_cook_handoff",
     "resolve_contract",
     "resolve_contract_value",
-    "response_is_affirmative",
     "validate_mold_cook_approval",
     "validate_mold_cook_handoff",
     "validate_mold_cook_setup_evidence",
@@ -359,50 +358,21 @@ def materialize_artifact_ref(
 def canonical_mold_cook_proposal(
     *,
     request_id: str,
-    kind: MoldCookApprovalKind,
     spec_digest: str,
     coverage: MoldCookCoverage,
-    planner_result: PlannerResult | None = None,
-    plan_digest: str | None = None,
-    setup_authorization: CookSetupAuthorization | None = None,
+    setup_authorization: CookSetupAuthorization,
 ) -> bytes:
-    """Render the one canonical proposal envelope for an approval kind."""
+    """Render the one canonical runner-setup proposal envelope."""
 
-    envelope: dict[str, object] = {
-        "kind": kind.value,
-        "request_id": request_id,
-        "spec_digest": spec_digest,
-        "coverage": coverage,
-    }
-    if kind is MoldCookApprovalKind.SCOPE:
-        if (
-            planner_result is not None
-            or plan_digest is not None
-            or setup_authorization is not None
-        ):
-            raise ValueError("scope proposal must not carry plan or runner authority")
-    elif kind in {MoldCookApprovalKind.PLAN, MoldCookApprovalKind.PARTIAL_PLAN}:
-        if setup_authorization is not None:
-            raise ValueError("plan proposal must not carry runner authority")
-        if planner_result is None or plan_digest is None or planner_result.plan is None:
-            raise ValueError(f"{kind.value} proposal requires a materialized plan")
-        if planner_result.plan.digest != plan_digest:
-            raise ValueError("proposal plan_digest does not match planner_result.plan")
-        envelope.update(
-            {
-                "plan_digest": plan_digest,
-                "planner_result": planner_result,
-            }
-        )
-    elif kind is MoldCookApprovalKind.RUNNER:
-        if planner_result is not None or plan_digest is not None:
-            raise ValueError("runner proposal must not carry planner authority")
-        if setup_authorization is None:
-            raise ValueError("runner proposal requires setup_authorization")
-        envelope["setup_authorization"] = setup_authorization
-    else:
-        raise ValueError(f"unsupported Mold-to-Cook proposal kind {kind.value!r}")
-    return canonical_bytes(envelope)
+    return canonical_bytes(
+        {
+            "kind": MoldCookApprovalKind.RUNNER.value,
+            "request_id": request_id,
+            "spec_digest": spec_digest,
+            "coverage": coverage,
+            "setup_authorization": setup_authorization,
+        }
+    )
 
 
 _LOCAL_ARTIFACT_SCHEMES = frozenset({"file", "repo"})
@@ -554,31 +524,9 @@ def _validate_proposal(
     return content
 
 
-_AFFIRMATIVE_RESPONSES = frozenset(
-    {
-        "approved",
-        "approve",
-        "yes",
-        "y",
-        "ok",
-        "lgtm",
-        "confirmed",
-        # Bind a direct Cook request to the displayed scope or plan.
-        "cook it",
-        "cook this",
-    }
-)
-
-
-def response_is_affirmative(response_text: str) -> bool:
-    normalized = response_text.strip().casefold().rstrip(" \t.!,;:")
-    return normalized in _AFFIRMATIVE_RESPONSES
-
-
-def bind_mold_cook_approval(
+def bind_mold_cook_runner_approval(
     *,
     request_id: str,
-    kind: MoldCookApprovalKind,
     decision: MoldCookApprovalDecision,
     source: MoldCookApprovalSource,
     spec_digest: str,
@@ -587,10 +535,9 @@ def bind_mold_cook_approval(
     response_text: str,
     response_source: str,
     coverage: MoldCookCoverage,
-    plan_digest: str | None = None,
-    setup_authorization: CookSetupAuthorization | None = None,
+    setup_authorization: CookSetupAuthorization,
 ) -> MoldCookApproval:
-    """Bind explicit response evidence to stable proposal and response refs."""
+    """Bind explicit runner-setup response evidence to stable proposal and response refs."""
 
     version = ContractVersion(
         schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
@@ -600,7 +547,7 @@ def bind_mold_cook_approval(
     return MoldCookApproval(
         contract_version=version,
         request_id=request_id,
-        kind=kind,
+        kind=MoldCookApprovalKind.RUNNER,
         decision=decision,
         source=source,
         spec_digest=spec_digest,
@@ -611,7 +558,6 @@ def bind_mold_cook_approval(
         response_text=response_text,
         response_source=response_source,
         coverage=coverage,
-        plan_digest=plan_digest,
         setup_authorization=setup_authorization,
     )
 
@@ -620,7 +566,8 @@ def host_scope_coverage(
     readiness: MoldCookSpecReadiness | None,
     planner_value: PlannerResult | None,
 ) -> MoldCookCoverage | None:
-    """Return the coverage Cook proposes for scope, never the approval's own.
+    """Return the coverage the host derives for the Cook handoff.
+
 
     A materialized plan is the strongest declaration of the work in hand; a
     spec that declares landing layers names its full coverage instead. A spec
@@ -664,9 +611,6 @@ def _validate_response(approval: MoldCookApproval, artifact_root: str | Path) ->
         raise ContractValidationError(
             f"{approval.kind.value} approval carries {approval.decision.value} response"
         )
-    if not response_is_affirmative(approval.response_text):
-        raise ContractValidationError("approval response is negative or unresolved")
-
     if approval.response_ref.role == "response":
         try:
             actual = content.decode("utf-8")
@@ -708,58 +652,33 @@ def _validate_response(approval: MoldCookApproval, artifact_root: str | Path) ->
     return content
 
 
-def _self_bound_proposal(approval: MoldCookApproval) -> bytes | None:
-    """Rebuild the canonical envelope an approval binds on its own fields.
+def _self_bound_proposal(approval: MoldCookApproval) -> bytes:
+    """Rebuild the canonical envelope a runner approval binds on its own fields."""
 
-    A plan approval names a plan digest but not the planner result that its
-    envelope carries, so only the handoff path can supply that envelope.
-    """
-
-    if approval.kind is MoldCookApprovalKind.SCOPE:
-        return canonical_mold_cook_proposal(
-            request_id=approval.request_id,
-            kind=approval.kind,
-            spec_digest=approval.spec_digest,
-            coverage=approval.coverage,
-        )
-    if approval.kind is MoldCookApprovalKind.RUNNER:
-        # `MoldCookApproval.__attrs_post_init__` (see
-        # `src/easy_cheese_schemas/mold_cook.py:479-481`) rejects a runner
-        # approval without a setup authorization, so it is never None here.
-        return canonical_mold_cook_proposal(
-            request_id=approval.request_id,
-            kind=approval.kind,
-            spec_digest=approval.spec_digest,
-            coverage=approval.coverage,
-            setup_authorization=approval.setup_authorization,
-        )
-    return None
+    # `MoldCookApproval.__attrs_post_init__` rejects an approval without a
+    # setup authorization, so it is never None here.
+    assert approval.setup_authorization is not None
+    return canonical_mold_cook_proposal(
+        request_id=approval.request_id,
+        spec_digest=approval.spec_digest,
+        coverage=approval.coverage,
+        setup_authorization=approval.setup_authorization,
+    )
 
 
 def validate_mold_cook_approval(
     approval: object,
     artifact_root: str | Path,
-    *,
-    expected_proposal: bytes | None = None,
 ) -> MoldCookApproval:
-    """Validate durable proposal/response evidence for one approval.
-
-    A supplied `expected_proposal` binds the approval to that canonical
-    envelope for every approval kind, including the plan kinds that cannot
-    rebuild their own envelope. Without it, only the self-bound kinds are
-    checked against an envelope.
-    """
+    """Validate durable proposal/response evidence for one runner approval."""
 
     if not isinstance(approval, MoldCookApproval):
         raise TypeError(
             f"validate_mold_cook_approval expects MoldCookApproval, not {type(approval).__name__}"
         )
-    expected = (
-        expected_proposal
-        if expected_proposal is not None
-        else _self_bound_proposal(approval)
+    _ = _validate_proposal(
+        approval, artifact_root, expected=_self_bound_proposal(approval)
     )
-    _ = _validate_proposal(approval, artifact_root, expected=expected)
     _ = _validate_response(approval, artifact_root)
     return approval
 
@@ -809,7 +728,6 @@ def _check_coverage_against_plan(
 def _validate_authority_refs(
     handoff: MoldCookHandoff,
     *,
-    approval: MoldCookApproval,
     artifact_root: str | Path,
     plan: CurdPlan | None,
 ) -> None:
@@ -846,10 +764,6 @@ def _validate_authority_refs(
         raise ContractValidationError("runner approval is bound to a different spec")
     if runner.coverage != handoff.coverage:
         raise ContractValidationError("runner approval coverage does not match handoff")
-    if approval.kind is MoldCookApprovalKind.RUNNER:
-        raise ContractValidationError(
-            "handoff approval and runner approval must be distinct"
-        )
     _ = validate_mold_cook_approval(runner, artifact_root)
     if handoff.setup_evidence_refs:
         if plan is None:
@@ -872,14 +786,12 @@ def _validate_authority_refs(
 
 def _validate_bound_evidence(
     handoff: MoldCookHandoff,
-    approval: MoldCookApproval,
     artifact_root: str | Path,
     *,
     spec_content: bytes,
     plan: CurdPlan | None = None,
-    planner: PlannerResult | None = None,
 ) -> None:
-    """Check the spec snapshot, the envelope, the response, and the authority."""
+    """Check the spec snapshot and the bound runner authority."""
 
     _ = evaluate_mold_cook_spec(
         spec_content,
@@ -888,19 +800,8 @@ def _validate_bound_evidence(
         taste_verdict_ref=handoff.taste_verdict_ref,
         taste_ledger_ref=handoff.taste_ledger_ref,
     )
-    expected = canonical_mold_cook_proposal(
-        request_id=handoff.request_id,
-        kind=approval.kind,
-        spec_digest=handoff.spec_ref.digest,
-        coverage=handoff.coverage,
-        planner_result=planner,
-        plan_digest=None if plan is None else plan.digest,
-    )
-    _ = _validate_proposal(approval, artifact_root, expected=expected)
-    _ = _validate_response(approval, artifact_root)
     _validate_authority_refs(
         handoff,
-        approval=approval,
         artifact_root=artifact_root,
         plan=plan,
     )
@@ -916,26 +817,8 @@ def validate_mold_cook_handoff(
             f"validate_mold_cook_handoff expects MoldCookHandoff, not {type(handoff).__name__}"
         )
     spec_content = _resolve_bytes(handoff.spec_ref, artifact_root)
-    approval_artifact = resolve_contract(
-        handoff.approval_ref, MoldCookApproval, artifact_root
-    )
-    approval = cast(MoldCookApproval, approval_artifact.value)
-    if approval.request_id != handoff.request_id:
-        raise ContractValidationError("approval request_id does not match handoff")
-    if approval.spec_digest != handoff.spec_ref.digest:
-        raise ContractValidationError("approval is bound to a different spec")
-    if approval.coverage != handoff.coverage:
-        raise ContractValidationError(
-            "approval coverage does not match handoff coverage"
-        )
 
     if handoff.mode is MoldCookMode.LIGHT:
-        if approval.kind is not MoldCookApprovalKind.SCOPE:
-            raise ContractValidationError("light handoff requires scope approval")
-        if approval.plan_digest is not None:
-            raise ContractValidationError(
-                "light handoff approval must not carry a plan digest"
-            )
         if handoff.planner_result_ref is not None or handoff.plan_ref is not None:
             raise ContractValidationError(
                 "light handoff must not reference planner artifacts"
@@ -946,7 +829,6 @@ def validate_mold_cook_handoff(
             )
         _validate_bound_evidence(
             handoff,
-            approval,
             artifact_root,
             spec_content=spec_content,
         )
@@ -968,25 +850,12 @@ def validate_mold_cook_handoff(
         )
     if canonical_bytes(planner.plan) != plan_artifact.canonical_bytes:
         raise ContractValidationError("planner and plan references are detached")
-    if approval.plan_digest != plan.digest:
-        raise ContractValidationError("approval is bound to a different plan")
-    expected_kind = (
-        MoldCookApprovalKind.PARTIAL_PLAN
-        if planner.disposition is PlannerDisposition.PARTIAL
-        else MoldCookApprovalKind.PLAN
-    )
-    if approval.kind is not expected_kind:
-        raise ContractValidationError(
-            f"full handoff requires {expected_kind.value} approval, got {approval.kind.value}"
-        )
     _check_coverage_against_plan(handoff.coverage, planner, plan)
     _validate_bound_evidence(
         handoff,
-        approval,
         artifact_root,
         spec_content=spec_content,
         plan=plan,
-        planner=planner,
     )
     return handoff
 

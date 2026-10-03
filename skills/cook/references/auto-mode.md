@@ -10,11 +10,11 @@ It defines the per-step chain, two-cure-pass cap enforcement, early-stop conditi
 
 `--auto` uses the same `cook(spec_ref, correction = false)` contract as manual Cook.
 
-For behavior work, Cook runs the inner RED → GREEN loop against the spec's test contracts.
+For behavior work, Cook writes tests against the spec's acceptance criteria where they fit.
 
-A closed `not-applicable` disposition routes the requested non-behavior change through its own verification path.
+For non-behavior work, Cook verifies the requested change through its own path.
 
-After inner TDD completes, Cook requires all inner tests and relevant gates to be GREEN before it invokes `/press`.
+Cook requires all tests and relevant gates to be GREEN before it invokes `/press`.
 
 When `correction = true`, Cook limits the scope to the active Press corrective loop.
 

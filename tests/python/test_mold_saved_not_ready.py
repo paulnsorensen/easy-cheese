@@ -6,10 +6,8 @@ from pathlib import Path
 from typing import cast
 
 from easy_cheese.skills.mold.producer import finalize_mold
-from easy_cheese_schemas.contracts import CurdPlan
 from easy_cheese_schemas.mold_cook import MoldCookMode
 
-from tests.python.test_mold_cook_producer import make_planner_result, make_spec
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "spec_format" / "valid_spec.md"
@@ -37,7 +35,6 @@ def test_incomplete_finalization_saves_a_blocked_preparation_result(
         operation_id="saved-1",
         request_id="saved-request-1",
         mode=MoldCookMode.LIGHT,
-        approval={},
     )
 
     assert outcome.status == "saved-not-ready"
@@ -55,29 +52,6 @@ def test_incomplete_finalization_saves_a_blocked_preparation_result(
     assert not (tmp_path / "artifacts" / "pointers" / "saved-1.json").exists()
 
 
-def test_full_tier_without_approval_still_names_the_plan_approval_kind(
-    tmp_path: Path,
-) -> None:
-    """An absent approval keeps the published requirement the plan needs."""
-    planner = make_planner_result()
-
-    outcome = finalize_mold(
-        make_spec(tmp_path),
-        artifact_root=tmp_path / "artifacts",
-        operation_id="saved-kind",
-        request_id="request-1",
-        mode=MoldCookMode.FULL,
-        planner_result=planner,
-        plan=cast(CurdPlan, planner.plan),
-    )
-
-    assert outcome.status == "saved-not-ready"
-    requirements = cast(Sequence[Mapping[str, object]], outcome.payload["requirements"])
-    assert "plan-approval-kind" in {
-        str(item["requirement_id"]) for item in requirements
-    }
-
-
 def test_save_only_override_and_user_hold_never_emit_a_pointer(tmp_path: Path) -> None:
     outcome = finalize_mold(
         _spec(tmp_path, do_not_implement=True),
@@ -85,14 +59,13 @@ def test_save_only_override_and_user_hold_never_emit_a_pointer(tmp_path: Path) -
         operation_id="saved-2",
         request_id="saved-request-2",
         mode=MoldCookMode.LIGHT,
-        approval={},
-        curdle_anyway=True,
+        save_approved=True,
     )
 
     assert outcome.status == "saved-not-ready"
     assert outcome.ready is False
     hold_rows = cast(Sequence[Mapping[str, object]], outcome.payload["holds"])
     hold_ids = {str(item["hold_id"]) for item in hold_rows}
-    assert {"curdle-anyway", "user-do-not-implement"} <= hold_ids
+    assert {"save-approved", "user-do-not-implement"} <= hold_ids
     assert "next" not in outcome.payload
     assert not (tmp_path / "artifacts" / "pointers" / "saved-2.json").exists()

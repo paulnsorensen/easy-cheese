@@ -92,9 +92,7 @@ from easy_cheese_schemas.mold_cook import (
     CookHoldKind,
     CookPreparationOutcome,
     CookSetupAuthorization,
-    MoldCookApproval,
     MoldCookApprovalDecision,
-    MoldCookApprovalKind,
     MoldCookApprovalSource,
     MoldCookCoverage,
     MoldCookHandoff,
@@ -103,7 +101,7 @@ from easy_cheese_schemas.mold_cook import (
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 
-from tests.python.mold_cook_helpers import bind_mold_cook_approval
+from tests.python.mold_cook_helpers import bind_mold_cook_runner_approval
 
 
 class ExecuteAcceptedHandoffKwargs(TypedDict):
@@ -123,12 +121,7 @@ class _FullFixture(TypedDict):
     handoff: MoldCookHandoff
     spec: Path
     spec_ref: ArtifactRef
-    scope_approval_ref: ArtifactRef
-    plan_approval_ref: ArtifactRef
-    proposal_ref: ArtifactRef
     response_ref: ArtifactRef
-    scope_approval: MoldCookApproval
-    plan_approval: MoldCookApproval
     taste_verdict_ref: ArtifactRef
     taste_ledger_ref: ArtifactRef
 
@@ -186,7 +179,6 @@ def _runner_approval_ref(
         root,
         canonical_mold_cook_proposal(
             request_id="cook-request",
-            kind=MoldCookApprovalKind.RUNNER,
             spec_digest=spec_ref.digest,
             coverage=coverage,
             setup_authorization=authorization,
@@ -195,9 +187,8 @@ def _runner_approval_ref(
         role="proposal",
         filename="runner-proposal.json",
     )
-    runner_approval = bind_mold_cook_approval(
+    runner_approval = bind_mold_cook_runner_approval(
         request_id="cook-request",
-        kind=MoldCookApprovalKind.RUNNER,
         decision=MoldCookApprovalDecision.APPROVED,
         source=MoldCookApprovalSource.USER_RESPONSE,
         spec_digest=spec_ref.digest,
@@ -240,10 +231,9 @@ def _curd(curd_id: str, *, dependencies: tuple[str, ...] = ()) -> SemanticCurd:
 def _full_fixture(
     root: Path,
     *,
-    coverage_ids: tuple[str, ...] = ("root",),
+    coverage_ids: tuple[str, ...] | None = None,
     partial: bool = True,
     curds: tuple[SemanticCurd, ...] | None = None,
-    scope_coverage_ids: tuple[str, ...] = ("root",),
 ) -> _FullFixture:
     root.mkdir(parents=True, exist_ok=True)
     spec_content = (
@@ -302,40 +292,12 @@ def _full_fixture(
         schema_uri="https://schemas.easy-cheese.dev/curd-plan",
     )
     coverage = MoldCookCoverage(
-        curd_ids=coverage_ids,
+        curd_ids=(
+            tuple(item.curd_id for item in curds)
+            if coverage_ids is None
+            else coverage_ids
+        ),
         unresolved_work=remainder,
-    )
-    scope_coverage = MoldCookCoverage(curd_ids=scope_coverage_ids)
-    scope_proposal_ref = _write_ref(
-        root,
-        canonical_mold_cook_proposal(
-            request_id="cook-request",
-            kind=MoldCookApprovalKind.SCOPE,
-            spec_digest=spec_ref.digest,
-            coverage=scope_coverage,
-        ),
-        artifact_id="scope-proposal",
-        role="proposal",
-        filename="scope-proposal.md",
-        media_type="text/markdown",
-    )
-    proposal_ref = _write_ref(
-        root,
-        canonical_mold_cook_proposal(
-            request_id="cook-request",
-            kind=(
-                MoldCookApprovalKind.PARTIAL_PLAN
-                if partial
-                else MoldCookApprovalKind.PLAN
-            ),
-            spec_digest=spec_ref.digest,
-            coverage=coverage,
-            planner_result=planner,
-            plan_digest=plan.digest,
-        ),
-        artifact_id="plan-proposal",
-        role="proposal",
-        filename="plan-proposal.json",
     )
     response_ref = _write_ref(
         root,
@@ -344,49 +306,6 @@ def _full_fixture(
         role="response",
         filename="response.txt",
         media_type="text/plain",
-    )
-    scope_approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=MoldCookApprovalKind.SCOPE,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_ref.digest,
-        proposal_ref=scope_proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=scope_coverage,
-    )
-    approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=(
-            MoldCookApprovalKind.PARTIAL_PLAN if partial else MoldCookApprovalKind.PLAN
-        ),
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_ref.digest,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=coverage,
-        plan_digest=plan.digest,
-    )
-    scope_approval_ref = _write_ref(
-        root,
-        scope_approval,
-        artifact_id="scope-approval",
-        role="approval",
-        filename="scope-approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
-    approval_ref = _write_ref(
-        root,
-        approval,
-        artifact_id="approval",
-        role="approval",
-        filename="approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
     )
     taste_verdict_ref = _write_ref(
         root,
@@ -410,7 +329,6 @@ def _full_fixture(
         input_kind=MoldCookInputKind.DIRECT_SPEC,
         mode=MoldCookMode.FULL,
         spec_ref=spec_ref,
-        approval_ref=approval_ref,
         coverage=coverage,
         planner_result_ref=planner_ref,
         plan_ref=plan_ref,
@@ -437,105 +355,69 @@ def _full_fixture(
         "handoff": handoff,
         "spec": root / "spec.md",
         "spec_ref": spec_ref,
-        "scope_approval_ref": scope_approval_ref,
-        "plan_approval_ref": approval_ref,
-        "proposal_ref": proposal_ref,
         "response_ref": response_ref,
-        "scope_approval": scope_approval,
-        "plan_approval": approval,
         "taste_verdict_ref": taste_verdict_ref,
         "taste_ledger_ref": taste_ledger_ref,
     }
 
 
-def test_full_preparation_skips_scope_gate_and_keeps_explicit_approval(
+def test_full_preparation_reaches_ready_without_approval_evidence(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "scope-first"
     fixture = _full_fixture(root)
     planner = fixture["planner"]
-    scope_approval = fixture["scope_approval_ref"]
-    plan_approval = fixture["plan_approval_ref"]
     dispatches: list[object] = []
 
     def forbidden_planner(request: object) -> object:
         dispatches.append(request)
         raise AssertionError("planning still needs host planner output")
 
-    before_scope = prepare(
+    before_plan = prepare(
         fixture["spec"],
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
         evidence=PreparationEvidence(planner_dispatch=forbidden_planner),
     )
-    assert before_scope.outcome is CookPreparationOutcome.NEEDS_PLANNING
-    assert before_scope.approved_scope_ref is not None
-    assert before_scope.approved_scope_ref.digest == fixture["spec_ref"].digest
+    assert before_plan.outcome is CookPreparationOutcome.NEEDS_PLANNING
+    assert before_plan.approved_scope_ref is not None
+    assert before_plan.approved_scope_ref.digest == fixture["spec_ref"].digest
     assert not dispatches
-
-    after_scope = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(scope_approval=scope_approval),
-    )
-    assert after_scope.outcome is CookPreparationOutcome.NEEDS_PLANNING
-
-    after_plan = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=scope_approval,
-            planner_result=planner,
-        ),
-    )
-    assert after_plan.outcome is CookPreparationOutcome.NEEDS_APPROVAL
 
     ready = prepare(
         fixture["spec"],
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=scope_approval,
-            planner_result=planner,
-            plan_approval=plan_approval,
-        ),
+        evidence=PreparationEvidence(planner_result=planner),
     )
     resumed = resubmit(
         ready,
         source=fixture["spec"],
         repository_root=tmp_path,
         artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=scope_approval,
-            planner_result=planner,
-            plan_approval=plan_approval,
-        ),
+        evidence=PreparationEvidence(planner_result=planner),
     )
     assert ready.outcome is CookPreparationOutcome.READY
+    assert ready.coverage == MoldCookCoverage(
+        curd_ids=("root", "leaf"), unresolved_work=planner.unresolved_work
+    )
     assert resumed.outcome is CookPreparationOutcome.READY
     assert resumed.coverage == ready.coverage
 
 
-def test_full_plan_reaches_accepted_handoff_without_scope_approval(
+def test_full_plan_reaches_accepted_handoff_without_approval_evidence(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "no-scope-approval"
-    fixture = _full_fixture(root, partial=False, coverage_ids=("root", "leaf"))
+    fixture = _full_fixture(root, partial=False)
     ready = prepare(
         fixture["spec"],
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        evidence=PreparationEvidence(
-            planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
-        ),
+        evidence=PreparationEvidence(planner_result=fixture["planner"]),
     )
 
     assert ready.outcome is CookPreparationOutcome.READY
@@ -552,74 +434,7 @@ def test_full_plan_reaches_accepted_handoff_without_scope_approval(
     handoff = cast(dict[str, object], accepted["value"])
     assert handoff["mode"] == "full"
     assert handoff["coverage"] is not None
-
-
-def test_plan_approval_must_match_displayed_plan_proposal(
-    tmp_path: Path,
-) -> None:
-    root = tmp_path / "detached-plan-approval"
-    fixture = _full_fixture(root)
-    scope_approval = fixture["scope_approval_ref"]
-    planner = fixture["planner"]
-
-    proposed = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
-            planner_result=planner,
-        ),
-    )
-    detached_proposal_ref = _write_ref(
-        root,
-        b'{"proposal":"detached"}',
-        artifact_id="detached-plan-proposal",
-        role="proposal",
-        filename="detached-plan-proposal.json",
-    )
-    approved = fixture["plan_approval"]
-    detached_approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=approved.kind,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=fixture["spec_ref"].digest,
-        proposal_ref=detached_proposal_ref,
-        response_ref=fixture["response_ref"],
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=approved.coverage,
-        plan_digest=fixture["plan"].digest,
-    )
-    assert proposed.outcome is CookPreparationOutcome.NEEDS_APPROVAL
-    assert proposed.proposal_digest is not None
-    assert detached_approval.proposal_digest != proposed.proposal_digest
-
-    detached_approval_ref = _write_ref(
-        root,
-        detached_approval,
-        artifact_id="detached-approval",
-        role="approval",
-        filename="detached-approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
-    detached = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=scope_approval,
-            planner_result=planner,
-            plan_approval=detached_approval_ref,
-        ),
-    )
-
-    assert detached.outcome is CookPreparationOutcome.INVALID
-    assert [item.code for item in detached.findings] == ["invalid-evidence"]
-    assert detached.handoff_ref is None
+    assert "approval_ref" not in handoff
 
 
 def _writer(context: Mapping[str, object]) -> CurdResultWriterView:
@@ -672,12 +487,11 @@ def test_execute_full_handoff_forwards_exact_coverage_and_keeps_remainder(
         evidence={"result.txt": evidence},
     )
 
-    assert result.completed_curds == ("root",)
+    assert result.completed_curds == ("root", "leaf")
     branches, curd_results = result.execution_results
     # Fan execution records phase artifacts in durable scope state.
     assert branches == ()
-    assert len(curd_results) == 1
-    assert curd_results[0].source_curd_ref.curd_id == "root"
+    assert [item.source_curd_ref.curd_id for item in curd_results] == ["root", "leaf"]
     planner = fixture["planner"]
     assert result.coverage.unresolved_work == planner.unresolved_work
     assert len(result.coverage.unresolved_work) == 1
@@ -693,7 +507,6 @@ def test_execute_light_handoff_stops_before_workflow(
         input_kind=MoldCookInputKind.DIRECT_SPEC,
         mode=MoldCookMode.LIGHT,
         spec_ref=fixture["spec_ref"],
-        approval_ref=fixture["scope_approval_ref"],
         coverage=MoldCookCoverage(curd_ids=("root",)),
         taste_verdict_ref=fixture["taste_verdict_ref"],
         taste_ledger_ref=fixture["taste_ledger_ref"],
@@ -736,10 +549,7 @@ def test_setup_authorization_requires_bounded_passing_evidence(tmp_path: Path) -
     plan = fixture["plan"]
     spec_ref = fixture["spec_ref"]
     response_ref = fixture["response_ref"]
-    coverage = MoldCookCoverage(
-        curd_ids=("root",),
-        unresolved_work=fixture["planner"].unresolved_work,
-    )
+    coverage = fixture["handoff"].coverage
     authorization = CookSetupAuthorization(
         prerequisite_curd_id="root",
         allowed_paths=("tests/",),
@@ -758,9 +568,7 @@ def test_setup_authorization_requires_bounded_passing_evidence(tmp_path: Path) -
         repository_root=tmp_path,
         artifact_root=root,
         evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
             planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
             runner_approval=runner_approval_ref,
         ),
     )
@@ -803,9 +611,7 @@ def test_setup_authorization_requires_bounded_passing_evidence(tmp_path: Path) -
         repository_root=tmp_path,
         artifact_root=root,
         evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
             planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
             runner_approval=runner_approval_ref,
             setup_evidence=retain_setup_evidence(
                 valid_evidence,
@@ -822,9 +628,7 @@ def test_setup_authorization_requires_bounded_passing_evidence(tmp_path: Path) -
         repository_root=tmp_path,
         artifact_root=root,
         evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
             planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
             runner_approval=runner_approval_ref,
             setup_evidence=retain_setup_evidence(
                 failed_evidence,
@@ -920,69 +724,6 @@ def test_execute_rejects_stale_pointer_before_workflow(
             dispatch_review=_review,
             dispatch_diagnosis=_diagnosis,
         )
-
-
-def test_partial_approval_omitting_dependency_returns_replan_request(
-    tmp_path: Path,
-) -> None:
-    fixture = _full_fixture(tmp_path / "partial", coverage_ids=("root",))
-    planner = fixture["planner"]
-    spec_ref = fixture["spec_ref"]
-    coverage = MoldCookCoverage(
-        curd_ids=("leaf",),
-        unresolved_work=planner.unresolved_work,
-    )
-    proposal_ref = _write_ref(
-        tmp_path / "partial",
-        canonical_mold_cook_proposal(
-            request_id="cook-request",
-            kind=MoldCookApprovalKind.PARTIAL_PLAN,
-            spec_digest=spec_ref.digest,
-            coverage=coverage,
-            planner_result=planner,
-            plan_digest=fixture["plan"].digest,
-        ),
-        artifact_id="invalid-partial-proposal",
-        role="proposal",
-        filename="invalid-partial-proposal.json",
-    )
-    response_ref = fixture["response_ref"]
-    bad_approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=MoldCookApprovalKind.PARTIAL_PLAN,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_ref.digest,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=coverage,
-        plan_digest=fixture["plan"].digest,
-    )
-    bad_approval_ref = _write_ref(
-        tmp_path / "partial",
-        bad_approval,
-        artifact_id="invalid-partial-approval",
-        role="approval",
-        filename="invalid-partial-approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
-    result = prepare(
-        fixture["spec"],
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "partial",
-        evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
-            planner_result=planner,
-            plan_approval=bad_approval_ref,
-        ),
-    )
-
-    assert result.outcome is CookPreparationOutcome.NEEDS_PLANNING
-    assert result.planner_request is not None
-    assert result.planner_request.kind.value == "replan"
 
 
 def test_resubmit_retains_existing_holds(tmp_path: Path) -> None:
@@ -1102,7 +843,7 @@ def test_resubmit_clears_hold_with_named_user_response(tmp_path: Path) -> None:
     assert second.outcome is CookPreparationOutcome.BLOCKED
 
 
-def test_resubmit_cli_forwards_approval_evidence(
+def test_resubmit_cli_forwards_runner_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1129,18 +870,12 @@ def test_resubmit_cli_forwards_approval_evidence(
         fake_load,
     )
     monkeypatch.setattr(contract_handlers, "run_resubmission", fake_resubmit)
-    scope = tmp_path / "scope.json"
-    plan = tmp_path / "plan.json"
     runner = tmp_path / "runner.json"
     authorization = tmp_path / "authorization.json"
 
     status = contract_handlers.resubmit_main(
         [
             str(tmp_path / "previous.json"),
-            "--scope-approval",
-            str(scope),
-            "--plan-approval",
-            str(plan),
             "--runner-approval",
             str(runner),
             "--setup-authorization",
@@ -1154,8 +889,6 @@ def test_resubmit_cli_forwards_approval_evidence(
     assert emitted["outcome"] == previous.outcome.value
     assert emitted["input_kind"] == MoldCookInputKind.TASK.value
     forwarded = cast(PreparationEvidence, captured["evidence"])
-    assert forwarded.scope_approval == scope
-    assert forwarded.plan_approval == plan
     assert forwarded.runner_approval == runner
     assert forwarded.setup_authorization == authorization
 
@@ -1208,10 +941,7 @@ def test_prepare_routes_runner_setup_through_the_shared_helper(
 ) -> None:
     root = tmp_path / "routed"
     fixture = _full_fixture(root)
-    coverage = MoldCookCoverage(
-        curd_ids=("root",),
-        unresolved_work=fixture["planner"].unresolved_work,
-    )
+    coverage = fixture["handoff"].coverage
     authorization = CookSetupAuthorization(
         prerequisite_curd_id="root",
         allowed_paths=("tests/",),
@@ -1239,9 +969,7 @@ def test_prepare_routes_runner_setup_through_the_shared_helper(
         repository_root=tmp_path,
         artifact_root=root,
         evidence=PreparationEvidence(
-            scope_approval=fixture["scope_approval_ref"],
             planner_result=fixture["planner"],
-            plan_approval=fixture["plan_approval_ref"],
             runner_approval=runner_approval_ref,
         ),
     )
@@ -2266,8 +1994,6 @@ def test_manifest_reload_separates_curd_named_postmerge_from_postmerge(
     root = tmp_path / "manifest"
     fixture = _full_fixture(
         root,
-        coverage_ids=("postmerge", "leaf"),
-        scope_coverage_ids=("root",),
         partial=False,
         curds=(_curd("postmerge"), _curd("leaf", dependencies=("postmerge",))),
     )

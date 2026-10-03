@@ -7,7 +7,6 @@ import inspect
 import shutil
 from pathlib import Path
 
-import attrs
 import pytest
 
 from easy_cheese_schemas import (
@@ -31,17 +30,12 @@ from easy_cheese_schemas.compat import (
     unregister_adapter,
 )
 from easy_cheese_schemas.mold_cook import (
-    MOLD_COOK_APPROVAL_SCHEMA_URI,
     CookPreparationOutcome,
     CookSetupAuthorization,
-    MoldCookApprovalDecision,
-    MoldCookApprovalKind,
-    MoldCookApprovalSource,
     MoldCookCoverage,
     MoldCookInputKind,
     MoldCookMode,
 )
-from easy_cheese.shared.mold_cook_handoff import canonical_mold_cook_proposal
 from easy_cheese.shared import paths
 from easy_cheese.skills.cook.preparation import (
     CookEvidenceError,
@@ -55,7 +49,6 @@ from easy_cheese.skills.cook.preparation import (
 )
 from easy_cheese.skills.cook.preparation import classify, pipeline, setup
 
-from tests.python.mold_cook_helpers import bind_mold_cook_approval
 from tests.python.test_cook_contract_accept import published_handoff
 
 
@@ -203,15 +196,15 @@ def test_direct_spec_without_execution_holds_reaches_planning(
     ],
     ids=["block", "flow"],
 )
-def test_direct_spec_execution_holds_block_before_scope_approval(
+def test_direct_spec_execution_holds_block_preparation(
     tmp_path: Path, declaration: str
 ) -> None:
     """A Mold draft's unresolved holds must survive the direct `/cook <spec>` path."""
     fixture = _SPEC_FIXTURE.read_text(encoding="utf-8")
-    assert "gate_applicability:\n" in fixture
+    assert fixture.startswith("---\n")
     spec_path = tmp_path / f"{_SPEC_SLUG}.md"
     _ = spec_path.write_text(
-        fixture.replace("gate_applicability:\n", declaration + "gate_applicability:\n", 1),
+        "---\n" + declaration + fixture[len("---\n") :],
         encoding="utf-8",
     )
 
@@ -474,175 +467,36 @@ def _landing_spec(root: Path) -> Path:
     return spec
 
 
-def _write_artifact(
-    root: Path,
-    content: bytes,
-    *,
-    artifact_id: str,
-    role: str,
-    filename: str,
-    media_type: str = "application/json",
-    schema_uri: str | None = None,
-) -> ArtifactRef:
-    root.mkdir(parents=True, exist_ok=True)
-    path = root / filename
-    _ = path.write_bytes(content)
-    return ArtifactRef(
-        artifact_id=artifact_id,
-        role=role,
-        uri=path.as_uri(),
-        digest=_digest(content),
-        size_bytes=len(content),
-        media_type=media_type,
-        schema_uri=schema_uri,
-    )
-
-
-def _approval_ref(
-    root: Path,
-    *,
-    kind: MoldCookApprovalKind,
-    spec_digest: str,
-    coverage: MoldCookCoverage,
-    proposal: bytes,
-    name: str,
-    plan_digest: str | None = None,
-    response_source: str | None = None,
-) -> ArtifactRef:
-    proposal_ref = _write_artifact(
-        root,
-        proposal,
-        artifact_id=f"{name}-proposal",
-        role="proposal",
-        filename=f"{name}-proposal.json",
-    )
-    response_ref = _write_artifact(
-        root,
-        b"Approve",
-        artifact_id=f"{name}-response",
-        role="response",
-        filename=f"{name}-response.txt",
-        media_type="text/plain",
-    )
-    approval = bind_mold_cook_approval(
-        request_id="cook-request",
-        kind=kind,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_digest,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source=(
-            f"{name}-response.txt" if response_source is None else response_source
-        ),
-        coverage=coverage,
-        plan_digest=plan_digest,
-    )
-    return _write_artifact(
-        root,
-        canonical_bytes(approval),
-        artifact_id=f"{name}-approval",
-        role="approval",
-        filename=f"{name}-approval.json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
-
-
-def _scope_approval_ref(
-    root: Path,
-    spec_digest: str,
-    curd_ids: tuple[str, ...],
-    response_source: str | None = None,
-) -> ArtifactRef:
-    coverage = MoldCookCoverage(curd_ids=curd_ids)
-    return _approval_ref(
-        root,
-        kind=MoldCookApprovalKind.SCOPE,
-        spec_digest=spec_digest,
-        coverage=coverage,
-        proposal=canonical_mold_cook_proposal(
-            request_id="cook-request",
-            kind=MoldCookApprovalKind.SCOPE,
-            spec_digest=spec_digest,
-            coverage=coverage,
-        ),
-        name="scope",
-        response_source=response_source,
-    )
-
-
-def test_scope_approval_cannot_widen_the_host_proposed_coverage(
+def test_full_spec_reaches_planning_without_approval_evidence(
     tmp_path: Path,
 ) -> None:
-    """Finding 31: the scope envelope binds Cook's coverage, not the approval's."""
-    root = tmp_path / "widened"
+    """Cook proceeds on invocation: a Full spec needs no scope approval."""
+    root = tmp_path / "no-approval"
     spec = _landing_spec(root)
-    widened = _scope_approval_ref(root, _digest(spec.read_bytes()), ("root", "extra"))
 
     result = prepare(
         spec,
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        evidence=PreparationEvidence(scope_approval=widened),
-    )
-
-    assert result.outcome is CookPreparationOutcome.INVALID
-    assert [item.code for item in result.findings] == ["invalid-evidence"]
-    assert b"canonical envelope" in canonical_bytes(result)
-
-
-def test_scope_approval_matching_the_host_proposal_is_accepted(
-    tmp_path: Path,
-) -> None:
-    """Finding 31: the declared landing coverage is the approvable scope."""
-    root = tmp_path / "matching"
-    spec = _landing_spec(root)
-    matching = _scope_approval_ref(root, _digest(spec.read_bytes()), ("root",))
-
-    result = prepare(
-        spec,
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(scope_approval=matching),
     )
 
     assert result.outcome is CookPreparationOutcome.NEEDS_PLANNING
+    assert result.approved_scope_ref is not None
+    assert result.approved_scope_ref.digest == _digest(spec.read_bytes())
+    assert result.planner_request is not None
 
 
-def test_scope_round_previous_does_not_mis_fire_the_plan_guard(
-    tmp_path: Path,
-) -> None:
-    """Finding 31: a scope round carried into a plan round proposes new bytes."""
+def test_full_plan_reaches_ready_without_approval_evidence(tmp_path: Path) -> None:
+    """A planner result carried into a second round is ready with no approval."""
     root = tmp_path / "carried"
     spec = _landing_spec(root)
-    spec_digest = _digest(spec.read_bytes())
-    scope = _scope_approval_ref(root, spec_digest, ("root",))
     plan = _signed_plan()
     planner = PlannerResult(
         contract_version=require_contract_version(PlannerResult),
         request_id="cook-request",
         disposition=PlannerDisposition.COMPLETE,
         plan=plan,
-    )
-    coverage = MoldCookCoverage(curd_ids=("root",))
-    plan_approval = _approval_ref(
-        root,
-        kind=MoldCookApprovalKind.PLAN,
-        spec_digest=spec_digest,
-        coverage=coverage,
-        proposal=canonical_mold_cook_proposal(
-            request_id="cook-request",
-            kind=MoldCookApprovalKind.PLAN,
-            spec_digest=spec_digest,
-            coverage=coverage,
-            planner_result=planner,
-            plan_digest=plan.digest,
-        ),
-        name="plan",
-        plan_digest=plan.digest,
     )
 
     scope_round = prepare(
@@ -658,102 +512,40 @@ def test_scope_round_previous_does_not_mis_fire_the_plan_guard(
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-        evidence=PreparationEvidence(
-            scope_approval=scope,
-            planner_result=planner,
-            plan_approval=plan_approval,
-            previous=scope_round,
-        ),
+        evidence=PreparationEvidence(planner_result=planner, previous=scope_round),
     )
 
     assert carried.outcome is CookPreparationOutcome.READY
+    assert carried.coverage == MoldCookCoverage(curd_ids=("root",))
+    assert [ref.role for ref in carried.references].count("curd_plan") == 1
+    assert carried.requirements == ()
 
 
-def test_scope_resubmission_without_host_coverage_advances(tmp_path: Path) -> None:
-    """A spec with no landing layers renders one proposal across both rounds."""
-    root = tmp_path / "no-landing"
-    root.mkdir(parents=True, exist_ok=True)
-    spec = root / "spec.md"
-    _ = spec.write_text(
-        _SPEC_FIXTURE.read_text(encoding="utf-8"),
-        encoding="utf-8",
-    )
-    approval = _scope_approval_ref(root, _digest(spec.read_bytes()), ("root",))
-
-    first = prepare(
-        spec,
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-    )
-    assert first.outcome is CookPreparationOutcome.NEEDS_PLANNING
-    assert first.approved_scope_ref is not None
-
-    resubmitted = prepare(
-        spec,
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(scope_approval=approval, previous=first),
-    )
-
-    assert resubmitted.outcome is CookPreparationOutcome.NEEDS_PLANNING
-
-
-def test_old_full_scope_wait_resubmits_without_a_new_reply(tmp_path: Path) -> None:
-    root = tmp_path / "old-scope-wait"
+def test_light_plan_with_one_curd_reaches_ready_without_approval(
+    tmp_path: Path,
+) -> None:
+    """Light scope is exactly one curd and needs no scope approval."""
+    root = tmp_path / "light"
     spec = _landing_spec(root)
-    first = prepare(
+    plan = _signed_plan()
+    planner = PlannerResult(
+        contract_version=require_contract_version(PlannerResult),
+        request_id="cook-request",
+        disposition=PlannerDisposition.COMPLETE,
+        plan=plan,
+    )
+
+    result = prepare(
         spec,
         request_id="cook-request",
         repository_root=tmp_path,
         artifact_root=root,
-    )
-    coverage = MoldCookCoverage(curd_ids=("root",))
-    proposal = canonical_mold_cook_proposal(
-        request_id="cook-request",
-        kind=MoldCookApprovalKind.SCOPE,
-        spec_digest=_digest(spec.read_bytes()),
-        coverage=coverage,
-    )
-    proposal_ref = _write_artifact(
-        root,
-        proposal,
-        artifact_id="old-scope-proposal",
-        role="proposal",
-        filename="old-scope-proposal.json",
-    )
-    old_wait = attrs.evolve(
-        first,
-        outcome=CookPreparationOutcome.NEEDS_APPROVAL,
-        references=(*first.references, proposal_ref),
-        approved_scope_ref=None,
-        planner_request=None,
-        approval_kind=MoldCookApprovalKind.SCOPE,
-        proposal_ref=proposal_ref,
-        proposal_digest=proposal_ref.digest,
-        missing_decision="explicit scope approval",
+        mode=MoldCookMode.LIGHT,
+        evidence=PreparationEvidence(planner_result=planner),
     )
 
-    resumed = pipeline.resubmit(
-        old_wait,
-        source=spec,
-        repository_root=tmp_path,
-        artifact_root=root,
-    )
-    assert resumed.outcome is CookPreparationOutcome.NEEDS_PLANNING
-    assert resumed.approved_scope_ref is not None
-    assert resumed.approved_scope_ref.digest == _digest(spec.read_bytes())
-
-    _ = spec.write_text(spec.read_text(encoding="utf-8") + "\nChanged scope.\n")
-    changed = pipeline.resubmit(
-        old_wait,
-        source=spec,
-        repository_root=tmp_path,
-        artifact_root=root,
-    )
-    assert changed.outcome is CookPreparationOutcome.INVALID
-    assert b"changed the displayed scope proposal" in canonical_bytes(changed)
+    assert result.outcome is CookPreparationOutcome.READY
+    assert result.coverage == MoldCookCoverage(curd_ids=("root",))
 
 
 def test_full_resubmission_rejects_changed_bound_spec(tmp_path: Path) -> None:
@@ -776,51 +568,6 @@ def test_full_resubmission_rejects_changed_bound_spec(tmp_path: Path) -> None:
     )
     assert changed.outcome is CookPreparationOutcome.INVALID
     assert b"changed the bound spec" in canonical_bytes(changed)
-
-
-def test_response_source_may_name_the_response_uri(tmp_path: Path) -> None:
-    """An approval that cites its own response URI is bound, not malformed."""
-    root = tmp_path / "uri-source"
-    spec = _landing_spec(root)
-    response_uri = (root / "scope-response.txt").as_uri()
-    approval = _scope_approval_ref(
-        root, _digest(spec.read_bytes()), ("root",), response_source=response_uri
-    )
-
-    result = prepare(
-        spec,
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(scope_approval=approval),
-    )
-
-    assert result.outcome is CookPreparationOutcome.NEEDS_PLANNING
-
-
-def test_absolute_response_source_is_reported_as_invalid_evidence(
-    tmp_path: Path,
-) -> None:
-    """An unusable response_source is bad evidence, not malformed host input."""
-    root = tmp_path / "absolute-source"
-    spec = _landing_spec(root)
-    approval = _scope_approval_ref(
-        root,
-        _digest(spec.read_bytes()),
-        ("root",),
-        response_source=str(root / "scope-response.txt"),
-    )
-
-    result = prepare(
-        spec,
-        request_id="cook-request",
-        repository_root=tmp_path,
-        artifact_root=root,
-        evidence=PreparationEvidence(scope_approval=approval),
-    )
-
-    assert result.outcome is CookPreparationOutcome.INVALID
-    assert [item.code for item in result.findings] == ["invalid-evidence"]
 
 
 def test_a_host_type_error_is_reported_as_internal_error(

@@ -67,7 +67,7 @@ def test_press_never_routes_to_itself() -> None:
 
     assert "| `press` |" not in output
     assert "next: age | done" in _output_preamble()
-    assert "Do not write `next: press`." in skill
+    assert "next: press" not in skill
 
 
 def test_artifact_names_the_consumed_cook_report() -> None:
@@ -124,32 +124,45 @@ def test_baseline_is_one_artifact_reference() -> None:
     assert "<Cook baseline block>" not in skill
 
 
-def test_third_red_does_not_dispatch_age() -> None:
-    """`gap-analysis.md` and `SKILL.md` gave two dispositions."""
+def test_finding_hands_off_to_cook_and_green_to_age() -> None:
+    """A finding is a Cook correction; only GREEN reaches Age."""
+    skill = _read(SKILL)
     gap = _read(REFERENCES / "gap-analysis.md")
 
-    assert "ready for terminal reporting" in gap
-    assert "Press does not dispatch Age after that result." in gap
+    assert "| finding (an attack test exposes a defect) | `ok-with-concerns: <defect>` | `cook` |" in skill
+    assert "A `next: cook` handoff is a Cook correction (`correction = true`)." in skill
+    assert "- GREEN hands off to `/age`." in gap
+    assert "- A finding hands off to Cook as a correction (`next: cook`)." in gap
+    assert "- Invalid evidence and production changes stop." in gap
 
 
-def test_gap_analysis_defines_its_attempt_terms() -> None:
-    """`P1`, `P2`, and `P3` were undefined in this area."""
+def test_press_outcome_vocabulary_has_no_red_gate() -> None:
+    """The RED gate is removed; Press selects one of four outcomes."""
+    skill = _read(SKILL)
+    gap = _read(REFERENCES / "gap-analysis.md")
+    outcomes = "`green`, `finding`, `invalid_evidence`, or `production_changed`"
+
+    assert outcomes in skill
+    assert outcomes in gap
+    for removed in ("in_contract_red", "third-red", "press-corrective-cook", "RED gate"):
+        assert removed not in skill
+        assert removed not in gap
+
+
+def test_gap_analysis_preserves_the_attack() -> None:
+    """Replays reuse one attack; weakening it to reach GREEN is forbidden."""
     gap = _read(REFERENCES / "gap-analysis.md")
 
-    assert "attempt 1, 1 for attempt 2, and 2 for attempt 3" in gap
-    assert not re.search(r"\bP[123]\b", gap)
+    assert "Run the same adversarial attack. Do not change its test or fixture digest." in gap
+    assert "Never weaken the attack to obtain GREEN." in gap
 
 
-def test_metadata_paths_are_not_boundary_safe() -> None:
-    """The audit accepted non-test metadata changes."""
-    telemetry = _read(REFERENCES / "telemetry.md")
-
-    assert "The `metadata` class does not make a path boundary-safe." in telemetry
-    assert "Classify the attempt as `production_changed`" in telemetry
-
-
-def test_command_summary_names_every_public_action() -> None:
-    """`press-route` also returns the `/age` dispatch."""
+def test_press_has_no_retired_route_or_telemetry_references() -> None:
+    """`press-route`, `press-telemetry`, and the telemetry reference are gone."""
+    assert not (REFERENCES / "telemetry.md").exists()
     commands = _read(REFERENCES / "commands.md")
+    skill = _read(SKILL)
 
-    assert "continue, dispatch /age, or stop" in commands
+    for removed in ("press-route", "press-telemetry"):
+        assert removed not in commands
+        assert removed not in skill

@@ -6,7 +6,6 @@
       "events": [
         {"type": "input_classified", "input_kind": "unsupported"},
         {"type": "prepare", "mode": "full", "outcome": "needs-planning"},
-        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
         {"type": "handoff_published", "ready": true},
         {"type": "consumer_accept", "ready": true}
       ]
@@ -19,8 +18,7 @@
       "scenario": "premature-write",
       "events": [
         {"type": "input_classified", "input_kind": "direct_spec"},
-        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
-        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+        {"type": "prepare", "mode": "full", "outcome": "ready"},
         {"type": "feature_write", "path": "src/feature.py"},
         {"type": "handoff_published", "ready": true},
         {"type": "consumer_accept", "ready": true}
@@ -34,8 +32,8 @@
       "scenario": "fabricated-approval",
       "events": [
         {"type": "input_classified", "input_kind": "direct_spec"},
-        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
-        {"type": "approval_recorded", "kind": "plan", "source": "agent", "decision": "approved"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-preparation"},
+        {"type": "approval_recorded", "kind": "runner", "source": "agent", "decision": "approved"},
         {"type": "handoff_published", "ready": true},
         {"type": "consumer_accept", "ready": true}
       ]
@@ -64,9 +62,8 @@
       "scenario": "lost-remainder",
       "events": [
         {"type": "input_classified", "input_kind": "direct_spec"},
-        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-planning"},
         {"type": "plan_materialized", "outcome": "partial"},
-        {"type": "approval_recorded", "kind": "partial_plan", "source": "harness", "decision": "approved"},
         {"type": "handoff_published", "ready": true},
         {"type": "consumer_accept", "ready": true}
       ]
@@ -79,8 +76,7 @@
       "scenario": "false-readiness",
       "events": [
         {"type": "input_classified", "input_kind": "direct_spec"},
-        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
-        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+        {"type": "prepare", "mode": "full", "outcome": "ready"},
         {"type": "handoff_published", "ready": false},
         {"type": "consumer_accept", "ready": true}
       ]
@@ -93,8 +89,7 @@
       "scenario": "mismatched-artifact",
       "events": [
         {"type": "input_classified", "input_kind": "direct_spec"},
-        {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
-        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"},
+        {"type": "prepare", "mode": "full", "outcome": "ready"},
         {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/published.json"},
         {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/other.json"}
       ]
@@ -102,31 +97,33 @@
     "expect": "consumer accepted an artifact the trace never published"
   },
   {
-    "name": "approval-after-accept",
+    "name": "setup-before-runner-approval",
     "trace": {
-      "scenario": "approval-after-accept",
-      "events": [
-        {"type": "input_classified", "input_kind": "slug"},
-        {"type": "prepare", "mode": "light", "outcome": "needs-approval"},
-        {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/late.json"},
-        {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/late.json"},
-        {"type": "approval_recorded", "kind": "scope", "source": "harness", "decision": "approved"}
-      ]
-    },
-    "expect": "handoff_published is not authorized by any approval that precedes it"
-  },
-  {
-    "name": "wrong-approval-kind",
-    "trace": {
-      "scenario": "wrong-approval-kind",
+      "scenario": "setup-before-runner-approval",
       "events": [
         {"type": "input_classified", "input_kind": "direct_spec"},
-        {"type": "prepare", "mode": "full", "outcome": "needs-planning"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-preparation"},
+        {"type": "setup_authorized", "curd_id": "setup"},
+        {"type": "setup_evidence", "status": "valid", "exit_code": 0},
         {"type": "approval_recorded", "kind": "runner", "source": "harness", "decision": "approved"},
-        {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/unplanned.json"},
-        {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/unplanned.json"}
+        {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/late.json"},
+        {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/late.json"}
       ]
     },
-    "expect": "full preparation requires an approved plan"
+    "expect": "setup_authorized is not authorized by any approval that precedes it"
+  },
+  {
+    "name": "refused-runner-approval",
+    "trace": {
+      "scenario": "refused-runner-approval",
+      "events": [
+        {"type": "input_classified", "input_kind": "direct_spec"},
+        {"type": "prepare", "mode": "full", "outcome": "needs-preparation"},
+        {"type": "approval_recorded", "kind": "runner", "source": "harness", "decision": "rejected"},
+        {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/refused.json"},
+        {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/refused.json"}
+      ]
+    },
+    "expect": "recorded approval does not authorize execution"
   }
 ]

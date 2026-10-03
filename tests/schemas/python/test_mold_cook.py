@@ -74,9 +74,8 @@ def coverage(*curd_ids: str) -> MoldCookCoverage:
 
 def approval(
     *,
-    kind: MoldCookApprovalKind = MoldCookApprovalKind.SCOPE,
+    kind: MoldCookApprovalKind = MoldCookApprovalKind.RUNNER,
     response_source: MoldCookApprovalSource = MoldCookApprovalSource.USER_RESPONSE,
-    plan_digest: str | None = None,
     proposal_ref: ArtifactRef | None = None,
     proposal_digest: str = DIGEST,
     response_ref: ArtifactRef | None = None,
@@ -101,8 +100,9 @@ def approval(
         response_text="Approve",
         response_source="local-dialogue-1",
         coverage=coverage("curd-1"),
-        plan_digest=plan_digest,
-        setup_authorization=setup_authorization,
+        setup_authorization=(
+            SETUP_AUTHORIZATION if setup_authorization is None else setup_authorization
+        ),
     )
 
 
@@ -119,7 +119,6 @@ def light_handoff(
         input_kind=MoldCookInputKind.DIRECT_SPEC,
         mode=MoldCookMode.LIGHT,
         spec_ref=ref("spec"),
-        approval_ref=ref("approval", schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI),
         coverage=coverage(*curd_ids),
         setup_evidence_refs=setup_evidence_refs,
         taste_verdict_ref=taste_verdict_ref,
@@ -136,10 +135,6 @@ def result(
     coverage: MoldCookCoverage | None = None,
     approved_scope_ref: ArtifactRef | None = None,
     planner_request: PlannerRequest | None = None,
-    approval_kind: MoldCookApprovalKind | None = None,
-    proposal_ref: ArtifactRef | None = None,
-    proposal_digest: str | None = None,
-    missing_decision: str | None = None,
     approved_plan_ref: ArtifactRef | None = None,
     setup_authorization: CookSetupAuthorization | None = None,
     requirements: list[CookUnmetRequirement] | tuple[CookUnmetRequirement, ...] = (),
@@ -156,10 +151,6 @@ def result(
         coverage=coverage,
         approved_scope_ref=approved_scope_ref,
         planner_request=planner_request,
-        approval_kind=approval_kind,
-        proposal_ref=proposal_ref,
-        proposal_digest=proposal_digest,
-        missing_decision=missing_decision,
         approved_plan_ref=approved_plan_ref,
         setup_authorization=setup_authorization,
         requirements=requirements,
@@ -195,7 +186,6 @@ SETUP_AUTHORIZATION = CookSetupAuthorization(
 
 NON_READY_OUTCOMES = (
     CookPreparationOutcome.NEEDS_PLANNING,
-    CookPreparationOutcome.NEEDS_APPROVAL,
     CookPreparationOutcome.NEEDS_PREPARATION,
     CookPreparationOutcome.BLOCKED,
     CookPreparationOutcome.INVALID,
@@ -224,17 +214,6 @@ def valid_result(
             outcome,
             approved_scope_ref=ref("approved_scope"),
             planner_request=PLANNER_REQUEST,
-            handoff_ref=handoff_ref,
-            requirements=requirements,
-            findings=findings,
-        )
-    if outcome is CookPreparationOutcome.NEEDS_APPROVAL:
-        return result(
-            outcome,
-            approval_kind=MoldCookApprovalKind.PLAN,
-            proposal_ref=ref("proposal"),
-            proposal_digest=DIGEST,
-            missing_decision="plan approval",
             handoff_ref=handoff_ref,
             requirements=requirements,
             findings=findings,
@@ -386,26 +365,6 @@ def test_registered_contracts_follow_the_contract_markers(
             id="dialogue-source-with-response-artifact",
         ),
         pytest.param(
-            lambda: approval(kind=MoldCookApprovalKind.PLAN),
-            "plan approval requires plan_digest",
-            id="plan-without-digest",
-        ),
-        pytest.param(
-            lambda: approval(plan_digest=DIGEST),
-            "scope approval must not carry plan_digest",
-            id="scope-with-plan-digest",
-        ),
-        pytest.param(
-            lambda: approval(kind=MoldCookApprovalKind.RUNNER),
-            "runner approval requires setup_authorization",
-            id="runner-without-setup-authorization",
-        ),
-        pytest.param(
-            lambda: approval(setup_authorization=SETUP_AUTHORIZATION),
-            "scope approval must not carry setup_authorization",
-            id="scope-with-setup-authorization",
-        ),
-        pytest.param(
             lambda: light_handoff(
                 setup_evidence_refs=(
                     ref("spec", schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI),
@@ -494,9 +453,14 @@ def test_handoff_rejects_missing_unknown_and_unsupported_fields(
 def test_preparation_outcomes_are_closed_and_reject_mixed_payloads() -> None:
     ready = valid_result(CookPreparationOutcome.READY)
     raw = as_dict(cast(object, json.loads(canonical_bytes(ready))))
-    raw["proposal_ref"] = cast(object, json.loads(canonical_bytes(ref("proposal"))))
-    raw["proposal_digest"] = DIGEST
-    raw["missing_decision"] = "approval"
+    raw["setup_authorization"] = cast(
+        object,
+        {
+            "prerequisite_curd_id": "curd-1",
+            "allowed_paths": ["tests/"],
+            "allowed_commands": ["python -m pytest tests/"],
+        },
+    )
 
     with pytest.raises(ContractValidationError):
         _ = validate_contract(
@@ -540,8 +504,6 @@ def test_non_ready_preparation_outcome_rejects_a_foreign_payload_field(
         (CookPreparationOutcome.READY, "findings"),
         (CookPreparationOutcome.NEEDS_PLANNING, "requirements"),
         (CookPreparationOutcome.NEEDS_PLANNING, "findings"),
-        (CookPreparationOutcome.NEEDS_APPROVAL, "requirements"),
-        (CookPreparationOutcome.NEEDS_APPROVAL, "findings"),
         (CookPreparationOutcome.NEEDS_PREPARATION, "requirements"),
         (CookPreparationOutcome.NEEDS_PREPARATION, "findings"),
         (CookPreparationOutcome.BLOCKED, "findings"),
@@ -573,7 +535,7 @@ def test_constructor_rejects_every_sequence_its_schema_forbids(
 def test_blocked_and_invalid_schema_branches_require_their_evidence() -> None:
     branches = outcome_branches()
 
-    assert len(branches) == 6
+    assert len(branches) == 5
     assert branches[CookPreparationOutcome.BLOCKED.value]["anyOf"] == [
         {"required": ["holds"], "properties": {"holds": {"minItems": 1}}},
         {"required": ["requirements"], "properties": {"requirements": {"minItems": 1}}},
@@ -629,21 +591,13 @@ def branch_for(
     raise AssertionError(f"no {field_name}=={value} branch in {schema_uri}")
 
 
-def test_approval_schema_branches_reject_a_null_conditional_field() -> None:
-    """``required`` alone accepts an explicit null, so each branch types the field.
+def test_runner_approval_schema_branch_rejects_a_null_setup_authorization() -> None:
+    """``required`` alone accepts an explicit null, so the branch types the field.
 
     The suite keeps jsonschema out of its dependency surface, so the assertion
     reads the emitted conditional instead of running a generic validator.
     """
     approval = mold_cook.MOLD_COOK_APPROVAL_SCHEMA_URI
-    for kind in (
-        MoldCookApprovalKind.PLAN,
-        MoldCookApprovalKind.PARTIAL_PLAN,
-    ):
-        branch = branch_for(approval, "MoldCookApproval", "kind", kind.value)
-        assert branch["required"] == ["plan_digest"]
-        assert as_dict(branch["properties"])["plan_digest"] == {"type": "string"}
-
     runner = branch_for(
         approval, "MoldCookApproval", "kind", MoldCookApprovalKind.RUNNER.value
     )
@@ -663,7 +617,7 @@ def test_approval_schema_binds_the_proposal_artifact_role() -> None:
 def test_handoff_schema_publishes_every_expressible_runtime_invariant() -> None:
     """Digest equality stays runtime-only; every other rule reaches the document.
 
-    ``__attrs_post_init__`` binds the spec and approval roles, forbids planner
+    ``__attrs_post_init__`` binds the spec role, forbids planner
     artifacts on a light handoff, caps light coverage at one curd, requires both
     planner artifacts on a full handoff, and pairs the two taste references.
     """
@@ -672,16 +626,6 @@ def test_handoff_schema_publishes_every_expressible_runtime_invariant() -> None:
 
     assert {
         "properties": {"spec_ref": {"properties": {"role": {"const": "spec"}}}}
-    } in rules
-    assert {
-        "properties": {
-            "approval_ref": {
-                "properties": {
-                    "role": {"const": "approval"},
-                    "schema_uri": {"const": mold_cook.MOLD_COOK_APPROVAL_SCHEMA_URI},
-                }
-            }
-        }
     } in rules
     assert {
         "anyOf": [
@@ -718,16 +662,12 @@ def test_handoff_schema_publishes_every_expressible_runtime_invariant() -> None:
 
 def test_preparation_branches_type_every_required_payload_field() -> None:
     expected = {
-        "approval_kind": {"type": "string"},
         "approved_plan_ref": {"$ref": "#/$defs/ArtifactRef"},
         "approved_scope_ref": {"$ref": "#/$defs/ArtifactRef"},
         "coverage": {"$ref": "#/$defs/MoldCookCoverage"},
         "findings": {"minItems": 1},
         "handoff_ref": {"$ref": "#/$defs/ArtifactRef"},
-        "missing_decision": {"type": "string"},
         "planner_request": {"$ref": "#/$defs/PlannerRequest"},
-        "proposal_digest": {"type": "string"},
-        "proposal_ref": {"$ref": "#/$defs/ArtifactRef"},
         "setup_authorization": {"$ref": "#/$defs/CookSetupAuthorization"},
     }
     for outcome, branch in outcome_branches().items():

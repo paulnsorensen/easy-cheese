@@ -3,7 +3,7 @@
 These tests pin the seams a consumer depends on: Mold retains through the one
 shared content-addressed store, structures host mappings through the one shared
 contract path, bounds every JSON input it reads, and proposes the coverage the
-approval is bound against.
+handoff carries.
 """
 
 from __future__ import annotations
@@ -38,7 +38,6 @@ from easy_cheese_schemas.contracts import (
     SemanticCurdWriterView,
 )
 from easy_cheese_schemas.mold_cook import (
-    MoldCookCoverage,
     MoldCookHandoff,
     MoldCookMode,
 )
@@ -50,7 +49,6 @@ from easy_cheese_schemas.schema_runtime import (
 
 from tests.python.test_mold_cook_producer import (
     finalize_fixture,
-    make_approval,
     make_planner_result,
     make_spec,
     taste_fixture,
@@ -183,14 +181,10 @@ def test_host_coverage_is_derived_and_published(tmp_path: Path) -> None:
     assert list(cast(Sequence[str], coverage["curd_ids"])) == ["curd-1"]
 
 
-def test_widened_approval_coverage_is_refused(tmp_path: Path) -> None:
-    """Finding 32: an approval cannot widen the scope the host proposed."""
-    spec = make_spec(tmp_path)
+def test_widened_proposed_coverage_is_refused(tmp_path: Path) -> None:
+    """Finding 32: proposed coverage cannot name curds outside the plan."""
+    spec = make_spec(tmp_path, landing_id="curd-1")
     planner = make_planner_result()
-    widened = cast(Callable[..., MoldCookCoverage], MoldCookCoverage)(
-        curd_ids=["curd-1", "curd-2"],
-    )
-    approval = make_approval(tmp_path, spec, plan=planner, coverage=widened)
 
     outcome = finalize_mold(
         spec,
@@ -198,15 +192,15 @@ def test_widened_approval_coverage_is_refused(tmp_path: Path) -> None:
         operation_id="operation-1",
         request_id="request-1",
         mode=MoldCookMode.FULL,
-        approval=approval,
         planner_result=planner,
         plan=cast(CurdPlan, planner.plan),
+        proposed_coverage={"curd_ids": ["curd-1", "curd-2"]},
         taste_result=taste_fixture(spec),
         decision_ledger=(),
     )
 
     assert outcome.status == "saved-not-ready"
-    assert "coverage-binding" in _requirement_ids(outcome)
+    assert "coverage-ids" in _requirement_ids(outcome)
     assert not (tmp_path / "artifacts" / "pointers" / "operation-1.json").exists()
 
 
@@ -214,7 +208,6 @@ def test_explicit_proposed_coverage_mapping_is_structured(tmp_path: Path) -> Non
     """Finding 32: an explicit host coverage overrides the derived value."""
     spec = make_spec(tmp_path)
     planner = make_planner_result()
-    approval = make_approval(tmp_path, spec, plan=planner)
 
     outcome = finalize_mold(
         spec,
@@ -222,7 +215,6 @@ def test_explicit_proposed_coverage_mapping_is_structured(tmp_path: Path) -> Non
         operation_id="operation-1",
         request_id="request-1",
         mode=MoldCookMode.FULL,
-        approval=approval,
         planner_result=planner,
         plan=cast(CurdPlan, planner.plan),
         proposed_coverage={"curd_ids": ["curd-1"]},
@@ -239,7 +231,6 @@ def test_malformed_proposed_coverage_blocks_instead_of_raising(tmp_path: Path) -
     """Host coverage is evidence, so a malformed value blocks rather than raises."""
     spec = make_spec(tmp_path)
     planner = make_planner_result()
-    approval = make_approval(tmp_path, spec, plan=planner)
 
     outcome = finalize_mold(
         spec,
@@ -247,7 +238,6 @@ def test_malformed_proposed_coverage_blocks_instead_of_raising(tmp_path: Path) -
         operation_id="operation-1",
         request_id="request-1",
         mode=MoldCookMode.FULL,
-        approval=approval,
         planner_result=planner,
         plan=cast(CurdPlan, planner.plan),
         proposed_coverage={"curd_ids": [7]},
@@ -263,12 +253,8 @@ def test_contract_paths_outside_the_artifact_root_are_read(tmp_path: Path) -> No
     """A Mold command input is an operator path, not a retained artifact."""
     spec = make_spec(tmp_path)
     planner = make_planner_result()
-    approval_path = tmp_path / "approval.json"
     planner_path = tmp_path / "planner.json"
     plan_path = tmp_path / "plan.json"
-    _ = approval_path.write_bytes(
-        canonical_bytes(make_approval(tmp_path, spec, plan=planner))
-    )
     _ = planner_path.write_bytes(canonical_bytes(planner))
     _ = plan_path.write_bytes(canonical_bytes(cast(CurdPlan, planner.plan)))
 
@@ -278,7 +264,6 @@ def test_contract_paths_outside_the_artifact_root_are_read(tmp_path: Path) -> No
         operation_id="operation-1",
         request_id="request-1",
         mode=MoldCookMode.FULL,
-        approval=approval_path,
         planner_result=planner_path,
         plan=plan_path,
         taste_result=taste_fixture(spec),
@@ -303,7 +288,6 @@ def test_oversized_json_input_is_rejected_by_the_bounded_reader(tmp_path: Path) 
         operation_id="operation-1",
         request_id="request-1",
         mode=MoldCookMode.FULL,
-        approval=make_approval(tmp_path, spec, plan=planner),
         planner_result=planner,
         plan=cast(CurdPlan, planner.plan),
         proposed_coverage=oversized,

@@ -26,7 +26,7 @@ def test_mini_spec_mode_in_skill_appends_hard() -> None:
     line = next(
         line
         for line in _read("SKILL.md").splitlines()
-        if "On that consent, finalize and dispatch only a ready pointer" in line
+        if "finalize and dispatch only a ready pointer" in line
     )
     assert HARD_RULE.search(line), line
 
@@ -44,7 +44,7 @@ def test_full_mode_handoff_appends_hard() -> None:
     assert HARD_RULE.search(section), section[:400]
 
 
-@pytest.mark.parametrize("row", ["Red-required Spec", "Spec"])
+@pytest.mark.parametrize("row", ["Spec (auto)", "Spec"])
 def test_curdle_handoff_rows_append_hard(row: str) -> None:
     """Both Curdle hand-off rows carry the flag."""
     line = next(

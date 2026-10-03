@@ -1,7 +1,6 @@
 """Acceptance policy for the mold spec format, shared by every release channel.
 
-The hardened spec format — the ``## Test Contracts`` table, the ``## Grounding``
-table, and the ``gate_applicability`` frontmatter block — postdates v0.13, and
+The hardened spec format — the ``## Grounding`` table — postdates v0.13, and
 this package did
 not exist then. v0.13-era specs already sitting in ``.cheese/specs/`` must stay
 readable forever, so a *read* asks for a policy and gets a lenient one for them,
@@ -30,17 +29,14 @@ _HARDENED_SOURCES = frozenset(
 # The parts of the document the hardened format added after v0.13. Their
 # *presence* is waived for a legacy spec; their *content*, when a legacy spec
 # happens to carry it, is validated exactly as it is for a hardened one.
-_POST_V013_SECTIONS = frozenset({"Test Contracts", "Grounding"})
+_POST_V013_SECTIONS = frozenset({"Grounding"})
 
-_MINI_SPEC_REQUIRED_SECTIONS = frozenset(
-    {"Contract", "Acceptance", "Test Contracts", "Non-goals"}
-)
+_MINI_SPEC_REQUIRED_SECTIONS = frozenset({"Contract", "Acceptance", "Non-goals"})
 
 _LEGACY_NOTICE = (
     "NOTICE: legacy-spec-format this spec predates the current format "
-    "(no mold provenance marker, so Test Contracts, Grounding and "
-    "gate_applicability are not required); accepted on read — re-mint it with "
-    "/mold to adopt them"
+    "(no mold provenance marker, so Grounding is not required); accepted on "
+    "read — re-mint it with /mold to adopt it"
 )
 
 
@@ -63,14 +59,9 @@ class SpecFormatPolicy:
             return section_name in _MINI_SPEC_REQUIRED_SECTIONS
         if self._source == "agent-mini-spec":
             return section_name in _MINI_SPEC_REQUIRED_SECTIONS
-        required = default_required or section_name == "Test Contracts"
-        return required and not (
+        return default_required and not (
             self.legacy and section_name in _POST_V013_SECTIONS
         )
-
-    def requires_gate_applicability(self) -> bool:
-        """Whether absent ``gate_applicability`` frontmatter is an error."""
-        return not self.legacy
 
     @property
     def notice(self) -> str | None:

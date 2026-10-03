@@ -8,11 +8,7 @@ from typing import cast
 
 import pytest
 
-from easy_cheese.shared.mold_cook_approve import approve
-from easy_cheese.shared.mold_cook_handoff import (
-    accept_mold_cook_handoff,
-    response_is_affirmative,
-)
+from easy_cheese.shared.mold_cook_handoff import accept_mold_cook_handoff
 from easy_cheese_schemas import ContractVersion, validate_contract
 from easy_cheese.shared.publication import PublicationError
 from easy_cheese.shared.taste_test import ForkTasteVerdict
@@ -37,16 +33,11 @@ from easy_cheese_schemas.contracts import (
 )
 from easy_cheese_schemas.mold_cook import (
     CookPreparationResult,
-    MoldCookApproval,
-    MoldCookApprovalDecision,
-    MoldCookApprovalKind,
     MoldCookCoverage,
     MoldCookHandoff,
     MoldCookMode,
 )
 from easy_cheese_schemas.schema_runtime import supported_version_for
-
-from tests.python.mold_cook_helpers import bind_mold_cook_approval
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "spec_format" / "valid_spec.md"
@@ -138,73 +129,29 @@ def make_planner_result() -> PlannerResult:
         curd_ids={"core": "curd-1"},
     )
 
-
-def response_decision(response: str) -> MoldCookApprovalDecision:
-    """Map a harness reply to the decision the executed workflow records."""
-    if response_is_affirmative(response):
-        return MoldCookApprovalDecision.APPROVED
-    return MoldCookApprovalDecision.REJECTED
-
-
-def make_approval(
-    tmp_path: Path,
-    spec_path: Path,
-    *,
-    plan: PlannerResult | None,
-    coverage: MoldCookCoverage | None = None,
-    kind: MoldCookApprovalKind = MoldCookApprovalKind.PLAN,
-    response: bytes = b"approved\n",
-    request_id: str = "request-1",
-) -> MoldCookApproval:
-    """Build an approval through the production `approve` path."""
-    approval, _ = approve(
-        spec_path,
-        artifact_root=tmp_path / "artifacts",
-        request_id=request_id,
-        kind=kind,
-        response_text=response.decode(),
-        planner_result=plan,
-        coverage=coverage or MoldCookCoverage(curd_ids=("curd-1",)),
-    )
-    return approval
-
-
-_MISSING_APPROVAL = object()
-
-
 def finalize_fixture(
     tmp_path: Path,
     *,
     spec_path: Path | None = None,
-    approval: MoldCookApproval
-    | Mapping[str, object]
-    | Path
-    | None
-    | object = _MISSING_APPROVAL,
     planner: PlannerResult | None = None,
     taste: ForkTasteVerdict | None = None,
-    curdle_anyway: bool = False,
+    save_approved: bool = False,
 ) -> FinalizationOutcome:
     spec = spec_path or make_spec(tmp_path)
     selected_plan = planner or make_planner_result()
-    selected_approval = (
-        make_approval(tmp_path, spec, plan=selected_plan)
-        if approval is _MISSING_APPROVAL
-        else cast(MoldCookApproval | Mapping[str, object] | Path | None, approval)
-    )
     return finalize_mold(
         spec,
         artifact_root=tmp_path / "artifacts",
         operation_id="operation-1",
         request_id="request-1",
         mode=MoldCookMode.FULL,
-        approval=selected_approval,
         planner_result=selected_plan,
         plan=cast(CurdPlan, selected_plan.plan),
         taste_result=taste or taste_fixture(spec),
         decision_ledger=(),
-        curdle_anyway=curdle_anyway,
+        save_approved=save_approved,
     )
+
 
 
 def test_complete_finalization_publishes_a_pointer_consumers_can_accept(
@@ -242,34 +189,6 @@ def test_failed_taste_is_saved_without_execution_authority(tmp_path: Path) -> No
     assert "pointer" not in outcome.payload
 
 
-def test_missing_approval_is_saved_without_execution_authority(tmp_path: Path) -> None:
-    outcome = finalize_fixture(tmp_path, approval=None)
-
-    assert outcome.status == "saved-not-ready"
-    assert outcome.ready is False
-    assert outcome.payload["requirements"] == [
-        {
-            "requirement_id": "approval-evidence",
-            "kind": "approval",
-            "description": "explicit approval evidence is required before publication",
-            "evidence": [],
-        },
-        {
-            "requirement_id": "scope-approval",
-            "kind": "scope",
-            "description": "approved scope coverage is required before finalization",
-            "evidence": [],
-        },
-        {
-            "requirement_id": "plan-approval-kind",
-            "kind": "approval",
-            "description": "Full-tier complete work requires plan approval",
-            "evidence": [],
-        },
-    ]
-    assert "pointer" not in outcome.payload
-
-
 def test_invalid_landing_id_is_saved_without_execution_authority(
     tmp_path: Path,
 ) -> None:
@@ -302,58 +221,75 @@ def test_do_not_implement_hold_blocks_ready_publication(tmp_path: Path) -> None:
     ]
 
 
-def test_stale_approval_reference_is_saved_not_ready(tmp_path: Path) -> None:
+def test_full_tier_publishes_without_any_approval_evidence(tmp_path: Path) -> None:
+    outcome = finalize_fixture(tmp_path)
+
+    assert outcome.status == "ready"
+    handoff = cast(Mapping[str, object], outcome.payload["handoff"])
+    assert "approval_ref" not in handoff
+
+
+def test_light_tier_publishes_one_curd_without_any_approval_evidence(
+    tmp_path: Path,
+) -> None:
     spec = make_spec(tmp_path)
-    approval = make_approval(tmp_path, spec, plan=make_planner_result())
-    stale = bind_mold_cook_approval(
-        request_id=approval.request_id,
-        kind=approval.kind,
-        decision=approval.decision,
-        source=approval.source,
-        spec_digest="sha256:" + "0" * 64,
-        proposal_ref=approval.proposal_ref,
-        response_ref=approval.response_ref,
-        response_text=approval.response_text,
-        response_source=approval.response_source,
-        coverage=approval.coverage,
-        plan_digest=approval.plan_digest,
+    outcome = finalize_mold(
+        spec,
+        artifact_root=tmp_path / "artifacts",
+        operation_id="operation-1",
+        request_id="request-1",
+        mode=MoldCookMode.LIGHT,
+        proposed_coverage=MoldCookCoverage(curd_ids=("curd-1",)),
+        taste_result=taste_fixture(spec),
+        decision_ledger=(),
     )
-    outcome = finalize_fixture(tmp_path, spec_path=spec, approval=stale)
+
+    assert outcome.status == "ready"
+    handoff = cast(Mapping[str, object], outcome.payload["handoff"])
+    assert handoff["mode"] == "light"
+    assert "approval_ref" not in handoff
+
+
+def test_light_tier_with_two_curds_is_saved_without_execution_authority(
+    tmp_path: Path,
+) -> None:
+    spec = make_spec(tmp_path)
+    outcome = finalize_mold(
+        spec,
+        artifact_root=tmp_path / "artifacts",
+        operation_id="operation-1",
+        request_id="request-1",
+        mode=MoldCookMode.LIGHT,
+        proposed_coverage=MoldCookCoverage(curd_ids=("curd-1", "curd-2")),
+        taste_result=taste_fixture(spec),
+        decision_ledger=(),
+    )
 
     assert outcome.status == "saved-not-ready"
-    assert outcome.ready is False
     requirements = cast(Sequence[Mapping[str, object]], outcome.payload["requirements"])
-    assert tuple(
-        (item["requirement_id"], item["kind"], item["evidence"])
-        for item in requirements
-    ) == (("approval-spec", "integrity", []),)
+    assert "light-coverage" in {str(item["requirement_id"]) for item in requirements}
 
-
-def test_curdle_anyway_is_save_only_and_records_a_hold(tmp_path: Path) -> None:
-    outcome = finalize_fixture(tmp_path, curdle_anyway=True)
+def test_save_approved_is_save_only_and_records_a_hold(tmp_path: Path) -> None:
+    outcome = finalize_fixture(tmp_path, save_approved=True)
 
     assert outcome.status == "saved-not-ready"
     assert outcome.ready is False
     assert outcome.payload["holds"] == [
         {
-            "hold_id": "curdle-anyway",
+            "hold_id": "save-approved",
             "kind": "preparation",
-            "reason": "curdle anyway is save-only and never waives execution readiness",
+            "reason": "save approval is save-only and never waives execution readiness",
             "evidence": [],
         }
     ]
     assert "pointer" not in outcome.payload
 
 
-@pytest.mark.parametrize("extra", ["failed taste", "missing approval"])
-def test_non_ready_results_are_durable(tmp_path: Path, extra: str) -> None:
-    if extra == "failed taste":
-        spec = make_spec(tmp_path)
-        outcome = finalize_fixture(
-            tmp_path, spec_path=spec, taste=taste_fixture(spec, passed=False)
-        )
-    else:
-        outcome = finalize_fixture(tmp_path, approval={})
+def test_non_ready_results_are_durable(tmp_path: Path) -> None:
+    spec = make_spec(tmp_path)
+    outcome = finalize_fixture(
+        tmp_path, spec_path=spec, taste=taste_fixture(spec, passed=False)
+    )
 
     assert outcome.result_path is not None
     assert outcome.result_path.is_file()
@@ -364,7 +300,7 @@ def _hold_rows(outcome: FinalizationOutcome) -> Sequence[Mapping[str, object]]:
     return cast(Sequence[Mapping[str, object]], outcome.payload["holds"])
 
 
-def test_block_list_gate_override_is_saved_with_a_curdle_anyway_hold(
+def test_block_list_gate_override_is_saved_with_a_save_approved_hold(
     tmp_path: Path,
 ) -> None:
     spec = make_spec(
@@ -376,8 +312,8 @@ def test_block_list_gate_override_is_saved_with_a_curdle_anyway_hold(
     assert outcome.status == "saved-not-ready"
     assert outcome.ready is False
     holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
-    assert "curdle-anyway" in holds
-    assert holds["curdle-anyway"].endswith("handshake-coherence, taste-test")
+    assert "save-approved" in holds
+    assert holds["save-approved"].endswith("handshake-coherence, taste-test")
     assert "pointer" not in outcome.payload
 
 
@@ -396,7 +332,7 @@ def test_flow_list_and_scalar_gate_overrides_keep_the_hold(
 
     assert outcome.status == "saved-not-ready"
     holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
-    assert holds["curdle-anyway"].endswith(expected)
+    assert holds["save-approved"].endswith(expected)
 
 
 @pytest.mark.parametrize(
@@ -417,7 +353,7 @@ def test_column_zero_and_commented_block_lists_keep_the_hold(
     assert outcome.status == "saved-not-ready"
     assert outcome.ready is False
     holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
-    assert holds["curdle-anyway"].endswith("agent-coherence, taste-test")
+    assert holds["save-approved"].endswith("agent-coherence, taste-test")
 
 
 def test_a_mapping_under_gates_overridden_is_a_caller_error(tmp_path: Path) -> None:

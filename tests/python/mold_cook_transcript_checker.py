@@ -35,7 +35,6 @@ _EVENT_TYPES = frozenset(
     {
         "input_classified",
         "prepare",
-        "approval_requested",
         "approval_recorded",
         "plan_materialized",
         "setup_authorized",
@@ -50,17 +49,11 @@ _INPUT_KINDS = frozenset(
     {"direct_spec", "slug", "task", "canonical_pointer", "continuation"}
 )
 _MODES = frozenset({"full", "light"})
-_APPROVAL_KINDS = frozenset({"scope", "plan", "partial_plan", "runner"})
-_PLAN_APPROVAL_KINDS = frozenset({"plan", "partial_plan"})
+_APPROVAL_KINDS = frozenset({"runner"})
 
-# Each recorded approval kind authorizes only the actions listed here, and only
-# for events that occur after it.
+# Only runner setup needs a recorded approval. Light scope and Full plan
+# handoffs proceed on invocation, so no approval gates them.
 _AUTHORIZED_ACTIONS: dict[str, frozenset[str]] = {
-    "scope": frozenset({"handoff_published", "consumer_accept"}),
-    "plan": frozenset({"handoff_published", "consumer_accept", "feature_write"}),
-    "partial_plan": frozenset(
-        {"handoff_published", "consumer_accept", "feature_write"}
-    ),
     "runner": frozenset({"setup_authorized", "setup_evidence"}),
 }
 _GATED_ACTIONS = frozenset(
@@ -153,8 +146,6 @@ def check_transcript(
         for index, event in enumerate(events)
         if event["type"] == "approval_recorded"
     ]
-    if not approvals:
-        raise TranscriptCheckError("trace has no harness approval evidence")
     approval_gates: list[tuple[int, str]] = []
     for index, approval in approvals:
         if approval.get("source") != "harness":
@@ -214,7 +205,7 @@ def check_transcript(
         if evidence.get("status") != "valid" or evidence.get("exit_code") != 0:
             raise TranscriptCheckError("setup evidence is stale or failed")
 
-    partial = any(kind == "partial_plan" for _, kind in approval_gates) or any(
+    partial = any(
         event.get("outcome") == "partial"
         for event in events
         if event["type"] == "plan_materialized"
@@ -243,10 +234,6 @@ def check_transcript(
 
     refs = _artifact_refs(events)
 
-    if mode == "full" and not any(
-        kind in _PLAN_APPROVAL_KINDS for _, kind in approval_gates
-    ):
-        raise TranscriptCheckError("full preparation requires an approved plan")
     for index, event in enumerate(events):
         action = event["type"]
         if action not in _GATED_ACTIONS:

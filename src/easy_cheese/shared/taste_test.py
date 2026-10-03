@@ -21,8 +21,6 @@ from pathlib import Path
 from typing import ClassVar, NoReturn, Protocol, cast
 
 from easy_cheese_schemas.contracts import (
-    GateApplicability as MoldGateApplicability,
-    GateApplicabilityDisposition,
     GroundingOutcome,
     GroundingProbe,
     GroundingRow,
@@ -32,8 +30,6 @@ from easy_cheese_schemas.contracts import (
     SpecConfidence,
     TestContractMode,
     TestContractRow,
-    UiSurface,
-    WorkClass,
     parse_landing_mapping,
 )
 from easy_cheese_schemas.spec_format import (
@@ -47,17 +43,6 @@ class _GroundingRowFactory(Protocol):
     def __call__(
         self, *, probe: GroundingProbe, outcome: GroundingOutcome, evidence: str
     ) -> GroundingRow: ...
-
-
-class _GateFactory(Protocol):
-    def __call__(
-        self,
-        *,
-        disposition: GateApplicabilityDisposition,
-        work_class: WorkClass,
-        ui_surface: UiSurface,
-        reason: str | None,
-    ) -> MoldGateApplicability: ...
 
 
 class _TestRowFactory(Protocol):
@@ -83,7 +68,6 @@ class _FrontmatterFactory(Protocol):
         source: str,
         created: str,
         confidence: SpecConfidence,
-        gate_applicability: MoldGateApplicability,
         gates_overridden: tuple[str, ...],
         agent_introduced_scope: tuple[str, ...],
         entity_referent_bindings: tuple[Mapping[str, object], ...],
@@ -104,64 +88,36 @@ class _DocumentFactory(Protocol):
 
 
 _grounding_row = cast(_GroundingRowFactory, cast(object, GroundingRow))
-_gate = cast(_GateFactory, cast(object, MoldGateApplicability))
 _test_row = cast(_TestRowFactory, cast(object, TestContractRow))
 _frontmatter_model = cast(_FrontmatterFactory, cast(object, MoldSpecFrontmatter))
 _document = cast(_DocumentFactory, cast(object, MoldSpecDocument))
-ACCEPTANCE_ID = re.compile(r"^AC-\d+$")
 DIGEST = re.compile(r"^[0-9a-fA-F]{64}$")
-WORK_CLASSES = frozenset(
-    {"behavior", "docs-only", "refactor-only", "test-only", "appearance-only"}
-)
-NON_BEHAVIOR_CLASSES = frozenset(WORK_CLASSES - {"behavior"})
-CONTRACT_MODES = frozenset({"tracer", "contract-matrix", "guard"})
-EXECUTABLE_CONTRACT_MODES = frozenset({"tracer", "contract-matrix"})
-RED_REQUIRED_EXECUTABLE_PROBLEM = "red-required-needs-executable-test-contracts"
 NEW_MOLD_SOURCES = _HARDENED_SOURCES
-BROWSER_MARKER = re.compile(
-    r"\b(?:browser|e2e|end[- ]to[- ]end|playwright|cypress|selenium|webdriver|puppeteer)\b",
-    re.I,
-)
 
-REFLECTIONS = ("approach", "interface", "acceptance", "test-contract")
-# A `not-applicable` spec cannot contain a `Test Contracts` section.
-# The other three sections contain the complete fork.
-NOT_APPLICABLE_REFLECTIONS = tuple(
-    location for location in REFLECTIONS if location != "test-contract"
-)
+# Test Contracts is optional; its reflection is required only when present.
+REFLECTIONS = ("approach", "interface", "acceptance")
+TEST_CONTRACT_REFLECTION = "test-contract"
 # The pinned goal lives outside the reflection set: forks never reflect into it,
 # but the ledger's `goal` must survive into it unchanged, compared case- and
 # whitespace-insensitively (goal-drift gate).
 GOAL_SECTION = "problem"
 __all__ = [
-    "ACCEPTANCE_ID",
     "ApplicabilityError",
-    "BROWSER_MARKER",
-    "CONTRACT_MODES",
     "DIGEST",
-    "EXECUTABLE_CONTRACT_MODES",
     "ForkCoverage",
     "ForkDecision",
     "ForkTasteVerdict",
     "GOAL_SECTION",
     "NEW_MOLD_SOURCES",
-    "NON_BEHAVIOR_CLASSES",
-    "NOT_APPLICABLE_REFLECTIONS",
-    "NotApplicable",
-    "RED_REQUIRED_EXECUTABLE_PROBLEM",
     "REFLECTIONS",
-    "RedRequired",
     "TasteGateResult",
     "TasteTestError",
-    "TestContract",
-    "WORK_CLASSES",
     "decomposition_gate",
     "draft_sha256",
     "goal_coverage",
     "is_new_mold_spec",
     "lexical_precheck",
     "main",
-    "parse_gate_applicability",
     "parse_landing",
     "read_spec_text",
     "reopen_named_forks",
@@ -212,135 +168,6 @@ class TasteTestError(ValueError):
 
 class ApplicabilityError(TasteTestError):
     """The declaration and Test Contracts do not form a valid combination."""
-
-
-@dataclass(frozen=True)
-class TestContract:
-    acceptance_id: str
-    interface: str
-    seam: str
-    expected_failure: str
-    mode: str
-    contract_source: str = "approved"
-    interface_version: str | None = None
-    matrix_rows: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        values = {
-            "acceptance_id": self.acceptance_id,
-            "interface": self.interface,
-            "seam": self.seam,
-            "expected_failure": self.expected_failure,
-            "mode": self.mode,
-            "contract_source": self.contract_source,
-        }
-        for name, value in values.items():
-            if not isinstance(value, str) or not value.strip():  # pyright: ignore[reportUnnecessaryIsInstance]
-                raise ApplicabilityError(f"contract-{name}-empty")
-        if ACCEPTANCE_ID.fullmatch(self.acceptance_id) is None:
-            raise ApplicabilityError(
-                f"contract-invalid-acceptance-id:{self.acceptance_id}"
-            )
-        if self.mode not in CONTRACT_MODES:
-            raise ApplicabilityError(f"contract-invalid-mode:{self.mode}")
-        if self.contract_source not in {"approved", "inferred"}:
-            raise ApplicabilityError(f"contract-invalid-source:{self.contract_source}")
-        if re.search(
-            r"\b(?:tbd|later|eventually|random|flaky)\b", self.expected_failure, re.I
-        ):
-            raise ApplicabilityError(
-                f"contract-nondeterministic-witness:{self.acceptance_id}"
-            )
-        if self.interface_version is not None and (
-            not isinstance(  # pyright: ignore[reportUnnecessaryIsInstance]
-                self.interface_version, str
-            )
-            or not self.interface_version.strip()
-        ):
-            raise ApplicabilityError(
-                f"contract-interface-version-empty:{self.acceptance_id}"
-            )
-        if any(
-            not isinstance(row, str)  # pyright: ignore[reportUnnecessaryIsInstance]
-            or not row.strip()
-            for row in self.matrix_rows
-        ):
-            raise ApplicabilityError(f"contract-matrix-row-empty:{self.acceptance_id}")
-        if len(set(self.matrix_rows)) != len(self.matrix_rows):
-            raise ApplicabilityError(
-                f"contract-matrix-rows-not-unique:{self.acceptance_id}"
-            )
-        if self.mode == "contract-matrix":
-            if self.contract_source != "approved":
-                raise ApplicabilityError(
-                    f"contract-matrix-source-must-be-approved:{self.acceptance_id}"
-                )
-            if self.interface_version is None:
-                raise ApplicabilityError(
-                    f"contract-matrix-interface-version-required:{self.acceptance_id}"
-                )
-            if not self.matrix_rows:
-                raise ApplicabilityError(
-                    f"contract-matrix-rows-required:{self.acceptance_id}"
-                )
-        elif self.interface_version is not None or self.matrix_rows:
-            raise ApplicabilityError(
-                f"non-matrix-cannot-carry-matrix-metadata:{self.acceptance_id}"
-            )
-
-    def to_dict(self) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "acceptance_id": self.acceptance_id,
-            "interface": self.interface,
-            "seam": self.seam,
-            "expected_failure": self.expected_failure,
-            "mode": self.mode,
-            "contract_source": self.contract_source,
-        }
-        if self.mode == "contract-matrix":
-            payload["interface_version"] = self.interface_version
-            payload["matrix_rows"] = list(self.matrix_rows)
-        return payload
-
-
-@dataclass(frozen=True)
-class RedRequired:
-    work_class: str
-    contracts: tuple[TestContract, ...]
-    disposition: str = "red-required"
-    ui_surface: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.work_class != "behavior":
-            raise ApplicabilityError("red-required-work-class-must-be-behavior")
-        if not self.contracts:
-            raise ApplicabilityError("red-required-needs-test-contracts")
-        if not any(
-            contract.mode in EXECUTABLE_CONTRACT_MODES for contract in self.contracts
-        ):
-            raise ApplicabilityError(RED_REQUIRED_EXECUTABLE_PROBLEM)
-
-
-@dataclass(frozen=True)
-class NotApplicable:
-    work_class: str
-    reason: str
-    contracts: tuple[TestContract, ...] = ()
-    disposition: str = "not-applicable"
-    ui_surface: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.work_class not in NON_BEHAVIOR_CLASSES:
-            raise ApplicabilityError(
-                "not-applicable-work-class-must-be-closed-non-behavior"
-            )
-        if not isinstance(self.reason, str) or not self.reason.strip():  # pyright: ignore[reportUnnecessaryIsInstance]
-            raise ApplicabilityError("not-applicable-reason-required")
-        if self.contracts:
-            raise ApplicabilityError("not-applicable-cannot-carry-test-contracts")
-
-
-GateApplicability = RedRequired | NotApplicable
 
 
 @dataclass(frozen=True)
@@ -782,38 +609,11 @@ def _typed_landing(merged: Mapping[str, object]) -> Landing | None:
 
 
 def _typed_mold_document(
-    spec: object, *, require_ui_surface: bool = False
+    spec: object,
 ) -> tuple[MoldSpecDocument, str, Mapping[str, object]]:
     text, raw_spec = _spec_text(spec)
     merged = _merged_frontmatter(text, raw_spec)
-    declaration = merged.get("gate_applicability")
-    if not isinstance(declaration, Mapping):
-        raise ApplicabilityError("gate-applicability-declaration-required")
-    gate = cast(Mapping[str, object], declaration)
-    ui_surface = gate.get("ui_surface")
-    if ui_surface is None:
-        if require_ui_surface:
-            raise ApplicabilityError("gate-applicability-ui-surface-required")
-        ui_surface = (
-            "not-applicable"
-            if gate.get("disposition") == "not-applicable"
-            else "non-browser"
-        )
-    if gate.get("disposition") == "not-applicable" and _has_test_contract_section(
-        text, merged
-    ):
-        raise ApplicabilityError("not-applicable-cannot-carry-test-contracts")
     try:
-        gate_model = _gate(
-            disposition=GateApplicabilityDisposition(
-                _clean_cell(gate.get("disposition"))
-            ),
-            work_class=WorkClass(_clean_cell(gate.get("work_class"))),
-            ui_surface=UiSurface(_clean_cell(ui_surface)),
-            reason=cast(
-                str | None, gate.get("reason") or merged.get("not_applicable_reason")
-            ),
-        )
         rows: list[TestContractRow] = []
         for item in _contract_items(text, merged):
             ids = cast(
@@ -862,7 +662,6 @@ def _typed_mold_document(
                 confidence=SpecConfidence(
                     cast(str, merged.get("confidence", "medium"))
                 ),
-                gate_applicability=gate_model,
                 gates_overridden=cast(
                     tuple[str, ...], merged.get("gates_overridden", ())
                 ),
@@ -901,53 +700,23 @@ def _typed_mold_document(
 typed_mold_document = _typed_mold_document
 
 
-def _contracts_from_document(document: MoldSpecDocument) -> tuple[TestContract, ...]:
-    return tuple(
-        TestContract(
-            acceptance_id=row.acceptance_id,
-            interface=row.interface_referent,
-            seam=row.outermost_stable_seam,
-            expected_failure=row.expected_failure,
-            mode=row.mode.value,
-            interface_version=row.interface_version or None,
-            matrix_rows=row.matrix_rows,
-        )
-        for row in document.test_contract_rows
-    )
-
-
 def _clean_cell(value: object) -> str:
     if not isinstance(value, str):
         raise ApplicabilityError("test-contract-field-not-string")
     return value.strip().strip("`")
 
 
-def _has_browser_interface(contract: TestContract) -> bool:
-    return contract.contract_source == "approved" and bool(
-        BROWSER_MARKER.search(contract.interface)
-    )
-
-
-def _has_browser_seam(contract: TestContract) -> bool:
-    return contract.contract_source == "approved" and bool(
-        BROWSER_MARKER.search(contract.seam)
-    )
-
-
 def required_reflections(spec: object) -> tuple[str, ...]:
-    """Return the reflection sections required for a consequential fork."""
-    try:
-        document, _, _ = _typed_mold_document(spec)
-    except ApplicabilityError as exc:
-        if exc.problems == ("gate-applicability-declaration-required",):
-            return REFLECTIONS
-        raise
-    if (
-        document.frontmatter.gate_applicability.disposition
-        is GateApplicabilityDisposition.NOT_APPLICABLE
-    ):
-        return NOT_APPLICABLE_REFLECTIONS
+    """Return the reflection sections required for a consequential fork.
+
+    Test Contracts is optional, so its reflection is required only when the
+    draft carries that section.
+    """
+    text, raw_spec = _spec_text(spec)
+    if _has_test_contract_section(text, _merged_frontmatter(text, raw_spec)):
+        return (*REFLECTIONS, TEST_CONTRACT_REFLECTION)
     return REFLECTIONS
+
 
 
 MAX_SPEC_BYTES = 1_000_000
@@ -982,43 +751,6 @@ def parse_landing(spec: object) -> Landing | None:
     """Read only the front matter's ``landing`` block; ``None`` when absent."""
     text, raw_spec = _spec_text(spec)
     return _typed_landing(_merged_frontmatter(text, raw_spec))
-
-
-def parse_gate_applicability(
-    spec: object, *, require_ui_surface: bool = False
-) -> GateApplicability:
-    document, _, merged = _typed_mold_document(
-        spec, require_ui_surface=require_ui_surface
-    )
-    declaration = document.frontmatter.gate_applicability
-    raw_declaration = cast(Mapping[str, object], merged["gate_applicability"])
-    ui_surface = (
-        declaration.ui_surface.value
-        if raw_declaration.get("ui_surface") is not None
-        else None
-    )
-    contracts = _contracts_from_document(document)
-    if declaration.disposition is GateApplicabilityDisposition.RED_REQUIRED:
-        problems: list[str] = []
-        if not contracts:
-            problems.append("red-required-needs-test-contracts")
-        elif not any(
-            contract.mode in EXECUTABLE_CONTRACT_MODES for contract in contracts
-        ):
-            problems.append(RED_REQUIRED_EXECUTABLE_PROBLEM)
-        if declaration.ui_surface is UiSurface.BROWSER:
-            if not all(_has_browser_interface(contract) for contract in contracts):
-                problems.append("browser-e2e-interface-required")
-            if not all(_has_browser_seam(contract) for contract in contracts):
-                problems.append("browser-e2e-seam-required")
-        if problems:
-            raise ApplicabilityError("; ".join(problems), problems)
-        return RedRequired(
-            declaration.work_class.value, contracts, ui_surface=ui_surface
-        )
-    return NotApplicable(
-        declaration.work_class.value, declaration.reason or "", ui_surface=ui_surface
-    )
 
 
 _LEDGER_RESERVED_KEYS = frozenset({"goal", "goal_clauses"})
@@ -1288,15 +1020,13 @@ def _failed(
     return ForkTasteVerdict.from_mapping(values)
 
 
-def _applicability_gaps(draft: object) -> list[str]:
+def _document_gaps(draft: object) -> list[str]:
+    if not is_new_mold_spec(draft):
+        return []
     try:
-        _ = parse_gate_applicability(draft, require_ui_surface=True)
+        _ = _typed_mold_document(draft)
     except ApplicabilityError as exc:
-        if exc.problems == ("gate-applicability-declaration-required",):
-            if not is_new_mold_spec(draft):
-                return []
-            return ["gate-applicability:gate-applicability-declaration-required"]
-        return [f"gate-applicability:{problem}" for problem in exc.problems]
+        return [f"spec-document:{problem}" for problem in exc.problems]
     return []
 
 
@@ -1308,7 +1038,7 @@ def lexical_precheck(draft: object, decision_ledger: object) -> tuple[str, ...]:
     sections = _draft_sections(draft)
     gaps: list[str] = [
         *ledger_problems,
-        *_applicability_gaps(draft),
+        *_document_gaps(draft),
         *_goal_gaps(sections, goal),
         *_coverage_gaps(sections, clauses),
     ]
@@ -1388,7 +1118,7 @@ def taste_test(
         "unsupported_assumptions": [],
         "acceptance_gaps": [
             *ledger_problems,
-            *_applicability_gaps(draft),
+            *_document_gaps(draft),
             *_goal_gaps(sections, goal),
             *_coverage_gaps(sections, clauses),
         ],

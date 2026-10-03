@@ -30,9 +30,6 @@ SPEC_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
 BASE_SPEC = (SPEC_FIXTURES / "valid_spec.md").read_text(encoding="utf-8")
 LEGACY_SPEC = (SPEC_FIXTURES / "legacy_v013_spec.md").read_text(encoding="utf-8")
 MINI_SPEC = (SPEC_FIXTURES / "valid_mini_spec.md").read_text(encoding="utf-8")
-RED_MINI_SPEC = (SPEC_FIXTURES / "valid_red_required_mini_spec.md").read_text(
-    encoding="utf-8"
-)
 MOLD_ARCHIVE = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
 COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
@@ -488,86 +485,28 @@ def test_missing_frontmatter_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     end = BASE_SPEC.index("---", 3) + 3
     text = BASE_SPEC[end:].lstrip("\n")
     path = _write(tmp_path, "spec.md", text)
-    result = _run(path)
+    result = _run(path, "--strict")
     errors = _error_lines(result)
     assert result.returncode == 1
-    assert any("gate-applicability-required" in line for line in errors)
+    assert any("spec-provenance-required" in line for line in errors)
 
 
-def test_missing_gate_applicability_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+def test_spec_without_gate_applicability_passes(tmp_path: Path, _run: _RunFn) -> None:
+    assert "gate_applicability" not in BASE_SPEC
+    path = _write(tmp_path, "spec.md", BASE_SPEC)
+    for flags in ((), ("--strict",)):
+        result = _run(path, *flags)
+        assert result.returncode == 0, (flags, result.stderr)
+        assert not _error_lines(result), flags
+
+
+def _spec_without_test_contracts() -> str:
     text = BASE_SPEC.replace(
-        "gate_applicability:\n  disposition: red-required\n  work_class: behavior\n"
-        + "  ui_surface: non-browser\n",
-        "",
-        1,
-    )
-    path = _write(tmp_path, "spec.md", text)
-    result = _run(path)
-    errors = _error_lines(result)
-    assert result.returncode == 1
-    assert any("gate-applicability-required" in line for line in errors)
-
-
-def test_underscore_not_applicable_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
-    text = BASE_SPEC.replace(
-        "  disposition: red-required\n", "  disposition: not_applicable\n", 1
-    )
-    path = _write(tmp_path, "spec.md", text)
-    result = _run(path)
-    errors = _error_lines(result)
-    assert result.returncode == 1
-    assert any(
-        "gate-applicability-closed-class" in line and "disposition" in line
-        for line in errors
-    )
-
-
-def test_unknown_work_class_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
-    text = BASE_SPEC.replace("  work_class: behavior\n", "  work_class: bogus\n", 1)
-    path = _write(tmp_path, "spec.md", text)
-    result = _run(path)
-    errors = _error_lines(result)
-    assert result.returncode == 1
-    assert any(
-        "gate-applicability-closed-class" in line and "work_class" in line
-        for line in errors
-    )
-
-
-def test_unknown_ui_surface_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
-    text = BASE_SPEC.replace("  ui_surface: non-browser\n", "  ui_surface: bogus\n", 1)
-    path = _write(tmp_path, "spec.md", text)
-    result = _run(path)
-    errors = _error_lines(result)
-    assert result.returncode == 1
-    assert any(
-        "gate-applicability-closed-class" in line and "ui_surface" in line
-        for line in errors
-    )
-
-
-def _isolated_gate_applicability_fixture(reason: str | None, rows: bool) -> str:
-    text = BASE_SPEC.replace(
-        "gate_applicability:\n  disposition: red-required\n  work_class: behavior\n"
-        + "  ui_surface: non-browser\n",
-        "gate_applicability:\n  disposition: not-applicable\n  work_class: docs-only\n"
-        + "  ui_surface: not-applicable\n"
-        + (f"  reason: {reason}\n" if reason else ""),
-        1,
-    )
-    text = text.replace(
         "- AC-2: WHEN the validator runs on a valid contract-matrix spec "
         + "THE SYSTEM SHALL exit 0.\n",
         "",
         1,
-    )
-    ac2_row = (
-        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
-        + "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n"
-    )
-    if rows:
-        return text.replace(ac2_row, "", 1)
-    text = text.replace(
+    ).replace(
         "- AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM "
         + "SHALL exit 0.\n",
         "",
@@ -576,44 +515,31 @@ def _isolated_gate_applicability_fixture(reason: str | None, rows: bool) -> str:
     return _strip_test_contracts(text)
 
 
-def test_not_applicable_with_contracts_is_rejected(
+def test_spec_without_test_contracts_section_is_accepted(
     tmp_path: Path, _run: _RunFn
 ) -> None:
-    text = _isolated_gate_applicability_fixture(
-        reason="closed, no CLI change", rows=True
-    )
-    path = _write(tmp_path, "spec.md", text)
-    result = _run(path)
-    errors = _error_lines(result)
-    assert result.returncode == 1
-    assert len(errors) == 1
-    assert "not-applicable" in errors[0]
-    assert "requires no Test Contracts section" in errors[0]
-
-
-def test_not_applicable_without_test_contracts_is_accepted(
-    tmp_path: Path, _run: _RunFn
-) -> None:
-    text = _isolated_gate_applicability_fixture(
-        reason="closed, no CLI change", rows=False
-    )
+    text = _spec_without_test_contracts()
+    assert "## Test Contracts" not in text
     path = _write(tmp_path, "spec.md", text)
     for flags in ((), ("--strict",)):
         result = _run(path, *flags)
-        assert result.returncode == 0, (flags, result.stderr)
+        assert result.returncode == 0, (flags, result.stdout + result.stderr)
         assert not _error_lines(result), flags
 
 
-def test_not_applicable_without_reason_is_rejected(
+def test_present_test_contracts_table_is_still_validated(
     tmp_path: Path, _run: _RunFn
 ) -> None:
-    text = _isolated_gate_applicability_fixture(reason=None, rows=False)
-    path = _write(tmp_path, "spec.md", text)
+    row = (
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
+        + "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n"
+    )
+    assert row in BASE_SPEC
+    path = _write(tmp_path, "spec.md", BASE_SPEC.replace(row, "", 1))
     result = _run(path)
     errors = _error_lines(result)
     assert result.returncode == 1
-    assert len(errors) == 1
-    assert "reason is required" in errors[0]
+    assert any("AC-2" in line for line in errors)
 
 
 def test_multiple_violations_accumulate_in_one_run(
@@ -682,18 +608,10 @@ def test_legacy_v013_spec_is_not_execution_authority(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     preparation = cast(dict[str, object], json.loads(result.stdout))
-    assert preparation["outcome"] == "invalid"
-    findings = cast(list[dict[str, object]], preparation["findings"])
-    assert findings == [
-        {
-            "code": "invalid-input",
-            "message": (
-                "spec snapshot is not a valid Mold document: "
-                "gate-applicability-declaration-required"
-            ),
-            "path": None,
-        }
-    ]
+    assert preparation["outcome"] == "needs-planning"
+    assert preparation["findings"] == []
+    assert preparation["handoff_ref"] is None
+    assert preparation["approved_plan_ref"] is None
     assert path.read_bytes() == original
 
 
@@ -706,11 +624,7 @@ def test_legacy_v013_spec_is_rejected_under_strict_mint(
     assert result.returncode == 1
     assert not _notice_lines(result)
     assert any("spec-provenance-required" in line for line in errors)
-    assert any(
-        "missing-required-section" in line and "Test Contracts" in line
-        for line in errors
-    )
-    assert any("gate-applicability-required" in line for line in errors)
+    assert not any("gate-applicability" in line for line in errors)
     assert any(
         "missing-required-section" in line and "Grounding" in line for line in errors
     )
@@ -765,33 +679,21 @@ def test_legacy_spec_test_contracts_content_is_still_validated(
     assert any("test-contracts-table-shape" in line for line in errors)
 
 
-def test_hardened_spec_missing_test_contracts_is_rejected_on_read(
+def test_hardened_spec_without_test_contracts_is_accepted_on_read(
     tmp_path: Path, _run: _RunFn
 ) -> None:
     path = _write(tmp_path, "spec.md", _strip_test_contracts(BASE_SPEC))
     result = _run(path)
-    errors = _error_lines(result)
-    assert result.returncode == 1
-    assert not _notice_lines(result)
-    assert any(
-        "missing-required-section" in line and "Test Contracts" in line
-        for line in errors
-    )
-
-
-def test_documented_not_applicable_mini_spec_passes_strict_validation(
-    tmp_path: Path, _run: _RunFn
-) -> None:
-    result = _run(_write(tmp_path, "mini-spec.md", MINI_SPEC), "--strict")
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     assert not _error_lines(result)
     assert not _notice_lines(result)
 
 
-def test_documented_red_required_mini_spec_passes_strict_validation(
+def test_documented_mini_spec_passes_strict_validation(
     tmp_path: Path, _run: _RunFn
 ) -> None:
-    result = _run(_write(tmp_path, "mini-spec.md", RED_MINI_SPEC), "--strict")
+    assert "gate_applicability" not in MINI_SPEC
+    result = _run(_write(tmp_path, "mini-spec.md", MINI_SPEC), "--strict")
     assert result.returncode == 0, result.stderr
     assert not _error_lines(result)
     assert not _notice_lines(result)
@@ -821,31 +723,15 @@ def test_nested_source_is_reported_without_a_traceback(
     assert "Traceback" not in result.stderr
 
 
-def test_legacy_scalar_gate_applicability_is_rejected(
-    tmp_path: Path, _run: _RunFn
-) -> None:
-    text = LEGACY_SPEC.replace(
-        "agent_introduced_scope: []\n",
-        "agent_introduced_scope: []\ngate_applicability: garbage\n",
-        1,
-    )
-    result = _run(_write(tmp_path, "spec.md", text))
-    assert result.returncode == 1
-    assert any(
-        "gate-applicability-required" in line and "unparseable" in line
-        for line in _error_lines(result)
-    )
-
-
 def test_spec_without_frontmatter_is_malformed_not_legacy(
     tmp_path: Path, _run: _RunFn
 ) -> None:
     end = BASE_SPEC.index("---", 3) + 3
     path = _write(tmp_path, "spec.md", BASE_SPEC[end:].lstrip("\n"))
-    result = _run(path)
+    result = _run(path, "--strict")
     assert result.returncode == 1
     assert not _notice_lines(result)
-    assert any("gate-applicability-required" in line for line in _error_lines(result))
+    assert any("spec-provenance-required" in line for line in _error_lines(result))
 
 
 # --- grounding gate (#553) ----------------------------------------------
@@ -981,12 +867,10 @@ def test_grounding_table_column_drift_is_a_shape_error(
     assert any("delegation-digest-recorded" in line for line in errors)
 
 
-def test_not_applicable_spec_still_requires_grounding(
+def test_spec_without_test_contracts_still_requires_grounding(
     tmp_path: Path, _run: _RunFn
 ) -> None:
-    text = _isolated_gate_applicability_fixture(
-        reason="closed, no CLI change", rows=False
-    ).replace(WIKI_ROW, "", 1)
+    text = _spec_without_test_contracts().replace(WIKI_ROW, "", 1)
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     errors = _error_lines(result)
@@ -1000,8 +884,8 @@ def test_unknown_landing_shape_is_rejected(
     tmp_path: Path, _run: _RunFn, flag: str
 ) -> None:
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\nlanding:\n  shape: stacked\n---",
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n  shape: stacked\n---",
         1,
     )
     path = _write(tmp_path, "spec.md", text)
@@ -1013,8 +897,8 @@ def test_unknown_landing_shape_is_rejected(
 
 def test_single_shape_with_layers_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        '  ui_surface: non-browser\nlanding:\n  shape: single\n  layers: [["c1"]]\n---',
+        "agent_introduced_scope: []\n---",
+        'agent_introduced_scope: []\nlanding:\n  shape: single\n  layers: [["c1"]]\n---',
         1,
     )
     path = _write(tmp_path, "spec.md", text)
@@ -1029,8 +913,8 @@ def test_valid_stacked_linear_landing_is_accepted(
     tmp_path: Path, _run: _RunFn, flag: str
 ) -> None:
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\n"
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
         + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n'
         + "  per_layer_green: required\n  review_fixes: fold\n---",
         1,
@@ -1042,8 +926,8 @@ def test_valid_stacked_linear_landing_is_accepted(
 
 def test_unknown_landing_key_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\n"
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
         + "landing:\n  shape: single\n  per_layer_greeen: tip-only\n---",
         1,
     )
@@ -1058,8 +942,8 @@ def test_missing_landing_shape_is_rejected_without_a_sentinel(
     tmp_path: Path, _run: _RunFn
 ) -> None:
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\nlanding:\n  per_layer_green: required\n---",
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n  per_layer_green: required\n---",
         1,
     )
     path = _write(tmp_path, "spec.md", text)
@@ -1072,8 +956,8 @@ def test_missing_landing_shape_is_rejected_without_a_sentinel(
 
 def test_empty_landing_mapping_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\nlanding: {}\n---",
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding: {}\n---",
         1,
     )
     path = _write(tmp_path, "spec.md", text)
@@ -1089,8 +973,8 @@ def test_landing_layers_block_sequence_of_scalars_is_rejected(
     # A plausible mistake: YAML block-list syntax naming bare curd ids instead
     # of one-element groups, i.e. `- c1` instead of `- [c1]`.
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\n"
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
         + "landing:\n  shape: stacked_linear\n  layers:\n    - c1\n    - c2\n---",
         1,
     )
@@ -1109,8 +993,8 @@ def test_landing_layers_with_non_string_item_is_rejected(
     tmp_path: Path, _run: _RunFn
 ) -> None:
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\n"
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
         + 'landing:\n  shape: stacked_linear\n  layers: [["c1", 1]]\n---',
         1,
     )
@@ -1128,8 +1012,8 @@ def test_landing_layers_with_duplicate_curd_id_is_rejected(
     tmp_path: Path, _run: _RunFn
 ) -> None:
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\n"
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
         + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c1"]]\n---',
         1,
     )
@@ -1145,8 +1029,8 @@ def test_single_shape_with_explicit_empty_layers_is_accepted(
     tmp_path: Path, _run: _RunFn
 ) -> None:
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\nlanding:\n  shape: single\n  layers: []\n---",
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n  shape: single\n  layers: []\n---",
         1,
     )
     path = _write(tmp_path, "spec.md", text)
@@ -1170,17 +1054,16 @@ def test_legacy_spec_with_valid_landing_block_is_still_accepted(
     assert not _error_lines(result)
 
 
-def test_not_applicable_spec_with_valid_landing_block_is_accepted(
+def test_spec_without_test_contracts_and_valid_landing_block_is_accepted(
     tmp_path: Path, _run: _RunFn
 ) -> None:
-    text = _isolated_gate_applicability_fixture(
-        reason="closed, no CLI change", rows=False
-    ).replace(
-        "gate_applicability:\n  disposition: not-applicable\n",
-        'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n'
-        + "gate_applicability:\n  disposition: not-applicable\n",
+    text = _spec_without_test_contracts().replace(
+        "agent_introduced_scope: []\n",
+        "agent_introduced_scope: []\n"
+        + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n',
         1,
     )
+    assert "landing:" in text
     path = _write(tmp_path, "spec.md", text)
     result = _run(path)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -1224,8 +1107,8 @@ def test_curdle_spec_template_landing_block_validates(
     )
     assert 'layers: [["c1"], ["c2"]]' in landing_block
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\nlanding:\n" + landing_block + "---",
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n" + landing_block + "---",
         1,
     )
     path = _write(tmp_path, "spec.md", text)
@@ -1260,8 +1143,8 @@ def test_mini_spec_mode_template_landing_block_validates(
     )
     assert 'layers: [["c1"], ["c2"]]' in landing_block
     text = BASE_SPEC.replace(
-        "  ui_surface: non-browser\n---",
-        "  ui_surface: non-browser\nlanding:\n" + landing_block + "---",
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n" + landing_block + "---",
         1,
     )
     path = _write(tmp_path, "spec.md", text)

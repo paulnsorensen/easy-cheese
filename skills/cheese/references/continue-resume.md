@@ -145,11 +145,11 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    - **When `next: cook` follows a gate handoff**, keep the handoff's specification pointer authoritative.
      Read that pointer from the typed `spec_ref` field.
      Read it from `artifact:` only for a legacy note that has no `spec_ref` value.
-     An approved Mold `red-required` handoff dispatches `/cook` with that same pointer.
+     An approved Mold handoff dispatches `/cook` with that same pointer.
      Preserve validated optional `mode:` and in-scope `--hard`, `--open-pr`, and `--safe` flags.
      Forward `--auto` only when the handoff contains it.
      Never infer `--auto`.
-     Press corrective work remains `continue: press-corrective-cook`, not a global Press-to-Cook dispatch.
+     A Press finding hands off as a Cook correction (`next: cook`).
    - **When `status:` is `ok` and `next:` names a read-only kickoff**, dispatch it automatically.
      The valid kickoff values are `briesearch | culture`.
      Use `/briesearch \<arg\>` or `/culture`.
