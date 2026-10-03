@@ -489,7 +489,6 @@ unresolved work. Partial work passes exactly the dependency-closed IDs to the
 selected route, while the canonical `PlannerResult.unresolved_work` remains
 durable for resumption.
 A changed subset or remainder returns to `needs-planning`.
-A changed subset or remainder returns to `needs-planning`.
 
 ### Preparation loop
 
@@ -514,6 +513,7 @@ used.
 Setup authorization names one prerequisite, a finite path set, and a finite
 command set.  Evidence must include that prerequisite, exact command and
 fixture, environment identity, successful exit result, and captured-output
+digest.  Setup authority cannot clear a feature hold or authorize feature
 writes.
 
 The host integration calls the public

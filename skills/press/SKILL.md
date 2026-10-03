@@ -83,7 +83,7 @@ Map `blocked` to `status: halt: <reason>` and `next: done`. `blocked` means inva
 
 Dispatch `/age <slug> --auto` after `ready for /age` or `follow-up recommended`. Add `--hard` when the user supplied it. Add `--open-pr` when the user supplied it.
 
-Stop after `blocked`. Do not dispatch Age.
+Stop after `blocked` or `halt: correction-cap`. Do not dispatch Age.
 
 Honor the no-chain directive when the caller supplies it. Write the Press handoff and stop. Do not start another phase. Cook's fan pathway owns this directive. The retired `/ultracook` orchestrator previously owned it. Test for the directive itself. Do not test for the source name. See [`../cook/references/auto-mode.md`](../cook/references/auto-mode.md).
 

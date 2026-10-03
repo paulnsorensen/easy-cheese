@@ -38,7 +38,7 @@ Before handoff to Press, make every inner test and relevant gate GREEN.
 
 For non-behavior work, complete the requested non-behavior verification and taste-test. Then, hand off directly to Age. Non-behavior work has no Test Contracts for Press to attack.
 
-A corrective Cook (`correction = true`) applies only to the active Press corrective loop. It must not weaken, replace, or bypass an existing test.
+A corrective Cook (`correction = true`) applies only to the active Press correction. It must not weaken, replace, or bypass an existing test.
 
 If Cook reports partial or skipped work, **stop and resolve it before taste-test**.
 

@@ -568,7 +568,7 @@ def test_light_scope_without_a_declared_curd_holds_with_a_scope_requirement(
     assert [item.requirement_id for item in result.requirements] == [
         "light-scope-cook-request"
     ]
-    assert result.outcome is not CookPreparationOutcome.READY
+    assert result.outcome is CookPreparationOutcome.BLOCKED
 
 
 def test_light_scope_with_two_curds_is_rejected(tmp_path: Path) -> None:

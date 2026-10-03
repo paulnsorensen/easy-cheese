@@ -9,8 +9,8 @@ else. Legacy is a read-side grace, never a write-side option.
 
 Legacy detection keys on Mold's provenance marker — the frontmatter ``source``
 field — the same discriminator the taste gate already trusts. A spec carrying no
-frontmatter at all reads as legacy: non-strict validation accepts it, and
-``--strict`` rejects it for lack of a provenance marker.
+frontmatter at all is not legacy: validation applies the full section rules,
+and ``--strict`` rejects it for lack of a provenance marker.
 
 This module is deliberately stdlib-only so the bundled validators can consume it
 without reaching for the attrs-backed model stack.

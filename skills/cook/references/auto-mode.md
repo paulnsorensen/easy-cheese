@@ -33,7 +33,7 @@ Cook cannot weaken or bypass existing tests.
    It invokes `/age <slug> --auto` when readiness is `ready for /age` or `follow-up recommended`.
    Both states mean that the cooked contract is sound.
    Documented follow-ups are review-safe.
-   Only `blocked` stops auto.
+   Only `blocked` or `halt: correction-cap` stops auto.
    Press reports `blocked` for invalid evidence or a production change.
    Cook runs a Press `next: cook` handoff as a correction (`correction = true`).
    Press enforces the correction cap: at most 2 Cook corrections for the same attack.
