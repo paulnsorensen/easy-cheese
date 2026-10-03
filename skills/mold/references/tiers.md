@@ -42,4 +42,4 @@ Downgrade only on the user's knob. Say what the lower tier skips before continui
 
 ## Relationship to `/cheese`
 
-`/cheese` enters mini-spec mode directly at tier 1 when the clarity check passes. Mold's Quick tier writes the same validated draft without a separate approval turn. A `mold` intent from `/cheese` still enters user mode and tiers itself here. Route selection and Cook consent stay separate; see [`handshake.md`](handshake.md) § User key for the accepted reply forms.
+`/cheese` enters mini-spec mode directly at tier 1 when the clarity check passes. Mold's Quick tier writes the same validated draft without a separate approval turn. A `mold` intent from `/cheese` still enters user mode and tiers itself here. Route selection and the Cook request stay separate; the agent coherence self-check in [`handshake.md`](handshake.md) is the only execution gate.

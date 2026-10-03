@@ -15,12 +15,10 @@ sys.path.insert(0, str(test_root))
 sys.path.insert(0, str(test_root / "src"))
 
 from easy_cheese_schemas import canonical_bytes  # noqa: E402
-from easy_cheese_schemas.mold_cook import MoldCookApprovalDecision  # noqa: E402
 from tests.python.test_mold_cook_producer import (  # noqa: E402
     taste_fixture,
     make_planner_result,
     make_spec,
-    response_decision,
 )
 
 
@@ -47,18 +45,6 @@ def _call(
     return dict(cast(Mapping[str, object], decoded)), result.returncode
 
 
-responses = cast(object, json.loads(os.environ["MOLD_COOK_HARNESS_RESPONSES"]))
-if not isinstance(responses, Mapping):
-    raise SystemExit("missing harness approval responses")
-response_map = cast(Mapping[str, object], responses)
-if not isinstance(response_map.get("plan"), str):
-    raise SystemExit("missing harness plan response")
-scope_response = response_map.get("scope")
-if scope_response is not None and not isinstance(scope_response, str):
-    raise SystemExit("invalid harness scope response")
-plan_response = cast(str, response_map["plan"])
-plan_decision = response_decision(plan_response)
-
 repository = Path(os.environ["MOLD_COOK_FIXTURE_REPOSITORY"])
 mold = Path(os.environ["MOLD_COOK_MOLD_BUNDLE"])
 cook = Path(os.environ["MOLD_COOK_COOK_BUNDLE"])
@@ -81,9 +67,6 @@ prepare, prepare_code = _call(
 )
 if prepare.get("outcome") != "needs-planning":
     raise SystemExit(f"Cook preparation did not reach planning: {prepare}")
-request_id = prepare.get("request_id")
-if not isinstance(request_id, str):
-    raise SystemExit("Cook preparation did not name a request id")
 
 events: list[dict[str, object]] = [
     {"type": "input_classified", "input_kind": "direct_spec"},
@@ -96,94 +79,12 @@ events: list[dict[str, object]] = [
     },
 ]
 
-if scope_response is not None:
-    scope_decision = response_decision(scope_response)
-    scope_approval, _ = _call(
-        cook,
-        repository,
-        "approve",
-        str(spec),
-        "--artifact-root",
-        str(artifacts),
-        "--request-id",
-        request_id,
-        "--kind",
-        "scope",
-        "--response",
-        scope_response,
-        "--curd-id",
-        "curd-1",
-    )
-    prepare_path = repository / "prepare.json"
-    _ = prepare_path.write_text(json.dumps(prepare), encoding="utf-8")
-    scope_approval_path = Path(cast(str, scope_approval["approval_path"]))
-    resubmitted, resubmit_code = _call(
-        cook,
-        repository,
-        "resubmit",
-        str(prepare_path),
-        "--source",
-        str(spec),
-        "--repository-root",
-        str(repository),
-        "--artifact-root",
-        str(artifacts),
-        "--scope-approval",
-        str(scope_approval_path),
-        check=False,
-    )
-    resubmit_outcome = str(resubmitted.get("outcome", "refused"))
-    events.extend(
-        [
-            {
-                "type": "approval_recorded",
-                "kind": "scope",
-                "source": "harness",
-                "decision": scope_decision.value,
-                "response": scope_response,
-            },
-            {
-                "type": "prepare",
-                "mode": "full",
-                "outcome": resubmit_outcome,
-                "tool": "scripts/cook.pyz resubmit",
-                "returncode": resubmit_code,
-            },
-        ]
-    )
-    if scope_decision is not MoldCookApprovalDecision.APPROVED:
-        if resubmit_code != 0 or resubmit_outcome not in {"blocked", "invalid"}:
-            raise SystemExit(
-                f"Cook did not hold a refused scope approval: {resubmit_outcome}",
-            )
-        print(json.dumps({"scenario": "fixture-agent", "events": events}))
-        raise SystemExit(0)
-    if resubmit_code != 0:
-        raise SystemExit("Cook refused the approved scope approval")
-
 planner_path = repository / "planner.json"
 plan_path = repository / "plan.json"
 taste_path = repository / "taste.json"
 ledger_path = repository / "ledger.json"
 _ = planner_path.write_bytes(canonical_bytes(planner))
 _ = plan_path.write_bytes(canonical_bytes(planner.plan))
-plan_approval, _ = _call(
-    mold,
-    repository,
-    "approve",
-    str(spec),
-    "--artifact-root",
-    str(artifacts),
-    "--request-id",
-    "request-1",
-    "--kind",
-    "plan",
-    "--response",
-    plan_response,
-    "--planner-result",
-    str(planner_path),
-)
-approval_path = Path(cast(str, plan_approval["approval_path"]))
 taste = taste_fixture(spec)
 _ = taste_path.write_text(
     json.dumps(
@@ -206,8 +107,6 @@ finalized, finalize_code = _call(
     repository,
     "finalize",
     str(spec),
-    "--approval",
-    str(approval_path),
     "--planner-result",
     str(planner_path),
     "--plan",
@@ -240,14 +139,6 @@ accepted, accept_code = _call(
 
 events.extend(
     [
-        {"type": "approval_requested", "kind": "plan"},
-        {
-            "type": "approval_recorded",
-            "kind": "plan",
-            "source": "harness",
-            "decision": plan_decision.value,
-            "response": plan_response,
-        },
         {
             "type": "plan_materialized",
             "outcome": finalized.get("status"),

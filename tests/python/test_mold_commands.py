@@ -108,17 +108,13 @@ def test_finalize_entrypoint_saves_invalid_taste_as_not_ready(
     fixture = Path(__file__).parent / "fixtures" / "spec_format" / "valid_spec.md"
     spec_path = tmp_path / "spec.md"
     _ = spec_path.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
-    approval_path = tmp_path / "approval.json"
     taste_path = tmp_path / "taste.json"
-    _ = approval_path.write_text("{}", encoding="utf-8")
     _ = taste_path.write_text(json.dumps({"not": "a taste verdict"}), encoding="utf-8")
 
     exit_code = commands.main(
         [
             "finalize",
             str(spec_path),
-            "--approval",
-            str(approval_path),
             "--artifact-root",
             str(tmp_path / "artifacts"),
             "--operation-id",

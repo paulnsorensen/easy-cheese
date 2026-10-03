@@ -3,7 +3,7 @@
 ``normalize`` and ``validate`` remain the writer-contract utilities.  ``accept``
 is the canonical execution entry for a validated MoldCookHandoff; ``prepare``
 and ``resubmit`` classify input and recompute closed preparation outcomes
-without dispatching agents or inventing approval evidence.
+without dispatching agents or inventing runner approval evidence.
 """
 
 from __future__ import annotations
@@ -201,8 +201,6 @@ def _hold_clearances(clear_hold: Sequence[str]) -> tuple[CookHoldClearance, ...]
 
 def _evidence_from_args(
     *,
-    scope_approval: str | None,
-    plan_approval: str | None,
     runner_approval: str | None,
     planner_result: str | None,
     setup_authorization: str | None,
@@ -213,8 +211,6 @@ def _evidence_from_args(
     """Collect the host-owned evidence the command-line options name."""
 
     return PreparationEvidence(
-        scope_approval=Path(scope_approval) if scope_approval else None,
-        plan_approval=Path(plan_approval) if plan_approval else None,
         runner_approval=Path(runner_approval) if runner_approval else None,
         planner_result=Path(planner_result) if planner_result else None,
         setup_authorization=Path(setup_authorization) if setup_authorization else None,
@@ -244,8 +240,6 @@ def prepare(
     repository_root: str = ".",
     artifact_root: str = ".cheese/cook",
     mode: str = "full",
-    scope_approval: str | None = None,
-    plan_approval: str | None = None,
     runner_approval: str | None = None,
     planner_result: str | None = None,
     setup_authorization: str | None = None,
@@ -276,10 +270,6 @@ def prepare(
         Artifact root preparation writes and reads under.
     mode
         Preparation mode: full or light.
-    scope_approval
-        Path to the scope-approval evidence.
-    plan_approval
-        Path to the plan-approval evidence.
     runner_approval
         Path to the runner-approval evidence.
     planner_result
@@ -301,8 +291,6 @@ def prepare(
             continuation=continuation,
         )
         evidence = _evidence_from_args(
-            scope_approval=scope_approval,
-            plan_approval=plan_approval,
             runner_approval=runner_approval,
             planner_result=planner_result,
             setup_authorization=setup_authorization,
@@ -330,8 +318,6 @@ def resubmit(
     repository_root: str | None = None,
     artifact_root: str | None = None,
     mode: str | None = None,
-    scope_approval: str | None = None,
-    plan_approval: str | None = None,
     runner_approval: str | None = None,
     planner_result: str | None = None,
     setup_authorization: str | None = None,
@@ -353,10 +339,6 @@ def resubmit(
         Artifact root preparation writes and reads under.
     mode
         Preparation mode: full or light.
-    scope_approval
-        Path to the scope-approval evidence.
-    plan_approval
-        Path to the plan-approval evidence.
     runner_approval
         Path to the runner-approval evidence.
     planner_result
@@ -374,8 +356,6 @@ def resubmit(
         previous_result = load_preparation_result(previous)
         clearances = _hold_clearances(clear_hold)
         evidence = _evidence_from_args(
-            scope_approval=scope_approval,
-            plan_approval=plan_approval,
             runner_approval=runner_approval,
             planner_result=planner_result,
             setup_authorization=setup_authorization,

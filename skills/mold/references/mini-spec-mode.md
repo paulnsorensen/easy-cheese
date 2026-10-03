@@ -6,7 +6,7 @@ Read this when `/mold` uses agent-invoked mini-spec mode. This mode is the tier-
    Check the leverage triggers in `../../cheese/references/routing-policy.md` first. A mini-spec always carries `leverage: []`. When any trigger fires, refuse the mint, name the trigger ids, and return the ask to `/cheese` for `/mold`'s user mode.
    2. **Write the resolver-owned `<spec-path>`** with the mini-spec schema below. Resolve it: run `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` and read `path` from its JSON reply. Never hardcode a repo-local spec path: the resolver anchors it at the durable corpus, matching the Curdle step.
 2. **Validate the minted spec** with `python3 skills/mold/scripts/mold.pyz validate-spec --strict <spec-path>`. Stop on a nonzero exit; no malformed or legacy-compatible artifact advances to Cook.
-3. **Return the resolved spec path** to `/cheese`. A saved draft is not a Cook command. After the spec validates, show it and ask one direct Cook question through [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md); bind the user's literal affirmative reply per [`handshake.md`](handshake.md) § User key. On that consent, finalize and return only a ready pointer. Otherwise offer Cook or keep shaping without dispatch.
+3. **Return the resolved spec path** to `/cheese`. A saved draft is not a Cook command. After the spec validates, show it and ask one direct Cook question through [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md). When the user selects Cook, finalize and return only a ready pointer. Otherwise offer Cook or keep shaping without dispatch.
 4. **Append `--hard`** to a selected Cook command when the user passed the flag. Plate alone runs the gate.
 
 The full coherence checklist does not fire in this mode. Saving the mini-spec needs no user approval; Cook still needs the user's request. The agent-introduced-scope check still runs implicitly. Every distinguishing noun in the mini-spec must come from the user's input or the tier-2 `/culture` or `/briesearch` synthesis. Record that synthesis in `## Provenance`. Never add any other noun. The mini-spec records only the user's request. It never records the agent's interpretation.
@@ -28,11 +28,6 @@ leverage: []
 inputs: <one-line>
 outputs: <one-line>
 agent_resolution: []
-gate_applicability:
-  disposition: red-required | not-applicable
-  work_class: behavior | docs-only | refactor-only | test-only | appearance-only
-  ui_surface: browser | non-browser | not-applicable
-  reason: <required only for not-applicable>
 landing:
   shape: single | orthogonal_flat | stacked_linear | diamond_stack
   layers: []
@@ -58,12 +53,12 @@ Add exactly one row for each probe. Record the real outcome. Never invent a row.
 - AC-2: <verifiable check 2>
 
 ## Test Contracts
-Include this section only for `red-required`; omit it for `not-applicable`.
+Optional. Include this section only when the spec benefits from it.
 
 | Acceptance ID | Interface referent | Outermost stable seam | Expected failure | Mode | Interface version | Matrix rows |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC-1 | <public interface> | <existing outer seam> | <expected RED assertion> | tracer | | |
-| AC-2 | <public interface> | <existing outer seam> | <expected RED assertion> | contract-matrix | <ratified version> | <row 1><br><row 2> |
+| AC-1 | <public interface> | <existing outer seam> | <expected failing assertion> | tracer | | |
+| AC-2 | <public interface> | <existing outer seam> | <expected failing assertion> | contract-matrix | <ratified version> | <row 1><br><row 2> |
 
 ## Non-goals
 - <what we are NOT changing>
@@ -74,15 +69,6 @@ Include this section only for `red-required`; omit it for `not-applicable`.
 ```
 
 Mini-spec mode writes `shape: single` unless the user named a shape.
-
-`source: agent-mini-spec` marks the strict Mold production path. New behavior
-specs must set `ui_surface` to exactly `browser` or `non-browser`; closed
-non-behavior specs, including `appearance-only`, set it to `not-applicable`.
-The taste and curd gates reject an omitted or unsupported value. `browser`
-requires every Test Contract to name an existing browser/E2E interface and
-outer seam; `non-browser` never consults contract prose for classification.
-User-invoked ceremony specs use `source: mold-handshake` and the same rules.
-Specs without either marker remain legacy-compatible.
 
 `## Provenance` appears only when `/cheese` reaches tier 2 before falling into tier 1. This occurs when `/culture` or `/briesearch` supplies context absent from the original input. Omit the section when tier 1 fires on the raw input.
 

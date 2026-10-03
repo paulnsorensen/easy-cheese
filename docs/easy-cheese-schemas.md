@@ -36,13 +36,13 @@ The phase-specific boundary uses three versioned schemas:
 | Schema URI | Model | Authority |
 | --- | --- | --- |
 | `https://schemas.easy-cheese.dev/mold-cook-handoff` | `MoldCookHandoff` | A ready, consumer-validated handoff. Full mode binds the planner result and `CurdPlan`; Light mode names exactly one curd and carries no planner artifacts. |
-| `https://schemas.easy-cheese.dev/mold-cook-approval` | `MoldCookApproval` | Exact scope, plan, partial-plan, or runner evidence. The proposal and response digests must match the referenced bytes; only an approved response can authorize the matching coverage. |
-| `https://schemas.easy-cheese.dev/cook-preparation-result` | `CookPreparationResult` | A closed preparation outcome. Only `ready` carries a handoff; planning, approval, setup, blocker, and validation outcomes carry no execution authority. |
+| `https://schemas.easy-cheese.dev/mold-cook-approval` | `MoldCookApproval` | Exact runner approval evidence. The proposal and response digests must match the referenced bytes; only an approved decision can authorize the runner setup. |
+| `https://schemas.easy-cheese.dev/cook-preparation-result` | `CookPreparationResult` | A closed preparation outcome. Only `ready` carries a handoff; planning, preparation, blocker, and validation outcomes carry no execution authority. |
 
 These contracts contain references rather than copied plans or evidence. The
 producer and consumer resolve and validate every reference before publication
 or execution. `CookSetupAuthorization` is limited to its named prerequisite
-curd, approved paths, and approved commands; setup evidence does not clear
+curd, authorized paths, and authorized commands; setup evidence does not clear
 unrelated holds. Partial coverage preserves the acknowledged unresolved work
 until it is completed or explicitly disposed.
 
@@ -111,51 +111,6 @@ Problems accumulate; `load` reports every one it found in a single pass rather t
 Values are not type-coerced. A `str` where a `list[str]` belongs is a problem, not eight one-character paths; `"no"` where a `bool` belongs is a problem, not `True`. Reading a document is how you find out whether to trust it, so this layer reports the mismatch rather than papering over it.
 
 One case returns a value *and* problems: a `schema_version` stamp that is not an integer is recorded as a problem and the payload is treated as `UNSTAMPED`, because an untrustworthy stamp is not a reason to discard an otherwise readable document. Callers that gate on `value is not None` should check `problems` too.
-
-## Outer-TDD gate receipts
-
-The gate types are phase-neutral evidence for the Cut, Cook, and Press
-boundaries:
-
-```python
-from easy_cheese_schemas import (
-    GateDisposition,
-    GateMode,
-    GateProducer,
-    GateReceipt,
-    load,
-)
-
-receipt = load(raw_receipt, GateReceipt, strict=True)
-if receipt.value is not None and not receipt.problems:
-    payload = receipt.value.to_dict()
-```
-
-The public enums are `GateDisposition` (`RED`, `NOT_APPLICABLE`), `GateMode`
-(`TRACER`, `CONTRACT_MATRIX`), `RedKind` (`BEHAVIOR`, `CONTRACT`),
-`GateProducer` (`CUT`, `PRESS`), and `EvidenceOrigin` (`GENERATED`,
-`ADOPTED`). `TestContract` owns its own `mode`, so a RED receipt can mix tracer
-and contract-matrix contracts without a receipt-level mode. A matrix contract
-also carries its non-empty `interface_version` and complete unique
-`matrix_rows`; each corresponding `RedCase` binds one `matrix_row`. Tracer
-contracts omit those optional fields.
-
-`BaselineCheck`, `RedCase`, and `ProtectedFile` carry executable evidence,
-observed witnesses, matrix-row bindings, and project-relative protected paths.
-Commands are argv lists, not shell strings; strict loading rejects primitive
-coercion, absolute paths, and parent-directory escapes. Required identity,
-provenance, command, and witness strings are non-empty.
-`GateReceipt.phase_token_ref` and `phase_token_sha256` bind newly issued
-evidence to the pre-oracle/pre-attack phase-entry token produced by
-`red-gate begin`. They are an optional pair only for reading legacy receipts;
-the issuance boundary requires both, verifies the token's work/project/root and
-baseline identity, and stores them in every new Cut, Press, RED, or N/A receipt.
-
-A RED `GateReceipt` requires non-empty contracts, baseline checks, cases, and
-protected files. A `not-applicable` receipt is a closed shape: it has a
-non-empty `not_applicable_reason` and no guards, contracts, baseline checks,
-cases, or protected files. `to_dict()` returns JSON-shaped data with enum
-values flattened to their strings.
 
 ## The `schema_version` contract
 

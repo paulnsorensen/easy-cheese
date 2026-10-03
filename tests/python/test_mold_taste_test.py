@@ -17,11 +17,8 @@ if TYPE_CHECKING:
     from easy_cheese.shared.taste_test import (  # noqa: V104 -- names used only in quoted Protocol annotations
         ApplicabilityError as _ApplicabilityError,
         ForkTasteVerdict as _ForkTasteVerdict,
-        NotApplicable as _NotApplicable,
-        RedRequired as _RedRequired,
         TasteGateResult as _TasteGateResult,
         TasteTestError as _TasteTestError,
-        TestContract as _TestContract,
     )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -30,11 +27,7 @@ TASTE_SOURCE = REPO_ROOT / "src" / "easy_cheese" / "shared" / "taste_test.py"
 
 class _MoldTasteTestModule(Protocol):
     REFLECTIONS: tuple[str, ...]
-    NOT_APPLICABLE_REFLECTIONS: tuple[str, ...]
-    RED_REQUIRED_EXECUTABLE_PROBLEM: str
-    TestContract: type["_TestContract"]
-    RedRequired: type["_RedRequired"]
-    NotApplicable: type["_NotApplicable"]
+    TEST_CONTRACT_REFLECTION: str
     TasteTestError: type["_TasteTestError"]
     ApplicabilityError: type["_ApplicabilityError"]
 
@@ -50,9 +43,7 @@ class _MoldTasteTestModule(Protocol):
     def decomposition_gate(
         self, verdict: "_ForkTasteVerdict", *, correction_round: int = ...
     ) -> "_TasteGateResult": ...
-    def parse_gate_applicability(
-        self, spec: object, *, require_ui_surface: bool = ...
-    ) -> "_RedRequired | _NotApplicable": ...
+    def typed_mold_document(self, spec: object) -> object: ...
     def required_reflections(self, spec: object) -> tuple[str, ...]: ...
     def lexical_precheck(
         self, draft: object, decision_ledger: object
@@ -118,12 +109,12 @@ def verdict(taste: _MoldTasteTestModule, draft: object = DRAFT) -> dict[str, obj
             {
                 "id": "F-1",
                 "decision": "outer tracer",
-                "reflected_in": list(taste.REFLECTIONS),
+                "reflected_in": list(taste.required_reflections(draft)),
             },
             {
                 "id": "F-2",
                 "decision": "browser seam",
-                "reflected_in": list(taste.REFLECTIONS),
+                "reflected_in": list(taste.required_reflections(draft)),
             },
         ],
         "contradictions": [],
@@ -133,13 +124,9 @@ def verdict(taste: _MoldTasteTestModule, draft: object = DRAFT) -> dict[str, obj
     }
 
 
-def red_spec() -> str:
+def contract_spec() -> str:
     return """---
 source: mold-handshake
-gate_applicability:
-  disposition: red-required
-  work_class: behavior
-  ui_surface: non-browser
 ---
 # A behavior
 
@@ -165,68 +152,57 @@ def test_pass_requires_digest_and_every_settled_consequential_fork(
     assert gate.allowed and not gate.halted
 
 
-def test_taste_gate_blocks_source_less_draft_without_ui_surface(
-    taste: _MoldTasteTestModule,
-) -> None:
-    draft = (
-        """---
-gate_applicability:
-  disposition: red-required
-  work_class: behavior
----
+GROUNDING_TWO_WIKI_PROBES = """
+## Grounding
+| Probe | Outcome | Evidence |
+| --- | --- | --- |
+| wiki | hit | wiki page |
+| wiki | miss | second wiki probe |
 """
-        + DRAFT
-    )
-    result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
-    assert not result.passed
-    assert (
-        "gate-applicability:gate-applicability-ui-surface-required"
-        in result.acceptance_gaps
-    )
 
 
-def test_taste_gate_requires_applicability_for_mold_handshake_source(
-    taste: _MoldTasteTestModule,
+@pytest.mark.parametrize(
+    "source", ["mold-handshake", "agent-mini-spec", "mold-curd-mini-spec"]
+)
+def test_marked_source_without_gate_applicability_passes_the_taste_gate(
+    taste: _MoldTasteTestModule, source: str
 ) -> None:
-    draft = "---\nsource: mold-handshake\n---\n" + DRAFT
+    draft = f"---\nsource: {source}\n---\n" + DRAFT
     result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
-    assert not result.passed
-    assert (
-        "gate-applicability:gate-applicability-declaration-required"
-        in result.acceptance_gaps
-    )
+    assert result.passed, result.acceptance_gaps
+    assert result.acceptance_gaps == ()
 
 
-def test_taste_gate_requires_applicability_for_agent_mini_spec_source(
-    taste: _MoldTasteTestModule,
+@pytest.mark.parametrize("source", ["mold-handshake", "agent-mini-spec"])
+def test_taste_gate_reports_document_gaps_for_marked_sources(
+    taste: _MoldTasteTestModule, source: str
 ) -> None:
-    draft = "---\nsource: agent-mini-spec\n---\n" + DRAFT
+    draft = f"---\nsource: {source}\n---\n" + DRAFT + GROUNDING_TWO_WIKI_PROBES
     result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
     assert not result.passed
-    assert (
-        "gate-applicability:gate-applicability-declaration-required"
-        in result.acceptance_gaps
+    assert any(
+        gap.startswith("spec-document:")
+        and "Grounding table must record the wiki probe exactly once" in gap
+        for gap in result.acceptance_gaps
     )
+    assert not any("gate-applicability" in gap for gap in result.acceptance_gaps)
 
 
-def test_taste_gate_requires_applicability_for_mold_curd_mini_spec_source(
-    taste: _MoldTasteTestModule,
-) -> None:
-    draft = "---\nsource: mold-curd-mini-spec\n---\n" + DRAFT
-    result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
-    assert not result.passed
-    assert (
-        "gate-applicability:gate-applicability-declaration-required"
-        in result.acceptance_gaps
-    )
-
-
-def test_taste_gate_keeps_missing_applicability_compatibility_for_legacy_spec(
+def test_taste_gate_keeps_document_compatibility_for_legacy_spec(
     taste: _MoldTasteTestModule,
 ) -> None:
     draft = "---\nslug: legacy-spec\n---\n" + DRAFT
     result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
     assert result.passed
+    assert not any(gap.startswith("spec-document:") for gap in result.acceptance_gaps)
+
+
+def test_taste_gate_ignores_document_problems_in_legacy_spec(
+    taste: _MoldTasteTestModule,
+) -> None:
+    draft = "---\nslug: legacy-spec\n---\n" + DRAFT + GROUNDING_TWO_WIKI_PROBES
+    result = taste.taste_test(draft, LEDGER, verdict(taste, draft))
+    assert result.passed, result.acceptance_gaps
 
 
 def test_each_settled_fork_requires_all_reflection_locations(
@@ -249,13 +225,8 @@ def test_each_settled_fork_requires_all_reflection_locations(
     } <= set(result.acceptance_gaps)
 
 
-NOT_APPLICABLE_DRAFT = """---
+DRAFT_WITHOUT_CONTRACTS = """---
 source: mold-handshake
-gate_applicability:
-  disposition: not-applicable
-  work_class: docs-only
-  ui_surface: not-applicable
-  reason: documentation-only change
 ---
 # Docs draft
 
@@ -280,39 +251,51 @@ def _verdict_with(
     return payload
 
 
-def test_not_applicable_spec_owes_only_the_three_reachable_reflections(
+def test_reflections_are_the_three_reachable_sections(
     taste: _MoldTasteTestModule,
 ) -> None:
-    assert taste.required_reflections(NOT_APPLICABLE_DRAFT) == (
-        "approach",
-        "interface",
-        "acceptance",
+    assert taste.REFLECTIONS == ("approach", "interface", "acceptance")
+    assert taste.TEST_CONTRACT_REFLECTION == "test-contract"
+
+
+def test_draft_without_test_contracts_owes_only_the_three_reflections(
+    taste: _MoldTasteTestModule,
+) -> None:
+    assert taste.required_reflections(DRAFT_WITHOUT_CONTRACTS) == taste.REFLECTIONS
+
+
+def test_draft_with_test_contracts_also_owes_the_test_contract_reflection(
+    taste: _MoldTasteTestModule,
+) -> None:
+    assert taste.required_reflections(DRAFT) == (
+        *taste.REFLECTIONS,
+        taste.TEST_CONTRACT_REFLECTION,
     )
-    assert taste.NOT_APPLICABLE_REFLECTIONS == ("approach", "interface", "acceptance")
+    assert taste.required_reflections(contract_spec()) == (
+        *taste.REFLECTIONS,
+        taste.TEST_CONTRACT_REFLECTION,
+    )
 
 
-def test_not_applicable_spec_passes_without_a_test_contract_reflection(
+def test_draft_without_test_contracts_passes_without_a_test_contract_reflection(
     taste: _MoldTasteTestModule,
 ) -> None:
     result = taste.taste_test(
-        NOT_APPLICABLE_DRAFT,
+        DRAFT_WITHOUT_CONTRACTS,
         LEDGER,
-        _verdict_with(
-            taste, NOT_APPLICABLE_DRAFT, taste.NOT_APPLICABLE_REFLECTIONS
-        ),
+        _verdict_with(taste, DRAFT_WITHOUT_CONTRACTS, taste.REFLECTIONS),
     )
-    assert result.acceptance_gaps == ()
     assert result.passed
-    assert taste.decomposition_gate(result).allowed
+    assert result.acceptance_gaps == ()
 
 
-def test_not_applicable_spec_still_owes_the_other_three_reflections(
+def test_draft_without_test_contracts_still_owes_the_other_reflections(
     taste: _MoldTasteTestModule,
 ) -> None:
     result = taste.taste_test(
-        NOT_APPLICABLE_DRAFT,
+        DRAFT_WITHOUT_CONTRACTS,
         LEDGER,
-        _verdict_with(taste, NOT_APPLICABLE_DRAFT, ("approach",)),
+        _verdict_with(taste, DRAFT_WITHOUT_CONTRACTS, ("approach",)),
     )
     assert not result.passed
     assert {
@@ -321,22 +304,19 @@ def test_not_applicable_spec_still_owes_the_other_three_reflections(
         "missing-reflection:F-2:interface",
         "missing-reflection:F-2:acceptance",
     } <= set(result.acceptance_gaps)
-    assert not any(
-        gap.endswith(":test-contract") for gap in result.acceptance_gaps
-    )
+    assert not any(gap.endswith(":test-contract") for gap in result.acceptance_gaps)
 
 
-def test_red_required_spec_keeps_the_four_reflection_contract(
+def test_draft_with_test_contracts_requires_the_test_contract_reflection(
     taste: _MoldTasteTestModule,
 ) -> None:
-    draft = red_spec().replace(
+    draft = contract_spec().replace(
         "## Acceptance\n",
         "## Approach\nF-1 outer tracer\n\n## Interface sketches\nF-1 outer tracer\n\n## Acceptance\n",
     )
     ledger = [LEDGER[0]]
-    payload = _verdict_with(taste, draft, ("approach", "interface", "acceptance"))
+    payload = _verdict_with(taste, draft, taste.REFLECTIONS)
     payload["forks"] = [cast(list[dict[str, object]], payload["forks"])[0]]
-    assert taste.required_reflections(draft) == taste.REFLECTIONS
     result = taste.taste_test(draft, ledger, payload)
     assert not result.passed
     assert "missing-reflection:F-1:test-contract" in result.acceptance_gaps
@@ -541,37 +521,32 @@ def test_third_failed_verdict_halts_after_two_corrections(taste: _MoldTasteTestM
     assert final.halted and not final.allowed
 
 
-def test_applicability_requires_complete_contracts_and_allows_closed_na(
+def _document_problems(taste: _MoldTasteTestModule, spec: str) -> tuple[str, ...]:
+    with pytest.raises(taste.ApplicabilityError) as error:
+        _ = taste.typed_mold_document(spec)
+    return error.value.problems
+
+
+def test_typed_document_exposes_no_gate_applicability_surface(
     taste: _MoldTasteTestModule,
 ) -> None:
-    applicability = taste.parse_gate_applicability(red_spec())
-    assert isinstance(applicability, taste.RedRequired)
-    assert [contract.acceptance_id for contract in applicability.contracts] == [
-        "AC-1",
-        "AC-2",
-    ]
-    matrix = applicability.contracts[1]
-    assert matrix.interface_version == "v1"
-    assert matrix.matrix_rows == ("empty", "non-empty")
-
-    not_applicable = taste.parse_gate_applicability(
-        """---
-gate_applicability:
-  disposition: not-applicable
-  work_class: docs-only
-  reason: documentation-only change
----
-# Docs
-"""
-    )
-    assert isinstance(not_applicable, taste.NotApplicable)
-    assert not not_applicable.contracts
+    for name in (
+        "parse_gate_applicability",
+        "RedRequired",
+        "NotApplicable",
+        "TestContract",
+        "NOT_APPLICABLE_REFLECTIONS",
+        "RED_REQUIRED_EXECUTABLE_PROBLEM",
+    ):
+        assert not hasattr(taste, name), name
 
 
-def test_applicability_consumes_canonical_mold_document(
+def test_document_consumes_canonical_grounding_rules(
     taste: _MoldTasteTestModule,
 ) -> None:
-    spec = red_spec() + """
+    spec = (
+        contract_spec()
+        + """
 
 ## Grounding
 | Probe | Outcome | Evidence |
@@ -579,84 +554,32 @@ def test_applicability_consumes_canonical_mold_document(
 | wiki | hit | wiki page |
 | wiki | miss | second wiki probe |
 """
-    with pytest.raises(
-        taste.ApplicabilityError,
-        match="Grounding table must record the wiki probe exactly once",
-    ):
-        _ = taste.parse_gate_applicability(spec)
+    )
+    assert any(
+        "Grounding table must record the wiki probe exactly once" in problem
+        for problem in _document_problems(taste, spec)
+    )
 
 
-def test_applicability_keeps_green_guards_outside_cut_contracts(
+def test_present_test_contracts_must_cover_every_acceptance_id(
     taste: _MoldTasteTestModule,
 ) -> None:
-    spec = red_spec().replace(
-        "| AC-2 | public call | existing service boundary | assert empty input is rejected | contract-matrix | v1 | empty<br>non-empty |",
-        "| AC-2 | public call | existing service boundary | existing behavior remains byte-identical | guard | | |",
+    spec = contract_spec().replace(
+        "| AC-2 | public call | existing service boundary | assert empty input is rejected | contract-matrix | v1 | empty<br>non-empty |\n",
+        "",
     )
-
-    applicability = taste.parse_gate_applicability(spec)
-    assert isinstance(applicability, taste.RedRequired)
-    assert [
-        (contract.acceptance_id, contract.mode)
-        for contract in applicability.contracts
-    ] == [("AC-1", "tracer"), ("AC-2", "guard")]
-
-
-def test_guard_only_red_required_is_rejected_before_cut_handoff(
-    taste: _MoldTasteTestModule,
-) -> None:
-    spec = red_spec()
-    spec = spec.replace(
-        "| AC-1 | public call | existing service boundary | assert result is returned | tracer | | |",
-        "| AC-1 | public call | existing service boundary | existing behavior remains byte-identical | guard | | |",
-    ).replace(
-        "| AC-2 | public call | existing service boundary | assert empty input is rejected | contract-matrix | v1 | empty<br>non-empty |",
-        "| AC-2 | public call | existing service boundary | existing behavior remains byte-identical | guard | | |",
+    assert any(
+        "Test Contracts table must cover every Acceptance ID exactly once" in problem
+        and "missing=['AC-2']" in problem
+        for problem in _document_problems(taste, spec)
     )
-
-    with pytest.raises(taste.ApplicabilityError) as error:
-        _ = taste.parse_gate_applicability(spec)
-    assert error.value.problems == (taste.RED_REQUIRED_EXECUTABLE_PROBLEM,)
-    guard = taste.TestContract(
-        acceptance_id="AC-1",
-        interface="public call",
-        seam="committed snapshot",
-        expected_failure="existing behavior changes",
-        mode="guard",
-    )
-    with pytest.raises(taste.ApplicabilityError) as constructor_error:
-        _ = taste.RedRequired("behavior", (guard,))
-    assert constructor_error.value.problems == (
-        taste.RED_REQUIRED_EXECUTABLE_PROBLEM,
-    )
-
-
-    result = taste.taste_test(
-        spec,
-        [],
-        {
-            "draft_sha256": taste.draft_sha256(spec),
-            "verdict": "pass",
-            "forks": [],
-            "contradictions": [],
-            "orphaned_decisions": [],
-            "unsupported_assumptions": [],
-            "acceptance_gaps": [],
-        },
-    )
-    assert result.acceptance_gaps == (
-        f"gate-applicability:{taste.RED_REQUIRED_EXECUTABLE_PROBLEM}",
-    )
-    gate = taste.decomposition_gate(result)
-    assert not gate.allowed
-    assert gate.reopened_forks == ()
 
 
 @pytest.mark.parametrize(
     ("replacement", "problem"),
     [
         (
-            "| contract-matrix | v1 | empty<br>non-empty |",
+            "| contract-matrix | | empty<br>non-empty |",
             "contract-matrix-interface-version-required",
         ),
         (
@@ -670,124 +593,56 @@ def test_contract_matrix_requires_versioned_unique_declared_rows(
     replacement: str,
     problem: str,
 ) -> None:
-    if "interface-version" in problem:
-        replacement = "| contract-matrix | | empty<br>non-empty |"
-    spec = red_spec().replace(
+    spec = contract_spec().replace(
         "| contract-matrix | v1 | empty<br>non-empty |",
         replacement,
     )
-
-    with pytest.raises(taste.ApplicabilityError, match=problem):
-        _ = taste.parse_gate_applicability(spec)
+    assert any(problem in item for item in _document_problems(taste, spec))
 
 
-def test_appearance_only_stays_not_applicable_with_explicit_surface(
+def test_guard_only_contracts_are_valid_without_a_cut_handoff_rule(
     taste: _MoldTasteTestModule,
 ) -> None:
-    spec = """---
-source: mold-handshake
-gate_applicability:
-  disposition: not-applicable
-  work_class: appearance-only
-  ui_surface: not-applicable
-  reason: visual-only change
----
-# Appearance
-"""
-    applicability = taste.parse_gate_applicability(spec)
-    assert isinstance(applicability, taste.NotApplicable)
-    assert applicability.ui_surface == "not-applicable"
+    spec = contract_spec().replace(
+        "| assert result is returned | tracer | | |",
+        "| existing behavior remains byte-identical | guard | | |",
+    ).replace(
+        "| assert empty input is rejected | contract-matrix | v1 | empty<br>non-empty |",
+        "| existing behavior remains byte-identical | guard | | |",
+    )
+    assert not any(
+        "executable" in problem for problem in _document_problems_or_empty(taste, spec)
+    )
 
 
-def test_not_applicable_allows_acceptance_ids_without_test_contracts(
+def _document_problems_or_empty(
+    taste: _MoldTasteTestModule, spec: str
+) -> tuple[str, ...]:
+    try:
+        _ = taste.typed_mold_document(spec)
+    except taste.ApplicabilityError as error:
+        return error.problems
+    return ()
+
+
+def test_contracts_without_stable_acceptance_ids_are_rejected(
     taste: _MoldTasteTestModule,
 ) -> None:
-    spec = """---
-gate_applicability:
-  disposition: not-applicable
-  work_class: docs-only
-  reason: documentation-only change
----
-# Docs
-
-## Acceptance Criteria
-- AC-1: The guide describes the new command.
-"""
-    assert isinstance(taste.parse_gate_applicability(spec), taste.NotApplicable)
+    spec = contract_spec().replace("- AC-1:", "- first:").replace("- AC-2:", "- second:")
+    assert any(
+        "acceptance-ids-required" in problem
+        for problem in _document_problems(taste, spec)
+    )
 
 
-def test_not_applicable_rejects_even_an_empty_test_contract_section(
+def test_spec_without_test_contracts_section_has_no_contract_problem(
     taste: _MoldTasteTestModule,
 ) -> None:
-    spec = """---
-gate_applicability:
-  disposition: not-applicable
-  work_class: docs-only
-  reason: documentation-only change
----
-# Docs
-
-## Acceptance Criteria
-- AC-1: The guide describes the new command.
-
-## Test Contracts
-"""
-    with pytest.raises(
-        taste.ApplicabilityError, match="not-applicable-cannot-carry-test-contracts"
-    ):
-        _ = taste.parse_gate_applicability(spec)
-
-
-def test_red_required_rejects_contracts_without_stable_acceptance_ids(
-    taste: _MoldTasteTestModule,
-) -> None:
-    spec = red_spec().replace("- AC-1:", "- first:").replace("- AC-2:", "- second:")
-    with pytest.raises(taste.ApplicabilityError, match="acceptance-ids-required"):
-        _ = taste.parse_gate_applicability(spec)
-
-
-def test_strict_ui_mode_blocks_missing_surface(taste: _MoldTasteTestModule) -> None:
-    spec = red_spec().replace("  ui_surface: non-browser\n", "")
-    with pytest.raises(taste.ApplicabilityError, match="ui-surface-required"):
-        _ = taste.parse_gate_applicability(spec, require_ui_surface=True)
-
-
-def test_browser_ui_requires_named_browser_interface_and_outer_seam(
-    taste: _MoldTasteTestModule,
-) -> None:
-    spec = red_spec().replace("ui_surface: non-browser", "ui_surface: browser")
-    spec = spec.replace("existing service boundary", "internal helper")
-    with pytest.raises(taste.ApplicabilityError, match="browser-e2e-seam"):
-        _ = taste.parse_gate_applicability(spec)
-
-
-def test_valid_browser_ui_surface_passes_with_browser_interface_and_seam(
-    taste: _MoldTasteTestModule,
-) -> None:
-    spec = red_spec().replace("ui_surface: non-browser", "ui_surface: browser")
-    spec = spec.replace("public call", "existing browser interface")
-    spec = spec.replace("existing service boundary", "existing browser E2E outer seam")
-    applicability = taste.parse_gate_applicability(spec)
-    assert isinstance(applicability, taste.RedRequired)
-    assert applicability.ui_surface == "browser"
-
-
-def test_explicit_non_browser_behavior_remains_valid_and_prose_does_not_reclassify(
-    taste: _MoldTasteTestModule,
-) -> None:
-    spec = red_spec() + "\nFunctional UI is ordinary behavior with a browser seam.\n"
-    applicability = taste.parse_gate_applicability(spec)
-    assert isinstance(applicability, taste.RedRequired)
-    assert applicability.ui_surface == "non-browser"
-
-
-def test_legacy_spec_without_ui_surface_remains_compatible(taste: _MoldTasteTestModule) -> None:
-    spec = red_spec().replace("source: mold-handshake\n", "")
-    spec = spec.replace("  ui_surface: non-browser\n", "")
-    applicability = taste.parse_gate_applicability(spec)
-    assert isinstance(applicability, taste.RedRequired)
-    assert applicability.ui_surface is None
-
+    spec = contract_spec().split("## Test Contracts")[0]
+    assert not any(
+        "Test Contracts" in problem or "contract-matrix" in problem
+        for problem in _document_problems_or_empty(taste, spec)
+    )
 
 
 

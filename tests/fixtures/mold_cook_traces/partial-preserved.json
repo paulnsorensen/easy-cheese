@@ -2,10 +2,8 @@
   "scenario": "partial-preserved",
   "events": [
     {"type": "input_classified", "input_kind": "canonical_pointer"},
-    {"type": "prepare", "mode": "full", "outcome": "needs-approval"},
+    {"type": "prepare", "mode": "full", "outcome": "needs-planning"},
     {"type": "plan_materialized", "outcome": "partial"},
-    {"type": "approval_requested", "kind": "partial_plan"},
-    {"type": "approval_recorded", "kind": "partial_plan", "source": "harness", "decision": "approved"},
     {"type": "remainder_preserved", "unresolved_work": ["curd-2"]},
     {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/partial.json"},
     {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/partial.json"}

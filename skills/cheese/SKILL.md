@@ -131,7 +131,7 @@ It also forwards `artifact:` unchanged, which always names the prior consumed re
 Continuation preserves the validated optional `mode:` value.
 It preserves the in-scope `--hard`, `--open-pr`, and `--safe` flags.
 `--auto` remains opt-in and is never inferred.
-Press corrective work remains `continue: press-corrective-cook`, not a global Press-to-Cook dispatch.
+Press findings reach Cook as a correction handoff (`next: cook`).
 
 ## Confidence and the clarify gate
 

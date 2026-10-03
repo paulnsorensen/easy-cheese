@@ -44,8 +44,8 @@ Run `validate` for a schema-only dry run that never opens the store.
 - **`working_context`** is a list of pointers, not a paragraph.
 - **`notes`** is the Markdown body the projection renders under `## Notes`; omission carries it forward.
 - `notes` holds at most 6000 characters; `lint` warns `notes-long` above 4000.
-- **`next`** accepts `mold`, `cut`, `cook`, `press`, `age`, `cure`, `affinage`, `briesearch`, `culture`, `hold`, `tasks`, or `done`.
-- **`artifact`** rides beside `next`; `affinage` needs `PR#<n>` or a PR URL, and `cook` or `cut` need a path.
+- **`next`** accepts `mold`, `cook`, `press`, `age`, `cure`, `affinage`, `briesearch`, `culture`, `hold`, `tasks`, or `done`.
+- **`artifact`** rides beside `next`; `affinage` needs `PR#<n>` or a PR URL, and `cook` needs a path.
 - **`entries`** holds `ProposedEntry` values of kind `decision`, `question`, `blocker`, or `directive`.
 - Each entry has `{kind, summary, rationale?, quote?, blocks_continuation}`.
 - Only a question or a blocker can set `blocks_continuation: true`.
@@ -128,7 +128,7 @@ The flag form refuses with these codes:
 
 ## `next:` values
 
-- `mold`, `cut`, `cook`, `press`, `age`, `cure`: the next pipeline phase.
+- `mold`, `cook`, `press`, `age`, `cure`: the next pipeline phase.
   `next: cook` on a standalone checkpoint names the phase to resume; it does not publish a Cook→Cook phase artifact.
 - `affinage`: PR review comments or failing CI; `artifact` names the PR.
 - `briesearch`, `culture`: a read-only next move that `/cheese --continue` dispatches.

@@ -47,4 +47,4 @@ An absolute note path resolves as an explicit path first.
 
 Resume preserves `mode:`, `--hard`, `--open-pr`, `--safe`, and an explicit `--auto`.
 
-Press corrective work remains `continue: press-corrective-cook`, not a global Press-to-Cook dispatch.
+A Press finding hands off as a Cook correction (`next: cook`).

@@ -1,6 +1,6 @@
 # Curdle — artifact extraction
 
-Curdle saves a validated draft and may run while Mold continues shaping its parent. Spec writing needs no user approval. A runnable Cook handoff still needs the two-key execution gate (see `handshake.md`). For a bounded early curd, read [`early-curds.md`](early-curds.md).
+Curdle saves a validated draft and may run while Mold continues shaping its parent. Spec writing needs no user approval. A runnable Cook handoff still needs the agent coherence self-check (see `handshake.md`). For a bounded early curd, read [`early-curds.md`](early-curds.md).
 
 ## Artifact types
 
@@ -36,7 +36,7 @@ Cross-cutting house style and citation form: [`formatting.md`](../../cheese/refe
 
 `landing.layers` records ordered groups of canonical curd ids from the approved CurdPlan, as a one-line flow list. Leave it `[]` only when `shape` is `single`; a non-single shape requires at least one layer.
 
-**Fork-id tags.** Every settled consequential fork in the decision ledger must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts for `red-required`. Each line that reflects a fork carries the fork id in parentheses, for example `- AC-3: WHEN ... THE SYSTEM SHALL ... (F-3)` or `public interface: parse(...) -> Result  (F-2)`. The taste test matches the fork id literally, or every 3+ letter word of the decision text; the tag is the reliable form.
+**Fork-id tags.** Every settled consequential fork in the decision ledger must appear in Approach, Interface sketches, and Acceptance, plus Test Contracts when the draft has them. Each line that reflects a fork carries the fork id in parentheses, for example `- AC-3: WHEN ... THE SYSTEM SHALL ... (F-3)` or `public interface: parse(...) -> Result  (F-2)`. The taste test matches the fork id literally, or every 3+ letter word of the decision text; the tag is the reliable form.
 
 **Goal-clause tags.** Every `G-n` clause from the ledger's `goal_clauses` carries its tag on at least one Acceptance line, or on exactly one disposition line: a `Non-goals` bullet, a `Deferred follow-ups` entry, or a `[TBD]` item under `Open questions`. The pre-check fails `goal-coverage:G-n` for an untagged clause and `goal-coverage-cap:<covered>/<total>` when fewer than half the clauses reach Acceptance. See `handshake.md` § Goal coverage. Run `python3 skills/mold/scripts/mold.pyz taste-test --precheck --draft <draft> --ledger <ledger>` before the reviewer dispatch; fix every reported gap first.
 
@@ -48,17 +48,12 @@ source: mold-handshake
 created: <YYYY-MM-DD>
 confidence: <low | medium | high>
 leverage: []   # fired trigger ids per `../../cheese/references/routing-policy.md` § Leverage triggers; copied from the handoff packet, extended when a later mode fires one
-gates_overridden: []   # list of unchecked handshake items if `curdle anyway` was used
+gates_overridden: []   # list of unchecked handshake items if the user approved saving anyway
 execution_holds: []   # unresolved named holds (scope-audit row, needs-your-verb, ALIAS/NEW ENTITY, coherence) written at save and removed when resolved; finalize and Cook stay held while it is non-empty
 agent_introduced_scope: []   # terms in the spec the user did not type — approved through the scope audit table per `handshake.md` § Scope audit table (audit trail; downstream skills trust this list)
 goal_coverage: {}   # G-n -> covered | non-goal | follow-up | tbd, the final disposition map printed as the narrowing delta per `handshake.md` § Goal coverage (audit trail; downstream skills trust this map)
 entity_referent_bindings: []   # list of binding records {noun, verdict, referent, citation, note} for identity/ownership-role nouns bound to code referents or marked NEW ENTITY — each resolved per `handshake.md` § Entity-referent binding (audit trail; downstream skills trust this list)
 agent_resolution: []   # the shared agent-resolution block per `../../cheese/references/agent-resolution.md`
-gate_applicability:
-  disposition: red-required | not-applicable
-  work_class: behavior | docs-only | refactor-only | test-only | appearance-only
-  ui_surface: browser | non-browser | not-applicable
-  reason: <required only for not-applicable>
 landing:
   shape: single | orthogonal_flat | stacked_linear | diamond_stack
   layers: []
@@ -114,9 +109,9 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 
 ## Test Contracts
 
-Include this entire section only when `gate_applicability.disposition` is
-`red-required`. Every numbered Acceptance ID appears exactly once in this table.
-`expected_failure` names a deterministic witness and expected red assertion.
+This section is optional. Include it only when the spec benefits from it.
+When present, every numbered Acceptance ID appears exactly once in this table.
+`expected_failure` names a deterministic witness and the expected failing assertion.
 `mode` is `tracer`, `contract-matrix`, or `guard`.
 The seam is the outer boundary that proves the behavior.
 A matrix names its ratified interface version and each unique row identity.
@@ -126,8 +121,8 @@ Add one row for each criterion.
 
 | Acceptance ID | Interface referent | Outermost stable seam | Expected failure | Mode | Interface version | Matrix rows |
 | --- | --- | --- | --- | --- | --- | --- |
-| AC-1 | <public interface> | <existing outer seam> | <witness and expected red assertion> | tracer | | |
-| AC-2 | <public interface> | <existing outer seam> | <witness and expected red assertion> | contract-matrix | <ratified version> | <row 1><br><row 2> |
+| AC-1 | <public interface> | <existing outer seam> | <witness and expected failing assertion> | tracer | | |
+| AC-2 | <public interface> | <existing outer seam> | <witness and expected failing assertion> | contract-matrix | <ratified version> | <row 1><br><row 2> |
 
 ## Interface sketches
 
@@ -162,16 +157,12 @@ arrows:           <dependency directions added, or none>
 <one footnote definition per cited source; include only when out-of-scope evidence was cited above per `../../cheese/references/formatting.md` § Citations>
 ```
 
-`source: mold-handshake` marks the strict full-spec path. `source: mold-curd-mini-spec` marks a strict early curd with a required `## Parent` section. Every new
-behavior declaration must set `ui_surface` to `browser` or `non-browser`;
-closed non-behavior declarations, including `appearance-only`, set it to
-`not-applicable`. A browser declaration is valid only when every Test Contract
-names an existing browser/E2E interface and outer seam.
+`source: mold-handshake` marks the strict full-spec path. `source: mold-curd-mini-spec` marks a strict early curd with a required `## Parent` section.
 
 Specs without this provenance marker are v0.13-era legacy and stay
-**readable forever**: `validate-spec` accepts them, waiving only the two parts
-the hardened format added after v0.13 — the `Test Contracts` section and the
-`gate_applicability` block — and printing a one-line `NOTICE:` rather than an
+**readable forever**: `validate-spec` accepts them, waiving only the part
+the hardened format added after v0.13 — the `Test Contracts` section — and printing a one-line `NOTICE:` rather than an
+error.
 error. Everything a v0.13 spec did carry is still validated. Minting is the
 mirror image: Curdle writes only the template above and gates it with
 `validate-spec --strict`, which enforces the hardened format *and* the
@@ -214,15 +205,7 @@ rule tracer-row-blank-matrix-cells: "Tracer rows must leave Interface version an
 rule contract-matrix-row-requires-both: "Contract-matrix rows require both Interface version and Matrix rows."
 rule grounding-probe-recorded: "The Grounding table must record the wiki probe exactly once with non-empty evidence."
 rule delegation-digest-recorded: "The Grounding table must record the explorer probe exactly once with non-empty evidence."
-rule not-applicable-closed-class: "red-required requires Test Contracts; not-applicable forbids them and requires a reason."
 rule landing-closed-class: "landing fields take only their declared values; layers is empty when shape is single."
-
-type GateApplicability {
-  disposition GateApplicabilityDisposition
-  work_class WorkClass
-  ui_surface UiSurface
-  reason? str | None = None
-}
 
 type GroundingRow {
   probe GroundingProbe
@@ -250,7 +233,6 @@ type MoldSpecFrontmatter {
   source str
   created str
   confidence SpecConfidence
-  gate_applicability GateApplicability
   gates_overridden? tuple[str, ...] = ()
   agent_introduced_scope? tuple[str, ...] = ()
   entity_referent_bindings? tuple[Mapping[str, object], ...] = ()
@@ -268,8 +250,6 @@ type TestContractRow {
   matrix_rows? tuple[str, ...] = ()
 }
 
-enum GateApplicabilityDisposition = "red-required" | "not-applicable"
-
 enum GroundingOutcome = "hit" | "miss" | "unavailable"
 
 enum GroundingProbe = "wiki" | "explorer"
@@ -283,10 +263,6 @@ enum ReviewFixes = "fold" | "top-up"
 enum SpecConfidence = "low" | "medium" | "high"
 
 enum TestContractMode = "tracer" | "contract-matrix" | "guard"
-
-enum UiSurface = "browser" | "non-browser" | "not-applicable"
-
-enum WorkClass = "behavior" | "docs-only" | "refactor-only" | "test-only" | "appearance-only"
 <!-- END GENERATED -->
 
 ## Issue template
@@ -335,7 +311,7 @@ Finish roadmap publication and all mechanical spec reconciliation before the imp
 
 ## ADRs (durable by-product)
 
-Write the session's non-obvious decisions as durable ADRs after both handshake keys pass. Include them with the durable spec in phase one's local atomic write. Both stay in the durable project corpus. The spec is the approved implementation contract. The ADRs preserve its rationale. Resolve the corpus **dynamically**. Probe for the consumer's `repo:<their-repo>:wiki` hallouminate corpus. Write there when it exists. Otherwise write a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. See [`adr.md`](adr.md) for the full resolution rule and the ADR format.
+Write the session's non-obvious decisions as durable ADRs after the coherence self-check passes. Include them with the durable spec in phase one's local atomic write. Both stay in the durable project corpus. The spec is the approved implementation contract. The ADRs preserve its rationale. Resolve the corpus **dynamically**. Probe for the consumer's `repo:<their-repo>:wiki` hallouminate corpus. Write there when it exists. Otherwise write a tracked `docs/adr/<slug>-NNN.md`. Never hardcode a corpus name. See [`adr.md`](adr.md) for the full resolution rule and the ADR format.
 
 ## Durable glossary (by-product)
 
@@ -386,7 +362,7 @@ Do not pre-split for a single context. This layout is identical across all three
 
 ## Rejected-directions store (by-product)
 
-Write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md` when the agent-introduced-scope audit **rejects a direction**. Do the same when the two-key handshake rejects it. Rejections include "drop <term>" for an approach or design knob, and "not that approach." An explicit deferral becomes a follow-up candidate. A rejected direction is not a follow-up candidate.
+Write the rejection to `.cheese/.out-of-scope/<slug>-NNN.md` when the agent-introduced-scope audit **rejects a direction**. Do the same when the handshake rejects it. Rejections include "drop <term>" for an approach or design knob, and "not that approach." An explicit deferral becomes a follow-up candidate. A rejected direction is not a follow-up candidate.
 
 Format:
 ```markdown
@@ -425,40 +401,28 @@ This is the runtime home of the **Durable writes** coherence gate (`handshake.md
 
 **Loud fallback.** If hallouminate is unavailable and the resolver degrades to a file backend, state this in one visible line. File backends include `docs/adr/…`, `docs/domain-model*`, and the XDG corpus. Never write silently to files when the author expected the wiki. See the absent-plugin degrade contract in [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
 
-## Pre-approval typed planner dispatch
+## Typed planner dispatch
 
-Before this procedure, run the digest-bound fresh-context fork taste test on the dialogue-state draft. It must pass for a runnable handoff; failures reopen only named forks, with two correction rounds. A blocked draft may still be saved with named holds. Prepare the typed plan before the user chooses Cook so the selection binds exact coverage.
+Before this procedure, run the digest-bound fresh-context fork taste test on the dialogue-state draft. It must pass for a runnable handoff; failures reopen only named forks, with two correction rounds. A blocked draft may still be saved with named holds. Prepare the typed plan before the user chooses Cook so the displayed coverage is exact.
 
 1. **Dispatch** a fresh-context planner on a `PlannerRequest` built from the current draft spec text. The planner returns a `PlannerResultWriterView`; it does not own contract versions, identifiers, digests, lineage, or evidence references.
-2. **Validate and normalize** the writer view on the host. The normal selected path is the typed `PlannerResult` containing a typed `CurdPlan`; reject malformed or wrong-kind output before approval.
-3. **Still invalid after one retry** — save the draft with a plan hold. Do not approve, publish, or dispatch an invalid plan.
-4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` before any Cook choice. The user's Cook selection binds this exact plan. When candidate curds are two or more, settle landing shape and curd independence before execution.
-5. Persist the draft spec and host-validated `PlannerResult` and `CurdPlan`. Do not mutate an approved execution plan; a change requires a new user Cook selection.
+2. **Validate and normalize** the writer view on the host. The normal selected path is the typed `PlannerResult` containing a typed `CurdPlan`; reject malformed or wrong-kind output before display.
+3. **Still invalid after one retry** — save the draft with a plan hold. Do not publish or dispatch an invalid plan.
+4. **On success**, count semantic curds and waves from the typed `CurdPlan`, then show `N curds / M waves` before any Cook choice. The user's Cook selection covers this exact plan. When candidate curds are two or more, settle landing shape and curd independence before execution.
+5. Persist the draft spec and host-validated `PlannerResult` and `CurdPlan`. Do not mutate a displayed execution plan; a change requires a new user Cook selection.
 
 ## Finalization
 
-Finalize the approved spec and plan before the hand-off. The host owns three values and sets each one once:
+Finalize the spec and plan before the hand-off. The host owns three values and sets each one once:
 
 - `REQUEST_ID` is the `request_id` of the `PlannerRequest`. On a path with no planner, use the spec slug.
 - `ARTIFACT_ROOT` is `.cheese/cook/<slug>-artifacts`. Mold and Cook must use the same directory.
 - The operation id is `<slug>-<ordinal>`. Keep it for an identical retry. Increase the ordinal when an input changes.
 
-After the user selects Cook for the displayed scope or plan, record the literal response. Only for an affirmative response, set the selected spec's lifecycle to `approved`, then bind the response to its exact bytes. For any other response, keep `status: draft` and bind the response as a rejection:
-
-```bash
-python3 skills/mold/scripts/mold.pyz approve "$SPEC" \
-  --artifact-root "$ARTIFACT_ROOT" \
-  --request-id "$REQUEST_ID" \
-  --kind plan \
-  --response "<the user's literal reply>" \
-  --planner-result "$PLANNER_RESULT_JSON"
-```
-
-Use `--kind partial_plan` for a partial planner disposition. On the Light path, use `--kind scope --curd-id <curd-id>` and omit `--planner-result`. The command prints `approval_path`. Then finalize:
+After the user selects Cook for the displayed scope or plan, finalize. The agent coherence self-check is the only execution gate. Finalization takes no user approval record:
 
 ```bash
 python3 skills/mold/scripts/mold.pyz finalize "$SPEC" \
-  --approval "$APPROVAL_PATH" \
   --artifact-root "$ARTIFACT_ROOT" \
   --operation-id "<slug>-<ordinal>" \
   --request-id "$REQUEST_ID" \
@@ -469,6 +433,8 @@ python3 skills/mold/scripts/mold.pyz finalize "$SPEC" \
 ```
 
 `--taste-result` is the persisted `taste-test` verdict. `--ledger` is the decision ledger as JSON. `--plan` is optional when the `PlannerResult` embeds its plan.
+
+Pass `--save-approved` only when the user approved saving with unchecked coherence items. The flag adds a `save-approved` preparation hold and a `handshake-coherence` requirement, so `finalize` returns `saved-not-ready`. Only a fresh user dialogue clears that hold and requirement.
 
 Read `status` in the output, not only the exit status. A nonzero exit status is an input error; stop. `ready` stores a canonical `HandoffPointer` and prints the Cook `command`. `saved-not-ready` exits zero, stores no pointer, and lists each unmet `requirements` entry and hold.
 
@@ -481,6 +447,6 @@ After writing, suggest the next step inline. **Never auto-invoke.**
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Red-required Spec | `/cook --auto <pointer path> --spec "$SPEC"` (add `--hard` when the user passed it) |
+| Spec (auto) | `/cook --auto <pointer path> --spec "$SPEC"` (add `--hard` when the user passed it) |
 | Spec | `/cook <pointer path> --spec "$SPEC"` (add `--hard` when the user passed it) |
 | Issues | Paste each into your tracker, or `gh issue create --body-file <path>` |

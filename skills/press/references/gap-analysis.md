@@ -2,30 +2,30 @@
 
 ## Ownership boundary
 
-Press is not a second first-coverage phase. Cook owns the implementation and the inner RED→GREEN loop.
+Press is not a second first-coverage phase. Cook owns the implementation and its tests.
 
 Press attacks the approved contract after Cook. Press writes only tests, fixtures, or test-only harness support.
 
-Treat a missing production implementation as an in-contract RED. Request a bounded corrective Cook continuation.
+Report a missing production implementation as a finding. Hand it to Cook as a correction.
 
 ## What Press may expose
 
 | Gap type | Evidence | Action |
 | --- | --- | --- |
-| In-contract defect | The approved seam fails on an adversarial input or transition | Preserve the same failing test and digest. Route as `in_contract_red`. |
-| Invalid evidence | The recorded run does not verify the attack outcome | Stop without a repair action. |
-| Production mutation | A production path changes during a Press interval | Stop. |
-| Out-of-contract behavior | The approved Test Contracts omit a desired behavior | Record it under `## Review follow-ups`. Report `ok-with-concerns` on a GREEN pass. Do not implement it. |
+| Defect | The approved seam fails on an adversarial input or transition | Report it as a finding with the failing test. Hand off to Cook as a correction. |
+| Invalid evidence (`blocked`) | The recorded run does not verify the attack outcome | Stop with `halt: <reason>`. |
+| Production mutation (`blocked`) | A production path changes during a Press interval | Stop with `halt: <reason>`. |
+| Out-of-contract behavior | The approved spec omits a desired behavior | Record it under `## Review follow-ups`. Report `ok-with-concerns` on a GREEN pass. Do not implement it. |
 
 ## Evidence sequence
 
-Complete these steps at each Press entry and after each Cook continuation:
+Complete these steps at each Press entry and after each Cook correction:
 
 1. Run the same adversarial attack. Do not change its test or fixture digest.
-2. Select `green`, `in_contract_red`, `invalid_evidence`, or `production_changed`.
-3. For an in-contract RED, record the failed test and its digest before you select a route.
+2. Select `green`, `finding`, `invalid_evidence`, or `production_changed`.
+3. For a finding, record the failing test and its digest.
 
-The failed-test digest is part of the evidence chain. A corrective Cook continuation can change production code to make the attack GREEN.
+A Cook correction can change production code to make the attack GREEN.
 
 Do not rewrite or weaken the attack. Do not change its expected witness or the tests that it uses.
 
@@ -41,40 +41,13 @@ Cook owns first coverage. Do not create one hardening test for each changed beha
 
 Do not add tests for unchanged or out-of-contract code.
 
-## Repair bound and readiness
+## Routing
 
-The packaged boundary uses the classified outcome and completed corrective count. The request contains only these fields:
-
-```json
-{
-  "outcome": "in_contract_red",
-  "repair_cycles": 0
-}
-```
-
-`repair_cycles` counts completed corrective Cook continuations for this slug. Use 0 for attempt 1, 1 for attempt 2, and 2 for attempt 3.
-
-Each attempt uses separate candidate and route paths. Never reuse or overwrite an earlier attempt artifact.
-
-Run this command from the project root. Use the route request for the current attempt:
-
-```sh
-python3 skills/press/scripts/press.pyz press-route \
-  .cheese/press/outer-tdd-gates.attempt-1.route.json
-```
-
-The packaged boundary applies these rules:
-
-- GREEN returns `Dispatch("/age")`.
-- An in-contract RED at `repair_cycles` 0 or 1 returns `Continue("press-corrective-cook")`.
-- The third RED at `repair_cycles` 2 returns `Stop("third-red")`.
+- GREEN hands off to `/age`.
+- A finding hands off to Cook as a correction (`next: cook`).
+- Press allows at most 2 Cook corrections for the same attack. A third finding on that attack stops with `status: halt: correction-cap` and `next: done`.
 - Invalid evidence and production changes stop.
-
-A valid GREEN result is ready for review. Press dispatches Age after that result.
-
-A complete third-RED evidence chain is ready for terminal reporting. Press does not dispatch Age after that result.
-
-Invalid evidence blocks the route. A production mutation also blocks the route.
+- That stop is `blocked`. It reports `status: halt: <reason>` and `next: done`.
 
 Baseline failures do not become new Press findings when their tests and signatures match the Cook handoff.
 
@@ -84,12 +57,11 @@ New or changed failures block the route.
 
 | Situation | Action |
 | --- | --- |
-| An approved adversarial test exposes a defect in Cook behavior | Preserve the RED evidence. Request a bounded corrective Cook continuation. |
-| The evidence chain, digest, or production snapshot is invalid | Stop. Report the exact integrity failure. |
-| The attack targets behavior outside approved contracts | Record it under `## Review follow-ups` for `/age`. Do not edit production code. Do not continue. |
+| An adversarial test exposes a defect in Cook behavior | Report the finding with its failing test. Hand off to Cook as a correction. |
+| The digest or production snapshot is invalid | Stop with `halt: <reason>`. Report the exact integrity failure. |
+| A third finding exposes the same attack | Stop with `status: halt: correction-cap` and `next: done`. |
+| The attack targets behavior outside the approved spec | Record it under `## Review follow-ups` for `/age`. Do not edit production code. |
 
-## Hard rule — preserve evidence
+## Hard rule — preserve the attack
 
-Never weaken the attack to obtain GREEN. Never reset a digest or change the attack between replays.
-
-Never turn a Press continuation into a global Cook dispatch.
+Never weaken the attack to obtain GREEN. Never change the attack between replays.

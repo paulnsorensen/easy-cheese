@@ -8,8 +8,8 @@ deterministic verdict naming the next phase to spawn (or the reason to stop).
 
 `decide()` walks a **phase table** — an ordered list of phase names. The phase
 that runs after index `i` is `table[i + 1]`; the last entry is terminal
-(terminal `next_phase=None`). The linear chain remains fixed. Closed
-not-applicable tables cover the legacy non-behavior paths. Fan remediation
+(terminal `next_phase=None`). The linear chain remains fixed. The non-behavior
+tables cover the legacy paths. Fan remediation
 uses the progress-aware state machine instead of these phase tables.
 
 Routing always reads `status` through the declared handback vocabulary
@@ -213,7 +213,7 @@ def decide(
         }
 
     # A nonterminal clean age ends a configured early-stop table. The fixed
-    # linear chain keeps its declared two-Cure sequence. Closed N/A curd
+    # linear chain keeps its declared two-Cure sequence. A non-behavior curd
     # execution can complete after a clean first review.
     if current_phase == "age" and (next_field or "").strip().lower() == "done":
         if allow_early_stop:
@@ -285,7 +285,7 @@ def decide_cmd(
         `next` field from the handoff slug (e.g. press, cure, done).
     table
         Which receipt-specific table to walk: linear or a closed
-        not-applicable path. Fan remediation uses its progress-aware state.
+        non-behavior path. Fan remediation uses its progress-aware state.
     retry_count
         needs-context retries already consumed by this phase (default 0).
     """

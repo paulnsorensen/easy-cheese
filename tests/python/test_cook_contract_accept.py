@@ -14,10 +14,9 @@ import pytest
 
 from easy_cheese_schemas import ArtifactRef, ContractVersion, canonical_bytes
 from easy_cheese_schemas.mold_cook import (
-    MOLD_COOK_APPROVAL_SCHEMA_URI,
     MOLD_COOK_HANDOFF_SCHEMA_URI,
+    CookSetupAuthorization,
     MoldCookApprovalDecision,
-    MoldCookApprovalKind,
     MoldCookApprovalSource,
     MoldCookCoverage,
     MoldCookHandoff,
@@ -34,7 +33,7 @@ from easy_cheese_schemas.schema_runtime import ContractValidationError
 from easy_cheese.shared.publication import request_digest
 from easy_cheese.skills.cook.contract_handlers import accept_main
 
-from tests.python.mold_cook_helpers import bind_mold_cook_approval
+from tests.python.mold_cook_helpers import bind_mold_cook_runner_approval
 
 ROOT = Path(__file__).resolve().parents[2]
 COOK_ARCHIVE = ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
@@ -82,40 +81,6 @@ def published_handoff(
     )
     coverage_factory = cast("Callable[..., MoldCookCoverage]", MoldCookCoverage)
     coverage = coverage_factory(curd_ids=["curd-1"])
-    proposal_ref = _write_ref(
-        root,
-        canonical_mold_cook_proposal(
-            request_id="request-1",
-            kind=MoldCookApprovalKind.SCOPE,
-            spec_digest=spec_ref.digest,
-            coverage=coverage,
-        ),
-        artifact_id="proposal-1",
-        role="proposal",
-        filename="proposal.json",
-        media_type="application/json",
-    )
-    response_ref = _write_ref(
-        root,
-        b"Approve",
-        artifact_id="response-1",
-        role="response",
-        filename="response.txt",
-        media_type="text/plain",
-    )
-
-    approval = bind_mold_cook_approval(
-        request_id="request-1",
-        kind=MoldCookApprovalKind.SCOPE,
-        decision=MoldCookApprovalDecision.APPROVED,
-        source=MoldCookApprovalSource.USER_RESPONSE,
-        spec_digest=spec_ref.digest,
-        proposal_ref=proposal_ref,
-        response_ref=response_ref,
-        response_text="Approve",
-        response_source="response.txt",
-        coverage=coverage,
-    )
     taste_verdict_ref = _write_ref(
         root,
         b'{"verdict":"pass"}',
@@ -134,15 +99,6 @@ def published_handoff(
         media_type="application/json",
         schema_uri="https://schemas.easy-cheese.dev/taste-ledger",
     )
-    approval_ref = _write_ref(
-        root,
-        approval,
-        artifact_id="approval-1",
-        role="approval",
-        filename="approval.json",
-        media_type="application/json",
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-    )
     version_factory = cast("Callable[..., ContractVersion]", ContractVersion)
     handoff_factory = cast("Callable[..., MoldCookHandoff]", MoldCookHandoff)
     handoff = handoff_factory(
@@ -155,7 +111,6 @@ def published_handoff(
         input_kind=MoldCookInputKind.DIRECT_SPEC,
         mode=MoldCookMode.LIGHT,
         spec_ref=spec_ref,
-        approval_ref=approval_ref,
         coverage=coverage,
         taste_verdict_ref=taste_verdict_ref,
         taste_ledger_ref=taste_ledger_ref,
@@ -189,13 +144,18 @@ def test_local_dialogue_requires_the_question_and_exact_response(
     coverage_factory = cast("Callable[..., MoldCookCoverage]", MoldCookCoverage)
     coverage = coverage_factory(curd_ids=["curd-1"])
     spec_digest = "sha256:" + ("a" * 64)
+    setup_authorization = CookSetupAuthorization(
+        prerequisite_curd_id="curd-1",
+        allowed_paths=("tests/",),
+        allowed_commands=("python -m pytest tests/",),
+    )
     proposal_ref = _write_ref(
         tmp_path,
         canonical_mold_cook_proposal(
             request_id="request-1",
-            kind=MoldCookApprovalKind.SCOPE,
             spec_digest=spec_digest,
             coverage=coverage,
+            setup_authorization=setup_authorization,
         ),
         artifact_id="proposal-1",
         role="proposal",
@@ -210,9 +170,8 @@ def test_local_dialogue_requires_the_question_and_exact_response(
         filename="dialogue.json",
         media_type="application/json",
     )
-    approval = bind_mold_cook_approval(
+    approval = bind_mold_cook_runner_approval(
         request_id="request-1",
-        kind=MoldCookApprovalKind.SCOPE,
         decision=MoldCookApprovalDecision.APPROVED,
         source=MoldCookApprovalSource.LOCAL_DIALOGUE,
         spec_digest=spec_digest,
@@ -221,6 +180,7 @@ def test_local_dialogue_requires_the_question_and_exact_response(
         response_text="Approve",
         response_source="dialogue.json",
         coverage=coverage,
+        setup_authorization=setup_authorization,
     )
 
     with pytest.raises(ContractValidationError, match=message):

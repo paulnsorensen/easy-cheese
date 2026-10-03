@@ -1,4 +1,4 @@
-"""Explicit approval evidence: proposals, binding checks, and coverage."""
+"""Runner approval evidence, planner requests, and plan disposition checks."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from pathlib import Path
 
 from easy_cheese_schemas import (
     ArtifactRef,
-    CurdPlan,
     PlannerDisposition,
     PlannerRequest,
     PlannerRequestKind,
@@ -17,11 +16,9 @@ from easy_cheese_schemas import (
 )
 from easy_cheese_schemas.mold_cook import (
     MOLD_COOK_APPROVAL_SCHEMA_URI,
-    CookPreparationResult,
     MoldCookApproval,
     MoldCookApprovalDecision,
     MoldCookApprovalKind,
-    MoldCookCoverage,
 )
 from easy_cheese_schemas.schema_runtime import ContractValidationError
 from easy_cheese_schemas.validate import require_relative_path
@@ -31,32 +28,12 @@ from easy_cheese.shared.wheypoint.canonical import digest_bytes
 from ._types import (
     CookEvidenceError,
     CookPreparationRequest,
-    DependencyClosureError,
 )
 from .evidence import (
     is_regular_path,
     load_contract,
-    persist_bytes,
     read_path,
-    resolve_ref,
 )
-
-
-def persist_proposal(
-    request: CookPreparationRequest,
-    content: bytes,
-    *,
-    artifact_id: str,
-) -> ArtifactRef:
-    return persist_bytes(
-        request.artifact_root,
-        content=content,
-        artifact_id=artifact_id,
-        role="proposal",
-        media_type="application/json"
-        if content.lstrip().startswith(b"{")
-        else "text/markdown",
-    )
 
 
 def approval_value(
@@ -108,7 +85,6 @@ def check_approval(
     request: CookPreparationRequest,
     spec_ref: ArtifactRef,
     expected: MoldCookApprovalKind,
-    expected_proposal: bytes | None = None,
 ) -> None:
     try:
         _ = validate_mold_cook_approval(approval, request.artifact_root)
@@ -128,15 +104,6 @@ def check_approval(
         raise CookEvidenceError("approval is not an explicit approved response")
     if approval_ref.role not in {"approval", "runner_approval"}:
         raise CookEvidenceError("approval reference has the wrong role")
-    # `validate_mold_cook_approval` already resolved the proposal bytes against
-    # `proposal_ref.digest`, and the contract binds `proposal_digest` to that
-    # same digest, so a second read of the same bytes proves nothing more.
-    if expected_proposal is not None and approval.proposal_digest != digest_bytes(
-        expected_proposal
-    ):
-        raise CookEvidenceError(
-            "approval proposal is not the canonical envelope for this request"
-        )
     if approval.response_source in {
         approval.response_ref.artifact_id,
         approval.response_ref.uri,
@@ -185,11 +152,7 @@ def build_planner_request(
     )
 
 
-def coverage_for_plan(
-    planner: PlannerResult,
-    plan: CurdPlan,
-    approval: MoldCookApproval,
-) -> MoldCookCoverage:
+def check_plan_disposition(planner: PlannerResult) -> None:
     if planner.disposition not in {
         PlannerDisposition.COMPLETE,
         PlannerDisposition.PARTIAL,
@@ -197,53 +160,3 @@ def coverage_for_plan(
         raise CookEvidenceError(
             f"planner disposition {planner.disposition.value} cannot authorize execution"
         )
-    expected_remainder = planner.unresolved_work
-    if approval.coverage.unresolved_work != expected_remainder:
-        raise CookEvidenceError("approval acknowledges a stale PlannerResult remainder")
-    selected = tuple(approval.coverage.curd_ids)
-    if len(set(selected)) != len(selected):
-        raise CookEvidenceError("approval coverage must not repeat curd IDs")
-    declared = {curd.curd_id: curd for curd in plan.curds}
-    unknown = set(selected) - declared.keys()
-    if unknown:
-        raise CookEvidenceError(
-            "approval names unknown curd IDs: " + ", ".join(sorted(unknown))
-        )
-    if planner.disposition is PlannerDisposition.COMPLETE:
-        expected = tuple(curd.curd_id for curd in plan.curds)
-        if selected != expected:
-            raise CookEvidenceError("complete plan approval must cover every curd")
-    for curd_id in selected:
-        missing = set(declared[curd_id].dependencies) - set(selected)
-        if missing:
-            raise DependencyClosureError(
-                f"approval coverage for {curd_id!r} omits dependencies: "
-                + ", ".join(sorted(missing))
-            )
-    return MoldCookCoverage(
-        curd_ids=selected,
-        unresolved_work=expected_remainder,
-    )
-
-
-def check_previous_proposal(
-    previous_result: CookPreparationResult | None,
-    *,
-    kind: MoldCookApprovalKind,
-    expected_proposal: bytes,
-    artifacts: Path,
-) -> None:
-    """Refuse a resubmission that changes the proposal the host displayed.
-
-    The guard applies only to a previous round that asked for this same
-    approval kind; a scope round carried into a plan round proposes different
-    bytes by design.
-    """
-
-    if previous_result is None or previous_result.proposal_ref is None:
-        return
-    if previous_result.approval_kind is not kind:
-        return
-    if resolve_ref(previous_result.proposal_ref, artifacts) != expected_proposal:
-        label = "scope" if kind is MoldCookApprovalKind.SCOPE else "plan"
-        raise CookEvidenceError(f"resubmission changed the displayed {label} proposal")

@@ -266,8 +266,8 @@ Then proceed.
 | Planner | `planner-request → PlannerResult → validated CurdPlan` | `PlannerResult` |
 | Per curd | `cook → age ↔ cure` until clean, stalled, or blocked | `CurdResult` + remediation state |
 | Post-merge | `press → age ↔ cure → age` over the merged typed results | final `CurdResult` |
-| Per curd, closed N/A | `coder(cook) → age ↔ coder(cure)` until terminal | `not-applicable-curd` |
-| Post-merge, closed N/A | `age ↔ cure → age` | `not-applicable-postmerge` |
+| Per curd, non-behavior work | `coder(cook) → age ↔ coder(cure)` until terminal | `not-applicable-curd` |
+| Post-merge, non-behavior work | `age ↔ cure → age` | `not-applicable-postmerge` |
 
 Per-curd workers own incomplete implementation slices.
 
@@ -466,7 +466,7 @@ spec independently checks matching continuity.  A missing continuation is a
 cold start, while a hold, blocker, ambiguity, scope conflict, or integrity
 failure remains a hold even when a direct spec is also supplied.
 
-A saved parent or early curd mini-spec is not execution authority. Enter Cook only on the user's request. Full Cook binds the unchanged requested scope without a second reply. Require plan approval and a ready pointer before any writer dispatch.
+A saved parent or early curd mini-spec is not execution authority. Enter Cook only on the user's request. Light and Full Cook proceed on invocation and show the scope or plan as information only. Require a ready pointer before any writer dispatch.
 
 ## Preparation transitions
 
@@ -476,19 +476,19 @@ reuse `materialize_planner_result`; it does not dispatch an agent or create a
 human response.  The transition sequence is:
 
 ```
-Full requested scope (Light: explicit bounded scope) -> planner result -> Full/partial plan approval
+Invoked scope -> planner result -> plan shown as information
       -> optional bounded runner setup -> accepted handoff -> execute
 ```
 
 Each transition recomputes its outcome and revalidates every reference and
-hold. Full resubmission rejects a changed bound spec. Only `ready` may enter execution.  Linear plans pass their
-approved curd IDs to `workflow.cook`.  Fan plans route through
-`execute_fan` → `run_fan`.  Light work has one explicitly authorized curd and
-no planner ceremony.  Partial work passes exactly the dependency-closed
-approved IDs to the selected route, while the canonical
-`PlannerResult.unresolved_work` remains durable for resumption.
-A changed subset or remainder invalidates the old approval and returns to
-`needs-approval`.
+hold. Full resubmission rejects a changed bound spec. Only `ready` may enter
+execution.  Linear plans pass their plan curd IDs to `workflow.cook`.  Fan
+plans route through `execute_fan` → `run_fan`.  Light work has exactly one
+curd and no planner ceremony.  Full coverage is every plan curd plus the
+unresolved work. Partial work passes exactly the dependency-closed IDs to the
+selected route, while the canonical `PlannerResult.unresolved_work` remains
+durable for resumption.
+A changed subset or remainder returns to `needs-planning`.
 
 ### Preparation loop
 
@@ -504,35 +504,17 @@ used.
 
 | `outcome` | Action | New evidence flag |
 | --- | --- | --- |
-| `needs-approval` | Show the retained `proposal_ref` content. Ask the user once through the [question transport](../../cheese/references/ask-user-question.md). Run `skills/cook/scripts/cook.pyz approve` with the literal reply. Accept the reply forms named in [`handshake.md`](../../mold/references/handshake.md) § User key. Full Cook does not ask for scope approval. | `--scope-approval` for Light, or `--plan-approval` for Full, as `approval_kind` names |
 | `needs-planning` | Dispatch a fresh-context planner on `planner_request`. Normalize its writer view on the host. | `--planner-result` |
-| `needs-preparation` | Follow the setup authorization rules below. The host records the runner approval; `approve` does not. | `--runner-approval`, `--setup-authorization`, `--setup-evidence` |
+| `needs-preparation` | Follow the setup authorization rules below. The host records the runner approval. | `--runner-approval`, `--setup-authorization`, `--setup-evidence` |
 | `blocked` | Show each hold. Only a fresh user dialogue clears a hold. | `--clear-hold HOLD_ID=DIALOGUE_JSON` |
 | `invalid` | Stop and show the findings. | none |
 | `ready` | Run `skills/cook/scripts/cook.pyz accept <pointer> --spec <spec>` on `handoff_ref`, then execute. | none |
-
-```bash
-python3 skills/cook/scripts/cook.pyz approve "$SPEC" \
-  --artifact-root "$ARTIFACT_ROOT" \
-  --request-id "<request_id from the result>" \
-  --kind plan \
-  --planner-result "$PLANNER_RESULT" \
-  --response "<the user's literal reply>"
-```
-
-Use `--kind partial_plan` for partial work. For a Light scope proposal
-without declared landing, name the covered curd with `--curd-id`. The command
-prints `approval_path`; pass that path to `resubmit`. A rejected reply does not
-advance. Only a reply to the displayed plan or Light scope proposal counts.
-The Full Cook invocation authorizes its unchanged scope, but not its plan.
-`--auto`, a status string, and a taste verdict never approve a plan.
 
 Setup authorization names one prerequisite, a finite path set, and a finite
 command set.  Evidence must include that prerequisite, exact command and
 fixture, environment identity, successful exit result, and captured-output
 digest.  Setup authority cannot clear a feature hold or authorize feature
-writes.  Historical pointers pass their original route, schema, payload, and
-receipt checks before Cook asks for missing spec or approval bindings.
+writes.
 
 The host integration calls the public
 `easy_cheese.skills.cook.execute_accepted_handoff` API for the final Full

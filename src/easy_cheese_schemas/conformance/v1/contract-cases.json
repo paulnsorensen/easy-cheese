@@ -709,15 +709,6 @@
         "minor": "0"
       },
       "input": {
-        "approval_ref": {
-          "artifact_id": "artifact-approval",
-          "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "media_type": "application/json",
-          "role": "approval",
-          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval",
-          "size_bytes": 64,
-          "uri": "repo://conformance/approval.json"
-        },
         "contract_version": {
           "major": "1",
           "minor": "0",
@@ -771,15 +762,6 @@
         "minor": "0"
       },
       "input": {
-        "approval_ref": {
-          "artifact_id": "artifact-approval",
-          "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "media_type": "application/json",
-          "role": "approval",
-          "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval",
-          "size_bytes": 64,
-          "uri": "repo://conformance/approval.json"
-        },
         "contract_version": {
           "major": "1",
           "minor": "0",
@@ -825,7 +807,7 @@
       }
     },
     {
-      "name": "mold-cook-approval-scope-accepted",
+      "name": "mold-cook-approval-runner-accepted",
       "operation": "validate_contract",
       "schema_uri": "https://schemas.easy-cheese.dev/mold-cook-approval",
       "supported_version": {
@@ -846,8 +828,7 @@
           "unresolved_work": []
         },
         "decision": "approved",
-        "kind": "scope",
-        "plan_digest": null,
+        "kind": "runner",
         "proposal_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "proposal_ref": {
           "artifact_id": "artifact-proposal",
@@ -870,8 +851,16 @@
           "uri": "repo://conformance/response.json"
         },
         "response_source": "user-response-1",
-        "response_text": "Approved the scope",
-        "setup_authorization": null,
+        "response_text": "Approved the runner setup",
+        "setup_authorization": {
+          "prerequisite_curd_id": "curd-runtime",
+          "allowed_paths": [
+            "pyproject.toml"
+          ],
+          "allowed_commands": [
+            "uv sync"
+          ]
+        },
         "source": "user_response",
         "spec_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
@@ -880,7 +869,7 @@
         "value": {
           "type": "MoldCookApproval",
           "request_id": "request-conformance",
-          "kind": "scope",
+          "kind": "runner",
           "decision": "approved",
           "curd_ids": [
             "curd-runtime"
@@ -910,8 +899,7 @@
           "unresolved_work": []
         },
         "decision": "approved",
-        "kind": "scope",
-        "plan_digest": null,
+        "kind": "runner",
         "proposal_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
         "proposal_ref": {
           "artifact_id": "artifact-proposal",
@@ -935,7 +923,15 @@
         },
         "response_source": "user-response-1",
         "response_text": "Approved the scope",
-        "setup_authorization": null,
+        "setup_authorization": {
+          "prerequisite_curd_id": "curd-runtime",
+          "allowed_paths": [
+            "pyproject.toml"
+          ],
+          "allowed_commands": [
+            "uv sync"
+          ]
+        },
         "source": "user_response",
         "spec_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
@@ -955,7 +951,6 @@
         "minor": "0"
       },
       "input": {
-        "approval_kind": null,
         "approved_plan_ref": null,
         "approved_scope_ref": null,
         "contract_version": {
@@ -981,11 +976,8 @@
         },
         "holds": [],
         "input_kind": "direct_spec",
-        "missing_decision": null,
         "outcome": "ready",
         "planner_request": null,
-        "proposal_digest": null,
-        "proposal_ref": null,
         "references": [
           {
             "artifact_id": "artifact-handoff",
@@ -1017,7 +1009,7 @@
       }
     },
     {
-      "name": "cook-preparation-result-ready-carrying-approval-payload-rejected",
+      "name": "cook-preparation-result-ready-carrying-setup-authorization-rejected",
       "operation": "validate_contract",
       "schema_uri": "https://schemas.easy-cheese.dev/cook-preparation-result",
       "supported_version": {
@@ -1026,7 +1018,6 @@
         "minor": "0"
       },
       "input": {
-        "approval_kind": null,
         "approved_plan_ref": null,
         "approved_scope_ref": null,
         "contract_version": {
@@ -1052,19 +1043,8 @@
         },
         "holds": [],
         "input_kind": "direct_spec",
-        "missing_decision": "plan",
         "outcome": "ready",
         "planner_request": null,
-        "proposal_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "proposal_ref": {
-          "artifact_id": "artifact-proposal",
-          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "media_type": "application/json",
-          "role": "proposal",
-          "schema_uri": null,
-          "size_bytes": 64,
-          "uri": "repo://conformance/proposal.json"
-        },
         "references": [
           {
             "artifact_id": "artifact-handoff",
@@ -1078,12 +1058,20 @@
         ],
         "request_id": "request-conformance",
         "requirements": [],
-        "setup_authorization": null
+        "setup_authorization": {
+          "prerequisite_curd_id": "curd-runtime",
+          "allowed_paths": [
+            "pyproject.toml"
+          ],
+          "allowed_commands": [
+            "uv sync"
+          ]
+        }
       },
       "expected": {
         "status": "reject",
         "error_type": "ContractValidationError",
-        "message": "$ is invalid: ready preparation carries fields for another outcome: missing_decision, proposal_digest, proposal_ref"
+        "message": "$ is invalid: ready preparation carries fields for another outcome: setup_authorization"
       }
     }
   ]

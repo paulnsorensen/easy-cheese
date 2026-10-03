@@ -49,10 +49,6 @@ class CookEvidenceError(ValueError):
     """Evidence is absent, stale, detached, or outside its authority."""
 
 
-class DependencyClosureError(CookEvidenceError):
-    """A partial approval names a curd without its approved dependencies."""
-
-
 class SetupExecutionFailed(CookEvidenceError):
     """The authorized setup command ran but did not pass."""
 
@@ -225,8 +221,6 @@ class PreparationEvidence:
     by ``resubmit`` alone; every other field reaches ``prepare``.
     """
 
-    scope_approval: ApprovalSource | None = None
-    plan_approval: ApprovalSource | None = None
     runner_approval: ApprovalSource | None = None
     planner_result: PlannerResult | ArtifactRef | str | Path | None = None
     planner_view: PlannerResultWriterView | None = None
@@ -282,12 +276,4 @@ class MaterializedPlan:
     planner_ref: ArtifactRef
     plan: CurdPlan
     plan_ref: ArtifactRef
-    candidate_coverage: MoldCookCoverage
-
-
-@attrs.define(frozen=True)
-class ApprovedPlan:
-    """The bound plan approval and the coverage it authorizes."""
-
-    approval_ref: ArtifactRef
     coverage: MoldCookCoverage

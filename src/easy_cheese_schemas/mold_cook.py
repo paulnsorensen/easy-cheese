@@ -61,11 +61,12 @@ class MoldCookInputKind(str, Enum):
 
 
 class MoldCookApprovalKind(str, Enum):
-    """The bounded decision represented by an approval record."""
+    """The bounded decision represented by an approval record.
 
-    SCOPE = "scope"
-    PLAN = "plan"
-    PARTIAL_PLAN = "partial_plan"
+    Only host-side runner setup needs an approval record. Cook proceeds on the
+    invocation for Light scope and Full plan handoffs.
+    """
+
     RUNNER = "runner"
 
 
@@ -89,7 +90,6 @@ class CookPreparationOutcome(str, Enum):
 
     READY = "ready"
     NEEDS_PLANNING = "needs-planning"
-    NEEDS_APPROVAL = "needs-approval"
     NEEDS_PREPARATION = "needs-preparation"
     BLOCKED = "blocked"
     INVALID = "invalid"
@@ -236,17 +236,13 @@ def _paired_or_absent(first: str, second: str) -> dict[str, object]:
 
 _OUTCOME_PAYLOAD_FIELDS: frozenset[str] = frozenset(
     {
-        "approval_kind",
         "approved_plan_ref",
         "approved_scope_ref",
         "coverage",
         "findings",
         "handoff_ref",
         "holds",
-        "missing_decision",
         "planner_request",
-        "proposal_digest",
-        "proposal_ref",
         "requirements",
         "setup_authorization",
     }
@@ -257,15 +253,11 @@ _OUTCOME_SEQUENCE_FIELDS: frozenset[str] = frozenset(
 )
 
 _OUTCOME_PAYLOAD_SCHEMAS: dict[str, dict[str, object]] = {
-    "approval_kind": _STRING,
     "approved_plan_ref": _ARTIFACT_REF,
     "approved_scope_ref": _ARTIFACT_REF,
     "coverage": {"$ref": "#/$defs/MoldCookCoverage"},
     "handoff_ref": _ARTIFACT_REF,
-    "missing_decision": _STRING,
     "planner_request": {"$ref": "#/$defs/PlannerRequest"},
-    "proposal_digest": _STRING,
-    "proposal_ref": _ARTIFACT_REF,
     "setup_authorization": _SETUP_AUTHORIZATION,
 }
 
@@ -290,17 +282,6 @@ _OUTCOME_FIELDS: dict[CookPreparationOutcome, _OutcomeFields] = {
     ),
     CookPreparationOutcome.NEEDS_PLANNING: _OutcomeFields(
         required=frozenset({"approved_scope_ref", "planner_request"}),
-        optional=_OPTIONAL_HOLDS,
-    ),
-    CookPreparationOutcome.NEEDS_APPROVAL: _OutcomeFields(
-        required=frozenset(
-            {
-                "approval_kind",
-                "proposal_ref",
-                "proposal_digest",
-                "missing_decision",
-            }
-        ),
         optional=_OPTIONAL_HOLDS,
     ),
     CookPreparationOutcome.NEEDS_PREPARATION: _OutcomeFields(
@@ -442,16 +423,6 @@ class CookValidationFinding:
 @schema_constraints(
     _if_equals(
         "kind",
-        MoldCookApprovalKind.PLAN.value,
-        _requires(plan_digest=_STRING),
-    ),
-    _if_equals(
-        "kind",
-        MoldCookApprovalKind.PARTIAL_PLAN.value,
-        _requires(plan_digest=_STRING),
-    ),
-    _if_equals(
-        "kind",
         MoldCookApprovalKind.RUNNER.value,
         _requires(setup_authorization=_SETUP_AUTHORIZATION),
     ),
@@ -484,9 +455,6 @@ class MoldCookApproval:
     coverage: MoldCookCoverage = field(
         validator=validators.instance_of(MoldCookCoverage)
     )
-    plan_digest: str | None = field(
-        default=None, validator=validators.optional(_digest)
-    )
     setup_authorization: CookSetupAuthorization | None = field(
         default=None,
         validator=validators.optional(validators.instance_of(CookSetupAuthorization)),
@@ -504,26 +472,8 @@ class MoldCookApproval:
             raise ValueError(
                 f"{self.source.value} approval requires a {expected_role} artifact"
             )
-        requires_plan = self.kind in {
-            MoldCookApprovalKind.PLAN,
-            MoldCookApprovalKind.PARTIAL_PLAN,
-        }
-        if requires_plan and self.plan_digest is None:
-            raise ValueError(f"{self.kind.value} approval requires plan_digest")
-        if not requires_plan and self.plan_digest is not None:
-            raise ValueError(f"{self.kind.value} approval must not carry plan_digest")
-        if (
-            self.kind is MoldCookApprovalKind.RUNNER
-            and self.setup_authorization is None
-        ):
+        if self.setup_authorization is None:
             raise ValueError("runner approval requires setup_authorization")
-        if (
-            self.kind is not MoldCookApprovalKind.RUNNER
-            and self.setup_authorization is not None
-        ):
-            raise ValueError(
-                f"{self.kind.value} approval must not carry setup_authorization"
-            )
 
 
 @contract("mold-cook-handoff")
@@ -545,12 +495,11 @@ class MoldCookApproval:
         _requires(planner_result_ref=_ARTIFACT_REF, plan_ref=_ARTIFACT_REF),
     ),
     _artifact_binding("spec_ref", "spec"),
-    _artifact_binding("approval_ref", "approval", MOLD_COOK_APPROVAL_SCHEMA_URI),
     _paired_or_absent("taste_verdict_ref", "taste_ledger_ref"),
 )
 @define(frozen=True)
 class MoldCookHandoff:
-    """Canonical phase payload consumed by Cook after approval."""
+    """Canonical phase payload consumed by Cook."""
 
     contract_version: ContractVersion = field(
         validator=validators.instance_of(ContractVersion)
@@ -561,12 +510,6 @@ class MoldCookHandoff:
     )
     mode: MoldCookMode = field(validator=validators.instance_of(MoldCookMode))
     spec_ref: ArtifactRef = field(validator=_artifact_role("spec"))
-    approval_ref: ArtifactRef = field(
-        validator=validators.and_(
-            _artifact_role("approval"),
-            _schema_uri(MOLD_COOK_APPROVAL_SCHEMA_URI),
-        )
-    )
     coverage: MoldCookCoverage = field(
         validator=validators.instance_of(MoldCookCoverage)
     )
@@ -670,18 +613,6 @@ class CookPreparationResult:
         default=None,
         validator=validators.optional(validators.instance_of(PlannerRequest)),
     )
-    approval_kind: MoldCookApprovalKind | None = field(
-        default=None,
-        validator=validators.optional(validators.instance_of(MoldCookApprovalKind)),
-    )
-    proposal_ref: ArtifactRef | None = field(
-        default=None,
-        validator=validators.optional(_artifact_role("proposal")),
-    )
-    proposal_digest: str | None = field(
-        default=None, validator=validators.optional(_digest)
-    )
-    missing_decision: str | None = field(default=None, validator=_optional_string)
     approved_plan_ref: ArtifactRef | None = field(
         default=None,
         validator=validators.optional(_artifact_role("curd_plan")),
@@ -722,11 +653,6 @@ class CookPreparationResult:
             raise ValueError(
                 f"{self.outcome.value} preparation carries fields for another outcome: {names}"
             )
-        if (
-            self.proposal_ref is not None
-            and self.proposal_digest != self.proposal_ref.digest
-        ):
-            raise ValueError("proposal_digest must match proposal_ref.digest")
 
 
 def registered_contracts() -> tuple[tuple[str, type], ...]:

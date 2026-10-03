@@ -1,22 +1,20 @@
-# The TDD loop: inner RED → implement → taste-test
+# The TDD loop: test first where it fits → implement → taste-test
 
-Cook uses a sequential TDD discipline. Each phase must have a clear exit before the next phase starts.
+TDD is recommended practice in Cook. No gate enforces it. Each phase should have a clear exit before the next phase starts.
 
-Closed `not-applicable` work routes requested docs/refactor/test/appearance work through its non-behavior implementation and verification path. N/A never means that requested work is not necessary.
+Docs, refactor, test, and appearance work uses its own implementation and verification path. It changes only the requested surface.
 
-## Inner TDD — failing tests first
+## Inner TDD — tests first where it fits
 
-When a change adds or modifies behavior, write an inner failing test before implementation. This test is Cook's vertical loop.
+When a change adds or modifies behavior, write the test before the implementation where it fits. This test is Cook's vertical loop.
 
-For behavior changes, only the inner TDD loop can modify production code. Closed N/A work must use its declared non-behavior implementation path. It can edit only the requested surface.
-
-If an inner test cannot fail for the expected reason, **stop and fix the test before implementing**. A test that passes against unimplemented code creates false-positive results.
+A test that passes against unimplemented code gives a false positive. Check that the test fails for the expected reason when that is cheap to do.
 
 ## Implement — minimal green
 
-For behavior work, make the smallest production change that makes the inner tests green.
+For behavior work, make the smallest production change that makes the tests green.
 
-For closed N/A work, make the requested docs/refactor/test/appearance change through its non-behavior path. Verify that path instead of replaying RED.
+For docs, refactor, test, or appearance work, make the requested change and verify it directly.
 
 **Implement must:**
 
@@ -38,9 +36,9 @@ These rules do not license speculative types, helpers, or abstractions. Scope an
 
 Before handoff to Press, make every inner test and relevant gate GREEN.
 
-For closed N/A work, complete the requested non-behavior verification and taste-test. Then, hand off directly to Age. N/A has no Test Contracts for Press to attack.
+For non-behavior work, complete the requested non-behavior verification and taste-test. Then, hand off directly to Age. Non-behavior work has no Test Contracts for Press to attack.
 
-A corrective Cook (`correction = true`) applies only to the active Press corrective loop. It must not weaken, replace, or bypass an existing test.
+A corrective Cook (`correction = true`) applies only to the active Press correction. It must not weaken, replace, or bypass an existing test.
 
 If Cook reports partial or skipped work, **stop and resolve it before taste-test**.
 
@@ -159,29 +157,27 @@ Confirm every item that the package report asserts (`package-report.md` § Self-
 - [ ] Spec or acceptance criteria are clear.
 - [ ] The report documents every remaining risk and every skipped check.
 
-## Boundary-specific RED checks
+## Boundary-specific checks
 
-For Mold-to-Cook changes, the inner RED loop covers the consumer seam rather
+For Mold-to-Cook changes, the inner test loop covers the consumer seam rather
 than only a helper function:
 
 - classify explicit mode before inference and reject malformed declared
   pointers/projections without task fallback;
-- plan Full work without another scope reply, but require bounded Light scope authority;
-- materialize a Full plan once, reuse unchanged approval, and renew it when
-  coverage or the acknowledged remainder changes;
+- plan Full work on invocation, with no scope or plan approval step;
+- materialize a Full plan once and recompute coverage when the acknowledged
+  remainder changes;
 - keep holds across every resubmission and permit execution only from `ready`;
-- accept Light only with explicit bounded authority and no invented planner
-  artifact;
+- accept Light on invocation with no invented planner artifact;
 - reject runner evidence that is stale, failed, or outside its authorized
   paths and commands; and
-- read supported historical pointers through their original integrity route,
-  preserving incomplete work and exact missing-decision requests.
+- preserve incomplete work and exact missing-decision requests.
 
 The command under test supplies no agent callback and no user response.  The
-orchestrator supplies planner output and approval/setup artifacts explicitly;
-the Cook result is recomputed from those references on every transition.
+orchestrator supplies planner output and runner approval explicitly; the Cook
+result is recomputed from those references on every transition.
 The final execution-boundary test uses
 `execute_accepted_handoff` with real dispatch callbacks.  It proves that
 non-ready, held, stale, and overbroad handoffs stop before `workflow.cook`,
-while a ready Full handoff forwards the exact approved IDs and leaves the
+while a ready Full handoff forwards the exact plan curd IDs and leaves the
 canonical planner remainder untouched.

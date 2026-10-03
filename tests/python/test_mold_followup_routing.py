@@ -47,27 +47,19 @@ def test_scoped_documents_exist() -> None:
     assert not missing, f"Mold follow-up routing files moved or renamed: {missing}"
 
 
-def test_user_key_requires_cook_intent_without_inference() -> None:
-    section = _section(HANDSHAKE, "User key")
-    for phrase in (
-        "intent to Cook the displayed scope or plan",
-        "cook it",
-        "cook this",
-        "route selection is separate from cook consent",
-        "response_is_affirmative",
-        "general approval of the design",
-        "unrelated or ambiguous approval",
-        "exact proposal",
-    ):
-        assert phrase.casefold() in section.casefold()
+def test_handshake_has_no_user_key_and_names_the_self_check() -> None:
+    body = _text(HANDSHAKE)
+    intro = body.split("\n## ", 1)[0]
+    assert "requires the agent coherence self-check" in intro
+    assert "## User key" not in body
+    assert "response_is_affirmative" not in body
+    assert "two-key" not in body.casefold()
 
 
-def test_user_key_binds_a_literal_response_to_the_exact_proposal() -> None:
-    section = _section(HANDSHAKE, "User key")
-    assert "Judge the key by intent" in section
-    assert "literal response" in section
-    assert "exact proposal" in section
-    assert "approval to write the spec" not in section
+def test_handshake_keeps_save_approval_override() -> None:
+    section = _section(HANDSHAKE, "Override semantics")
+    assert "does not grant execution authority" in section
+    assert "gates_overridden" in section
 
 
 def test_candidate_collection_is_non_committing_dialogue_state() -> None:
@@ -250,10 +242,10 @@ def test_mold_saves_draft_before_cook_consent_and_persists_typed_plan() -> None:
         "save a validated parent spec or early curd mini-spec",
         "Never start Cook from a saved spec",
         "user must select the exact curd",
-        "Bind that literal selection",
+        "An explicit Cook selection plus `finalize` is enough",
     )
 
-    procedure = _section(CURDLE, "Pre-approval typed planner dispatch")
+    procedure = _section(CURDLE, "Typed planner dispatch")
     _assert_in_order(
         procedure,
         "1. **Dispatch**",
@@ -273,7 +265,7 @@ def test_early_curd_route_selection_stays_separate_from_scope_approval() -> None
         "For **Cook here in isolation**",
         "For **Cook in another worktree**",
     )
-    assert "approval envelope binds the scope or plan, not the dispatch route" in selection.casefold()
+    assert "the selection covers the scope or plan, not the dispatch route" in selection.casefold()
     assert "without starting local Cook or publishing a local execution pointer" in selection
 
 

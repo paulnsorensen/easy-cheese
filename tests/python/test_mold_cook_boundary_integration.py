@@ -41,7 +41,6 @@ from tests.python.mold_cook_transcript_checker import (
 )
 from tests.python.test_cook_contract_accept import published_handoff
 from tests.python.test_mold_cook_producer import (
-    make_approval,
     finalize_fixture,
     make_planner_result,
     make_spec,
@@ -72,22 +71,22 @@ def test_full_and_light_authority_are_distinct_and_consumable(tmp_path: Path) ->
     assert light.plan_ref is None
 
 
-def test_approval_reuse_succeeds_but_stale_evidence_is_rejected(tmp_path: Path) -> None:
+def test_repeated_acceptance_succeeds_but_stale_evidence_is_rejected(
+    tmp_path: Path,
+) -> None:
     pointer, _, _ = published_handoff(tmp_path, "repeatable")
     first = accept_mold_cook_handoff(pointer, artifact_root=tmp_path)
     second = accept_mold_cook_handoff(pointer, artifact_root=tmp_path)
     assert first.canonical.canonical_bytes == second.canonical.canonical_bytes
 
-    approval = tmp_path / "approval.json"
-    _ = approval.write_bytes(approval.read_bytes().replace(b"Approve", b"Reject!"))
+    taste = tmp_path / "taste-verdict.json"
+    _ = taste.write_bytes(taste.read_bytes().replace(b"pass", b"fail"))
     with pytest.raises(ContractValidationError, match="stale or corrupt"):
         _ = accept_mold_cook_handoff(pointer, artifact_root=tmp_path)
-
 
 def test_hold_survives_resubmission(tmp_path: Path) -> None:
     spec = make_spec(tmp_path)
     planner = make_planner_result()
-    approval = make_approval(tmp_path, spec, plan=planner)
     hold = cast(Callable[..., CookExecutionHold], CookExecutionHold)(
         hold_id="incident-1",
         kind=CookHoldKind.BLOCKED,
@@ -101,7 +100,6 @@ def test_hold_survives_resubmission(tmp_path: Path) -> None:
         mode=MoldCookMode.FULL,
         evidence=PreparationEvidence(
             planner_result=planner,
-            plan_approval=approval,
             holds=(hold,),
         ),
     )
@@ -114,7 +112,6 @@ def test_hold_survives_resubmission(tmp_path: Path) -> None:
         mode=MoldCookMode.FULL,
         evidence=PreparationEvidence(
             planner_result=planner,
-            plan_approval=approval,
             holds=(hold,),
         ),
     )

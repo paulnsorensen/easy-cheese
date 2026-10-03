@@ -12,8 +12,8 @@ as headings or table rows. The parsed frontmatter and table rows are then passed
 once to ``MoldSpecDocument``. Its typed validators enforce document invariants.
 
 Legacy acceptance: the default read posture accepts v0.13-era specs without a
-Mold provenance marker. It waives only the Test Contracts section, the Grounding
-section, and the ``gate_applicability`` block that the current format added.
+Mold provenance marker. It waives only the Grounding section that the current
+format added.
 ``--strict`` requires the current format and its provenance marker. The policy
 lives once in ``easy_cheese_schemas.spec_format`` so every release channel uses
 the same rule.
@@ -43,8 +43,6 @@ from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
 
 if TYPE_CHECKING:
     from easy_cheese_schemas.contracts import (
-        GateApplicability,
-        GateApplicabilityDisposition,
         GroundingOutcome,
         GroundingProbe,
         GroundingRow,
@@ -54,16 +52,12 @@ if TYPE_CHECKING:
         SpecConfidence,
         TestContractMode,
         TestContractRow,
-        UiSurface,
-        WorkClass,
     )
 
 
 class _SpecFormatPolicy(Protocol):
     @property
     def notice(self) -> str | None: ...
-
-    def requires_gate_applicability(self) -> bool: ...
 
     def requires_section(
         self, section_name: str, *, default_required: bool
@@ -82,8 +76,6 @@ class _SpecFormatModule(Protocol):
 
 
 class _SchemaModule(Protocol):
-    GateApplicability: type[GateApplicability]
-    GateApplicabilityDisposition: type[GateApplicabilityDisposition]
     GroundingOutcome: type[GroundingOutcome]
     GroundingProbe: type[GroundingProbe]
     GroundingRow: type[GroundingRow]
@@ -92,8 +84,6 @@ class _SchemaModule(Protocol):
     SpecConfidence: type[SpecConfidence]
     TestContractMode: type[TestContractMode]
     TestContractRow: type[TestContractRow]
-    UiSurface: type[UiSurface]
-    WorkClass: type[WorkClass]
     parse_landing_mapping: Callable[[object], Landing]
 
 
@@ -203,7 +193,6 @@ def _rule_id(rule_id: str) -> str:
 AC_COVERAGE_RULE = _rule_id("ac-coverage-exactly-once")
 TRACER_ROW_RULE = _rule_id("tracer-row-blank-matrix-cells")
 CONTRACT_MATRIX_ROW_RULE = _rule_id("contract-matrix-row-requires-both")
-NOT_APPLICABLE_RULE = _rule_id("not-applicable-closed-class")
 
 # Each declared probe carries its own cross-field rule id so a skipped wiki
 # probe and a skipped explorer delegation fail under distinct identifiers.
@@ -477,8 +466,6 @@ def _typed_errors(message: str, path: Path) -> tuple[str, ...]:
             + f"{count} in {path}"
             for probe, count in grounding
         )
-    if "gate_applicability.reason is required" in message:
-        return (f"ERROR: {NOT_APPLICABLE_RULE} {message} in {path}",)
     return (f"ERROR: typed-document-invalid {message} in {path}",)
 
 
@@ -488,34 +475,6 @@ def _typed_frontmatter(
     errors: list[str],
 ) -> tuple[_SchemaModule, MoldSpecFrontmatter] | None:
     schema = _schema_module()
-    gate = frontmatter.get("gate_applicability")
-    if gate is None:
-        gate = {
-            "disposition": "red-required",
-            "work_class": "behavior",
-            "ui_surface": "non-browser",
-        }
-    if not isinstance(gate, Mapping):
-        return None
-    gate = cast(Mapping[str, object], gate)
-
-    enum_values = (
-        (
-            "disposition",
-            "gate_applicability_disposition",
-            "gate-applicability-closed-class",
-        ),
-        ("work_class", "work_class", "gate-applicability-closed-class"),
-        ("ui_surface", "ui_surface", "gate-applicability-closed-class"),
-    )
-    for key, enum_name, error_id in enum_values:
-        value = gate.get(key)
-        if value not in ENUMS[enum_name]:
-            errors.append(
-                f"ERROR: {error_id} gate_applicability.{key} '{value}' is "
-                + f"not a recognized {key.replace('_', ' ')} in {path}"
-            )
-            return None
 
     landing: Landing | None = None
     landing_raw = frontmatter.get("landing")
@@ -527,14 +486,6 @@ def _typed_frontmatter(
             return None
 
     try:
-        gate_model = schema.GateApplicability(
-            disposition=schema.GateApplicabilityDisposition(
-                cast(str, gate["disposition"])
-            ),
-            work_class=schema.WorkClass(cast(str, gate["work_class"])),
-            ui_surface=schema.UiSurface(cast(str, gate["ui_surface"])),
-            reason=cast(str | None, gate.get("reason")),
-        )
         front_model = schema.MoldSpecFrontmatter(
             slug=cast(str, frontmatter.get("slug", "legacy-spec")),
             status=cast(str, frontmatter.get("status", "draft")),
@@ -543,7 +494,6 @@ def _typed_frontmatter(
             confidence=schema.SpecConfidence(
                 cast(str, frontmatter.get("confidence", "medium"))
             ),
-            gate_applicability=gate_model,
             gates_overridden=cast(
                 tuple[str, ...], frontmatter.get("gates_overridden", ())
             ),
@@ -703,13 +653,6 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     policy = spec_format_policy(frontmatter, strict=strict)
     found_sections, duplicate_headings = _find_sections(body)
     source = frontmatter.get("source")
-    gate_applicability = frontmatter.get("gate_applicability")
-    gate_mapping = (
-        cast(Mapping[str, object], gate_applicability)
-        if isinstance(gate_applicability, Mapping)
-        else None
-    )
-    disposition = gate_mapping.get("disposition") if gate_mapping else None
 
     if source is not None and not isinstance(source, str):
         errors.append(
@@ -734,8 +677,6 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
     section_requirements.append(("Contract", False))
     for name, default_required in section_requirements:
         required = policy.requires_section(name, default_required=default_required)
-        if name == "Test Contracts" and disposition == "not-applicable":
-            required = False
         if required and _canonical_heading(name) not in found_sections:
             errors.append(
                 f"ERROR: missing-required-section '{name}' section not "
@@ -755,12 +696,7 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
 
     test_contracts_lines = found_sections.get(_canonical_heading("Test Contracts"))
     test_rows: list[list[str]] = []
-    if disposition == "not-applicable" and test_contracts_lines is not None:
-        errors.append(
-            f"ERROR: {NOT_APPLICABLE_RULE} gate_applicability.disposition="
-            + f"not-applicable requires no Test Contracts section in {path}"
-        )
-    elif test_contracts_lines is not None:
+    if test_contracts_lines is not None:
         test_rows = _declared_table_rows(
             test_contracts_lines,
             TABLE_COLUMNS,
@@ -783,16 +719,7 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
         )
 
     acceptance_lines = found_sections.get(_canonical_heading("Acceptance"), [])
-    acceptance_ids = (
-        [] if disposition == "not-applicable" else _acceptance_ids(acceptance_lines)
-    )
-
-    if not isinstance(gate_applicability, Mapping):
-        if "gate_applicability" in frontmatter or policy.requires_gate_applicability():
-            errors.append(
-                "ERROR: gate-applicability-required frontmatter gate_applicability is "
-                + f"missing or unparseable in {path}"
-            )
+    acceptance_ids = _acceptance_ids(acceptance_lines)
 
     _validate_typed_document(
         frontmatter,

@@ -4,18 +4,17 @@ from __future__ import annotations
 
 import attrs
 
-from easy_cheese_schemas import ArtifactRef, require_contract_version
+from easy_cheese_schemas import ArtifactRef
 from easy_cheese_schemas.mold_cook import (
     CookExecutionHold,
     CookHoldKind,
-    CookPreparationOutcome,
     CookPreparationResult,
-    MoldCookApprovalKind,
+    CookRequirementKind,
+    CookUnmetRequirement,
     MoldCookInputKind,
     MoldCookMode,
 )
 from easy_cheese.shared.mold_cook_handoff import (
-    canonical_mold_cook_proposal,
     evaluate_mold_cook_spec,
     host_scope_coverage,
 )
@@ -26,12 +25,6 @@ from ._types import (
     PreparationContext,
     ResolvedPreparationSource,
     SpecStage,
-)
-from .approval import (
-    approval_value,
-    check_approval,
-    check_previous_proposal,
-    persist_proposal,
 )
 from .evidence import resolve_ref
 from .outcomes import hold_result, publish_handoff, ready_result
@@ -110,120 +103,60 @@ def stage_spec_binding(
     )
 
 
-def stage_scope_approval(
+def stage_scope(
     ctx: PreparationContext,
     spec: SpecStage,
     resolved: ResolvedPreparationSource,
 ) -> CookPreparationResult | ArtifactRef | None:
-    """Bind explicit scope approval, or use the Full request's unchanged spec."""
+    """Bind the invocation's unchanged spec as the scope; Light publishes here."""
 
     if resolved.legacy_mode:
         return None
     request = ctx.request
     classified = ctx.classified
     refs = ctx.refs
-    proposed_coverage = host_scope_coverage(spec.readiness, resolved.planner_value)
-    scope_envelope = (
-        None
-        if proposed_coverage is None
-        else canonical_mold_cook_proposal(
-            request_id=request.request_id,
-            kind=MoldCookApprovalKind.SCOPE,
-            spec_digest=spec.spec_ref.digest,
-            coverage=proposed_coverage,
-        )
-    )
-    # Round one displays these bytes and round two compares against them, so
-    # both rounds must render the proposal the same way.
-    displayed_proposal = spec.spec_raw if scope_envelope is None else scope_envelope
-    if ctx.evidence.scope_approval is None and request.mode is MoldCookMode.FULL:
-        check_previous_proposal(
-            ctx.previous,
-            kind=MoldCookApprovalKind.SCOPE,
-            expected_proposal=displayed_proposal,
-            artifacts=ctx.artifacts,
-        )
-        if ctx.previous is not None and any(
-            ref.role == "spec" and ref.digest != spec.spec_ref.digest
-            for ref in ctx.previous.references
-        ):
-            raise CookEvidenceError("resubmission changed the bound spec")
-        approved_scope_ref = attrs.evolve(spec.spec_ref, role="approved_scope")
-        refs.append(approved_scope_ref)
-        return approved_scope_ref
-    if ctx.evidence.scope_approval is None:
-        proposal_ref = persist_proposal(
-            request,
-            displayed_proposal,
-            artifact_id=f"{request.request_id}/scope-proposal",
-        )
-        return validate_preparation_result(
-            CookPreparationResult(
-                contract_version=require_contract_version(CookPreparationResult),
-                request_id=request.request_id,
-                input_kind=classified.kind,
-                outcome=CookPreparationOutcome.NEEDS_APPROVAL,
-                references=tuple((*refs, proposal_ref)),
-                approval_kind=MoldCookApprovalKind.SCOPE,
-                proposal_ref=proposal_ref,
-                proposal_digest=proposal_ref.digest,
-                missing_decision="explicit scope approval",
-            )
-        )
-    scope, scope_ref = approval_value(ctx.evidence.scope_approval, request=request)
-    scope_proposal = (
-        canonical_mold_cook_proposal(
-            request_id=request.request_id,
-            kind=MoldCookApprovalKind.SCOPE,
-            spec_digest=spec.spec_ref.digest,
-            coverage=scope.coverage,
-        )
-        if scope_envelope is None
-        else scope_envelope
-    )
-    check_previous_proposal(
-        ctx.previous,
-        kind=MoldCookApprovalKind.SCOPE,
-        expected_proposal=displayed_proposal,
-        artifacts=ctx.artifacts,
-    )
-    check_approval(
-        scope,
-        approval_ref=scope_ref,
-        request=request,
-        spec_ref=spec.spec_ref,
-        expected=MoldCookApprovalKind.SCOPE,
-        expected_proposal=scope_proposal,
-    )
+    if ctx.previous is not None and any(
+        ref.role == "spec" and ref.digest != spec.spec_ref.digest
+        for ref in ctx.previous.references
+    ):
+        raise CookEvidenceError("resubmission changed the bound spec")
+    scope_ref = attrs.evolve(spec.spec_ref, role="approved_scope")
     refs.append(scope_ref)
-    approved_scope_ref = attrs.evolve(scope_ref, role="approved_scope")
-    if request.mode is MoldCookMode.LIGHT:
-        if len(scope.coverage.curd_ids) != 1 or scope.coverage.unresolved_work:
-            raise CookEvidenceError(
-                "Light authorization must name exactly one resolved curd"
-            )
-        handoff_ref = publish_handoff(
-            request,
-            source=classified,
-            spec_ref=spec.spec_ref,
-            approval_ref=scope_ref,
-            coverage=scope.coverage,
-            planner_result_ref=None,
-            plan_ref=None,
-            taste_verdict_ref=(
-                None if spec.readiness is None else spec.readiness.taste_verdict_ref
-            ),
-            taste_ledger_ref=(
-                None if spec.readiness is None else spec.readiness.taste_ledger_ref
-            ),
-        )
+    if request.mode is not MoldCookMode.LIGHT:
+        return scope_ref
+    coverage = host_scope_coverage(spec.readiness, resolved.planner_value)
+    if coverage is None:
         return validate_preparation_result(
-            ready_result(
+            hold_result(
                 request,
                 classified,
-                [*refs, approved_scope_ref],
-                handoff_ref,
-                scope.coverage,
+                refs,
+                requirements=(
+                    CookUnmetRequirement(
+                        requirement_id=f"light-scope-{request.request_id}",
+                        kind=CookRequirementKind.SCOPE,
+                        description="Light Cook needs a spec that declares exactly one curd",
+                        evidence=(spec.spec_ref,),
+                    ),
+                ),
             )
         )
-    return approved_scope_ref
+    if len(coverage.curd_ids) != 1 or coverage.unresolved_work:
+        raise CookEvidenceError("Light scope must name exactly one resolved curd")
+    handoff_ref = publish_handoff(
+        request,
+        source=classified,
+        spec_ref=spec.spec_ref,
+        coverage=coverage,
+        planner_result_ref=None,
+        plan_ref=None,
+        taste_verdict_ref=(
+            None if spec.readiness is None else spec.readiness.taste_verdict_ref
+        ),
+        taste_ledger_ref=(
+            None if spec.readiness is None else spec.readiness.taste_ledger_ref
+        ),
+    )
+    return validate_preparation_result(
+        ready_result(request, classified, refs, handoff_ref, coverage)
+    )

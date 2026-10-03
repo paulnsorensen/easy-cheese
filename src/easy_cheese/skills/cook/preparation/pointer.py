@@ -89,7 +89,6 @@ def resolve_canonical_pointer(
         (
             pointer_ref,
             handoff.spec_ref,
-            handoff.approval_ref,
             *(
                 (handoff.planner_result_ref, handoff.plan_ref)
                 if handoff.planner_result_ref is not None
@@ -150,7 +149,6 @@ def resolve_canonical_pointer(
         authority_request,
         source=source,
         spec_ref=handoff.spec_ref,
-        approval_ref=handoff.approval_ref,
         coverage=handoff.coverage,
         planner_result_ref=handoff.planner_result_ref,
         plan_ref=handoff.plan_ref,

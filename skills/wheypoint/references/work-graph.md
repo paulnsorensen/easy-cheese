@@ -64,7 +64,7 @@ python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientati
 - A moved gating entry needs a `--dossier` fork that describes it.
 - The child holds a `forked_from` edge pinned to the parent's current revision.
 - The reply adds `origins` (child entry id to origin ref) and `edges` to the checkpoint result.
-- `--next` follows the same artifact rule as `checkpoint`; a missing `--artifact` for `cook`, `cut`, or `affinage` is refused as `invalid-intent`.
+- `--next` follows the same artifact rule as `checkpoint`; a missing `--artifact` for `cook` or `affinage` is refused as `invalid-intent`.
 - `fork` mirrors the child projection to `.cheese/notes` and reports `repo-snapshot`, like `checkpoint`; under `--project` it writes no mirror and reports `canonical-local`.
 
 ### `fork-pending` and host-side reconciliation

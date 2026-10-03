@@ -81,7 +81,6 @@ def test_mold_spec_document_declares_cross_field_rules() -> None:
         "contract-matrix-row-requires-both",
         "grounding-probe-recorded",
         "delegation-digest-recorded",
-        "not-applicable-closed-class",
         "landing-closed-class",
     }
 
@@ -101,11 +100,6 @@ def test_ac_coverage_validator_rejects_missing_and_duplicate_ids() -> None:
         source="mold-handshake",
         created="2026-08-23",
         confidence=contracts.SpecConfidence.HIGH,
-        gate_applicability=contracts.GateApplicability(
-            disposition=contracts.GateApplicabilityDisposition.RED_REQUIRED,
-            work_class=contracts.WorkClass.BEHAVIOR,
-            ui_surface=contracts.UiSurface.NON_BROWSER,
-        ),
     )
     row = contracts.TestContractRow(
         acceptance_id="AC-1",
@@ -160,12 +154,6 @@ def _minimal_frontmatter() -> contracts.MoldSpecFrontmatter:
         source="mold-handshake",
         created="2026-08-23",
         confidence=contracts.SpecConfidence.HIGH,
-        gate_applicability=contracts.GateApplicability(
-            disposition=contracts.GateApplicabilityDisposition.NOT_APPLICABLE,
-            work_class=contracts.WorkClass.DOCS_ONLY,
-            ui_surface=contracts.UiSurface.NOT_APPLICABLE,
-            reason="closed, no behavior change",
-        ),
     )
 
 
@@ -200,19 +188,13 @@ def test_grounding_row_rejects_blank_evidence() -> None:
         )
 
 
-def test_not_applicable_document_allows_acceptance_without_test_contracts() -> None:
+def test_document_without_test_contract_rows_allows_acceptance_ids() -> None:
     frontmatter = contracts.MoldSpecFrontmatter(
         slug="docs-only",
         status="approved",
         source="mold-handshake",
         created="2026-08-23",
         confidence=contracts.SpecConfidence.HIGH,
-        gate_applicability=contracts.GateApplicability(
-            disposition=contracts.GateApplicabilityDisposition.NOT_APPLICABLE,
-            work_class=contracts.WorkClass.DOCS_ONLY,
-            ui_surface=contracts.UiSurface.NOT_APPLICABLE,
-            reason="documentation-only change",
-        ),
     )
 
     _ = contracts.MoldSpecDocument(
@@ -272,16 +254,12 @@ def test_generated_document_rules_module_imports_only_stdlib_names() -> None:
         "contract-matrix-row-requires-both",
         "grounding-probe-recorded",
         "delegation-digest-recorded",
-        "not-applicable-closed-class",
         "landing-closed-class",
     }
     assert set(cast(dict[str, object], rules["enums"])) == {
         "mode",
         "grounding_probe",
         "grounding_outcome",
-        "gate_applicability_disposition",
-        "work_class",
-        "ui_surface",
         "landing_shape",
         "per_layer_green",
         "review_fixes",

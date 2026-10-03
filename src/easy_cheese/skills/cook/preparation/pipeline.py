@@ -29,14 +29,13 @@ from .classify import classify_input
 from .evidence import local_path_for, request_metadata, resolve_ref
 from .outcomes import hold_result, invalid_result
 from .plan_stages import (
-    stage_plan_approval,
     stage_plan_material,
     stage_planner_result,
     stage_runner_setup,
 )
 from .results import validate_preparation_result
 from .sources import bind_previous_result, classify_request, resolve_preparation_source
-from .stages import stage_scope_approval, stage_spec_binding
+from .stages import stage_scope, stage_spec_binding
 
 
 def prepare(
@@ -85,7 +84,7 @@ def prepare(
             raise CookEvidenceError(
                 "setup authority and evidence must be derived from runner approval"
             )
-        scope_ref = stage_scope_approval(ctx, spec, resolved)
+        scope_ref = stage_scope(ctx, spec, resolved)
         if isinstance(scope_ref, CookPreparationResult):
             return scope_ref
         planner_value = stage_planner_result(ctx, spec, resolved, scope_ref)
@@ -94,10 +93,7 @@ def prepare(
         material = stage_plan_material(ctx, spec, resolved, planner_value, scope_ref)
         if isinstance(material, CookPreparationResult):
             return material
-        approved = stage_plan_approval(ctx, spec, planner_value, material, scope_ref)
-        if isinstance(approved, CookPreparationResult):
-            return approved
-        return stage_runner_setup(ctx, spec, material, approved)
+        return stage_runner_setup(ctx, spec, material)
     except PreparationFailure as failure:
         return validate_preparation_result(
             invalid_result(request, classified, refs, failure)
