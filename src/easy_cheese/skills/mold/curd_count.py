@@ -29,6 +29,7 @@ import fromargs
 
 from easy_cheese.shared.fanout.mode import PARALLEL_THRESHOLD
 from easy_cheese.shared.taste_test import (
+    ApplicabilityError,
     TasteTestError,
     parse_landing,
     read_spec_text,
