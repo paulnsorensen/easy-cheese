@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/easy-cheese.jpg" alt="easy-cheese" width="100%" />
+</p>
+
 # 🧀 easy-cheese 🧀
 
 [![CI](https://img.shields.io/github/actions/workflow/status/paulnsorensen/easy-cheese/validate.yml?branch=main&label=CI&style=flat-square)](https://github.com/paulnsorensen/easy-cheese/actions/workflows/validate.yml)
