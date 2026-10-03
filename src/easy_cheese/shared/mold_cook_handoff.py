@@ -568,7 +568,6 @@ def host_scope_coverage(
 ) -> MoldCookCoverage | None:
     """Return the coverage the host derives for the Cook handoff.
 
-
     A materialized plan is the strongest declaration of the work in hand; a
     spec that declares landing layers names its full coverage instead. A spec
     that declares neither leaves Cook with no coverage of its own to propose.

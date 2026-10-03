@@ -36,7 +36,7 @@ These rules do not license speculative types, helpers, or abstractions. Scope an
 
 Before handoff to Press, make every inner test and relevant gate GREEN.
 
-For closed N/A work, complete the requested non-behavior verification and taste-test. Then, hand off directly to Age. N/A has no Test Contracts for Press to attack.
+For non-behavior work, complete the requested non-behavior verification and taste-test. Then, hand off directly to Age. Non-behavior work has no Test Contracts for Press to attack.
 
 A corrective Cook (`correction = true`) applies only to the active Press corrective loop. It must not weaken, replace, or bypass an existing test.
 
@@ -164,22 +164,20 @@ than only a helper function:
 
 - classify explicit mode before inference and reject malformed declared
   pointers/projections without task fallback;
-- plan Full work without another scope reply, but require bounded Light scope authority;
-- materialize a Full plan once, reuse unchanged approval, and renew it when
-  coverage or the acknowledged remainder changes;
+- plan Full work on invocation, with no scope or plan approval step;
+- materialize a Full plan once and recompute coverage when the acknowledged
+  remainder changes;
 - keep holds across every resubmission and permit execution only from `ready`;
-- accept Light only with explicit bounded authority and no invented planner
-  artifact;
+- accept Light on invocation with no invented planner artifact;
 - reject runner evidence that is stale, failed, or outside its authorized
   paths and commands; and
-- read supported historical pointers through their original integrity route,
-  preserving incomplete work and exact missing-decision requests.
+- preserve incomplete work and exact missing-decision requests.
 
 The command under test supplies no agent callback and no user response.  The
-orchestrator supplies planner output and approval/setup artifacts explicitly;
-the Cook result is recomputed from those references on every transition.
+orchestrator supplies planner output and runner approval explicitly; the Cook
+result is recomputed from those references on every transition.
 The final execution-boundary test uses
 `execute_accepted_handoff` with real dispatch callbacks.  It proves that
 non-ready, held, stale, and overbroad handoffs stop before `workflow.cook`,
-while a ready Full handoff forwards the exact approved IDs and leaves the
+while a ready Full handoff forwards the exact plan curd IDs and leaves the
 canonical planner remainder untouched.

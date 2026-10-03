@@ -251,10 +251,6 @@ def _verdict_with(
     return payload
 
 
-def _without_document_gaps(gaps: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(gap for gap in gaps if not gap.startswith("spec-document:"))
-
-
 def test_reflections_are_the_three_reachable_sections(
     taste: _MoldTasteTestModule,
 ) -> None:
@@ -289,8 +285,8 @@ def test_draft_without_test_contracts_passes_without_a_test_contract_reflection(
         LEDGER,
         _verdict_with(taste, DRAFT_WITHOUT_CONTRACTS, taste.REFLECTIONS),
     )
-    assert not any(gap.endswith(":test-contract") for gap in result.acceptance_gaps)
-    assert _without_document_gaps(result.acceptance_gaps) == ()
+    assert result.passed
+    assert result.acceptance_gaps == ()
 
 
 def test_draft_without_test_contracts_still_owes_the_other_reflections(

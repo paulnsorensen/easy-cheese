@@ -44,7 +44,7 @@ Press preserves the Cook `durable_flags:` value without change. Press ignores th
 4. **Replay** — Replay the same attack after the correction returns. Use the same attack and test digest. Then classify the result again.
 5. **Terminate** — Hand off to `/age` after GREEN.
 
-Invalid evidence and a production tree change stop the run.
+Invalid evidence and a production tree change stop the run. A third finding on the same attack also stops the run. The outcome table defines the correction cap.
 
 Press has no global `dispatch: /cook` action. A Cook correction runs only for a reported finding.
 
@@ -75,7 +75,7 @@ Map `follow-up recommended` to `status: ok-with-concerns: <concern>` and `next: 
 
 Map `finding` to `status: ok-with-concerns: <defect>` and `next: cook`.
 
-Map `blocked` to `status: gated: <decision>` and `next: done`. Stop after that status.
+Map `blocked` to `status: halt: <reason>` and `next: done`. `blocked` means invalid evidence or a production change. Stop after that status.
 
 ## Auto mode
 
@@ -129,11 +129,14 @@ Map the outcome to the terminal preamble:
 | GREEN | `ok` | `age` |
 | GREEN with a recorded concern | `ok-with-concerns: <concern>` | `age` |
 | finding (an attack test exposes a defect) | `ok-with-concerns: <defect>` | `cook` |
-| invalid evidence or production change | `halt: <reason>` | `done` |
+| invalid evidence or production change (`blocked`) | `halt: <reason>` | `done` |
+| third finding on the same attack | `halt: correction-cap` | `done` |
 
 `next: done` is terminal. It never starts another phase.
 
 A `next: cook` handoff is a Cook correction (`correction = true`). Cook fixes the defect. Press then replays the same attack.
+
+Press enforces a correction cap. Press allows at most 2 Cook corrections for the same attack. A third finding on that attack stops with `status: halt: correction-cap` and `next: done`.
 
 ## Handoff
 

@@ -16,7 +16,7 @@ For non-behavior work, Cook verifies the requested change through its own path.
 
 Cook requires all tests and relevant gates to be GREEN before it invokes `/press`.
 
-When `correction = true`, Cook limits the scope to the active Press corrective loop.
+When `correction = true`, Cook limits the scope to the active Press correction.
 
 Cook cannot weaken or bypass existing tests.
 
@@ -32,10 +32,13 @@ Cook cannot weaken or bypass existing tests.
 2. `/press --auto` runs its hardening pass.
    It invokes `/age <slug> --auto` when readiness is `ready for /age` or `follow-up recommended`.
    Both states mean that the cooked contract is sound.
-   Both states also mean that every changed behavior has a hardening test.
    Documented follow-ups are review-safe.
    Only `blocked` stops auto.
-   [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md) defines the blocked criteria once.
+   Press reports `blocked` for invalid evidence or a production change.
+   Cook runs a Press `next: cook` handoff as a correction (`correction = true`).
+   Press enforces the correction cap: at most 2 Cook corrections for the same attack.
+   A third finding on that attack stops with `halt: correction-cap`.
+   See [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
 
 3. `/age <slug> --auto` writes the report.
    It then invokes `/cure <slug> --auto --stake medium+`.
@@ -98,8 +101,8 @@ The orchestrator owns the pass position.
   Record Identical-to-baseline failures outside the cooked contract.
   These failures never stop auto mode.
 
-- `/press` returns `blocked`.
-  See the blocked criteria in [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
+- `/press` stops with `blocked` (invalid evidence or a production change) or with `halt: correction-cap`.
+  See the Press outcome table in [`../../press/SKILL.md`](../../press/SKILL.md) and [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
 
 - A cure pass cannot apply any finding.
   This condition occurs when every selected fix breaks tests during revert-or-keep evaluation.

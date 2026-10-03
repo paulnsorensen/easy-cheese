@@ -266,8 +266,8 @@ Then proceed.
 | Planner | `planner-request → PlannerResult → validated CurdPlan` | `PlannerResult` |
 | Per curd | `cook → age ↔ cure` until clean, stalled, or blocked | `CurdResult` + remediation state |
 | Post-merge | `press → age ↔ cure → age` over the merged typed results | final `CurdResult` |
-| Per curd, closed N/A | `coder(cook) → age ↔ coder(cure)` until terminal | `not-applicable-curd` |
-| Post-merge, closed N/A | `age ↔ cure → age` | `not-applicable-postmerge` |
+| Per curd, non-behavior work | `coder(cook) → age ↔ coder(cure)` until terminal | `not-applicable-curd` |
+| Post-merge, non-behavior work | `age ↔ cure → age` | `not-applicable-postmerge` |
 
 Per-curd workers own incomplete implementation slices.
 
@@ -476,19 +476,19 @@ reuse `materialize_planner_result`; it does not dispatch an agent or create a
 human response.  The transition sequence is:
 
 ```
-Full requested scope (Light: explicit bounded scope) -> planner result -> plan shown as information
+Invoked scope -> planner result -> plan shown as information
       -> optional bounded runner setup -> accepted handoff -> execute
 ```
 
 Each transition recomputes its outcome and revalidates every reference and
-hold. Full resubmission rejects a changed bound spec. Only `ready` may enter execution.  Linear plans pass their
-plan curd IDs to `workflow.cook`.  Fan plans route through
-`execute_fan` → `run_fan`.  Light and Full proceed on invocation. Cook shows the scope or plan as
-information only and asks no approval. Light work has exactly one curd and
-no planner ceremony.  Full coverage is every plan curd plus the unresolved work.
-Partial work passes exactly the dependency-closed
-IDs to the selected route, while the canonical
-`PlannerResult.unresolved_work` remains durable for resumption.
+hold. Full resubmission rejects a changed bound spec. Only `ready` may enter
+execution.  Linear plans pass their plan curd IDs to `workflow.cook`.  Fan
+plans route through `execute_fan` → `run_fan`.  Light work has exactly one
+curd and no planner ceremony.  Full coverage is every plan curd plus the
+unresolved work. Partial work passes exactly the dependency-closed IDs to the
+selected route, while the canonical `PlannerResult.unresolved_work` remains
+durable for resumption.
+A changed subset or remainder returns to `needs-planning`.
 A changed subset or remainder returns to `needs-planning`.
 
 ### Preparation loop
@@ -514,9 +514,7 @@ used.
 Setup authorization names one prerequisite, a finite path set, and a finite
 command set.  Evidence must include that prerequisite, exact command and
 fixture, environment identity, successful exit result, and captured-output
-digest.  Setup authority cannot clear a feature hold or authorize feature
-writes.  Historical pointers pass their original route, schema, payload, and
-receipt checks before Cook asks for missing spec bindings.
+writes.
 
 The host integration calls the public
 `easy_cheese.skills.cook.execute_accepted_handoff` API for the final Full

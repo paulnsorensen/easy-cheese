@@ -665,7 +665,7 @@ def _gate_gate_override(ledger: _GateLedger, frontmatter: _Frontmatter) -> None:
         _append_hold(
             holds,
             _hold(
-                "save-approved",
+                "gates-overridden",
                 CookHoldKind.PREPARATION,
                 "user approved saving this design with unchecked handshake items: "
                 + ", ".join(frontmatter.gates_overridden),
@@ -759,7 +759,6 @@ def _gate_user_directive(ledger: _GateLedger, frontmatter: _Frontmatter) -> None
                 "the whole-request directive must be cleared by a new bound user response",
             ),
         )
-
 
 
 def _gate_planner_artifacts(

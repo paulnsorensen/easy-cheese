@@ -242,10 +242,10 @@ def test_mold_saves_draft_before_cook_consent_and_persists_typed_plan() -> None:
         "save a validated parent spec or early curd mini-spec",
         "Never start Cook from a saved spec",
         "user must select the exact curd",
-        "Bind that literal selection",
+        "An explicit Cook selection plus `finalize` is enough",
     )
 
-    procedure = _section(CURDLE, "Pre-approval typed planner dispatch")
+    procedure = _section(CURDLE, "Typed planner dispatch")
     _assert_in_order(
         procedure,
         "1. **Dispatch**",

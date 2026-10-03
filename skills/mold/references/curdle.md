@@ -401,7 +401,7 @@ This is the runtime home of the **Durable writes** coherence gate (`handshake.md
 
 **Loud fallback.** If hallouminate is unavailable and the resolver degrades to a file backend, state this in one visible line. File backends include `docs/adr/…`, `docs/domain-model*`, and the XDG corpus. Never write silently to files when the author expected the wiki. See the absent-plugin degrade contract in [`../../cheese/references/optional-plugins.md`](../../cheese/references/optional-plugins.md).
 
-## Pre-approval typed planner dispatch
+## Typed planner dispatch
 
 Before this procedure, run the digest-bound fresh-context fork taste test on the dialogue-state draft. It must pass for a runnable handoff; failures reopen only named forks, with two correction rounds. A blocked draft may still be saved with named holds. Prepare the typed plan before the user chooses Cook so the displayed coverage is exact.
 
@@ -433,6 +433,8 @@ python3 skills/mold/scripts/mold.pyz finalize "$SPEC" \
 ```
 
 `--taste-result` is the persisted `taste-test` verdict. `--ledger` is the decision ledger as JSON. `--plan` is optional when the `PlannerResult` embeds its plan.
+
+Pass `--save-approved` only when the user approved saving with unchecked coherence items. The flag adds a `save-approved` preparation hold and a `handshake-coherence` requirement, so `finalize` returns `saved-not-ready`. Only a fresh user dialogue clears that hold and requirement.
 
 Read `status` in the output, not only the exit status. A nonzero exit status is an input error; stop. `ready` stores a canonical `HandoffPointer` and prints the Cook `command`. `saved-not-ready` exits zero, stores no pointer, and lists each unmet `requirements` entry and hold.
 

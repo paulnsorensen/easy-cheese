@@ -36,8 +36,6 @@ from .evidence import (
 )
 
 
-
-
 def approval_value(
     value: MoldCookApproval | ArtifactRef | str | Path | Mapping[str, object],
     *,
@@ -87,7 +85,6 @@ def check_approval(
     request: CookPreparationRequest,
     spec_ref: ArtifactRef,
     expected: MoldCookApprovalKind,
-    expected_proposal: bytes | None = None,
 ) -> None:
     try:
         _ = validate_mold_cook_approval(approval, request.artifact_root)
@@ -107,15 +104,6 @@ def check_approval(
         raise CookEvidenceError("approval is not an explicit approved response")
     if approval_ref.role not in {"approval", "runner_approval"}:
         raise CookEvidenceError("approval reference has the wrong role")
-    # `validate_mold_cook_approval` already resolved the proposal bytes against
-    # `proposal_ref.digest`, and the contract binds `proposal_digest` to that
-    # same digest, so a second read of the same bytes proves nothing more.
-    if expected_proposal is not None and approval.proposal_digest != digest_bytes(
-        expected_proposal
-    ):
-        raise CookEvidenceError(
-            "approval proposal is not the canonical envelope for this request"
-        )
     if approval.response_source in {
         approval.response_ref.artifact_id,
         approval.response_ref.uri,
@@ -172,5 +160,3 @@ def check_plan_disposition(planner: PlannerResult) -> None:
         raise CookEvidenceError(
             f"planner disposition {planner.disposition.value} cannot authorize execution"
         )
-
-

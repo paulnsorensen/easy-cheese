@@ -13,8 +13,8 @@ Report a missing production implementation as a finding. Hand it to Cook as a co
 | Gap type | Evidence | Action |
 | --- | --- | --- |
 | Defect | The approved seam fails on an adversarial input or transition | Report it as a finding with the failing test. Hand off to Cook as a correction. |
-| Invalid evidence | The recorded run does not verify the attack outcome | Stop. |
-| Production mutation | A production path changes during a Press interval | Stop. |
+| Invalid evidence (`blocked`) | The recorded run does not verify the attack outcome | Stop with `halt: <reason>`. |
+| Production mutation (`blocked`) | A production path changes during a Press interval | Stop with `halt: <reason>`. |
 | Out-of-contract behavior | The approved spec omits a desired behavior | Record it under `## Review follow-ups`. Report `ok-with-concerns` on a GREEN pass. Do not implement it. |
 
 ## Evidence sequence
@@ -45,7 +45,9 @@ Do not add tests for unchanged or out-of-contract code.
 
 - GREEN hands off to `/age`.
 - A finding hands off to Cook as a correction (`next: cook`).
+- Press allows at most 2 Cook corrections for the same attack. A third finding on that attack stops with `status: halt: correction-cap` and `next: done`.
 - Invalid evidence and production changes stop.
+- That stop is `blocked`. It reports `status: halt: <reason>` and `next: done`.
 
 Baseline failures do not become new Press findings when their tests and signatures match the Cook handoff.
 
@@ -56,7 +58,8 @@ New or changed failures block the route.
 | Situation | Action |
 | --- | --- |
 | An adversarial test exposes a defect in Cook behavior | Report the finding with its failing test. Hand off to Cook as a correction. |
-| The digest or production snapshot is invalid | Stop. Report the exact integrity failure. |
+| The digest or production snapshot is invalid | Stop with `halt: <reason>`. Report the exact integrity failure. |
+| A third finding exposes the same attack | Stop with `status: halt: correction-cap` and `next: done`. |
 | The attack targets behavior outside the approved spec | Record it under `## Review follow-ups` for `/age`. Do not edit production code. |
 
 ## Hard rule — preserve the attack

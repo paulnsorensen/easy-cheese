@@ -98,7 +98,7 @@ Read [`references/fan-pathway.md`](references/fan-pathway.md) for topology and l
 Run `cook(CurdPlan) → reviewer(age)` with confirmed diagnosis and `CureDiagnosisBinding` through the progress-aware fan state machine until clean, stalled, or blocked.
 Run one global `/press → /age → /cure` chain only after every curd passes.
 Incomplete fan work never emits `next: press`; stalls route to Mold remediation planning.
-Closed N/A bypasses Press.
+Non-behavior work bypasses Press.
 
 **Un-curded.** Keep small work in the single-coder path.
 For big work, ask "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
@@ -191,7 +191,7 @@ Use `age` after non-behavior work (documentation, refactor, appearance).
 Never publish `next: cook`; `needs-context` is a parent-owned same-phase retry.
 Use `mold` after a spec failure.
 Use `done` only at true completion.
-Do not send contractless N/A to Press.
+Do not send non-behavior work to Press.
 Omit `taste_test:` when its cost gate does not apply.
 
 Set `durable_flags:` to `none` by default.
@@ -214,7 +214,7 @@ Use these options:
 - **Harden tests before review** *(recommended)* — `/press <slug>`.
 - **Plate it** — `/press <slug> --auto --open-pr`: run the remaining review chain, then `/plate` resolves topology and publishes.
 
-Press does not apply to closed N/A.
+Press does not apply to non-behavior work.
 Set `next: age`.
 Replace the options with **Review the change** *(recommended)* — `/age <slug>`.
 Also offer **Plate it** — `/age <slug> --auto --open-pr`.
@@ -258,9 +258,6 @@ A terminal Age is publishable only with `next: done`.
 - Do not use `should`, `probably`, or `I think`.
 - State what the gate output shows.
 
-## Guidance
-
-Write the test first where it fits; see [`references/tdd-loop.md`](references/tdd-loop.md). No gate enforces test-first order.
 ## Agent resolution
 
 Resolve through [`agent-resolution.md`](../cheese/references/agent-resolution.md).
@@ -281,7 +278,7 @@ Generated bundle command inventory: [`references/commands.md`](references/comman
 ## Mold-to-Cook ingress and preparation
 
 Classify and prepare every input before execution; only the standalone fast-path skips this step.
-A spec needs no Mold format or handoff. Cook shows its scope or plan as information only.
+A spec needs no Mold format or handoff. Cook proceeds on invocation; see the fan-pathway reference.
 Only a freshly accepted `ready` Full handoff may reach `workflow.cook`.
 Follow [`references/fan-pathway.md`](references/fan-pathway.md) § Classified Mold-to-Cook ingress and § Preparation loop.
 Run the fresh-agent regression scenarios in [`references/evals.md`](references/evals.md) when this boundary changes.

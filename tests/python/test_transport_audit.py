@@ -61,7 +61,6 @@ ROUTED_FILES = {
     "skills/cheese/references/handoff-gate.md",  # the chokepoint itself
     "skills/cheese/references/harness-portability.md",
     "skills/cheese/SKILL.md",
-    "skills/cook/references/fan-pathway.md",  # preparation-loop approval ask
     "skills/cook/SKILL.md",
     "skills/culture/SKILL.md",
     "skills/cure/SKILL.md",

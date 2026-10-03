@@ -167,7 +167,7 @@ class TasteTestError(ValueError):
 
 
 class ApplicabilityError(TasteTestError):
-    """The declaration and Test Contracts do not form a valid combination."""
+    """The typed spec document has malformed Test Contracts or landing."""
 
 
 @dataclass(frozen=True)
@@ -718,7 +718,6 @@ def required_reflections(spec: object) -> tuple[str, ...]:
     return REFLECTIONS
 
 
-
 MAX_SPEC_BYTES = 1_000_000
 
 
@@ -1020,7 +1019,8 @@ def _failed(
     return ForkTasteVerdict.from_mapping(values)
 
 
-def _document_gaps(draft: object) -> list[str]:
+def spec_document_gaps(draft: object) -> list[str]:
+    """Name each typed-document problem of a new Mold spec as a gap."""
     if not is_new_mold_spec(draft):
         return []
     try:
@@ -1038,7 +1038,7 @@ def lexical_precheck(draft: object, decision_ledger: object) -> tuple[str, ...]:
     sections = _draft_sections(draft)
     gaps: list[str] = [
         *ledger_problems,
-        *_document_gaps(draft),
+        *spec_document_gaps(draft),
         *_goal_gaps(sections, goal),
         *_coverage_gaps(sections, clauses),
     ]
@@ -1118,7 +1118,7 @@ def taste_test(
         "unsupported_assumptions": [],
         "acceptance_gaps": [
             *ledger_problems,
-            *_document_gaps(draft),
+            *spec_document_gaps(draft),
             *_goal_gaps(sections, goal),
             *_coverage_gaps(sections, clauses),
         ],

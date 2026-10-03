@@ -29,12 +29,10 @@ import fromargs
 
 from easy_cheese.shared.fanout.mode import PARALLEL_THRESHOLD
 from easy_cheese.shared.taste_test import (
-    ApplicabilityError,
     TasteTestError,
-    is_new_mold_spec,
     parse_landing,
     read_spec_text,
-    typed_mold_document,
+    spec_document_gaps,
 )
 from easy_cheese_schemas.contracts import Landing, LandingShape, landing_mapping
 
@@ -117,15 +115,10 @@ def _spec_document_warnings(body: str) -> list[str]:
     recommendation here.  Reporting it names the problem the finalize gate
     raises later, while the spec is still open.
     """
-    if not is_new_mold_spec(body):
-        return []
     try:
-        _ = typed_mold_document(body)
-    except ApplicabilityError as exc:
-        return [f"spec-document:{problem}" for problem in exc.problems]
+        return spec_document_gaps(body)
     except TasteTestError as exc:
         return [f"spec-document:{exc}"]
-    return []
 
 
 def analyze(spec_path: Path, blast_radius: str | None) -> dict[str, object]:

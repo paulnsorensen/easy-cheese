@@ -37,6 +37,7 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookMode,
 )
 from easy_cheese.shared import paths
+from easy_cheese.skills.mold import validate_spec
 from easy_cheese.skills.cook.preparation import (
     CookEvidenceError,
     CookInputError,
@@ -548,6 +549,50 @@ def test_light_plan_with_one_curd_reaches_ready_without_approval(
     assert result.coverage == MoldCookCoverage(curd_ids=("root",))
 
 
+def test_light_scope_without_a_declared_curd_holds_with_a_scope_requirement(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "light-none"
+    root.mkdir()
+    spec = root / "spec.md"
+    _ = shutil.copy(_SPEC_FIXTURE, spec)
+
+    result = prepare(
+        spec,
+        request_id="cook-request",
+        repository_root=tmp_path,
+        artifact_root=root,
+        mode=MoldCookMode.LIGHT,
+    )
+
+    assert [item.requirement_id for item in result.requirements] == [
+        "light-scope-cook-request"
+    ]
+    assert result.outcome is not CookPreparationOutcome.READY
+
+
+def test_light_scope_with_two_curds_is_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "light-two"
+    spec = _landing_spec(root)
+    two_curds = spec.read_text(encoding="utf-8").replace(
+        'layers: [["root"]]', 'layers: [["root"], ["second"]]'
+    )
+    _ = spec.write_text(two_curds, encoding="utf-8")
+
+    result = prepare(
+        spec,
+        request_id="cook-request",
+        repository_root=tmp_path,
+        artifact_root=root,
+        mode=MoldCookMode.LIGHT,
+    )
+
+    assert result.outcome is CookPreparationOutcome.INVALID
+    assert [finding.message for finding in result.findings] == [
+        "Light scope must name exactly one resolved curd"
+    ]
+
+
 def test_full_resubmission_rejects_changed_bound_spec(tmp_path: Path) -> None:
     root = tmp_path / "changed-bound-spec"
     spec = _landing_spec(root)
@@ -589,3 +634,31 @@ def test_a_host_type_error_is_reported_as_internal_error(
 
     assert result.outcome is CookPreparationOutcome.INVALID
     assert [item.code for item in result.findings] == ["internal-error"]
+
+
+def test_spec_with_a_removed_gate_applicability_block_still_validates_and_prepares(
+    tmp_path: Path,
+) -> None:
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "spec_format"
+        / "legacy_gate_applicability_spec.md"
+    )
+    assert "gate_applicability:" in fixture.read_text(encoding="utf-8")
+
+    errors, _notice = validate_spec.validate(fixture)
+    assert errors == []
+
+    root = tmp_path / "legacy-gate"
+    root.mkdir()
+    spec = root / "spec.md"
+    _ = shutil.copy(fixture, spec)
+    result = prepare(
+        spec,
+        request_id="cook-request",
+        repository_root=tmp_path,
+        artifact_root=root,
+    )
+
+    assert result.outcome is CookPreparationOutcome.NEEDS_PLANNING

@@ -35,7 +35,7 @@ def test_documented_preamble_parses_with_the_canonical_parser() -> None:
     template = _output_preamble()
     concrete = (
         template.replace("<canonical status field>", "ok")
-        .replace("age | done", "age")
+        .replace("age | cook | done", "age")
         .replace("<slug>", "outer-tdd-gates")
         .replace("<preserved Cook value>", "none")
         .replace("none | <baseline artifact path>", "none")
@@ -66,7 +66,7 @@ def test_press_never_routes_to_itself() -> None:
     output = skill.split("\n## Output\n", 1)[1].split("\n## ", 1)[0]
 
     assert "| `press` |" not in output
-    assert "next: age | done" in _output_preamble()
+    assert "next: age | cook | done" in _output_preamble()
     assert "next: press" not in skill
 
 

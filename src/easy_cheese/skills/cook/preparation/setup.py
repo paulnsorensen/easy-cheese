@@ -28,7 +28,6 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookHandoff,
 )
 from easy_cheese_schemas.validate import require_mapping, require_relative_path
-from easy_cheese.shared.mold_cook_handoff import canonical_mold_cook_proposal
 from easy_cheese.shared.wheypoint.canonical import digest_bytes
 
 from ._types import (
@@ -139,20 +138,17 @@ def validate_handoff_authority(
     authorization = runner.setup_authorization
     if authorization is None:
         raise CookEvidenceError("runner approval has no setup authorization")
-    expected_proposal = canonical_mold_cook_proposal(
-        request_id=handoff.request_id,
-        spec_digest=handoff.spec_ref.digest,
-        coverage=handoff.coverage,
-        setup_authorization=authorization,
-    )
     check_approval(
         runner,
         approval_ref=handoff.runner_approval_ref,
         request=request,
         spec_ref=handoff.spec_ref,
         expected=MoldCookApprovalKind.RUNNER,
-        expected_proposal=expected_proposal,
     )
+    if runner.coverage != handoff.coverage:
+        raise CookEvidenceError(
+            "runner approval coverage does not match the handoff coverage"
+        )
     if handoff.plan_ref is None:
         raise CookEvidenceError("setup evidence requires a materialized plan")
     plan = load_contract(handoff.plan_ref, CurdPlan, request.artifact_root)
@@ -208,20 +204,17 @@ def apply_runner_setup(
         authorization = runner.setup_authorization
         if authorization is None:
             raise CookEvidenceError("runner approval lacks setup authorization")
-        runner_proposal = canonical_mold_cook_proposal(
-            request_id=authority_request.request_id,
-            spec_digest=spec_ref.digest,
-            coverage=coverage,
-            setup_authorization=authorization,
-        )
         check_approval(
             runner,
             approval_ref=runner_ref,
             request=authority_request,
             spec_ref=spec_ref,
             expected=MoldCookApprovalKind.RUNNER,
-            expected_proposal=runner_proposal,
         )
+        if runner.coverage != coverage:
+            raise CookEvidenceError(
+                "runner approval coverage does not match the preparation coverage"
+            )
         refs.append(runner_ref)
         runner_handoff_ref = attrs.evolve(runner_ref, role="runner_approval")
     if authorization is None:

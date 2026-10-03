@@ -91,7 +91,7 @@ The **integrator** owns the approval loop and stays with the parent agent.
 Never delegate the integrator.
 The **planner** is a delegated worker.
 Mold dispatches a fresh-context planner on a `PlannerRequest` and validates the returned writer view.
-See [`../../mold/references/curdle.md`](../../mold/references/curdle.md) section Pre-approval typed planner dispatch.
+See [`../../mold/references/curdle.md`](../../mold/references/curdle.md) section Typed planner dispatch.
 Resolve the planner through the resolution order above.
 Record its `agent_resolution` block like any other delegated role.
 

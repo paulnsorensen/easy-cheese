@@ -300,7 +300,7 @@ def _hold_rows(outcome: FinalizationOutcome) -> Sequence[Mapping[str, object]]:
     return cast(Sequence[Mapping[str, object]], outcome.payload["holds"])
 
 
-def test_block_list_gate_override_is_saved_with_a_save_approved_hold(
+def test_block_list_gate_override_is_saved_with_a_gates_overridden_hold(
     tmp_path: Path,
 ) -> None:
     spec = make_spec(
@@ -312,9 +312,23 @@ def test_block_list_gate_override_is_saved_with_a_save_approved_hold(
     assert outcome.status == "saved-not-ready"
     assert outcome.ready is False
     holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
-    assert "save-approved" in holds
-    assert holds["save-approved"].endswith("handshake-coherence, taste-test")
+    assert "gates-overridden" in holds
+    assert holds["gates-overridden"].endswith("handshake-coherence, taste-test")
     assert "pointer" not in outcome.payload
+
+
+def test_gate_override_and_save_approval_keep_distinct_holds(tmp_path: Path) -> None:
+    spec = make_spec(
+        tmp_path, gates_overridden="gates_overridden:\n  - taste-test\n"
+    )
+    outcome = finalize_fixture(tmp_path, spec_path=spec, save_approved=True)
+
+    holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
+    assert holds["gates-overridden"].endswith("taste-test")
+    assert (
+        holds["save-approved"]
+        == "save approval is save-only and never waives execution readiness"
+    )
 
 
 @pytest.mark.parametrize(
@@ -332,7 +346,7 @@ def test_flow_list_and_scalar_gate_overrides_keep_the_hold(
 
     assert outcome.status == "saved-not-ready"
     holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
-    assert holds["save-approved"].endswith(expected)
+    assert holds["gates-overridden"].endswith(expected)
 
 
 @pytest.mark.parametrize(
@@ -353,7 +367,7 @@ def test_column_zero_and_commented_block_lists_keep_the_hold(
     assert outcome.status == "saved-not-ready"
     assert outcome.ready is False
     holds = {str(item["hold_id"]): str(item["reason"]) for item in _hold_rows(outcome)}
-    assert holds["save-approved"].endswith("agent-coherence, taste-test")
+    assert holds["gates-overridden"].endswith("agent-coherence, taste-test")
 
 
 def test_a_mapping_under_gates_overridden_is_a_caller_error(tmp_path: Path) -> None:
