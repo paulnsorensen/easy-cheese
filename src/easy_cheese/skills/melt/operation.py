@@ -79,7 +79,7 @@ def _unmerged_paths(root: Path) -> list[str]:
 
 
 _MAX_SCAN_BYTES = 8 * 1024 * 1024
-_MARKER = re.compile(rb"^<{7,}(?: |$)")
+_MARKER = re.compile(rb"^(?:<{7,}|>{7,}|\|{7,})(?: |$)")
 
 
 def _contains_markers(content: bytes) -> bool:

@@ -383,6 +383,34 @@ def test_operation_blocks_custom_width_markers_in_index_and_worktree(repo: Path)
     assert operation_cmd(continue_operation=True)["conflict_marker_files"] == ["file.txt"]
 
 
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "<<<<<<< ours", ">>>>>>> theirs", "||||||| base",
+        "<<<<<<<<<< ours", ">>>>>>>>>> theirs", "|||||||||| base",
+    ],
+)
+def test_operation_blocks_all_marker_types_in_index_and_worktree(repo: Path, marker: str) -> None:
+    conflict(repo)
+    _ = (repo / "file.txt").write_text(f"{marker}\n")
+    _ = git(repo, "add", "file.txt")
+    _ = (repo / "file.txt").write_text("clean\n")
+    assert operation_cmd()["conflict_marker_files"] == ["file.txt"]
+
+    _ = git(repo, "add", "file.txt")
+    _ = (repo / "file.txt").write_text(f"{marker}\n")
+    assert operation_cmd()["conflict_marker_files"] == ["file.txt"]
+
+
+def test_operation_ignores_bare_separator_lines(repo: Path) -> None:
+    conflict(repo)
+    _ = (repo / "file.txt").write_text("=======\n==========\n")
+    _ = git(repo, "add", "file.txt")
+    assert operation_cmd()["status"] == "ready"
+    _ = (repo / "file.txt").write_text("==========\n=======\n")
+    assert operation_cmd()["status"] == "ready"
+
+
 def test_operation_rejects_changed_symlink_without_reading_target(repo: Path, tmp_path: Path) -> None:
     target = tmp_path.parent / "outside.txt"
     _ = target.write_text("clean\n")
