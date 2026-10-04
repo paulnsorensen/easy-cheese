@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Callable, cast
 
@@ -326,3 +329,173 @@ def test_gh_only_unknown_merge_commit_uses_merge(repo: Path) -> None:
 
     assert [remedy["name"] for remedy in result["remedies"]] == ["merge"]
     assert any("merge commit" in warning for warning in result["warnings"])
+
+
+def test_squash_apply_requires_abort_confirmation_and_preserves_resolution(repo: Path) -> None:
+    from easy_cheese.skills.melt.detect_squash_residue import detect_squash_residue_cmd
+
+    _ = squash_with_followups(repo, conflict_on_replay=True)
+    _ = git(repo, "rebase", "master", check=False)
+    _ = (repo / "file.txt").write_text("staged resolution\n")
+    _ = git(repo, "add", "file.txt")
+
+    result = detect_squash_residue_cmd(base="master", apply=True)
+    application = result.get("application")
+    assert application is not None
+    assert application["state"] == "confirmation-required"
+    assert operation_cmd()["operation"] == "rebase"
+    assert git(repo, "show", ":file.txt").stdout == "staged resolution\n"
+
+    confirmed = detect_squash_residue_cmd(base="master", apply=True, abort_operation=True)
+    confirmed_application = confirmed.get("application")
+    assert confirmed_application is not None
+    assert confirmed_application["state"] == "needs-resolution"
+    assert operation_cmd()["operation"] == "cherry-pick"
+
+
+def test_squash_replay_continues_later_commits_after_first_conflict(repo: Path) -> None:
+    from easy_cheese.skills.melt.detect_squash_residue import detect_squash_residue_cmd
+
+    _ = squash_with_followups(repo, conflict_on_replay=True)
+    result = detect_squash_residue_cmd(base="master", apply=True)
+    application = result.get("application")
+    assert application is not None
+    assert application["state"] == "needs-resolution"
+    _ = (repo / "file.txt").write_text("resolved first\n")
+    _ = git(repo, "add", "file.txt")
+    assert operation_cmd(continue_operation=True)["status"] == "blocked"
+    _ = (repo / "file.txt").write_text("resolved second\n")
+    _ = git(repo, "add", "file.txt")
+    assert operation_cmd(continue_operation=True)["status"] == "complete"
+    assert git(repo, "log", "-2", "--reverse", "--format=%s").stdout.splitlines() == ["one", "two"]
+
+
+def test_operation_blocks_custom_width_markers_in_index_and_worktree(repo: Path) -> None:
+    _ = (repo / ".gitattributes").write_text("file.txt conflict-marker-size=10\n")
+    _ = git(repo, "add", ".gitattributes")
+    _ = git(repo, "commit", "-qm", "marker width")
+    conflict(repo)
+    _ = git(repo, "add", "file.txt")
+    _ = (repo / "file.txt").write_text("clean\n")
+    assert operation_cmd(continue_operation=True)["conflict_marker_files"] == ["file.txt"]
+    _ = git(repo, "add", "file.txt")
+    _ = (repo / "file.txt").write_text("<<<<<<<<<< unresolved\n")
+    assert operation_cmd(continue_operation=True)["conflict_marker_files"] == ["file.txt"]
+
+
+def test_operation_rejects_changed_symlink_without_reading_target(repo: Path, tmp_path: Path) -> None:
+    target = tmp_path.parent / "outside.txt"
+    _ = target.write_text("clean\n")
+    _ = (repo / "link.txt").symlink_to(target)
+    state = operation_cmd(continue_operation=True)
+    assert state["status"] == "blocked"
+    assert state["conflict_marker_files"] == ["link.txt"]
+
+
+def test_squash_replay_merge_commit_uses_merge_before_mutation(repo: Path) -> None:
+    from easy_cheese.skills.melt.detect_squash_residue import detect_squash_residue_cmd
+
+    _ = squash_with_followups(repo)
+    root = git(repo, "rev-list", "--max-parents=0", "master").stdout.strip()
+    _ = git(repo, "switch", "-qc", "side", root)
+    _ = (repo / "side.txt").write_text("side\n")
+    _ = git(repo, "add", "side.txt")
+    _ = git(repo, "commit", "-qm", "side")
+    _ = git(repo, "switch", "-q", "topic")
+    _ = git(repo, "merge", "--no-ff", "-qm", "merge side", "side")
+
+    result = detect_squash_residue_cmd(base="master", apply=True)
+
+    assert "remedies" in result
+    assert [item["name"] for item in result["remedies"]] == ["merge"]
+    assert any("merge commit" in warning for warning in result["warnings"])
+    application = result.get("application")
+    assert application is not None
+    assert application["remedy"] == "merge"
+    assert git(repo, "show-ref", "--verify", "--quiet", "refs/heads/topic-clean", check=False).returncode == 1
+
+
+def test_operation_rejects_changed_fifo(repo: Path) -> None:
+    (repo / "file.txt").unlink()
+    os.mkfifo(repo / "file.txt")
+    state = operation_cmd(continue_operation=True)
+    assert state["status"] == "blocked"
+    assert state["conflict_marker_files"] == ["file.txt"]
+
+
+def test_archive_operation_failure_has_nonzero_exit_and_json(repo: Path) -> None:
+    conflict(repo)
+    _ = (repo / "file.txt").write_text("resolved\n")
+    _ = git(repo, "add", "file.txt")
+    _ = git(repo, "config", "commit.gpgsign", "true")
+    _ = git(repo, "config", "gpg.program", "false")
+    archive = Path(__file__).parents[2] / "skills/melt/scripts/melt.pyz"
+
+    result = subprocess.run(
+        [sys.executable, str(archive), "operation", "--continue"],
+        cwd=repo, capture_output=True, text=True,
+        env={**os.environ, "SHIV_ROOT": str(repo.parent / f"{repo.name}-shiv")},
+    )
+
+    assert result.returncode != 0
+    assert result.stdout, result.stderr
+    payload = cast("dict[str, object]", json.loads(result.stdout))
+    assert payload["status"] == "failure"
+    assert payload["failed_step"] == "git merge --continue"
+
+
+def test_squash_apply_preserves_unrelated_cherry_pick(repo: Path) -> None:
+    from easy_cheese.skills.melt.detect_squash_residue import detect_squash_residue_cmd
+
+    _ = squash_with_followups(repo)
+    root = git(repo, "rev-list", "--max-parents=0", "master").stdout.strip()
+    _ = git(repo, "switch", "-qc", "incoming", root)
+    _ = (repo / "file.txt").write_text("incoming\n")
+    _ = git(repo, "commit", "-qam", "incoming")
+    _ = git(repo, "switch", "-q", "topic")
+    _ = git(repo, "cherry-pick", "incoming", check=False)
+    assert operation_cmd()["operation"] == "cherry-pick"
+    _ = (repo / "file.txt").write_text("staged unrelated resolution\n")
+    _ = git(repo, "add", "file.txt")
+
+    result = detect_squash_residue_cmd(base="master", apply=True)
+
+    application = result.get("application")
+    assert application is not None
+    assert application["state"] == "confirmation-required"
+    assert operation_cmd()["operation"] == "cherry-pick"
+    assert git(repo, "show", ":file.txt").stdout == "staged unrelated resolution\n"
+
+
+def test_operation_scans_from_repository_root(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    conflict(repo)
+    _ = git(repo, "add", "file.txt")
+    nested = repo / "nested"
+    nested.mkdir()
+    monkeypatch.chdir(nested)
+
+    state = operation_cmd(continue_operation=True)
+
+    assert state["status"] == "blocked"
+    assert state["conflict_marker_files"] == ["file.txt"]
+
+
+def test_operation_blocks_oversized_regular_file_before_continue(repo: Path) -> None:
+    scan_limit = 8 * 1024 * 1024
+
+    conflict(repo)
+    _ = (repo / "file.txt").write_text("resolved\n")
+    _ = git(repo, "add", "file.txt")
+    large = repo / "large.txt"
+    chunk = b"safe\n" * 1024
+    with large.open("wb") as stream:
+        written = 0
+        while written <= scan_limit:
+            written += stream.write(chunk)
+
+    state = operation_cmd(continue_operation=True)
+
+    assert large.stat().st_size > scan_limit
+    assert state["status"] == "blocked"
+    assert state["conflict_marker_files"] == ["large.txt"]
+    assert git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0

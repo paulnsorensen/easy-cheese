@@ -33,6 +33,10 @@ Otherwise it merges the base into the original branch.
 It preflights branch collisions before aborting an interrupted operation.
 It never pushes or rewrites either branch.
 
+If `application.state` is `confirmation-required`, keep the active operation intact.
+Ask once whether to discard its staged resolution and abort it.
+After explicit confirmation, rerun with `--apply --abort-operation`.
+If confirmation is refused, continue the existing operation instead.
 If `application.state` is `failed`, report `failed_step`, `error`, and `recovery_branch`; stop.
 If it is `needs-resolution`, continue the cascade.
 If it is `applied` without conflicts, check the operation state and proceed to handoff.

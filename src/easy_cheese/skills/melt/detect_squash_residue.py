@@ -519,11 +519,18 @@ def detect(branch: str, base_ref: str) -> _DetectResult:
                     f"gh PR merge commit {merge_commit or 'unknown'} is not verified on "
                     + f"selected base {base_ref}; using merge remedy"
                 )
+        replay_has_merge = any(
+            (parents := run_git(["rev-list", "--parents", "-n", "1", commit["sha"]])).returncode
+            or len(parents.stdout.split()) > 2
+            for commit in result["unique_commits"]
+        )
+        if replay_has_merge:
+            result["warnings"].append("verified replay includes a merge commit; using merge remedy")
         abort = _in_progress_abort()
         merge = _build_merge_remedy(base_ref, abort)
         result["remedies"] = (
             [merge]
-            if result["method"] == "local-synth"
+            if result["method"] == "local-synth" or replay_has_merge
             or (result["method"] == "gh-api" and (result["unique_commits"] or not gh_clean_verified))
             else [_build_clean_branch_remedy(result, base_ref, abort), merge]
         )
@@ -531,7 +538,7 @@ def detect(branch: str, base_ref: str) -> _DetectResult:
     return result
 
 
-def _apply_remedy(result: _DetectResult) -> _ApplyResult:
+def _apply_remedy(result: _DetectResult, *, abort_operation: bool = False) -> _ApplyResult:
     branch = result["branch"]
     remedy = result["remedies"][0]["name"]
     outcome: _ApplyResult = {
@@ -547,6 +554,11 @@ def _apply_remedy(result: _DetectResult) -> _ApplyResult:
             return outcome
 
     operation, rebase_branch = current_operation()
+    if operation and not abort_operation:
+        outcome["state"] = "confirmation-required"
+        outcome["failed_step"] = f"git {operation} --abort"
+        outcome["error"] = "active operation requires --abort-operation confirmation"
+        return outcome
     active_branch = rebase_branch if operation == "rebase" else _current_branch()
     if active_branch != branch:
         outcome["failed_step"] = "preflight-branch"
@@ -568,7 +580,8 @@ def _apply_remedy(result: _DetectResult) -> _ApplyResult:
         steps.append(abort)
     if remedy == "clean-branch":
         steps.append(["switch", "-c", clean_branch, result["base"]])
-        steps.extend(["cherry-pick", commit["sha"]] for commit in result["unique_commits"])
+        if result["unique_commits"]:
+            steps.append(["cherry-pick", *(commit["sha"] for commit in result["unique_commits"])])
     else:
         steps.append(["merge", result["base"]])
 
@@ -592,7 +605,8 @@ class _NotApplicableResult(TypedDict):
 
 
 def detect_squash_residue_cmd(
-    *, base: str = "origin/main", branch: str | None = None, apply: bool = False
+    *, base: str = "origin/main", branch: str | None = None, apply: bool = False,
+    abort_operation: bool = False,
 ) -> _DetectResult | _NotApplicableResult:
     """Detect squash-merge residue and emit the remedy.
 
@@ -624,7 +638,7 @@ def detect_squash_residue_cmd(
     result = detect(resolved_branch, base)
     if apply:
         result["application"] = (
-            _apply_remedy(result)
+            _apply_remedy(result, abort_operation=abort_operation)
             if result["remedies"]
             else {"state": "not-applied", "remedy": None, "failed_step": None,
                   "recovery_branch": resolved_branch, "error": None}

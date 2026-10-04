@@ -820,6 +820,9 @@ class TestDetectViaTreeMatch:
             patch.object(detect_squash_residue, "_check_via_tree_match", return_value=tree_hit),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=None),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+            patch.object(detect_squash_residue, "run_git", return_value=make_completed(
+                stdout="commit parent\n"
+            )),
         ):
             result = detect_squash_residue.detect("feature", "origin/main")
 

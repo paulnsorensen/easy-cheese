@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import stat
 import subprocess
 from pathlib import Path
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Callable, Literal, TypedDict
 
 import fromargs
 
@@ -53,8 +55,8 @@ def current_operation(git_dir: Path | None = None) -> tuple[Operation | None, st
     return None, None
 
 
-def _changed_paths() -> list[str]:
-    result = run_git(["status", "--porcelain=v1", "-z", "--untracked-files=all"])
+def _changed_paths(root: Path) -> list[str]:
+    result = run_git(["status", "--porcelain=v1", "-z", "--untracked-files=all"], cwd=root)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "git status failed")
     entries = result.stdout.split("\0")
@@ -69,28 +71,62 @@ def _changed_paths() -> list[str]:
     return sorted(set(paths))
 
 
-def _unmerged_paths() -> list[str]:
-    result = run_git(["diff", "--name-only", "--diff-filter=U", "-z"])
+def _unmerged_paths(root: Path) -> list[str]:
+    result = run_git(["diff", "--name-only", "--diff-filter=U", "-z"], cwd=root)
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "git diff failed")
     return sorted(path for path in result.stdout.split("\0") if path)
 
 
+_MAX_SCAN_BYTES = 8 * 1024 * 1024
+_MARKER = re.compile(rb"^<{7,}(?: |$)")
+
+
 def _contains_markers(content: bytes) -> bool:
     if b"\0" in content[:8000]:
         return False
-    return any(line.startswith(b"<<<<<<< ") or line == b"<<<<<<<" for line in content.splitlines())
+    return any(_MARKER.match(line) for line in content.splitlines())
 
 
-def _has_worktree_markers(path: str) -> bool:
+def _has_worktree_markers(root: Path, path: str) -> bool:
+    relative = Path(path)
+    if relative.is_absolute() or ".." in relative.parts:
+        return True
+    target = root / relative
     try:
-        return _contains_markers(Path(path).read_bytes())
-    except OSError:
+        for parent in target.parents:
+            if parent == root:
+                break
+            if parent.is_symlink():
+                return True
+        descriptor = os.open(target, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+        with os.fdopen(descriptor, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                return True
+            if b"\0" in stream.read(8000):
+                return False
+            _ = stream.seek(0)
+            scanned = 0
+            while line := stream.readline(65536):
+                scanned += len(line)
+                if scanned > _MAX_SCAN_BYTES or len(line) == 65536 and not line.endswith(b"\n"):
+                    return True
+                if _MARKER.match(line.rstrip(b"\r\n")):
+                    return True
+            return False
+    except FileNotFoundError:
         return False
+    except OSError:
+        return True
 
 
-def _has_index_markers(path: str) -> bool:
-    result = run_git(["show", f":{path}"])
+def _has_index_markers(root: Path, path: str) -> bool:
+    size = run_git(["cat-file", "-s", f":{path}"], cwd=root)
+    if size.returncode:
+        return False
+    if int(size.stdout.strip()) > _MAX_SCAN_BYTES:
+        return True
+    result = run_git(["show", f":{path}"], cwd=root)
     return result.returncode == 0 and _contains_markers(result.stdout.encode())
 
 
@@ -100,10 +136,14 @@ def abort_args(operation: Operation | None) -> list[str] | None:
 
 def status() -> OperationState:
     operation, branch = current_operation()
-    unmerged = _unmerged_paths()
+    root_result = run_git(["rev-parse", "--show-toplevel"])
+    if root_result.returncode:
+        raise RuntimeError(root_result.stderr.strip() or "not inside a Git repository")
+    root = Path(root_result.stdout.strip())
+    unmerged = _unmerged_paths(root)
     markers = [
-        path for path in _changed_paths()
-        if _has_worktree_markers(path) or _has_index_markers(path)
+        path for path in _changed_paths(root)
+        if _has_worktree_markers(root, path) or _has_index_markers(root, path)
     ]
     rerere = run_git(["config", "--bool", "--get", "rerere.enabled"])
     merge_tool = run_git(["config", "--get", "merge.tool"])
@@ -146,12 +186,23 @@ def operation_cmd(
     return after
 
 
-def build_app() -> fromargs.App:
+def build_app(command: Callable[..., OperationState] = operation_cmd) -> fromargs.App:
     return fromargs.App(
         "operation", help="Report or continue the current Git operation.",
-        help_formatter="plain", default_command=operation_cmd,
+        help_formatter="plain", default_command=command,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
-    return build_app().run(argv)
+    failed = False
+
+    def cli_operation(
+        *, continue_operation: Annotated[bool, fromargs.Parameter(name="--continue")] = False
+    ) -> OperationState:
+        nonlocal failed
+        result = operation_cmd(continue_operation=continue_operation)
+        failed = result["status"] == "failure"
+        return result
+
+    exit_code = build_app(cli_operation).run(argv)
+    return exit_code or int(failed)
