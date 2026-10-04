@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from pathlib import Path
 from types import ModuleType
 from typing import Protocol, TypedDict, cast
 from unittest.mock import patch
@@ -98,7 +97,6 @@ class _DetectSquashResidueModule(Protocol):
 
     def _in_progress_abort(self) -> str | None: ...
 
-    def _branch_during_rebase(self) -> str | None: ...
 
     def _base_branch_name(self, base_ref: str) -> str: ...
 
@@ -175,14 +173,11 @@ class TestDetectViaGhApi:
         assert pr is not None
         assert pr["number"] == 42
         assert result["unique_commits"] == []
-        assert not any("verify the cherry-pick list" in w for w in result["warnings"])
+        assert any("merge commit" in warning for warning in result["warnings"])
         merge = _remedy(result["remedies"], "merge")
         assert merge["destructive"] is False
         assert "git merge origin/main" in merge["commands"]
-        clean = _remedy(result["remedies"], "clean-branch")
-        assert clean["destructive"] is False
-        assert clean["commands"] == ["git switch -c feature-clean origin/main"]
-        assert result["remedies"][0] == clean
+        assert [remedy["name"] for remedy in result["remedies"]] == ["merge"]
 
     def test_pr_found_with_unverified_followups_offers_merge_only(
         self, detect_squash_residue: _DetectSquashResidueModule
@@ -307,6 +302,7 @@ class TestRemedyCompleteness:
             number=2,
             commit_oids=[c["sha"] for c in commits],
             merged_at="2026-05-15T12:00:00Z",
+            merge_commit="a" * 40,
         )
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
@@ -314,9 +310,11 @@ class TestRemedyCompleteness:
             patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+            patch.object(detect_squash_residue, "run_git", return_value=make_completed()) as ancestry,
         ):
             result = detect_squash_residue.detect("feature", "origin/main")
 
+        ancestry.assert_called_once_with(["merge-base", "--is-ancestor", "a" * 40, "origin/main"])
         clean = _remedy(result["remedies"], "clean-branch")
         assert clean["commands"] == ["git switch -c feature-clean origin/main"]
 
@@ -329,6 +327,7 @@ class TestRemedyCompleteness:
             number=3,
             commit_oids=[c["sha"] for c in commits],
             merged_at="2026-05-15T12:00:00Z",
+            merge_commit="a" * 40,
         )
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
@@ -336,6 +335,7 @@ class TestRemedyCompleteness:
             patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
             patch.object(detect_squash_residue, "_in_progress_abort", return_value=None),
+            patch.object(detect_squash_residue, "run_git", return_value=make_completed()),
         ):
             result = detect_squash_residue.detect("feature", "origin/main")
 
@@ -433,40 +433,6 @@ class TestGitLogFailurePropagation:
         assert any("fetched" in w for w in result["warnings"])
 
 
-class TestBranchDuringRebase:
-    def test_reads_head_name_from_rebase_merge(
-        self, detect_squash_residue: _DetectSquashResidueModule, tmp_path: Path
-    ) -> None:
-        gd = tmp_path / "git-dir"
-        (gd / "rebase-merge").mkdir(parents=True)
-        _ = (gd / "rebase-merge" / "head-name").write_text("refs/heads/feature-branch\n")
-        with patch.object(
-            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
-        ):
-            assert detect_squash_residue._branch_during_rebase() == "feature-branch"  # pyright: ignore[reportPrivateUsage]
-
-    def test_reads_head_name_from_rebase_apply(
-        self, detect_squash_residue: _DetectSquashResidueModule, tmp_path: Path
-    ) -> None:
-        gd = tmp_path / "git-dir"
-        (gd / "rebase-apply").mkdir(parents=True)
-        _ = (gd / "rebase-apply" / "head-name").write_text("refs/heads/fix/my-fix\n")
-        with patch.object(
-            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
-        ):
-            assert detect_squash_residue._branch_during_rebase() == "fix/my-fix"  # pyright: ignore[reportPrivateUsage]
-
-    def test_returns_none_when_no_rebase_in_progress(
-        self, detect_squash_residue: _DetectSquashResidueModule, tmp_path: Path
-    ) -> None:
-        gd = tmp_path / "git-dir"
-        gd.mkdir()
-        with patch.object(
-            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
-        ):
-            assert detect_squash_residue._branch_during_rebase() is None  # pyright: ignore[reportPrivateUsage]
-
-
 class TestEdgeCases:
     def test_no_commits_between_base_and_head(
         self, detect_squash_residue: _DetectSquashResidueModule
@@ -485,13 +451,15 @@ class TestEdgeCases:
     ) -> None:
         commits = _commits("a")
         gh = _gh_payload(
-            number=1, commit_oids=[c["sha"] for c in commits], merged_at="2026-05-15T12:00:00Z"
+            number=1, commit_oids=[c["sha"] for c in commits],
+            merged_at="2026-05-15T12:00:00Z", merge_commit="a" * 40,
         )
         with (
             patch.object(detect_squash_residue, "_resolve_head", return_value="HEAD"),
             patch.object(detect_squash_residue, "_commits_since", return_value=commits),
             patch.object(detect_squash_residue, "_check_via_tree_match", return_value=None),
             patch.object(detect_squash_residue, "_check_via_gh", return_value=gh),
+            patch.object(detect_squash_residue, "run_git", return_value=make_completed()),
             patch.object(
                 detect_squash_residue, "_in_progress_abort", return_value="git rebase --abort"
             ),
@@ -529,62 +497,6 @@ class TestEdgeCases:
 
         for r in result["remedies"]:
             assert r["commands"][0] == "git cherry-pick --abort"
-
-
-class TestInProgressAbort:
-    def test_detects_rebase_apply(
-        self, detect_squash_residue: _DetectSquashResidueModule, tmp_path: Path
-    ) -> None:
-        gd = tmp_path / "git-dir"
-        (gd / "rebase-apply").mkdir(parents=True)
-        with patch.object(
-            detect_squash_residue,
-            "run_git",
-            return_value=make_completed(stdout=str(gd)),
-        ):
-            assert detect_squash_residue._in_progress_abort() == "git rebase --abort"  # pyright: ignore[reportPrivateUsage]
-
-    def test_detects_rebase_merge(
-        self, detect_squash_residue: _DetectSquashResidueModule, tmp_path: Path
-    ) -> None:
-        gd = tmp_path / "git-dir"
-        (gd / "rebase-merge").mkdir(parents=True)
-        with patch.object(
-            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
-        ):
-            assert detect_squash_residue._in_progress_abort() == "git rebase --abort"  # pyright: ignore[reportPrivateUsage]
-
-    def test_detects_merge(
-        self, detect_squash_residue: _DetectSquashResidueModule, tmp_path: Path
-    ) -> None:
-        gd = tmp_path / "git-dir"
-        gd.mkdir()
-        _ = (gd / "MERGE_HEAD").write_text("deadbeef")
-        with patch.object(
-            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
-        ):
-            assert detect_squash_residue._in_progress_abort() == "git merge --abort"  # pyright: ignore[reportPrivateUsage]
-
-    def test_detects_cherry_pick(
-        self, detect_squash_residue: _DetectSquashResidueModule, tmp_path: Path
-    ) -> None:
-        gd = tmp_path / "git-dir"
-        gd.mkdir()
-        _ = (gd / "CHERRY_PICK_HEAD").write_text("deadbeef")
-        with patch.object(
-            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
-        ):
-            assert detect_squash_residue._in_progress_abort() == "git cherry-pick --abort"  # pyright: ignore[reportPrivateUsage]
-
-    def test_no_in_progress_returns_none(
-        self, detect_squash_residue: _DetectSquashResidueModule, tmp_path: Path
-    ) -> None:
-        gd = tmp_path / "git-dir"
-        gd.mkdir()
-        with patch.object(
-            detect_squash_residue, "run_git", return_value=make_completed(stdout=str(gd))
-        ):
-            assert detect_squash_residue._in_progress_abort() is None  # pyright: ignore[reportPrivateUsage]
 
 
 class TestGhApiCall:

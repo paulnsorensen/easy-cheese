@@ -22,16 +22,14 @@ def test_format_support_comes_from_conflict_summary() -> None:
     assert "Do not use a static format list." in cascade
 
 
-def test_cascade_does_not_depend_on_hidden_git_configuration() -> None:
-    """Stage 2 and stage 3 declare a preflight and an explicit tool."""
+def test_cascade_uses_operation_for_mechanical_state() -> None:
     skill = SKILL.read_text()
 
-    assert "git config --get rerere.enabled" in skill
-    assert "git config --get merge.tool" in skill
-    assert "git config --global rerere.enabled true" in skill
-    assert "git mergetool --tool=kdiff3" in skill
-    assert "\ngit mergetool\n" not in skill
-
+    assert "melt.pyz detect-squash-residue --apply" in skill
+    assert "melt.pyz operation --continue" in skill
+    assert "git config --get" not in skill
+    assert "git rebase --continue" not in skill
+    assert skill.index("batch-resolve --debug") < skill.index("batch-resolve --apply")
 
 def _handoff_gate() -> dict[str, object]:
     """Return the parsed handoff gate record from the Melt skill file."""
@@ -74,9 +72,25 @@ def test_handoff_gate_carries_the_standard_tail() -> None:
     assert options["stop"]["dispatch"] == "none"
 
 
-def test_plate_option_requires_a_complete_git_operation() -> None:
-    """Prose states the precondition that makes the Plate dispatch safe."""
-    skill = SKILL.read_text()
+def test_handoff_does_not_repeat_continuation() -> None:
+    gate = _handoff_gate()
+    options = {option["id"]: option for option in _gate_options()}
 
-    assert "Run the continuation command first for `plate-it`." in skill
-    assert "no unmerged paths and no interrupted operation" in skill
+    assert gate["recommended"] == "rerun-upstream"
+    assert "resume-operation" not in options
+    assert "continuation" not in str(options["plate-it"])
+    assert "continue" not in str(options["plate-it"])
+    assert "Handoff only when status is `complete`" in SKILL.read_text()
+
+
+def test_frontmatter_targets_conflict_requests_only() -> None:
+    frontmatter = SKILL.read_text().split("---", 2)[1]
+    description = cast("dict[str, str]", yaml.safe_load(frontmatter))["description"].lower()
+
+    for phrase in ("merge", "rebase", "cherry-pick", "pull", "conflict", "unmerged paths"):
+        assert phrase in description
+    assert re.search(r"needs merge.*unmerged path", description)
+    assert ", needs merge," not in description
+    assert "clean git operations" in description
+    assert "review-only" in description
+    assert "mergiraf" not in description
