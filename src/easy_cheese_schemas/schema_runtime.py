@@ -6,6 +6,7 @@ import types
 from collections.abc import Mapping
 from enum import Enum
 from functools import cache
+from pathlib import Path
 from types import ModuleType
 from typing import (
     Any,
@@ -48,7 +49,6 @@ from easy_cheese_schemas.contracts import (
     DiagnosisResult,
     DiagnosisResultWriterView,
     EvidenceRef,
-    HandoffPointer,
     IdentityAction,
     IdentityLineage,
     PlannerResult,
@@ -202,14 +202,12 @@ class CanonicalArtifact:
 @attrs.define(frozen=True)
 class AcceptedArtifact:
     canonical: CanonicalArtifact
-    normalization_receipt: ArtifactRef | None = None
 
 
 @attrs.define(frozen=True)
 class PublishedArtifact:
-    pointer: HandoffPointer
+    pointer_path: Path
     canonical: CanonicalArtifact
-    normalization_receipt: ArtifactRef | None = None
 
 
 def _enum_schema(enum: type[Enum]) -> dict[str, object]:

@@ -25,7 +25,6 @@ from easy_cheese_schemas import (
     SCHEMA_VERSION,
     CompactionRecord,
     Durability,
-    NormalizationReceipt,
     WheypointProjection,
     WheypointRecord,
     WheypointRevision,
@@ -53,18 +52,13 @@ from .lineage import Lineage
 class LintReport:
     """Everything that is wrong, plus what was readable while checking.
 
-    `normalizations` holds one receipt per link the reader filled in from an
-    older schema. They are advisory data, never findings. `pending` holds the
-    reciprocal edges sibling records ask this one to add; each also appears
-    as an advisory `link-pending` finding. `pending_forks` holds the forks
-    child records ask this one to reconcile; each also appears as an advisory
-    `fork-pending` finding.
+    `pending` holds reciprocal edges sibling records ask this one to add.
+    `pending_forks` holds forks child records ask this one to reconcile.
     """
 
     findings: tuple[LintFinding, ...] = field(default=())
     record: WheypointRecord | None = None
     projection: WheypointProjection | None = None
-    normalizations: tuple[NormalizationReceipt, ...] = field(default=())
     pending: tuple[edges.PendingEdge, ...] = field(default=())
     pending_forks: tuple[fork_reconcile.PendingFork, ...] = field(default=())
 
@@ -262,12 +256,10 @@ def lint_work(
                 + f"{NOTES_WARN_LIMIT}",
             )
         )
-    _, normalizations = records.normalize_links(record)
     return LintReport(
         findings=tuple(findings),
         record=record,
         projection=projection,
-        normalizations=normalizations,
         pending=pending,
         pending_forks=pending_forks,
     )

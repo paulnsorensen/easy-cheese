@@ -4,7 +4,7 @@ Run these trace scenarios against a fresh OMP task agent in an isolated fixture 
 
 ## Canonical handoff reaches execution
 
-1. Give the agent a canonical Mold `HandoffPointer` and its retained artifacts.
+1. Give the agent a Mold publication index path and its retained artifacts.
 2. Supply runner approval as a scripted host event. Light and Full Cook need no scope or plan reply.
 3. Supply setup authorization before any package or browser setup.
 4. Require `skills/cook/scripts/cook.pyz prepare` or `resubmit` before `accept`.
@@ -22,7 +22,7 @@ Start with a named user-intent hold. Re-running preparation, using `--auto`, or 
 
 ## Historical input fails closed
 
-A supported historical pointer must pass its original route, schema, digest, and receipt checks before Cook requests missing bindings. A tampered pointer must report `invalid`; it must not fall back to spec text or execute.
+Cook must reject an unsupported historical index as `invalid`. It must not fall back to spec text or execute.
 
 ## Trace acceptance
 

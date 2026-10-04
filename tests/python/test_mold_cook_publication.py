@@ -129,7 +129,6 @@ def test_publish_and_accept_preserve_canonical_handoff_identity(tmp_path: Path) 
 
     assert accepted.canonical.value == handoff
     assert accepted.canonical.canonical_bytes == canonical_bytes(handoff)
-    assert accepted.normalization_receipt is None
 
 
 

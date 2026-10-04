@@ -110,8 +110,6 @@ def stage_scope(
 ) -> CookPreparationResult | ArtifactRef | None:
     """Bind the invocation's unchanged spec as the scope; Light publishes here."""
 
-    if resolved.legacy_mode:
-        return None
     request = ctx.request
     classified = ctx.classified
     refs = ctx.refs

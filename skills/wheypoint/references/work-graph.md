@@ -22,7 +22,7 @@ The runtime parses, normalizes, resolves, and digests it by scheme.
 - `milknado:` and `https:` refs carry no digest, and the runtime does not check that the target exists.
 - A `--covers` or `covers_entry_ids` on a `milknado:` or `https:` ref is refused as `unpinnable-scheme`.
 - An unpinned `wheypoint:` link is pinned to the target's current revision at commit.
-- A schema-3 link that holds only `path` reads as `repo:<path>` with a normalization receipt.
+- A schema-3 link that holds only `path` reads as `repo:<path>` without changing stored bytes.
 
 ## Edge kinds
 

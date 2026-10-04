@@ -55,7 +55,7 @@ Run this scenario with a fresh OMP task agent in an isolated repository. Supply 
 1. Give the agent a strict, valid spec that needs two curds.
 2. Supply the planner result, taste verdict, and user approval as scripted host events.
 3. Require `scripts/mold.pyz finalize`; reject any `publish` command or direct `CurdPlan` hand-off.
-4. Pass the emitted `HandoffPointer` to Cook's preparation command.
+4. Pass the emitted publication index path to Cook's preparation command.
 5. Capture actual tool calls, approval events, and final artifact references.
 
 The trace passes only when the bounded transcript checker accepts it and Cook loads the emitted handoff. Missing approval evidence must stop finalization.

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
@@ -27,9 +26,7 @@ from easy_cheese_schemas.mold_cook import (
     CookExecutionHold,
     CookHoldKind,
     CookPreparationOutcome,
-    CookRequirementKind,
     CookSetupAuthorization,
-    MoldCookInputKind,
     MoldCookMode,
     MoldCookHandoff,
 )
@@ -131,87 +128,6 @@ def test_continuity_reuses_published_payload(tmp_path: Path) -> None:
     assert accepted.canonical.canonical_bytes == canonical_bytes(handoff)
     assert accepted_again.canonical.canonical_bytes == canonical_bytes(handoff)
 
-
-_BOUNDARY_FIXTURES = Path(__file__).parents[1] / "fixtures" / "mold_cook_boundary"
-
-
-def _copy_historical_fixture(tmp_path: Path, pointer_name: str) -> Path:
-    for name in (
-        "historical-plan.json",
-        "historical-receipt.json",
-        pointer_name,
-    ):
-        _ = shutil.copy2(_BOUNDARY_FIXTURES / name, tmp_path / name)
-    return tmp_path / pointer_name
-
-
-@pytest.mark.parametrize(
-    ("pointer_name", "reference_count"),
-    [
-        ("historical-pointer.json", 3),
-        ("historical-pointer-with-receipt.json", 4),
-    ],
-)
-def test_historical_curd_plan_pointer_requires_one_bound_migration(
-    tmp_path: Path, pointer_name: str, reference_count: int
-) -> None:
-    pointer = _copy_historical_fixture(tmp_path, pointer_name)
-    original_pointer = pointer.read_bytes()
-    result = prepare(
-        pointer,
-        request_id="historical-1",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "artifacts",
-        explicit_kind=MoldCookInputKind.CANONICAL_POINTER,
-    )
-
-    assert result.outcome is CookPreparationOutcome.BLOCKED
-    assert result.holds == ()
-    assert tuple(
-        (item.requirement_id, item.kind, item.description, item.evidence)
-        for item in result.requirements
-    ) == (
-        (
-            "legacy-spec-binding",
-            CookRequirementKind.SCOPE,
-            "an intact historical CurdPlan requires a canonical host-bound "
-            + "Mold spec before migration",
-            (),
-        ),
-    )
-    assert len(result.references) == reference_count
-    assert "curd_plan" in {reference.role for reference in result.references}
-    assert pointer.read_bytes() == original_pointer
-
-
-@pytest.mark.parametrize("corruption", ["pointer-digest", "payload-bytes"])
-def test_historical_curd_plan_pointer_reports_exact_corruption(
-    tmp_path: Path, corruption: str
-) -> None:
-    pointer = _copy_historical_fixture(tmp_path, "historical-pointer.json")
-    if corruption == "pointer-digest":
-        document = cast(
-            dict[str, object], json.loads(pointer.read_text(encoding="utf-8"))
-        )
-        payload = cast(dict[str, object], document["payload"])
-        payload["digest"] = "sha256:" + "0" * 64
-        _ = pointer.write_text(json.dumps(document), encoding="utf-8")
-    else:
-        plan = tmp_path / "historical-plan.json"
-        _ = plan.write_text(plan.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-
-    result = prepare(
-        pointer,
-        request_id="historical-corrupt",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "artifacts",
-        explicit_kind=MoldCookInputKind.CANONICAL_POINTER,
-    )
-
-    assert result.outcome is CookPreparationOutcome.INVALID
-    assert tuple((item.code, item.path) for item in result.findings) == (
-        ("invalid-pointer", str(pointer)),
-    )
 
 
 def test_setup_authority_is_named_and_does_not_claim_feature_execution(

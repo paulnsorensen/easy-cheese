@@ -11,7 +11,6 @@ import attrs
 from easy_cheese_schemas import (
     ArtifactRef,
     CurdPlan,
-    require_contract_version,
 )
 from easy_cheese_schemas.mold_cook import (
     CookPreparationResult,
@@ -29,7 +28,6 @@ from ._types import (
     SetupEvidence,
 )
 from .evidence import load_contract
-from .legacy import read_pointer
 from .outcomes import build_pointer_ref, publish_handoff, ready_result
 from .results import validate_preparation_result
 from .setup import apply_runner_setup, validate_handoff_authority
@@ -58,15 +56,8 @@ def resolve_canonical_pointer(
     | Path
     | None = None,
 ) -> CookPreparationResult:
-    pointer, refs = read_pointer(source)
-    expected_schema = require_contract_version(MoldCookHandoff).schema_uri
-    if pointer.payload.schema_uri != expected_schema:
-        raise PreparationFailure(
-            "unsupported-pointer-schema",
-            f"pointer payload schema {pointer.payload.schema_uri!r} is not supported by Cook",
-            path=str(source.path),
-        )
-    assert source.path is not None
+    if source.path is None:
+        raise PreparationFailure("missing-pointer", "canonical pointer input must name a file")
     pointer_root = request.artifact_root.resolve()
     if not source.path.resolve().is_relative_to(pointer_root):
         raise PreparationFailure(
@@ -78,6 +69,7 @@ def resolve_canonical_pointer(
         source.path,
         artifact_root=pointer_root,
     )
+    refs: list[ArtifactRef] = []
     # `accept_mold_cook_handoff` already ran the shared deep validator under
     # `pointer_root`; only the setup authority Cook itself owns is left.
     handoff = cast(MoldCookHandoff, accepted.canonical.value)

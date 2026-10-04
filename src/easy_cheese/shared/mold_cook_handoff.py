@@ -23,7 +23,6 @@ from easy_cheese_schemas.contracts import (
     CurdPlan,
     Landing,
     MAX_CONTRACT_BYTES,
-    NormalizationReceipt,
     PlannerDisposition,
     PlannerResult,
     canonical_bytes,
@@ -883,14 +882,11 @@ def publish_mold_cook_handoff(
         # caller must also catch.
         raise ContractValidationError(str(exc)) from exc
 
-    def prepare() -> tuple[CanonicalArtifact, NormalizationReceipt | None]:
-        return (
-            validate_contract(
-                canonical if canonical is not None else canonical_bytes(handoff),
-                MoldCookHandoff,
-                version,
-            ),
-            None,
+    def prepare() -> CanonicalArtifact:
+        return validate_contract(
+            canonical if canonical is not None else canonical_bytes(handoff),
+            MoldCookHandoff,
+            version,
         )
 
     return publish_canonical(

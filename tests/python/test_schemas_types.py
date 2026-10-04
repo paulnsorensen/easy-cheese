@@ -627,11 +627,6 @@ class TestPublicSurface:
             "classify_stamp",
             "parse_mapping",
             "AcceptedArtifact",
-            "HandoffPointer",
-            "IngressKind",
-            "NormalizationAction",
-            "NormalizationActionKind",
-            "NormalizationReceipt",
             "PublishedArtifact",
         ):
             assert name in easy_cheese_schemas.__all__
