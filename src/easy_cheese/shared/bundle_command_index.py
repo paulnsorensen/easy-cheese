@@ -47,6 +47,7 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'mode': ('cook',),
     'normalize': ('cook',),
     'normalize-planner': ('mold',),
+    'operation': ('melt',),
     'pasteurize-route': ('pasteurize',),
     'paths': ('age', 'cook', 'cure'),
     'phase-decision': ('cook',),

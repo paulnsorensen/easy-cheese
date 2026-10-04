@@ -4,8 +4,8 @@
 When a PR is squash-merged into the base branch, the local branch retains the
 pre-squash commits. Rebasing then re-applies commits whose content is already
 in base, producing useless conflicts that mergiraf cannot resolve — the right
-answer is to merge base in (non-destructive) or reset and re-cherry-pick the
-unique commits (destructive).
+answer is to create a clean branch from base and replay verified unique
+commits, or merge base when the unique commits are unknown.
 
 Detection cascade (strongest first; later signals run only when needed):
   1. Tree-match — walk recent commits on base looking for one whose tree
@@ -23,8 +23,8 @@ Detection cascade (strongest first; later signals run only when needed):
      cannot enumerate squashed vs unique commits, and misses the case
      where the branch has commits past the squash.
 
-No auto-fix. Prints two remedies (merge first, then reset+cherry-pick) as
-copy-paste blocks; the user picks and runs.
+Prints a preferred clean-branch remedy when the replay set is verified.
+Local synthesis offers only the merge remedy.
 """
 
 from __future__ import annotations
@@ -34,17 +34,14 @@ import re
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
 import fromargs
 
-# Safe git ref name characters: alphanumeric, slash, dot, dash, underscore.
-# Used to prevent shell metacharacters from being interpolated into the printed
-# remedy block (which the user copy-pastes).
-_SAFE_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
+from easy_cheese.shared.git_utils import run_git
+from easy_cheese.skills.melt.operation import abort_args, current_operation, status
 
-from easy_cheese.shared.git_utils import run_git  # noqa: E402
+_SAFE_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
 
 
 class _Commit(TypedDict):
@@ -105,6 +102,15 @@ class _DetectResult(TypedDict):
     unique_commits: list[_Commit]
     remedies: list[_Remedy]
     warnings: list[str]
+    application: NotRequired[_ApplyResult]
+
+
+class _ApplyResult(TypedDict):
+    state: str
+    remedy: str | None
+    failed_step: str | None
+    recovery_branch: str
+    error: str | None
 
 
 def _current_branch() -> str | None:
@@ -287,33 +293,13 @@ def _check_via_synthesis(base_ref: str, head: str = "HEAD") -> bool | None:
 
 
 def _branch_during_rebase() -> str | None:
-    """Read the pre-rebase branch name from git rebase metadata.
-
-    During a rebase HEAD is detached, so `git branch --show-current` returns
-    empty. The rebase state directory records the original branch in head-name.
-    """
-    r: subprocess.CompletedProcess[str] = run_git(["rev-parse", "--git-dir"])
-    if r.returncode != 0:
-        return None
-    gd = Path(r.stdout.strip())
-    for head_name_path in (gd / "rebase-merge" / "head-name", gd / "rebase-apply" / "head-name"):
-        if head_name_path.exists():
-            return head_name_path.read_text().strip().removeprefix("refs/heads/")
-    return None
+    operation, branch = current_operation()
+    return branch if operation == "rebase" else None
 
 
 def _in_progress_abort() -> str | None:
-    r: subprocess.CompletedProcess[str] = run_git(["rev-parse", "--git-dir"])
-    if r.returncode != 0:
-        return None
-    gd = Path(r.stdout.strip())
-    if (gd / "rebase-merge").exists() or (gd / "rebase-apply").exists():
-        return "git rebase --abort"
-    if (gd / "MERGE_HEAD").exists():
-        return "git merge --abort"
-    if (gd / "CHERRY_PICK_HEAD").exists():
-        return "git cherry-pick --abort"
-    return None
+    operation, _ = current_operation()
+    return f"git {operation} --abort" if operation else None
 
 
 def _resolve_head(branch: str) -> str:
@@ -341,34 +327,28 @@ def _build_merge_remedy(base_ref: str, abort: str | None) -> _Remedy:
         "description": (
             "Merge base into branch. Non-destructive: preserves all "
             "branch history and refs. Squashed commits collapse to a "
-            "no-op merge, so only real conflicts surface. Prefer this "
-            "when the branch has unique work or you are not sure the "
-            "unique-commit list below is complete."
+            "no-op merge, so only real conflicts surface. Use this "
+            "when detection cannot verify the replay set."
         ),
         "commands": commands,
     }
 
 
-def _build_reset_remedy(result: _DetectResult, base_ref: str, abort: str | None) -> _Remedy:
-    commands: list[str] = []
-    if abort:
-        commands.append(abort)
-    commands.append(f"git reset --hard {base_ref}")
+def _build_clean_branch_remedy(
+    result: _DetectResult, base_ref: str, abort: str | None
+) -> _Remedy:
+    commands = [f"git switch -c {result['branch']}-clean {base_ref}"]
     if result["unique_commits"]:
         shas = " ".join(c["sha"] for c in result["unique_commits"])
         commands.append(f"git cherry-pick {shas}")
-    elif result["method"] == "local-synth":
-        commands.append("# review and cherry-pick unique commits manually:")
-        for c in result["branch_commits"]:
-            commands.append(f"#   {c['short']} {c['subject']}")
+    if abort:
+        commands.insert(0, abort)
     return {
-        "name": "reset-and-cherry-pick",
-        "destructive": True,
+        "name": "clean-branch",
+        "destructive": False,
         "description": (
-            "Reset to base and replay only the unique commits. "
-            "DESTRUCTIVE: rewrites the branch and requires force-push. "
-            "Use when you want a clean linear history and the "
-            "unique-commit list looks complete."
+            "Create a clean branch from base and replay verified unique commits. "
+            "Keep the original branch unchanged for recovery."
         ),
         "commands": commands,
     }
@@ -525,22 +505,108 @@ def detect(branch: str, base_ref: str) -> _DetectResult:
         _apply_synth_fallback(result, base_ref, head_ref)
 
     if result["verdict"] == "squash-merged":
+        gh_clean_verified = True
+        if result["method"] == "gh-api" and not result["unique_commits"]:
+            pr = result["pr"]
+            merge_commit = pr["merge_commit"] if pr else None
+            gh_clean_verified = bool(
+                merge_commit
+                and re.fullmatch(r"[0-9a-fA-F]{40}", merge_commit)
+                and run_git(["merge-base", "--is-ancestor", merge_commit, base_ref]).returncode == 0
+            )
+            if not gh_clean_verified:
+                result["warnings"].append(
+                    f"gh PR merge commit {merge_commit or 'unknown'} is not verified on "
+                    + f"selected base {base_ref}; using merge remedy"
+                )
+        replay_has_merge = any(
+            (parents := run_git(["rev-list", "--parents", "-n", "1", commit["sha"]])).returncode
+            or len(parents.stdout.split()) > 2
+            for commit in result["unique_commits"]
+        )
+        if replay_has_merge:
+            result["warnings"].append("verified replay includes a merge commit; using merge remedy")
         abort = _in_progress_abort()
-        result["remedies"] = [
-            _build_merge_remedy(base_ref, abort),
-            _build_reset_remedy(result, base_ref, abort),
-        ]
+        merge = _build_merge_remedy(base_ref, abort)
+        result["remedies"] = (
+            [merge]
+            if result["method"] == "local-synth" or replay_has_merge
+            or (result["method"] == "gh-api" and (result["unique_commits"] or not gh_clean_verified))
+            else [_build_clean_branch_remedy(result, base_ref, abort), merge]
+        )
 
     return result
+
+
+def _apply_remedy(result: _DetectResult, *, abort_operation: bool = False) -> _ApplyResult:
+    branch = result["branch"]
+    remedy = result["remedies"][0]["name"]
+    outcome: _ApplyResult = {
+        "state": "failed", "remedy": remedy, "failed_step": None,
+        "recovery_branch": branch, "error": None,
+    }
+    clean_branch = f"{branch}-clean"
+    if remedy == "clean-branch":
+        collision = run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{clean_branch}"])
+        if collision.returncode != 1:
+            outcome["failed_step"] = "preflight-branch"
+            outcome["error"] = "clean branch already exists" if collision.returncode == 0 else collision.stderr.strip()
+            return outcome
+
+    operation, rebase_branch = current_operation()
+    if operation and not abort_operation:
+        outcome["state"] = "confirmation-required"
+        outcome["failed_step"] = f"git {operation} --abort"
+        outcome["error"] = "active operation requires --abort-operation confirmation"
+        return outcome
+    active_branch = rebase_branch if operation == "rebase" else _current_branch()
+    if active_branch != branch:
+        outcome["failed_step"] = "preflight-branch"
+        outcome["error"] = f"{branch} is not the active branch"
+        return outcome
+    original = run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"])
+    if original.returncode:
+        outcome["failed_step"] = "preflight-recovery"
+        outcome["error"] = f"recovery branch {branch} is unavailable"
+        return outcome
+    if operation is None:
+        dirty = run_git(["status", "--porcelain"])
+        if dirty.returncode or dirty.stdout.strip():
+            outcome["failed_step"] = "preflight-worktree"
+            outcome["error"] = dirty.stderr.strip() or "worktree has uncommitted changes"
+            return outcome
+    steps: list[list[str]] = []
+    if abort := abort_args(operation):
+        steps.append(abort)
+    if remedy == "clean-branch":
+        steps.append(["switch", "-c", clean_branch, result["base"]])
+        if result["unique_commits"]:
+            steps.append(["cherry-pick", *(commit["sha"] for commit in result["unique_commits"])])
+    else:
+        steps.append(["merge", result["base"]])
+
+    for step in steps:
+        command = f"git {' '.join(step)}"
+        attempt = run_git(step)
+        if attempt.returncode:
+            outcome["failed_step"] = command
+            outcome["error"] = attempt.stderr.strip() or attempt.stdout.strip()
+            if status()["status"] == "blocked":
+                outcome["state"] = "needs-resolution"
+            return outcome
+    outcome["state"] = "applied"
+    return outcome
 
 
 class _NotApplicableResult(TypedDict):
     verdict: str
     reason: str
+    application: NotRequired[_ApplyResult]
 
 
 def detect_squash_residue_cmd(
-    *, base: str = "origin/main", branch: str | None = None
+    *, base: str = "origin/main", branch: str | None = None, apply: bool = False,
+    abort_operation: bool = False,
 ) -> _DetectResult | _NotApplicableResult:
     """Detect squash-merge residue and emit the remedy.
 
@@ -551,7 +617,7 @@ def detect_squash_residue_cmd(
     branch
         Branch to check (default: current).
     """
-    if not _SAFE_REF.match(base):
+    if not _SAFE_REF.match(base) or base.startswith("-"):
         raise fromargs.CliError(f"--base {base!r} contains unsafe characters", exit_code=1)
 
     resolved_branch = branch or _current_branch() or _branch_during_rebase()
@@ -560,7 +626,7 @@ def detect_squash_residue_cmd(
             "cannot determine current branch — pass --branch <name>", exit_code=1
         )
 
-    if not _SAFE_REF.match(resolved_branch):
+    if not _SAFE_REF.match(resolved_branch) or resolved_branch.startswith("-"):
         raise fromargs.CliError(
             f"branch {resolved_branch!r} contains unsafe characters", exit_code=1
         )
@@ -569,7 +635,15 @@ def detect_squash_residue_cmd(
     if resolved_branch == base_short or resolved_branch in ("main", "master", "develop"):
         return {"verdict": "not-applicable", "reason": f"on base branch {resolved_branch}"}
 
-    return detect(resolved_branch, base)
+    result = detect(resolved_branch, base)
+    if apply:
+        result["application"] = (
+            _apply_remedy(result, abort_operation=abort_operation)
+            if result["remedies"]
+            else {"state": "not-applied", "remedy": None, "failed_step": None,
+                  "recovery_branch": resolved_branch, "error": None}
+        )
+    return result
 
 
 def build_app() -> fromargs.App:
