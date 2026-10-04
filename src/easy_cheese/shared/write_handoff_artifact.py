@@ -18,7 +18,7 @@ contents land in a tmp file inside the target directory and are then
 so readers never observe a half-written file.
 
 ``--phase`` is mandatory and names *this* phase's own directory. The value is
-validated against the generated phase registry before any output directory or
+validated against the private route table before any output directory or
 file is created. ``--next`` is preamble-content only — it tells the *next*
 phase where the chain should go, but does not influence where this artifact
 lands.
@@ -37,13 +37,11 @@ import fromargs
 
 from easy_cheese.shared import handoff, paths
 
-from easy_cheese_schemas.phase_contracts import (
-    COMPILED_TRANSITION_REGISTRY,
+from easy_cheese.shared.phase_routes import RouteError, validate_route
+from easy_cheese_schemas.handback_status import (
     StatusError,
-    TransitionError,
     parse_status_field,
     status_vocabulary,
-    validate_transition,
 )
 
 # Exit codes a caller branches on. Plain integers, identical on every host: a
@@ -57,13 +55,8 @@ def _validate_transition(
     source: str, destination: str, payload_schema_uri: str | None, *, slug: str
 ) -> None:
     try:
-        _ = validate_transition(
-            COMPILED_TRANSITION_REGISTRY,
-            source=source,
-            destination=destination,
-            payload_schema_uri=payload_schema_uri,
-        )
-    except TransitionError as exc:
+        validate_route(source, destination, payload_schema_uri)
+    except RouteError as exc:
         raise fromargs.contract_error(exc, context=f"--phase {source} --slug {slug}") from exc
 
 def _render_preamble(
@@ -322,8 +315,7 @@ def write_artifact(
     root_path = paths.resolve_repo_root(root)
     cheese_root = root_path / ".cheese"
     target = cheese_root / phase / f"{slug}.md"
-    # Phase names are validated against the compiled registry and therefore
-    # select exactly one directory beneath .cheese/.
+    # Validated phase names select one directory beneath .cheese/.
     if cheese_root not in target.resolve().parents:
         raise fromargs.CliError(f"--phase must stay under .cheese/: {phase!r}")
 

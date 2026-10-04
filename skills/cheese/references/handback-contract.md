@@ -6,10 +6,9 @@ The `hard-cheese` receipt uses `status: PASS | FAIL | FAILED | LOGGED`.
 It is a grading record, not a handback.
 Neither vocabulary extends the other.
 
-`easy_cheese_schemas.phase_contracts` is the machine source of truth.
-It defines the status vocabulary, wire grammar, and phase transition registry.
-Each skill bundle contains this module.
-This file describes only rules that the module enforces.
+`easy_cheese_schemas.handback_status` defines the status vocabulary and wire grammar.
+`easy_cheese.shared.phase_routes` validates active handoff routes privately.
+Each skill bundle contains the status vocabulary it uses.
 Producers and consumers must not derive the grammar again.
 
 ## The preamble

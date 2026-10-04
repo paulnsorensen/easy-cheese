@@ -20,7 +20,6 @@ from easy_cheese_schemas import (
     SCHEMA_ROOT,
     ContractValidationError,
     ArtifactRef,
-    TransitionError,
     canonical_bytes,
     normalize_agent_output,
     supported_version_for,
@@ -30,6 +29,7 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookHandoff,
     MoldCookMode,
 )
+from easy_cheese.shared.phase_routes import RouteError
 from easy_cheese.shared.mold_cook_handoff import accept_mold_cook_handoff
 from easy_cheese.shared.publication import PublicationError
 from easy_cheese.shared.taste_test import read_spec_text
@@ -402,7 +402,7 @@ def accept(
     except (
         ContractValidationError,
         PublicationError,
-        TransitionError,
+        RouteError,
         OSError,
         UnicodeDecodeError,
     ) as exc:

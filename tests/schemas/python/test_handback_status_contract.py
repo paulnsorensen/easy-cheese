@@ -1,7 +1,7 @@
 """Every handback producer and consumer speaks one status vocabulary.
 
 The regression these lock down: before the vocabulary moved into
-``easy_cheese_schemas.phase_contracts`` each seam carried its own grammar, so
+``easy_cheese_schemas.handback_status`` each seam carried its own grammar, so
 ``gated:`` -- a status ``/wheypoint`` derives and ``continue-resume.md``
 documents -- was rejected by the shared preamble parser and read as "proceed"
 by ``/ultracook``'s phase router, which spawned the next phase through a gate
@@ -29,7 +29,7 @@ from easy_cheese_schemas.handback_status import (
     Disposition,
     HandbackStatus,
 )
-from easy_cheese_schemas.phase_contracts import (
+from easy_cheese_schemas.handback_status import (
     DISPOSITIONS,
     HANDBACK_STATUSES,
     PROCEED,
@@ -54,7 +54,7 @@ def _field(name: str) -> str:
 
 def test_package_index_reexports_the_full_handback_vocabulary() -> None:
     """#6: every vocabulary name is reachable from the package's top-level
-    `__all__`, not just from `phase_contracts`. `require_single_line` is a
+    `__all__`, not just from `handback_status`. `require_single_line` is a
     module-internal helper, not part of the vocabulary, so it is exempt."""
     vocabulary = set(handback_status.__all__) - {"require_single_line"}
     assert vocabulary <= set(easy_cheese_schemas.__all__)

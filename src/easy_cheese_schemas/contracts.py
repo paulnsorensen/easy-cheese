@@ -512,18 +512,6 @@ def _identifier_list(
     )
 
 
-def _uri_list(
-    *,
-    non_empty: bool = False,
-    limit: int = MAX_COLLECTION_ITEMS,
-) -> Validator:
-    return _string_list(
-        non_empty=non_empty,
-        limit=limit,
-        item_validator=_uri,
-    )
-
-
 def _context_string_list(
     *,
     non_empty: bool = False,
@@ -2091,35 +2079,6 @@ class CurdResult:
             raise ValueError(f"deliverables artifact_id {duplicate!r} must be unique")
         if self.disposition is CurdDisposition.PASSED and self.unresolved_work:
             raise ValueError("passed curd result must not include unresolved work")
-
-
-@define(frozen=True)
-class PhaseDestination:
-    destination: str = field(validator=_identifier)
-    payload_schema_uri: str = field(validator=_uri)
-
-
-@contract("phase-contract")
-@define(frozen=True)
-class PhaseContract:
-    contract_version: ContractVersion = field(
-        validator=validators.instance_of(ContractVersion)
-    )
-    source: str = field(validator=_identifier)
-    input_schema_uris: tuple[str, ...] = field(
-        converter=_tuple_sequence, validator=_uri_list(non_empty=True)
-    )
-    outputs: tuple[PhaseDestination, ...] = field(
-        converter=_tuple_sequence, validator=_list_of(PhaseDestination, non_empty=True)
-    )
-
-    @outputs.validator  # pyright: ignore[reportUntypedFunctionDecorator, reportUnknownMemberType, reportAttributeAccessIssue]
-    def _validate_routes(self, _attribute: _NamedAttribute, _value: object) -> None:  # noqa: V103
-        routes = {
-            (route.destination, route.payload_schema_uri) for route in self.outputs
-        }
-        if len(routes) != len(self.outputs):
-            raise ValueError("outputs must not contain duplicate routes")
 
 
 @define(frozen=True)
@@ -4336,8 +4295,6 @@ __all__ = [
     "IdentityLineage",
     "MoldSpecDocument",
     "MoldSpecFrontmatter",
-    "PhaseContract",
-    "PhaseDestination",
     "PlannerDisposition",
     "PlannerRequest",
     "PlannerRequestKind",

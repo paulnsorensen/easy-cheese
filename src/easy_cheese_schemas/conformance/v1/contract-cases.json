@@ -644,59 +644,13 @@
           "digest": "sha256:48208f9428d64634bd8e28ff345bf0eab60d53c18fa2fbdb0b9bc1e84df2b5f6",
           "size_bytes": 11,
           "media_type": "application/json",
-          "schema_uri": "https://schemas.easy-cheese.dev/phase-contract"
+          "schema_uri": "https://schemas.easy-cheese.dev/planner-request"
         }
       },
       "expected": {
         "status": "reject",
         "error_type": "ArtifactResolutionError",
-        "message": "artifact schema mismatch: https://schemas.easy-cheese.dev/phase-contract: $.contract_version is required"
-      }
-    },
-    {
-      "name": "registered-transition-accepted",
-      "operation": "validate_transition",
-      "input": {
-        "source": "mold",
-        "destination": "cook",
-        "payload_schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff"
-      },
-      "expected": {
-        "status": "accept",
-        "value": {
-          "type": "CompiledTransition",
-          "source": "mold",
-          "destination": "cook",
-          "payload_schema_uri": "https://schemas.easy-cheese.dev/mold-cook-handoff"
-        }
-      }
-    },
-    {
-      "name": "registered-transition-rejected",
-      "operation": "validate_transition",
-      "input": {
-        "source": "mold",
-        "destination": "cure",
-        "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
-      },
-      "expected": {
-        "status": "reject",
-        "error_type": "TransitionError",
-        "message": "transition mold -> cure is not declared"
-      }
-    },
-    {
-      "name": "retired-mold-cook-curd-plan-route-rejected",
-      "operation": "validate_transition",
-      "input": {
-        "source": "mold",
-        "destination": "cook",
-        "payload_schema_uri": "https://schemas.easy-cheese.dev/curd-plan"
-      },
-      "expected": {
-        "status": "reject",
-        "error_type": "TransitionError",
-        "message": "payload schema 'https://schemas.easy-cheese.dev/curd-plan' is not declared for mold -> cook"
+        "message": "artifact schema mismatch: https://schemas.easy-cheese.dev/planner-request: $.contract_version is required"
       }
     },
     {

@@ -52,8 +52,6 @@ from easy_cheese_schemas.contracts import (
     parse_landing_mapping,
     NormalizationAction,
     NormalizationReceipt,
-    PhaseContract,
-    PhaseDestination,
     PlannerDisposition,
     PlannerRequest,
     PlannerRequestKind,
@@ -1000,21 +998,6 @@ def test_curd_result_disposition_is_derived_from_criterion_rows() -> None:
         )
 
 
-def test_phase_contract_rejects_duplicate_routes() -> None:
-    route = PhaseDestination(
-        destination="cook",
-        payload_schema_uri="https://schemas.easy-cheese.dev/curd-plan",
-    )
-
-    with pytest.raises(ValueError, match="outputs must not contain duplicate routes"):
-        _ = PhaseContract(
-            contract_version=VERSION,
-            source="mold",
-            input_schema_uris=["https://schemas.easy-cheese.dev/spec"],
-            outputs=[route, route],
-        )
-
-
 def test_contract_version_source_references_are_typed() -> None:
     assert source_plan_ref() == SourcePlanRef("plan-1", 1, DIGEST)
     assert source_curd_ref() == SourceCurdRef("curd-1", DIGEST)
@@ -1082,21 +1065,6 @@ def test_semantic_string_collections_use_their_declared_validators() -> None:
             subject=artifact(),
             coverage_targets=["not an id"],
         )
-
-    with pytest.raises(ValueError, match="absolute URI"):
-        _ = PhaseContract(
-            contract_version=VERSION,
-            source="mold",
-            input_schema_uris=["not-a-uri"],
-            outputs=[
-                PhaseDestination(
-                    destination="cook",
-                    payload_schema_uri="https://schemas.easy-cheese.dev/curd-plan",
-                )
-            ],
-        )
-
-
 def test_bounded_context_accepts_the_documented_context_limit() -> None:
     text = "x" * 5_000
     context = BoundedContext(constraints=[text])
