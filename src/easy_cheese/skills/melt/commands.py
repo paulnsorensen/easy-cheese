@@ -51,7 +51,7 @@ COMMANDS = (
         _conflict_summary, "Summarize conflicts with line numbers and framed context"
     ),
     derive_command(
-        _detect_squash_residue, "Detect squash-merge residue and print both remedies"
+        _detect_squash_residue, "Detect squash-merge residue and print the safe action"
     ),
     derive_command(
         _lockfile_resolve, "Take one side of a lockfile conflict and regenerate it"

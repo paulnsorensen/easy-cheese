@@ -40,9 +40,9 @@ python3 skills/melt/scripts/melt.pyz detect-squash-residue
 ```
 
 If the verdict is `SQUASH-MERGED`, stop the cascade.
-Show both printed remedies to the user without changes.
-Do not apply either remedy automatically.
-The user selects and copies one remedy.
+Run the first emitted remedy in command order.
+Stop and report the failed command if any command fails.
+Do not push; keep the original branch as recovery.
 
 Flags:
 
@@ -67,23 +67,23 @@ Verdicts:
 - `SQUASH-MERGED` with `method=tree-match` or `tree-match+gh` — This is the strongest signal.
   The unique commit list contains branch commits after the squash point.
 - `SQUASH-MERGED` with `method=gh-api` — The PR commit data overlaps with branch commits.
+  Unmatched commits are not verified as unique. Use merge when they exist.
 - `SQUASH-MERGED` with `method=local-synth` — The offline check found a match.
-  Review the cherry-pick list manually.
+  Unique commits are unknown, so use the merge remedy only.
 - `not-detected` — Continue with the cascade.
 - `not-applicable` — The current branch is the base branch.
 
-The detector prints two remedies in this order:
+The detector puts the preferred action first:
 
-- **[A] merge** — Run `git merge <base>`.
-  This non-destructive remedy preserves branch history.
-  Squashed commits become an empty merge, so only real conflicts remain.
-  Prefer this remedy when the branch has unique work or the commit list is uncertain.
-- **[B] reset-and-cherry-pick** — Run `git reset --hard <base>`, then run `git cherry-pick <unique-shas>`.
-  This destructive remedy rewrites the branch and requires a force push.
-  Use it when the user wants linear history and the unique commit list is complete.
+- **clean-branch** — Create `<original-branch>-clean` from the base.
+  Cherry-pick only verified unique commits in order.
+  The original branch remains unchanged for recovery.
+- **merge** — Merge the base into the original branch.
+  Use this action when detection cannot verify the replay set.
+  This action preserves branch history and may require conflict resolution.
 
-Suggest remedy [A] first.
-Suggest remedy [B] only when the user requests linear history or verifies a small commit list.
+The detector prepends an abort command when a Git operation is interrupted.
+Run each command in order. Stop and report if any command fails.
 
 ### 1. Diagnose
 

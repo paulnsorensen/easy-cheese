@@ -4,8 +4,8 @@
 When a PR is squash-merged into the base branch, the local branch retains the
 pre-squash commits. Rebasing then re-applies commits whose content is already
 in base, producing useless conflicts that mergiraf cannot resolve — the right
-answer is to merge base in (non-destructive) or reset and re-cherry-pick the
-unique commits (destructive).
+answer is to create a clean branch from base and replay verified unique
+commits, or merge base when the unique commits are unknown.
 
 Detection cascade (strongest first; later signals run only when needed):
   1. Tree-match — walk recent commits on base looking for one whose tree
@@ -23,8 +23,8 @@ Detection cascade (strongest first; later signals run only when needed):
      cannot enumerate squashed vs unique commits, and misses the case
      where the branch has commits past the squash.
 
-No auto-fix. Prints two remedies (merge first, then reset+cherry-pick) as
-copy-paste blocks; the user picks and runs.
+Prints a preferred clean-branch remedy when the replay set is verified.
+Local synthesis offers only the merge remedy.
 """
 
 from __future__ import annotations
@@ -40,8 +40,7 @@ from typing import NotRequired, TypedDict, cast
 import fromargs
 
 # Safe git ref name characters: alphanumeric, slash, dot, dash, underscore.
-# Used to prevent shell metacharacters from being interpolated into the printed
-# remedy block (which the user copy-pastes).
+# Used to prevent shell metacharacters in printed remedy commands.
 _SAFE_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
 
 from easy_cheese.shared.git_utils import run_git  # noqa: E402
@@ -341,34 +340,28 @@ def _build_merge_remedy(base_ref: str, abort: str | None) -> _Remedy:
         "description": (
             "Merge base into branch. Non-destructive: preserves all "
             "branch history and refs. Squashed commits collapse to a "
-            "no-op merge, so only real conflicts surface. Prefer this "
-            "when the branch has unique work or you are not sure the "
-            "unique-commit list below is complete."
+            "no-op merge, so only real conflicts surface. Use this "
+            "when detection cannot verify the replay set."
         ),
         "commands": commands,
     }
 
 
-def _build_reset_remedy(result: _DetectResult, base_ref: str, abort: str | None) -> _Remedy:
-    commands: list[str] = []
-    if abort:
-        commands.append(abort)
-    commands.append(f"git reset --hard {base_ref}")
+def _build_clean_branch_remedy(
+    result: _DetectResult, base_ref: str, abort: str | None
+) -> _Remedy:
+    commands = [f"git switch -c {result['branch']}-clean {base_ref}"]
     if result["unique_commits"]:
         shas = " ".join(c["sha"] for c in result["unique_commits"])
         commands.append(f"git cherry-pick {shas}")
-    elif result["method"] == "local-synth":
-        commands.append("# review and cherry-pick unique commits manually:")
-        for c in result["branch_commits"]:
-            commands.append(f"#   {c['short']} {c['subject']}")
+    if abort:
+        commands.insert(0, abort)
     return {
-        "name": "reset-and-cherry-pick",
-        "destructive": True,
+        "name": "clean-branch",
+        "destructive": False,
         "description": (
-            "Reset to base and replay only the unique commits. "
-            "DESTRUCTIVE: rewrites the branch and requires force-push. "
-            "Use when you want a clean linear history and the "
-            "unique-commit list looks complete."
+            "Create a clean branch from base and replay verified unique commits. "
+            "Keep the original branch unchanged for recovery."
         ),
         "commands": commands,
     }
@@ -526,10 +519,13 @@ def detect(branch: str, base_ref: str) -> _DetectResult:
 
     if result["verdict"] == "squash-merged":
         abort = _in_progress_abort()
-        result["remedies"] = [
-            _build_merge_remedy(base_ref, abort),
-            _build_reset_remedy(result, base_ref, abort),
-        ]
+        merge = _build_merge_remedy(base_ref, abort)
+        result["remedies"] = (
+            [merge]
+            if result["method"] == "local-synth"
+            or (result["method"] == "gh-api" and result["unique_commits"])
+            else [_build_clean_branch_remedy(result, base_ref, abort), merge]
+        )
 
     return result
 
