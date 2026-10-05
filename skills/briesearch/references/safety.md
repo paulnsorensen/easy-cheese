@@ -41,7 +41,8 @@ Rules:
 
 - Let a CLI read its key from the environment or its stored login.
 - Do not write a key value into a command argument, a manifest, a raw body, or a report. Shell history and logs keep command arguments.
-- For a raw `curl` route, send the header on stdin from a shell builtin. Do not put the key in `curl` arguments, because `ps` shows them. Example: `printf 'header = "Authorization: Bearer %s"\n' "$JINA_API_KEY" | curl --config - -sS '<url>'`.
+- For a raw `curl` route, send the header on stdin from a shell builtin. Do not put the key in `curl` arguments, because `ps` shows them. Example: `printf 'header = "Authorization: Bearer %s"\n' "$JINA_API_KEY" | curl --config - -gsS '<url>'`.
+- Send a keyed URL, such as OpenAlex `api_key`, on stdin as `url = "..."` in the `curl --config -` input. Do not pass it as an argument.
 
 ## Quote command values
 
@@ -50,4 +51,5 @@ Rules:
 - Wrap every substituted value in single quotes, such as `'<url>'` or `'<q>'`.
 - Replace each single quote inside a value with `'\''`.
 - URL-encode `<q>` before you put it in a URL.
-- Do not use double quotes. The shell expands `$`, backticks, and `\` inside them.
+- Do not put a substituted value in double quotes. The shell expands `$`, backticks, and `\` inside them.
+- Reject a substituted value that starts with `-`. A CLI can read it as a flag.

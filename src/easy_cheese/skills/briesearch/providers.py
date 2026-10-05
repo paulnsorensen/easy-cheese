@@ -26,14 +26,19 @@ import json
 import os
 import re
 import shutil
-import stat
 import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import fromargs
+
+from easy_cheese.shared.bounded_read import (
+    BoundedReadOverflow,
+    NotRegularFileError,
+    read_bounded_descriptor,
+)
 
 WEB_SEARCH = "web-search"
 WEB_EXTRACT = "web-extract"
@@ -45,8 +50,10 @@ CAPABILITIES = (WEB_SEARCH, WEB_EXTRACT, DOCS, PAPERS, GIT_HOST)
 READY = "ready"
 UNVERIFIED = "unverified"
 
-USER = "user"
-PROJECT = "project"
+Scope = Literal["user", "project"]
+
+USER: Scope = "user"
+PROJECT: Scope = "project"
 
 # A real ~/.claude.json is about 100 KB; the cap only stops absurd files.
 MAX_CONFIG_BYTES = 16 * 1024 * 1024
@@ -80,9 +87,9 @@ class Provider:
     cheap_mode: str = ""
 
 
-# Registry order is the default preference inside one route tier. Cheap,
+# Registry order is the default preference inside one route rank. Cheap,
 # agent-oriented providers come first; `references/providers.md` gives the
-# cost evidence. Commands are templates: `<q>` is a URL-encoded query, `<url>` a URL.
+# cost evidence. Commands are templates: `<q>` is a query, URL-encoded only inside a URL, and `<url>` is a URL.
 # Single quotes wrap each substituted value; `references/safety.md` has the rule.
 # A provider lists only the CLI routes that are a sensible default for it:
 # Jina search bills a 10k-token minimum, so Jina registers extraction only.
@@ -95,7 +102,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 WEB_EXTRACT,
                 "curl",
-                "curl -sS 'https://r.jina.ai/<url>' -H 'x-respond-with: markdown'",
+                "curl -gsS 'https://r.jina.ai/<url>' -H 'x-respond-with: markdown'",
                 keyless=True,
             ),
         ),
@@ -241,7 +248,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 PAPERS,
                 "curl",
-                "curl -sS 'https://api.openalex.org/works?search=<q>&per_page=10'",
+                "curl -gsS 'https://api.openalex.org/works?search=<q>&per_page=10'",
                 keyless=True,
             ),
         ),
@@ -255,7 +262,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 PAPERS,
                 "curl",
-                "curl -sS 'https://export.arxiv.org/api/query?search_query=all:<q>&max_results=10'",
+                "curl -gsS 'https://export.arxiv.org/api/query?search_query=all:<q>&max_results=10'",
                 keyless=True,
             ),
         ),
@@ -269,7 +276,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 PAPERS,
                 "curl",
-                "curl -sS 'https://api.semanticscholar.org/graph/v1/paper/search"
+                "curl -gsS 'https://api.semanticscholar.org/graph/v1/paper/search"
                 + "?query=<q>&fields=title,year,externalIds,url&limit=10'",
                 keyless=True,
             ),
@@ -284,7 +291,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 GIT_HOST,
                 "gh",
-                "gh search repos|code|issues '<q>' --json <fields> -L 10",
+                "gh search repos|code|issues '<q>' --json '<fields>' -L 10",
             ),
         ),
         keys=("GH_TOKEN", "GITHUB_TOKEN"),
@@ -318,7 +325,7 @@ class McpServer:
     """
 
     config: str
-    scope: str
+    scope: Scope
 
 
 @dataclass(frozen=True)
@@ -353,17 +360,22 @@ def _load(
     quote file content, and file content can hold credentials.
     """
     try:
-        info = path.stat()
-        if not stat.S_ISREG(info.st_mode):
-            warnings.append(f"could not read {path}: not a regular file")
-            return None
-        if info.st_size > MAX_CONFIG_BYTES:
-            warnings.append(
-                f"could not read {path}: larger than {MAX_CONFIG_BYTES} bytes"
-            )
-            return None
-        data = parse(path.read_bytes())
+        fd = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0),
+        )
+        try:
+            raw = read_bounded_descriptor(fd, path, limit=MAX_CONFIG_BYTES)
+        finally:
+            os.close(fd)
+        data = parse(raw)
     except FileNotFoundError:
+        return None
+    except NotRegularFileError:
+        warnings.append(f"could not read {path}: not a regular file")
+        return None
+    except BoundedReadOverflow:
+        warnings.append(f"could not read {path}: larger than {MAX_CONFIG_BYTES} bytes")
         return None
     except (OSError, ValueError, RecursionError) as exc:
         warnings.append(f"could not read {path}: {type(exc).__name__}")
@@ -388,7 +400,7 @@ def _server_names(
     return [name for name in cast(dict[object, object], table) if isinstance(name, str)]
 
 
-ConfigFile = tuple[str, Path, dict[str, object]]
+ConfigFile = tuple[Scope, Path, dict[str, object]]
 
 
 def codex_configs(
@@ -397,10 +409,11 @@ def codex_configs(
     """Parse the user and project Codex configs once: (scope, path, table)."""
     codex_home = Path(env["CODEX_HOME"]) if env.get("CODEX_HOME") else home / ".codex"
     configs: list[ConfigFile] = []
-    for scope, path in (
+    candidates: tuple[tuple[Scope, Path], ...] = (
         (USER, codex_home / "config.toml"),
         (PROJECT, cwd / ".codex" / "config.toml"),
-    ):
+    )
+    for scope, path in candidates:
         data = _load(path, warnings, _parse_toml)
         if data is not None:
             configs.append((scope, path, data))
@@ -414,37 +427,47 @@ def configured_mcp_servers(
 
     Reads only server names. Values such as `env` and `headers` can hold
     credentials, so they are never read into the result. User-scope configs
-    win over project-scope configs for the same name.
+    list first. A name in any project-scope config reports
+    `project` scope, because the harness may run the repository's server.
     """
-    configs: list[tuple[str, Path, str, Mapping[str, object]]] = []
+    user: list[tuple[Scope, Path, str, Mapping[str, object]]] = []
+    project: list[tuple[Scope, Path, str, Mapping[str, object]]] = []
     claude_user = home / ".claude.json"
     data = _load(claude_user, warnings, _parse_json)
     if data is not None:
-        configs.append((USER, claude_user, "mcpServers", data))
+        user.append((USER, claude_user, "mcpServers", data))
         projects = data.get("projects")
         if isinstance(projects, dict):
             local = cast(dict[str, object], projects).get(str(cwd))
             if isinstance(local, dict):
-                configs.append(
+                user.append(
                     (USER, claude_user, "mcpServers", cast(dict[str, object], local))
                 )
-    for scope, path in (
+    json_configs: tuple[tuple[Scope, Path], ...] = (
         (USER, home / ".cursor" / "mcp.json"),
         (PROJECT, cwd / ".mcp.json"),
         (PROJECT, cwd / ".cursor" / "mcp.json"),
-    ):
+    )
+    for scope, path in json_configs:
         data = _load(path, warnings, _parse_json)
         if data is not None:
-            configs.append((scope, path, "mcpServers", data))
-    configs.extend((scope, path, "mcp_servers", data) for scope, path, data in codex)
+            (user if scope == USER else project).append(
+                (scope, path, "mcpServers", data)
+            )
+    for scope, path, table in codex:
+        (user if scope == USER else project).append((scope, path, "mcp_servers", table))
 
-    found: dict[str, McpServer] = {}
-    for scope, path, key, table in sorted(
-        configs, key=lambda config: config[0] != USER
-    ):
+    sources: dict[str, list[tuple[Scope, Path]]] = {}
+    for scope, path, key, table in (*user, *project):
         for name in _server_names(table, key, path, warnings):
-            _ = found.setdefault(name, McpServer(str(path), scope))
-    return found
+            sources.setdefault(name, []).append((scope, path))
+    return {
+        name: McpServer(
+            str(next((p for s, p in found if s == USER), found[0][1])),
+            PROJECT if any(s == PROJECT for s, _ in found) else USER,
+        )
+        for name, found in sources.items()
+    }
 
 
 def _codex_web_search(codex: list[ConfigFile]) -> str | None:
@@ -461,8 +484,10 @@ def detect_harness(env: Mapping[str, str], codex: list[ConfigFile]) -> Harness:
     """Name the running harness and its native web tools.
 
     `CLAUDECODE=1` is the documented Claude Code subprocess marker. Codex
-    documents its sandbox markers (`CODEX_SANDBOX*`). Other `CODEX_` variables,
-    such as a user-exported `CODEX_HOME`, do not prove that Codex is running.
+    documents its sandbox markers (`CODEX_SANDBOX*`), and injects
+    `CODEX_THREAD_ID` into every shell environment, including `--yolo` runs.
+    Other `CODEX_` variables, such as a user-exported `CODEX_HOME`, do not
+    prove that Codex is running.
     """
     if env.get("CLAUDECODE") == "1":
         return Harness(
@@ -472,7 +497,9 @@ def detect_harness(env: Mapping[str, str], codex: list[ConfigFile]) -> Harness:
                 WEB_EXTRACT: "WebFetch (model summary, not raw text: do not quote it)",
             },
         )
-    if any(name.startswith("CODEX_SANDBOX") for name in env):
+    if "CODEX_THREAD_ID" in env or any(
+        name.startswith("CODEX_SANDBOX") for name in env
+    ):
         if _codex_web_search(codex) == "disabled":
             return Harness("codex", {})
         return Harness(
@@ -570,7 +597,7 @@ def detect_providers(
         ranked = [
             *tiers[capability]["ready"],
             *tiers[capability]["unverified"],
-            *tiers[capability]["mcp"],
+            *sorted(tiers[capability]["mcp"], key=lambda route: route["scope"] != USER),
         ]
         native = harness.native.get(capability)
         if native is not None:
@@ -581,7 +608,7 @@ def detect_providers(
         "harness": harness.name,
         "routes": routes,
         "unusable": unusable,
-        "mcp_servers": sorted(servers),
+        "mcp_servers": {name: servers[name].scope for name in sorted(servers)},
         "warnings": warnings,
     }
 

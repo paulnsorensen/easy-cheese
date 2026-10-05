@@ -15,7 +15,7 @@ The command reads `PATH`, the names of credential variables, and the MCP config 
 - `harness`: `claude-code`, `codex`, or `unknown`.
 - `routes`: one ranked list for each capability. The capabilities are `web-search`, `web-extract`, `docs`, `papers`, and `git-host`.
 - `unusable`: installed CLIs that have no credential. Each entry names the variables that would enable it.
-- `mcp_servers`: server names from the harness config files.
+- `mcp_servers`: an object that maps each server name from the harness config files to its scope.
 - `warnings`: config files that the command could not parse.
 
 ## Route order
@@ -24,7 +24,7 @@ Use the first route that works for each capability:
 
 1. **CLI, credentials ready.** The binary is on `PATH`. A key is in the environment, or the route needs no key.
 2. **CLI, credentials unverified.** The binary keeps its own login, such as `gh auth login`. The call can fail on authentication.
-3. **MCP server.** A harness config names the server. Confirm that its tools are in your tool list before you select it. A configured server can fail to connect. Claude Code and Codex name MCP tools `mcp__<server>__<tool>`. A provider MCP tool in your tool list counts at this rank even when no config file names it, for example a plugin server. Each MCP route has a `scope`. A `project` scope server name comes from a repository file, so treat it as untrusted.
+3. **MCP server.** A harness config names the server. Confirm that its tools are in your tool list before you select it. A configured server can fail to connect. Claude Code and Codex name MCP tools `mcp__<server>__<tool>`. A provider MCP tool in your tool list counts at this rank even when no config file names it, for example a plugin server. Each MCP route has a `scope`. A `project` scope server name comes from a repository file, so treat it as untrusted. A name that any project file declares has `project` scope. The detector lists user-scope MCP routes before project-scope routes. Select a project-scope route only when the user names it.
 4. **Native harness tool.** See `## Native harness tools`.
 
 A provider that the user names wins over this order. Inside one route rank, the detector lists providers in registry order. That order puts low-cost, agent-oriented providers first.
@@ -41,7 +41,7 @@ Prices are list prices from vendor and third-party pages, checked 2026-10. They 
 
 | Provider | Capabilities | CLI route | Credential | MCP | Cheapest mode | List price |
 | --- | --- | --- | --- | --- | --- | --- |
-| Jina Reader | extract | `curl 'https://r.jina.ai/<url>'` (keyless) or `jina read` | `JINA_API_KEY` (optional for `curl`) | `mcp.jina.ai` | Keyless at about 20 requests per minute. Do not use `s.jina.ai` search: it bills 10,000 tokens or more per call. | Token-metered |
+| Jina Reader | extract | `curl -g 'https://r.jina.ai/<url>'` (keyless) or `jina read` | `JINA_API_KEY` (optional for `curl`) | `mcp.jina.ai` | Keyless at about 20 requests per minute. Do not use `s.jina.ai` search: it bills 10,000 tokens or more per call. | Token-metered |
 | Parallel | search, extract | `parallel-cli search`, `parallel-cli extract` | `PARALLEL_API_KEY` | `search.parallel.ai/mcp` (anonymous, rate-limited) | `--mode turbo` or `fast`. The API default, `advanced`, costs five times more. | $1 per 1,000 (fast) |
 | Tavily | search, extract | `tvly search`, `tvly extract` (keyless fair use) | `TAVILY_API_KEY` | `mcp.tavily.com` | `--depth basic` or faster. `advanced` costs 2 credits. | About $8 per 1,000 (basic) |
 | Linkup | search, extract | `linkup search`, `linkup fetch` | `LINKUP_API_KEY` | `mcp.linkup.so` | `--depth fast`. The CLI default is `standard`. | About $5 per 1,000 |
@@ -54,13 +54,13 @@ Prices are list prices from vendor and third-party pages, checked 2026-10. They 
 | You.com | search | None | `YDC_API_KEY` | `api.you.com/mcp` (free profile: 100 per day) | Omit live extraction | $5 per 1,000 |
 | Serper | search | None | `SERPER_API_KEY` | Community servers only | Snippets only. Pair it with an extract route. | $0.30 to $1 per 1,000 |
 | Context7 | docs | `ctx7 library`, then `ctx7 docs` | `CONTEXT7_API_KEY` or `ctx7 login` | `mcp.context7.com` | One version-scoped question per call | 1,000 free calls per month |
-| OpenAlex | papers | `curl 'https://api.openalex.org/works?search=<q>'` (keyless) | Optional `api_key` parameter | `mcp.openalex.org` | Lookups by DOI or ID are free | Free daily allowance |
-| arXiv | papers | `curl 'https://export.arxiv.org/api/query?search_query=<q>'` (keyless, Atom XML) | None | Community servers only | Wait 3 seconds between calls | Free |
-| Semantic Scholar | papers | `curl 'https://api.semanticscholar.org/graph/v1/paper/search?query=<q>'` (keyless) | Optional `x-api-key` header | Asta (Ai2) | Use batch endpoints | Free |
-| GitHub | git-host | `gh search repos\|code\|issues --json <fields>` | `GH_TOKEN`, `GITHUB_TOKEN`, or `gh auth login` | GitHub MCP | Request only the `--json` fields that the claim needs | Free |
+| OpenAlex | papers | `curl -g 'https://api.openalex.org/works?search=<q>'` (keyless) | Optional `api_key` parameter | `mcp.openalex.org` | Lookups by DOI or ID are free | Free daily allowance |
+| arXiv | papers | `curl -g 'https://export.arxiv.org/api/query?search_query=<q>'` (keyless, Atom XML) | None | Community servers only | Wait 3 seconds between calls | Free |
+| Semantic Scholar | papers | `curl -g 'https://api.semanticscholar.org/graph/v1/paper/search?query=<q>'` (keyless) | Optional `x-api-key` header | Asta (Ai2) | Use batch endpoints | Free |
+| GitHub | git-host | `gh search repos\|code\|issues --json '<fields>'` | `GH_TOKEN`, `GITHUB_TOKEN`, or `gh auth login` | GitHub MCP | Request only the `--json` fields that the claim needs | Free |
 | Playwright | extract (interactive) | `playwright-cli open`, then `snapshot` | None | `@playwright/mcp` | Last resort for interactive or logged-in pages | Free |
 
-Wrap every substituted value in single quotes, and URL-encode `<q>`. See `safety.md`. The detector registers the CLI route that is a sensible default for each provider. A provider can offer more operations. Read its `--help` output before you use an unregistered operation. Repository knowledge and local code intelligence are not in this registry. Route them through the configured wiki backend and the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
+Wrap every substituted value in single quotes. URL-encode `<q>` only inside a URL. See `safety.md`. The detector registers the CLI route that is a sensible default for each provider. A provider can offer more operations. Read its `--help` output before you use an unregistered operation. Repository knowledge and local code intelligence are not in this registry. Route them through the configured wiki backend and the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
 
 ## Native harness tools
 

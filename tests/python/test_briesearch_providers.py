@@ -8,6 +8,8 @@ configs, and an environment — and check the ranked routes the agent receives.
 from __future__ import annotations
 
 import json
+import os
+import re
 from pathlib import Path
 from typing import cast
 
@@ -182,7 +184,12 @@ def test_mcp_servers_are_read_from_every_harness_config(
         json.dumps({"mcpServers": {"github": {}}}), encoding="utf-8"
     )
     result = _detect(machine)
-    assert result["mcp_servers"] == ["context7", "exa", "github", "openalex"]
+    assert result["mcp_servers"] == {
+        "context7": "user",
+        "exa": "user",
+        "github": "user",
+        "openalex": "project",
+    }
     assert _routes(result, DOCS) == [("context7", "mcp")]
     assert _routes(result, PAPERS) == [("openalex", "mcp")]
     assert _routes(result, GIT_HOST) == [("github", "mcp")]
@@ -202,7 +209,7 @@ def test_codex_home_overrides_the_default_codex_config(
         "[mcp_servers.decoy]\n", encoding="utf-8"
     )
     result = _detect(machine, {"CODEX_HOME": str(codex_home)})
-    assert result["mcp_servers"] == ["linkup"]
+    assert result["mcp_servers"] == {"linkup": "user"}
 
 
 def test_codex_home_sets_the_web_search_mode(
@@ -223,7 +230,16 @@ def test_codex_home_sets_the_web_search_mode(
 def test_codex_home_alone_does_not_make_the_harness_codex(
     machine: tuple[Path, Path, Path],
 ) -> None:
-    assert _detect(machine, {"CODEX_HOME": "/somewhere"})["harness"] == "unknown"
+    codex_home = machine[2].parent / "codex-home"
+    assert _detect(machine, {"CODEX_HOME": str(codex_home)})["harness"] == "unknown"
+
+
+def test_a_codex_thread_id_alone_makes_the_harness_codex(
+    machine: tuple[Path, Path, Path],
+) -> None:
+    result = _detect(machine, {"CODEX_THREAD_ID": "thread-1"})
+    assert result["harness"] == "codex"
+    assert _routes(result, WEB_SEARCH) == [("native", "native")]
 
 
 def test_claude_code_wins_over_a_codex_sandbox_marker(
@@ -249,6 +265,10 @@ def test_the_command_resolves_a_relative_cwd_and_routes_project_servers(
         ),
         encoding="utf-8",
     )
+    for name in ("CODEX_HOME", "CLAUDECODE", "CODEX_THREAD_ID"):
+        monkeypatch.delenv(name, raising=False)
+    for name in [name for name in os.environ if name.startswith("CODEX_SANDBOX")]:
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("PATH", str(bin_dir))
     monkeypatch.chdir(tmp_path)
@@ -263,19 +283,51 @@ def _mcp_routes(result: dict[str, object], capability: str) -> list[dict[str, ob
     return [r for r in routes[capability] if r["route"] == "mcp"]
 
 
-def test_a_user_config_wins_over_a_project_config_for_the_same_server(
+def test_a_name_in_a_project_config_reports_project_scope_and_the_user_path(
     machine: tuple[Path, Path, Path],
 ) -> None:
     _, home, project = machine
     _ = (project / ".mcp.json").write_text(
         json.dumps({"mcpServers": {"exa": {}}}), encoding="utf-8"
     )
-    (home / ".cursor").mkdir()
-    cursor = home / ".cursor" / "mcp.json"
-    _ = cursor.write_text(json.dumps({"mcpServers": {"exa": {}}}), encoding="utf-8")
-    (route,) = _mcp_routes(_detect(machine), WEB_SEARCH)
-    assert route["config"] == str(cursor)
-    assert route["scope"] == "user"
+    (home / ".codex").mkdir()
+    codex = home / ".codex" / "config.toml"
+    _ = codex.write_text("[mcp_servers.exa]\n", encoding="utf-8")
+    result = _detect(machine)
+    (route,) = _mcp_routes(result, WEB_SEARCH)
+    assert route["config"] == str(codex)
+    assert route["scope"] == "project"
+    assert result["mcp_servers"] == {"exa": "project"}
+
+
+def test_user_scope_mcp_routes_rank_before_project_scope_routes(
+    machine: tuple[Path, Path, Path],
+) -> None:
+    _, home, project = machine
+    _ = (project / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"tavily": {}}}), encoding="utf-8"
+    )
+    _ = (home / ".claude.json").write_text(
+        json.dumps({"mcpServers": {"exa": {}}}), encoding="utf-8"
+    )
+    assert _routes(_detect(machine), WEB_SEARCH) == [("exa", "mcp"), ("tavily", "mcp")]
+
+
+def test_a_project_web_search_value_overrides_the_user_value(
+    machine: tuple[Path, Path, Path],
+) -> None:
+    _, home, project = machine
+    (home / ".codex").mkdir()
+    _ = (home / ".codex" / "config.toml").write_text(
+        'web_search = "live"\n', encoding="utf-8"
+    )
+    (project / ".codex").mkdir()
+    _ = (project / ".codex" / "config.toml").write_text(
+        'web_search = "disabled"\n', encoding="utf-8"
+    )
+    result = _detect(machine, {"CODEX_SANDBOX": "seatbelt"})
+    assert result["harness"] == "codex"
+    assert _routes(result, WEB_SEARCH) == []
 
 
 def test_mcp_routes_carry_the_scope_of_their_config(
@@ -325,8 +377,7 @@ def test_a_login_provider_with_its_key_ranks_ready(
 @pytest.mark.parametrize(
     ("server", "provider"),
     [
-        ("brave-search", "brave"),
-        ("you.com", "you"),
+        ("you-com", "you"),
         ("semantic_scholar", "semantic-scholar"),
     ],
 )
@@ -425,9 +476,9 @@ def test_a_non_regular_config_is_skipped_with_a_warning(
     machine: tuple[Path, Path, Path],
 ) -> None:
     _, home, _ = machine
-    (home / ".claude.json").symlink_to("/dev/zero")
+    (home / ".claude.json").mkdir()
     result = _detect(machine)
-    assert result["mcp_servers"] == []
+    assert result["mcp_servers"] == {}
     assert any("not a regular file" in w for w in _warnings(result))
 
 
@@ -440,7 +491,7 @@ def test_an_oversized_config_is_skipped_with_a_warning(
     )
     monkeypatch.setattr(providers, "MAX_CONFIG_BYTES", 8)
     result = _detect(machine)
-    assert result["mcp_servers"] == []
+    assert result["mcp_servers"] == {}
     assert any("larger than" in w for w in _warnings(result))
 
 
@@ -461,7 +512,14 @@ def test_warnings_never_quote_config_content(machine: tuple[Path, Path, Path]) -
     _ = (project / ".codex" / "config.toml").write_text(
         f'token = "{SECRET}" oops', encoding="utf-8"
     )
-    assert SECRET not in json.dumps(_detect(machine))
+    result = _detect(machine)
+    assert SECRET not in json.dumps(result)
+    assert sorted(_warnings(result)) == sorted(
+        [
+            f"could not read {home / '.claude.json'}: JSONDecodeError",
+            f"could not read {project / '.codex' / 'config.toml'}: TOMLDecodeError",
+        ]
+    )
 
 
 def test_a_toml_config_that_is_not_utf8_is_a_warning_not_a_crash(
@@ -486,7 +544,7 @@ def test_a_config_with_a_non_table_shape_is_a_warning(
         'mcp_servers = "exa"\n', encoding="utf-8"
     )
     result = _detect(machine)
-    assert result["mcp_servers"] == []
+    assert result["mcp_servers"] == {}
     warnings = _warnings(result)
     assert any("top level is list" in w for w in warnings)
     assert any("mcpServers" in w and "not a table" in w for w in warnings)
@@ -498,14 +556,34 @@ def test_every_registry_binary_and_key_is_documented() -> None:
         Path(__file__).resolve().parents[2]
         / "skills/briesearch/references/providers.md"
     ).read_text(encoding="utf-8")
+    registry = doc.split("\n## Registry\n", 1)[1].split("\n## ", 1)[0]
+    rows = "\n".join(line for line in registry.splitlines() if line.startswith("| "))
     binaries = {route.binary for provider in REGISTRY for route in provider.cli}
     keys = {key for provider in REGISTRY for key in provider.keys}
     assert "curl" in binaries
     for token in sorted(binaries | keys):
-        assert token in doc, token
+        assert re.search(rf"(?<![\w-]){re.escape(token)}(?![\w-])", rows), token
 
 
 def test_no_registry_command_double_quotes_a_substituted_value() -> None:
     for provider in REGISTRY:
         for route in provider.cli:
             assert '"' not in route.command, (provider.name, route.command)
+
+
+def test_every_registry_placeholder_sits_inside_single_quotes() -> None:
+    for provider in REGISTRY:
+        for route in provider.cli:
+            spans = [m.span() for m in re.finditer(r"'[^']*'", route.command)]
+            for placeholder in re.finditer(r"<[a-z-]+>", route.command):
+                assert any(
+                    start < placeholder.start() and placeholder.end() < end
+                    for start, end in spans
+                ), (provider.name, route.command, placeholder.group())
+
+
+def test_every_curl_template_disables_globbing() -> None:
+    for provider in REGISTRY:
+        for route in provider.cli:
+            if route.binary == "curl":
+                assert route.command.startswith("curl -g"), route.command
