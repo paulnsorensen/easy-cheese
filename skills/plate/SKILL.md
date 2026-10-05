@@ -57,6 +57,7 @@ New-PR work loads its references in this sequence. Load each reference alone. Cl
 2. Load `references/ordinary-pr.md` for single topology. Load `references/stacks.md` for stacked topology.
 3. Load exactly one provider reference from `references/stacks.md` for stacked topology.
    The provider references are [`gt.md`](references/gt.md), [`git-town.md`](references/git-town.md), and [`gh-stack.md`](references/gh-stack.md).
+   When no provider is usable, `references/stacks.md` routes to [`setup.md`](references/setup.md).
 
 When an existing pull request uses a stack, load `references/stacks.md`. Do not use a bare single-branch push.
 

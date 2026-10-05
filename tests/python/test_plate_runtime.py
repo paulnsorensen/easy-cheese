@@ -551,6 +551,55 @@ def test_stack_tools_reports_missing_providers(
     }
 
 
+@pytest.mark.parametrize(
+    ("filename", "content", "status"),
+    [
+        ("git-town.toml", '[branches]\nmain = "trunk"\n', "available"),
+        (".git-town.toml", '[branches]\nmain = "trunk"\n', "available"),
+        (".git-branches.toml", '[branches]\nmain = "trunk"\n', "available"),
+        ("git-town.toml", '[branches]\nperennials = ["qa"]\n', "not-configured"),
+        ("git-town.toml", '[branches]\nmain = ""\n', "not-configured"),
+        ("git-town.toml", "[branches\n", "not-configured"),
+        ("other.toml", '[branches]\nmain = "trunk"\n', "not-configured"),
+    ],
+)
+def test_git_town_detects_a_committed_config_file_without_local_git_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    filename: str,
+    content: str,
+    status: str,
+) -> None:
+    """A clone of a repo with a committed Git Town file has no local trunk key.
+
+    Git Town reads the trunk from the committed file, so detection must too.
+    """
+    _ = (tmp_path / filename).write_text(content)
+
+    def which(name: str) -> str | None:
+        return f"/bin/{name}" if name in {"git", "git-town"} else None
+
+    monkeypatch.setattr(shutil, "which", which)
+
+    def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args == ["git", "rev-parse", "--git-dir"]:
+            return completed(args, stdout=".git\n")
+        if args == ["git", "config", "--get", "git-town.main-branch"]:
+            return completed(args, returncode=1)
+        if args == ["git", "rev-parse", "--show-toplevel"]:
+            return completed(args, stdout=f"{tmp_path}\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+    result = stack_tools.detect_stack_tools(tmp_path)
+
+    providers = cast(dict[str, dict[str, object]], result["providers"])
+    assert providers["git-town"]["status"] == status
+    assert providers["git-town"]["repository_signal"] is (status == "available")
+    assert result["recommended"] == ("git-town" if status == "available" else None)
+
+
 def test_validate_publication_commit_only_landing_with_na_topology_is_valid() -> None:
     landing: dict[str, object] = {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
     overrides: dict[str, object] = {

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 from typing import cast
 
@@ -14,6 +15,8 @@ _TIMEOUT_SECONDS = 5
 _REMOTE_TIMEOUT_SECONDS = 10
 _STATUS_LINE = re.compile(r"^HTTP/[\d.]+\s+(\d{3})\b")
 _STDERR_LIMIT = 2000
+# File names Git Town accepts for its committed, team-shared configuration.
+_GIT_TOWN_CONFIG_FILES = ("git-town.toml", ".git-town.toml", ".git-branches.toml")
 
 
 def _run(
@@ -40,6 +43,32 @@ def _git_dir(cwd: Path) -> Path | None:
         return None
     path = Path(result.stdout.strip())
     return path if path.is_absolute() else cwd / path
+
+
+def _git_town_file_trunk(cwd: Path) -> bool:
+    """Whether a committed Git Town config file declares a trunk branch.
+
+    A teammate who clones a repository with a committed `git-town.toml` has no
+    local `git-town.main-branch` key, but Git Town reads the trunk from the file.
+    """
+    result = _run(["git", "rev-parse", "--show-toplevel"], cwd)
+    if result is None or result.returncode != 0 or not result.stdout.strip():
+        return False
+    root = Path(result.stdout.strip())
+    for name in _GIT_TOWN_CONFIG_FILES:
+        try:
+            config = tomllib.loads((root / name).read_text())
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+            continue
+        branches = config.get("branches")
+        trunk = (
+            cast(dict[str, object], branches).get("main")
+            if isinstance(branches, dict)
+            else None
+        )
+        if isinstance(trunk, str) and trunk.strip():
+            return True
+    return False
 
 
 def _truncated(text: str) -> str | None:
@@ -81,8 +110,9 @@ def _gh_stack_enablement(cwd: Path) -> dict[str, object]:
 
     `GET /repos/{owner}/{repo}/stacks` answers 200 when Stacked PRs is enabled
     and 404 when it is not. Every other outcome — authentication, service, or
-    an unresolvable repository — stays indeterminate so the caller keeps the
-    exit-code-4 fallback instead of reporting a false enablement verdict.
+    an unresolvable repository — stays indeterminate so the caller falls back
+    to the remote-operation exit code (`9` means not enabled) instead of
+    reporting a false enablement verdict.
 
     `gh-stack.md` requires the caller to preserve the status and stderr of a
     service failure, so the probe reports `http_status`, `exit_status`, and
@@ -120,7 +150,7 @@ def detect_stack_tools(cwd: Path) -> dict[str, object]:
         git_town_result
         and git_town_result.returncode == 0
         and git_town_result.stdout.strip()
-    )
+    ) or (git_town_result is not None and _git_town_file_trunk(cwd))
 
     gh_installed = shutil.which("gh") is not None
     extension_result = _run(["gh", "extension", "list"], cwd) if gh_installed else None

@@ -41,14 +41,17 @@ that the repository metadata directory is the literal `.git` path.
 | Provider | Installed | Repository signal | Reference |
 | --- | --- | --- | --- |
 | Graphite | `gt --version` | `$GIT_DIR/.graphite_repo_config` | [`gt.md`](gt.md) |
-| Git Town | `git town --version` | `git-town.main-branch` config | [`git-town.md`](git-town.md) |
+| Git Town | `git town --version` | `git-town.main-branch` config or a committed `git-town.toml` trunk | [`git-town.md`](git-town.md) |
 | `gh stack` | `gh extension list` contains `github/gh-stack` | `gh api --include "repos/{owner}/{repo}/stacks"` preflight | [`gh-stack.md`](gh-stack.md) |
 
 Use the `stack-tools` report on every invocation. Preserve the provider that already tracks the branch.
 When no provider tracks it, use the report's `recommended` provider. State the choice.
 Only a `gh-stack` status of `not-enabled` (preflight `404`) is a repository enablement requirement.
-Other non-`available` statuses are environment failures. Exit code 4 remains the fallback.
+Other non-`available` statuses are environment failures.
+When the preflight is indeterminate, a remote operation's exit code `9` is the fallback enablement signal.
+Exit code `4` is a generic GitHub API failure, not an enablement signal.
 Stop with setup instructions when no provider is usable after you select stacked.
+Take those instructions from [`setup.md`](setup.md).
 Do not emulate stacking with plain pushes.
 
 ## Existing stacked PR updates
