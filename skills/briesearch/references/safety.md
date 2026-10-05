@@ -15,7 +15,7 @@ Rules:
 
 ## Protect private context
 
-Externally hosted documentation, web-search/extraction, wiki, and Git-hosting providers may log queries (for example any search, extraction, documentation, or scholarly provider in `providers.md`, or a hosted Git integration). A local provider may avoid that exposure, but provider choice never weakens the no-exfiltration rule.
+Externally hosted providers may log queries. These providers include documentation, web-search, extraction, wiki, and Git-hosting providers. Examples are any provider in `providers.md` and a hosted Git integration. A local provider may avoid that exposure. Provider choice never weakens the no-exfiltration rule.
 
 Rules:
 
@@ -41,4 +41,13 @@ Rules:
 
 - Let a CLI read its key from the environment or its stored login.
 - Do not write a key value into a command argument, a manifest, a raw body, or a report. Shell history and logs keep command arguments.
-- For a raw `curl` route, reference the variable, such as `-H "Authorization: Bearer $JINA_API_KEY"`. Do not expand it in the visible command.
+- For a raw `curl` route, send the header on stdin from a shell builtin. Do not put the key in `curl` arguments, because `ps` shows them. Example: `printf 'header = "Authorization: Bearer %s"\n' "$JINA_API_KEY" | curl --config - -sS '<url>'`.
+
+## Quote command values
+
+Rules:
+
+- Wrap every substituted value in single quotes, such as `'<url>'` or `'<q>'`.
+- Replace each single quote inside a value with `'\''`.
+- URL-encode `<q>` before you put it in a URL.
+- Do not use double quotes. The shell expands `$`, backticks, and `\` inside them.

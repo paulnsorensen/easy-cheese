@@ -26,8 +26,9 @@ import json
 import os
 import re
 import shutil
+import stat
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -43,6 +44,12 @@ CAPABILITIES = (WEB_SEARCH, WEB_EXTRACT, DOCS, PAPERS, GIT_HOST)
 
 READY = "ready"
 UNVERIFIED = "unverified"
+
+USER = "user"
+PROJECT = "project"
+
+# A real ~/.claude.json is about 100 KB; the cap only stops absurd files.
+MAX_CONFIG_BYTES = 16 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -75,7 +82,8 @@ class Provider:
 
 # Registry order is the default preference inside one route tier. Cheap,
 # agent-oriented providers come first; `references/providers.md` gives the
-# cost evidence. Commands are templates: `<q>` is a query, `<url>` a URL.
+# cost evidence. Commands are templates: `<q>` is a URL-encoded query, `<url>` a URL.
+# Single quotes wrap each substituted value; `references/safety.md` has the rule.
 # A provider lists only the CLI routes that are a sensible default for it:
 # Jina search bills a 10k-token minimum, so Jina registers extraction only.
 REGISTRY: tuple[Provider, ...] = (
@@ -83,11 +91,11 @@ REGISTRY: tuple[Provider, ...] = (
         "jina",
         (WEB_EXTRACT,),
         cli=(
-            CliRoute(WEB_EXTRACT, "jina", 'jina read "<url>" --json'),
+            CliRoute(WEB_EXTRACT, "jina", "jina read '<url>' --json"),
             CliRoute(
                 WEB_EXTRACT,
                 "curl",
-                'curl -sS "https://r.jina.ai/<url>" -H "x-respond-with: markdown"',
+                "curl -sS 'https://r.jina.ai/<url>' -H 'x-respond-with: markdown'",
                 keyless=True,
             ),
         ),
@@ -102,12 +110,12 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 WEB_SEARCH,
                 "parallel-cli",
-                'parallel-cli search "<q>" --mode fast --max-results 5 --json',
+                "parallel-cli search '<q>' --mode fast --max-results 5 --json",
             ),
             CliRoute(
                 WEB_EXTRACT,
                 "parallel-cli",
-                'parallel-cli extract "<url>" --objective "<claim>" --json',
+                "parallel-cli extract '<url>' --objective '<claim>' --json",
             ),
         ),
         keys=("PARALLEL_API_KEY",),
@@ -121,10 +129,10 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 WEB_SEARCH,
                 "tvly",
-                'tvly search "<q>" --depth basic --max-results 5 --json',
+                "tvly search '<q>' --depth basic --max-results 5 --json",
                 keyless=True,
             ),
-            CliRoute(WEB_EXTRACT, "tvly", 'tvly extract "<url>" --json', keyless=True),
+            CliRoute(WEB_EXTRACT, "tvly", "tvly extract '<url>' --json", keyless=True),
         ),
         keys=("TAVILY_API_KEY",),
         mcp=("tavily",),
@@ -134,8 +142,8 @@ REGISTRY: tuple[Provider, ...] = (
         "linkup",
         (WEB_SEARCH, WEB_EXTRACT),
         cli=(
-            CliRoute(WEB_SEARCH, "linkup", 'linkup search "<q>" --depth fast --json'),
-            CliRoute(WEB_EXTRACT, "linkup", 'linkup fetch "<url>" --json'),
+            CliRoute(WEB_SEARCH, "linkup", "linkup search '<q>' --depth fast --json"),
+            CliRoute(WEB_EXTRACT, "linkup", "linkup fetch '<url>' --json"),
         ),
         keys=("LINKUP_API_KEY",),
         mcp=("linkup",),
@@ -144,15 +152,15 @@ REGISTRY: tuple[Provider, ...] = (
     Provider(
         "brave",
         (WEB_SEARCH,),
-        cli=(CliRoute(WEB_SEARCH, "bx", 'bx web "<q>" --count 5'),),
+        cli=(CliRoute(WEB_SEARCH, "bx", "bx web '<q>' --count 5"),),
         keys=("BRAVE_SEARCH_API_KEY",),
-        mcp=("brave",),
+        mcp=("brave", "bravesearch"),
         cheap_mode="--count 5; prefer bx web over bx context",
     ),
     Provider(
         "perplexity",
         (WEB_SEARCH,),
-        cli=(CliRoute(WEB_SEARCH, "pplx", 'pplx search web "<q>" -n 5'),),
+        cli=(CliRoute(WEB_SEARCH, "pplx", "pplx search web '<q>' -n 5"),),
         keys=("PERPLEXITY_API_KEY",),
         login=True,
         mcp=("perplexity", "pplx"),
@@ -168,7 +176,7 @@ REGISTRY: tuple[Provider, ...] = (
     Provider(
         "serpapi",
         (WEB_SEARCH,),
-        cli=(CliRoute(WEB_SEARCH, "serpapi", 'serpapi search engine=google q="<q>"'),),
+        cli=(CliRoute(WEB_SEARCH, "serpapi", "serpapi search engine=google q='<q>'"),),
         keys=("SERPAPI_KEY",),
         login=True,
         mcp=("serpapi",),
@@ -181,7 +189,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 WEB_EXTRACT,
                 "firecrawl",
-                'firecrawl scrape "<url>" --format markdown --only-main-content',
+                "firecrawl scrape '<url>' --format markdown --only-main-content",
             ),
         ),
         keys=("FIRECRAWL_API_KEY",),
@@ -200,7 +208,7 @@ REGISTRY: tuple[Provider, ...] = (
         "you",
         (WEB_SEARCH,),
         keys=("YDC_API_KEY",),
-        mcp=("youdotcom", "ydc", "you.com"),
+        mcp=("youdotcom", "ydc", "you.com", "youcom"),
         cheap_mode="omit live extraction",
     ),
     Provider(
@@ -217,8 +225,8 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 DOCS,
                 "ctx7",
-                'ctx7 library <name> "<question>" --json, then '
-                + 'ctx7 docs <library-id> "<question>" --json',
+                "ctx7 library '<name>' '<question>' --json, then "
+                + "ctx7 docs '<library-id>' '<question>' --json",
             ),
         ),
         keys=("CONTEXT7_API_KEY",),
@@ -233,7 +241,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 PAPERS,
                 "curl",
-                'curl -sS "https://api.openalex.org/works?search=<q>&per_page=10"',
+                "curl -sS 'https://api.openalex.org/works?search=<q>&per_page=10'",
                 keyless=True,
             ),
         ),
@@ -247,7 +255,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 PAPERS,
                 "curl",
-                'curl -sS "https://export.arxiv.org/api/query?search_query=all:<q>&max_results=10"',
+                "curl -sS 'https://export.arxiv.org/api/query?search_query=all:<q>&max_results=10'",
                 keyless=True,
             ),
         ),
@@ -261,8 +269,8 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 PAPERS,
                 "curl",
-                'curl -sS "https://api.semanticscholar.org/graph/v1/paper/search'
-                + '?query=<q>&fields=title,year,externalIds,url&limit=10"',
+                "curl -sS 'https://api.semanticscholar.org/graph/v1/paper/search"
+                + "?query=<q>&fields=title,year,externalIds,url&limit=10'",
                 keyless=True,
             ),
         ),
@@ -276,7 +284,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 GIT_HOST,
                 "gh",
-                'gh search repos|code|issues "<q>" --json <fields> -L 10',
+                "gh search repos|code|issues '<q>' --json <fields> -L 10",
             ),
         ),
         keys=("GH_TOKEN", "GITHUB_TOKEN"),
@@ -291,7 +299,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 WEB_EXTRACT,
                 "playwright-cli",
-                'playwright-cli open "<url>", then playwright-cli snapshot',
+                "playwright-cli open '<url>', then playwright-cli snapshot",
                 keyless=True,
             ),
         ),
@@ -299,6 +307,18 @@ REGISTRY: tuple[Provider, ...] = (
         cheap_mode="last resort for interactive or logged-in pages",
     ),
 )
+
+
+@dataclass(frozen=True)
+class McpServer:
+    """Where a configured MCP server name came from.
+
+    `scope` is `project` when the repository controls the config file, so the
+    server name is untrusted. Other configs are `user`.
+    """
+
+    config: str
+    scope: str
 
 
 @dataclass(frozen=True)
@@ -312,89 +332,137 @@ _TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
 
 def _tokens(server: str) -> set[str]:
     lowered = server.casefold()
-    return {lowered, *(token for token in _TOKEN_SPLIT.split(lowered) if token)}
+    parts = {token for token in _TOKEN_SPLIT.split(lowered) if token}
+    return {lowered, _TOKEN_SPLIT.sub("", lowered), *parts}
 
 
-def _json_servers(path: Path, warnings: list[str]) -> dict[str, object] | None:
+def _parse_json(raw: bytes) -> object:
+    return cast(object, json.loads(raw.decode("utf-8")))
+
+
+def _parse_toml(raw: bytes) -> object:
+    return cast(object, tomllib.loads(raw.decode("utf-8")))
+
+
+def _load(
+    path: Path, warnings: list[str], parse: Callable[[bytes], object]
+) -> dict[str, object] | None:
+    """Parse one config file that is a regular file under the size cap.
+
+    Warnings name the path and the exception type only: parser messages can
+    quote file content, and file content can hold credentials.
+    """
     try:
-        data = cast(object, json.loads(path.read_text(encoding="utf-8")))
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode):
+            warnings.append(f"could not read {path}: not a regular file")
+            return None
+        if info.st_size > MAX_CONFIG_BYTES:
+            warnings.append(
+                f"could not read {path}: larger than {MAX_CONFIG_BYTES} bytes"
+            )
+            return None
+        data = parse(path.read_bytes())
     except FileNotFoundError:
         return None
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:
         warnings.append(f"could not read {path}: {type(exc).__name__}")
         return None
-    return cast(dict[str, object], data) if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        warnings.append(
+            f"ignored {path}: top level is {type(data).__name__}, not a table"
+        )
+        return None
+    return cast(dict[str, object], data)
 
 
-def _server_names(table: object) -> list[str]:
+def _server_names(
+    config: Mapping[str, object], key: str, source: Path, warnings: list[str]
+) -> list[str]:
+    table = config.get(key)
+    if table is None:
+        return []
     if not isinstance(table, dict):
+        warnings.append(f"ignored {key} in {source}: not a table")
         return []
     return [name for name in cast(dict[object, object], table) if isinstance(name, str)]
 
 
-def _toml(path: Path, warnings: list[str]) -> dict[str, object] | None:
-    try:
-        with path.open("rb") as handle:
-            return cast(dict[str, object], tomllib.load(handle))
-    except FileNotFoundError:
-        return None
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        warnings.append(f"could not read {path}: {type(exc).__name__}")
-        return None
+ConfigFile = tuple[str, Path, dict[str, object]]
+
+
+def codex_configs(
+    home: Path, cwd: Path, env: Mapping[str, str], warnings: list[str]
+) -> list[ConfigFile]:
+    """Parse the user and project Codex configs once: (scope, path, table)."""
+    codex_home = Path(env["CODEX_HOME"]) if env.get("CODEX_HOME") else home / ".codex"
+    configs: list[ConfigFile] = []
+    for scope, path in (
+        (USER, codex_home / "config.toml"),
+        (PROJECT, cwd / ".codex" / "config.toml"),
+    ):
+        data = _load(path, warnings, _parse_toml)
+        if data is not None:
+            configs.append((scope, path, data))
+    return configs
 
 
 def configured_mcp_servers(
-    home: Path, cwd: Path, env: Mapping[str, str], warnings: list[str]
-) -> dict[str, str]:
+    home: Path, cwd: Path, codex: list[ConfigFile], warnings: list[str]
+) -> dict[str, McpServer]:
     """Map each MCP server name in a known harness config to its config file.
 
     Reads only server names. Values such as `env` and `headers` can hold
-    credentials, so they are never read into the result.
+    credentials, so they are never read into the result. User-scope configs
+    win over project-scope configs for the same name.
     """
-    found: dict[str, str] = {}
-
-    def add(names: list[str], source: Path) -> None:
-        for name in names:
-            _ = found.setdefault(name, str(source))
-
+    configs: list[tuple[str, Path, str, Mapping[str, object]]] = []
     claude_user = home / ".claude.json"
-    data = _json_servers(claude_user, warnings)
+    data = _load(claude_user, warnings, _parse_json)
     if data is not None:
-        add(_server_names(data.get("mcpServers")), claude_user)
+        configs.append((USER, claude_user, "mcpServers", data))
         projects = data.get("projects")
         if isinstance(projects, dict):
-            project = cast(dict[str, object], projects).get(str(cwd))
-            if isinstance(project, dict):
-                add(_server_names(cast(dict[str, object], project).get("mcpServers")), claude_user)
-    for path in (cwd / ".mcp.json", home / ".cursor" / "mcp.json", cwd / ".cursor" / "mcp.json"):
-        data = _json_servers(path, warnings)
+            local = cast(dict[str, object], projects).get(str(cwd))
+            if isinstance(local, dict):
+                configs.append(
+                    (USER, claude_user, "mcpServers", cast(dict[str, object], local))
+                )
+    for scope, path in (
+        (USER, home / ".cursor" / "mcp.json"),
+        (PROJECT, cwd / ".mcp.json"),
+        (PROJECT, cwd / ".cursor" / "mcp.json"),
+    ):
+        data = _load(path, warnings, _parse_json)
         if data is not None:
-            add(_server_names(data.get("mcpServers")), path)
-    codex_home = Path(env["CODEX_HOME"]) if env.get("CODEX_HOME") else home / ".codex"
-    for path in (codex_home / "config.toml", cwd / ".codex" / "config.toml"):
-        data = _toml(path, warnings)
-        if data is not None:
-            add(_server_names(data.get("mcp_servers")), path)
+            configs.append((scope, path, "mcpServers", data))
+    configs.extend((scope, path, "mcp_servers", data) for scope, path, data in codex)
+
+    found: dict[str, McpServer] = {}
+    for scope, path, key, table in sorted(
+        configs, key=lambda config: config[0] != USER
+    ):
+        for name in _server_names(table, key, path, warnings):
+            _ = found.setdefault(name, McpServer(str(path), scope))
     return found
 
 
-def _codex_web_search(home: Path, cwd: Path, env: Mapping[str, str]) -> str | None:
+def _codex_web_search(codex: list[ConfigFile]) -> str | None:
     """The Codex `web_search` mode from the nearest config, if set."""
-    codex_home = Path(env["CODEX_HOME"]) if env.get("CODEX_HOME") else home / ".codex"
     mode: str | None = None
-    for path in (codex_home / "config.toml", cwd / ".codex" / "config.toml"):
-        data = _toml(path, [])
-        value = data.get("web_search") if data is not None else None
+    for _, _, data in codex:
+        value = data.get("web_search")
         if isinstance(value, str):
             mode = value
     return mode
 
 
-def detect_harness(home: Path, cwd: Path, env: Mapping[str, str]) -> Harness:
+def detect_harness(env: Mapping[str, str], codex: list[ConfigFile]) -> Harness:
     """Name the running harness and its native web tools.
 
     `CLAUDECODE=1` is the documented Claude Code subprocess marker. Codex
-    documents no single marker, so any `CODEX_` variable counts as Codex.
+    documents its sandbox markers (`CODEX_SANDBOX*`). Other `CODEX_` variables,
+    such as a user-exported `CODEX_HOME`, do not prove that Codex is running.
     """
     if env.get("CLAUDECODE") == "1":
         return Harness(
@@ -404,8 +472,8 @@ def detect_harness(home: Path, cwd: Path, env: Mapping[str, str]) -> Harness:
                 WEB_EXTRACT: "WebFetch (model summary, not raw text: do not quote it)",
             },
         )
-    if any(name.startswith("CODEX_") for name in env):
-        if _codex_web_search(home, cwd, env) == "disabled":
+    if any(name.startswith("CODEX_SANDBOX") for name in env):
+        if _codex_web_search(codex) == "disabled":
             return Harness("codex", {})
         return Harness(
             "codex",
@@ -417,7 +485,9 @@ def detect_harness(home: Path, cwd: Path, env: Mapping[str, str]) -> Harness:
     return Harness("unknown", {})
 
 
-def _cli_auth(provider: Provider, route: CliRoute, env: Mapping[str, str]) -> str | None:
+def _cli_auth(
+    provider: Provider, route: CliRoute, env: Mapping[str, str]
+) -> str | None:
     """How the route authenticates, or None when it cannot.
 
     A set key wins even on a keyless route: a keyed account has higher limits,
@@ -440,12 +510,14 @@ def detect_providers(
 ) -> dict[str, object]:
     """Rank every usable route per capability: ready CLI, unverified CLI, MCP, native."""
     warnings: list[str] = []
-    servers = configured_mcp_servers(home, cwd, env, warnings)
-    harness = detect_harness(home, cwd, env)
+    codex = codex_configs(home, cwd, env, warnings)
+    servers = configured_mcp_servers(home, cwd, codex, warnings)
+    harness = detect_harness(env, codex)
     search_path = env.get("PATH", "")
 
     tiers: dict[str, dict[str, list[dict[str, object]]]] = {
-        capability: {"ready": [], "unverified": [], "mcp": []} for capability in CAPABILITIES
+        capability: {"ready": [], "unverified": [], "mcp": []}
+        for capability in CAPABILITIES
     }
     unusable: list[dict[str, object]] = []
     for provider in registry:
@@ -460,7 +532,8 @@ def detect_providers(
                         "capability": route.capability,
                         "route": "cli",
                         "binary": route.binary,
-                        "reason": "no credential: set one of " + ", ".join(provider.keys),
+                        "reason": "no credential: set one of "
+                        + ", ".join(provider.keys),
                     }
                 )
                 continue
@@ -486,7 +559,8 @@ def detect_providers(
                         "provider": provider.name,
                         "route": "mcp",
                         "server": name,
-                        "config": servers[name],
+                        "config": servers[name].config,
+                        "scope": servers[name].scope,
                         "cheap_mode": provider.cheap_mode,
                     }
                 )

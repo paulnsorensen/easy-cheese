@@ -1,6 +1,6 @@
 # Unavailable providers
 
-A provider is an implementation detail; the routed capability is the contract. Use the next route that `providers` lists for the capability: a CLI, then an MCP tool in your tool list, then a native harness tool. See `providers.md`.
+A provider is an implementation detail; the routed capability is the contract. Use the next route that `providers` lists for the capability. The order is a CLI, then an MCP tool in your tool list, then a native harness tool. This order covers only the detector capabilities. Wiki and local code keep their own routing rules. See `providers.md`.
 
 ## Capability fallbacks
 

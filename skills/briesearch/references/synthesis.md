@@ -60,7 +60,7 @@ Skip link verification only for inline `file:line` references and URLs that the 
 | Sources disagree | `don't know` — and surface the disagreement |
 | Single source per claim | cap at `speculating` unless authoritative for that claim |
 
-**Independent means a separate origin, not a separate URL or provider.** Combine pages that have the same root domain or upstream source. Determine criticality from the claim and capability. Documentation is critical for a version-specific API claim. Current web evidence is critical for a freshness claim. Local code is critical for current repository behavior. Repository knowledge is critical for prior decisions and rationale. Git hosting evidence usually supports other evidence. It becomes critical when the question asks about hosted state or precedent. A missing named provider does not reduce confidence when an equivalent source supplies the required evidence.
+**Independent means a separate origin, not a separate URL or provider.** Combine pages that have the same root domain or upstream source. Determine criticality from the claim and capability. Documentation is critical for a version-specific API claim. Current web evidence is critical for a freshness claim. Scholarly evidence is critical for a claim that rests on a paper or citation. Local code is critical for current repository behavior. Repository knowledge is critical for prior decisions and rationale. Git hosting evidence usually supports other evidence. It becomes critical when the question asks about hosted state or precedent. A missing named provider does not reduce confidence when an equivalent source supplies the required evidence.
 
 ## Absence and negative claims
 

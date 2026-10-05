@@ -15,6 +15,7 @@ Select one tier before routing. The tier sets the starting budget, the sub-agent
 Rules:
 
 - **Escalate on conflict.** Two credible sources that disagree on a decision-critical fact move the run up one tier. Record the `unresolved-contradiction` extension.
+- **Conflict at `deep`.** A run at `deep` cannot move up. Record the `unresolved-contradiction` extension and spend it. Report the conflict if it stays open.
 - **Never de-escalate silently.** Report a lower tier than the plan in the routing block.
 - **Spawn workers in waves for `deep`.** Wave 1 covers the subqueries. A gap review follows. Wave 2 covers only the gaps.
 - **Re-read raw text for each numeric or dated claim in `deep`.** Mark each claim `confirmed`, `conflicting`, or `unsupported`. Report each conflict.
