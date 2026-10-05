@@ -15,7 +15,7 @@ Rules:
 
 ## Protect private context
 
-Externally hosted documentation, web-search/extraction, wiki, and Git-hosting providers may log queries (for example Context7, Tavily, Exa, or a hosted Git integration). A local provider may avoid that exposure, but provider choice never weakens the no-exfiltration rule.
+Externally hosted documentation, web-search/extraction, wiki, and Git-hosting providers may log queries (for example any search, extraction, documentation, or scholarly provider in `providers.md`, or a hosted Git integration). A local provider may avoid that exposure, but provider choice never weakens the no-exfiltration rule.
 
 Rules:
 
@@ -34,3 +34,11 @@ Rules:
 - Store only a display URL with user information, query values, and fragments removed.
 - Store a one-way full-URL digest when later correlation is required.
 - Never print a full URL in a diagnostic.
+
+## Protect provider credentials
+
+Rules:
+
+- Let a CLI read its key from the environment or its stored login.
+- Do not write a key value into a command argument, a manifest, a raw body, or a report. Shell history and logs keep command arguments.
+- For a raw `curl` route, reference the variable, such as `-H "Authorization: Bearer $JINA_API_KEY"`. Do not expand it in the visible command.

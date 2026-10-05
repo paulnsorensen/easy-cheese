@@ -20,10 +20,10 @@ Accept the complete user prompt as the research question. Ask one question only 
 
 ## Flow
 
-1. **Classify.** Identify the required source types and research method.
+1. **Classify.** Identify the required source types, the research method, and the depth tier: `quick`, `standard`, or `deep`. See `references/budgets.md`.
 2. **Plan.** Use a compact freshness plan for one time-sensitive fact. Use the full plan for comparisons, best practices, reports, or questions with multiple parts. Define decisions, constraints, subqueries, and stop criteria. See `references/query-planning.md`.
-3. **Route.** Select the required capabilities and one provider for each capability. Follow `references/routing.md`. Then emit the routing block. Run each capability marked `YES` through its selected provider or an explicit fallback.
-4. **Gather.** Prefer native easy-cheese helpers and backends when they are available. Otherwise, select one equivalent provider. Load only the selected provider tools when the harness defers schemas. Fetch independent capabilities in parallel when the harness supports parallel work. Send heavy fetches to a research sub-agent. See `## Sub-agent context gate`. Verify cited URLs with the selected provider tool. Select an explicit fallback provider when that tool cannot retrieve a URL. See `references/routing.md` § Provider tool sets. Record each call in the capture manifest immediately. Include the provider, tool, and status. Declare the call budget before the first call. Do not repeat a logged search. Do not extract a logged URL again.
+3. **Route.** Select the required capabilities. Run `providers` to list the usable routes for each capability. Select one route for each capability. Follow `references/routing.md` and `references/providers.md`. Then emit the routing block. Run each capability marked `YES` through its selected route or an explicit fallback.
+4. **Gather.** Prefer a CLI route, then an MCP tool in your tool list, then a native harness tool. Load only the selected provider tools when the harness defers schemas. Fetch independent capabilities in parallel when the harness supports parallel work. Send heavy fetches to a research sub-agent. See `## Sub-agent context gate`. Verify cited URLs with a retrieval route that returns raw page text. Never quote a model summary. See `references/routing.md` § Provider tool sets. Record each call in the capture manifest immediately. Include the provider, tool, and status. Declare the call budget before the first call. Do not repeat a logged search. Do not extract a logged URL again.
 5. **Synthesize.** Build the claim evidence table from `references/synthesis.md`. Verify each link. Apply the confidence cap. Run `ground-check` and `budget-check` for a deep report. Compare the conclusion with the raw evidence.
 6. **Stop.** Hand off the result. Do not implement the result. Do not turn citations into design choices. The next skill uses the report. Treat source alternatives as open questions, not recommendations. See the alternatives section in `references/synthesis.md`. Implement only when the current prompt explicitly requests research-informed implementation.
 
@@ -43,17 +43,9 @@ Start one small sub-agent for each independent heavy source. Start these sub-age
 
 **Sub-agent selection.** Select a `researcher` through the shared agent resolver. Gather inline when no eligible fresh-context worker exists. Keep result counts low. Write raw content to disk as you receive it. Record this reduced topology. Stop only when a required capability has no usable provider.
 
-## Preferred capabilities and providers
+## Capabilities and providers
 
-Prefer a native easy-cheese helper or backend for each capability. Otherwise, choose one equivalent provider. The provider names are examples, not requirements.
-
-| Capability | Suitable providers and fallbacks |
-| --- | --- |
-| Library or API documentation | Documentation helper, Context7, official vendor documentation, `llms.txt`, or package README |
-| Current web discovery and extraction | Native web search and open, Tavily search and extract, Exa search and contents, or vendor pages |
-| Repository knowledge or wiki | Hallouminate, llm-wiki, or focused Markdown ADR and wiki reads |
-| Local code intelligence | Backends selected by the shared [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) contract |
-| Git hosting examples | `gh`, a Git hosting integration, or a web search limited to the host |
+The capabilities in `references/routing.md` are the contract. Providers are replaceable routes. `references/providers.md` lists candidate providers with their CLIs, MCP servers, credentials, and cheapest modes. Do not hard-code one vendor. Local code intelligence follows the shared [`code-intelligence-routing.md`](../cheese/references/code-intelligence-routing.md) contract.
 
 Do not lower confidence only because you substitute a provider. Lower confidence when the replacement gives weaker evidence or leaves a critical question unanswered.
 
@@ -81,9 +73,10 @@ Use the style and citation format in [`../cheese/references/formatting.md`](../c
 - Use [`references/commands.md`](references/commands.md) for the generated bundle command inventory.
 - Use `references/query-planning.md` for plans, decomposition, parallel work, and stop criteria.
 - Use `references/routing.md` for the capability matrix, provider selection, and source priority.
+- Use `references/providers.md` for route detection, route order, the provider registry, and native harness tools.
 - Use `references/synthesis.md` for claim evidence, confidence limits, and output format.
 - Use `references/context-isolation.md` to keep raw content out of the main context.
-- Use `references/budgets.md` for call budgets, extension gaps, and duplicate-call rules.
+- Use `references/budgets.md` for depth tiers, call budgets, extension gaps, and duplicate-call rules.
 - Use `references/safety.md` for untrusted content and data protection rules.
 - Use `references/unavailable.md` for provider substitutions and uncovered capabilities.
 - Use `references/evals.md` for trigger queries and trace checks.

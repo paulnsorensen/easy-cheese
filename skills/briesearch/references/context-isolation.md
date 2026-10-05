@@ -12,7 +12,7 @@ Apply context isolation when a selected provider operation is likely to return m
 - Deep research or report operations that must retain their sources.
 - Any response likely to crowd out the routing plan and claim table.
 
-Provider examples include Tavily crawl or research, Exa contents, and batches of native web opens. Skip isolation for snippet triage. Also skip it for a small set of focused page reads.
+Examples include a provider crawl or research operation, multi-URL contents retrieval, and batches of CLI extract calls. Skip isolation for snippet triage. Also skip it for a small set of focused page reads.
 
 ## The recipe
 
@@ -47,9 +47,9 @@ Provider examples include Tavily crawl or research, Exa contents, and batches of
   "budget": {"search": 6, "extract": 8, "spawn": 1},
   "extensions": [],
   "calls": [
-    {"kind": "search", "provider": "tavily", "tool": "tavily_search",
-     "query": "reciprocal rank fusion k", "filters": {"days": 30}, "status": "ok"},
-    {"kind": "extract", "provider": "tavily", "tool": "tavily_extract",
+    {"kind": "search", "provider": "parallel", "tool": "parallel-cli search",
+     "query": "reciprocal rank fusion k", "filters": {"mode": "fast"}, "status": "ok"},
+    {"kind": "extract", "provider": "jina", "tool": "curl r.jina.ai",
      "url": "https://example.com/rrf",
      "url_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
      "file": "raw/01-example.md", "title": "RRF",
