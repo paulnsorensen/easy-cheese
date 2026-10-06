@@ -20,7 +20,7 @@ The command reads `PATH`, the names of credential variables, and the MCP config 
 
 ## Route order
 
-Use the first route that works for each capability:
+Use the first route that works for each capability. The `git-host` capability lists MCP routes before CLI routes (see below):
 
 1. **CLI, credentials ready.** The binary is on `PATH`. A key is in the environment, or the route needs no key.
 2. **CLI, credentials unverified.** The binary keeps its own login, such as `gh auth login`. The call can fail on authentication.
@@ -57,7 +57,7 @@ Prices are list prices from vendor and third-party pages, checked 2026-10. They 
 | OpenAlex | papers | `curl -g 'https://api.openalex.org/works?search=<q>'` (keyless) | Optional `api_key` parameter | `mcp.openalex.org` | Lookups by DOI or ID are free | Free daily allowance |
 | arXiv | papers | `curl -g 'https://export.arxiv.org/api/query?search_query=<q>'` (keyless, Atom XML) | None | Community servers only | Wait 3 seconds between calls | Free |
 | Semantic Scholar | papers | `curl -g 'https://api.semanticscholar.org/graph/v1/paper/search?query=<q>'` (keyless) | Optional `x-api-key` header | Asta (Ai2) | Use batch endpoints | Free |
-| GitHub | git-host | `gh search repos\|code\|issues --json '<fields>'` | `GH_TOKEN`, `GITHUB_TOKEN`, or `gh auth login` | GitHub MCP | Request only the `--json` fields that the claim needs | Free |
+| GitHub | git-host | `gh search <repos\|code\|issues> '<q>' --json '<fields>'` | `GH_TOKEN`, `GITHUB_TOKEN`, or `gh auth login` | GitHub MCP | Request only the `--json` fields that the claim needs | Free |
 | Playwright | extract (interactive) | `playwright-cli open`, then `snapshot` | None | `@playwright/mcp` | Last resort for interactive or logged-in pages | Free |
 
 Wrap every substituted value in single quotes. URL-encode `<q>` only inside a URL. See `safety.md`. The detector registers the CLI route that is a sensible default for each provider. A provider can offer more operations. Read its `--help` output before you use an unregistered operation. Repository knowledge and local code intelligence are not in this registry. Route them through the configured wiki backend and the [shared routing contract](../../cheese/references/code-intelligence-routing.md).
@@ -65,7 +65,7 @@ Wrap every substituted value in single quotes. URL-encode `<q>` only inside a UR
 ## Native harness tools
 
 - **Claude Code.** `WebSearch` returns titles and URLs only. `WebFetch` returns a summary from a separate model call, not the page text. Use `WebFetch` for discovery only. Do not quote it.
-- **Codex.** `web_search` is the native tool. The `web_search` key in `config.toml` sets the mode: `disabled`, `cached`, `indexed`, or `live`. The `cached` default reads an index without live access. The `indexed` mode permits external access only when the search index gates it. A full-access sandbox (`--yolo`) defaults to `live`. For a freshness claim in `cached` mode, use a CLI or MCP route.
+- **Codex.** `web_search` is the native tool. The `web_search` key in the user `config.toml` sets the mode: `disabled`, `cached`, `indexed`, or `live`. The detector ignores a project `.codex/config.toml` for this key. The detector shows the effective mode in the tool string. The `cached` default reads an index without live access. The `indexed` mode permits external access only when the search index gates it. A full-access sandbox (`--yolo`) defaults to `live`. For a freshness claim in `cached` mode, use a CLI or MCP route.
 - **Other harnesses.** The detector reports `unknown`. Check your tool list for a native web tool.
 
 ## Raw text for quotes

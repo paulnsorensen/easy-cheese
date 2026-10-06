@@ -42,7 +42,7 @@ Rules:
 - Let a CLI read its key from the environment or its stored login.
 - Do not write a key value into a command argument, a manifest, a raw body, or a report. Shell history and logs keep command arguments.
 - For a raw `curl` route, send the header on stdin from a shell builtin. Do not put the key in `curl` arguments, because `ps` shows them. Example: `printf 'header = "Authorization: Bearer %s"\n' "$JINA_API_KEY" | curl --config - -gsS '<url>'`.
-- Send a keyed URL, such as OpenAlex `api_key`, on stdin as `url = "..."` in the `curl --config -` input. Do not pass it as an argument.
+- Send a keyed URL, such as OpenAlex `api_key`, on stdin as `url = "..."` in the `curl --config -` input. Do not pass it as an argument. Pass every value as a `%s` argument. The format string must hold no substituted value, because `%xx` escapes in a URL act as format directives. Example: `printf 'url = "%s&api_key=%s"\n' '<url>' "$OPENALEX_API_KEY" | curl --config - -gsS`.
 
 ## Quote command values
 

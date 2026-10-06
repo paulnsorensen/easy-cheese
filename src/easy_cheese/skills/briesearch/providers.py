@@ -291,7 +291,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 GIT_HOST,
                 "gh",
-                "gh search repos|code|issues '<q>' --json '<fields>' -L 10",
+                "gh search <repos|code|issues> '<q>' --json '<fields>' -L 10",
             ),
         ),
         keys=("GH_TOKEN", "GITHUB_TOKEN"),
@@ -306,7 +306,7 @@ REGISTRY: tuple[Provider, ...] = (
             CliRoute(
                 WEB_EXTRACT,
                 "playwright-cli",
-                "playwright-cli open '<url>', then playwright-cli snapshot",
+                "playwright-cli open '<url>' && playwright-cli snapshot",
                 keyless=True,
             ),
         ),
@@ -334,6 +334,8 @@ class Harness:
     native: Mapping[str, str]
 
 
+PROJECT_NAME_PATTERN = re.compile(r"[A-Za-z0-9_.-]{1,64}")
+MAX_PROJECT_SERVERS = 32
 _TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
 
 
@@ -352,18 +354,23 @@ def _parse_toml(raw: bytes) -> object:
 
 
 def _load(
-    path: Path, warnings: list[str], parse: Callable[[bytes], object]
+    path: Path,
+    warnings: list[str],
+    parse: Callable[[bytes], object],
+    *,
+    scope: Scope = USER,
 ) -> dict[str, object] | None:
     """Parse one config file that is a regular file under the size cap.
 
     Warnings name the path and the exception type only: parser messages can
     quote file content, and file content can hold credentials.
     """
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
+    if scope == PROJECT:
+        # Project paths are repository-controlled; user dotfiles may be stow symlinks.
+        flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
-        fd = os.open(
-            path,
-            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0),
-        )
+        fd = os.open(path, flags)
         try:
             raw = read_bounded_descriptor(fd, path, limit=MAX_CONFIG_BYTES)
         finally:
@@ -414,7 +421,7 @@ def codex_configs(
         (PROJECT, cwd / ".codex" / "config.toml"),
     )
     for scope, path in candidates:
-        data = _load(path, warnings, _parse_toml)
+        data = _load(path, warnings, _parse_toml, scope=scope)
         if data is not None:
             configs.append((scope, path, data))
     return configs
@@ -449,7 +456,7 @@ def configured_mcp_servers(
         (PROJECT, cwd / ".cursor" / "mcp.json"),
     )
     for scope, path in json_configs:
-        data = _load(path, warnings, _parse_json)
+        data = _load(path, warnings, _parse_json, scope=scope)
         if data is not None:
             (user if scope == USER else project).append(
                 (scope, path, "mcpServers", data)
@@ -458,12 +465,26 @@ def configured_mcp_servers(
         (user if scope == USER else project).append((scope, path, "mcp_servers", table))
 
     sources: dict[str, list[tuple[Scope, Path]]] = {}
+    project_names: set[str] = set()
+    dropped = 0
     for scope, path, key, table in (*user, *project):
         for name in _server_names(table, key, path, warnings):
+            if scope == PROJECT:
+                if name not in project_names and (
+                    not PROJECT_NAME_PATTERN.fullmatch(name)
+                    or len(project_names) >= MAX_PROJECT_SERVERS
+                ):
+                    dropped += 1
+                    continue
+                project_names.add(name)
             sources.setdefault(name, []).append((scope, path))
+    if dropped:
+        warnings.append(f"dropped {dropped} project-scope MCP server names")
     return {
         name: McpServer(
-            str(next((p for s, p in found if s == USER), found[0][1])),
+            str(next((p for s, p in found if s == PROJECT), found[0][1]))
+            if any(s == PROJECT for s, _ in found)
+            else str(found[0][1]),
             PROJECT if any(s == PROJECT for s, _ in found) else USER,
         )
         for name, found in sources.items()
@@ -471,11 +492,14 @@ def configured_mcp_servers(
 
 
 def _codex_web_search(codex: list[ConfigFile]) -> str | None:
-    """The Codex `web_search` mode from the nearest config, if set."""
+    """The Codex `web_search` mode from user-scope configs only, if set.
+
+    A repository-controlled project config must not change the search mode.
+    """
     mode: str | None = None
-    for _, _, data in codex:
+    for scope, _, data in codex:
         value = data.get("web_search")
-        if isinstance(value, str):
+        if scope == USER and isinstance(value, str):
             mode = value
     return mode
 
@@ -500,12 +524,15 @@ def detect_harness(env: Mapping[str, str], codex: list[ConfigFile]) -> Harness:
     if "CODEX_THREAD_ID" in env or any(
         name.startswith("CODEX_SANDBOX") for name in env
     ):
-        if _codex_web_search(codex) == "disabled":
+        mode = _codex_web_search(codex)
+        if mode == "disabled":
             return Harness("codex", {})
+        effective = mode or "cached"
+        note = "; no live access" if effective == "cached" else ""
         return Harness(
             "codex",
             {
-                WEB_SEARCH: "web_search",
+                WEB_SEARCH: f"web_search (mode: {effective}{note})",
                 WEB_EXTRACT: "web_search open_page (not verified as raw text)",
             },
         )
@@ -533,7 +560,6 @@ def detect_providers(
     env: Mapping[str, str],
     home: Path,
     cwd: Path,
-    registry: tuple[Provider, ...] = REGISTRY,
 ) -> dict[str, object]:
     """Rank every usable route per capability: ready CLI, unverified CLI, MCP, native."""
     warnings: list[str] = []
@@ -547,7 +573,7 @@ def detect_providers(
         for capability in CAPABILITIES
     }
     unusable: list[dict[str, object]] = []
-    for provider in registry:
+    for provider in REGISTRY:
         for route in provider.cli:
             if shutil.which(route.binary, path=search_path) is None:
                 continue
@@ -594,11 +620,10 @@ def detect_providers(
 
     routes: dict[str, list[dict[str, object]]] = {}
     for capability in CAPABILITIES:
-        ranked = [
-            *tiers[capability]["ready"],
-            *tiers[capability]["unverified"],
-            *sorted(tiers[capability]["mcp"], key=lambda route: route["scope"] != USER),
-        ]
+        mcp = sorted(tiers[capability]["mcp"], key=lambda route: route["scope"] != USER)
+        cli = [*tiers[capability]["ready"], *tiers[capability]["unverified"]]
+        # git-host follows the shared rule: host GitHub primitive (MCP) before `gh`.
+        ranked = [*mcp, *cli] if capability == GIT_HOST else [*cli, *mcp]
         native = harness.native.get(capability)
         if native is not None:
             ranked.append({"provider": "native", "route": "native", "tool": native})

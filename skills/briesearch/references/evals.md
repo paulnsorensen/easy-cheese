@@ -44,7 +44,7 @@ For each completed /briesearch run, verify:
 10. **A route does not authorize the next skill.** A research-only run can recommend `/mold` or `/cook` in `### Next step`. That run must then stop. Enter the next skill only when the current prompt explicitly requests that work.
 11. **A sidechain run declares itself.** A run that another skill starts records `invocation: sidechain` in the manifest. That run does not ask the user a question. It reports the open question in the result.
 12. **Routes come from detection.** The run executes `providers` before the routing block. Each selected route is the first working route for its capability, or the provider that the user named.
-13. **A CLI wins over an MCP for one provider.** When both routes are usable, the manifest `tool` names the CLI subcommand.
+13. **A CLI wins over an MCP for one provider.** When both routes are usable, the manifest `tool` names the CLI subcommand. Exception: `git-host` uses the host GitHub MCP before `gh`.
 14. **No quote rests on a model summary.** Each quoted claim cites a raw body from a retrieval route, not native fetch summary text.
 15. **The tier matches the question.** The routing block names the tier. The declared budget matches the tier in `budgets.md`, or an extension explains the difference.
 
