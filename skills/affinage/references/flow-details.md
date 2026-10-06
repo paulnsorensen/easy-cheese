@@ -1,6 +1,6 @@
 # Flow command and reason details
 
-Use this file for `## Flow` steps 2, 3, 6, and 9.
+Use this file for `## Flow` steps 2, 3, 5, 6, 9, and 11.
 It gives exact commands, exit codes, and grading rules.
 
 ## Step 2 — Fetch PR status
@@ -38,6 +38,22 @@ The command reads the contextual request and emits a deterministic subject plan.
 Pass the complete plan and its evidence to `/age`, not the old dimension-lens tuple.
 Then treat each `/age` finding as an additional claim.
 
+## Step 5 — Thread state
+
+Read each thread's resolution state and node ID in one query:
+
+```bash
+gh api graphql -F owner=<owner> -F repo=<repo> -F pr=<n> -f query='
+  query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){
+    pullRequest(number:$pr){reviewThreads(first:100){nodes{
+      id isResolved comments(first:100){nodes{databaseId author{login}}}}}}}}'
+```
+
+Match a REST comment to its thread by `databaseId`.
+A thread is answered when it is resolved.
+A thread is also answered when the handle wrote any comment after the root comment.
+A bot acknowledgement after the handle's reply does not reopen the thread.
+
 ## Step 6 — Grading rules
 
 - Grade every failed check, including build, compile, lint, type, and test failures.
@@ -64,6 +80,9 @@ Use these report sections:
   Structural later work is also large.
   Reject a wrong claim.
   Defer a large claim.
+- Put a claim that the current head already fixes in `## Already-addressed`.
+  Cite the fixing commit and the line that proves the fix.
+  Do not draft a reply. Resolve the thread at step 11.
 
 ## Step 9 — Reply rules
 
@@ -80,3 +99,15 @@ Do not post with `gh api` because it omits the required attribution.
 - Post the actual result when the user accepts the investigation.
 - Post the explicit follow-up note when the user declines.
 - Do not reply to `[from-check:<job>]` or `[from-age:<dimension>]` findings.
+
+## Step 11 — Resolve already-addressed threads
+
+Resolve each approved `## Already-addressed` thread with its step 5 node ID:
+
+```bash
+gh api graphql -F id=<thread-node-id> -f query='
+  mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}'
+```
+
+Confirm that the response shows `isResolved: true`.
+Do not post a reply to a resolved thread.

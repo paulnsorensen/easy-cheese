@@ -76,7 +76,7 @@ def test_skill_drafts_replies_before_one_gate() -> None:
     skill = _read(SKILL)
     draft_cure = skill.index("10. **Draft cure replies.**")
     post = skill.index(
-        "11. **Post replies.** Show one reply gate for every drafted reply."
+        "11. **Post replies.** Show one reply gate that lists every drafted reply"
     )
     publish = skill.index("12. **Publish.**")
     assert draft_cure < post < publish
