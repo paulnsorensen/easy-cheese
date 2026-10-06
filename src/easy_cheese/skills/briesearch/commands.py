@@ -32,6 +32,13 @@ def _budget_check(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("providers")
+def _providers(argv: list[str]) -> int:
+    from easy_cheese.skills.briesearch.providers import main
+
+    return main(argv)
+
+
 @bundle_command("research-layout")
 def _research_layout(argv: list[str]) -> int:
     from easy_cheese.skills.briesearch.research_layout import main
@@ -49,6 +56,10 @@ COMMANDS = (
     ),
     derive_command(
         _ground_check, "Lint a synthesis report for grounding and citation violations"
+    ),
+    derive_command(
+        _providers,
+        "Detect usable provider routes per capability: CLI first, then MCP, then native",
     ),
     derive_command(
         _research_layout, "Print the slug-aware research corpus layout as JSON"

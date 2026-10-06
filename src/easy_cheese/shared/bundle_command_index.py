@@ -55,6 +55,7 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'pr-plan-to-branches': ('cook',),
     'pr-status': ('affinage',),
     'prepare': ('cook',),
+    'providers': ('briesearch',),
     'rank-hunks': ('hard-cheese',),
     'read-handoff-slug': ('age', 'cook', 'cure'),
     'remediation-decision': ('cook',),
