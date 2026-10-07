@@ -74,12 +74,49 @@ def test_reply_gate_covers_applied_and_deferred_replies() -> None:
 
 def test_skill_drafts_replies_before_one_gate() -> None:
     skill = _read(SKILL)
-    draft_cure = skill.index("10. **Draft cure replies.**")
+    draft_cure = skill.index("11. **Draft cure replies.**")
+    rereview = skill.index("12. **Re-review the cure diff.**")
     post = skill.index(
-        "11. **Post replies.** Show one reply gate that lists every drafted reply"
+        "13. **Post replies.** Show one reply gate that lists every drafted reply"
     )
-    publish = skill.index("12. **Publish.**")
-    assert draft_cure < post < publish
+    publish = skill.index("14. **Publish.**")
+    assert draft_cure < rereview < post < publish
+
+
+# --- high: flow order matches each step's inputs (skillz improve, PR #1193) --
+
+
+def test_checkout_precedes_every_working_tree_read() -> None:
+    skill = _read(SKILL)
+    checkout = skill.index("3. **Check out the PR.** Run `gh pr checkout <pr>`.")
+    fresh = skill.index("6. **Run fresh review.**")
+    act = skill.index("9. **Act or ask.**")
+    assert checkout < fresh < act
+    assert "A failed checkout stops with `status: halt: pr-checkout-failed`." in skill
+    flow = _read(REFERENCES / "flow-details.md")
+    assert "Step 3 checks out the PR, so use `origin/<base>...HEAD`." in flow
+
+
+def test_fresh_review_follows_the_thread_count_it_consumes() -> None:
+    skill = _read(SKILL)
+    answered = skill.index("5. **Skip answered threads.**")
+    fresh = skill.index("6. **Run fresh review.**")
+    grade = skill.index("7. **Grade claims.**")
+    assert answered < fresh < grade
+    assert "Include the unresolved thread count from step 5" in skill
+
+
+def test_default_cure_gets_one_scoped_rereview() -> None:
+    """Default /cure only recommends /age --scope, so affinage must run it."""
+    cure = _read(REPO_ROOT / "skills" / "cure" / "SKILL.md")
+    assert "Recommend `/age <slug> --scope <touched-path>`." in cure
+    skill = _read(SKILL)
+    assert "Run this step only after a `/cure` run without `--auto`." in skill
+    assert "Do not re-review that second `/cure`." in skill
+    templates = _read(REFERENCES / "handoff-templates.md")
+    assert "It runs its `/age --scope` loop" not in templates
+    assert "Without `--auto`, it only recommends a scoped review." in templates
+    assert "Affinage runs that review at Flow step 12." in templates
 
 
 # --- high: harness portability ----------------------------------------------
