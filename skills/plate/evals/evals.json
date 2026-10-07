@@ -140,6 +140,13 @@
       "prompt": "This published gh stack was initialized with origin/main as its trunk. Repair it without replacing the PRs.",
       "expected_output": "Rejects origin/main as a remote-tracking trunk, snapshots PR identities and stack state, halts for merged, queued, auto-merge-enabled, or non-open PRs, and otherwise un-stacks and re-adopts the same branches on main before verifying the same PR numbers and exact remote mapping.",
       "files": []
+    },
+    {
+      "id": 20,
+      "name": "topology-change-commit-diagram",
+      "prompt": "Commit this change. It moves worktree harvesting out of the cook skill into shared support that cook and plate both import.",
+      "expected_output": "Classifies the change as a topology change, derives a flowchart LR or TD Mermaid block from the staged diff that shows the new shared module, its two importers, and the removed cook module with new and removed labels, and places the block after the rationale and before any trailer in a Conventional Commit body. A change inside one module with unchanged interfaces gets no diagram.",
+      "files": []
     }
   ]
 }

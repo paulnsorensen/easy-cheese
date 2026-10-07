@@ -127,6 +127,7 @@ Optional body when the rationale needs it.
 
 Write the subject first. Use a neutral tone. State the change first in the subject.
 Put only required reviewer facts in the optional body. Keep the body short. Omit narrative prose, tone, and slang.
+A topology change also requires the diagram in `### Architecture diagram` below.
 
 Use these types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`, and `style`.
 If a hook fails, fix the failure. Re-run the writing and quality gates when artifacts change.
@@ -141,6 +142,41 @@ Create one commit for each review unit. Use one commit for a single PR and one c
 Do not shape a PR for commit-by-commit review. The system does not track approval for each commit.
 Quality gates usually run only on the branch tip. Feedback on one commit delays the other commits.
 Use multiple commits in one PR only for a short series of simple steps. Keep the combined change small.
+
+### Architecture diagram
+
+Add one Mermaid diagram to the commit body when the commit changes system topology.
+These changes are topology changes:
+
+- Add, remove, rename, split, or merge a module, slice, package, service, or skill.
+- Change a dependency direction, a cross-module call path, or a data flow.
+- Change infrastructure topology. This includes services, queues, data stores, networks, deployment units, and CI or release pipeline stages.
+
+Do not add a diagram when a change stays inside one unit and its interfaces and dependencies do not change.
+
+Apply these rules to the diagram:
+
+- Derive each node and edge from the staged diff. Do not show inferred or planned structure.
+- Show the state after the commit. Also show each removed node or edge. Use 12 nodes or fewer.
+- Show only the changed nodes and their direct neighbors.
+- Label each added or removed node or edge as `new` or `removed`.
+- Use `flowchart LR` or `flowchart TD`. Do not use styles, classes, or click handlers.
+- Put the fenced `mermaid` block after the rationale and before all trailers.
+- Do not start a diagram line with `#`. Git removes these lines when an editor cleans the message.
+- In a stack, each layer commit gets its own diagram for that layer's topology change.
+
+````text
+refactor(cook): move worktree harvest into shared support
+
+Cook and plate both harvest worktrees. Shared support removes the duplicate.
+
+```mermaid
+flowchart LR
+  cook[cook skill] -->|new| harvest[shared/harvest]
+  plate[plate skill] -->|new| harvest
+  cook -.->|removed| cookharvest[cook/harvest]
+```
+````
 
 ## Halting
 
