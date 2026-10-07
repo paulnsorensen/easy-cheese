@@ -336,6 +336,25 @@ def test_plate_stack_flow_is_per_layer_and_metadata_is_resolved() -> None:
     assert "per-layer transaction in `references/stacks.md`" in skill
 
 
+def test_plate_commit_contract_requires_mermaid_for_topology_changes() -> None:
+    skill = read("skills/plate/SKILL.md")
+    stacks = read("skills/plate/references/stacks.md")
+    contract = skill.split("## Commit contract", maxsplit=1)[1].split("\n## ", maxsplit=1)[0]
+    diagram = contract.split("### Architecture diagram", maxsplit=1)[1]
+    flat = " ".join(diagram.split())
+    assert "`### Architecture diagram`" in contract.split("### Architecture diagram\n", maxsplit=1)[0]
+    for trigger in ("dependency direction", "data flow", "deployment units", "pipeline stages"):
+        assert trigger in flat, trigger
+    assert "Do not add a diagram when a change stays inside one unit" in flat
+    assert "Derive each node and edge from the staged diff" in flat
+    assert "before all trailers" in flat
+    assert "Do not start a diagram line with `#`" in flat
+    # The example is a real Mermaid flowchart nested in the commit body.
+    example = diagram.split("```mermaid\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
+    assert example.splitlines()[0] in {"flowchart LR", "flowchart TD"}
+    assert not any(line.lstrip().startswith("#") for line in example.splitlines())
+    assert "carries its own Mermaid diagram" in " ".join(stacks.split())
+
 def test_plate_routing_guard_rejects_review_and_read_only_github_work() -> None:
     skill = read("skills/plate/SKILL.md")
     guard = skill.split("## Routing guard", maxsplit=1)[1].split("\n## ", maxsplit=1)[0]

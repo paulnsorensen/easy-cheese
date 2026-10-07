@@ -25,6 +25,7 @@ Ordinary single pull request work never reads this file.
    3. Run the repository quality gate.
    4. Inspect the layer diff. Then stage only its named paths.
    5. Create a new Conventional Commit without skipping hooks.
+      Follow the `SKILL.md` commit contract. A layer that changes topology carries its own Mermaid diagram.
    6. Verify the commit's paths and the layer's parent.
 6. Inspect or restack the complete chain through the provider.
 7. Submit the complete chain after you verify all layers.
