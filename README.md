@@ -80,6 +80,7 @@ A Python-backed skill ships exactly one executable archive at `skills/<skill>/sc
 | `skills/hard-cheese/SKILL.md` | `/hard-cheese` (or `--hard` flag) | Metacognitive vibecheck gate before review — asks the author to explain the diff's causal logic, grades the explanation against the SOLO Taxonomy. Standalone or via `--hard` propagation through the pipeline. |
 | `skills/ultracook/SKILL.md` | `/ultracook` | Compatibility redirect to `/cook`; its retained scripts, references, and manifest paths remain fan-path internals consumed by `/cook`. |
 | `skills/melt/SKILL.md` | `/melt` | Resolve merge / rebase / cherry-pick conflicts via the structural cascade (mergiraf → rerere → kdiff3) with batch, pick-side, and lockfile helpers. |
+| `skills/wheel/SKILL.md` | `/wheel` | Run a repeated task as a resumable loop. The first call authors the loop with the user — step, checkable done condition, budget, and a blocker scan — into a wheypoint record; `/wheel <slug>` later runs iterations, checkpointing each one, until done, a gate, a stall, or the budget. User-only. |
 | `skills/wheypoint/SKILL.md` | `/wheypoint` | Mark a checkpoint: compact a mid-task conversation into a durable handoff document at `.cheese/notes/<slug>.md` (resumable slug + state-mapped suggested-skills + redacted secrets) so a fresh agent can resume via `/cheese --continue <slug>`. |
 
 ### Source-code routing
@@ -220,7 +221,7 @@ gh skill install paulnsorensen/easy-cheese
 Install every current skill in one shot:
 
 ```sh
-for s in age affinage briesearch cheese cook culture cure hard-cheese melt mold pasteurize press ultracook wheypoint; do
+for s in age affinage briesearch cheese cook culture cure hard-cheese melt mold pasteurize press ultracook wheel wheypoint; do
   gh skill install paulnsorensen/easy-cheese "$s"
 done
 ```
