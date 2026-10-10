@@ -90,6 +90,12 @@ extraPaths = ["tests/wheypoint/python", ".", "src", "scripts", ".github/scripts"
 root = "tests"
 extraPaths = [".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
 
+# Each archive test copies a ~23 MB archive into tmp_path, so one xdist run
+# writes 1-3 GB. With the default policy ("all"), pytest keeps the last three
+# runs, and /tmp on a tmpfs host fills its per-user quota. Keep the temp dirs
+# of failed tests only.
+[tool.pytest.ini_options]
+tmp_path_retention_policy = "failed"
 [tool.vulture]
 min_confidence = 60
 paths = [
