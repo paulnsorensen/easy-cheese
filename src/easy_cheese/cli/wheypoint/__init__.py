@@ -105,7 +105,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             rehydrated from the current revision before writing
         note_dir
             directory the readable projection is mirrored into (default:
-            <git toplevel>/.cheese/notes)
+            `<git toplevel>`/.cheese/notes; no mirror outside a repository)
         no_note
             write no mirror; the checkpoint stays canonical-local
         work_id
