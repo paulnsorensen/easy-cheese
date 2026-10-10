@@ -235,6 +235,21 @@ def test_checkpoint_mirrors_the_projection_into_an_explicit_note_dir(
     assert "durability: repo-snapshot" in markdown
 
 
+def test_checkpoint_help_names_the_repository_relative_note_default() -> None:
+    """`checkpoint --help` must keep the `<git toplevel>` prefix on the
+    note-directory default; a bare `/.cheese/notes` reads as a filesystem-root
+    path, which the help renderer produced when the angle brackets were parsed
+    as an empty HTML tag (issue #763)."""
+    out = io.StringIO()
+
+    status = wheypoint.main(
+        ["checkpoint", "--help"], stdin=io.StringIO(""), stdout=out
+    )
+
+    assert status == 0
+    rendered = " ".join(out.getvalue().split())
+    assert "<git toplevel>/.cheese/notes" in rendered
+
 @pytest.mark.usefixtures("store")
 def test_checkpoint_replay_rewrites_the_identical_mirror(tmp_path: Path) -> None:
     notes = tmp_path / "handoffs"
