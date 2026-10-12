@@ -113,4 +113,4 @@ ignore_decorators = [
 # published easy-cheese-schemas wheel's own dependencies. Keep the pin equal
 # to requirements/runtime.txt; a test compares the two.
 [dependency-groups]
-runtime = ["fromargs==0.1.0"]
+runtime = ["fromargs==0.2.0"]
