@@ -23,7 +23,6 @@ from attrs import define, evolve
 from easy_cheese_schemas import (
     LOWER_IDENTIFIER_RE,
     CheckpointIntent,
-    CompactionRecord,
     Durability,
     EntryKind,
     WheypointDelta,
@@ -79,6 +78,7 @@ class IntentFlags:
     link: Sequence[str] = ()
     kind: Sequence[str] = ()
     covers: Sequence[str] = ()
+    base: str | None = None
 
     def given(self) -> bool:
         return self != IntentFlags()
@@ -111,6 +111,7 @@ class IntentFlags:
                 link=self.link,
                 kind=self.kind,
                 covers=self.covers,
+                base=self.base,
             )
         except intent_flags.IntentFlagError as exc:
             raise refusal_for(exc) from exc
@@ -252,21 +253,19 @@ def run_checkpoint(
     intent_arg: str | None,
     stdin: TextIO,
     *,
-    compacted: str | None,
     note_dir: str | None,
     no_note: bool,
     flags: IntentFlags | None = None,
 ) -> dict[str, object]:
-    """A semantic intent, bound to the current record and committed.
+    """A semantic intent, committed onto the revision its writer read.
 
-    The binding is a read outside the lock, so it settles nothing: `commit`
+    The base is a read outside the lock, so it settles nothing: `commit`
     re-checks the parent under the lock and refuses a delta whose record has
-    moved on. This command shortens the authoring, not the checking.
+    moved on. An existing record with no base is refused.
     """
     payload, carry_from = _read_overlaid(intent_arg, stdin, flags)
     return commit_intent(
         payload,
-        compacted=compacted,
         note_dir=note_dir,
         no_note=no_note,
         carry_from=carry_from,
@@ -276,7 +275,6 @@ def run_checkpoint(
 def commit_intent(
     payload: object,
     *,
-    compacted: str | None = None,
     note_dir: str | None = None,
     no_note: bool = False,
     carry_from: int | None = None,
@@ -291,8 +289,8 @@ def commit_intent(
     if reserved:
         raise fromargs.CliError(
             f"commit-only-field: checkpoint does not author {', '.join(reserved)}: "
-            + "the runtime binds the parent automatically. Use base_revision_id to pin "
-            + "a read revision. Use checkpoint --compacted <proof-path> for a compaction proof.",
+            + "name the revision you read with base_revision_id (--base); "
+            + "compaction proofs are no longer accepted.",
             exit_code=1,
         )
     try:
@@ -306,7 +304,6 @@ def commit_intent(
             + "durable, digest-protected text, so it cannot carry one",
             exit_code=1,
         )
-    proof = _compaction_proof(compacted)
     store = open_store(intent.work_id)
     try:
         current = store.read_record()
@@ -320,15 +317,13 @@ def commit_intent(
         ) from exc
     if carry_from is not None:
         intent = carry_coverage(intent, current, carry_from)
-    # The proof is part of the request: an identical intent with and without a
-    # proof must not share a pending-mirror ledger entry.
-    request_identity = request_identity_for(intent, proof)
+    request_identity = request_identity_for(intent)
     try:
         delta = checkpoint_mod.build_delta(intent, current)
+    except checkpoint_mod.BaseRevisionRequiredError as exc:
+        raise fromargs.CliError(f"base-revision-required: {exc}", exit_code=1) from exc
     except checkpoint_mod.IntentError as exc:
         raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
-    if proof is not None:
-        delta = evolve(delta, compacted=True, compaction=proof)
     return _promote(
         delta,
         store,
@@ -385,40 +380,9 @@ def _normalized(ref: str) -> str:
         return ref
 
 
-def request_identity_for(
-    intent: CheckpointIntent, proof: CompactionRecord | None
-) -> str:
-    """The pending-mirror ledger key: the intent, plus the proof when one rides with it."""
-    if proof is None:
-        return canonical.digest_value(records.unstructure(intent))
-    return canonical.digest_value(
-        {
-            "intent": records.unstructure(intent),
-            "compaction": records.unstructure(proof),
-        }
-    )
-
-
-def _compaction_proof(path_arg: str | None) -> CompactionRecord | None:
-    """The `--compacted` proof, validated before it can touch a delta."""
-    if path_arg is None:
-        return None
-    path = Path(path_arg)
-    try:
-        raw = cast(object, json.loads(path.read_text(encoding="utf-8")))
-    except OSError as exc:
-        raise fromargs.CliError(
-            f"compaction-proof-unreadable: {path_arg}: {exc}", exit_code=1
-        ) from exc
-    except ValueError as exc:
-        raise fromargs.CliError(
-            f"compaction-proof-unreadable: {path_arg} is not one JSON value: {exc}",
-            exit_code=1,
-        ) from exc
-    try:
-        return records.structure(raw, CompactionRecord, forbid_unknown=True)
-    except records.RecordError as exc:
-        raise fromargs.CliError(f"invalid-compaction-proof: {exc}", exit_code=1) from exc
+def request_identity_for(intent: CheckpointIntent) -> str:
+    """The pending-mirror ledger key: the digest of the intent."""
+    return canonical.digest_value(records.unstructure(intent))
 
 
 def refusal_for(exc: Exception) -> fromargs.CliError:
@@ -461,14 +425,6 @@ def _promote(
         return result_payload(result, None, warnings=_warnings_for(delta, result))
 
     try:
-        note_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise fromargs.CliError(
-            f"note-unwritable: note directory {note_dir} cannot be created: {exc}",
-            exit_code=1,
-        ) from exc
-
-    try:
         current = store.read_record()
     except storage.SchemaVersionFutureError as exc:
         raise refusal_for(exc) from exc
@@ -478,6 +434,30 @@ def _promote(
             + f"be read: {exc}",
             exit_code=1,
         ) from exc
+    # Refuse a superseded base before the note directory or the ledger exist.
+    # The commit repeats this check under the store lock as the race backstop,
+    # and a request that already has a complete receipt is a replay, not stale.
+    if (
+        current is not None
+        and delta.expected_revision_id
+        not in (commit_mod.GENESIS_PARENT, current.revision_id)
+        and store.find_complete_revision(commit_mod.revision_id_for(delta)) is None
+    ):
+        raise refusal_for(
+            commit_mod.StaleParentError(
+                f"delta expects revision {delta.expected_revision_id!r} but the "
+                + f"current revision is {current.revision_id!r}"
+            )
+        )
+
+    try:
+        note_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise fromargs.CliError(
+            f"note-unwritable: note directory {note_dir} cannot be created: {exc}",
+            exit_code=1,
+        ) from exc
+
     target = note_dir / (f"{store.work_id if current is None else current.slug}.md")
     pending = _read_pending(store, request_identity)
     if pending is not None:

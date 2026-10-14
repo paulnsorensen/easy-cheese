@@ -318,6 +318,7 @@ Wiring rows exist in the manifest, not the curd block.
   The worker does not guess an artifact or next phase, and it does not run checkpoint at the hard limit.
   The parent delegates checkpoint persistence to the Wheypoint capability as one structured checkpoint task.
   The task follows Wheypoint's `validate` then `checkpoint` commands; only that skill documents their executable form.
+  Each command over an existing record passes `--base` with the `revision_id` the parent read; after a compaction, the parent reads again first.
   Use Cook's `wheypoint-resolve` command for retry resolution.
   Require resolver outcome `authoritative` with a non-empty, validated `working_context`.
   The first source read contains only the resolved ranges.
@@ -328,6 +329,7 @@ Wiring rows exist in the manifest, not the curd block.
   This is same-phase orchestration, not a Cook→Cook transition.
   Known-false lead: the compiled registry has no `cook -> cook` route; do not re-investigate or publish `--next cook`.
   The published `write-handoff-artifact` remains `--phase cook --next age`; the checkpoint is not that terminal phase artifact.
+  Pass that command `--base` with the `revision_id` from Cook's `wheypoint-resolve` when a record exists.
   The host finalizes the blocked `CurdResult` and continues to harvest the other results.
 
 - **Aggregate-gate conflict.**

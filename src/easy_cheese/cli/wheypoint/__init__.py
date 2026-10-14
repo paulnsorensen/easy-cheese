@@ -65,7 +65,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
             str | None, fromargs.Parameter(allow_leading_hyphen=True)
         ] = None,
         *,
-        compacted: str | None = None,
         note_dir: str | None = None,
         no_note: bool = False,
         work_id: str | None = None,
@@ -85,6 +84,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         link: list[str] | None = None,
         kind: list[str] | None = None,
         covers: list[str] | None = None,
+        base: str | None = None,
     ) -> dict[str, object]:
         """Checkpoint a semantic intent onto the current record.
 
@@ -93,9 +93,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
         intent
             path to a JSON intent file, or - for stdin (default: stdin); with
             flags it may name the work id, and when absent the intent starts empty
-        compacted
-            path to a caller-authored CompactionRecord proving the session
-            rehydrated from the current revision before writing
         note_dir
             directory the readable projection is mirrored into (default:
             <git toplevel>/.cheese/notes)
@@ -137,6 +134,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the edge kind for each --link (repeatable)
         covers
             entry ids the pinnable --link covers (repeatable)
+        base
+            the revision id you read (from resolve or show); required when the
+            record exists, so a write never lands on state you did not read
         """
         flags = IntentFlags(
             work_id=work_id,
@@ -156,13 +156,13 @@ def build_app(stdin: TextIO) -> fromargs.App:
             link=link or (),
             kind=kind or (),
             covers=covers or (),
+            base=base,
         )
         return _ok(
             "checkpoint",
             run_checkpoint(
                 intent,
                 stdin,
-                compacted=compacted,
                 note_dir=note_dir,
                 no_note=no_note,
                 flags=flags,
@@ -191,6 +191,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         link: list[str] | None = None,
         kind: list[str] | None = None,
         covers: list[str] | None = None,
+        base: str | None = None,
     ) -> dict[str, object]:
         """Validate an intent against its schema without opening the store.
 
@@ -235,6 +236,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the edge kind for each --link (repeatable)
         covers
             entry ids the pinnable --link covers (repeatable)
+        base
+            the revision id you read (from resolve or show); required when the
+            record exists, so a write never lands on state you did not read
         """
         flags = IntentFlags(
             work_id=work_id,
@@ -254,6 +258,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             link=link or (),
             kind=kind or (),
             covers=covers or (),
+            base=base,
         )
         return _ok("validate", queries_mod.run_validate(intent, stdin, flags))
 

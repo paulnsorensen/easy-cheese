@@ -8,26 +8,27 @@ where there is no record at all. None of that is a decision; all of it is
 bookkeeping the runtime can do, and every step of it is a way to get an
 otherwise-correct checkpoint refused.
 
-This module does that bookkeeping and nothing else. It reads the record, binds
-`expected_revision_id` to whatever is current (or `GENESIS_PARENT` when the
-work has no record yet), assembles the `NextAction`, and hands the resulting
-delta to `commit` unchanged. Every guarantee stays where it was:
+This module does that bookkeeping and nothing else. It checks that the caller
+named the revision it read (or `GENESIS_PARENT` when the work has no record
+yet), assembles the `NextAction`, and hands the resulting delta to `commit`
+unchanged. Every guarantee stays where it was:
 
-* **A concurrent writer still loses.** The revision bound here is read outside
-  the lock, so it is a guess by the time the delta is applied; `commit`
-  re-checks it under the lock and raises `StaleParentError` when it has moved.
-  Binding a parent is not the same as winning a race.
-* **A caller that did read the state can still say so.** `base_revision_id` is
-  optional, and when it is given it is bound *instead of* the current revision,
-  which hands the caller the kernel's own rule verbatim: an exact resubmission
-  replays into the receipt it already produced, and a changed request against a
-  parent that has been superseded is refused as stale. Binding the current
-  revision is the convenience; pinning a base is how a caller who did read the
-  state keeps the answer it read from being silently written over.
-* **Compaction still has to be proved.** A rehydration record is evidence that
-  a compacted session reloaded durable state before writing, so filling one in
-  from the store would make it evidence of nothing. The compaction fields are
-  refused outright here and belong to `commit`.
+* **A concurrent writer still loses.** The record is read outside the lock,
+  so the base is a guess by the time the delta is applied; `commit` re-checks
+  it under the lock and raises `StaleParentError` when it has moved.
+* **Every write to an existing record names the revision the writer read.**
+  `base_revision_id` is required once a record exists, and the runtime refuses
+  a write that omits it (`BaseRevisionRequiredError`) instead of binding the
+  current revision for the caller. Binding it silently would make the
+  parent evidence of nothing: a writer whose context was compacted would
+  write over state it never re-read. The bound base is passed to `commit`
+  untouched, which hands the caller the kernel's own rule verbatim: an exact
+  resubmission replays into the receipt it already produced, and a changed
+  request against a parent that has been superseded is refused as stale.
+  Genesis has no record to read, so it needs no base.
+* **Compaction needs no mode.** Because every write proves a read, a compacted
+  session cannot write until it has re-read. The compaction fields are
+  refused outright here and refused by `commit`.
 * **Retirement still needs a reason.** Omission carries forward because the
   same kernel is underneath, and an entry leaves the record only through a
   caller-authored `EntryTransition` with a rationale.
@@ -80,8 +81,8 @@ PR_REFERENCE_RE = re.compile(
 TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 # Delta fields a checkpoint intent may never carry. `expected_revision_id` is
-# bound from the record here, and the compaction pair is a proof rather than a
-# field: both belong to the low-level `commit` path.
+# set from `base_revision_id` here, and the compaction pair is legacy that the
+# runtime no longer writes.
 COMMIT_ONLY_FIELDS = ("expected_revision_id", "compacted", "compaction")
 
 
@@ -93,7 +94,20 @@ class IntentError(ValueError):
     """The intent does not describe a checkpoint this record can take."""
 
 
+class BaseRevisionRequiredError(IntentError):
+    """The record exists and the intent names no revision the writer read."""
+
+    def __init__(self, current_revision_id: str) -> None:
+        super().__init__(
+            "the record already exists, so the write must name the revision "
+            + f"it read as the base; the current revision is {current_revision_id!r}: "
+            + "re-read the record, then write again with that base"
+        )
+        self.current_revision_id: str = current_revision_id
+
+
 __all__ = [
+    "BaseRevisionRequiredError",
     "CheckpointIntent",
     "IntentError",
     "PR_REFERENCE_RE",
@@ -204,9 +218,9 @@ def task_command_problems(intent: CheckpointIntent) -> list[str]:
 def commit_only_fields(payload: object) -> tuple[str, ...]:
     """The `commit`-only delta fields this payload tried to author.
 
-    `expected_revision_id` is bound from the record, and the compaction pair is
-    a proof that rides on `--compacted`; naming them here tells the author where
-    they go instead of calling them unknown keys.
+    `expected_revision_id` is set from `base_revision_id`, and the compaction
+    pair is legacy the runtime no longer writes; naming them here tells the
+    author what to use instead of calling them unknown keys.
     """
     if not isinstance(payload, Mapping):
         return ()
@@ -271,19 +285,24 @@ def build_delta(
     *,
     now: Callable[[], str] | None = None,
 ) -> WheypointDelta:
-    """The delta `commit` is given, bound to the record as it reads right now."""
+    """The delta `commit` is given, based on the revision the writer read.
+
+    Raises `BaseRevisionRequiredError` when the record exists and the intent
+    names no base.
+    """
     clock = _utc_now if now is None else now
     command_problems = task_command_problems(intent)
     if command_problems:
         raise IntentError("; ".join(command_problems))
     next_action = _next_action(intent, current)
+    parent = _parent(intent.base_revision_id, current)
     grouped: dict[str, list[ProposedEntry]] = {}
     for entry in intent.entries or []:
         grouped.setdefault(commit_mod.ADDITION_FIELDS[entry.kind], []).append(entry)
     try:
         return WheypointDelta(
             work_id=intent.work_id,
-            expected_revision_id=_parent(intent.base_revision_id, current),
+            expected_revision_id=parent,
             orientation=intent.orientation,
             working_context=intent.working_context,
             notes=intent.notes,
@@ -307,16 +326,18 @@ def build_delta(
 
 
 def _parent(base: str | None, current: WheypointRecord | None) -> str:
-    """The revision the delta declares, pinned by the caller or bound here.
+    """The revision the delta declares: the caller's base, or genesis.
 
-    A pinned base is passed through untouched rather than compared here: the
+    A base is passed through untouched rather than compared here: the
     comparison that decides anything happens under the record lock, and making
     it twice would only mean answering it once in a place that cannot see a
-    concurrent writer.
+    concurrent writer. An existing record with no base is refused.
     """
     if base is not None:
         return base
-    return commit_mod.GENESIS_PARENT if current is None else current.revision_id
+    if current is None:
+        return commit_mod.GENESIS_PARENT
+    raise BaseRevisionRequiredError(current.revision_id)
 
 
 def _next_action(

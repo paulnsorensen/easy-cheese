@@ -62,7 +62,7 @@ Run `validate` for a schema-only dry run that never opens the store.
 - **`transitions`** holds `{entry_id, action, rationale, target_entry_id}`; `action` is `resolve`, `supersede`, or `withdraw`.
 - Only a transition changes a protected entry's state; no operation removes one.
 - **`tasks`** and **`parallel`** carry independent moves when `next` is `tasks`; see [`parallel-handoffs.md`](parallel-handoffs.md).
-- **`base_revision_id`** pins the revision the intent was written against; omit it to bind the current revision.
+- **`base_revision_id`** names the revision the writer read. It is required for every write to an existing record; a genesis write and a `fork` child need none.
 - **`session`** holds optional `{harness, session_id, captured_at}`.
 
 ## Rules
@@ -76,12 +76,15 @@ Run `validate` for a schema-only dry run that never opens the store.
 - An unknown key at any depth is refused and named by path.
 - Text that matches a credential pattern is refused and named by field.
 - An identical intent against the same parent replays the existing receipt.
-- A changed intent against a superseded parent is refused as stale.
+- A write to an existing record with no base is refused as `base-revision-required`.
+- A base that is not the current revision is refused as `stale-parent`.
 
 ## Compaction
 
-After a context compaction, rehydrate with `show` or `resolve` before you write the intent.
-A compaction proof is optional; `checkpoint --compacted <proof.json>` still accepts one, and no resume path requires it.
+The runtime is always ready for a compaction: every write names the revision the writer read.
+After a context compaction, read with `show` or `resolve` again and write with that `revision_id` as `--base`.
+There is no compaction proof; `--compacted` is removed.
+
 ## Flag form
 
 `checkpoint` and `validate` build or overlay the intent from flags.
@@ -91,6 +94,7 @@ With flags, a positional that names no existing path is a work id.
 Flags ignore stdin unless the intent argument is `-`.
 
 - `--work-id`, `--orientation`, `--next`, `--artifact`, and `--notes-file` set one scalar each.
+- `--base` sets `base_revision_id` to the revision you read; an existing record requires it.
 - `--question` adds a question entry; `--gates` makes every question in the call block continuation.
 - A blocking question needs a `--rationale`; the rationale pairs by order, see below.
 - `--decision` adds a decision, and `--directive` adds a directive with the paired `--quote`.
@@ -164,13 +168,12 @@ Each refusal names a `code`:
 - `invalid-json`: stdin was not one JSON value.
 - `storage-error`: the work store could not be opened or read.
 - `commit-only-field`: `checkpoint` was asked to author `compacted`, `compaction`, or `expected_revision_id` directly.
+- `base-revision-required`: the record exists and the write named no `--base`; the message names the current revision.
 - `invalid-intent`: the intent payload failed schema or delta validation, such as a blocking question without a `rationale`.
 - `secret-pattern`: a field looked like a credential.
 - `record-unreadable`: the work's record exists but could not be parsed.
-- `compaction-proof-unreadable`: the `--compacted` proof file could not be read or parsed as JSON.
-- `invalid-compaction-proof`: the `--compacted` proof failed schema validation.
 - `genesis-conflict`: a genesis commit collided with an existing record.
-- `stale-parent`: the intent's parent revision has moved on.
+- `stale-parent`: the named base is not the current revision; read again and re-apply.
 - `commit-refused`: the commit kernel refused the delta for another reason.
 - `note-unwritable`: the note directory or mirror file could not be written.
 - `pending-corrupt`: a pending-mirror ledger entry named a different request than its revision.

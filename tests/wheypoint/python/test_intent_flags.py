@@ -33,10 +33,11 @@ HAND_WRITTEN: dict[str, object] = {
 }
 
 
-def _flag_form() -> dict[str, object]:
+def _flag_form(base: str | None = None) -> dict[str, object]:
     return intent_flags.overlay(
         {},
         work_id=WORK_ID,
+        base=base,
         question=["Q"],
         gates=True,
         rationale=["Why."],
@@ -58,8 +59,11 @@ def test_ac14_both_forms_fingerprint_the_same_delta(
 ) -> None:
     current = make_promotion(gating=True).record
 
-    flag_delta = checkpoint.build_delta(_intent(_flag_form()), current)
-    file_delta = checkpoint.build_delta(_intent(HAND_WRITTEN), current)
+    base = current.revision_id
+    flag_delta = checkpoint.build_delta(_intent(_flag_form(base)), current)
+    file_delta = checkpoint.build_delta(
+        _intent({**HAND_WRITTEN, "base_revision_id": base}), current
+    )
 
     assert records.request_fingerprint(flag_delta) == records.request_fingerprint(
         file_delta
@@ -70,10 +74,16 @@ def test_ac14_both_forms_commit_the_same_revision(
     tmp_path: Path, make_promotion: Callable[..., Promotion]
 ) -> None:
     revision_ids: list[str] = []
-    for form, payload in (("flags", _flag_form()), ("file", HAND_WRITTEN)):
+    for form in ("flags", "file"):
         store = storage.WorkStore.open(WORK_ID, corpus_root=tmp_path / form)
         seed = make_promotion(gating=True)
         store.promote(seed.record, seed.revision, seed.markdown)
+        base = seed.record.revision_id
+        payload = (
+            _flag_form(base)
+            if form == "flags"
+            else {**HAND_WRITTEN, "base_revision_id": base}
+        )
         delta = checkpoint.build_delta(_intent(payload), store.read_record())
         revision_ids.append(commit.commit(delta, store=store).record.revision_id)
 

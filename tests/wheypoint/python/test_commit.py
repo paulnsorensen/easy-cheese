@@ -33,7 +33,7 @@ from easy_cheese_schemas import (
 )
 
 from easy_cheese.shared import paths
-from easy_cheese.shared.wheypoint import commit, records, storage
+from easy_cheese.shared.wheypoint import commit, records, resolve, storage
 
 from conftest import PLACEHOLDER_DIGEST, WORK_ID, Promotion
 
@@ -525,129 +525,7 @@ def test_two_concurrent_writers_on_one_parent_promote_exactly_one_revision(
     assert store.recover().problems == ()
 
 
-def test_compaction_rehydrated_from_the_current_revision_is_accepted(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    seed = _seed(store, make_promotion, gating=True)
-    provenance = SessionProvenance(
-        harness="claude-code", session_id="s-42", captured_at="2026-08-02T01:00:00Z"
-    )
-    evidence = _compaction(seed.record)
-
-    result = commit.commit(
-        _delta(
-            seed.record.revision_id,
-            orientation="Rehydrated after compaction.",
-            compacted=True,
-            compaction=evidence,
-            session_provenance=provenance,
-        ),
-        store=store,
-    )
-
-    assert result.revision.compaction == evidence
-    assert evidence.reconciled_entry_ids == ["q-durability"]
-    assert result.revision.session_provenance == provenance
-    # Evidence only: the authority the record carries has nowhere to put a
-    # session, so nothing downstream can select on one.
-    assert "session_provenance" not in {
-        field.name
-        for field in cast(
-            tuple["Attribute[object]", ...], attrs.fields(WheypointRecord)
-        )
-    }
-
-
-def test_compaction_rehydrated_from_a_superseded_revision_is_rejected(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    seed = _seed(store, make_promotion)
-    second = commit.commit(
-        _delta(seed.record.revision_id, orientation="Moved on."), store=store
-    )
-    after_second = _revision_files(store)
-
-    with pytest.raises(commit.CommitError) as raised:
-        _ = commit.commit(
-            _delta(
-                second.revision.revision_id,
-                orientation="Written from a stale memory.",
-                compacted=True,
-                compaction=_compaction(seed.record),
-            ),
-            store=store,
-        )
-
-    assert "rehydrated from the current revision" in str(raised.value)
-    assert _revision_files(store) == after_second
-    assert store.read_record() == second.record
-
-
-def test_a_later_compaction_chains_to_the_one_before_it(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    seed = _seed(store, make_promotion)
-    first = commit.commit(
-        _delta(
-            seed.record.revision_id,
-            orientation="First compaction.",
-            compacted=True,
-            compaction=_compaction(seed.record),
-        ),
-        store=store,
-    )
-    between = commit.commit(
-        _delta(first.record.revision_id, orientation="Ordinary work in between."),
-        store=store,
-    )
-    second = commit.commit(
-        _delta(
-            between.record.revision_id,
-            orientation="Second compaction.",
-            compacted=True,
-            compaction=_compaction(between.record),
-        ),
-        store=store,
-    )
-
-    assert first.revision.compaction is not None
-    assert first.revision.compaction.prior_compaction_revision_id is None
-    assert second.revision.compaction is not None
-    assert (
-        second.revision.compaction.prior_compaction_revision_id
-        == first.revision.revision_id
-    )
-    # Derived from the lineage on disk, so the receipt reads back the same way
-    # a cold reader would re-derive it.
-    stored = store.read_revision(4, second.revision.revision_id)
-    assert stored == second.revision
-
-
-def test_a_delta_may_not_declare_its_own_prior_compaction(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    seed = _seed(store, make_promotion)
-    after_seed = _revision_files(store)
-
-    with pytest.raises(commit.CommitError) as raised:
-        _ = commit.commit(
-            _delta(
-                seed.record.revision_id,
-                orientation="Naming my own past.",
-                compacted=True,
-                compaction=_compaction(
-                    seed.record, prior_compaction_revision_id="rev-000000000001"
-                ),
-            ),
-            store=store,
-        )
-
-    assert "may not declare prior_compaction_revision_id" in str(raised.value)
-    assert _revision_files(store) == after_seed
-    assert store.read_record() == seed.record
-
-
-def test_a_compacted_delta_without_a_compaction_record_is_rejected(
+def test_a_compacted_delta_is_refused_as_unsupported(
     store: storage.WorkStore, make_promotion: Callable[..., Promotion]
 ) -> None:
     seed = _seed(store, make_promotion)
@@ -659,13 +537,80 @@ def test_a_compacted_delta_without_a_compaction_record_is_rejected(
                 seed.record.revision_id,
                 orientation="Compacted, and writing anyway.",
                 compacted=True,
+                compaction=_compaction(seed.record),
             ),
             store=store,
         )
 
-    assert "must rehydrate first" in str(raised.value)
+    assert "compaction-unsupported" in str(raised.value)
     assert _revision_files(store) == after_seed
     assert store.read_record() == seed.record
+
+
+def test_a_legacy_receipt_that_holds_a_compaction_still_structures(
+    make_promotion: Callable[..., Promotion],
+) -> None:
+    seed = make_promotion()
+    legacy = evolve(seed.revision, compaction=_compaction(seed.record))
+
+    reread = records.structure_stored(records.unstructure(legacy), type(legacy))
+
+    assert reread == legacy
+    assert reread.compaction == _compaction(seed.record)
+
+
+def test_a_store_whose_current_receipt_holds_a_compaction_reads_resolves_and_accepts_a_based_commit(
+    store: storage.WorkStore,
+    corpus_root: Path,
+    make_promotion: Callable[..., Promotion],
+) -> None:
+    seed = make_promotion()
+    legacy_revision = evolve(seed.revision, compaction=_compaction(seed.record))
+    legacy_record = evolve(
+        seed.record, revision_digest=records.revision_digest(legacy_revision)
+    )
+    store.promote(legacy_record, legacy_revision, seed.markdown)
+
+    reread = store.read_revision(1, legacy_revision.revision_id)
+    found = resolve.resolve(
+        WORK_ID,
+        corpus_root=corpus_root,
+        project_key="paulnsorensen-easy-cheese",
+        git_object_exists=lambda _obj: True,
+        artifact_digest=lambda _path: None,
+    )
+    result = commit.commit(
+        _delta(legacy_record.revision_id, orientation="Writing over a legacy receipt."),
+        store=store,
+    )
+
+    assert reread == legacy_revision
+    assert reread is not None and reread.compaction is not None
+    assert found.outcome is resolve.ResolutionOutcome.AUTHORITATIVE
+    assert result.revision.parent_revision_id == legacy_record.revision_id
+    assert result.revision.compaction is None
+    assert store.read_record() == result.record
+    assert store.recover().problems == ()
+
+
+def test_a_based_commit_keeps_session_provenance_on_the_receipt_not_the_record(
+    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+) -> None:
+    seed = _seed(store, make_promotion)
+    provenance = SessionProvenance(session_id="s-42", captured_at="2026-08-03T00:00:00Z")
+
+    result = commit.commit(
+        _delta(
+            seed.record.revision_id,
+            orientation="Carries session provenance.",
+            session_provenance=provenance,
+        ),
+        store=store,
+    )
+
+    assert result.revision.session_provenance == provenance
+    assert "session_provenance" not in attrs.fields_dict(WheypointRecord)
+
 
 
 def test_a_new_gating_question_derives_gated(
@@ -1172,23 +1117,6 @@ def test_a_first_delta_against_an_empty_store_must_name_genesis(
 
     assert store.read_record() is None
     assert not store.revisions_dir.exists()
-
-
-def test_a_genesis_delta_cannot_declare_compaction(store: storage.WorkStore) -> None:
-    with pytest.raises(commit.CommitError, match="cannot declare compaction"):
-        _ = commit.commit(
-            _genesis_delta(
-                compacted=True,
-                compaction=CompactionRecord(
-                    rehydrated_from_revision_id="rev-000000000001",
-                    rehydrated_record_digest=PLACEHOLDER_DIGEST,
-                    reconciled_entry_ids=[],
-                ),
-            ),
-            store=store,
-        )
-
-    assert store.read_record() is None
 
 
 def test_a_genesis_delta_cannot_carry_transitions(store: storage.WorkStore) -> None:

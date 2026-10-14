@@ -51,6 +51,7 @@ def overlay(
     link: Sequence[str] = (),
     kind: Sequence[str] = (),
     covers: Sequence[str] = (),
+    base: str | None = None,
 ) -> dict[str, object]:
     """`payload` (an intent file's JSON, or `{}`) with the flags applied."""
     _check_pairing(
@@ -73,6 +74,7 @@ def overlay(
         "next": next,
         "artifact": artifact,
         "notes": notes,
+        "base_revision_id": base,
     }
     result.update({key: value for key, value in scalars.items() if value is not None})
     _extend(result, "working_context", list(context))

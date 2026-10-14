@@ -3576,7 +3576,11 @@ class SessionProvenance:
 
 @define(frozen=True)
 class CompactionRecord:
-    """What a session did to earn the right to write after a compaction.
+    """Legacy: what a session once proved before writing after a compaction.
+
+    The runtime no longer writes this record. Compaction safety is now the
+    rule that every write to an existing record names the revision the writer
+    read. The type stays so stored receipts that hold one still load.
 
     A compacted session has lost the context it was holding, so the revision it
     remembers is a guess. Naming the revision it re-read is not enough on its
@@ -3825,10 +3829,8 @@ class WheypointDelta:
         default=None, validator=_one_transition_per_entry
     )
     compacted: bool = field(default=False, validator=validators.instance_of(bool))
-    # Declaring compaction is not the same as surviving it: the flag says the
-    # harness detected one, the record is the evidence that durable state was
-    # reloaded and reconciled first. The runtime refuses the flag without the
-    # record, so a compacted session cannot write until it has rehydrated.
+    # Legacy and refused by `commit`: compaction is no longer declared on a
+    # delta. The fields stay so request fingerprints of stored receipts hold.
     compaction: CompactionRecord | None = field(
         default=None, validator=_rehydration_rule
     )
@@ -3878,6 +3880,7 @@ class WheypointRevision:
     parent_revision_digest: str | None = field(
         default=None, validator=validators.optional(_digest)
     )
+    # Legacy, read-only: receipts written before schema 5 may hold one.
     compaction: CompactionRecord | None = None
     session_provenance: SessionProvenance | None = None
     applied_edges: tuple[WorkEdge, ...] = field(

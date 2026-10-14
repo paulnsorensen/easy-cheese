@@ -214,7 +214,9 @@ def test_a_concurrent_writer_still_loses_under_the_lock(
     current = store.read_record()
     assert current is not None
     intent = checkpoint.CheckpointIntent(
-        work_id=WORK_ID, orientation="Built against the record that was current."
+        work_id=WORK_ID,
+        orientation="Built against the record that was current.",
+        base_revision_id=current.revision_id,
     )
     delta = checkpoint.build_delta(intent, current)
 
@@ -277,19 +279,95 @@ def test_a_base_revision_id_on_work_with_no_record_refuses() -> None:
     assert _get(payload, "error", "code") == "commit-refused"
 
 
+def _tree_bytes(store: storage.WorkStore) -> dict[Path, bytes]:
+    return {
+        path: path.read_bytes() for path in store.root.rglob("*") if path.is_file()
+    }
+
+
+def test_a_write_to_an_existing_record_without_a_base_is_refused(
+    store: storage.WorkStore, genesis: dict[str, object]
+) -> None:
+    before = _tree_bytes(store)
+
+    status, payload = run_cli(
+        ["checkpoint"],
+        stdin=_intent(orientation="Wrote without reading."),
+        read_first=False,
+    )
+
+    assert status == 1
+    assert _get(payload, "error", "code") == "base-revision-required"
+    message = cast(str, _get(payload, "error", "message"))
+    assert cast(str, genesis["revision_id"]) in message
+    assert _tree_bytes(store) == before
+
+
+def test_the_base_flag_names_the_revision_the_writer_read(
+    genesis: dict[str, object],
+) -> None:
+    status, payload = run_cli(
+        [
+            "checkpoint",
+            WORK_ID,
+            "--base",
+            cast(str, genesis["revision_id"]),
+            "--orientation",
+            "Wrote with the flag.",
+        ],
+        read_first=False,
+    )
+
+    assert status == 0, payload
+    assert payload["parent_revision_id"] == genesis["revision_id"]
+
+
+def test_a_stale_base_flag_is_refused_without_writing(
+    store: storage.WorkStore, genesis: dict[str, object]
+) -> None:
+    _, _ = _run("checkpoint", stdin=_intent(orientation="Moves the record on."))
+    before = _tree_bytes(store)
+
+    status, payload = run_cli(
+        [
+            "checkpoint",
+            WORK_ID,
+            "--base",
+            cast(str, genesis["revision_id"]),
+            "--orientation",
+            "Wrote from a stale read.",
+        ],
+        read_first=False,
+    )
+
+    assert status == 1
+    assert _get(payload, "error", "code") == "stale-parent"
+    assert _tree_bytes(store) == before
+
+
+@pytest.mark.usefixtures("store")
+def test_genesis_needs_no_base() -> None:
+    status, payload = run_cli(["checkpoint"], stdin=_first(), read_first=False)
+
+    assert status == 0, payload
+    assert payload["parent_revision_id"] is None
+
+
+@pytest.mark.usefixtures("genesis")
+def test_checkpoint_no_longer_has_a_compacted_option() -> None:
+    status, payload = run_cli(
+        ["checkpoint", WORK_ID, "--compacted", "--orientation", "Nope."],
+        read_first=False,
+    )
+
+    assert status != 0
+    assert _get(payload, "error", "code") != "base-revision-required"
+    assert "compacted" in cast(str, _get(payload, "error", "text"))
+
+
 @pytest.mark.parametrize(
     "field, value",
     [
-        ("compacted", True),
-        (
-            "compaction",
-            {
-                "rehydrated_from_revision_id": "rev-000000000000",
-                "rehydrated_record_digest": "sha256:" + "0" * 64,
-                "reconciled_entry_ids": [],
-                "reconciliation_source_session_ids": [],
-            },
-        ),
         ("expected_revision_id", "rev-000000000000"),
     ],
 )
@@ -309,7 +387,7 @@ def test_checkpoint_refuses_the_fields_that_belong_to_commit(
     assert _get(payload, "error", "code") == "commit-only-field"
     message = cast(str, _get(payload, "error", "message"))
     assert field in message
-    assert "checkpoint --compacted" in message
+    assert "--compacted" not in message
     assert "base_revision_id" in message
 
 
@@ -579,9 +657,14 @@ def test_build_delta_carries_the_next_action_when_next_is_omitted(
 ) -> None:
     """The unit seam: an omitted move sends None, which the kernel reads as
     "unchanged" -- checkpoint invents no NextAction to restate it with."""
+    record = make_record()
     delta = checkpoint.build_delta(
-        checkpoint.CheckpointIntent(work_id=WORK_ID, orientation="Only this."),
-        make_record(),
+        checkpoint.CheckpointIntent(
+            work_id=WORK_ID,
+            orientation="Only this.",
+            base_revision_id=record.revision_id,
+        ),
+        record,
     )
 
     assert delta.next_action is None

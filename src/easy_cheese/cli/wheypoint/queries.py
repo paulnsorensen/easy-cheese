@@ -142,8 +142,8 @@ def run_validate(
         )
     intent_payload = cast("dict[str, object]", payload)
     problems = [
-        f"{name} belongs to the compaction proof or the parent binding: pass it "
-        + "through --compacted or let the runtime bind it"
+        f"{name} is not authored in an intent: name the revision you read with "
+        + "base_revision_id (--base)"
         for name in checkpoint_mod.commit_only_fields(intent_payload)
     ]
     scrubbed = {

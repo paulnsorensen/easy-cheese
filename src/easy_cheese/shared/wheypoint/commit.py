@@ -19,9 +19,9 @@ The order of the checks is the contract:
    structurable receipt whose digest the record still quotes. The check reads
    receipts only: whether an ancestor's projection is present is recovery's
    question, not this one's.
-3. **Rehydration before compaction.** A delta written after a context
-   compaction has to prove it read the *current* revision, not the revision the
-   compacted session remembered.
+3. **No compaction proofs.** A delta that declares compaction is refused.
+   Compaction safety is the parent rule above: a writer that lost its context
+   re-reads the record and names the revision it read.
 
 Identity is derived, never drawn. Revision ids hash the parent and the request;
 entry ids hash the parent and the proposed entry. Nothing here reads a clock or
@@ -51,7 +51,6 @@ from attrs import define, evolve
 from easy_cheese_schemas import (
     SCHEMA_VERSION,
     ArtifactLink,
-    CompactionRecord,
     Durability,
     EntryKind,
     EntryState,
@@ -191,6 +190,11 @@ def commit(
             f"delta names work {delta.work_id!r} but the store holds "
             + f"{store.work_id!r}"
         )
+    if delta.compacted or delta.compaction is not None:
+        raise CommitError(
+            "compaction-unsupported: a delta no longer declares compaction; "
+            + "re-read the record and name the revision you read as the parent"
+        )
     fingerprint = records.request_fingerprint(delta)
     with store.lock():
         try:
@@ -258,15 +262,13 @@ def commit(
                 f"delta expects revision {delta.expected_revision_id!r} but the "
                 + f"current revision is {current.revision_id!r}"
             )
-        checked_ancestry = _check_lineage(store, current)
-        _check_rehydration(delta, current)
+        _check_lineage(store, current)
         return _finalize(
             store,
             _apply(
                 store,
                 delta,
                 current,
-                ancestry=checked_ancestry,
                 fingerprint=fingerprint,
                 repository=repository_value,
                 digest_of=digest_of,
@@ -388,11 +390,8 @@ def _finalize(
     )
 
 
-def _check_lineage(
-    store: storage.WorkStore, current: WheypointRecord
-) -> tuple[WheypointRevision, ...]:
+def _check_lineage(store: storage.WorkStore, current: WheypointRecord) -> None:
     stored = store.stored_receipts()
-    receipts = tuple(receipt.revision for receipt in stored)
     found = next(
         (
             receipt
@@ -413,19 +412,6 @@ def _check_lineage(
             f"current revision {current.revision_id!r} does not match the digest "
             + "the record quotes"
         )
-    return ancestry(receipts, parent)
-
-
-def _prior_compaction_id(chain: tuple[WheypointRevision, ...]) -> str | None:
-    """The nearest receipt in the chain that recorded a compaction."""
-    return next(
-        (
-            revision.revision_id
-            for revision in chain
-            if revision.compaction is not None
-        ),
-        None,
-    )
 
 
 def ancestry(
@@ -444,35 +430,6 @@ def ancestry(
         seen.add(parent_id)
         parent_id = parent.parent_revision_id
     return tuple(chain)
-
-
-def _check_rehydration(delta: WheypointDelta, current: WheypointRecord) -> None:
-    """Make a compacted delta name the record it is writing over.
-
-    The flag says a compaction happened; the compaction record has to name the
-    current revision, not the revision the compacted session remembered.
-    """
-    if not delta.compacted:
-        return
-    compaction = delta.compaction
-    if compaction is not None and compaction.prior_compaction_revision_id is not None:
-        raise CommitError(
-            "a delta may not declare prior_compaction_revision_id "
-            + f"{compaction.prior_compaction_revision_id!r}: the runtime derives "
-            + "the previous compaction from the lineage on disk, because a "
-            + "compacted session's memory of that lineage is exactly what was lost"
-        )
-    if compaction is None:
-        raise CommitError(
-            "a compacted delta must rehydrate first: it carries no compaction "
-            + f"record naming the current revision {current.revision_id!r}"
-        )
-    if compaction.rehydrated_from_revision_id != current.revision_id:
-        raise CommitError(
-            "a compacted delta must be rehydrated from the current revision "
-            + f"{current.revision_id!r}, not "
-            + f"{compaction.rehydrated_from_revision_id!r}"
-        )
 
 
 def _entry_id(delta: WheypointDelta, proposed: ProposedEntry, index: int) -> str:
@@ -519,7 +476,6 @@ def _additions(delta: WheypointDelta) -> dict[EntryKind, list[ProtectedEntry]]:
     additions: dict[EntryKind, list[ProtectedEntry]] = {}
     for kind in ADDITION_FIELDS:
         additions[kind] = [
-
             ProtectedEntry(
                 entry_id=_entry_id(delta, entry, index),
                 kind=entry.kind,
@@ -689,7 +645,6 @@ def _apply(
     delta: WheypointDelta,
     current: WheypointRecord,
     *,
-    ancestry: tuple[WheypointRevision, ...],
     fingerprint: str,
     repository: RepositoryProvenance,
     digest_of: Callable[[str], str | None],
@@ -732,19 +687,10 @@ def _apply(
         current.edges, delta, host=fork_edge, revision_id=revision_id
     )
     draft = _with_edges(draft, merged.edges)
-    compaction = (
-        None
-        if delta.compaction is None
-        else evolve(
-            delta.compaction,
-            prior_compaction_revision_id=_prior_compaction_id(ancestry),
-        )
-    )
     return _finish(
         store,
         delta,
         draft,
-        compaction=compaction,
         parent_revision_id=current.revision_id,
         # `_check_lineage` has already proven the record's own pointer against
         # the receipt on disk, so quoting it here pins the ancestor rather than
@@ -800,11 +746,6 @@ def _genesis(
             + f"carry {', '.join(missing)}"
         )
     next_action = cast(NextAction, delta.next_action)
-    if delta.compacted:
-        raise CommitError(
-            "a genesis delta cannot declare compaction: there is no current "
-            + "revision to rehydrate from"
-        )
     if delta.transitions:
         raise CommitError("a genesis delta has no existing entries to transition")
     created = (
@@ -862,7 +803,6 @@ def _genesis(
         store,
         delta,
         draft,
-        compaction=None,
         parent_revision_id=None,
         parent_revision_digest=None,
         fingerprint=fingerprint,
@@ -902,7 +842,6 @@ def _finish(
     delta: WheypointDelta,
     draft: WheypointRecord,
     *,
-    compaction: CompactionRecord | None,
     parent_revision_id: str | None,
     parent_revision_digest: str | None,
     fingerprint: str,
@@ -932,7 +871,6 @@ def _finish(
         ),
         repository=repository,
         parent_revision_digest=parent_revision_digest,
-        compaction=compaction,
         session_provenance=delta.session_provenance,
     )
     record = evolve(draft, revision_digest=records.revision_digest(revision))

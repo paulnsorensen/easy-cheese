@@ -32,9 +32,9 @@ When the consumer repository lacks `skills/`, resolve the installed bundle path 
 ```bash
 python3 skills/wheypoint/scripts/wheypoint.pyz turns [--session <id> | --transcript <path>]
 python3 skills/wheypoint/scripts/wheypoint.pyz show <work-id> [--project <key>]
-python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json]
-python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [intent.json]
-python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint <work-id> --question "<q>" --gates --rationale "<why>" --decision "<d>" --directive "<d>" --quote "<words>" --link <ref> --kind <edge-kind> [--covers <id>]...
+python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json] [--base <revision_id>]
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [intent.json] [--base <revision_id>]
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint <work-id> [--base <revision_id>] --question "<q>" --gates --rationale "<why>" --decision "<d>" --directive "<d>" --quote "<words>" --link <ref> --kind <edge-kind> [--covers <id>]...
 python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
 python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
 python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]... [--entry-kind <k>]... [--entry-state <s>]... [--gated | --no-gated] [--edge-kind <k>]... [--linked-to <ref>]... [--forked-from <work-id>]...
@@ -57,8 +57,9 @@ Phase skills resolve with their own `wheypoint-resolve --ref <slug>` command; fo
 
 1. **Read the user's words.** Run `turns` and keep every user turn in view.
 2. Map each turn to an entry, or write one line that says why the turn is not captured.
-3. **Rehydrate.** Run `show` for the work id; a first checkpoint binds the genesis sentinel itself.
-4. After a compaction, rehydrate with `show` or `resolve` before you write the intent.
+3. **Rehydrate.** Run `show` or `resolve` for the work id and note its `revision_id`; a first checkpoint needs no base.
+4. Every write to an existing record needs that `revision_id` as `--base` (or `base_revision_id`).
+   After a compaction, read again before you write.
 5. **Write the intent.** Follow [`references/intent-contract.md`](references/intent-contract.md).
 6. Put each user-stated constraint or preference in a `directive` entry with its verbatim `quote`.
 7. Put each choice in a `decision` entry with a `rationale`.
@@ -66,8 +67,9 @@ Phase skills resolve with their own `wheypoint-resolve --ref <slug>` command; fo
 9. Record a parked fork as a `question` with `--gates` and a `--rationale` that names the options and your prior leaning.
 10. Put the report a cold reader needs in `notes`.
 11. Put paths and URLs in `artifact_links` and `working_context`, not their contents.
-12. **Validate.** Run `validate` and fix every named problem.
-13. **Checkpoint.** Run `checkpoint`.
+12. **Validate.** Run `validate --base <revision_id>` and fix every named problem.
+13. **Checkpoint.** Run `checkpoint --base <revision_id>`.
+    A `base-revision-required` or `stale-parent` refusal means: read again, apply your change again, then write.
 14. **Report.** State the durability the result reports and the resume commands.
 
 ## What the runtime enforces

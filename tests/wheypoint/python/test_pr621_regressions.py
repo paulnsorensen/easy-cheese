@@ -330,6 +330,7 @@ def test_l1_reserved_field_guidance_names_current_checkpoint_options(
     assert (status, _error(reply)["code"]) == (1, "commit-only-field")
     message = cast(str, _error(reply)["message"])
     assert "base_revision_id" in message
-    assert "checkpoint --compacted" in message
+    assert "--base" in message
+    assert "--compacted" not in message
     assert "with commit" not in message
     assert store.read_record() is None

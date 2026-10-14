@@ -259,11 +259,15 @@ def test_build_delta_forwards_edge_additions_and_removals(
     add = (WorkEdge(to=_ref("beta"), kind=EdgeKind.SUPERSEDES),)
     remove = (WorkEdgeKey(to=_ref("gamma"), kind=EdgeKind.CHECKPOINTS),)
 
+    record = make_record(work_id="alpha")
     delta = checkpoint.build_delta(
         checkpoint.CheckpointIntent(
-            work_id="alpha", add_edges=add, remove_edges=remove
+            work_id="alpha",
+            add_edges=add,
+            remove_edges=remove,
+            base_revision_id=record.revision_id,
         ),
-        make_record(work_id="alpha"),
+        record,
     )
 
     assert delta.add_edges == add

@@ -19,7 +19,6 @@ from typing import cast
 
 import pytest
 
-from easy_cheese_schemas import CheckpointIntent
 from easy_cheese.shared.wheypoint import commit, records, resolve_cli, storage
 from easy_cheese.cli import wheypoint
 from easy_cheese.cli.wheypoint import queries as queries_mod
@@ -155,6 +154,34 @@ def test_checkpoint_reports_a_stale_parent_as_its_own_code() -> None:
 
     assert status == 1
     assert _get(payload, "error", "code") == "stale-parent"
+
+
+@pytest.mark.usefixtures("store")
+def test_stale_base_with_a_note_dir_leaves_no_note_dir_or_ledger(
+    store: storage.WorkStore, tmp_path: Path
+) -> None:
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    _ = _run(
+        "checkpoint",
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="First writer wins."
+        ),
+    )
+    notes = tmp_path / "fresh-notes"
+
+    status, payload = _run(
+        "checkpoint",
+        "--note-dir",
+        str(notes),
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="Second writer loses."
+        ),
+    )
+
+    assert status == 1
+    assert _get(payload, "error", "code") == "stale-parent"
+    assert not notes.exists()
+    assert not store.pending_dir.exists() or not list(store.pending_dir.iterdir())
 
 
 def test_checkpoint_refuses_an_intent_without_a_next_move(
@@ -863,50 +890,6 @@ def test_ac26_a_genesis_without_entries_or_notes_creates_no_store(
     assert not store.record_path.exists()
 
 
-def test_ac10_checkpoint_compacted_commits_a_compacted_delta(
-    store: storage.WorkStore, tmp_path: Path
-) -> None:
-    status, payload = _run("checkpoint", stdin=_first_intent())
-    assert status == 0, payload
-    current = store.read_record()
-    assert current is not None
-    proof = tmp_path / "proof.json"
-    _ = proof.write_text(
-        json.dumps(
-            {
-                "rehydrated_from_revision_id": current.revision_id,
-                "rehydrated_record_digest": records.record_digest(current),
-                "reconciled_entry_ids": [
-                    entry.entry_id for entry in records.entries(current)
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    status, payload = _run(
-        "checkpoint",
-        "--compacted",
-        str(proof),
-        stdin=_intent_json(
-            orientation="Rehydrated.",
-            session={"harness": "claude", "session_id": "s-1"},
-        ),
-    )
-    assert status == 0, payload
-    revision = store.find_complete_revision(cast(str, payload["revision_id"]))
-    assert revision is not None and revision.compaction is not None
-    assert revision.compaction.rehydrated_from_revision_id == current.revision_id
-
-    _ = proof.write_text(
-        json.dumps({"rehydrated_from_revision_id": current.revision_id}),
-        encoding="utf-8",
-    )
-    status, payload = _run(
-        "checkpoint", "--compacted", str(proof), stdin=_intent_json(orientation="x")
-    )
-    assert status == 1 and _error(payload)[0] == "invalid-compaction-proof"
-
-
 def test_ac10_commit_is_no_longer_a_listed_command() -> None:
     from easy_cheese.skills.wheypoint import commands
 
@@ -1132,30 +1115,6 @@ def test_cure_secret_scan_covers_every_string_field() -> None:
         ),
     )
     assert status == 1 and _error(payload)[1].startswith("entries[0].rationale")
-
-
-def test_cure_a_compaction_proof_is_part_of_the_request_identity(
-    store: storage.WorkStore,
-) -> None:
-    """The pending-mirror ledger key differs with and without a proof (dead-store regression)."""
-    from easy_cheese_schemas import CompactionRecord
-
-    _ = _run("checkpoint", stdin=_first_intent())
-    current = store.read_record()
-    assert current is not None
-    intent = records.structure(
-        cast(object, json.loads(_intent_json(orientation="Same words."))),
-        CheckpointIntent,
-    )
-    proof = CompactionRecord(
-        rehydrated_from_revision_id=current.revision_id,
-        rehydrated_record_digest=records.record_digest(current),
-        reconciled_entry_ids=[e.entry_id for e in records.entries(current)],
-    )
-    without = wheypoint.request_identity_for(intent, None)
-    with_proof = wheypoint.request_identity_for(intent, proof)
-    assert without != with_proof
-    assert without == wheypoint.request_identity_for(intent, None)
 
 
 @pytest.mark.usefixtures("store")
@@ -2312,7 +2271,9 @@ def test_cure_a_positional_that_is_neither_file_nor_work_id_names_both_forms() -
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_cure_flags_leave_stdin_unread_unless_the_intent_is_dash() -> None:
+def test_cure_flags_leave_stdin_unread_unless_the_intent_is_dash(
+    store: storage.WorkStore,
+) -> None:
     _ = _seed()
     piped = json.dumps({"work_id": WORK_ID, "notes": "Piped."})
 
@@ -2321,6 +2282,10 @@ def test_cure_flags_leave_stdin_unread_unless_the_intent_is_dash() -> None:
         ["checkpoint", WORK_ID, "--question", "Q2"],
         ["validate", WORK_ID, "--question", "Q3"],
     ):
+        current = store.read_record()
+        assert current is not None
+        if argv[0] == "checkpoint":
+            argv = [*argv, "--base", current.revision_id]
         stdin, out = io.StringIO(piped), io.StringIO()
         assert wheypoint.main(argv, stdin=stdin, stdout=out) == 0, argv
         assert stdin.tell() == 0, argv

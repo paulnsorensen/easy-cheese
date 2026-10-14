@@ -270,6 +270,12 @@ def persist_checkpoint(
             current = store.read_record()
         except (ValueError, OSError) as exc:
             raise RecoveryError("current checkpoint record cannot be read") from exc
+        # The runtime reads inside one artifact lock with no model memory in
+        # between, so the record it just read is the base it read. A write
+        # that races in before the commit makes the commit refuse; it is not
+        # retried, because the store lock is taken only inside the commit.
+        if current is not None and intent.base_revision_id is None:
+            intent = attrs.evolve(intent, base_revision_id=current.revision_id)
         try:
             delta = checkpoint.build_delta(intent, current)
         except checkpoint.IntentError as exc:
@@ -295,17 +301,7 @@ def persist_checkpoint(
         if should_publish:
             previous = _publish(root, artifact_path, artifact_payload)
             try:
-                try:
-                    _ = commit.commit(delta, store=store, artifact_root=root)
-                except (commit.StaleParentError, commit.GenesisConflictError):
-                    refreshed = store.read_record()
-                    if refreshed is None:
-                        raise RecoveryError("checkpoint retry found no current record")
-                    retry_intent = attrs.evolve(
-                        intent, base_revision_id=refreshed.revision_id
-                    )
-                    retry_delta = checkpoint.build_delta(retry_intent, refreshed)
-                    _ = commit.commit(retry_delta, store=store, artifact_root=root)
+                _ = commit.commit(delta, store=store, artifact_root=root)
             except BaseException:
                 try:
                     current_after = store.read_record()

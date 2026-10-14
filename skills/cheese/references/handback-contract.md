@@ -95,6 +95,18 @@ A worker that writes a durable artifact hands back the same `status:` /
 `next:` it wrote there, with `artifact:` pointing at the report it consumed.
 The two must never tell different stories.
 
+## Base revision
+
+Every durable write over an existing Wheypoint record names the revision the
+writer read. This keeps every phase ready for a compaction.
+
+- Keep `record.revision_id` from the `authoritative` phase-entry resolve as `<base>`.
+- Pass `--base <base>` to each handoff write over an existing record.
+- Omit `--base` only when no record exists yet for the slug.
+- After a compaction, resolve again before you write.
+- A `base-revision-required` or `stale-parent` refusal means: resolve again,
+  apply your result again, then write.
+
 ## Boundaries
 
 | Boundary | Producer | Consumer | Required fields | Optional fields |

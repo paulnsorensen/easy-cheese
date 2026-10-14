@@ -19,6 +19,7 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    It finally checks legacy notes in the current `.cheese/notes/` directory and each sibling worktree.
    Use `git worktree list --porcelain` to identify sibling worktrees.
    Dispatch only the validated authoritative current revision.
+   Pass its `record.revision_id` as `--base` to every later write over that record; a `base-revision-required` or `stale-parent` refusal means: resolve again, re-apply, then write.
    The runtime generates the Markdown as a projection.
    The runtime does not treat it as authoritative.
    A `.cheese/` parent identifies the original repository root for legacy notes.
