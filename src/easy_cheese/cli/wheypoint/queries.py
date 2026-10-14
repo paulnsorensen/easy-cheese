@@ -1,4 +1,4 @@
-"""The read-only commands: show, resolve, lint, validate, schema, list, log, turns."""
+"""The read-only commands: show, resolve, validate, schema, list, log, turns."""
 
 from __future__ import annotations
 
@@ -17,9 +17,6 @@ from easy_cheese_schemas import schema_runtime
 from easy_cheese.shared import paths
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
 from easy_cheese.shared.wheypoint import discovery
-from easy_cheese.shared.wheypoint import edges
-from easy_cheese.shared.wheypoint import fork_reconcile
-from easy_cheese.shared.wheypoint import lint as lint_mod
 from easy_cheese.shared.wheypoint import milknado_bridge
 from easy_cheese.shared.wheypoint import projection
 from easy_cheese.shared.wheypoint import records
@@ -27,7 +24,6 @@ from easy_cheese.shared.wheypoint import resolve as resolve_mod
 from easy_cheese.shared.wheypoint import resolve_cli
 from easy_cheese.shared.wheypoint import storage
 from easy_cheese.shared.wheypoint import transcript as transcript_mod
-from easy_cheese.shared.wheypoint.resolve_cli import findings_payload, maybe_payload
 
 from easy_cheese.cli.wheypoint.checkpoint import (
     IntentFlags,
@@ -68,6 +64,10 @@ def run_show(work_id: str, *, project: str | None = None) -> dict[str, object]:
     store = open_store(work_id, corpus_root=corpus_root)
     try:
         record = store.read_record()
+    except storage.SchemaVersionFutureError as exc:
+        raise fromargs.CliError(
+            f"{storage.FUTURE_STAMP_CODE}: {exc}", exit_code=1
+        ) from exc
     except (storage.StorageError, OSError, ValueError) as exc:
         raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=1) from exc
     if record is None:
@@ -75,10 +75,6 @@ def run_show(work_id: str, *, project: str | None = None) -> dict[str, object]:
             f"record-missing: work {work_id!r} has no record at {store.record_path}",
             exit_code=1,
         )
-    siblings = edges.sibling_records(store.corpus_root, work_id=record.work_id)
-    pending = edges.pending_reciprocals(
-        record, siblings=siblings, receipts=store.receipt_revisions()
-    )
     bridge = milknado_bridge.bind(record, repo_root=paths.resolve_repo_root(None))
     return {
         "work_id": record.work_id,
@@ -86,12 +82,6 @@ def run_show(work_id: str, *, project: str | None = None) -> dict[str, object]:
         "revision_id": record.revision_id,
         "revision_number": record.revision_number,
         "record": records.unstructure(record),
-        "pending": [
-            *edges.pending_payload(pending),
-            *fork_reconcile.fork_payload(
-                fork_reconcile.pending_forks(record, siblings=siblings)
-            ),
-        ],
         "bridge": milknado_bridge.payload(bridge),
     }
 
@@ -134,16 +124,6 @@ def run_resolve(
         )
     resolve_cli.raise_if_error(payload)
     return payload
-
-
-def run_lint(path: str) -> dict[str, object]:
-    report = lint_mod.lint_projection_file(path)
-    return {
-        "path": path,
-        "clean": report.ok,
-        "findings": findings_payload(report.findings),
-        "projection": maybe_payload(report.projection),
-    }
 
 
 def run_validate(

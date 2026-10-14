@@ -14,9 +14,10 @@ from easy_cheese_schemas import (
     WheypointRecord,
 )
 
-from easy_cheese.shared.wheypoint import canonical, commit, lint, records, refs, storage
+from easy_cheese.shared.wheypoint import canonical, commit, records, refs, storage
 
 from conftest import WORK_ID, Promotion, run_cli
+from work_check import check_work
 
 PROJECT = "paulnsorensen-easy-cheese"
 CAPTURED_AT = "2026-08-02T00:00:00Z"
@@ -374,7 +375,7 @@ def test_ac2_v3_path_only_links_read_as_repo_refs(
     assert digest_before == seed.revision.record_digest
 
 
-def test_ac2_lint_of_a_v3_record_has_no_failure(
+def test_ac2_check_of_a_v3_record_has_no_failure(
     store: storage.WorkStore,
     make_promotion: Callable[..., Promotion],
     make_record: Callable[..., WheypointRecord],
@@ -388,14 +389,7 @@ def test_ac2_lint_of_a_v3_record_has_no_failure(
         ),
     )
 
-    report = lint.lint_work(
-        store,
-        project_key=PROJECT,
-        git_object_exists=lambda _obj: True,
-        artifact_digest=lambda _ref: None,
-    )
-
-    assert report.findings == ()
+    assert check_work(store, project_key=PROJECT).findings == ()
 
 
 def test_ac2_a_link_that_carries_a_ref_stays_unchanged(

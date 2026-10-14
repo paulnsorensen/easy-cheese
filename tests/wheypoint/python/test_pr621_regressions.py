@@ -136,35 +136,6 @@ def test_b3_task_fields_without_next_refuse_without_a_revision(
     assert len(store.revisions().files) == 1
 
 
-@pytest.mark.parametrize(
-    "separator",
-    ["\r", "\r\n", "\u0085", "\u2028", "\u2029", "\v", "\f", "\x1c", "\x1d", "\x1e"],
-)
-def test_b4_dossier_separators_survive_checkpoint_and_resolve(
-    store: storage.WorkStore, separator: str
-) -> None:
-    text = f"A{separator}B"
-    fork = {
-        "fork": text,
-        "options": [{"option": text, "evidence": [text], "breaks": text}],
-        "prior_leaning": text,
-    }
-    fields = _intent(decision_dossier=[fork])
-    assert _run("validate", **fields)[0] == 0
-    status, reply = _run("checkpoint", "--no-note", **fields)
-    assert status == 0, reply
-    record = store.read_record()
-    assert record is not None
-    revision = store.revisions().files[0]
-    parsed = projection.parse(revision.projection_path.read_text(encoding="utf-8"))
-    assert parsed.decision_dossier == record.decision_dossier
-    assert store.recover().consistent
-    status, resolved = _run("resolve", "--ref", store.work_id)
-    assert status == 0, resolved
-    assert resolved["outcome"] == "authoritative"
-    assert resolved["findings"] == []
-
-
 def test_b5_task_values_survive_exactly(store: storage.WorkStore) -> None:
     status, reply = _run(
         "checkpoint",

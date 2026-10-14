@@ -24,19 +24,6 @@ from easy_cheese.cli import wheypoint
 from conftest import WORK_ID, run_cli
 
 CAPTURED_AT = "2026-08-30T12:00:00Z"
-DOSSIER = [
-    {
-        "fork": "Where the intent is bound",
-        "options": [
-            {
-                "option": "runtime",
-                "evidence": ["the caller cannot see the lock"],
-                "breaks": "nothing: commit re-checks under it",
-            }
-        ],
-        "prior_leaning": "runtime",
-    }
-]
 
 
 def _run(command: str, *args: str, stdin: str = "") -> tuple[int, dict[str, object]]:
@@ -382,7 +369,6 @@ def test_omitted_protected_state_carries_forward() -> None:
         _get(payload, "record", "next_action", "artifact")
         == ".cheese/cook/wheypoint-checkpoint.md"
     )
-    assert cast(list[str], _get(payload, "revision", "preserved_entry_ids"))
 
 
 @pytest.mark.usefixtures("store")
@@ -396,9 +382,9 @@ def test_retirement_still_needs_a_caller_authored_transition() -> None:
                     "kind": "question",
                     "summary": "Does binding weaken the stale-writer check?",
                     "blocks_continuation": True,
+                    "rationale": "The stale-writer check is the guarantee.",
                 }
             ],
-            decision_dossier=DOSSIER,
         ),
     )
     assert status == 0, first
@@ -416,7 +402,6 @@ def test_retirement_still_needs_a_caller_authored_transition() -> None:
                     "rationale": "commit re-checks the parent under the lock.",
                 }
             ],
-            decision_dossier=[],
         ),
     )
 
@@ -455,18 +440,18 @@ def test_a_gating_addition_derives_gated_status_and_a_projection(
             session={"captured_at": CAPTURED_AT},
             entries=[
                 {
-                    "kind": "blocker",
+                    "kind": "question",
                     "summary": "The bundle manifest has not been regenerated.",
                     "blocks_continuation": True,
+                    "rationale": "Cook cannot start on a stale manifest.",
                 }
             ],
-            decision_dossier=DOSSIER,
         ),
     )
 
     assert status == 0, payload
     assert payload["status"] == "gated"
-    gating = cast(list[dict[str, object]], _get(payload, "record", "blockers"))
+    gating = cast(list[dict[str, object]], _get(payload, "record", "questions"))
     assert [entry["state"] for entry in gating] == ["active"]
     assert payload["durability"] == "repo-snapshot"
     revision_id = cast(str, payload["revision_id"])
@@ -735,13 +720,43 @@ def test_the_checkpoint_command_is_registered_for_the_bundle() -> None:
     ]
 
 
-def test_ac15_build_delta_forwards_remove_dossier_forks(
-    make_record: Callable[..., WheypointRecord],
+@pytest.mark.usefixtures("store")
+@pytest.mark.parametrize(
+    ("overrides", "key_path"),
+    [
+        ({"decision_dossier": []}, "decision_dossier"),
+        ({"remove_dossier_forks": ["Durability default"]}, "remove_dossier_forks"),
+        ({"add_blockers": []}, "add_blockers"),
+        (
+            {"add_edges": [{"to": "repo:docs/spec.md", "kind": "relates_to"}]},
+            "add_edges[1].kind",
+        ),
+    ],
+)
+def test_ac5_removed_intent_surface_is_refused_and_names_the_key_path(
+    overrides: dict[str, object], key_path: str
 ) -> None:
-    intent = checkpoint.CheckpointIntent(
-        work_id=WORK_ID, remove_dossier_forks=("Durability default",)
+    status, payload = _run("checkpoint", stdin=_first(**overrides))
+
+    assert status == 1, payload
+    assert _get(payload, "error", "code") == "invalid-intent"
+    assert key_path in cast(str, _get(payload, "error", "message"))
+
+
+@pytest.mark.usefixtures("genesis")
+def test_ac6_a_blocking_question_without_a_rationale_is_refused() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_intent(
+            entries=[
+                {
+                    "kind": "question",
+                    "summary": "Does binding weaken the stale-writer check?",
+                    "blocks_continuation": True,
+                }
+            ]
+        ),
     )
 
-    delta = checkpoint.build_delta(intent, make_record(gating=True))
-
-    assert delta.remove_dossier_forks == ("Durability default",)
+    assert status == 1, payload
+    assert "rationale" in cast(str, _get(payload, "error", "message"))

@@ -23,8 +23,6 @@ from attrs import define, evolve  # noqa: E402
 from easy_cheese_schemas import (  # noqa: E402
     SCHEMA_VERSION,
     ArtifactLink,
-    DecisionFork,
-    DossierOption,
     Durability,
     EntryKind,
     EntryState,
@@ -81,20 +79,7 @@ def _gate_entry() -> ProtectedEntry:
         summary="Should durability default to repo-snapshot?",
         state=EntryState.ACTIVE,
         blocks_continuation=True,
-    )
-
-
-def _dossier() -> DecisionFork:
-    return DecisionFork(
-        fork="Durability default",
-        options=[
-            DossierOption(
-                option="canonical-local",
-                evidence=["no git side effect"],
-                breaks="nothing outside the corpus survives",
-            )
-        ],
-        prior_leaning="canonical-local",
+        rationale="Durability decides where the checkpoint survives.",
     )
 
 
@@ -113,9 +98,7 @@ class _RecordFields(TypedDict):
     next_action: NextAction
     decisions: list[ProtectedEntry]
     questions: list[ProtectedEntry]
-    blockers: list[ProtectedEntry]
     artifact_links: list[ArtifactLink]
-    decision_dossier: list[DecisionFork]
 
 
 def _record(**overrides: object) -> WheypointRecord:
@@ -135,9 +118,7 @@ def _record(**overrides: object) -> WheypointRecord:
         "next_action": _next_action(),
         "decisions": [],
         "questions": [_gate_entry()] if gating else [],
-        "blockers": [],
         "artifact_links": [],
-        "decision_dossier": [_dossier()] if gating else [],
     }
     fields.update(overrides)
     return WheypointRecord(**cast(_RecordFields, cast(object, fields)))
@@ -151,12 +132,11 @@ def _promotion(
     record: WheypointRecord | None = None,
     gating: bool = False,
     additions: list[ProtectedEntry] | None = None,
-    preserved: list[str] | None = None,
 ) -> Promotion:
     base = record or _record(
         revision_id=revision_id, revision_number=number, gating=gating
     )
-    projected, markdown = projection.build_projection(
+    _, markdown = projection.build_projection(
         base, durability=Durability.CANONICAL_LOCAL
     )
     # A parent given as a Promotion is the real ancestor, so the receipt can pin
@@ -182,9 +162,7 @@ def _promotion(
         record_digest=records.record_digest(base),
         applied_additions=list(additions or []),
         applied_transitions=[],
-        preserved_entry_ids=list(preserved or []),
         projection_path=f"projections/{base.revision_number}-{base.revision_id}.md",
-        projection_digest=projected.projection_digest,
         repository=RepositoryProvenance(branch="claude/wheypoint", commit="abc1234"),
     )
     # The record's pointer at its receipt is the last thing to settle: the

@@ -103,7 +103,7 @@ The two must never tell different stories.
 | Durable report | the same phases, via the artifact writer | the next phase, `/cheese --continue` | same preamble + body | same |
 | Unregistered report | `/affinage`, `/pasteurize` | `/cheese --continue` | same preamble, written by hand | same |
 | Fan phase router | a fan-out phase handback | `/cook`'s fan pathway phase decision | `status` (routed by disposition), `next` | — |
-| Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | decision dossier body |
+| Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | notes body |
 | Grading receipt (distinct vocabulary, not a handback) | `/hard-cheese` | the attempt log | `status: PASS \| FAIL \| FAILED \| LOGGED` | `attempts` |
 
 `schema-intertwine.md` lists the registered source phases.

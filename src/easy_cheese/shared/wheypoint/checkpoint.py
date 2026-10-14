@@ -168,7 +168,7 @@ def _string_fields(value: object, path: str) -> list[tuple[str, str]]:
 def secret_fields(intent: object) -> list[str]:
     """Every text field of the intent that carries a secret pattern, named by path.
 
-    Every string field is scanned -- task commands, dossier evidence, transition
+    Every string field is scanned -- task commands, transition
     rationales, and artifact paths included -- because a checkpoint is durable,
     digest-protected text that can never be scrubbed afterwards (AC-20).
     """
@@ -288,11 +288,8 @@ def build_delta(
             working_context=intent.working_context,
             notes=intent.notes,
             next_action=next_action,
-            decision_dossier=intent.decision_dossier,
-            remove_dossier_forks=intent.remove_dossier_forks,
             add_decisions=grouped.get("add_decisions"),
             add_questions=grouped.get("add_questions"),
-            add_blockers=grouped.get("add_blockers"),
             add_directives=grouped.get("add_directives"),
             add_artifact_links=intent.artifact_links,
             remove_artifact_links=intent.remove_artifact_links,

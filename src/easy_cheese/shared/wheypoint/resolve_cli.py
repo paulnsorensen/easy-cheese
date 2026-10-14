@@ -23,16 +23,15 @@ import fromargs
 from attrs import AttrsInstance
 
 from easy_cheese.shared import handoff, paths
-from easy_cheese.shared.wheypoint import edges, fork_reconcile, milknado_bridge
-from easy_cheese.shared.wheypoint import lint as lint_mod
-from easy_cheese.shared.wheypoint import records
+from easy_cheese.shared.wheypoint import milknado_bridge
+from easy_cheese.shared.wheypoint import lint_types, records
 from easy_cheese.shared.wheypoint import resolve as resolve_mod
 
 COMMAND = "wheypoint-resolve"
 
 
 def findings_payload(
-    findings: tuple[lint_mod.LintFinding, ...],
+    findings: tuple[lint_types.LintFinding, ...],
 ) -> list[dict[str, str]]:
     return [
         {"code": finding.code.value, "detail": finding.detail} for finding in findings
@@ -92,11 +91,6 @@ def resolve_payload(
             else handoff.slug_payload(resolution.phase_slug)
         ),
         "detail": resolution.detail,
-        # Link entries carry their edge kind; fork entries carry `"fork"`.
-        "pending": [
-            *edges.pending_payload(resolution.pending),
-            *fork_reconcile.fork_payload(resolution.pending_forks),
-        ],
         "bridge": bridge,
     }
 

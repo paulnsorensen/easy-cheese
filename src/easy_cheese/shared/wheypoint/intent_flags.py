@@ -9,8 +9,9 @@ follow in the order of the keyword parameters. A scalar flag (`work_id`,
 `orientation`, `next`, `artifact`, `notes`) overrides the payload's value
 without a refusal, because the flag is the later, more specific statement.
 
-Rationales pair in one sequence: the decisions take the first ones, then each
-`resolve`, then each `withdraw`.
+Rationales pair in one sequence: gated questions (`--gates`) take the first
+ones, then the decisions, then each `resolve`, then each `withdraw`. A gating
+question needs a rationale; a plain question takes none.
 """
 
 from __future__ import annotations
@@ -35,7 +36,6 @@ def overlay(
     *,
     work_id: str | None = None,
     question: Sequence[str] = (),
-    blocker: Sequence[str] = (),
     gates: bool = False,
     decision: Sequence[str] = (),
     rationale: Sequence[str] = (),
@@ -55,7 +55,6 @@ def overlay(
     """`payload` (an intent file's JSON, or `{}`) with the flags applied."""
     _check_pairing(
         question=question,
-        blocker=blocker,
         gates=gates,
         decision=decision,
         rationale=rationale,
@@ -66,6 +65,7 @@ def overlay(
         link=link,
         kind=kind,
     )
+    gated = len(question) if gates else 0
     result: dict[str, object] = copy.deepcopy(dict(payload or {}))
     scalars = {
         "work_id": work_id,
@@ -77,15 +77,16 @@ def overlay(
     result.update({key: value for key, value in scalars.items() if value is not None})
     _extend(result, "working_context", list(context))
 
-    decision_rationales = rationale[: len(decision)]
-    resolve_rationales = rationale[len(decision) : len(decision) + len(resolve)]
-    withdraw_rationales = rationale[len(decision) + len(resolve) :]
+    question_rationales = rationale[:gated]
+    rest = rationale[gated:]
+    decision_rationales = rest[: len(decision)]
+    resolve_rationales = rest[len(decision) : len(decision) + len(resolve)]
+    withdraw_rationales = rest[len(decision) + len(resolve) :]
     _extend(
         result,
         "entries",
         [
-            *(_gate("question", text, gates) for text in question),
-            *(_gate("blocker", text, gates) for text in blocker),
+            *_questions(question, gates, question_rationales),
             *(
                 {"kind": "decision", "summary": text, "rationale": why}
                 for text, why in zip(decision, decision_rationales, strict=True)
@@ -113,7 +114,6 @@ def overlay(
 def _check_pairing(
     *,
     question: Sequence[str],
-    blocker: Sequence[str],
     gates: bool,
     decision: Sequence[str],
     rationale: Sequence[str],
@@ -124,11 +124,12 @@ def _check_pairing(
     link: Sequence[str],
     kind: Sequence[str],
 ) -> None:
-    wanted = len(decision) + len(resolve) + len(withdraw)
+    wanted = (len(question) if gates else 0) + len(decision) + len(resolve)
+    wanted += len(withdraw)
     if len(rationale) != wanted:
         raise IntentFlagError(
             f"flag-pairing: {len(rationale)} --rationale for {wanted} "
-            + "--decision, --resolve, and --withdraw flags"
+            + "--gates --question, --decision, --resolve, and --withdraw flags"
         )
     if len(quote) != len(directive):
         raise IntentFlagError(
@@ -138,12 +139,27 @@ def _check_pairing(
         raise IntentFlagError(
             f"flag-pairing: {len(kind)} --kind for {len(link)} --link"
         )
-    if gates and not (question or blocker):
-        raise IntentFlagError("flag-pairing: --gates needs --question or --blocker")
+    if gates and not question:
+        raise IntentFlagError("flag-pairing: --gates needs --question")
 
 
-def _gate(entry_kind: str, summary: str, gates: bool) -> dict[str, object]:
-    return {"kind": entry_kind, "summary": summary, "blocks_continuation": gates}
+def _questions(
+    questions: Sequence[str], gates: bool, rationales: Sequence[str]
+) -> list[dict[str, object]]:
+    if not gates:
+        return [
+            {"kind": "question", "summary": text, "blocks_continuation": False}
+            for text in questions
+        ]
+    return [
+        {
+            "kind": "question",
+            "summary": text,
+            "blocks_continuation": True,
+            "rationale": why,
+        }
+        for text, why in zip(questions, rationales, strict=True)
+    ]
 
 
 def _transitions(

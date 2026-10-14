@@ -1,7 +1,7 @@
-"""The fourteen commands the bundle exposes: checkpoint, validate, schema, resolve, show, lint, list, log, turns, fork, link, unlink, shape, backlinks.
+"""The nine commands the bundle exposes: checkpoint, validate, schema, resolve, show, list, log, turns, fork.
 
 This package is a mouth, not a brain. Every decision it reports was made by
-`commit`, `resolve`, or `lint`; nothing here parses a projection, compares a
+`commit` or `resolve`; nothing here parses a projection, compares a
 revision, or decides what is dispatchable, because a second implementation of
 any of those would be a second answer to a question the kernel already answers.
 
@@ -18,8 +18,7 @@ stderr, ``{"error": "<code>: <message>", "exit_code": <n>}``.
 
 A resolution that is gated, ambiguous, or not found is an *answer* about the
 corpus, so it prints with ``ok: true`` and the outcome in the payload; only a
-reference that could not be interpreted at all is a refusal. Lint findings are
-answers by the same rule.
+reference that could not be interpreted at all is a refusal.
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ from easy_cheese.cli.wheypoint.checkpoint import (
     request_identity_for as request_identity_for,
     run_checkpoint,
 )
-from easy_cheese.cli.wheypoint import graph as graph_mod
+from easy_cheese.cli.wheypoint import fork as fork_mod
 from easy_cheese.cli.wheypoint import queries as queries_mod
 
 COMMANDS = (
@@ -43,15 +42,10 @@ COMMANDS = (
     "schema",
     "resolve",
     "show",
-    "lint",
     "list",
     "log",
     "turns",
     "fork",
-    "link",
-    "unlink",
-    "shape",
-    "backlinks",
 )
 
 
@@ -76,7 +70,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
         no_note: bool = False,
         work_id: str | None = None,
         question: list[str] | None = None,
-        blocker: list[str] | None = None,
         gates: bool = False,
         decision: list[str] | None = None,
         rationale: list[str] | None = None,
@@ -112,15 +105,14 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the work id the flags write to (default: the intent's work_id)
         question
             add an open question (repeatable)
-        blocker
-            add a blocker (repeatable)
         gates
-            the added questions and blockers block continuation
+            the added questions block continuation; pair each with a --rationale
         decision
             add a decision; pair each with a --rationale (repeatable)
         rationale
-            the rationale for each --decision, then each --resolve, then each
-            --withdraw, in that order (repeatable)
+            the rationale for each gating --question, then each --decision,
+            then each --resolve, then each --withdraw, in that order
+            (repeatable)
         directive
             add a user directive; pair each with a --quote (repeatable)
         quote
@@ -149,7 +141,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
         flags = IntentFlags(
             work_id=work_id,
             question=question or (),
-            blocker=blocker or (),
             gates=gates,
             decision=decision or (),
             rationale=rationale or (),
@@ -185,7 +176,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
         *,
         work_id: str | None = None,
         question: list[str] | None = None,
-        blocker: list[str] | None = None,
         gates: bool = False,
         decision: list[str] | None = None,
         rationale: list[str] | None = None,
@@ -213,15 +203,14 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the work id the flags write to (default: the intent's work_id)
         question
             add an open question (repeatable)
-        blocker
-            add a blocker (repeatable)
         gates
-            the added questions and blockers block continuation
+            the added questions block continuation; pair each with a --rationale
         decision
             add a decision; pair each with a --rationale (repeatable)
         rationale
-            the rationale for each --decision, then each --resolve, then each
-            --withdraw, in that order (repeatable)
+            the rationale for each gating --question, then each --decision,
+            then each --resolve, then each --withdraw, in that order
+            (repeatable)
         directive
             add a user directive; pair each with a --quote (repeatable)
         quote
@@ -250,7 +239,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
         flags = IntentFlags(
             work_id=work_id,
             question=question or (),
-            blocker=blocker or (),
             gates=gates,
             decision=decision or (),
             rationale=rationale or (),
@@ -324,16 +312,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
             read another project's corpus (corpus_home()/KEY)
         """
         return _ok("show", queries_mod.run_show(work_id, project=project))
-
-    def lint(path: str) -> dict[str, object]:
-        """Lint a generated projection against the record.
-
-        Parameters
-        ----------
-        path
-            path to a rendered projection document
-        """
-        return _ok("lint", queries_mod.run_lint(path))
 
     def list_(
         *,
@@ -458,9 +436,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
         child: str,
         *,
         orientation: str,
-        move: list[str] | None = None,
-        copy: list[str] | None = None,
-        dossier: list[str] | None = None,
         link: list[str] | None = None,
         context: list[str] | None = None,
         notes_file: str | None = None,
@@ -478,14 +453,6 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the new child work id
         orientation
             the child orientation; its first line is the child title
-        move
-            a parent entry id the child takes over (repeatable; default:
-            active questions and blockers)
-        copy
-            a parent entry id the child copies (repeatable; default: active
-            decisions and directives)
-        dossier
-            a parent decision-dossier fork title the child takes (repeatable)
         link
             a parent artifact-link ref the child takes (repeatable)
         context
@@ -502,13 +469,10 @@ def build_app(stdin: TextIO) -> fromargs.App:
         """
         return _ok(
             "fork",
-            graph_mod.run_fork(
+            fork_mod.run_fork(
                 parent,
                 child,
                 orientation=orientation,
-                move=move or (),
-                copy=copy or (),
-                dossier=dossier or (),
                 links=link or (),
                 context=context or (),
                 notes_file=notes_file,
@@ -517,126 +481,15 @@ def build_app(stdin: TextIO) -> fromargs.App:
                 project=project,
             ),
         )
-
-    def link(
-        work_id: str,
-        ref: str,
-        *,
-        kind: str,
-        covers: list[str] | None = None,
-        rationale: str | None = None,
-    ) -> dict[str, object]:
-        """Add one typed edge from a record to a work item or document.
-
-        Parameters
-        ----------
-        work_id
-            the work id that holds the edge
-        ref
-            the typed target ref, e.g. wheypoint:acme-app/wg-1
-        kind
-            the edge kind, e.g. relates_to, informs, or checkpoints
-        covers
-            an entry id the pinned link covers (repeatable)
-        rationale
-            why the edge exists
-        """
-        return _ok(
-            "link",
-            graph_mod.run_link(
-                work_id, ref, kind=kind, covers=covers or (), rationale=rationale
-            ),
-        )
-
-    def unlink(work_id: str, ref: str, *, kind: str) -> dict[str, object]:
-        """Remove the edge a record holds to a ref under one kind.
-
-        Parameters
-        ----------
-        work_id
-            the work id that holds the edge
-        ref
-            the edge target ref
-        kind
-            the edge kind
-        """
-        return _ok("unlink", graph_mod.run_unlink(work_id, ref, kind=kind))
-
-    def shape(
-        work_id: str | None = None,
-        *,
-        scope: Literal["project", "machine"] = "project",
-        project: list[str] | None = None,
-        depth: int | None = None,
-        kind: list[str] | None = None,
-    ) -> dict[str, object]:
-        """Print the work graph as JSON, with a Graphviz string in dot.
-
-        Parameters
-        ----------
-        work_id
-            keep only the component around this work id
-        scope
-            this project's corpus (default), or every project on the machine
-        project
-            read this project key (repeatable)
-        depth
-            keep records within this many hops of work_id
-        kind
-            keep only edges of this kind (repeatable)
-        """
-        return _ok(
-            "shape",
-            graph_mod.run_shape(
-                work_id,
-                scope=scope,
-                project=project or (),
-                depth=depth,
-                kind=kind or (),
-            ),
-        )
-
-    def backlinks(
-        ref: str,
-        *,
-        corpus_root: str | None = None,
-        scope: Literal["project", "machine"] = "project",
-        project: list[str] | None = None,
-    ) -> dict[str, object]:
-        """List every record whose edges or links name a ref.
-
-        Parameters
-        ----------
-        ref
-            the typed ref, e.g. wheypoint:acme-app/wg-1
-        corpus_root
-            the per-project corpus root (default: the project's own corpus)
-        scope
-            this project's worktrees (default), or the whole machine
-        project
-            limit hits to this project key (repeatable; implies --scope machine)
-        """
-        return _ok(
-            "backlinks",
-            graph_mod.run_backlinks(
-                ref, scope=scope, project=project or (), corpus_root=corpus_root
-            ),
-        )
-
     _ = app.command(checkpoint, name="checkpoint")
     _ = app.command(validate, name="validate")
     _ = app.command(schema, name="schema")
     _ = app.command(resolve, name="resolve")
     _ = app.command(show, name="show")
-    _ = app.command(lint, name="lint")
     _ = app.command(list_, name="list")
     _ = app.command(log, name="log")
     _ = app.command(turns, name="turns")
     _ = app.command(fork, name="fork")
-    _ = app.command(link, name="link")
-    _ = app.command(unlink, name="unlink")
-    _ = app.command(shape, name="shape")
-    _ = app.command(backlinks, name="backlinks")
     return app
 
 

@@ -551,35 +551,16 @@ def test_resolve_refuses_a_corpus_root_given_with_legacy() -> None:
     assert "--legacy: not allowed with --corpus-root" in text
 
 
-def test_lint_reports_a_clean_projection(
-    tmp_path: Path, make_promotion: Callable[..., Promotion]
-) -> None:
-    document = tmp_path / "1-rev-0001.md"
-    _ = document.write_text(make_promotion().markdown, encoding="utf-8")
+@pytest.mark.parametrize("verb", ["lint", "link", "unlink", "shape", "backlinks"])
+def test_a_removed_verb_is_an_unknown_command(verb: str) -> None:
+    status, payload = _run(verb)
 
-    status, payload = _run("lint", str(document))
-
-    assert status == 0
-    assert payload["ok"] is True
-    assert payload["command"] == "lint"
-    assert payload["path"] == str(document)
-    assert payload["clean"] is True
-    assert payload["findings"] == []
-    assert _get(payload, "projection", "work_id") == WORK_ID
-
-
-def test_lint_reports_findings_as_an_answer_not_a_refusal(tmp_path: Path) -> None:
-    document = tmp_path / "missing.md"
-
-    status, payload = _run("lint", str(document))
-
-    assert status == 0
-    assert payload["ok"] is True
-    assert payload["clean"] is False
-    findings = cast(list[dict[str, object]], payload["findings"])
-    assert [f["code"] for f in findings] == ["projection-unreadable"]
-    assert payload["projection"] is None
-
+    assert status == 2
+    assert _get(payload, "error", "code") == ""
+    text = cast(str, _get(payload, "error", "text"))
+    assert f'Unknown command "{verb}".' in text
+    assert "Available commands: checkpoint, validate" in text
+    assert verb not in wheypoint.COMMANDS
 
 def test_an_unknown_command_is_a_usage_error_in_the_same_json_shape() -> None:
     status, payload = _run("destroy")
@@ -612,22 +593,17 @@ def test_every_reply_is_one_document_of_indented_json() -> None:
     assert json.dumps(payload, indent=2) + "\n" == text
 
 
-def test_the_command_surface_is_exactly_fourteen_commands() -> None:
+def test_the_command_surface_is_exactly_nine_commands() -> None:
     assert wheypoint.COMMANDS == (
         "checkpoint",
         "validate",
         "schema",
         "resolve",
         "show",
-        "lint",
         "list",
         "log",
         "turns",
         "fork",
-        "link",
-        "unlink",
-        "shape",
-        "backlinks",
     )
     assert "commit" not in wheypoint.COMMANDS and "create" not in wheypoint.COMMANDS
 
@@ -696,7 +672,7 @@ def test_ac3_entries_are_promoted_per_kind_with_their_rationale() -> None:
                 },
                 {"kind": "question", "summary": "Bump or migrate?"},
                 {
-                    "kind": "blocker",
+                    "kind": "question",
                     "summary": "Bundle is stale.",
                     "blocks_continuation": False,
                 },
@@ -706,8 +682,7 @@ def test_ac3_entries_are_promoted_per_kind_with_their_rationale() -> None:
     assert status == 0, payload
     decisions = cast(list[dict[str, object]], _get(payload, "record", "decisions"))
     assert decisions[0]["rationale"] == "digests need it"
-    assert len(cast(list[object], _get(payload, "record", "questions"))) == 1
-    assert len(cast(list[object], _get(payload, "record", "blockers"))) == 1
+    assert len(cast(list[object], _get(payload, "record", "questions"))) == 2
 
 
 @pytest.mark.usefixtures("store")
@@ -942,15 +917,10 @@ def test_ac10_commit_is_no_longer_a_listed_command() -> None:
         "schema",
         "resolve",
         "show",
-        "lint",
         "list",
         "log",
         "turns",
         "fork",
-        "link",
-        "unlink",
-        "shape",
-        "backlinks",
         "handoff",
     ]
 
@@ -1151,21 +1121,17 @@ def test_cure_secret_scan_covers_every_string_field() -> None:
     status, payload = _run(
         "checkpoint",
         stdin=_first_intent(
-            decision_dossier=[
+            entries=[
                 {
-                    "fork": "f",
-                    "options": [
-                        {"option": "o", "evidence": [f"AKIA{'C' * 16}"], "breaks": "x"}
-                    ],
-                    "prior_leaning": None,
+                    "kind": "question",
+                    "summary": "q",
+                    "blocks_continuation": True,
+                    "rationale": f"AKIA{'C' * 16}",
                 }
             ],
-            entries=[{"kind": "question", "summary": "q", "blocks_continuation": True}],
         ),
     )
-    assert status == 1 and _error(payload)[1].startswith(
-        "decision_dossier[0].options[0].evidence[0]"
-    )
+    assert status == 1 and _error(payload)[1].startswith("entries[0].rationale")
 
 
 def test_cure_a_compaction_proof_is_part_of_the_request_identity(
@@ -1293,8 +1259,8 @@ def _tasks_intent(**fields: object) -> str:
 
 
 @pytest.mark.usefixtures("store")
-def test_cure_a_tasks_projection_parses_and_lints_clean() -> None:
-    from easy_cheese.shared.wheypoint import lint, projection
+def test_cure_a_tasks_projection_parses() -> None:
+    from easy_cheese.shared.wheypoint import projection
 
     status, payload = _run("checkpoint", stdin=_tasks_intent())
     assert status == 0, payload
@@ -1308,7 +1274,6 @@ def test_cure_a_tasks_projection_parses_and_lints_clean() -> None:
         parsed.next_action.parallel is not None
         and parsed.next_action.parallel.worktree_root == "../wt"
     )
-    assert lint.lint_projection_text(markdown).findings == ()
 
 
 @pytest.mark.usefixtures("store")
@@ -1518,7 +1483,7 @@ def test_cure_validate_reports_the_next_action_gate_and_the_task_command_togethe
 
 
 @pytest.mark.usefixtures("store")
-def test_cure_ac7_a_non_gating_question_with_a_dossier_renders_open_entries() -> None:
+def test_cure_ac7_a_non_gating_question_renders_open_entries() -> None:
     status, payload = _run(
         "checkpoint",
         stdin=_first_intent(
@@ -1527,13 +1492,6 @@ def test_cure_ac7_a_non_gating_question_with_a_dossier_renders_open_entries() ->
                     "kind": "question",
                     "summary": "Bump or migrate?",
                     "blocks_continuation": False,
-                }
-            ],
-            decision_dossier=[
-                {
-                    "fork": "f",
-                    "options": [{"option": "o", "evidence": ["e"], "breaks": "x"}],
-                    "prior_leaning": None,
                 }
             ],
         ),
@@ -2012,14 +1970,6 @@ def test_resolve_miss_lists_close_suggestions() -> None:
 PROJECT = "paulnsorensen-easy-cheese"
 OTHER = "other-work"
 OTHER_REF = f"wheypoint:{PROJECT}/{OTHER}"
-# A gating entry needs a dossier fork on the record before it can commit.
-DOSSIER = [
-    {
-        "fork": "Store backing",
-        "options": [{"option": "local", "evidence": ["no git"], "breaks": "nothing"}],
-        "prior_leaning": "local",
-    }
-]
 
 
 def _seed(work_id: str = WORK_ID, **fields: object) -> dict[str, object]:
@@ -2055,9 +2005,6 @@ def test_ac4_fork_writes_only_the_child_genesis(corpus_root: Path) -> None:
             {"kind": "directive", "summary": "Keep forks small.", "quote": "small"},
         ]
     )
-    record = cast(dict[str, object], seeded["record"])
-    question = cast(list[dict[str, str]], record["questions"])[0]["entry_id"]
-    directive = cast(list[dict[str, str]], record["directives"])[0]["entry_id"]
     parent_revision = cast(str, seeded["revision_id"])
     parent = storage.WorkStore.open(WORK_ID, corpus_root=corpus_root)
     parent_bytes = parent.record_path.read_bytes()
@@ -2066,10 +2013,6 @@ def test_ac4_fork_writes_only_the_child_genesis(corpus_root: Path) -> None:
         "fork",
         WORK_ID,
         "child-work",
-        "--move",
-        question,
-        "--copy",
-        directive,
         "--orientation",
         "Child work.\nSplit off the parent.",
     )
@@ -2079,14 +2022,9 @@ def test_ac4_fork_writes_only_the_child_genesis(corpus_root: Path) -> None:
     assert (payload["work_id"], payload["revision_number"]) == ("child-work", 1)
     child = storage.WorkStore.open("child-work", corpus_root=corpus_root)
     assert [r.revision_id for r in child.receipt_revisions()] == [payload["revision_id"]]
-    origins = cast(dict[str, str], payload["origins"])
-    assert sorted(ref.rpartition("#")[2] for ref in origins.values()) == sorted(
-        [question, directive]
-    )
-    assert all(
-        ref.startswith("wheypoint:") and f"@{parent_revision}#" in ref
-        for ref in origins.values()
-    )
+    assert "origins" not in payload
+    child_record = cast(dict[str, object], payload["record"])
+    assert not child_record.get("questions") and not child_record.get("directives")
     forked_from = [
         to for to, kind in _edge_pairs(payload["edges"]) if kind == "forked_from"
     ]
@@ -2103,114 +2041,30 @@ def test_ac4_fork_refusals_surface_their_own_code() -> None:
     status, payload = _run("fork", "no-such-work", "child", "--orientation", "C.")
     assert (status, _error(payload)[0]) == (1, "unknown-parent")
 
-    status, payload = _run(
-        "fork", WORK_ID, "child", "--move", "q-missing", "--orientation", "C."
-    )
-    assert (status, _error(payload)[0]) == (1, "unknown-entry")
-
     assert _run("fork", WORK_ID, "child", "--orientation", "C.")[0] == 0
     status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
     assert (status, _error(payload)[0]) == (1, "fork-exists")
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_ac8_link_is_pending_on_the_target_until_its_next_checkpoint() -> None:
-    _ = _seed()
-    _ = _seed(OTHER)
-
-    status, payload = _run("link", WORK_ID, OTHER_REF, "--kind", "relates_to")
-    assert status == 0, payload
-    assert payload["revision_number"] == 2
-    assert [kind for _, kind in _edge_pairs(payload["applied_edges"])] == ["relates_to"]
-    assert _edge_pairs(payload["applied_edges"])[0][0].startswith(OTHER_REF)
-
-    status, shown = _run("show", OTHER)
-    assert status == 0
-    pending = cast(list[dict[str, object]], shown["pending"])
-    assert [(item["kind"], cast(str, item["source"]).endswith(WORK_ID)) for item in pending] == [
-        ("relates_to", True)
-    ]
-
-    status, receipt = _run("checkpoint", stdin=json.dumps({"work_id": OTHER, "notes": "Next."}))
-    assert status == 0, receipt
-    applied = _edge_pairs(receipt["applied_edges"])
-    assert [(to.startswith(f"wheypoint:{PROJECT}/{WORK_ID}"), kind) for to, kind in applied] == [
-        (True, "relates_to")
-    ]
-    assert _run("show", OTHER)[1]["pending"] == []
-
-
-@pytest.mark.usefixtures("corpus_root")
-def test_ac9_unlink_removes_the_edge_by_target_and_kind() -> None:
-    _ = _seed()
-    _ = _seed(OTHER)
-    assert _run("link", WORK_ID, OTHER_REF, "--kind", "informs")[0] == 0
-
-    status, payload = _run("unlink", WORK_ID, OTHER_REF, "--kind", "informs")
-    assert status == 0, payload
-    assert [kind for _, kind in _edge_pairs(payload["removed_edges"])] == ["informs"]
-    assert cast(dict[str, object], payload["record"]).get("edges", []) == []
-
-    status, payload = _run("unlink", WORK_ID, OTHER_REF, "--kind", "informs")
-    assert (status, _error(payload)[0]) == (1, "unknown-edge")
-
-
-def test_ac10_shape_returns_nodes_edges_dot_and_dangling(corpus_root: Path) -> None:
+def test_ac12_list_linked_to_returns_the_linking_records() -> None:
     for work_id in (WORK_ID, OTHER, "third-work"):
         _ = _seed(work_id)
-    # `other-work` links first: a later commit on it would apply the reciprocal
-    # of `work-0001`'s link and make a third held edge.
-    assert _run("link", OTHER, f"wheypoint:{PROJECT}/third-work", "--kind", "blocked_by")[0] == 0
-    assert _run("link", WORK_ID, OTHER_REF, "--kind", "relates_to")[0] == 0
-
-    status, payload = _run("shape", "--scope", "project")
-    assert status == 0, payload
-    assert len(cast(list[object], payload["nodes"])) == 3
-    edges = cast(list[dict[str, object]], payload["edges"])
-    assert sorted((cast(str, e["from"]).rpartition("/")[2], e["kind"]) for e in edges) == [
-        (OTHER, "blocked_by"),
-        (WORK_ID, "relates_to"),
-    ]
-    assert payload["dangling"] == []
-    dot = cast(str, payload["dot"])
-    assert dot == _run("shape", "--scope", "project")[1]["dot"]
-    if shutil.which("dot"):
-        rendered = subprocess.run(
-            ["dot", "-Tsvg"], input=dot, capture_output=True, text=True, check=False
-        )
-        assert rendered.returncode == 0, rendered.stderr
-
-    shutil.rmtree(storage.WorkStore.open("third-work", corpus_root=corpus_root).record_path.parent)
-    status, payload = _run("shape", "--scope", "project")
-    assert status == 0, payload
-    assert [e["kind"] for e in cast(list[dict[str, object]], payload["dangling"])] == [
-        "blocked_by"
-    ]
-
-
-@pytest.mark.usefixtures("corpus_root")
-def test_ac12_list_linked_to_and_backlinks_return_the_same_records() -> None:
-    for work_id in (WORK_ID, OTHER, "third-work"):
-        _ = _seed(work_id)
-    assert _run("link", WORK_ID, OTHER_REF, "--kind", "relates_to")[0] == 0
-    assert _run("link", "third-work", OTHER_REF, "--kind", "informs")[0] == 0
+    link = ("checkpoint", WORK_ID, "--link", OTHER_REF, "--kind", "supersedes")
+    assert _run(*link)[0] == 0
+    link = ("checkpoint", "third-work", "--link", OTHER_REF, "--kind", "checkpoints")
+    assert _run(*link)[0] == 0
 
     status, listed = _run("list", "--linked-to", OTHER_REF)
     assert status == 0, listed
-    status, back = _run("backlinks", OTHER_REF)
-    assert status == 0, back
-    assert _hit_keys(listed) == _hit_keys(back) == {(PROJECT, WORK_ID), (PROJECT, "third-work")}
+    assert _hit_keys(listed) == {(PROJECT, WORK_ID), (PROJECT, "third-work")}
     item = next(
-        i for i in cast(list[dict[str, object]], back["items"]) if i["ref"] == WORK_ID
+        i for i in cast(list[dict[str, object]], listed["items"]) if i["ref"] == WORK_ID
     )
     edges_out = cast(list[dict[str, str]], item["edges_out"])
     assert [(edge["kind"], edge["to"].startswith(OTHER_REF)) for edge in edges_out] == [
-        ("relates_to", True)
+        ("supersedes", True)
     ]
-    other = next(
-        i for i in cast(list[dict[str, object]], listed["items"]) if i["ref"] == WORK_ID
-    )
-    assert other["edges_out"] == item["edges_out"]
     status, everything = _run("list")
     assert status == 0, everything
     target = next(
@@ -2220,16 +2074,19 @@ def test_ac12_list_linked_to_and_backlinks_return_the_same_records() -> None:
         (edge["kind"], edge["source"])
         for edge in cast(list[dict[str, str]], target["edges_in"])
     ) == [
-        ("informs", f"wheypoint:{PROJECT}/third-work"),
-        ("relates_to", f"wheypoint:{PROJECT}/{WORK_ID}"),
+        ("checkpoints", f"wheypoint:{PROJECT}/third-work"),
+        ("supersedes", f"wheypoint:{PROJECT}/{WORK_ID}"),
     ]
 
 
 @pytest.mark.usefixtures("corpus_root")
 def test_ac13_list_filters_gated_records_by_entry_kind_and_state() -> None:
     _ = _seed(entries=[{"kind": "question", "summary": "Open but not gating?"}])
-    _ = _seed(OTHER, decision_dossier=DOSSIER)
-    status, gated = _run("checkpoint", "--work-id", OTHER, "--question", "Gate?", "--gates")
+    _ = _seed(OTHER)
+    status, gated = _run(
+        "checkpoint", "--work-id", OTHER, "--question", "Gate?", "--gates",
+        "--rationale", "Needs an answer.",
+    )
     assert status == 0, gated
 
     status, payload = _run(
@@ -2246,13 +2103,15 @@ def test_ac14_checkpoint_flags_commit_the_same_revision_as_the_intent_file(
 ) -> None:
     monkeypatch.setenv("EASY_CHEESE_PROJECT", PROJECT)
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "flags"))
-    _ = _seed(decision_dossier=DOSSIER)
+    _ = _seed()
     status, by_flags = _run(
         "checkpoint",
         WORK_ID,
         "--question",
         "Q",
         "--gates",
+        "--rationale",
+        "Why.",
         "--directive",
         "D",
         "--quote",
@@ -2261,12 +2120,17 @@ def test_ac14_checkpoint_flags_commit_the_same_revision_as_the_intent_file(
     assert status == 0, by_flags
 
     monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "file"))
-    _ = _seed(decision_dossier=DOSSIER)
+    _ = _seed()
     intent = tmp_path / "intent.json"
     _ = intent.write_text(
         _intent_json(
             entries=[
-                {"kind": "question", "summary": "Q", "blocks_continuation": True},
+                {
+                    "kind": "question",
+                    "summary": "Q",
+                    "blocks_continuation": True,
+                    "rationale": "Why.",
+                },
                 {"kind": "directive", "summary": "D", "quote": "d"},
             ]
         ),
@@ -2299,7 +2163,9 @@ def test_ac17_a_milknado_checkpoints_edge_binds_only_when_milknado_is_present(
     before = _run("resolve", WORK_ID)[1]
     node = f"milknado:{PROJECT}/node-7"
 
-    status, payload = _run("link", WORK_ID, node, "--kind", "checkpoints")
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--link", node, "--kind", "checkpoints"
+    )
     assert status == 0, payload
 
     status, inactive = _run("resolve", WORK_ID)
@@ -2337,17 +2203,24 @@ def test_graph_an_unpinnable_link_that_covers_entries_is_refused() -> None:
     assert (status, _error(payload)[0]) == (1, "unpinnable-scheme")
 
     status, payload = _run(
-        "link", WORK_ID, "https://example.com", "--kind", "informs", "--covers", decision
+        "checkpoint",
+        WORK_ID,
+        "--link",
+        "https://example.com",
+        "--kind",
+        "supersedes",
+        "--covers",
+        decision,
     )
-    assert (status, _error(payload)[0]) == (1, "unpinnable-scheme")
+    assert (status, _error(payload)[0]) == (1, "flag-pairing")
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_graph_show_reports_bridge_and_an_empty_pending_list() -> None:
+def test_graph_show_reports_the_bridge_state() -> None:
     _ = _seed()
     status, payload = _run("show", WORK_ID)
     assert status == 0
-    assert payload["pending"] == []
+    assert "pending" not in payload
     assert _get(payload, "bridge", "state") == "unbound"
 
 
@@ -2406,23 +2279,26 @@ def test_cure_relinking_a_covered_ref_keeps_its_coverage(
         for entry in cast(list[dict[str, str]], _get(seeded, "record", "decisions"))
     )
     ref = "repo:README.md"
-    status, payload = _run("link", WORK_ID, ref, "--kind", "informs", "--covers", first)
+    link = ("checkpoint", WORK_ID, "--link", ref)
+    status, payload = _run(*link, "--kind", "supersedes", "--covers", first)
     assert status == 0, payload
     assert _covers(payload, ref) == [first]
 
-    status, payload = _run("link", WORK_ID, ref, "--kind", "informs")
+    status, payload = _run(*link, "--kind", "supersedes")
     assert status == 0, payload
     assert _covers(payload, ref) == [first]
 
-    status, payload = _run("link", WORK_ID, ref, "--kind", "implements")
+    status, payload = _run(*link, "--kind", "checkpoints")
     assert status == 0, payload
     assert _covers(payload, ref) == [first]
 
-    status, payload = _run("checkpoint", WORK_ID, "--link", ref, "--kind", "relates_to")
+    status, payload = _run("checkpoint", WORK_ID, "--link", ref, "--kind", "supersedes")
     assert status == 0, payload
     assert _covers(payload, ref) == [first]
 
-    status, payload = _run("link", WORK_ID, ref, "--kind", "informs", "--covers", second)
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--link", ref, "--kind", "checkpoints", "--covers", second
+    )
     assert status == 0, payload
     assert _covers(payload, ref) == [second]
 
@@ -2492,7 +2368,9 @@ def test_cure_a_file_link_keeps_its_explicit_empty_coverage_beside_flags(
         for entry in cast(list[dict[str, str]], _get(seeded, "record", "decisions"))
     )
     ref = "repo:README.md"
-    status, payload = _run("link", WORK_ID, ref, "--kind", "informs", "--covers", first)
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--link", ref, "--kind", "supersedes", "--covers", first
+    )
     assert status == 0, payload
     assert _covers(payload, ref) == [first]
 
@@ -2525,11 +2403,13 @@ def test_cure_a_pinned_link_does_not_take_another_revisions_coverage() -> None:
     new = cast(str, payload["revision_id"])
     old_ref, new_ref = f"{OTHER_REF}@{old}", f"{OTHER_REF}@{new}"
 
-    status, payload = _run("link", WORK_ID, new_ref, "--kind", "informs", "--covers", first)
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--link", new_ref, "--kind", "supersedes", "--covers", first
+    )
     assert status == 0, payload
     assert _covers(payload, new_ref) == [first]
 
-    status, payload = _run("checkpoint", WORK_ID, "--link", old_ref, "--kind", "relates_to")
+    status, payload = _run("checkpoint", WORK_ID, "--link", old_ref, "--kind", "checkpoints")
     assert status == 0, payload
     assert (_covers(payload, old_ref), _covers(payload, new_ref)) == ([], [first])
 
@@ -2546,15 +2426,11 @@ def test_cure_fork_from_an_unreadable_parent_is_refused(corpus_root: Path) -> No
 
 @pytest.mark.usefixtures("corpus_root")
 def test_cure_fork_input_errors_are_invalid_intent_not_record_unreadable() -> None:
-    seeded = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
-    (first,) = (
-        entry["entry_id"]
-        for entry in cast(list[dict[str, str]], _get(seeded, "record", "questions"))
-    )
-    status, payload = _run("fork", WORK_ID, "child", "--move", first, "--orientation", "")
+    _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
+    status, payload = _run("fork", WORK_ID, "child", "--orientation", "")
     assert (status, _error(payload)[0]) == (1, "invalid-intent")
     status, payload = _run(
-        "fork", WORK_ID, "child", "--move", first, "--orientation", "C.",
+        "fork", WORK_ID, "child", "--orientation", "C.",
         "--next", "cook", "--artifact", "",
     )
     assert (status, _error(payload)[0]) == (1, "invalid-intent")
@@ -2565,18 +2441,9 @@ def test_cure_fork_mirrors_the_child_note_except_under_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     checkout = _git_checkout(tmp_path, monkeypatch)
-    seeded = _seed(
-        entries=[
-            {"kind": "question", "summary": "Which store?"},
-            {"kind": "question", "summary": "Which host?"},
-        ]
-    )
-    first, second = (
-        entry["entry_id"]
-        for entry in cast(list[dict[str, str]], _get(seeded, "record", "questions"))
-    )
+    _ = _seed()
 
-    status, payload = _run("fork", WORK_ID, "child", "--move", first, "--orientation", "C.")
+    status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
     assert status == 0, payload
     mirror = checkout / ".cheese" / "notes" / "child.md"
     assert payload["note_path"] == str(mirror)
@@ -2584,7 +2451,7 @@ def test_cure_fork_mirrors_the_child_note_except_under_project(
     assert mirror.read_text(encoding="utf-8") == payload["markdown"]
 
     status, payload = _run(
-        "fork", WORK_ID, "child-two", "--move", second, "--orientation", "C.", "--project", PROJECT
+        "fork", WORK_ID, "child-two", "--orientation", "C.", "--project", PROJECT
     )
     assert status == 0, payload
     assert (payload["note_path"], payload["durability"]) == (None, "canonical-local")
@@ -2595,14 +2462,11 @@ def test_cure_fork_mirrors_the_child_note_except_under_project(
 @pytest.mark.parametrize(
     ("argv", "code"),
     [
-        (("shape", "--kind", "nope"), "flag-kind"),
         (("fork", WORK_ID, "child", "--orientation", "C.", "--next", "bogus"), "invalid-intent"),
-        (("link", WORK_ID, OTHER_REF, "--kind", "nope"), "flag-kind"),
-        (("unlink", WORK_ID, OTHER_REF, "--kind", "nope"), "flag-kind"),
+        (("checkpoint", WORK_ID, "--link", OTHER_REF, "--kind", "nope"), "flag-kind"),
         (("list", "--edge-kind", "nope"), "flag-kind"),
         (("list", "--entry-kind", "nope"), "flag-entry"),
         (("list", "--entry-state", "nope"), "flag-entry"),
-        (("backlinks", "garbage"), "flag-link"),
     ],
 )
 def test_cure_a_bad_enum_value_is_refused_with_its_code(
@@ -2611,3 +2475,64 @@ def test_cure_a_bad_enum_value_is_refused_with_its_code(
     _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
     status, payload = _run(*argv)
     assert (status, _error(payload)[0]) == (1, code)
+
+
+def _corpus_bytes(root: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _stamp_record_future(store: storage.WorkStore) -> None:
+    payload = cast(dict[str, object], json.loads(store.record_path.read_text()))
+    payload["schema_version"] = cast(int, payload["schema_version"]) + 1
+    _ = store.record_path.write_text(json.dumps(payload))
+
+
+def test_show_refuses_a_future_stamped_record_without_writing(
+    store: storage.WorkStore, corpus_root: Path
+) -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _stamp_record_future(store)
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run("show", WORK_ID)
+
+    assert status == 1
+    assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
+    assert _corpus_bytes(corpus_root) == before
+
+
+def test_checkpoint_refuses_a_future_stamped_record_without_writing(
+    store: storage.WorkStore, corpus_root: Path
+) -> None:
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    _stamp_record_future(store)
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="Past the future."
+        ),
+    )
+
+    assert status == 1
+    assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
+    assert _corpus_bytes(corpus_root) == before
+
+
+def test_fork_refuses_a_future_stamped_parent_without_writing(
+    store: storage.WorkStore, corpus_root: Path
+) -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _stamp_record_future(store)
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
+
+    assert status == 1
+    assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
+    assert _corpus_bytes(corpus_root) == before

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import threading
@@ -17,8 +18,6 @@ from easy_cheese_schemas import (
     SCHEMA_VERSION,
     ArtifactLink,
     CompactionRecord,
-    DecisionFork,
-    DossierOption,
     EntryKind,
     EntryState,
     EntryTransition,
@@ -131,7 +130,6 @@ def test_narrowed_delta_preserves_omitted_protected_state(
     parent = make_record(
         decisions=[_entry("d-keep", EntryKind.DECISION)],
         questions=[_entry("q-keep", EntryKind.QUESTION)],
-        blockers=[_entry("b-keep", EntryKind.BLOCKER)],
         artifact_links=[ArtifactLink(path=".cheese/cook/wave-2.md")],
     )
     seed = _seed(store, make_promotion, record=parent)
@@ -143,9 +141,7 @@ def test_narrowed_delta_preserves_omitted_protected_state(
 
     assert [entry.entry_id for entry in result.record.decisions] == ["d-keep"]
     assert [entry.entry_id for entry in result.record.questions] == ["q-keep"]
-    assert [entry.entry_id for entry in result.record.blockers] == ["b-keep"]
     assert result.record.artifact_links == parent.artifact_links
-    assert result.revision.preserved_entry_ids == ["d-keep", "q-keep", "b-keep"]
     assert result.revision.applied_additions == []
 
 
@@ -168,35 +164,6 @@ def test_a_stale_schema_version_stamp_is_refreshed_on_commit(
 
     assert result.record.schema_version == SCHEMA_VERSION
 
-
-def test_resolving_the_last_gate_must_clear_the_dossier_it_carried(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    """ADR wheypoint-ergonomics-001: a dossier is required while something
-    gates, but nothing forces it to disappear once the last gate clears --
-    `_dossier_rule` only checks that direction. Resolving the last gate is
-    accepted outright, the fork it carried survives untouched, and clearing
-    the dossier explicitly in the same delta is equally legal."""
-    seed = _seed(store, make_promotion, gating=True)
-    resolve = EntryTransition(
-        entry_id="q-durability",
-        action=TransitionAction.RESOLVE,
-        rationale="canonical-local it is",
-    )
-
-    carried = commit.commit(
-        _delta(seed.record.revision_id, transitions=[resolve]), store=store
-    )
-
-    assert carried.record.decision_dossier == seed.record.decision_dossier
-    assert carried.record.status is WheypointStatus.OK
-
-    cleared = commit.commit(
-        _delta(carried.record.revision_id, decision_dossier=[]), store=store
-    )
-
-    assert cleared.record.decision_dossier == []
-    assert cleared.record.status is WheypointStatus.OK
 
 
 def test_assigned_entry_ids_are_derived_from_the_request_not_the_clock(
@@ -273,9 +240,6 @@ def test_transition_settles_the_entry_and_leaves_it_out_of_the_preserved_ledger(
     resolved = result.record.questions[0]
     assert resolved.state is EntryState.RESOLVED
     assert resolved.rationale == "Answered in wave 3."
-    # Only the untouched entry is preserved: a settled entry was applied, not
-    # carried, and the ledgers must not double-count it.
-    assert result.revision.preserved_entry_ids == ["d-new"]
     assert [t.entry_id for t in result.revision.applied_transitions] == [
         "d-old",
         "q-open",
@@ -352,7 +316,7 @@ def test_a_delta_offers_no_way_to_remove_protected_state() -> None:
         for name in field_names
         if any(
             protected in name
-            for protected in ("decisions", "questions", "blockers", "directives")
+            for protected in ("decisions", "questions", "directives")
         )
     }
     assert not [
@@ -394,51 +358,6 @@ def test_a_record_quoting_the_wrong_receipt_digest_blocks_the_next_revision(
     assert _revision_files(store) == [
         f"1-{seed.record.revision_id}.json",
     ]
-
-
-def test_a_missing_ancestor_receipt_blocks_the_next_revision(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    _ = _seed(store, make_promotion)
-    broken = make_promotion(2, "rev-0002", parent="rev-missing")
-    store.promote(broken.record, broken.revision, broken.markdown)
-
-    with pytest.raises(commit.CommitError, match="names parent 'rev-missing'"):
-        _ = commit.commit(
-            _delta(broken.record.revision_id, orientation="Reject a broken chain."),
-            store=store,
-        )
-
-
-def test_a_cyclic_ancestor_chain_blocks_the_next_revision(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    cyclic = make_promotion(1, "rev-0001", parent="rev-0001")
-    store.promote(cyclic.record, cyclic.revision, cyclic.markdown)
-
-    with pytest.raises(commit.CommitError, match="re-enters the chain"):
-        _ = commit.commit(
-            _delta(cyclic.record.revision_id, orientation="Reject a cyclic chain."),
-            store=store,
-        )
-
-
-def test_a_parent_receipt_digest_mismatch_blocks_the_next_revision(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    seed = _seed(store, make_promotion)
-    second = make_promotion(2, "rev-0002", parent=seed)
-    forged = evolve(second.revision, parent_revision_digest=PLACEHOLDER_DIGEST)
-    forged_record = evolve(
-        second.record, revision_digest=records.revision_digest(forged)
-    )
-    store.promote(forged_record, forged, second.markdown)
-
-    with pytest.raises(commit.CommitError, match="pins parent"):
-        _ = commit.commit(
-            _delta(forged_record.revision_id, orientation="Reject a forged parent."),
-            store=store,
-        )
 
 
 def test_identical_replay_against_the_same_parent_returns_the_existing_revision(
@@ -749,88 +668,22 @@ def test_a_compacted_delta_without_a_compaction_record_is_rejected(
     assert store.read_record() == seed.record
 
 
-def test_a_compaction_record_quoting_the_wrong_record_digest_is_rejected(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    """Naming the current revision is not proof it was re-read: the id is the
-    one part of the report a stale transcript already holds."""
-    seed = _seed(store, make_promotion)
-    after_seed = _revision_files(store)
-
-    with pytest.raises(commit.CommitError) as raised:
-        _ = commit.commit(
-            _delta(
-                seed.record.revision_id,
-                orientation="Right revision, unread record.",
-                compacted=True,
-                compaction=_compaction(
-                    seed.record, rehydrated_record_digest=PLACEHOLDER_DIGEST
-                ),
-            ),
-            store=store,
-        )
-
-    assert "did not re-read the record it is writing over" in str(raised.value)
-    assert _revision_files(store) == after_seed
-    assert store.read_record() == seed.record
-
-
-def test_a_compaction_record_missing_a_protected_entry_is_rejected(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
-) -> None:
-    seed = _seed(store, make_promotion, gating=True)
-    after_seed = _revision_files(store)
-
-    with pytest.raises(commit.CommitError) as raised:
-        _ = commit.commit(
-            _delta(
-                seed.record.revision_id,
-                orientation="Reconciled nothing.",
-                compacted=True,
-                compaction=_compaction(seed.record, reconciled_entry_ids=[]),
-            ),
-            store=store,
-        )
-
-    assert "does not reconcile protected entries 'q-durability'" in str(raised.value)
-    assert _revision_files(store) == after_seed
-    assert store.read_record() == seed.record
-
-
-def test_a_new_gating_blocker_derives_gated_and_needs_a_dossier(
+def test_a_new_gating_question_derives_gated(
     store: storage.WorkStore, make_promotion: Callable[..., Promotion]
 ) -> None:
     seed = _seed(store, make_promotion)
-    blocker = ProposedEntry(
-        kind=EntryKind.BLOCKER,
+    question = ProposedEntry(
+        kind=EntryKind.QUESTION,
         summary="Vendored cattrs is missing.",
         blocks_continuation=True,
+        rationale="The build cannot continue without it.",
     )
-    fork = DecisionFork(
-        fork="How to vendor cattrs",
-        options=[
-            DossierOption(
-                option="pin the lock",
-                evidence=["the build already hashes it"],
-                breaks="nothing until the lock moves",
-            )
-        ],
-    )
-
-    with pytest.raises(commit.CommitError, match="does not produce a legal record"):
-        _ = commit.commit(
-            _delta(seed.record.revision_id, add_blockers=[blocker]), store=store
-        )
-    assert _revision_files(store) == [f"1-{seed.record.revision_id}.json"]
 
     result = commit.commit(
-        _delta(
-            seed.record.revision_id, add_blockers=[blocker], decision_dossier=[fork]
-        ),
-        store=store,
+        _delta(seed.record.revision_id, add_questions=[question]), store=store
     )
 
-    gate = result.record.blockers[0].entry_id
+    gate = result.record.questions[0].entry_id
     assert result.record.status is WheypointStatus.GATED
     assert result.projection.status is WheypointStatus.GATED
     assert result.projection.gating_entry_ids == [gate]
@@ -1072,6 +925,29 @@ def _genesis_delta(**overrides: object) -> WheypointDelta:
     return _delta(commit.GENESIS_PARENT, **fields)
 
 
+def test_ac10_a_commit_writes_a_receipt_without_the_removed_fields(
+    store: storage.WorkStore,
+) -> None:
+    result = commit.commit(_genesis_delta(), store=store)
+
+    raw = cast(
+        dict[str, object],
+        json.loads(
+            store.revision_path(
+                result.revision.revision_number, result.revision.revision_id
+            ).read_bytes()
+        ),
+    )
+    assert raw["schema_version"] == SCHEMA_VERSION
+    assert raw["record_digest"] == records.record_digest(result.record)
+    assert result.record.revision_digest == records.revision_digest(result.revision)
+    assert "projection_digest" not in raw
+    assert "preserved_entry_ids" not in raw
+    assert "projection_digest" not in store.projection_path(
+        result.revision.revision_number, result.revision.revision_id
+    ).read_text(encoding="utf-8")
+
+
 def test_genesis_creates_the_first_record_when_the_store_is_empty(
     store: storage.WorkStore,
 ) -> None:
@@ -1102,7 +978,6 @@ def test_genesis_creates_the_first_record_when_the_store_is_empty(
     assert record.working_context == ["src/easy_cheese/shared/wheypoint/commit.py"]
     assert [entry.summary for entry in record.decisions] == ["Genesis is a commit."]
     assert result.revision.applied_additions == list(record.decisions)
-    assert result.revision.preserved_entry_ids == []
     assert result.revision.applied_transitions == []
 
     revision_id = result.revision.revision_id
@@ -1436,106 +1311,3 @@ def test_committing_a_new_revision_never_reads_projection_files(
     assert fourth.record.revision_number == 4
     assert not any("projections" in path.parts for path in reads)
 
-
-def _fork(title: str, leaning: str = "a") -> DecisionFork:
-    return DecisionFork(
-        fork=title,
-        options=[DossierOption(option="a", evidence=["e"], breaks="b")],
-        prior_leaning=leaning,
-    )
-
-
-FIVE_TITLES = ["fork-1", "fork-2", "fork-3", "fork-4", "fork-5"]
-
-
-@pytest.fixture
-def five_forks(
-    store: storage.WorkStore,
-    make_promotion: Callable[..., Promotion],
-    make_record: Callable[..., WheypointRecord],
-) -> WheypointRecord:
-    record = make_record(
-        gating=True, decision_dossier=[_fork(title) for title in FIVE_TITLES]
-    )
-    return _seed(store, make_promotion, record=record).record
-
-
-def _titles(record: WheypointRecord) -> list[str]:
-    return [fork.fork for fork in record.decision_dossier]
-
-
-def test_ac15_a_one_fork_delta_merges_into_five_forks_to_give_six(
-    store: storage.WorkStore, five_forks: WheypointRecord
-) -> None:
-    result = commit.commit(
-        _delta(five_forks.revision_id, decision_dossier=[_fork("fork-6")]),
-        store=store,
-    )
-
-    assert _titles(result.record) == [*FIVE_TITLES, "fork-6"]
-
-
-def test_ac15_a_fork_with_a_carried_title_replaces_it_in_place(
-    store: storage.WorkStore, five_forks: WheypointRecord
-) -> None:
-    result = commit.commit(
-        _delta(five_forks.revision_id, decision_dossier=[_fork("fork-3", "b")]),
-        store=store,
-    )
-
-    assert _titles(result.record) == FIVE_TITLES
-    assert [fork.prior_leaning for fork in result.record.decision_dossier] == [
-        "a",
-        "a",
-        "b",
-        "a",
-        "a",
-    ]
-
-
-def test_ac15_remove_dossier_forks_removes_by_title(
-    store: storage.WorkStore, five_forks: WheypointRecord
-) -> None:
-    result = commit.commit(
-        _delta(five_forks.revision_id, remove_dossier_forks=("fork-2", "fork-4")),
-        store=store,
-    )
-
-    assert _titles(result.record) == ["fork-1", "fork-3", "fork-5"]
-
-
-def test_ac15_an_unknown_fork_title_is_refused(
-    store: storage.WorkStore, five_forks: WheypointRecord
-) -> None:
-    with pytest.raises(commit.CommitError, match="^unknown-dossier-fork: .*fork-9"):
-        _ = commit.commit(
-            _delta(five_forks.revision_id, remove_dossier_forks=("fork-9",)),
-            store=store,
-        )
-
-
-def test_ac15_an_explicit_empty_dossier_still_empties_it(
-    store: storage.WorkStore, five_forks: WheypointRecord
-) -> None:
-    resolve = EntryTransition(
-        entry_id="q-durability",
-        action=TransitionAction.RESOLVE,
-        rationale="answered",
-    )
-
-    result = commit.commit(
-        _delta(five_forks.revision_id, transitions=[resolve], decision_dossier=[]),
-        store=store,
-    )
-
-    assert result.record.decision_dossier == []
-
-
-def test_ac15_removing_every_fork_of_a_gated_record_is_refused(
-    store: storage.WorkStore, five_forks: WheypointRecord
-) -> None:
-    with pytest.raises(commit.CommitError, match="does not produce a legal record"):
-        _ = commit.commit(
-            _delta(five_forks.revision_id, remove_dossier_forks=tuple(FIVE_TITLES)),
-            store=store,
-        )

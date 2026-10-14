@@ -25,6 +25,7 @@ from easy_cheese_schemas import (
     CheckpointIntent,
     CompactionRecord,
     Durability,
+    EntryKind,
     WheypointDelta,
     WheypointRecord,
 )
@@ -57,22 +58,12 @@ def enum_values(
         raise fromargs.CliError(f"{code}: {flag} {exc}; known: {known}", exit_code=1) from exc
 
 
-def parsed_ref(ref: str) -> str:
-    """`ref` when the ref grammar can read it, else a `flag-link` refusal."""
-    try:
-        _ = ref_grammar.parse_ref(ref)
-    except ValueError as exc:
-        raise fromargs.CliError(f"flag-link: {exc}", exit_code=1) from exc
-    return ref
-
-
 @define(frozen=True, kw_only=True)
 class IntentFlags:
     """The `checkpoint` and `validate` flags that build or overlay an intent (G7)."""
 
     work_id: str | None = None
     question: Sequence[str] = ()
-    blocker: Sequence[str] = ()
     gates: bool = False
     decision: Sequence[str] = ()
     rationale: Sequence[str] = ()
@@ -105,7 +96,6 @@ class IntentFlags:
                 cast(dict[str, object], payload),
                 work_id=self.work_id,
                 question=self.question,
-                blocker=self.blocker,
                 gates=self.gates,
                 decision=self.decision,
                 rationale=self.rationale,
@@ -320,6 +310,8 @@ def commit_intent(
     store = open_store(intent.work_id)
     try:
         current = store.read_record()
+    except storage.SchemaVersionFutureError as exc:
+        raise refusal_for(exc) from exc
     except ValueError as exc:
         raise fromargs.CliError(
             f"record-unreadable: work {intent.work_id!r} has a record that cannot "
@@ -435,6 +427,8 @@ def refusal_for(exc: Exception) -> fromargs.CliError:
     A fork, flag, or commit refusal whose message starts with its own code
     surfaces that code; any other commit refusal is `commit-refused`.
     """
+    if isinstance(exc, storage.SchemaVersionFutureError):
+        return fromargs.CliError(f"{storage.FUTURE_STAMP_CODE}: {exc}", exit_code=1)
     if isinstance(exc, commit_mod.GenesisConflictError):
         return fromargs.CliError(f"genesis-conflict: {exc}", exit_code=1)
     if isinstance(exc, commit_mod.StaleParentError):
@@ -464,7 +458,7 @@ def _promote(
             )
         except (commit_mod.CommitError, storage.StorageError) as exc:
             raise refusal_for(exc) from exc
-        return result_payload(result, None)
+        return result_payload(result, None, warnings=_warnings_for(delta, result))
 
     try:
         note_dir.mkdir(parents=True, exist_ok=True)
@@ -476,6 +470,8 @@ def _promote(
 
     try:
         current = store.read_record()
+    except storage.SchemaVersionFutureError as exc:
+        raise refusal_for(exc) from exc
     except ValueError as exc:
         raise fromargs.CliError(
             f"record-unreadable: work {store.work_id!r} has a record that cannot "
@@ -495,7 +491,9 @@ def _promote(
                 )
             resume_target = note_dir / pending.target
             result = _resume_mirror(store, revision.revision_id, resume_target, pending)
-            return result_payload(result, str(resume_target))
+            return result_payload(
+                result, str(resume_target), warnings=_warnings_for(delta, result)
+            )
         try:
             store.remove_pending(request_identity)
         except OSError as exc:
@@ -528,7 +526,7 @@ def _promote(
         _drop_uncommitted_pending(store, pending)
         raise refusal_for(exc) from exc
     _clear_pending(store, request_identity)
-    return result_payload(result, str(target))
+    return result_payload(result, str(target), warnings=_warnings_for(delta, result))
 
 
 def mirror_finalizer(
@@ -647,8 +645,36 @@ def _resume_mirror(
     return result
 
 
+def _warnings_for(
+    delta: WheypointDelta, result: commit_mod.CommitResult
+) -> list[str]:
+    """Advice that does not refuse the write.
+
+    `stale-notes`: the delta added or transitioned a decision but left `notes`
+    as it was, so the free-text notes may now describe a superseded state.
+    A genesis commit, or a record that never had notes, has none to go stale.
+    """
+    revision = result.revision
+    if (
+        delta.notes is not None
+        or revision.parent_revision_id is None
+        or not result.record.notes
+    ):
+        return []
+    added = any(entry.kind is EntryKind.DECISION for entry in revision.applied_additions)
+    moved = any(
+        (entry := records.find_entry(result.record, item.entry_id)) is not None
+        and entry.kind is EntryKind.DECISION
+        for item in revision.applied_transitions
+    )
+    return ["stale-notes"] if added or moved else []
+
+
 def result_payload(
-    result: commit_mod.CommitResult, note_path: str | None
+    result: commit_mod.CommitResult,
+    note_path: str | None,
+    *,
+    warnings: Sequence[str] = (),
 ) -> dict[str, object]:
     """The commit reply every write verb shares, with each derived id named."""
     revision = result.revision
@@ -671,4 +697,5 @@ def result_payload(
         ],
         "applied_edges": [records.unstructure(edge) for edge in revision.applied_edges],
         "removed_edges": [records.unstructure(key) for key in revision.removed_edges],
+        "warnings": list(warnings),
     }

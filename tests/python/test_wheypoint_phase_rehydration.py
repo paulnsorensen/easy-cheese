@@ -388,11 +388,9 @@ def _seed_ambiguous_slug(corpus_root: Path, slug: str, project_key: str) -> None
             next_action=NextAction(move=NextMove.COOK, orientation="proceed"),
             decisions=[],
             questions=[],
-            blockers=[],
             artifact_links=[],
-            decision_dossier=[],
         )
-        projected, markdown = projection.build_projection(
+        _, markdown = projection.build_projection(
             record, durability=Durability.CANONICAL_LOCAL
         )
         revision = WheypointRevision(
@@ -406,9 +404,7 @@ def _seed_ambiguous_slug(corpus_root: Path, slug: str, project_key: str) -> None
             record_digest=records.record_digest(record),
             applied_additions=[],
             applied_transitions=[],
-            preserved_entry_ids=[],
             projection_path=f"projections/{record.revision_number}-{record.revision_id}.md",
-            projection_digest=projected.projection_digest,
             repository=RepositoryProvenance(
                 branch="claude/wheypoint", commit="abc1234"
             ),

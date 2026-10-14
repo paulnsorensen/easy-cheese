@@ -16,7 +16,7 @@ import fromargs
 import pytest
 
 from easy_cheese.shared.wheypoint import commit as commit_module
-from easy_cheese.shared.wheypoint import lint as lint_module
+from easy_cheese.shared.wheypoint import lint_types as lint_module
 from easy_cheese.shared.wheypoint import resolve as resolve_module
 from easy_cheese.shared.wheypoint import storage as wheypoint_storage
 

@@ -235,10 +235,8 @@ def _same_intent(
         (
             delta.add_decisions,
             delta.add_questions,
-            delta.add_blockers,
             delta.add_directives,
             delta.transitions,
-            delta.decision_dossier,
             delta.remove_artifact_links,
         )
     ):

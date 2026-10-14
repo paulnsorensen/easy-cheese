@@ -1172,9 +1172,9 @@ class TestWheypointDeriveNextFromBlockers:
         body = _skill("wheypoint")
         body_lower = body.lower()
         # Must instruct reading the blockers section before authoring next:.
-        assert (
-            "open questions and blockers" in body_lower or "blockers" in body_lower
-        ), "wheypoint must tell the author to read the Open-questions/blockers section"
+        assert "open questions" in body_lower, (
+            "wheypoint must tell the author to read the open questions"
+        )
         # The derive-from-blockers-not-optimism rule.
         assert "optimism" in body_lower or "derive" in body_lower, (
             "wheypoint must state next: derives from blockers, not optimism"

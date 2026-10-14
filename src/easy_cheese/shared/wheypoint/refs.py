@@ -25,7 +25,7 @@ from pathlib import Path
 
 from attrs import define
 
-from . import records, storage
+from . import storage
 from .ref_grammar import ParsedRef, Scheme, is_pinnable, normalize_ref, parse_ref
 
 __all__ = [
@@ -137,7 +137,6 @@ def _record(parsed: ParsedRef, corpus_home: Path) -> tuple[Path, str | None]:
         if parsed.revision_id is not None:
             receipt = store.find_complete_revision(parsed.revision_id)
             return store.root, None if receipt is None else receipt.record_digest
-        record = store.read_record()
+        return store.root, store.read_record_digest()
     except (OSError, ValueError):
         return store.root, None
-    return store.root, None if record is None else records.record_digest(record)
