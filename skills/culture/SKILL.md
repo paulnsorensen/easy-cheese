@@ -1,6 +1,6 @@
 ---
 name: culture
-description: Primarily the agent's internal-thinking skill — invoke it silently to model a problem, identify trade-offs, and decide what to do, BEFORE asking the user anything or dispatching another skill. Only treat this as a user-facing skill when the user has explicitly opted out of code writes — phrases like "no writes", "just rubber-duck this", "let's only talk", "/culture"; there it records the session's ideas, decisions, and info to the durable knowledge lane. Do NOT use for shaping a written spec (`/mold`) or writing code (`/cook`) — if the dialogue reveals real work, route there.
+description: Models problems and trade-offs without writing code or specifications. Use when a workflow needs silent reasoning, or the user asks for "/culture", "no writes", "rubber-duck this", or "understand this problem at several altitudes before solutions".
 license: MIT
 ---
 
@@ -15,6 +15,15 @@ Two modes:
 2. **User-facing mode.** The user wants to think, not build: no production code, no spec, no PR. This is culture's sustained domain-modeling mode — investigate as deeply as the question needs, hold it open across turns and sessions rather than forcing convergence, record ideas, decisions, and info as they settle (`## Record ledger`), and end by writing a durable `/wheypoint` so the modeling resumes later. Reach this mode when the user said "no writes" / "rubber-duck this" / "just talk", or routed a thinking-and-modeling task here.
 
 Do not use the user-facing mode when the user wants a written spec (`/mold`), implementation (`/cook`), review (`/age`), or external evidence gathering (`/briesearch`) — those targets get the internal-mode call instead, and the calling skill does the work.
+
+## Problem altitudes (prototype)
+
+`/culture --altitudes <goal or problem>` selects user-facing problem framing before solution design.
+Also use this mode when the user explicitly asks to understand a problem at several altitudes before solutions.
+Read [Problem altitudes](references/problem-altitudes.md) only for this mode; it replaces the numbered Flow below.
+Culture still owns the record ledger and session-end handoff.
+Keep the silent internal mode unchanged.
+For behavioral evaluation, use [the pressure scenarios](references/problem-altitudes-evals.md).
 
 ## Invariant
 

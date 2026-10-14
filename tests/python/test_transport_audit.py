@@ -99,6 +99,12 @@ EXEMPT_SITES: list[tuple[str, str, str]] = [
         + "discuss first",
     ),
     (
+        "skills/culture/references/problem-altitudes.md",
+        "Offer a useful zoom direction and ask one conversational question.",
+        "Culture keeps exploration conversational; its SKILL.md routes "
+        + "session-end handoffs through the shared transport",
+    ),
+    (
         "skills/briesearch/references/unavailable.md",
         "Stop and ask the user when:",
         "describes refusal trigger conditions; the actual ask transport is "

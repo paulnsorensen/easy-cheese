@@ -24,3 +24,18 @@ This couples the two skills: wheypoint now owns the compaction, redaction, state
 ## Scope guard
 
 The change applies to user-facing mode only. Internal mode (the silent reasoning pass every workflow skill and `/cheese` step-1 invoke) stays silent, light, and no-writes, and inherits none of the buffs. This guard is what keeps the coupling safe: only the human-driven, opt-out-of-writes path produces a wheypoint.
+
+## Problem-altitude prototype
+
+Culture's `--altitudes` prototype extends user-facing problem framing before solution design.
+It connects events, patterns, structure, outcomes, and purpose without treating a shared cause as proven.[^altitudes]
+The prototype remains a proposal under review, not a new execution contract.
+
+Problem framing reuses Culture's record ledger and Wheypoint session handoff.
+The problem brief travels through that handoff; it does not introduce another artifact schema.
+Silent internal mode stays light and unchanged.
+Mold receives the user's selected problem and unresolved hypotheses, not an approved implementation.[^altitudes]
+
+[^altitudes]: skills/culture/SKILL.md:19-26; skills/culture/references/problem-altitudes.md:25-39,107-128
+
+_Source: Culture problem-altitude prototype · Updated: 2026-10-14 · Supersedes: none_
