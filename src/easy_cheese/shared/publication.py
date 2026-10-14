@@ -21,7 +21,6 @@ except ImportError:  # pragma: no cover
 
 from easy_cheese_schemas import (
     MAX_CONTRACT_BYTES,
-    MOLD_COOK_HANDOFF_SCHEMA_URI,
     AcceptedArtifact,
     ArtifactRef,
     CanonicalArtifact,
@@ -53,25 +52,9 @@ __all__ = [
     "pointer_path",
     "publish_canonical",
     "read_bounded",
-    "register_deep_validator",
     "request_digest",
 ]
 
-
-# Payload schema URIs whose canonical value alone does not prove the payload
-# valid: the host must also resolve and check the bytes it references. The
-# owning module registers that pass through `register_deep_validator`, so this
-# generic gateway holds no phase-specific policy.
-_DEEP_VALIDATION_REQUIRED: frozenset[str] = frozenset({MOLD_COOK_HANDOFF_SCHEMA_URI})
-_DEEP_VALIDATORS: dict[str, Callable[[object, Path], object]] = {}
-
-
-def register_deep_validator(
-    schema_uri: str, validator: Callable[[object, Path], object]
-) -> None:
-    """Bind a payload schema URI to its host-side deep validator."""
-
-    _DEEP_VALIDATORS[schema_uri] = validator
 
 
 class PublicationError(ValueError):
@@ -446,13 +429,6 @@ def _resolve_pointer(
         request.payload_schema_uri,
         supported_version_for(request.payload_schema_uri),
     )
-    deep_validator = _DEEP_VALIDATORS.get(request.payload_schema_uri)
-    if deep_validator is not None:
-        _ = deep_validator(canonical.value, artifact_root)
-    elif request.payload_schema_uri in _DEEP_VALIDATION_REQUIRED:
-        raise PublicationError(
-            f"no deep validator registered for {request.payload_schema_uri}"
-        )
     return canonical
 
 

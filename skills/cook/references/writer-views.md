@@ -166,9 +166,4 @@ enum WriterViewKind = "curd_plan" | "planner_result" | "review_result" | "diagno
 
 ## Mold-to-Cook boundary
 
-The `planner_result` writer view is the only planner payload Cook accepts from
-an agent. The host supplies request identity, canonical curd IDs, bound
-artifacts, runner approval evidence, and any setup authorization; an agent response
-cannot grant execution authority. Cook preparation returns a closed outcome
-(`ready`, `needs-planning`, `needs-preparation`, `blocked`, or
-`invalid`) and only `ready` carries an accepted `MoldCookHandoff`.
+The `planner_result` writer view is the planner payload normalized by the host. Mold returns bound `spec_ref`, `planner_result_ref`, `plan_ref`, and `coverage` only after it validates the exact bytes and scope. Cook's `execute_bound_plan` validates them again before dispatch. The host alone retains runner authorization, explicit response, and setup evidence. An agent response cannot grant execution authority.

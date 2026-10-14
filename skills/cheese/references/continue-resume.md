@@ -146,6 +146,7 @@ Also use it when the user manually resumes the pipeline from a cleared context.
      Read that pointer from the typed `spec_ref` field.
      Read it from `artifact:` only for a legacy note that has no `spec_ref` value.
      An approved Mold handoff dispatches `/cook` with that same pointer.
+     A Full or planned handoff reruns `/mold` finalize and dispatches its printed `--result` command instead.
      Preserve validated optional `mode:` and in-scope `--hard`, `--open-pr`, and `--safe` flags.
      Forward `--auto` only when the handoff contains it.
      Never infer `--auto`.

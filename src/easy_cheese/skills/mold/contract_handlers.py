@@ -1,24 +1,15 @@
-"""Handlers for the Mold finalize and planner-normalization commands.
-
-``finalize`` publishes a canonical ``MoldCookHandoff`` for one spec, and
-``normalize-planner`` materializes a planner writer envelope into a canonical
-``PlannerResult``.  Both adapt argv and stdout only; every finalization and
-normalization decision stays in :mod:`easy_cheese.skills.mold.producer`.
-"""
+"""Handlers for Mold finalization and planner normalization."""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from enum import Enum
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import cast
 
 import fromargs
 
 from easy_cheese_schemas.contracts import CurdPlan
-from easy_cheese_schemas.mold_cook import MoldCookInputKind, MoldCookMode
-from easy_cheese.shared.taste_test import ForkTasteVerdict
 
 # The producer owns the bounded JSON read and the canonical JSON projection
 # that both commands report with, so the CLI borrows them instead of keeping a
@@ -36,9 +27,6 @@ __all__ = [
     "main",
     "normalize_planner_main",
 ]
-
-_EnumT = TypeVar("_EnumT", bound=Enum)
-
 
 def _normalize_planner(
     writer: str,
@@ -124,12 +112,6 @@ def normalize_planner_main(argv: list[str] | None = None) -> int:
     return _normalize_planner_app().run(argv)
 
 
-def _parse_enum(value: str, enum: type[_EnumT], label: str) -> _EnumT:
-    try:
-        return enum(value)
-    except ValueError as exc:
-        raise FinalizationError(f"invalid {label}: {value!r}") from exc
-
 
 def _finalize(
     spec: str,
@@ -137,66 +119,21 @@ def _finalize(
     artifact_root: str,
     operation_id: str,
     request_id: str,
-    input_kind: str = MoldCookInputKind.DIRECT_SPEC.value,
-    mode: str = MoldCookMode.FULL.value,
     planner_result: str | None = None,
     plan: str | None = None,
     coverage: str | None = None,
-    taste_result: str | None = None,
-    ledger: str | None = None,
     save_approved: bool = False,
 ) -> dict[str, object]:
-    """Finalize a Mold spec and publish only a consumer-valid handoff.
-
-    Parameters
-    ----------
-    spec
-        Path to the mold spec markdown file.
-    artifact_root
-        Root directory for finalization artifacts.
-    operation_id
-        Idempotency key for this finalize operation.
-    request_id
-        Request id the handoff carries.
-    input_kind
-        MoldCookInputKind value naming the input shape.
-    mode
-        MoldCookMode value naming the execution mode.
-    planner_result
-        Optional path to a canonical PlannerResult JSON artifact.
-    plan
-        Optional path to a CurdPlan JSON artifact.
-    coverage
-        Optional path to a proposed coverage JSON artifact.
-    taste_result
-        Optional path to a fork taste verdict JSON artifact.
-    ledger
-        Optional path to a decision ledger JSON artifact.
-    save_approved
-        The user approved saving the draft with unchecked coherence items.
-        The save stays not ready and publishes no pointer.
-    """
+    """Save Mold work with direct bound spec, plan, and scope references."""
     try:
-        taste: object | None = (
-            None if taste_result is None else read_json_artifact(Path(taste_result))
-        )
-        ledger_data: object | None = (
-            None if ledger is None else read_json_artifact(Path(ledger))
-        )
         outcome = finalize_mold(
             Path(spec),
             artifact_root=Path(artifact_root),
             operation_id=operation_id,
             request_id=request_id,
-            input_kind=_parse_enum(input_kind, MoldCookInputKind, "input kind"),
-            mode=_parse_enum(mode, MoldCookMode, "mode"),
             planner_result=Path(planner_result) if planner_result is not None else None,
             plan=Path(plan) if plan is not None else None,
             proposed_coverage=Path(coverage) if coverage is not None else None,
-            taste_result=cast(
-                ForkTasteVerdict | Mapping[str, object] | Path | None, taste
-            ),
-            decision_ledger=ledger_data,
             save_approved=save_approved,
         )
     except (
@@ -213,7 +150,7 @@ def _finalize(
 def build_app() -> fromargs.App:
     return fromargs.App(
         "finalize",
-        help="Finalize a Mold spec and publish only a consumer-valid handoff.",
+        help="Finalize a Mold spec with direct Cook references.",
         help_formatter="plain",
         default_command=_finalize,
     )

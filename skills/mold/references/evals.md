@@ -50,15 +50,15 @@ For each completed `/mold` Grill-mode run, verify:
 
 ## Mold-to-Cook live trace
 
-Run this scenario with a fresh OMP task agent in an isolated repository. Supply the changed Mold and Cook bundles explicitly.
+Run this scenario with a fresh task agent in an isolated repository. Supply the changed Mold bundle.
 
 1. Give the agent a strict, valid spec that needs two curds.
-2. Supply the planner result, taste verdict, and user approval as scripted host events.
-3. Require `scripts/mold.pyz finalize`; reject any `publish` command or direct `CurdPlan` hand-off.
-4. Pass the emitted publication index path to Cook's preparation command.
-5. Capture actual tool calls, approval events, and final artifact references.
+2. Supply a typed planner result and explicit user Cook selection as separate host events.
+3. Require `scripts/mold.pyz finalize`; reject any `publish` command or fabricated execution refs.
+4. Pass the returned `request_id`, `spec_ref`, `planner_result_ref`, `plan_ref`, and `coverage` to bound validation and execution.
+5. Capture actual tool calls, any bounded runner response and setup evidence, and the final artifact.
 
-The trace passes only when the bounded transcript checker accepts it and Cook loads the emitted handoff. Missing approval evidence must stop finalization.
+The trace passes only when the checker accepts it, Cook validates the exact refs, and execution produces the selected curds. An unresolved hold must prevent ready finalization.
 
 ## How to run
 

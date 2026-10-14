@@ -1,15 +1,10 @@
-"""Host-side validation and binding for the Mold-to-Cook handoff.
-
-The schema package defines only deterministic value invariants. This module is
-the host seam that resolves the referenced bytes, validates each referenced
-contract, and checks that approval covers exactly the handoff being accepted.
-"""
+"""Host validation for bound Mold specs, plans, scope, and runner limits."""
 
 from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar, cast
@@ -19,7 +14,6 @@ import attrs
 from easy_cheese_schemas import SCHEMA_ROOT
 from easy_cheese_schemas.contracts import (
     ArtifactRef,
-    ContractVersion,
     CurdPlan,
     Landing,
     MAX_CONTRACT_BYTES,
@@ -29,25 +23,14 @@ from easy_cheese_schemas.contracts import (
     landing_layer_errors,
 )
 from easy_cheese_schemas.mold_cook import (
-    MOLD_COOK_APPROVAL_SCHEMA_URI,
-    MOLD_COOK_HANDOFF_SCHEMA_URI,
     CookExecutionHold,
     CookHoldKind,
     CookSetupAuthorization,
-    MoldCookApproval,
-    MoldCookApprovalDecision,
-    MoldCookApprovalKind,
-    MoldCookApprovalSource,
     MoldCookCoverage,
-    MoldCookHandoff,
-    MoldCookMode,
 )
 from easy_cheese_schemas.schema_runtime import (
-    AcceptedArtifact,
     CanonicalArtifact,
     ContractValidationError,
-    PublishedArtifact,
-    require_contract_version,
     supported_version_for,
     validate_contract,
 )
@@ -65,37 +48,35 @@ from easy_cheese.shared.artifacts import (
     resolve_artifact,
 )
 from easy_cheese.shared.bounded_read import read_bounded_file
-from easy_cheese.shared.publication import (
-    accept,
-    publish_canonical,
-    register_deep_validator,
-)
-from easy_cheese.shared.taste_test import typed_mold_document
+from easy_cheese.shared.taste_test import parse_spec_frontmatter, typed_mold_document
 from easy_cheese.shared.wheypoint.canonical import digest_bytes
 
 
 SETUP_EVIDENCE_SCHEMA_URI = f"{SCHEMA_ROOT}/setup-evidence"
 
+_REQUEST_DIRECTIVE_KEYS = frozenset(
+    {"request_directive", "execution_directive", "whole_request_directive"}
+)
+_DIRECTIVE_FIELDS = frozenset(
+    {"action", "decision", "directive", "disposition", "intent"}
+)
+_REQUEST_DIRECTIVE_HEADINGS = re.compile(
+    r"(?im)^##\s+(?:request|execution|whole-request)\s+directive\s*$"
+)
+
 
 __all__ = [
-    "MOLD_COOK_APPROVAL_SCHEMA_URI",
-    "MOLD_COOK_HANDOFF_SCHEMA_URI",
     "MoldCookSpecReadiness",
     "SETUP_EVIDENCE_SCHEMA_URI",
     "SetupEvidence",
     "SetupEvidenceExecutionError",
-    "accept_mold_cook_handoff",
-    "bind_mold_cook_runner_approval",
-    "canonical_mold_cook_proposal",
-    "dialogue_authorizes_execution",
     "evaluate_mold_cook_spec",
-    "host_scope_coverage",
     "materialize_artifact_ref",
-    "publish_mold_cook_handoff",
     "resolve_contract",
+    "request_directive",
     "resolve_contract_value",
-    "validate_mold_cook_approval",
-    "validate_mold_cook_handoff",
+    "validate_bound_execution",
+    "validate_runner_authority",
     "validate_mold_cook_setup_evidence",
 ]
 
@@ -105,11 +86,8 @@ class MoldCookSpecReadiness:
     """One bounded spec snapshot and the authority it is fit to support."""
 
     spec_ref: ArtifactRef
-    spec_slug: str
     landing: Landing | None
     lifecycle: str | None
-    taste_verdict_ref: ArtifactRef | None
-    taste_ledger_ref: ArtifactRef | None
     holds: tuple[CookExecutionHold, ...]
 
 
@@ -251,31 +229,72 @@ def validate_mold_cook_setup_evidence(
     return parsed
 
 
+def _directive_value(value: object) -> str | None:
+    if isinstance(value, Mapping):
+        mapping = cast(Mapping[str, object], value)
+        for key in _DIRECTIVE_FIELDS:
+            candidate = mapping.get(key)
+            if isinstance(candidate, str):
+                value = candidate
+                break
+        else:
+            return None
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().casefold().replace("_", "-").replace(" ", "-")
+    return normalized if normalized in {"do-not-implement", "do-not-proceed"} else None
+
+
+def request_directive(text: str) -> str | None:
+    """Read an explicit whole-request stop from frontmatter or its section."""
+    values = parse_spec_frontmatter(text)
+    directive = next(
+        (
+            parsed
+            for key, value in values.items()
+            if key in _REQUEST_DIRECTIVE_KEYS
+            for parsed in (_directive_value(value),)
+            if parsed is not None
+        ),
+        None,
+    )
+    if directive is not None:
+        return directive
+    match = _REQUEST_DIRECTIVE_HEADINGS.search(text)
+    if match is None:
+        return None
+    next_heading = re.search(r"(?im)^##\s+", text[match.end() :])
+    section = (
+        text[match.end() : match.end() + next_heading.start()]
+        if next_heading
+        else text[match.end() :]
+    )
+    for line in section.splitlines():
+        candidate = line.strip().lstrip("-*").strip()
+        if ":" not in candidate:
+            continue
+        key, value = candidate.split(":", 1)
+        if key.strip().casefold() in _DIRECTIVE_FIELDS:
+            directive = _directive_value(value)
+            if directive is not None:
+                return directive
+    return None
+
+
 def evaluate_mold_cook_spec(
     content: bytes,
     *,
     spec_ref: ArtifactRef,
     plan: CurdPlan | None = None,
     lifecycle: str | None = None,
-    taste_verdict_ref: ArtifactRef | None = None,
-    taste_ledger_ref: ArtifactRef | None = None,
     holds: Sequence[CookExecutionHold] = (),
 ) -> MoldCookSpecReadiness:
-    """Evaluate one immutable spec snapshot without rereading its path.
-
-    The shared seam owns strict typed Mold parsing, snapshot identity, landing
-    parsing, and landing/plan consistency. Taste policy remains host-owned:
-    callers pass only the protected typed references that they have verified.
-    """
+    """Evaluate one immutable spec snapshot and its landing declaration."""
 
     if len(content) != spec_ref.size_bytes:
         raise ContractValidationError("spec snapshot size does not match spec_ref")
     if digest_bytes(content) != spec_ref.digest:
         raise ContractValidationError("spec snapshot digest does not match spec_ref")
-    if (taste_verdict_ref is None) != (taste_ledger_ref is None):
-        raise ContractValidationError(
-            "taste_verdict_ref and taste_ledger_ref must be supplied together"
-        )
     try:
         text = content.decode("utf-8")
         document, _, _ = typed_mold_document(text)
@@ -309,11 +328,8 @@ def evaluate_mold_cook_spec(
     )
     return MoldCookSpecReadiness(
         spec_ref=spec_ref,
-        spec_slug=document.frontmatter.slug,
         landing=landing,
         lifecycle=parsed_lifecycle,
-        taste_verdict_ref=taste_verdict_ref,
-        taste_ledger_ref=taste_ledger_ref,
         holds=(*tuple(holds), *declared_holds),
     )
 
@@ -351,26 +367,6 @@ def materialize_artifact_ref(
         size_bytes=len(content),
         media_type=media_type,
         schema_uri=schema_uri,
-    )
-
-
-def canonical_mold_cook_proposal(
-    *,
-    request_id: str,
-    spec_digest: str,
-    coverage: MoldCookCoverage,
-    setup_authorization: CookSetupAuthorization,
-) -> bytes:
-    """Render the one canonical runner-setup proposal envelope."""
-
-    return canonical_bytes(
-        {
-            "kind": MoldCookApprovalKind.RUNNER.value,
-            "request_id": request_id,
-            "spec_digest": spec_digest,
-            "coverage": coverage,
-            "setup_authorization": setup_authorization,
-        }
     )
 
 
@@ -498,187 +494,79 @@ def resolve_contract_value(
     return cast(_ContractT, artifact.value)
 
 
-def _validate_proposal(
-    approval: MoldCookApproval,
-    artifact_root: str | Path,
-    *,
-    expected: bytes | None = None,
-) -> bytes:
-    content = _resolve_bytes(approval.proposal_ref, artifact_root)
-    if approval.proposal_ref.media_type.split(";", 1)[0] == "application/json":
-        try:
-            decoded = cast(object, json.loads(content))
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise ContractValidationError(
-                "approval proposal is not valid JSON"
-            ) from exc
-        try:
-            _ = require_mapping(decoded, "approval proposal")
-        except ValueError as exc:
-            raise ContractValidationError(str(exc)) from exc
-    if expected is not None and content != expected:
-        raise ContractValidationError(
-            "approval proposal is not the canonical envelope for the bound handoff"
-        )
-    return content
 
 
-def bind_mold_cook_runner_approval(
-    *,
-    request_id: str,
-    decision: MoldCookApprovalDecision,
-    source: MoldCookApprovalSource,
-    spec_digest: str,
-    proposal_ref: ArtifactRef,
+def _retained_runner_bytes(ref: ArtifactRef, artifact_root: str | Path) -> bytes:
+    raw = _resolve_bytes(ref, artifact_root)
+    digest = digest_bytes(raw)
+    expected = (
+        Path(artifact_root).resolve() / f"sha256-{digest.removeprefix('sha256:')}"
+    ).as_uri()
+    if ref.uri != expected:
+        raise ContractValidationError("runner authority must be a retained host artifact")
+    return raw
+
+
+def validate_runner_authority(
+    authorization_ref: ArtifactRef,
     response_ref: ArtifactRef,
-    response_text: str,
-    response_source: str,
-    coverage: MoldCookCoverage,
-    setup_authorization: CookSetupAuthorization,
-) -> MoldCookApproval:
-    """Bind explicit runner-setup response evidence to stable proposal and response refs."""
-
-    version = ContractVersion(
-        schema_uri=MOLD_COOK_APPROVAL_SCHEMA_URI,
-        major="1",
-        minor="0",
-    )
-    return MoldCookApproval(
-        contract_version=version,
-        request_id=request_id,
-        kind=MoldCookApprovalKind.RUNNER,
-        decision=decision,
-        source=source,
-        spec_digest=spec_digest,
-        proposal_ref=proposal_ref,
-        proposal_digest=proposal_ref.digest,
-        response_ref=response_ref,
-        response_digest=response_ref.digest,
-        response_text=response_text,
-        response_source=response_source,
-        coverage=coverage,
-        setup_authorization=setup_authorization,
-    )
-
-
-def host_scope_coverage(
-    readiness: MoldCookSpecReadiness | None,
-    planner_value: PlannerResult | None,
-) -> MoldCookCoverage | None:
-    """Return the coverage the host derives for the Cook handoff.
-
-    A materialized plan is the strongest declaration of the work in hand; a
-    spec that declares landing layers names its full coverage instead. A spec
-    that declares neither leaves Cook with no coverage of its own to propose.
-    """
-
-    if planner_value is not None and planner_value.plan is not None:
-        return MoldCookCoverage(
-            curd_ids=tuple(curd.curd_id for curd in planner_value.plan.curds),
-            unresolved_work=planner_value.unresolved_work,
-        )
-    if readiness is not None and readiness.landing is not None:
-        declared = tuple(
-            curd_id for layer in readiness.landing.layers for curd_id in layer
-        )
-        if declared:
-            return MoldCookCoverage(curd_ids=declared)
-    return None
-
-
-def dialogue_authorizes_execution(dialogue: Mapping[str, object]) -> bool:
-    """Report whether one local dialogue explicitly authorizes execution.
-
-    Authorization is affirmative and explicit: the dialogue must name the holds
-    it clears and must carry `execution_authorized` as the literal `True`. A
-    missing key is never consent.
-    """
-
-    clear_holds = dialogue.get("clear_holds")
-    if not isinstance(clear_holds, list) or not clear_holds:
-        return False
-    cleared = cast("list[object]", clear_holds)
-    if any(not isinstance(item, str) or not item.strip() for item in cleared):
-        return False
-    return dialogue.get("execution_authorized") is True
-
-
-def _validate_response(approval: MoldCookApproval, artifact_root: str | Path) -> bytes:
-    content = _resolve_bytes(approval.response_ref, artifact_root)
-    if approval.decision is not MoldCookApprovalDecision.APPROVED:
-        raise ContractValidationError(
-            f"{approval.kind.value} approval carries {approval.decision.value} response"
-        )
-    if approval.response_ref.role == "response":
-        try:
-            actual = content.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise ContractValidationError("response artifact is not UTF-8") from exc
-        if actual != approval.response_text:
-            raise ContractValidationError(
-                "approval response text is detached from response artifact"
-            )
-    else:
-        try:
-            parsed = cast(object, json.loads(content))
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise ContractValidationError(
-                "local dialogue artifact is not valid JSON"
-            ) from exc
-        try:
-            dialogue = require_mapping(parsed, "local dialogue artifact")
-        except ValueError as exc:
-            raise ContractValidationError(str(exc)) from exc
-        question = dialogue.get("question")
-        if not isinstance(question, str) or not question.strip():
-            raise ContractValidationError(
-                "local dialogue artifact must record the presented question"
-            )
-        recorded = dialogue.get("response")
-        if recorded != approval.response_text:
-            raise ContractValidationError(
-                "approval response text is absent from or detached from local dialogue"
-            )
-        if dialogue.get("hold") or dialogue.get("holds"):
-            raise ContractValidationError(
-                "approval dialogue preserves an execution hold"
-            )
-        if not dialogue_authorizes_execution(dialogue):
-            raise ContractValidationError(
-                "approval dialogue does not authorize execution"
-            )
-    return content
-
-
-def _self_bound_proposal(approval: MoldCookApproval) -> bytes:
-    """Rebuild the canonical envelope a runner approval binds on its own fields."""
-
-    # `MoldCookApproval.__attrs_post_init__` rejects an approval without a
-    # setup authorization, so it is never None here.
-    assert approval.setup_authorization is not None
-    return canonical_mold_cook_proposal(
-        request_id=approval.request_id,
-        spec_digest=approval.spec_digest,
-        coverage=approval.coverage,
-        setup_authorization=approval.setup_authorization,
-    )
-
-
-def validate_mold_cook_approval(
-    approval: object,
     artifact_root: str | Path,
-) -> MoldCookApproval:
-    """Validate durable proposal/response evidence for one runner approval."""
+    *,
+    spec_digest: str,
+    coverage: MoldCookCoverage,
+) -> CookSetupAuthorization:
+    """Read retained runner limits and the explicit response to those limits."""
 
-    if not isinstance(approval, MoldCookApproval):
-        raise TypeError(
-            f"validate_mold_cook_approval expects MoldCookApproval, not {type(approval).__name__}"
+    if authorization_ref.role != "runner_authorization":
+        raise ContractValidationError("runner authorization has the wrong role")
+    if response_ref.role != "dialogue":
+        raise ContractValidationError("runner response must be retained local dialogue")
+    authorization_raw = _retained_runner_bytes(authorization_ref, artifact_root)
+    try:
+        authorization_data = require_mapping(
+            cast(object, json.loads(authorization_raw)), "runner authorization"
         )
-    _ = _validate_proposal(
-        approval, artifact_root, expected=_self_bound_proposal(approval)
-    )
-    _ = _validate_response(approval, artifact_root)
-    return approval
+        require_exact_keys(
+            authorization_data,
+            ("prerequisite_curd_id", "allowed_paths", "allowed_commands"),
+            "runner authorization",
+        )
+        authorization = CookSetupAuthorization(
+            prerequisite_curd_id=cast(str, authorization_data["prerequisite_curd_id"]),
+            allowed_paths=cast(list[str], authorization_data["allowed_paths"]),
+            allowed_commands=cast(list[str], authorization_data["allowed_commands"]),
+        )
+    except (TypeError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ContractValidationError(f"invalid runner authorization: {exc}") from exc
+    if authorization_raw != canonical_bytes(authorization):
+        raise ContractValidationError("runner authorization is not canonical")
+    response_raw = _retained_runner_bytes(response_ref, artifact_root)
+    try:
+        dialogue = require_mapping(
+            cast(object, json.loads(response_raw)), "runner response"
+        )
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ContractValidationError(f"invalid runner response: {exc}") from exc
+    digest = digest_bytes(authorization_raw)
+    question = dialogue.get("question")
+    response = dialogue.get("response")
+    if dialogue.get("authorization_digest") != digest:
+        raise ContractValidationError("runner response names different authorization")
+    if dialogue.get("spec_digest") != spec_digest:
+        raise ContractValidationError("runner response names a different spec")
+    if dialogue.get("curd_ids") != list(coverage.curd_ids):
+        raise ContractValidationError("runner response names different coverage")
+    if not isinstance(question, str) or not all(
+        item in question for item in (digest, spec_digest, *coverage.curd_ids)
+    ):
+        raise ContractValidationError("runner question does not present exact limits and work")
+    if not isinstance(response, str) or response.strip().lower() not in {
+        "approve", "approved", "yes",
+    }:
+        raise ContractValidationError("runner response is not explicit approval")
+    if dialogue.get("execution_authorized") is not True or dialogue.get("hold") or dialogue.get("holds"):
+        raise ContractValidationError("runner response does not authorize execution")
+    return authorization
 
 
 def _check_coverage_against_plan(
@@ -723,197 +611,54 @@ def _check_coverage_against_plan(
             )
 
 
-def _validate_authority_refs(
-    handoff: MoldCookHandoff,
+
+
+def validate_bound_execution(
     *,
+    spec_ref: ArtifactRef,
+    planner_result_ref: ArtifactRef,
+    plan_ref: ArtifactRef,
+    coverage: MoldCookCoverage,
     artifact_root: str | Path,
-    plan: CurdPlan | None,
-) -> None:
-    if handoff.setup_evidence_refs and handoff.runner_approval_ref is None:
-        raise ContractValidationError(
-            "setup evidence requires a bound runner approval reference"
-        )
-    if handoff.runner_approval_ref is not None and not handoff.setup_evidence_refs:
-        raise ContractValidationError(
-            "runner approval requires passing setup evidence before execution"
-        )
-    for reference in (
-        handoff.taste_verdict_ref,
-        handoff.taste_ledger_ref,
-        *handoff.setup_evidence_refs,
-    ):
-        if reference is not None:
-            _ = _resolve_bytes(reference, artifact_root)
-    if handoff.runner_approval_ref is None:
-        return
-    runner_artifact = resolve_contract(
-        handoff.runner_approval_ref, MoldCookApproval, artifact_root
-    )
-    runner = cast(MoldCookApproval, runner_artifact.value)
-    if runner.kind is not MoldCookApprovalKind.RUNNER:
-        raise ContractValidationError(
-            "runner_approval_ref must reference runner approval"
-        )
-    if runner.request_id != handoff.request_id:
-        raise ContractValidationError(
-            "runner approval request_id does not match handoff"
-        )
-    if runner.spec_digest != handoff.spec_ref.digest:
-        raise ContractValidationError("runner approval is bound to a different spec")
-    if runner.coverage != handoff.coverage:
-        raise ContractValidationError("runner approval coverage does not match handoff")
-    _ = validate_mold_cook_approval(runner, artifact_root)
-    if handoff.setup_evidence_refs:
-        if plan is None:
-            raise ContractValidationError(
-                "setup evidence requires a materialized plan"
-            )
-        authorization = runner.setup_authorization
-        if authorization is None:
-            raise ContractValidationError(
-                "runner approval has no setup authorization"
-            )
-        for evidence_ref in handoff.setup_evidence_refs:
-            _ = validate_mold_cook_setup_evidence(
-                evidence_ref,
-                authorization=authorization,
-                plan=plan,
-                artifact_root=artifact_root,
-            )
-
-
-def _validate_bound_evidence(
-    handoff: MoldCookHandoff,
-    artifact_root: str | Path,
-    *,
-    spec_content: bytes,
-    plan: CurdPlan | None = None,
-) -> None:
-    """Check the spec snapshot and the bound runner authority."""
-
-    _ = evaluate_mold_cook_spec(
-        spec_content,
-        spec_ref=handoff.spec_ref,
-        plan=plan,
-        taste_verdict_ref=handoff.taste_verdict_ref,
-        taste_ledger_ref=handoff.taste_ledger_ref,
-    )
-    _validate_authority_refs(
-        handoff,
-        artifact_root=artifact_root,
-        plan=plan,
-    )
-
-
-def validate_mold_cook_handoff(
-    handoff: object, artifact_root: str | Path
-) -> MoldCookHandoff:
-    """Resolve and validate all authority bound by a canonical handoff."""
-
-    if not isinstance(handoff, MoldCookHandoff):
-        raise TypeError(
-            f"validate_mold_cook_handoff expects MoldCookHandoff, not {type(handoff).__name__}"
-        )
-    spec_content = _resolve_bytes(handoff.spec_ref, artifact_root)
-
-    if handoff.mode is MoldCookMode.LIGHT:
-        if handoff.planner_result_ref is not None or handoff.plan_ref is not None:
-            raise ContractValidationError(
-                "light handoff must not reference planner artifacts"
-            )
-        if handoff.coverage.unresolved_work:
-            raise ContractValidationError(
-                "light handoff cannot discard unresolved work"
-            )
-        _validate_bound_evidence(
-            handoff,
-            artifact_root,
-            spec_content=spec_content,
-        )
-        return handoff
-
-    if handoff.planner_result_ref is None or handoff.plan_ref is None:
-        raise ContractValidationError(
-            "full handoff is missing planner or plan reference"
-        )
-    planner_artifact = resolve_contract(
-        handoff.planner_result_ref, PlannerResult, artifact_root
-    )
-    plan_artifact = resolve_contract(handoff.plan_ref, CurdPlan, artifact_root)
+    runner_authorization_ref: ArtifactRef | None = None,
+    runner_response_ref: ArtifactRef | None = None,
+    setup_evidence_refs: Sequence[ArtifactRef] = (),
+) -> CurdPlan:
+    """Validate direct spec, plan, scope, and retained runner authority."""
+    if spec_ref.role != "spec":
+        raise ContractValidationError("execution requires a spec reference")
+    if planner_result_ref.role != "planner_result" or plan_ref.role != "curd_plan":
+        raise ContractValidationError("execution requires planner and plan references")
+    spec_content = _resolve_bytes(spec_ref, artifact_root)
+    planner_artifact = resolve_contract(planner_result_ref, PlannerResult, artifact_root)
+    plan_artifact = resolve_contract(plan_ref, CurdPlan, artifact_root)
     planner = cast(PlannerResult, planner_artifact.value)
     plan = cast(CurdPlan, plan_artifact.value)
-    if planner.plan is None:
-        raise ContractValidationError(
-            "full handoff planner result has no materialized plan"
-        )
-    if canonical_bytes(planner.plan) != plan_artifact.canonical_bytes:
+    if planner.plan is None or canonical_bytes(planner.plan) != plan_artifact.canonical_bytes:
         raise ContractValidationError("planner and plan references are detached")
-    _check_coverage_against_plan(handoff.coverage, planner, plan)
-    _validate_bound_evidence(
-        handoff,
-        artifact_root,
-        spec_content=spec_content,
-        plan=plan,
-    )
-    return handoff
-
-
-def publish_mold_cook_handoff(
-    handoff: MoldCookHandoff,
-    *,
-    request_digest: str,
-    operation_id: str,
-    artifact_root: str | Path,
-    canonical: bytes | None = None,
-    _before_reveal: Callable[[], None] | None = None,
-) -> PublishedArtifact:
-    """Publish an already materialized, strictly validated Mold handoff.
-
-    A caller that already serialized ``handoff`` -- to derive the request
-    digest, for example -- passes those bytes as ``canonical`` so the handoff
-    is serialized once for both uses.
-    """
-
-    try:
-        version = require_contract_version(MoldCookHandoff)
-    except TypeError as exc:
-        # The publish seam answers with one error type. A host that cannot
-        # name a supported version is a defect here, not a `TypeError` the
-        # caller must also catch.
-        raise ContractValidationError(str(exc)) from exc
-
-    def prepare() -> CanonicalArtifact:
-        return validate_contract(
-            canonical if canonical is not None else canonical_bytes(handoff),
-            MoldCookHandoff,
-            version,
+    _check_coverage_against_plan(coverage, planner, plan)
+    readiness = evaluate_mold_cook_spec(spec_content, spec_ref=spec_ref, plan=plan)
+    if readiness.holds:
+        raise ContractValidationError("spec retains execution holds")
+    directive = request_directive(spec_content.decode("utf-8"))
+    if directive is not None:
+        raise ContractValidationError(
+            f"spec request directive {directive!r} blocks execution"
         )
-
-    return publish_canonical(
-        request_digest=request_digest,
-        source_phase="mold",
-        destination_phase="cook",
-        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
-        operation_id=operation_id,
-        artifact_root=artifact_root,
-        prepare=prepare,
-        _before_reveal=_before_reveal,
-    )
-
-
-def accept_mold_cook_handoff(
-    pointer_path: str | Path,
-    *,
-    artifact_root: str | Path | None = None,
-) -> AcceptedArtifact:
-    """Accept a Mold-to-Cook pointer through the shared strict validator."""
-
-    return accept(
-        pointer_path,
-        destination_phase="cook",
-        payload_schema_uri=MOLD_COOK_HANDOFF_SCHEMA_URI,
-        artifact_root=artifact_root,
-    )
-
-
-register_deep_validator(MOLD_COOK_HANDOFF_SCHEMA_URI, validate_mold_cook_handoff)
+    if (runner_authorization_ref is None) != (runner_response_ref is None):
+        raise ContractValidationError("runner authority requires authorization and response")
+    if setup_evidence_refs and runner_authorization_ref is None:
+        raise ContractValidationError("setup evidence requires runner authority")
+    if runner_authorization_ref is not None and runner_response_ref is not None:
+        if not setup_evidence_refs:
+            raise ContractValidationError("runner authority requires passing setup evidence")
+        authorization = validate_runner_authority(
+            runner_authorization_ref, runner_response_ref, artifact_root,
+            spec_digest=spec_ref.digest, coverage=coverage,
+        )
+        for evidence_ref in setup_evidence_refs:
+            _ = validate_mold_cook_setup_evidence(
+                evidence_ref, authorization=authorization, plan=plan,
+                artifact_root=artifact_root,
+            )
+    return plan

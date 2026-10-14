@@ -70,13 +70,13 @@ def test_three_tiers_each_name_entry_runs_skips_and_handoff() -> None:
         assert len(row) == 5 and all(row), f"tier row incomplete: {row}"
     quick, light, full = rows
     assert "Standalone fast-path" in quick[1], "Quick reuses Cook's clarity check"
-    assert "mini-spec" in quick[4] and "publication index path" in quick[4]
+    assert "mini-spec" in quick[4] and "selected spec path" in quick[4]
     assert "validate-spec --strict" in quick[4], "Quick still validates its spec"
     assert "agent coherence check" in light[2] and "fork taste test" in light[2], (
         "Light skips dialogue, not coherence checks"
     )
     assert "after a user Cook request" in light[4]
-    assert "typed planner" in light[3], "a single curd needs no CurdPlan"
+    assert "typed planner" in light[3], "standalone clear work needs no planner"
     assert full[2].startswith("The whole Flow") and full[3] == "Nothing"
 
 
@@ -103,11 +103,11 @@ def test_quick_tier_saves_without_write_approval_but_does_not_start_cook() -> No
 
 def test_light_single_curd_skips_the_planner_not_execution_consent() -> None:
     step5 = _flow_step(5)
-    assert "Light with one expected curd" in step5 and "no planner" in step5
-    assert "taste-test" in step5.split("Light with one expected curd")[0]
+    assert "A clear single-curd task" in step5 and "without a planner" in step5
+    assert "taste-test" in step5.split("A clear single-curd task")[0]
     assert "6. **Readiness check**" in _flow_step(6)
     assert "Before Cook, require an explicit user selection" in _flow_step(6)
-    assert "Dispatch only a ready pointer" in _flow_step(8)
+    assert "pass only ready direct inputs" in _flow_step(8)
 
 
 def test_upgrade_rules_and_user_knobs() -> None:

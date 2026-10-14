@@ -174,13 +174,7 @@ approval permits one durable save. It does not grant execution authority and
 does not disable later gates. Record the override and every unchecked item in
 the spec frontmatter (`gates_overridden`).
 It accepts every other default.
-Finalization returns `saved-not-ready` with a preparation hold; it must not
-publish a pointer or an automatic Cook command until the requirements are
-cleared through a fresh user dialogue. The override does not waive the scope-audit
-leverage rows, unresolved identity bindings, failed taste, stale references,
-invalid landing IDs, an uncovered `G-n` clause, the goal-coverage cap, or a
-user do-not-implement hold. Downstream skills trust the saved preparation
-result and never reinterpret the save approval as execution approval.
+Finalization returns `saved-not-ready` with a save-only hold; it must not return ready bound refs until the requirements are cleared through a fresh user decision and updated spec. The override does not waive scope-audit leverage rows, unresolved identity bindings, stale references, invalid landing IDs, an uncovered `G-n` clause, the goal-coverage cap, or a user do-not-implement hold. Taste review remains useful design evidence, not a required Cook reference. Downstream skills must not reinterpret save approval as execution authority.
 
 ## Why one key
 

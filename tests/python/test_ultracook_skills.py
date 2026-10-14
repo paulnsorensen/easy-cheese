@@ -305,7 +305,7 @@ class TestMoldHighBlastHandoff:
     def test_routes_high_blast_by_work_type(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_high_blast_handoff_menu()
-        assert "/cook --auto <pointer-path>" in body
+        assert '/cook --auto --spec "$SPEC"' in body
         assert "fresh-context isolation" in menu.lower()
         assert "Behavior work continues" in menu
         assert "non-behavior work skips Press" in menu
