@@ -72,7 +72,6 @@ ROUTED_FILES = {
     "skills/mold/SKILL.md",
     "skills/pasteurize/SKILL.md",
     "skills/plate/SKILL.md",  # the gate-`ERROR` ask before publication
-    "skills/plate/references/topology.md",  # layout question, moved out of the body
     "skills/press/SKILL.md",
     "skills/wheypoint/SKILL.md",
 }
@@ -80,6 +79,12 @@ ROUTED_FILES = {
 # Bare sites (no transport link anywhere in file) recorded with an explicit
 # exemption reason. Pinned by literal snippet so a rewrite forces re-audit.
 EXEMPT_SITES: list[tuple[str, str, str]] = [
+    (
+        "skills/plate/references/topology.md",
+        "Plate decides the review shape. It does not ask the user.",
+        "negative instruction: Plate decides topology without a question, so "
+        + "the file has no live question site",
+    ),
     (
         "skills/age/references/dimensions.md",
         'Confirm with the user that Y is intentional',

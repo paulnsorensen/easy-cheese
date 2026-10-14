@@ -1,0 +1,27 @@
+Repository: easy-cheese (Agent Skills monorepo). Trunk: main. Branch: feat/wheypoint-search. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0). No other check ran.
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline main..HEAD
+9c41d2e feat(wheypoint): add search verb that ranks handoffs by term overlap
+
+$ git diff --stat main...HEAD
+ src/easy_cheese/skills/wheypoint/search.py        | 188 +++++++++++++
+ src/easy_cheese/cli/wheypoint.py                  |  41 ++-
+ tests/python/test_wheypoint_search.py             | 236 ++++++++++++++++
+ skills/wheypoint/SKILL.md                         |  22 +-
+ skills/wheypoint/scripts/wheypoint.pyz            | Bin 81234 -> 83310 bytes
+ 5 files changed, 479 insertions(+), 8 deletions(-)
+
+Notes from the implementer:
+- search.py is one function family: tokenize, score, rank. The CLI verb is a thin wrapper.
+- The tests drive the CLI verb end to end; no test touches search.py privately.
+- There is no refactor, rename, or unrelated change in the diff.
+- The .pyz is the regenerated archive; `just wedge-check` fails without it.
+
+Key hunk (src/easy_cheese/cli/wheypoint.py):
++@app.command
++def search(terms: list[str], limit: int = 10) -> None:
++    """Rank wheypoints by term overlap with their title and goal."""
++    for hit in rank(load_all(), terms)[:limit]:
++        print(hit.render())

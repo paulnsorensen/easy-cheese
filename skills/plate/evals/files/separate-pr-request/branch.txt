@@ -1,0 +1,11 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/milknado-runner. PR #812 is open for this branch (base main, ordinary, not a stack).
+Quality gate: `just check` passed at HEAD (exit 0).
+PR template: .github/PULL_REQUEST_TEMPLATE.md with sections What changed / Why / How to verify / Non-obvious changes / Risk / rollout notes / Checklist.
+
+$ git log --oneline --reverse main..HEAD
+e01 feat(milknado): run ready nodes in the node runner              files: src/easy_cheese/skills/milknado/runner.py, tests/python/test_runner.py
+e02 feat(milknado): retry a failed node once                         files: src/easy_cheese/skills/milknado/runner.py, tests/python/test_runner.py
+e03 feat(obs): emit run timing spans to the local trace log          files: src/easy_cheese/shared/trace.py, tests/python/test_trace.py
+e04 feat(obs): document the trace log format                         files: docs/trace-log.md
+
+e03 and e04 touch no runner file, and runner.py does not import trace.py.
