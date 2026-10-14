@@ -425,3 +425,31 @@ def test_publish_pointer_last_survives_crash_before_reveal(tmp_path: Path) -> No
     assert pointer_path.is_file()
     assert artifact.pointer_path == pointer_path
     assert list((tmp_path / "pointers").glob(".*")) == []
+
+
+def test_accept_rejects_pointer_with_old_plan_schema(tmp_path: Path) -> None:
+    plan = _prepared_plan(tmp_path)
+    _ = _publish(tmp_path, plan, operation_id="op-old-plan")
+    pointer_path = tmp_path / "pointers" / "op-old-plan.json"
+    pointer = _read_pointer_json(pointer_path)
+    payload = cast("dict[str, object]", pointer["payload"])
+    payload["schema_uri"] = CURD_PLAN_SCHEMA_URI + "-old"
+    _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+
+    with pytest.raises(
+        ContractValidationError,
+        match="payload schema does not match publication request",
+    ):
+        _ = _accept(pointer_path, artifact_root=tmp_path)
+
+
+def test_accept_rejects_pointer_with_wrong_destination_route(tmp_path: Path) -> None:
+    plan = _prepared_plan(tmp_path)
+    _ = _publish(tmp_path, plan, operation_id="op-route")
+    pointer_path = tmp_path / "pointers" / "op-route.json"
+    pointer = _read_pointer_json(pointer_path)
+    cast("dict[str, object]", pointer["request"])["destination_phase"] = "age"
+    _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
+
+    with pytest.raises(ContractValidationError, match="'age'.*'cook'"):
+        _ = _accept(pointer_path, artifact_root=tmp_path)
