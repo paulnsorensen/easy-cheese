@@ -331,7 +331,6 @@ def test_registered_schemas_are_deterministic_draft_2020_12() -> None:
         f"{SCHEMA_ROOT}/mold-cook-approval",
         f"{SCHEMA_ROOT}/mold-cook-handoff",
         f"{SCHEMA_ROOT}/normalization-receipt",
-        f"{SCHEMA_ROOT}/phase-contract",
         f"{SCHEMA_ROOT}/planner-request",
         f"{SCHEMA_ROOT}/planner-result",
         f"{SCHEMA_ROOT}/pr-plan",

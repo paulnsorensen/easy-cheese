@@ -98,7 +98,6 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
         "NormalizationAction",
         "NormalizationActionKind",
         "NormalizationReceipt",
-        "PhaseContract",
         "PublishedArtifact",
         "PlannerRequest",
         "PlannerResult",
@@ -119,7 +118,6 @@ def test_top_level_package_exposes_stable_contract_api() -> None:
         "schema_bytes",
         "supported_version_for",
         "validate_contract",
-        "validate_transition",
     }
     assert expected <= set(schemas.__all__)
     assert all(hasattr(schemas, name) for name in expected)

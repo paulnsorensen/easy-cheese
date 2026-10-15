@@ -320,7 +320,6 @@ _UNIQUE_COLLECTION_FIELDS = {
     "CurdPlan": {"curds"},
     "CurdResult": {"criterion_results", "deliverables"},
     "DiagnosisResult": {"hypotheses"},
-    "PhaseContract": {"outputs"},
     "ReviewResult": {"coverage", "findings"},
     "SemanticCurd": {"criteria", "inputs"},
 }

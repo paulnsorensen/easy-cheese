@@ -3,13 +3,11 @@
 Covers scripts/render_generated_regions.py: on-disk regions must equal a
 fresh render, both named surfaces must carry a non-empty generated region,
 and a seeded stale copy must be detected as drift. Also covers
-schema-intertwine.md (wholly generated, byte-idempotent) and asserts the
-phase-registry sources stay untouched (phase-registry-untouched invariant).
+schema-intertwine.md (wholly generated and byte-idempotent).
 """
 
 from __future__ import annotations
 
-import hashlib
 import shutil
 import subprocess
 import sys
@@ -126,43 +124,7 @@ def test_intertwine_seeded_stale_copy_is_detected_as_drift(tmp_path: Path) -> No
     assert "schema-intertwine.md" in result.stderr
 
 
-def test_intertwine_lists_a_real_registered_phase_transition_row() -> None:
+def test_intertwine_lists_a_real_registered_contract() -> None:
     text = regen.INTERTWINE_PATH.read_text(encoding="utf-8")
-    assert (
-        "| mold | 1.0 | planner-request | cook | mold-cook-handoff | MoldCookHandoff |"
-        in text
-    )
-
-
-# Pinned sha256 digests of the phase-registry compiler and its compiled output.
-# These sources must never be hand-touched as part of rendering the generated
-# regions; the registry is regenerated deterministically from its own compiler,
-# not from documentation. To legitimately update a pin, regenerate the
-# registry through its own pipeline, review the diff, then recompute:
-#   python3 -c "import hashlib; print(hashlib.sha256(open(PATH, 'rb').read()).hexdigest())"
-_PHASE_REGISTRY_COMPILER_DIGEST = (
-    "84cb45b0e3efea3dc53eaa53265ab0da9584e4016ecabfd1faf7d60e5f3a5136"
-)
-_COMPILED_PHASE_REGISTRY_DIGEST = (
-    "b716453db1a717ad69adf6bedff1ddb365e2bdf55ec5e69bb6655bfb1061694b"
-)
-
-
-def test_phase_registry_sources_are_untouched() -> None:
-    for relative_path, expected_digest in (
-        ("scripts/_phase_registry_compiler.py", _PHASE_REGISTRY_COMPILER_DIGEST),
-        (
-            "src/easy_cheese_schemas/_compiled_phase_registry.py",
-            _COMPILED_PHASE_REGISTRY_DIGEST,
-        ),
-    ):
-        content = (REPO_ROOT / relative_path).read_bytes()
-        digest = hashlib.sha256(content).hexdigest()
-        assert digest == expected_digest, (
-            f"{relative_path} no longer matches its pinned digest; the "
-            "phase-registry-untouched invariant requires this file be produced "
-            "only by regenerating the registry through its own compiler, never "
-            "hand-edited or touched incidentally by unrelated changes. If this "
-            "change is a legitimate registry regeneration, update the pinned "
-            "digest constant above."
-        )
+    assert "| curd-result | CurdResult |" in text
+    assert "phase-contract" not in text

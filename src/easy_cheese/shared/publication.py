@@ -27,7 +27,6 @@ except ImportError:  # pragma: no cover
     fcntl = None  # type: ignore[assignment]
 
 from easy_cheese_schemas import (
-    COMPILED_TRANSITION_REGISTRY,
     MAX_CONTRACT_BYTES,
     MOLD_COOK_HANDOFF_SCHEMA_URI,
     NORMALIZATION_RECEIPT_SCHEMA_URI,
@@ -41,8 +40,8 @@ from easy_cheese_schemas import (
     canonical_bytes,
     supported_version_for,
     validate_contract,
-    validate_transition,
 )
+from easy_cheese.shared.phase_routes import validate_route
 from easy_cheese.shared.artifacts import (
     ArtifactDigestMismatchError,
     ArtifactResolutionError,
@@ -389,11 +388,8 @@ def _resolve_pointer(
             f"pointer destination {pointer.destination_phase!r} does not match "
             + f"consumer {request.destination_phase!r}"
         )
-    _ = validate_transition(
-        COMPILED_TRANSITION_REGISTRY,
-        pointer.source_phase,
-        pointer.destination_phase,
-        request.payload_schema_uri,
+    validate_route(
+        pointer.source_phase, pointer.destination_phase, request.payload_schema_uri
     )
     payload_bytes = _resolve_pointer_artifact(
         pointer.payload,
@@ -513,11 +509,8 @@ def _publish_canonical(
     """Persist a prepared canonical payload and reveal its pointer."""
     root = Path(artifact_root)
     pointer_path = _pointer_path(root, request.operation_id)
-    _ = validate_transition(
-        COMPILED_TRANSITION_REGISTRY,
-        request.source_phase,
-        request.destination_phase,
-        request.payload_schema_uri,
+    validate_route(
+        request.source_phase, request.destination_phase, request.payload_schema_uri
     )
     if pointer_path.exists():
         existing = _read_pointer(pointer_path)
@@ -598,8 +591,8 @@ def accept(
     own ``pointers/`` directory still resolves the correct root. Execution
     may proceed only once this function returns: the pointer's contract
     version is checked for strict equality, its ``source_phase ->
-    destination_phase`` route is validated against the compiled phase
-    registry, every referenced artifact (payload and, when present,
+    destination_phase`` route is validated against the private route table,
+    every referenced artifact (payload and, when present,
     normalization receipt) is checked for file existence and digest match, a
     present receipt is bound to the canonical payload's digest, and the
     canonical payload itself is validated against ``payload_schema_uri``.

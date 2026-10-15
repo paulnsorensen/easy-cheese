@@ -39,9 +39,9 @@ from easy_cheese_schemas import (
     WheypointProjection,
     WheypointRecord,
     WheypointStatus,
-    phase_contracts,
 )
 
+from easy_cheese_schemas.handback_status import PROCEED
 from easy_cheese.shared import git_utils, handoff, paths
 
 from . import checkpoint as checkpoint_mod
@@ -744,7 +744,7 @@ def resolve_legacy(
                 + "name no legacy note in any worktree and are not absolute "
                 + "http(s) URLs",
             )
-    if slug_block.disposition != phase_contracts.PROCEED:
+    if slug_block.disposition != PROCEED:
         reason = slug_block.reason or f"{slug_block.status} status"
         return _gate(found, f"legacy note {slug_block.status}: {reason}")
     return found

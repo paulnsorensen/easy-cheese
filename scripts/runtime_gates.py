@@ -30,7 +30,6 @@ SKILLS_ROOT = PACKAGE_ROOT / "skills"
 SCHEMA_ROOT = SRC_ROOT / "easy_cheese_schemas"
 BUILD_SCRIPTS_ROOT = REPO_ROOT / "scripts"
 SCHEMA_CATALOG_SOURCE = SCHEMA_ROOT / "_schema_catalog.py"
-PHASE_REGISTRY_SOURCE = SCHEMA_ROOT / "_compiled_phase_registry.py"
 DOCUMENT_RULES_SOURCE = PACKAGE_ROOT / "shared" / "document_rules.py"
 BUNDLE_COMMAND_INDEX_SOURCE = PACKAGE_ROOT / "shared" / "bundle_command_index.py"
 SKILLS = tuple(
@@ -52,17 +51,6 @@ def _compiler_module(name: str) -> ModuleType:
     """Load a build-only compiler source module (never packaged)."""
     return _import_from(BUILD_SCRIPTS_ROOT, name)
 
-
-def _phase_compiler() -> Callable[[Iterable[Path]], str]:
-    compiler = _compiler_module("_phase_registry_compiler")
-    return cast(
-        Callable[[Iterable[Path]], str],
-        getattr(compiler, "compile_phase_files_to_source"),
-    )
-
-
-def _compiled_phase_registry_source() -> str:
-    return _phase_compiler()(sorted(REPO_ROOT.glob("skills/*/phase-contract.yaml")))
 
 
 def _schema_catalog_compiler() -> tuple[
@@ -182,7 +170,6 @@ def _checked_in_generated_file_bytes(
 # The checked-in runtime sources this gate compiles, and the renderer that
 # produces each one. `--write-generated` writes them; the gate checks them.
 GENERATED_RUNTIME_SOURCES: tuple[tuple[Path, str, "Callable[[], str]"], ...] = (
-    (PHASE_REGISTRY_SOURCE, "phase registry", _compiled_phase_registry_source),
     (SCHEMA_CATALOG_SOURCE, "schema catalog", _compiled_schema_catalog_source),
     (DOCUMENT_RULES_SOURCE, "document rules", compiled_document_rules_source),
     (
