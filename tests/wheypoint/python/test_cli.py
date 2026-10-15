@@ -2636,3 +2636,115 @@ def test_supersede_refuses_an_unknown_successor() -> None:
 
     assert status == 1
     assert "unknown entry" in _error(payload)[1]
+
+
+def _questions(payload: dict[str, object]) -> list[dict[str, object]]:
+    record = cast(dict[str, object], payload["record"])
+    return cast(list[dict[str, object]], record["questions"])
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_question_owner_and_when_flags_pair_by_order_and_are_stored() -> None:
+    _ = _seed()
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "Which index?",
+        "--question",
+        "Who pays?",
+        "--owner",
+        "Ana",
+        "--owner",
+        "Bo",
+        "--when",
+        "after the spike",
+        "--when",
+        "before launch",
+    )
+
+    assert status == 0, payload
+    stored = [
+        (q["summary"], q.get("owner"), q.get("when")) for q in _questions(payload)
+    ]
+    assert stored == [
+        ("Which index?", "Ana", "after the spike"),
+        ("Who pays?", "Bo", "before launch"),
+    ]
+
+
+@pytest.mark.usefixtures("corpus_root")
+@pytest.mark.parametrize("flag", ["--owner", "--when"])
+def test_question_owner_or_when_count_mismatch_refuses_and_writes_nothing(
+    corpus_root: Path, flag: str
+) -> None:
+    _ = _seed()
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "One?",
+        "--question",
+        "Two?",
+        flag,
+        "solo",
+    )
+
+    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_operator_directive_flag_stores_scope_operator_and_plain_directive_stays_work() -> None:
+    _ = _seed()
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--directive",
+        "Ship small PRs",
+        "--operator-directive",
+        "Lead with the answer",
+        "--quote",
+        "ship small PRs please",
+        "--quote",
+        "lead with the answer",
+    )
+
+    assert status == 0, payload
+    record = cast(dict[str, object], payload["record"])
+    directives = cast(list[dict[str, object]], record["directives"])
+    assert [(d["summary"], d.get("scope", "work")) for d in directives] == [
+        ("Ship small PRs", "work"),
+        ("Lead with the answer", "operator"),
+    ]
+    assert "scope" not in directives[0]
+    assert "## Operator preferences" in cast(str, payload["markdown"]).splitlines()
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_owner_keeps_records_with_an_active_question_owned_case_insensitively() -> None:
+    _ = _seed(
+        work_id="ana-work",
+        entries=[{"kind": "question", "summary": "Q?", "owner": "Ana"}],
+    )
+    _ = _seed(
+        work_id="bo-work",
+        entries=[{"kind": "question", "summary": "Q?", "owner": "Bo"}],
+    )
+    _ = _seed(work_id="nobody-work")
+
+    def refs(*argv: str) -> set[object]:
+        status, payload = _run("list", *argv)
+        assert status == 0, payload
+        return {
+            cast(dict[str, object], item)["ref"]
+            for item in cast("list[object]", payload["items"])
+        }
+
+    assert refs("--owner", "ANA") == {"ana-work"}
+    assert refs("--owner", "ana", "--owner", "bo") == {"ana-work", "bo-work"}
+    assert refs("--owner", "carl") == set()
