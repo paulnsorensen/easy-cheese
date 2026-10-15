@@ -1176,7 +1176,7 @@ def _finalize_publication(
         "command": [
             "/cook",
             "--auto",
-            str(artifact_root / "pointers" / f"{_safe_segment(operation_id)}.json"),
+            pointer,
             "--spec",
             str(spec_path),
         ],

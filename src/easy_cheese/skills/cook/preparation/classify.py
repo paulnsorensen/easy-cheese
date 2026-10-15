@@ -15,9 +15,7 @@ from easy_cheese.shared.wheypoint.canonical import digest_bytes
 from ._types import ClassifiedCookInput, CookInputError
 from .evidence import as_path, is_regular_path, read_path
 
-_POINTER_MARKERS = frozenset(
-    {"operation_id", "request_digest", "source_phase", "destination_phase", "payload"}
-)
+_POINTER_MARKERS = frozenset({"request", "payload"})
 _PROJECTION_MARKERS = frozenset(
     {
         "schema_version",

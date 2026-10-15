@@ -76,9 +76,11 @@ def execute_accepted_handoff(
         pointer_path = Path(pointer_source)
         handoff_ref = None
     pointer_parent = pointer_path.resolve().parent
-    resolved_artifact_root = supplied_root or (
-        pointer_parent.parent if pointer_parent.name == "pointers" else pointer_parent
-    )
+    if supplied_root is None and pointer_parent.name != "pointers":
+        raise ContractValidationError(
+            "canonical pointer must live under <artifact_root>/pointers"
+        )
+    resolved_artifact_root = supplied_root or pointer_parent.parent
     if not pointer_path.resolve().is_relative_to(resolved_artifact_root):
         raise ContractValidationError(
             "canonical pointer is outside artifact root "
