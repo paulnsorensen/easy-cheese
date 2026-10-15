@@ -191,7 +191,6 @@ _ = _converter.register_structure_hook_factory(_is_list_annotation, _guarded_lis
 _ = _converter.register_structure_hook_factory(
     _is_variadic_tuple_annotation, _guarded_tuple
 )
-_ = _strict_converter.register_structure_hook_factory(attrs.has, _guarded_class_strict)
 
 # A second converter for the write path (S6): identical primitive handling,
 # but an unknown key on any nested class is a refused write, not an ignored
@@ -199,6 +198,7 @@ _ = _strict_converter.register_structure_hook_factory(attrs.has, _guarded_class_
 # A copy keeps every primitive rule the read path uses; only the attrs-class
 # factory is swapped, so read and write can never disagree on what a primitive is.
 _strict_converter = _converter.copy()
+_ = _strict_converter.register_structure_hook_factory(attrs.has, _guarded_class_strict)
 
 
 class Provenance(Enum):
