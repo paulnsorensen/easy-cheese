@@ -133,3 +133,50 @@ def test_stale_notes_is_quiet_when_the_record_never_had_notes() -> None:
 
     assert status == 0, second
     assert _warnings(second) == []
+
+
+def _stamps(payload: dict[str, object]) -> tuple[object, object]:
+    record = cast(dict[str, object], payload["record"])
+    return record.get("notes_revision_number"), record.get("decisions_revision_number")
+
+
+def test_stamp_genesis_stamps_notes_and_decisions_at_revision_one(
+    _genesis: dict[str, object],
+) -> None:
+    assert _stamps(_genesis) == (1, 1)
+
+
+def test_stamp_a_decision_without_notes_moves_only_the_decision_stamp() -> None:
+    payload = _checkpoint(
+        entries=[{"kind": "decision", "summary": "Use WAL", "rationale": "speed"}]
+    )
+
+    assert _stamps(payload) == (1, 2)
+
+
+def test_stamp_a_decision_transition_moves_the_decision_stamp(
+    _genesis: dict[str, object],
+) -> None:
+    payload = _checkpoint(
+        transitions=[
+            {
+                "entry_id": _decision_id(_genesis),
+                "action": "withdraw",
+                "rationale": "Dropped.",
+            }
+        ]
+    )
+
+    assert _stamps(payload) == (1, 2)
+
+
+def test_stamp_replacing_notes_moves_only_the_notes_stamp() -> None:
+    payload = _checkpoint(notes="Fresh notes.")
+
+    assert _stamps(payload) == (2, 1)
+
+
+def test_stamp_a_question_only_checkpoint_moves_neither_stamp() -> None:
+    payload = _checkpoint(entries=[{"kind": "question", "summary": "Which index?"}])
+
+    assert _stamps(payload) == (1, 1)

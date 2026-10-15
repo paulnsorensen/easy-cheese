@@ -88,7 +88,7 @@ The runtime refuses an intent instead of dropping data.
 - It derives every identifier, digest, and revision.
 - It refuses an agent-authored `fork` transition and a `forked_from` edge in a delta.
 - It refuses `notes` over 6000 characters.
-- It warns with `stale-notes` when a decision changes and `notes` stay as they were.
+- It warns with `stale-notes` when a decision changes and `notes` stay as they were, marks that drift at the top of `## Notes`, and lists an entry that `checkpoint --supersede <old> [--by <new>] --rationale <why>` replaced under `## Superseded`.
 
 Fix a refused intent and run `checkpoint` again.
 

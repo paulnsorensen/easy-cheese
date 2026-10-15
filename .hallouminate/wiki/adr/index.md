@@ -86,6 +86,7 @@
 - [wheypoint-ergonomics-004](./wheypoint-ergonomics-004.md) — Additive schema evolution keeps old digests valid
 - [wheypoint-ergonomics-005](./wheypoint-ergonomics-005.md) — Checkpoints must carry the user's words
 - [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md) — ADR: wheypoint provenance as additive header fields with join/split verbs
+- [wheypoint-schema5-stack-001](./wheypoint-schema5-stack-001.md) — Wheypoint schema 5 follow-up stack decisions
 - [workflow-contract-milknado-seam-001](./workflow-contract-milknado-seam-001.md) — ADR: CurdPlan is the semantic work authority
 - [workflow-contract-milknado-seam-002](./workflow-contract-milknado-seam-002.md) — ADR: Agents write slim views and hosts normalize canonical contracts
 - [workflow-contract-milknado-seam-003](./workflow-contract-milknado-seam-003.md) — ADR: The planner owns semantic decomposition

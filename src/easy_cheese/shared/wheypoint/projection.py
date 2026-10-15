@@ -73,6 +73,7 @@ _OPEN_HEADING = "## Open entries"
 _DECISIONS_HEADING = "## Decisions"
 _DIRECTIVES_HEADING = "## Directives"
 _NOTES_HEADING = "## Notes"
+_SUPERSEDED_HEADING = "## Superseded"
 _CONTEXT_HEADING = "## Context"
 _ARTIFACTS_HEADING = "## Artifacts"
 _LINKS_HEADING = "## Links"
@@ -161,6 +162,33 @@ def _entry_line(entry: ProtectedEntry) -> str:
     return f"- {entry.entry_id} ({entry.kind.value}) — {escape(entry.summary)}"
 
 
+def _drift_marker(record: WheypointRecord) -> list[str]:
+    """One line saying the notes predate the latest decision change, else nothing.
+
+    A record without stamps renders no marker: it cannot say which is newer.
+    """
+    decided = record.decisions_revision_number
+    written = record.notes_revision_number
+    if not record.notes or decided is None or (written is not None and decided <= written):
+        return []
+    notes_at = "unstamped" if written is None else f"revision {written}"
+    return [
+        f"> notes may be stale: decisions changed at revision {decided}, "
+        + f"notes written at {notes_at}"
+    ]
+
+
+def _superseded(record: WheypointRecord) -> list[str]:
+    """The `## Superseded` section, or nothing when no entry was superseded."""
+    moved = [
+        e for e in records.entries(record)
+        if e.state is EntryState.SUPERSEDED and e.superseded_by
+    ]
+    if not moved:
+        return []
+    return ["", _SUPERSEDED_HEADING, "", *(f"- {e.entry_id} -> {e.superseded_by}" for e in moved)]
+
+
 def _body(record: WheypointRecord) -> list[str]:
     """The human sections: everything the record holds that the pins do not."""
     lines: list[str] = []
@@ -187,7 +215,7 @@ def _body(record: WheypointRecord) -> list[str]:
             lines.extend(f"  > {part}" for part in entry.quote.splitlines() or [""])
     if not directives:
         lines.append(_NONE)
-    lines += ["", _NOTES_HEADING, ""]
+    lines += ["", _NOTES_HEADING, "", *_drift_marker(record)]
     # A notes line that looks like a heading would split the parsed sections.
     lines += (
         [("\\" + line) if line.startswith("#") else line for line in record.notes.splitlines()]
@@ -216,7 +244,7 @@ def _body(record: WheypointRecord) -> list[str]:
             lines.append(f"  rationale: {escape(edge.rationale)}")
     if not record.edges:
         lines.append(_NONE)
-    return lines
+    return lines + _superseded(record)
 
 
 def _tasks(action: NextAction) -> list[str]:

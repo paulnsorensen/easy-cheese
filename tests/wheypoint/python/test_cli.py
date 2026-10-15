@@ -2501,3 +2501,340 @@ def test_fork_refuses_a_future_stamped_parent_without_writing(
     assert status == 1
     assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
     assert _corpus_bytes(corpus_root) == before
+
+
+def _decision_ids(payload: dict[str, object]) -> list[str]:
+    record = cast(dict[str, object], payload["record"])
+    return [
+        cast(str, entry["entry_id"])
+        for entry in cast(list[dict[str, object]], record["decisions"])
+    ]
+
+
+def _entry_states(payload: dict[str, object]) -> dict[str, tuple[str, object]]:
+    record = cast(dict[str, object], payload["record"])
+    return {
+        cast(str, entry["entry_id"]): (
+            cast(str, entry["state"]),
+            entry.get("superseded_by"),
+        )
+        for entry in cast(list[dict[str, object]], record["decisions"])
+    }
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_by_names_the_successor_and_projects_it() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    status, added = _run(
+        "checkpoint", WORK_ID, "--decision", "Use B", "--rationale", "b is faster"
+    )
+    assert status == 0, added
+    new = _decision_ids(added)[1]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--supersede",
+        old,
+        "--by",
+        new,
+        "--rationale",
+        "B replaces A",
+    )
+
+    assert status == 0, payload
+    assert _entry_states(payload)[old] == ("superseded", new)
+    assert f"- {old} -> {new}" in cast(str, payload["markdown"]).splitlines()
+    transitions = cast(list[dict[str, object]], payload["applied_transitions"])
+    assert [(t["entry_id"], t["action"], t["target_entry_id"]) for t in transitions] == [
+        (old, "supersede", new)
+    ]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_without_by_takes_the_one_decision_the_checkpoint_adds() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--decision",
+        "Use B",
+        "--rationale",
+        "b is faster",
+        "--supersede",
+        old,
+        "--rationale",
+        "B replaces A",
+    )
+
+    assert status == 0, payload
+    ids = _decision_ids(payload)
+    assert len(ids) == 2
+    assert _entry_states(payload)[old] == ("superseded", ids[1])
+    assert _entry_states(payload)[ids[1]][0] == "active"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_pairing_refuses_with_no_successor_and_writes_nothing(
+    corpus_root: Path,
+) -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--supersede", old, "--rationale", "Gone."
+    )
+
+    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_pairing_refuses_two_added_entries_of_the_kind() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--decision",
+        "B",
+        "--decision",
+        "C",
+        "--rationale",
+        "b",
+        "--rationale",
+        "c",
+        "--supersede",
+        old,
+        "--rationale",
+        "Replaced.",
+    )
+
+    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_refuses_an_unknown_successor(corpus_root: Path) -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--supersede",
+        old,
+        "--by",
+        "d-nothing",
+        "--rationale",
+        "Replaced.",
+    )
+
+    assert status == 1
+    assert "unknown entry" in _error(payload)[1]
+    assert _corpus_bytes(corpus_root) == before
+
+
+def _two_decisions() -> tuple[str, str]:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    status, added = _run(
+        "checkpoint", WORK_ID, "--decision", "Use B", "--rationale", "b is faster"
+    )
+    assert status == 0, added
+    ids = _decision_ids(added)
+    assert _decision_ids(seeded)[0] == ids[0]
+    return ids[0], ids[1]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_refuses_an_entry_superseding_itself(corpus_root: Path) -> None:
+    old, _ = _two_decisions()
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--supersede", old, "--by", old, "--rationale", "Self."
+    )
+
+    assert status == 1
+    assert "cannot supersede itself" in _error(payload)[1]
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_refuses_a_successor_that_is_not_active(corpus_root: Path) -> None:
+    old, new = _two_decisions()
+    status, done = _run(
+        "checkpoint", WORK_ID, "--supersede", old, "--by", new, "--rationale", "B."
+    )
+    assert status == 0, done
+    status, added = _run(
+        "checkpoint", WORK_ID, "--decision", "Use C", "--rationale", "c is cheap"
+    )
+    assert status == 0, added
+    third = _decision_ids(added)[-1]
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--supersede", third, "--by", old, "--rationale", "No."
+    )
+
+    assert status == 1
+    assert "already superseded" in _error(payload)[1]
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_refuses_a_cycle_in_one_delta(corpus_root: Path) -> None:
+    old, new = _two_decisions()
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--supersede",
+        old,
+        "--by",
+        new,
+        "--rationale",
+        "A to B.",
+        "--supersede",
+        new,
+        "--by",
+        old,
+        "--rationale",
+        "B to A.",
+    )
+
+    assert status == 1
+    assert "also transitions" in _error(payload)[1]
+    assert _corpus_bytes(corpus_root) == before
+
+
+def _kind_ids(payload: dict[str, object], field: str) -> list[str]:
+    entries = cast(list[dict[str, str]], _get(payload, "record", field))
+    return [entry["entry_id"] for entry in entries]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_without_by_takes_the_one_question_the_checkpoint_adds() -> None:
+    seeded = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
+    old = _kind_ids(seeded, "questions")[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "Which cache?",
+        "--supersede",
+        old,
+        "--rationale",
+        "Narrowed.",
+    )
+
+    assert status == 0, payload
+    questions = cast(list[dict[str, object]], _get(payload, "record", "questions"))
+    assert len(questions) == 2
+    assert (questions[0]["state"], questions[0]["superseded_by"]) == (
+        "superseded",
+        questions[1]["entry_id"],
+    )
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_without_by_takes_the_one_gated_question_the_checkpoint_adds() -> None:
+    seeded = _seed(
+        entries=[
+            {
+                "kind": "question",
+                "summary": "Gate A?",
+                "blocks_continuation": True,
+                "rationale": "Needs an answer.",
+            }
+        ]
+    )
+    old = _kind_ids(seeded, "questions")[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "Gate B?",
+        "--gates",
+        "--rationale",
+        "Needs a new answer.",
+        "--supersede",
+        old,
+        "--rationale",
+        "Reframed.",
+    )
+
+    assert status == 0, payload
+    questions = cast(list[dict[str, object]], _get(payload, "record", "questions"))
+    assert len(questions) == 2
+    assert questions[1]["blocks_continuation"] is True
+    assert (questions[0]["state"], questions[0]["superseded_by"]) == (
+        "superseded",
+        questions[1]["entry_id"],
+    )
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_without_by_takes_the_one_directive_the_checkpoint_adds() -> None:
+    seeded = _seed(entries=[{"kind": "directive", "summary": "Use A", "quote": "a"}])
+    old = _kind_ids(seeded, "directives")[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--directive",
+        "Use B",
+        "--quote",
+        "b",
+        "--supersede",
+        old,
+        "--rationale",
+        "Changed.",
+    )
+
+    assert status == 0, payload
+    directives = cast(list[dict[str, object]], _get(payload, "record", "directives"))
+    assert len(directives) == 2
+    assert (directives[0]["state"], directives[0]["superseded_by"]) == (
+        "superseded",
+        directives[1]["entry_id"],
+    )
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_a_decision_only_supersede_stamps_decisions_and_marks_notes_drift() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    assert _get(seeded, "record", "notes_revision_number") == 1
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--decision",
+        "Use B",
+        "--rationale",
+        "b is faster",
+        "--supersede",
+        old,
+        "--rationale",
+        "B replaces A",
+    )
+
+    assert status == 0, payload
+    assert _get(payload, "record", "decisions_revision_number") == 2
+    assert _get(payload, "record", "notes_revision_number") == 1
+    assert payload["warnings"] == ["stale-notes"]
+    lines = cast(str, payload["markdown"]).splitlines()
+    first_note_line = lines[lines.index("## Notes") + 2]
+    assert first_note_line.startswith(
+        "> notes may be stale: decisions changed at revision 2"
+    )

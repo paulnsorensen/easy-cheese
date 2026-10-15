@@ -76,6 +76,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
         quote: list[str] | None = None,
         resolve: list[str] | None = None,
         withdraw: list[str] | None = None,
+        supersede: list[str] | None = None,
+        by: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -108,8 +110,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
             add a decision; pair each with a --rationale (repeatable)
         rationale
             the rationale for each gating --question, then each --decision,
-            then each --resolve, then each --withdraw, in that order
-            (repeatable)
+            then each --resolve, then each --withdraw, then each --supersede,
+            in that order (repeatable)
         directive
             add a user directive; pair each with a --quote (repeatable)
         quote
@@ -118,6 +120,11 @@ def build_app(stdin: TextIO) -> fromargs.App:
             resolve an entry id; pair each with a --rationale (repeatable)
         withdraw
             withdraw an entry id; pair each with a --rationale (repeatable)
+        supersede
+            supersede an entry id; pair each with a --rationale (repeatable)
+        by
+            the entry id that replaces each --supersede; without --by, the one
+            entry of that kind this checkpoint adds (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -148,6 +155,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
             quote=quote or (),
             resolve=resolve or (),
             withdraw=withdraw or (),
+            supersede=supersede or (),
+            by=by or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -183,6 +192,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
         quote: list[str] | None = None,
         resolve: list[str] | None = None,
         withdraw: list[str] | None = None,
+        supersede: list[str] | None = None,
+        by: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -210,8 +221,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
             add a decision; pair each with a --rationale (repeatable)
         rationale
             the rationale for each gating --question, then each --decision,
-            then each --resolve, then each --withdraw, in that order
-            (repeatable)
+            then each --resolve, then each --withdraw, then each --supersede,
+            in that order (repeatable)
         directive
             add a user directive; pair each with a --quote (repeatable)
         quote
@@ -220,6 +231,11 @@ def build_app(stdin: TextIO) -> fromargs.App:
             resolve an entry id; pair each with a --rationale (repeatable)
         withdraw
             withdraw an entry id; pair each with a --rationale (repeatable)
+        supersede
+            supersede an entry id; pair each with a --rationale (repeatable)
+        by
+            the entry id that replaces each --supersede; without --by, the one
+            entry of that kind this checkpoint adds (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -250,6 +266,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
             quote=quote or (),
             resolve=resolve or (),
             withdraw=withdraw or (),
+            supersede=supersede or (),
+            by=by or (),
             orientation=orientation,
             next=next,
             artifact=artifact,

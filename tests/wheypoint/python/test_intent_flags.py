@@ -209,3 +209,89 @@ def test_overlay_refuses_flags_that_do_not_pair(
 def test_overlay_refuses_a_payload_list_field_that_is_not_a_list() -> None:
     with pytest.raises(intent_flags.IntentFlagError, match="^flag-conflict: "):
         _ = intent_flags.overlay({"entries": "oops"}, question=["Q"])
+
+
+def test_supersede_without_by_refuses_when_the_added_entry_has_no_summary() -> None:
+    payload: dict[str, object] = {
+        "work_id": WORK_ID,
+        "base_revision_id": "rev-abc",
+        "entries": [{"kind": "decision"}],
+    }
+    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing: "):
+        _ = intent_flags.overlay(
+            payload, supersede=["d-aaaaaaaaaaaa"], rationale=["why"]
+        )
+
+
+def test_supersede_flags_build_a_supersede_transition_with_its_successor() -> None:
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        base="rev-0001",
+        supersede=["d-old"],
+        by=["d-new"],
+        rationale=["Replaced."],
+    )
+
+    assert payload["transitions"] == [
+        {
+            "entry_id": "d-old",
+            "action": "supersede",
+            "rationale": "Replaced.",
+            "target_entry_id": "d-new",
+        }
+    ]
+
+
+def test_supersede_without_by_derives_the_id_of_the_one_added_entry() -> None:
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        base="rev-0001",
+        decision=["Use B"],
+        supersede=["d-old"],
+        rationale=["why", "Replaced."],
+    )
+    intent = _intent(payload)
+    assert intent.entries is not None
+
+    expected = commit.proposed_entry_id(
+        WORK_ID, "rev-0001", EntryKind.DECISION, "Use B", False, 0
+    )
+    transitions = payload["transitions"]
+    assert isinstance(transitions, list)
+    assert transitions[0]["target_entry_id"] == expected
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        {"supersede": ["d-old"], "rationale": ["Replaced."]},
+        {
+            "supersede": ["d-old"],
+            "rationale": ["Replaced."],
+            "question": ["Q?"],
+        },
+        {
+            "supersede": ["d-old"],
+            "decision": ["B", "C"],
+            "rationale": ["b", "c", "Replaced."],
+        },
+    ],
+)
+def test_supersede_pairing_refuses_when_no_successor_resolves(
+    flags: dict[str, object],
+) -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing"):
+        _ = intent_flags.overlay({}, work_id=WORK_ID, base="rev-0001", **flags)  # pyright: ignore[reportArgumentType]
+
+
+def test_supersede_pairing_refuses_a_by_count_that_differs() -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing"):
+        _ = intent_flags.overlay(
+            {},
+            work_id=WORK_ID,
+            supersede=["d-a", "d-b"],
+            by=["d-c"],
+            rationale=["x", "y"],
+        )
