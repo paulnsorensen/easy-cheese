@@ -39,7 +39,11 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 
 from easy_cheese.shared.document_rules import DOCUMENT_RULES
-from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
+from easy_cheese.shared.frontmatter_lists import (
+    frontmatter_mapping_list,
+    frontmatter_string_list,
+    strip_flow_comment,
+)
 
 if TYPE_CHECKING:
     from easy_cheese_schemas.contracts import (
@@ -230,6 +234,8 @@ def _split_frontmatter(text: str) -> tuple[dict[str, object], str]:
 
 def _frontmatter_scalar(value: str) -> object:
     value = value.strip()
+    if value.startswith(("[", "{")):
+        value = strip_flow_comment(value)
     if value in {"{}", "[]"}:
         return {} if value == "{}" else []
     if value.lower() in {"true", "false"}:
@@ -650,6 +656,16 @@ def validate(path: Path, *, strict: bool = False) -> tuple[list[str], str | None
         except ValueError as error:
             errors.append(f"ERROR: {error} in {path}")
             frontmatter["execution_holds"] = ()
+    if "entity_referent_bindings" in frontmatter:
+        # The subset YAML reader drops block lists and rejects unquoted flow
+        # keys; read the binding records with the reader taste-test shares.
+        try:
+            frontmatter["entity_referent_bindings"] = frontmatter_mapping_list(
+                text, "entity_referent_bindings"
+            )
+        except ValueError as error:
+            errors.append(f"ERROR: {error} in {path}")
+            frontmatter["entity_referent_bindings"] = ()
     policy = spec_format_policy(frontmatter, strict=strict)
     found_sections, duplicate_headings = _find_sections(body)
     source = frontmatter.get("source")
