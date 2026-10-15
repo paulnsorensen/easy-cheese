@@ -647,7 +647,7 @@ def _warnings_for(result: commit_mod.CommitResult) -> list[str]:
     record = result.record
     if result.revision.parent_revision_id is None or not record.notes:
         return []
-    number = record.revision_number
+    number = result.revision.revision_number
     moved = record.decisions_revision_number == number
     return ["stale-notes"] if moved and record.notes_revision_number != number else []
 

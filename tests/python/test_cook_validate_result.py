@@ -89,3 +89,33 @@ def test_not_ready_result_refuses(tmp_path: Path) -> None:
     fixture = _full_fixture(root, partial=False)
     result = _result(root, fixture, status="saved-not-ready", ready=False)
     assert _run(result, root) != 0
+
+
+def _respec(root: Path, fixture: _FullFixture, old: bytes, new: bytes) -> None:
+    spec = (root / "spec.md").read_bytes()
+    assert old in spec
+    fixture["spec_ref"] = _write_ref(
+        root, spec.replace(old, new, 1), artifact_id="spec", role="spec",
+        filename="spec.md", media_type="text/markdown",
+    )
+
+
+def test_draft_lifecycle_refuses(tmp_path: Path) -> None:
+    root = tmp_path / "draft"
+    fixture = _full_fixture(root, partial=False)
+    _respec(root, fixture, b"status: approved", b"status: draft")
+    assert _run(_result(root, fixture), root) != 0
+
+
+def test_gates_overridden_refuses(tmp_path: Path) -> None:
+    root = tmp_path / "overridden"
+    fixture = _full_fixture(root, partial=False)
+    _respec(root, fixture, b"gates_overridden: []", b'gates_overridden: ["coherence"]')
+    assert _run(_result(root, fixture), root) != 0
+
+
+def test_cook_skill_names_spec_hold_refusal() -> None:
+    skill = Path(__file__).parents[2] / "skills" / "cook" / "SKILL.md"
+    text = skill.read_text(encoding="utf-8")
+    assert "Spec-hold refusal" in text
+    assert "execution_holds" in text
