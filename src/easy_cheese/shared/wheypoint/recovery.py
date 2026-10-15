@@ -270,10 +270,11 @@ def persist_checkpoint(
             current = store.read_record()
         except (ValueError, OSError) as exc:
             raise RecoveryError("current checkpoint record cannot be read") from exc
-        # The runtime reads inside one artifact lock with no model memory in
-        # between, so the record it just read is the base it read. A write
-        # that races in before the commit makes the commit refuse; it is not
-        # retried, because the store lock is taken only inside the commit.
+        # Documented exception to the required-base rule: the only caller is
+        # the workflow runtime's budget checkpoint, which has no earlier read
+        # to name. It reads inside one artifact lock with no model memory in
+        # between, so the record just read is its base. A write that races in
+        # before the commit makes the commit refuse; it is not retried.
         if current is not None and intent.base_revision_id is None:
             intent = attrs.evolve(intent, base_revision_id=current.revision_id)
         try:

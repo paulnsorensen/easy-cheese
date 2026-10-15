@@ -1180,6 +1180,27 @@ class TestWheypointCommitFailure:
         assert "Traceback" in capsys.readouterr().err
 
 
+class TestBaseRejectedOnNonChainPhase:
+    def test_base_on_a_non_chain_phase_is_refused_and_writes_nothing(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(
+            fromargs.CliError, match="--base is only valid for chain phases"
+        ):
+            _ = writer.write_artifact(
+                slug="non-chain",
+                status="ok",
+                phase="mold",
+                next_skill="cook",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                base_revision_id="rev-abc",
+            )
+        assert not (tmp_path / ".cheese" / "mold" / "non-chain.md").exists()
+
+
 class TestGroundedRejectedOnNonChainPhase:
     def test_grounded_on_a_non_chain_phase_is_caller_usage(
         self, writer: _WriterModule, tmp_path: Path

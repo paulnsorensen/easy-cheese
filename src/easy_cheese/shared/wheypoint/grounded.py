@@ -81,9 +81,13 @@ def resolve_within(path_text: str, resolved_root: Path) -> GroundedPathIssue | N
         return GroundedPathIssue.ESCAPES_ROOT
     if not resolved.is_relative_to(resolved_root):
         return GroundedPathIssue.ESCAPES_ROOT
-    if not resolved.is_file():
+    try:
+        is_file = resolved.is_file()
+    except OSError:
+        # An entry too long to be a file name (prose in a stored record) names
+        # no file; the probe must report that, not raise.
         return GroundedPathIssue.MISSING
-    return None
+    return None if is_file else GroundedPathIssue.MISSING
 
 
 def validate_grounded(entries: Sequence[str], *, root: Path | str) -> tuple[str, ...]:

@@ -299,6 +299,8 @@ def write_artifact(
     _validate_transition(phase, next_skill, payload_schema_uri, slug=slug)
     if phase not in paths.CHAIN_PHASES and grounded:
         raise fromargs.CliError(f"--grounded is only valid for chain phases, not {phase!r}")
+    if phase not in paths.CHAIN_PHASES and base_revision_id is not None:
+        raise fromargs.CliError(f"--base is only valid for chain phases, not {phase!r}")
     preamble = _render_preamble(
         status=status,
         next_skill=next_skill,
