@@ -489,6 +489,9 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     assert "owns the size rule" in planner
     assert "skills/plate/references/topology.md" in planner
     assert "~400" not in planner
+    # The planner receives the resolved shape, not only the binary layout.
+    assert "Pass both values to the PR planner as `{plate_layout}` and `{shape}`." in skill
+    assert "Emit `shape: {shape}` when `{shape}` is set." in planner
 
 
 def test_cure_open_pr_dispatch_obeys_plate_policy() -> None:

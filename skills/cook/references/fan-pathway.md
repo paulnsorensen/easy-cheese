@@ -207,6 +207,8 @@ Record `plate_layout` and the chosen `shape` in the typed handoff evidence.
 
 Read `plate_layout` and `shape` from that evidence.
 
+Pass both values to the PR planner as `{plate_layout}` and `{shape}`.
+
 Apply the policy `do not decide twice`.
 
 Do not use a legacy manifest to make this decision.

@@ -1,6 +1,6 @@
 # PR planner sub-agent prompt template
 
-Loaded by `/cook`'s fan pathway at its PR-planning phase. Substitute `{slug}`, `{manifest_path}`, `{merged_diff_path}`, `{plate_layout}`, and `{spec_summary}` before dispatch.
+Loaded by `/cook`'s fan pathway at its PR-planning phase. Substitute `{slug}`, `{manifest_path}`, `{merged_diff_path}`, `{plate_layout}`, `{shape}`, and `{spec_summary}` before dispatch.
 
 ````text
 You are the PR planner sub-agent for /ultracook spec: {slug}
@@ -10,7 +10,7 @@ You are the PR planner sub-agent for /ultracook spec: {slug}
 Read the manifest at {manifest_path}, the merged diff at {merged_diff_path}, and the
 spec summary below. Emit a PR layout plan to
 `.cheese/ultracook/{slug}/pr-plan.yaml`.
-`/plate` resolved topology before parallel-mode commits. The persisted, authoritative resolution is `{plate_layout}`. Use it to choose `shape`: a `single` resolution maps to the `single` shape, and a `stacked` resolution maps to a multi-PR shape. The plan may explain why the decomposition supports a stack, but it must not change or re-decide an explicit or previously verified choice.
+`/plate` resolved topology before parallel-mode commits. The persisted, authoritative resolution is `{plate_layout}` with shape `{shape}`. Emit `shape: {shape}` when `{shape}` is set. Use the criteria below only when `{shape}` is empty. The plan may explain why the decomposition supports a stack, but it must not change or re-decide an explicit or previously verified choice.
 
 ## Layout shapes
 
