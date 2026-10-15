@@ -224,6 +224,7 @@ def _lone_successor(result: Mapping[str, object], entry_id: str) -> str:
         for item in (cast(list[object], entries) if isinstance(entries, list) else [])
         if isinstance(item, Mapping)
         and cast(Mapping[str, object], item).get("kind") == kind.value
+        and isinstance(cast(Mapping[str, object], item).get("summary"), str)
     ]
     if len(proposals) != 1:
         raise IntentFlagError(
