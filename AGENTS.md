@@ -78,6 +78,7 @@ The durable rationale and migration boundary live in
 | `/hard-cheese` | Metacognitive vibecheck gate before sharing for review (standalone or via `--hard` propagation) |
 | `/ultracook` | Compatibility redirect to `/cook`; retained scripts, references, and manifest paths remain `/cook` fan-path internals |
 | `/melt` | Resolves merge / rebase / cherry-pick conflicts via the structural-merge cascade |
+| `/wheel` | User-only loop runner: authors a loop spec with a checkable done condition into a wheypoint, then resumes it by slug until done, a gate, or the budget |
 | `/wheypoint` | Checkpoints a mid-task conversation into a durable handoff at `.cheese/notes/<slug>.md`, resumable via `/cheese --continue` |
 
 ### Source-code routing

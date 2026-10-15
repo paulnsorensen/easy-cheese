@@ -16,6 +16,7 @@
     "./skills/plate",
     "./skills/press",
     "./skills/ultracook",
+    "./skills/wheel",
     "./skills/wheypoint"
   ]
 }

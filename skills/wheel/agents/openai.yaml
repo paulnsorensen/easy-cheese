@@ -1,0 +1,5 @@
+interface:
+  display_name: "Wheel"
+  short_description: "Author and run a resumable loop stored in a wheypoint"
+policy:
+  allow_implicit_invocation: false

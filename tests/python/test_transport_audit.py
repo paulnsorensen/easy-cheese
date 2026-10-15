@@ -74,6 +74,7 @@ ROUTED_FILES = {
     "skills/plate/SKILL.md",  # the gate-`ERROR` ask before publication
     "skills/plate/references/topology.md",  # layout question, moved out of the body
     "skills/press/SKILL.md",
+    "skills/wheel/SKILL.md",
     "skills/wheypoint/SKILL.md",
 }
 
