@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from easy_cheese.shared import phase_routes
+import pytest
+
+from easy_cheese.shared.phase_routes import RouteError, validate_route
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL_DIR = REPO_ROOT / "skills" / "cheese"
@@ -362,16 +364,18 @@ class TestHandbackClaimMatchesThePhaseRegistry:
         body = _text(REFERENCES / "handback-contract.md")
         assert (
             "Routes live in the private `_ROUTES` table in "
-            "`src/easy_cheese/shared/phase_routes.py`." in body
+            + "`src/easy_cheese/shared/phase_routes.py`."
+            in body
         )
         assert (
             "They write the same preamble by hand and do not call the writer." in body
         )
 
-    def test_route_table_still_omits_the_unrouted_phases(self) -> None:
-        """The narrowed claim is only correct while `_ROUTES` omits them."""
-        assert "affinage" not in phase_routes._ROUTES
-        assert "pasteurize" not in phase_routes._ROUTES
+    @pytest.mark.parametrize("phase", ["affinage", "pasteurize"])
+    def test_route_table_still_omits_the_unrouted_phases(self, phase: str) -> None:
+        """The narrowed claim is only correct while the route table omits them."""
+        with pytest.raises(RouteError, match="unknown source phase"):
+            validate_route(phase, "done")
 
 
 class TestPlannerAndIntegratorAreSeparateJobs:
