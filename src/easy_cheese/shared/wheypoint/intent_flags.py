@@ -48,6 +48,9 @@ def overlay(
     withdraw: Sequence[str] = (),
     supersede: Sequence[str] = (),
     by: Sequence[str] = (),
+    owner: Sequence[str] = (),
+    when: Sequence[str] = (),
+    operator_directive: Sequence[str] = (),
     orientation: str | None = None,
     next: str | None = None,
     artifact: str | None = None,
@@ -58,8 +61,15 @@ def overlay(
     covers: Sequence[str] = (),
     base: str | None = None,
 ) -> dict[str, object]:
-    """`payload` (an intent file's JSON, or `{}`) with the flags applied."""
+    """`payload` (an intent file's JSON, or `{}`) with the flags applied.
+
+    `owner` and `when` pair by position with `question`. `quote` pairs with
+    `directive` first, then `operator_directive`.
+    """
     _check_pairing(
+        owner=owner,
+        when=when,
+        operator_directive=operator_directive,
         supersede=supersede,
         by=by,
         question=question,
@@ -97,14 +107,20 @@ def overlay(
         result,
         "entries",
         [
-            *_questions(question, gates, question_rationales),
+            *_questions(question, gates, question_rationales, owner, when),
             *(
                 {"kind": "decision", "summary": text, "rationale": why}
                 for text, why in zip(decision, decision_rationales, strict=True)
             ),
             *(
                 {"kind": "directive", "summary": text, "quote": words}
-                for text, words in zip(directive, quote, strict=True)
+                for text, words in zip(directive, quote, strict=False)
+            ),
+            *(
+                {"kind": "directive", "summary": text, "quote": words, "scope": "operator"}
+                for text, words in zip(
+                    operator_directive, quote[len(directive) :], strict=True
+                )
             ),
         ],
     )
@@ -125,6 +141,9 @@ def overlay(
 
 def _check_pairing(
     *,
+    owner: Sequence[str],
+    when: Sequence[str],
+    operator_directive: Sequence[str],
     supersede: Sequence[str],
     by: Sequence[str],
     question: Sequence[str],
@@ -149,9 +168,16 @@ def _check_pairing(
             f"flag-pairing: {len(rationale)} --rationale for {wanted} "
             + "--gates --question, --decision, --resolve, --withdraw, and --supersede flags"
         )
-    if len(quote) != len(directive):
+    for flag, values in (("--owner", owner), ("--when", when)):
+        if values and len(values) != len(question):
+            raise IntentFlagError(
+                f"flag-pairing: {len(values)} {flag} for {len(question)} --question"
+            )
+    quoted = len(directive) + len(operator_directive)
+    if len(quote) != quoted:
         raise IntentFlagError(
-            f"flag-pairing: {len(quote)} --quote for {len(directive)} --directive"
+            f"flag-pairing: {len(quote)} --quote for {quoted} "
+            + "--directive and --operator-directive"
         )
     if len(kind) != len(link):
         raise IntentFlagError(
@@ -162,22 +188,27 @@ def _check_pairing(
 
 
 def _questions(
-    questions: Sequence[str], gates: bool, rationales: Sequence[str]
+    questions: Sequence[str],
+    gates: bool,
+    rationales: Sequence[str],
+    owners: Sequence[str],
+    whens: Sequence[str],
 ) -> list[dict[str, object]]:
-    if not gates:
-        return [
-            {"kind": "question", "summary": text, "blocks_continuation": False}
-            for text in questions
-        ]
-    return [
-        {
+    items: list[dict[str, object]] = []
+    for index, text in enumerate(questions):
+        item: dict[str, object] = {
             "kind": "question",
             "summary": text,
-            "blocks_continuation": True,
-            "rationale": why,
+            "blocks_continuation": gates,
         }
-        for text, why in zip(questions, rationales, strict=True)
-    ]
+        if gates:
+            item["rationale"] = rationales[index]
+        if owners:
+            item["owner"] = owners[index]
+        if whens:
+            item["when"] = whens[index]
+        items.append(item)
+    return items
 
 
 def _transitions(

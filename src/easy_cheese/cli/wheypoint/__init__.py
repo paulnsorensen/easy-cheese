@@ -78,6 +78,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
         withdraw: list[str] | None = None,
         supersede: list[str] | None = None,
         by: list[str] | None = None,
+        owner: list[str] | None = None,
+        when: list[str] | None = None,
+        operator_directive: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -125,6 +128,16 @@ def build_app(stdin: TextIO) -> fromargs.App:
         by
             the entry id that replaces each --supersede; without --by, the one
             entry of that kind this checkpoint adds (repeatable)
+        owner
+            who answers each --question; one per --question, paired by order
+            (repeatable)
+        when
+            the trigger that makes each --question due; one per --question,
+            paired by order (repeatable)
+        operator_directive
+            add an operator-preference directive (how the user wants to be
+            worked with); pair each with a --quote, after the --directive
+            quotes (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -157,6 +170,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             withdraw=withdraw or (),
             supersede=supersede or (),
             by=by or (),
+            owner=owner or (),
+            when=when or (),
+            operator_directive=operator_directive or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -194,6 +210,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
         withdraw: list[str] | None = None,
         supersede: list[str] | None = None,
         by: list[str] | None = None,
+        owner: list[str] | None = None,
+        when: list[str] | None = None,
+        operator_directive: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -236,6 +255,16 @@ def build_app(stdin: TextIO) -> fromargs.App:
         by
             the entry id that replaces each --supersede; without --by, the one
             entry of that kind this checkpoint adds (repeatable)
+        owner
+            who answers each --question; one per --question, paired by order
+            (repeatable)
+        when
+            the trigger that makes each --question due; one per --question,
+            paired by order (repeatable)
+        operator_directive
+            add an operator-preference directive (how the user wants to be
+            worked with); pair each with a --quote, after the --directive
+            quotes (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -268,6 +297,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             withdraw=withdraw or (),
             supersede=supersede or (),
             by=by or (),
+            owner=owner or (),
+            when=when or (),
+            operator_directive=operator_directive or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -355,6 +387,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         edge_kind: list[str] | None = None,
         linked_to: list[str] | None = None,
         forked_from: list[str] | None = None,
+        owner: list[str] | None = None,
     ) -> dict[str, object]:
         """List and search work items and notes across worktrees; outside a Git checkout the default scope falls back to machine.
 
@@ -397,6 +430,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             keep records whose edges or links name this ref (repeatable)
         forked_from
             keep records forked from this parent work id (repeatable)
+        owner
+            keep records with an active question owned by this person
+            (repeatable; case-insensitive; matches any)
         """
         return _ok(
             "list",
@@ -418,6 +454,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
                 edge_kind=edge_kind,
                 linked_to=linked_to,
                 forked_from=forked_from,
+                owner=owner,
             ),
         )
 

@@ -6,7 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from attrs import evolve
-from easy_cheese_schemas.contracts import EdgeKind
+from easy_cheese_schemas.contracts import EdgeKind, EntryState
 
 from easy_cheese.shared import paths
 
@@ -107,6 +107,11 @@ def _store_candidate(
             haystack=haystack,
             entries=entries,
             links=links,
+            owners=tuple(
+                entry.owner.lower()
+                for entry in records.entries(record)
+                if entry.owner and entry.state is EntryState.ACTIVE
+            ),
         ),
         None,
     )

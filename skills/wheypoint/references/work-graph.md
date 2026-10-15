@@ -81,6 +81,7 @@ python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientati
 - `--edge-kind` keeps records that hold an edge of that kind.
 - `--linked-to <ref>` keeps records whose edges or links name the ref.
 - `--forked-from <work-id>` keeps the fork children of that parent.
+- `--owner <who>` keeps records with an active question owned by that person; the match ignores case.
 
 Each `list` item adds `edges_out`, `edges_in`, `forked_from`, and `gates`.
 `edges_out` items are `{kind, to}`, and `edges_in` items are `{kind, source}`.
