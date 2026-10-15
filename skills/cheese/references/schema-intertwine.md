@@ -1,6 +1,6 @@
 # Schema intertwine
 
-Run `scripts/render_generated_regions.py` to generate this file. Do not edit it manually. The generator joins the schema catalog (`_schema_catalog`) with registered contract models (contracts.py, pr_plan.py, mold_cook.py).
+Run `scripts/render_generated_regions.py` to generate this file. Do not edit it manually. The generator joins the schema catalog (`_schema_catalog`) with registered contract models (contracts.py, pr_plan.py).
 
 ## Registered schema catalog
 
@@ -8,13 +8,10 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | --- | --- |
 | agent-writer-view | AgentWriterView |
 | checkpoint-intent | CheckpointIntent |
-| cook-preparation-result | CookPreparationResult |
 | curd-plan | CurdPlan |
 | curd-result | CurdResult |
 | diagnosis-request | DiagnosisRequest |
 | diagnosis-result | DiagnosisResult |
-| mold-cook-approval | MoldCookApproval |
-| mold-cook-handoff | MoldCookHandoff |
 | planner-request | PlannerRequest |
 | planner-result | PlannerResult |
 | pr-plan | PrPlan |

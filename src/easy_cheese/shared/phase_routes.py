@@ -5,7 +5,6 @@ from __future__ import annotations
 from easy_cheese_schemas import (
     CURD_PLAN_SCHEMA_URI,
     CURD_RESULT_SCHEMA_URI,
-    MOLD_COOK_HANDOFF_SCHEMA_URI,
     PLANNER_REQUEST_SCHEMA_URI,
 )
 
@@ -22,7 +21,7 @@ _ROUTES: dict[str, dict[str, str]] = {
         "press": CURD_RESULT_SCHEMA_URI,
     },
     "cure": {"age": CURD_RESULT_SCHEMA_URI},
-    "mold": {"cook": MOLD_COOK_HANDOFF_SCHEMA_URI},
+    "mold": {"cook": CURD_PLAN_SCHEMA_URI},
     "press": {"age": CURD_RESULT_SCHEMA_URI},
 }
 

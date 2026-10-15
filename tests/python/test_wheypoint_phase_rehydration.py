@@ -28,7 +28,6 @@ from easy_cheese.shared.wheypoint import canonical, projection, records, storage
 from tests.python.test_mold_cook_producer import (
     make_planner_result,
     make_spec,
-    taste_fixture,
 )
 
 
@@ -628,28 +627,10 @@ def test_curd_4_mold_publication_creates_no_wheypoint_revision(tmp_path: Path) -
     artifact_root = root / "artifacts"
     spec = make_spec(root)
     planner = make_planner_result()
-    taste = taste_fixture(spec)
     planner_path = root / "planner.json"
     plan_path = root / "plan.json"
-    taste_path = root / "taste.json"
-    ledger_path = root / "ledger.json"
     _ = planner_path.write_bytes(canonical_bytes(planner))
     _ = plan_path.write_bytes(canonical_bytes(planner.plan))
-    _ = taste_path.write_text(
-        json.dumps(
-            {
-                "draft_sha256": taste.draft_sha256,
-                "verdict": taste.verdict,
-                "forks": [],
-                "contradictions": [],
-                "orphaned_decisions": [],
-                "unsupported_assumptions": [],
-                "acceptance_gaps": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-    _ = ledger_path.write_text("[]\n", encoding="utf-8")
     publish = _run(
         "mold",
         "finalize",
@@ -658,10 +639,6 @@ def test_curd_4_mold_publication_creates_no_wheypoint_revision(tmp_path: Path) -
         str(planner_path),
         "--plan",
         str(plan_path),
-        "--taste-result",
-        str(taste_path),
-        "--ledger",
-        str(ledger_path),
         "--operation-id",
         "phase-rehydration-guard",
         "--request-id",

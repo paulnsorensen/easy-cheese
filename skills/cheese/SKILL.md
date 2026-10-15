@@ -125,6 +125,7 @@ The user can append `--auto` explicitly, as in `/cheese --continue <slug> --auto
 The durable pipeline is `culture -> mold -> cook -> press -> age -> cure -> plate`.
 An approved Mold handoff routes to `/cook`.
 It routes to `/cook --auto` only when the user makes auto explicit.
+A Full or planned handoff reruns `/mold` finalize first.
 It carries its durable specification pointer in the typed `spec_ref` field.
 Continuation forwards `spec_ref` unchanged.
 It also forwards `artifact:` unchanged, which always names the prior consumed report.

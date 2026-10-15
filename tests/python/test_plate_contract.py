@@ -574,11 +574,11 @@ def test_landing_block_answers_the_layout_question() -> None:
     assert "`easy_cheese_schemas.manifest.plate_layout_for`" in topology
     assert "`/plate` decides the shape from the curd plan" in fan_pathway
     assert "--spec <spec-path>" in cook_skill
-    assert "refused before any coder dispatch" in cook_skill
+    assert "refused before coder dispatch" in cook_skill
     mini_spec = read("skills/mold/references/mini-spec-mode.md")
     curdle = read("skills/mold/references/curdle.md")
     assert "landing:\n  shape: single | orthogonal_flat | stacked_linear | diamond_stack" in mini_spec
     assert "Mini-spec mode writes `shape: single`" in mini_spec
     assert "landing:\n  shape: single | orthogonal_flat | stacked_linear | diamond_stack" in curdle
     assert "settle landing shape and curd independence before execution" in curdle
-    assert '/cook --auto <pointer path> --spec "$SPEC"' in curdle
+    assert '/cook --auto --spec "$SPEC"' in curdle

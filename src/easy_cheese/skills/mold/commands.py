@@ -89,7 +89,7 @@ COMMANDS = (
     ),
     derive_command(
         _finalize,
-        "Finalize a Mold spec and publish only a consumer-valid handoff",
+        "Finalize a Mold spec and print a ready result for bound Cook execution",
     ),
     derive_command(
         _normalize_planner,

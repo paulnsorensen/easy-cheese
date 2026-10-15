@@ -6,7 +6,6 @@ static COMMANDS manifest."""
 from __future__ import annotations
 
 COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
-    'accept': ('cook',),
     'age-route': ('affinage', 'age'),
     'append-attempt': ('hard-cheese',),
     'artifact-path': ('age', 'briesearch', 'cook', 'mold'),
@@ -54,7 +53,6 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'post-reply': ('affinage',),
     'pr-plan-to-branches': ('cook',),
     'pr-status': ('affinage',),
-    'prepare': ('cook',),
     'providers': ('briesearch',),
     'rank-hunks': ('hard-cheese',),
     'read-handoff-slug': ('age', 'cook', 'cure'),
@@ -63,7 +61,6 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'repro-rerun': ('pasteurize',),
     'research-layout': ('briesearch',),
     'resolve': ('wheypoint',),
-    'resubmit': ('cook',),
     'review': ('mold',),
     'review-instructions': ('age',),
     'review-lock': ('age',),
@@ -83,6 +80,7 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'validate-manifest': ('cook',),
     'validate-pr-plan': ('cook',),
     'validate-publication': ('plate',),
+    'validate-result': ('cook',),
     'validate-spec': ('mold',),
     'wheypoint-resolve': ('affinage', 'age', 'cook', 'cure', 'plate', 'press'),
     'wiring-topo-sort': ('cook',),
