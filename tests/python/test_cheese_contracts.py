@@ -66,12 +66,13 @@ class TestGateExampleMatchesTheStandardMenu:
         example = body[
             body.index("handoff_gate:") : body.index("Every gate must include")
         ]
-        for option in ("harden-tests", "plate-it", "checkpoint-and-stop", "stop"):
+        for option in ("review-change", "plate-it", "checkpoint-and-stop", "stop"):
             assert f"- id: {option}" in example, option
 
     def test_plate_option_forwards_the_publication_flag(self) -> None:
         body = _text(REFERENCES / "handoff-gate.md")
-        assert "dispatch: /press <slug> --auto --open-pr" in body
+        assert "dispatch: /age <slug> --auto --open-pr" in body
+        assert "/press" not in body
 
     def test_stop_stays_the_last_option(self) -> None:
         body = _text(REFERENCES / "handoff-gate.md")

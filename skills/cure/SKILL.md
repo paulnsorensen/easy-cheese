@@ -219,7 +219,7 @@ Use `/age <slug> --scope <touched-path>` or `/plate` as that command.
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → press → age → **[cure]** → plate
+**Pipeline:** culture → mold → cook (⇄ press) → age → **[cure]** → plate
 
 After the report exists, decide whether to dispatch `/plate` or ask.
 A clean cure updates an open PR without another gate by default.

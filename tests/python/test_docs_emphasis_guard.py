@@ -205,9 +205,9 @@ def test_question_routing_is_native_first_and_lossless():
         "**Source skill**",
         "id: post-cook-next-step",
         "prompt: What should happen next?",
-        "recommended: harden-tests",
+        "recommended: review-change",
         "multi: false",
-        "description: Strengthen regression coverage before review.",
+        "description: Review the diff after Cook's Press loop passes.",
     ):
         assert required in gate
     assert "question.id = handoff_gate.id" in gate

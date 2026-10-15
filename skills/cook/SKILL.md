@@ -18,15 +18,16 @@ metadata: {dispatches-agents: true}
 
 ## Contract
 
-`cook(spec_ref, correction = false) -> handoff(next = press | age | mold)`.
+`cook(spec_ref, correction = false) -> handoff(next = age | mold | done)`.
 
 Cook returns `next: mold` for a specification failure.
 A fan run also returns `next: mold` for a stalled remediation scope, a curd that does not pass, or partial coverage.
 
 Cook does not require a failing test first and does not load a gate receipt.
-For behavior work, write the test first where it fits; see `references/tdd-loop.md`.
+For behavior work, Cook owns first acceptance coverage before Press; see `references/tdd-loop.md` § Inner TDD.
+This is a reported obligation, not a gate.
 For documentation, refactor, test, or appearance work, change that surface and verify it directly.
-Use `correction = true` only for the active Press correction loop.
+Use `correction = true` only for an active Press finding or `coverage_gap`; see `references/press-loop.md`.
 Do not weaken an existing test.
 
 ## Phase entry
@@ -45,7 +46,7 @@ Resolve a bare slug to `path` from `python3 skills/cook/scripts/cook.pyz artifac
 A Mold handoff pointer, a spec path, and a slug enter through § Mold-to-Cook ingress and preparation.
 Flags:
 
-- `--auto` chains `/press → /age → /cure`.
+- `--auto` chains `/age → /cure` after the in-Cook Press loop.
 - `--prototype` runs a plan → spike → check loop, then stabilizes; read [`references/prototype-mode.md`](references/prototype-mode.md).
 - `--hard` propagates through `/plate`.
 - `--open-pr` lets terminal `/plate` publish. Auto mode never adds this flag.
@@ -82,10 +83,10 @@ Route the task to `/mold` if an ambiguity check fails.
 4. **Taste-test** — Use a fresh-context review for multi-file or public-surface diffs.
    Otherwise use an inline review, limited to two rounds.
    Read `references/tdd-loop.md` for details.
-5. **Hand off** — Write the package report and slug.
-   Route behavior work through `/press → /age → /cure`.
-   A non-behavior change has no adversarial contract for Press.
-   Route it directly through `/age → /cure`.
+5. **Press loop** — For behavior work, Cook dispatches a fresh-context Press agent; no menu.
+   Read [`references/press-loop.md`](references/press-loop.md).
+   Non-behavior work skips this step.
+6. **Hand off** — Write the package report and slug, then route to `/age → /cure`.
 
 ## Fan pathway
 
@@ -96,9 +97,10 @@ Read [`references/fan-pathway.md`](references/fan-pathway.md) for topology and l
 
 **Curded.** Require a `ready` Full `MoldCookHandoff` and validated `CurdPlan`.
 Run `cook(CurdPlan) → reviewer(age)` with confirmed diagnosis and `CureDiagnosisBinding` through the progress-aware fan state machine until clean, stalled, or blocked.
-Run one global `/press → /age → /cure` chain only after every curd passes.
+Each curd's Cook loop runs its own Press loop.
+The barrier runs Cook's integrated acceptance check on the merged tip.
+No global post-merge Press runs.
 Incomplete fan work never emits `next: press`; stalls route to Mold remediation planning.
-Non-behavior work bypasses Press.
 
 **Un-curded.** Keep small work in the single-coder path.
 For big work, ask "12 ACs -> 5 curds, 2 waves, up to 25 agent dispatches. Go?" unless `--auto`.
@@ -144,7 +146,7 @@ Use this schema:
 
 ```markdown
 status: <canonical status field>
-next: mold | press | age | done
+next: mold | age | done
 artifact: <path to the upstream artifact this run consumed, or empty>
 taste_test: inline-pass | dispatched-pass | revised | deferred-to-orchestrator
 durable_flags: none | <one line per flag: what durable knowledge changed -> target wiki page>
@@ -186,12 +188,10 @@ In a fan run, read each phase's handoff slug file from disk.
 Do not infer the handoff from stdout.
 
 Set `next:` to the next runnable phase.
-Use `press` after behavior work.
-Use `age` after non-behavior work (documentation, refactor, appearance).
-Never publish `next: cook`; `needs-context` is a parent-owned same-phase retry.
+Use `age` after the Press loop returns `green`, and after non-behavior work.
+Never publish `next: press` or `next: cook`; `needs-context` is a parent-owned same-phase retry.
 Use `mold` after a spec failure.
 Use `done` only at true completion.
-Do not send non-behavior work to Press.
 Omit `taste_test:` when its cost gate does not apply.
 
 Set `durable_flags:` to `none` by default.
@@ -204,26 +204,24 @@ The preamble accepts one physical line for each key, so never inline the mapping
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → press → age → cure → plate
+**Pipeline:** culture → mold → cook (⇄ press) → age → cure → plate
 
 After you write the report and slug, use the shared handoff gate.
 Read its **Standard forward-step menu** in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md).
-For behavior work, start each option with the verb.
-Use these options:
+The menu never offers Press.
+Behavior work reaches it only after the Press loop returns `green`.
+Start each option with the verb.
+Use these options for behavior and non-behavior work:
 
-- **Harden tests before review** *(recommended)* — `/press <slug>`.
-- **Plate it** — `/press <slug> --auto --open-pr`: run the remaining review chain, then `/plate` resolves topology and publishes.
+- **Review the change** *(recommended)* — `/age <slug>`.
+- **Plate it** — `/age <slug> --auto --open-pr`: run the remaining review chain, then `/plate` resolves topology and publishes.
+- **Checkpoint & stop** — `/wheypoint`.
+- **Stop** — dispatch none.
 
-Press does not apply to non-behavior work.
-Set `next: age`.
-Replace the options with **Review the change** *(recommended)* — `/age <slug>`.
-Also offer **Plate it** — `/age <slug> --auto --open-pr`.
-
-Both menus retain **Checkpoint & stop** — `/wheypoint` and **Stop** — dispatch none.
 Do not dispatch before selection.
 Run the selected command immediately.
 When the user invokes `--auto`, skip this gate.
-Take the route for the change type directly.
+Take the route to `/age` directly.
 
 ## Auto mode
 
@@ -268,6 +266,7 @@ Harvest and plate stay parent-owned.
 | Work | Preferred types | Permissions/isolation | Minimum power | Effort | Fallback |
 | --- | --- | --- | --- | --- | --- |
 | Decompose the spec | planner, general | write (manifest only), fresh-context | powerful | high | compatible planner, then general |
+| Press loop | coder | write (tests only), fresh-context | default | medium | general |
 
 The handoff carries the `agent_resolution` block.
 Publish a terminal Age only when it contains `next: done`.

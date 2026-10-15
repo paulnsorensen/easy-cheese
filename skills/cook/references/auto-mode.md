@@ -14,31 +14,28 @@ For behavior work, Cook writes tests against the spec's acceptance criteria wher
 
 For non-behavior work, Cook verifies the requested change through its own path.
 
-Cook requires all tests and relevant gates to be GREEN before it invokes `/press`.
+Cook requires all tests and relevant gates to be GREEN before it runs the Press loop.
 
-When `correction = true`, Cook limits the scope to the active Press correction.
+When `correction = true`, Cook limits the scope to the active Press finding or `coverage_gap`.
 
 Cook cannot weaken or bypass existing tests.
 
 ## What auto mode does
 
-1. After Cook completes the inner implementation and green gates, Cook writes the package-ready report.
-   Cook then invokes `/press <slug> --auto`.
+1. After Cook completes the inner implementation and green gates, Cook runs its Press loop for behavior work.
+   See [`press-loop.md`](press-loop.md).
+   Only `green` continues the chain.
+   Cook writes the package-ready report.
+   Cook then invokes `/age <slug> --auto`.
    Cook appends `--open-pr` only when the user supplied that flag.
    `--open-pr` is publication permission, and auto mode never creates it.
    Without that flag, the chain stays commit-only.
    Cook also forwards `--hard` when the user supplied it.
 
-2. `/press --auto` runs its hardening pass.
-   It invokes `/age <slug> --auto` when readiness is `ready for /age` or `follow-up recommended`.
-   Both states mean that the cooked contract is sound.
-   Documented follow-ups are review-safe.
-   Only `blocked` or `halt: correction-cap` stops auto.
+2. The chain is cook with its Press loop, then age, cure, age, and so on.
+   Non-behavior work skips the Press loop.
+   Cook halts on `halt: correction-cap` and `halt: coverage-gap`.
    Press reports `blocked` for invalid evidence or a production change.
-   Cook runs a Press `next: cook` handoff as a correction (`correction = true`).
-   Press enforces the correction cap: at most 2 Cook corrections for the same attack.
-   A third finding on that attack stops with `halt: correction-cap`.
-   See [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
 
 3. `/age <slug> --auto` writes the report.
    It then invokes `/cure <slug> --auto --stake medium+`.
@@ -101,8 +98,8 @@ The orchestrator owns the pass position.
   Record Identical-to-baseline failures outside the cooked contract.
   These failures never stop auto mode.
 
-- `/press` stops with `blocked` (invalid evidence or a production change) or with `halt: correction-cap`.
-  See the Press outcome table in [`../../press/SKILL.md`](../../press/SKILL.md) and [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
+- The Press loop halts with `halt: correction-cap`, `halt: coverage-gap`, invalid evidence, or a production change.
+  See [`press-loop.md`](press-loop.md) and [`../../press/references/gap-analysis.md`](../../press/references/gap-analysis.md).
 
 - A cure pass cannot apply any finding.
   This condition occurs when every selected fix breaks tests during revert-or-keep evaluation.
@@ -120,7 +117,7 @@ Do not silently downgrade.
 
 By default, each phase's existing `--auto` contract chains forward in the same session.
 
-`/cook --auto` invokes `/press --auto`, which invokes `/age --auto`, and so on.
+`/cook --auto` runs its Press loop, then invokes `/age --auto`, and so on.
 
 When `/cook` runs as its fan-pathway orchestrator, `fan-pathway.md` overrides this default.
 

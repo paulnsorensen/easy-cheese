@@ -101,7 +101,7 @@ See `../hard-cheese/references/composition.md`.
 
 ## Handoff
 
-**Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
+**Pipeline:** culture → **[mold]** → cook (⇄ press) → age → cure → plate
 
 After Curdle's phase two finishes, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md) for the blast-radius digest. A draft offers no Cook command. On an explicit Cook selection, finalize and keep only a consumer-valid canonical `HandoffPointer`. Prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)); never pre-select. Keep applicability, contract, and taste metadata unchanged. Append `--hard` when the user passed it.
 

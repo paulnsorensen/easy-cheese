@@ -70,7 +70,7 @@ Culture-relevant `next:` values: `culture` or `hold` to resume the modeling in a
 
 ## Handoff
 
-**Pipeline:** **[culture]** → mold → cook → press → age → cure → plate
+**Pipeline:** **[culture]** → mold → cook (⇄ press) → age → cure → plate
 
 At session end, write the durable wheypoint first (invoke `/wheypoint`), then — when the conversation reveals real work — ask via the shared handoff gate in [`../cheese/references/handoff-gate.md`](../cheese/references/handoff-gate.md). Any structured confirm reaching this gate must satisfy the freshness rule in [`../cheese/references/ask-user-question.md`](../cheese/references/ask-user-question.md) — only a fork already discussed conversationally this session may reach a structured question here. Lead each option with the verb (what the user wants to *do* next); the skill command is the backing detail. Before asking, render a compact context packet so the downstream skill can dispatch without losing the discussion:
 
@@ -87,7 +87,7 @@ Default options (pick at most three of these plus a stop):
 
 - **Shape this into a written spec** *(recommended when the idea is still fuzzy)* — `/mold` with the context packet, or `/mold .cheese/notes/<slug>.md` when a notes slug exists.
 - **Implement it directly** *(recommended when the ask is clear and unambiguous)* — `/cook` with the context packet as the accepted contract.
-- **Implement and auto-review** — `/cook --auto` with the context packet, chains through `/press → /age → /cure` autonomously, fixing every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Pre-select this when the conversation reached an unambiguous contract; offer the non-auto `/cook` as an alternative when the user wants per-step approval.
+- **Implement and auto-review** — `/cook --auto` with the context packet, runs Cook's Press loop, then chains through `/age → /cure` autonomously, fixing every medium-or-above finding plus cheap (contained-fix) lows across up to two cure passes. Stops at the final cure pass; opening or updating the PR stays a manual step. Pre-select this when the conversation reached an unambiguous contract; offer the non-auto `/cook` as an alternative when the user wants per-step approval.
 - **Research more first** *(when the conversation hit a factual gap external docs could close)* — `/briesearch`.
 - **Pause / resume later** — dispatch none; the session wheypoint already captured the state, so resume any time with `/cheese --continue <slug>`.
 
