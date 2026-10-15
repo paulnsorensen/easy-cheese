@@ -624,7 +624,7 @@ def test_every_reply_is_one_document_of_indented_json() -> None:
     assert json.dumps(payload, indent=2) + "\n" == text
 
 
-def test_the_command_surface_is_exactly_nine_commands() -> None:
+def test_the_command_surface_is_exactly_eleven_commands() -> None:
     assert wheypoint.COMMANDS == (
         "checkpoint",
         "validate",
@@ -635,6 +635,8 @@ def test_the_command_surface_is_exactly_nine_commands() -> None:
         "log",
         "turns",
         "fork",
+        "export",
+        "import",
     )
     assert "commit" not in wheypoint.COMMANDS and "create" not in wheypoint.COMMANDS
 
@@ -908,6 +910,8 @@ def test_ac10_commit_is_no_longer_a_listed_command() -> None:
         "log",
         "turns",
         "fork",
+        "export",
+        "import",
         "handoff",
     ]
 

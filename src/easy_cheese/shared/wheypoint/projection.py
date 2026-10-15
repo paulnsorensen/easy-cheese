@@ -231,12 +231,12 @@ def _superseded(record: WheypointRecord) -> list[str]:
     return ["", _SUPERSEDED_HEADING, "", *(f"- {e.entry_id} -> {e.superseded_by}" for e in moved)]
 
 
-def _local_references(record: WheypointRecord, checkout: Path | None) -> list[str]:
-    """The `## Local references` section, or nothing when no reference is local.
+def local_references(record: WheypointRecord, checkout: Path | None) -> list[str]:
+    """The references that need the author's machine, in record order.
 
     A reference is local when it needs the author's machine: an `xdg:` ref, an
     absolute path outside `checkout`, or a repository path Git ignores.
-    Without a checkout only the first two classify. The section depends on
+    Without a checkout only the first two classify. The result depends on
     `checkout`, never on the working directory.
     """
     candidates: list[tuple[str, bool]] = []
@@ -244,11 +244,22 @@ def _local_references(record: WheypointRecord, checkout: Path | None) -> list[st
         ref = link.ref
         candidates.append((link.path if ref is None or ref.startswith("repo:") else ref, False))
     candidates += [(edge.to, False) for edge in record.edges]
-    for item in record.working_context:
-        for word in item.split():
-            token = word.strip(_TOKEN_OPEN).rstrip(_TOKEN_CLOSE)
-            if "/" in token or "." in token:
-                candidates.append((token, True))
+    candidates += [(token, True) for item in record.working_context for token in tokens(item)]
+    return _local_among(candidates, checkout)
+
+
+def tokens(text: str) -> list[str]:
+    """The path-like words of free text: those holding a `/` or a `.`."""
+    found = (word.strip(_TOKEN_OPEN).rstrip(_TOKEN_CLOSE) for word in text.split())
+    return [token for token in found if "/" in token or "." in token]
+
+
+def local_tokens(texts: list[str], checkout: Path | None) -> set[str]:
+    """The path-like words of `texts` that name a local file, as `local_references` decides."""
+    return set(_local_among([(t, True) for text in texts for t in tokens(text)], checkout))
+
+
+def _local_among(candidates: list[tuple[str, bool]], checkout: Path | None) -> list[str]:
     verdicts: dict[str, bool | str] = {}
     for text, must_exist in candidates:
         if text not in verdicts:
@@ -261,11 +272,16 @@ def _local_references(record: WheypointRecord, checkout: Path | None) -> list[st
         except CheckIgnoreError:
             # Fail closed: when Git cannot say what it ignores, hide nothing.
             ignored = set(to_check)
-    found = [
+    return [
         text
         for text, verdict in verdicts.items()
         if verdict is True or (isinstance(verdict, str) and verdict in ignored)
     ]
+
+
+def _local_references(record: WheypointRecord, checkout: Path | None) -> list[str]:
+    """The `## Local references` section, or nothing when no reference is local."""
+    found = local_references(record, checkout)
     if not found:
         return []
     return ["", _LOCAL_HEADING, "", *(f"- {escape(text)}" for text in found)]

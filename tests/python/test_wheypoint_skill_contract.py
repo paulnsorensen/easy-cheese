@@ -26,7 +26,8 @@ WORK_GRAPH = SKILLS_DIR / "wheypoint" / "references" / "work-graph.md"
 
 # `checkpoint` is the only intent write path (the wheypoint-ergonomics spec made
 # the kernel's `commit` host-internal); `validate` is its dry run, `schema`
-# prints a contract, and `fork` writes one child genesis. The rest are
+# prints a contract, `fork` and `import` write one child genesis, and `export`
+# writes a bundle file. The rest are
 # read-only. Genesis is a parent the runtime binds, so neither a `create` nor
 # a `commit` command may appear.
 COMMANDS = (
@@ -39,6 +40,8 @@ COMMANDS = (
     "log",
     "turns",
     "fork",
+    "export",
+    "import",
     "handoff",
 )
 REF_SCHEMES = ("repo:", "xdg:", "wheypoint:", "milknado:", "https:")
@@ -111,13 +114,13 @@ def test_legacy_runtime_gates_cannot_be_waived_by_manual_resume() -> None:
     assert "never this halt gate or any other runtime integrity gate" in body
     assert "explicit permission to dispatch the next phase" not in body
 
-def test_the_documented_command_set_is_exactly_the_ten_the_spec_fixes() -> None:
+def test_the_documented_command_set_is_exactly_the_twelve_the_spec_fixes() -> None:
     """Documented across the continuity docs as a whole: /wheypoint owns the
-    write path (checkpoint, validate, fork) and the read path (schema, show,
-    list, log, turns, handoff), the resume flow owns resolve. All ten are
-    reachable; neither `create` nor the retired `commit`, `lint`, `link`,
-    `unlink`, `shape`, or `backlinks` exists."""
-    assert len(COMMANDS) == 10
+    write path (checkpoint, validate, fork, import) and the read path (schema,
+    show, list, log, turns, export, handoff), the resume flow owns resolve. All
+    twelve are reachable; neither `create` nor the retired `commit`, `lint`,
+    `link`, `unlink`, `shape`, or `backlinks` exists."""
+    assert len(COMMANDS) == 12
     corpus = "\n".join(_read(path) for path in (WHEYPOINT, CHEESE, CONTINUE_RESUME))
     for command in COMMANDS:
         marker = f"scripts/wheypoint.pyz {command}"

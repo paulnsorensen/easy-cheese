@@ -161,8 +161,13 @@ def commit(
     finalize: Callable[[PendingRevision], None] | None = None,
     artifact_root: Path | str | None = None,
     fork_edge: WorkEdge | None = None,
+    imported_stamps: tuple[int | None, int | None] | None = None,
 ) -> CommitResult:
     """Apply `delta` to the store's current record under the record lock.
+
+    `imported_stamps` is host-only input for an import genesis: the source
+    record's `(notes_revision_number, decisions_revision_number)`, kept so the
+    drift marker the source projection showed still renders.
 
     `fork_edge` is host-only input too: the `forked_from` edge `fork()` writes
     into a child. A delta cannot author a fork edge itself.
@@ -240,6 +245,7 @@ def commit(
                     digest_of=digest_of,
                     checkout=digest_root,
                     fork_edge=fork_edge,
+                    imported_stamps=imported_stamps,
                 ),
                 finalize=finalize,
             )
@@ -759,6 +765,7 @@ def _genesis(
     checkout: Path,
     durability: Durability,
     fork_edge: WorkEdge | None,
+    imported_stamps: tuple[int | None, int | None] | None = None,
 ) -> PendingRevision:
     """The first record for a work id, built from the delta alone.
 
@@ -817,8 +824,16 @@ def _genesis(
             orientation=delta.orientation or "",
             working_context=list(delta.working_context or []),
             notes=delta.notes,
-            notes_revision_number=1 if delta.notes is not None else None,
-            decisions_revision_number=1 if additions[EntryKind.DECISION] else None,
+            notes_revision_number=(
+                (1 if delta.notes is not None else None)
+                if imported_stamps is None
+                else (imported_stamps[0] if delta.notes is not None else None)
+            ),
+            decisions_revision_number=(
+                (1 if additions[EntryKind.DECISION] else None)
+                if imported_stamps is None
+                else imported_stamps[1]
+            ),
             next_action=next_action,
             decisions=additions[EntryKind.DECISION],
             questions=additions[EntryKind.QUESTION],

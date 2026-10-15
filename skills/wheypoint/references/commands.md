@@ -5,8 +5,10 @@
 | Command | Purpose | Subcommands |
 | --- | --- | --- |
 | `checkpoint` | Checkpoint a semantic intent onto the current record |  |
+| `export` | Write a canonical JSON bundle of a record for another person |  |
 | `fork` | Fork a child record from a parent; only the child is written |  |
 | `handoff` | Render, parse, and dispatch-split handoff preambles | `render`, `parse`, `dispatch` |
+| `import` | Verify a bundle and write it as a fork child record |  |
 | `list` | List and search work items and notes across worktrees; outside a Git checkout the default scope falls back to machine |  |
 | `log` | Walk the revisions of one work id, oldest first |  |
 | `resolve` | Resolve a slug (exact, unique prefix, or unique substring), work id, or path to the current record |  |
