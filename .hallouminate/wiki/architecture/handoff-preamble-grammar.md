@@ -23,7 +23,7 @@ The writer and parser require `baseline:` to fit one physical line (`src/easy_ch
 `write_handoff_artifact` validates `phase -> next` against `src/easy_cheese_schemas/_compiled_phase_registry.py` and exits `3` for an undeclared transition. Two consequences:
 
 - Affinage and Pasteurize are not registered phases. They cannot use the canonical writer until a `schemas`-owned registration and a `phase-contract.yaml` land; their handoffs stay ad hoc Markdown and must still follow the key rules above.
-- A same-phase loop is not expressible. `press -> press` exits `3`, and `next: press` still makes Cook's router dispatch Age. The Press corrective loop therefore stays a typed local continuation (`src/easy_cheese/shared/fanout/press_route.py`, `outcome` plus `repair_cycles` 0-2) outside the global registry, per [outer-tdd-gates-003](../adr/outer-tdd-gates-003.md).
+- A same-phase loop is not expressible. `press -> press` exits `3`. Cook no longer declares `cook -> press`: Cook owns the Press loop and counts its rounds, and the fan orchestrator dispatches Press per curd (`src/easy_cheese/shared/fanout/run_fan.py`), per [acceptance-demonstration-press-fold-001](../adr/acceptance-demonstration-press-fold-001.md), which supersedes [outer-tdd-gates-003](../adr/outer-tdd-gates-003.md).
 
 ## Findings and slug helpers
 

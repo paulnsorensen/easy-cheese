@@ -78,7 +78,7 @@ class TestSlugifyToWriterRoundTrip:
             "--phase",
             "cook",
             "--next",
-            "press",
+            "age",
             "--artifact",
             "",
             "--orientation",
@@ -144,13 +144,13 @@ class TestWriterToReaderRoundTrip:
             slug="cook-to-press",
             status="ok",
             phase="cook",
-            next_phase="press",
+            next_phase="age",
             artifact=".cheese/cook/cook-to-press.md",
             orientation="implemented widget",
         )
         assert payload == {
             "status": "ok",
-            "next": "press",
+            "next": "age",
             "artifact": ".cheese/cook/cook-to-press.md",
             "orientation": "implemented widget",
             "reason": None,
@@ -189,7 +189,7 @@ class TestWriterToReaderRoundTrip:
             slug="chain-head",
             status="ok",
             phase="cook",
-            next_phase="press",
+            next_phase="age",
             artifact="",
             orientation="first phase in the chain",
         )
@@ -239,7 +239,7 @@ class TestThreeScriptChain:
             "--phase",
             "cook",
             "--next",
-            "press",
+            "age",
             "--artifact",
             "",
             "--orientation",
@@ -251,7 +251,7 @@ class TestThreeScriptChain:
         assert read_proc.returncode == 0, read_proc.stderr
         payload = cast("dict[str, object]", json.loads(read_proc.stdout))
         # The slug-derived artifact lives on disk and parses back cleanly.
-        assert payload["next"] == "press"
+        assert payload["next"] == "age"
         assert payload["orientation"] == "cook step complete"
         assert payload["status"] == "ok"
 
@@ -287,7 +287,7 @@ class TestThreeScriptChain:
             "--slug", slug,
             "--status", "ok",
             "--phase", "cook",
-            "--next", "press",
+            "--next", "age",
             "--artifact", "",
             "--orientation", "cook implemented widget",
             cwd=tmp_path,
@@ -300,7 +300,7 @@ class TestThreeScriptChain:
         press_read = _run(READER, "--phase", "cook", "--slug", slug, cwd=tmp_path)
         assert press_read.returncode == 0, press_read.stderr
         cook_payload = cast("dict[str, object]", json.loads(press_read.stdout))
-        assert cook_payload["next"] == "press"
+        assert cook_payload["next"] == "age"
         assert cook_payload["orientation"] == "cook implemented widget"
 
         # 3. Press writes its own handoff to .cheese/press/<slug>.md while the

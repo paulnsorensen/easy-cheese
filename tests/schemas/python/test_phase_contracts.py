@@ -771,7 +771,7 @@ def test_registered_writer_route_can_infer_its_only_payload_schema(
         slug="legacy-cook-call",
         status="ok",
         phase="cook",
-        next_skill="press",
+        next_skill="age",
         artifact="",
         orientation="cook completed its curds",
         body=None,
@@ -780,6 +780,76 @@ def test_registered_writer_route_can_infer_its_only_payload_schema(
     )
 
     assert target == tmp_path / ".cheese" / "cook" / "legacy-cook-call.md"
+
+
+def test_registry_declares_no_cook_to_press_transition() -> None:
+    # AC-8: Press runs inside Cook; only manual /press runs still leave Press.
+    declared = {
+        (route.source, route.destination)
+        for phase in COMPILED_TRANSITION_REGISTRY.phases
+        for route in phase.outputs
+    }
+
+    assert ("cook", "press") not in declared
+    assert {("cook", "age"), ("cook", "mold")} <= declared
+    assert ("press", "age") in declared
+    with pytest.raises(TransitionError, match="cook -> press is not declared"):
+        _ = validate_transition(
+            COMPILED_TRANSITION_REGISTRY,
+            source="cook",
+            destination="press",
+            payload_schema_uri=CURD_RESULT_SCHEMA_URI,
+        )
+
+
+def test_writer_rejects_cook_handoff_that_routes_to_press(
+    writer: _WriterModule, tmp_path: Path
+) -> None:
+    with pytest.raises(fromargs.CliError, match="cook -> press is not declared"):
+        _ = writer.write_artifact(
+            slug="cook-to-press",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="must not be written",
+            body=None,
+            root=tmp_path,
+            grounded=_grounded(tmp_path),
+        )
+
+    assert not (tmp_path / ".cheese" / "cook").exists()
+
+
+def test_press_findings_route_back_to_cook_but_cook_never_routes_to_press(
+    writer: _WriterModule, tmp_path: Path
+) -> None:
+    # Press `finding` and `coverage_gap` outcomes hand back to Cook.
+    target = writer.write_artifact(
+        slug="press-finding",
+        status="ok",
+        phase="press",
+        next_skill="cook",
+        artifact="",
+        orientation="press found a gap",
+        body=None,
+        root=tmp_path,
+        grounded=_grounded(tmp_path),
+    )
+
+    assert target == tmp_path / ".cheese" / "press" / "press-finding.md"
+    with pytest.raises(fromargs.CliError, match="cook -> press is not declared"):
+        _ = writer.write_artifact(
+            slug="cook-to-press-again",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="must not be written",
+            body=None,
+            root=tmp_path,
+            grounded=_grounded(tmp_path),
+        )
 
 
 def test_terminal_outcome_preserves_registered_phase_path(

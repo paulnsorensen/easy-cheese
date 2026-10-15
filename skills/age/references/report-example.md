@@ -71,7 +71,7 @@ When ten or more `low` findings exist, collapse the `## Low` section to one line
 <`certain` | `speculating` | `don't know`> — <one-line justification including which evidence sources were unavailable>
 
 ## Next step
-<when press was skipped, lead with>: Hardening was skipped for this diff — run `/press <slug>` before curing, or continue reviewing as-is.
+<when press was skipped, lead with>: Hardening was skipped for this diff — re-run `/cook` or `/press <slug>`, or continue reviewing as-is.
 Auto-fixing the recommended set via `/cure` (or the selection prompt on a reason to ask / `--safe`).
 ```
 
@@ -136,7 +136,7 @@ A sub-agent adds `verifier: skipped (sub-agent)` on its own line.
 <one bullet per escalated claim that the verifier could not settle, with the missing evidence>
 
 ## Next step
-<when press was skipped, lead with>: Hardening was skipped for this diff. Run `/press <slug>` before curing, or continue the review.
+<when press was skipped, lead with>: Hardening was skipped for this diff. Re-run `/cook` or `/press <slug>`, or continue the review.
 <when the plan has a non-null `degraded_reason`, or verification is recorded as unavailable or skipped>:
 State that recorded reason and its effect on coverage.
 Do not infer degradation from the surface score.

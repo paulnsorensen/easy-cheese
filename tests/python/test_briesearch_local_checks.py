@@ -43,7 +43,10 @@ def test_synthesis_says_docs_are_not_proof_of_deployed_integration() -> None:
     text = _read("synthesis.md")
     assert "does not show that our deployed integration works" in text
     assert "Cap a claim about our integration at `speculating` until a local check runs" in text
-    assert "Claim about our deployed integration with no local check run" in text
+    assert (
+        "| Claim about our deployed integration with no local check run | cap at `speculating` |"
+        in text
+    )
 
 
 def test_query_planning_stops_when_uncertainty_requires_execution() -> None:
