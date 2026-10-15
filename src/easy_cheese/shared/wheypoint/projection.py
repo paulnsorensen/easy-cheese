@@ -254,7 +254,13 @@ def _local_references(record: WheypointRecord, checkout: Path | None) -> list[st
         if text not in verdicts:
             verdicts[text] = _classify(text, checkout, must_exist=must_exist)
     to_check = sorted({v for v in verdicts.values() if isinstance(v, str)})
-    ignored: set[str] = _ignored(to_check, checkout) if checkout is not None else set()
+    ignored: set[str] = set()
+    if checkout is not None:
+        try:
+            ignored = _ignored(to_check, checkout)
+        except CheckIgnoreError:
+            # Fail closed: when Git cannot say what it ignores, hide nothing.
+            ignored = set(to_check)
     found = [
         text
         for text, verdict in verdicts.items()
@@ -287,13 +293,30 @@ def _classify(text: str, checkout: Path | None, *, must_exist: bool) -> bool | s
             return False
         if must_exist and not (checkout / path).exists():
             return False
+        # Resolve `..` and symlinks: Git refuses a path that leaves the
+        # checkout or passes through a link, so those never reach check-ignore.
+        root = checkout.resolve()
+        resolved = (root / path).resolve()
+        if not resolved.is_relative_to(root):
+            return True
+        path = resolved.relative_to(root).as_posix()
+        if path == ".":
+            return False
     except (OSError, RuntimeError):
         return False
     return path
 
 
+class CheckIgnoreError(RuntimeError):
+    """`git check-ignore` could not answer: bad exit, timeout, or no git."""
+
+
 def _ignored(candidates: list[str], checkout: Path) -> set[str]:
-    """The members of `candidates` Git ignores in `checkout`, in one call."""
+    """The members of `candidates` Git ignores in `checkout`, in one call.
+
+    Raises `CheckIgnoreError` when Git cannot answer. A caller must not read
+    that as "nothing is ignored".
+    """
     if not candidates:
         return set()
     try:
@@ -307,10 +330,12 @@ def _ignored(candidates: list[str], checkout: Path) -> set[str]:
             errors="replace",
             timeout=5,
         )
-    except (OSError, subprocess.SubprocessError):
-        return set()
+    except (OSError, subprocess.SubprocessError) as error:
+        raise CheckIgnoreError(f"git check-ignore did not run: {error}") from error
     if result.returncode not in (0, 1):
-        return set()
+        raise CheckIgnoreError(
+            f"git check-ignore exited {result.returncode}: {result.stderr.strip()}"
+        )
     return {item for item in result.stdout.split("\0") if item}
 
 
