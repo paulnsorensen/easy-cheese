@@ -50,7 +50,9 @@ def _cwd_outside_a_repository(  # pyright: ignore[reportUnusedFunction]
     monkeypatch.chdir(tmp_path)
     ancestor = git_marker_ancestor(tmp_path)
     if ancestor is not None:
-        pytest.fail(f"{ancestor} holds a .git entry above tmp_path; list is not hermetic")
+        pytest.fail(
+            f"{ancestor} holds a .git entry above tmp_path; list is not hermetic"
+        )
 
 
 @pytest.fixture
@@ -588,6 +590,7 @@ def test_a_removed_verb_is_an_unknown_command(verb: str) -> None:
     assert f'Unknown command "{verb}".' in text
     assert "Available commands: checkpoint, validate" in text
     assert verb not in wheypoint.COMMANDS
+
 
 def test_an_unknown_command_is_a_usage_error_in_the_same_json_shape() -> None:
     status, payload = _run("destroy")
@@ -1245,8 +1248,7 @@ def test_cure_validate_reports_next_action_and_delta_invariants() -> None:
     )
     problems = cast(str, _get(payload, "error", "message")).split("; ")
     assert (
-        status == 1
-        and len([p for p in problems if "expected_revision_id" in p]) == 1
+        status == 1 and len([p for p in problems if "expected_revision_id" in p]) == 1
     )
 
 
@@ -1980,7 +1982,9 @@ def test_ac4_fork_writes_only_the_child_genesis(corpus_root: Path) -> None:
     assert payload["command"] == "fork"
     assert (payload["work_id"], payload["revision_number"]) == ("child-work", 1)
     child = storage.WorkStore.open("child-work", corpus_root=corpus_root)
-    assert [r.revision_id for r in child.receipt_revisions()] == [payload["revision_id"]]
+    assert [r.revision_id for r in child.receipt_revisions()] == [
+        payload["revision_id"]
+    ]
     assert "origins" not in payload
     child_record = cast(dict[str, object], payload["record"])
     assert not child_record.get("questions") and not child_record.get("directives")
@@ -2027,7 +2031,9 @@ def test_ac12_list_linked_to_returns_the_linking_records() -> None:
     status, everything = _run("list")
     assert status == 0, everything
     target = next(
-        i for i in cast(list[dict[str, object]], everything["items"]) if i["ref"] == OTHER
+        i
+        for i in cast(list[dict[str, object]], everything["items"])
+        if i["ref"] == OTHER
     )
     assert sorted(
         (edge["kind"], edge["source"])
@@ -2043,8 +2049,14 @@ def test_ac13_list_filters_gated_records_by_entry_kind_and_state() -> None:
     _ = _seed(entries=[{"kind": "question", "summary": "Open but not gating?"}])
     _ = _seed(OTHER)
     status, gated = _run(
-        "checkpoint", "--work-id", OTHER, "--question", "Gate?", "--gates",
-        "--rationale", "Needs an answer.",
+        "checkpoint",
+        "--work-id",
+        OTHER,
+        "--question",
+        "Gate?",
+        "--gates",
+        "--rationale",
+        "Needs an answer.",
     )
     assert status == 0, gated
 
@@ -2149,13 +2161,19 @@ def test_ac17_a_milknado_checkpoints_edge_binds_only_when_milknado_is_present(
 @pytest.mark.usefixtures("corpus_root")
 def test_graph_an_unpinnable_link_that_covers_entries_is_refused() -> None:
     seeded = _seed(entries=[{"kind": "decision", "summary": "S.", "rationale": "R."}])
-    decision = cast(list[dict[str, str]], _get(seeded, "record", "decisions"))[0]["entry_id"]
+    decision = cast(list[dict[str, str]], _get(seeded, "record", "decisions"))[0][
+        "entry_id"
+    ]
 
     status, payload = _run(
         "checkpoint",
         stdin=_intent_json(
             artifact_links=[
-                {"path": "example.com", "ref": "https://example.com", "covers_entry_ids": [decision]}
+                {
+                    "path": "example.com",
+                    "ref": "https://example.com",
+                    "covers_entry_ids": [decision],
+                }
             ]
         ),
     )
@@ -2199,23 +2217,45 @@ def _git_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _covers(payload: dict[str, object], ref: str) -> list[str]:
     links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
-    return next(cast(list[str], link["covers_entry_ids"]) for link in links if link["ref"] == ref)
+    return next(
+        cast(list[str], link["covers_entry_ids"])
+        for link in links
+        if link["ref"] == ref
+    )
 
 
 @pytest.mark.usefixtures("corpus_root")
 def test_cure_fork_next_move_needs_the_artifact_checkpoint_needs() -> None:
     _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
 
-    status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.", "--next", "cook")
-    assert (status, _error(payload)[0]) == (1, "invalid-intent")
-
     status, payload = _run(
-        "fork", WORK_ID, "child", "--orientation", "C.", "--next", "affinage", "--artifact", "spec.md"
+        "fork", WORK_ID, "child", "--orientation", "C.", "--next", "cook"
     )
     assert (status, _error(payload)[0]) == (1, "invalid-intent")
 
     status, payload = _run(
-        "fork", WORK_ID, "child", "--orientation", "C.", "--next", "cook", "--artifact", "spec.md"
+        "fork",
+        WORK_ID,
+        "child",
+        "--orientation",
+        "C.",
+        "--next",
+        "affinage",
+        "--artifact",
+        "spec.md",
+    )
+    assert (status, _error(payload)[0]) == (1, "invalid-intent")
+
+    status, payload = _run(
+        "fork",
+        WORK_ID,
+        "child",
+        "--orientation",
+        "C.",
+        "--next",
+        "cook",
+        "--artifact",
+        "spec.md",
     )
     assert status == 0, payload
     assert _get(payload, "record", "next_action", "move") == "cook"
@@ -2256,7 +2296,14 @@ def test_cure_relinking_a_covered_ref_keeps_its_coverage(
     assert _covers(payload, ref) == [first]
 
     status, payload = _run(
-        "checkpoint", WORK_ID, "--link", ref, "--kind", "checkpoints", "--covers", second
+        "checkpoint",
+        WORK_ID,
+        "--link",
+        ref,
+        "--kind",
+        "checkpoints",
+        "--covers",
+        second,
     )
     assert status == 0, payload
     assert _covers(payload, ref) == [second]
@@ -2308,8 +2355,16 @@ def test_cure_a_missing_intent_file_or_a_directory_is_never_a_work_id(
     tmp_path: Path,
 ) -> None:
     status, payload = _run(
-        "checkpoint", "new.json", "--orientation", "New.\nWork.", "--question", "Q",
-        "--next", "hold", "--context", "x",
+        "checkpoint",
+        "new.json",
+        "--orientation",
+        "New.\nWork.",
+        "--question",
+        "Q",
+        "--next",
+        "hold",
+        "--context",
+        "x",
     )
     assert (status, _error(payload)[0]) == (1, "intent-unreadable")
     assert "new.json" in _error(payload)[1]
@@ -2327,7 +2382,9 @@ def test_cure_a_file_link_keeps_its_explicit_empty_coverage_beside_flags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     checkout = _git_checkout(tmp_path, monkeypatch)
-    seeded = _seed(entries=[{"kind": "decision", "summary": "First.", "rationale": "R."}])
+    seeded = _seed(
+        entries=[{"kind": "decision", "summary": "First.", "rationale": "R."}]
+    )
     (first,) = (
         entry["entry_id"]
         for entry in cast(list[dict[str, str]], _get(seeded, "record", "decisions"))
@@ -2357,7 +2414,9 @@ def test_cure_a_file_link_keeps_its_explicit_empty_coverage_beside_flags(
 
 @pytest.mark.usefixtures("corpus_root")
 def test_cure_a_pinned_link_does_not_take_another_revisions_coverage() -> None:
-    seeded = _seed(entries=[{"kind": "decision", "summary": "First.", "rationale": "R."}])
+    seeded = _seed(
+        entries=[{"kind": "decision", "summary": "First.", "rationale": "R."}]
+    )
     (first,) = (
         entry["entry_id"]
         for entry in cast(list[dict[str, str]], _get(seeded, "record", "decisions"))
@@ -2369,12 +2428,21 @@ def test_cure_a_pinned_link_does_not_take_another_revisions_coverage() -> None:
     old_ref, new_ref = f"{OTHER_REF}@{old}", f"{OTHER_REF}@{new}"
 
     status, payload = _run(
-        "checkpoint", WORK_ID, "--link", new_ref, "--kind", "supersedes", "--covers", first
+        "checkpoint",
+        WORK_ID,
+        "--link",
+        new_ref,
+        "--kind",
+        "supersedes",
+        "--covers",
+        first,
     )
     assert status == 0, payload
     assert _covers(payload, new_ref) == [first]
 
-    status, payload = _run("checkpoint", WORK_ID, "--link", old_ref, "--kind", "checkpoints")
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--link", old_ref, "--kind", "checkpoints"
+    )
     assert status == 0, payload
     assert (_covers(payload, old_ref), _covers(payload, new_ref)) == ([], [first])
 
@@ -2395,8 +2463,15 @@ def test_cure_fork_input_errors_are_invalid_intent_not_record_unreadable() -> No
     status, payload = _run("fork", WORK_ID, "child", "--orientation", "")
     assert (status, _error(payload)[0]) == (1, "invalid-intent")
     status, payload = _run(
-        "fork", WORK_ID, "child", "--orientation", "C.",
-        "--next", "cook", "--artifact", "",
+        "fork",
+        WORK_ID,
+        "child",
+        "--orientation",
+        "C.",
+        "--next",
+        "cook",
+        "--artifact",
+        "",
     )
     assert (status, _error(payload)[0]) == (1, "invalid-intent")
 
@@ -2427,7 +2502,10 @@ def test_cure_fork_mirrors_the_child_note_except_under_project(
 @pytest.mark.parametrize(
     ("argv", "code"),
     [
-        (("fork", WORK_ID, "child", "--orientation", "C.", "--next", "bogus"), "invalid-intent"),
+        (
+            ("fork", WORK_ID, "child", "--orientation", "C.", "--next", "bogus"),
+            "invalid-intent",
+        ),
         (("checkpoint", WORK_ID, "--link", OTHER_REF, "--kind", "nope"), "flag-kind"),
         (("list", "--edge-kind", "nope"), "flag-kind"),
         (("list", "--entry-kind", "nope"), "flag-entry"),
@@ -2547,9 +2625,9 @@ def test_supersede_by_names_the_successor_and_projects_it() -> None:
     assert _entry_states(payload)[old] == ("superseded", new)
     assert f"- {old} -> {new}" in cast(str, payload["markdown"]).splitlines()
     transitions = cast(list[dict[str, object]], payload["applied_transitions"])
-    assert [(t["entry_id"], t["action"], t["target_entry_id"]) for t in transitions] == [
-        (old, "supersede", new)
-    ]
+    assert [
+        (t["entry_id"], t["action"], t["target_entry_id"]) for t in transitions
+    ] == [(old, "supersede", new)]
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -2638,6 +2716,122 @@ def test_supersede_refuses_an_unknown_successor(corpus_root: Path) -> None:
     assert status == 1
     assert "unknown entry" in _error(payload)[1]
     assert _corpus_bytes(corpus_root) == before
+
+
+def _questions(payload: dict[str, object]) -> list[dict[str, object]]:
+    record = cast(dict[str, object], payload["record"])
+    return cast(list[dict[str, object]], record["questions"])
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_question_owner_and_when_flags_pair_by_order_and_are_stored() -> None:
+    _ = _seed()
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "Which index?",
+        "--question",
+        "Who pays?",
+        "--owner",
+        "Ana",
+        "--owner",
+        "Bo",
+        "--when",
+        "after the spike",
+        "--when",
+        "before launch",
+    )
+
+    assert status == 0, payload
+    stored = [
+        (q["summary"], q.get("owner"), q.get("when")) for q in _questions(payload)
+    ]
+    assert stored == [
+        ("Which index?", "Ana", "after the spike"),
+        ("Who pays?", "Bo", "before launch"),
+    ]
+
+
+@pytest.mark.usefixtures("corpus_root")
+@pytest.mark.parametrize("flag", ["--owner", "--when"])
+def test_question_owner_or_when_count_mismatch_refuses_and_writes_nothing(
+    corpus_root: Path, flag: str
+) -> None:
+    _ = _seed()
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "One?",
+        "--question",
+        "Two?",
+        flag,
+        "solo",
+    )
+
+    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_operator_directive_flag_stores_scope_operator_and_plain_directive_stays_work() -> (
+    None
+):
+    _ = _seed()
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--directive",
+        "Ship small PRs",
+        "--operator-directive",
+        "Lead with the answer",
+        "--operator-quote",
+        "lead with the answer",
+        "--quote",
+        "ship small PRs please",
+    )
+
+    assert status == 0, payload
+    record = cast(dict[str, object], payload["record"])
+    directives = cast(list[dict[str, object]], record["directives"])
+    assert [(d["summary"], d.get("scope", "work")) for d in directives] == [
+        ("Ship small PRs", "work"),
+        ("Lead with the answer", "operator"),
+    ]
+    assert "scope" not in directives[0]
+    assert "## Operator preferences" in cast(str, payload["markdown"]).splitlines()
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_owner_keeps_records_with_an_active_question_owned_case_insensitively() -> (
+    None
+):
+    _ = _seed(
+        work_id="ana-work",
+        entries=[{"kind": "question", "summary": "Q?", "owner": "Ana"}],
+    )
+    _ = _seed(
+        work_id="bo-work",
+        entries=[{"kind": "question", "summary": "Q?", "owner": "Bo"}],
+    )
+    _ = _seed(work_id="nobody-work")
+
+    def refs(*argv: str) -> set[object]:
+        status, payload = _run("list", *argv)
+        assert status == 0, payload
+        return {
+            cast(dict[str, object], item)["ref"]
+            for item in cast("list[object]", payload["items"])
+        }
+
+    assert refs("--owner", "ANA") == {"ana-work"}
+    assert refs("--owner", "ana", "--owner", "bo") == {"ana-work", "bo-work"}
+    assert refs("--owner", "carl") == set()
 
 
 def _two_decisions() -> tuple[str, str]:
@@ -2746,7 +2940,9 @@ def test_supersede_without_by_takes_the_one_question_the_checkpoint_adds() -> No
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_supersede_without_by_takes_the_one_gated_question_the_checkpoint_adds() -> None:
+def test_supersede_without_by_takes_the_one_gated_question_the_checkpoint_adds() -> (
+    None
+):
     seeded = _seed(
         entries=[
             {

@@ -3032,6 +3032,13 @@ class EntryKind(str, Enum):
     DIRECTIVE = "directive"
 
 
+class DirectiveScope(str, Enum):
+    """Whom a directive instructs: the work, or the operator's own working style."""
+
+    WORK = "work"
+    OPERATOR = "operator"
+
+
 class EntryState(str, Enum):
     """Where an entry stands. There is no `deleted`: protected state leaves the
     record by transition, with a rationale, or not at all."""
@@ -3351,6 +3358,34 @@ def _gating_kind_rule(
         )
 
 
+@schema_constraints(minLength=1, maxLength=_MAX_TEXT)
+def _question_only(
+    instance: ProtectedEntry | ProposedEntry,
+    attribute: _NamedAttribute,
+    value: object,
+) -> None:
+    if value is not None and instance.kind is not EntryKind.QUESTION:
+        raise ValueError(
+            f"{attribute.name} is only for a question, not a {instance.kind.value}"
+        )
+    if value is not None:
+        _single_line_text(instance, attribute, value)
+
+
+def _operator_directive_only(
+    instance: ProtectedEntry | ProposedEntry,
+    attribute: _NamedAttribute,
+    value: object,
+) -> None:
+    if value is DirectiveScope.OPERATOR and instance.kind is not EntryKind.DIRECTIVE:
+        raise ValueError(
+            f"{attribute.name} operator is only for a directive, "
+            + f"not a {instance.kind.value}"
+        )
+    if not isinstance(value, DirectiveScope):
+        raise ValueError(f"{attribute.name} must be a DirectiveScope")
+
+
 @define(frozen=True)
 class ProtectedEntry:
     """A decision, question, or directive the record carries forward until a
@@ -3368,6 +3403,17 @@ class ProtectedEntry:
         default=None,
         validator=validators.optional(_bounded_text),
         metadata={"since": 3},
+    )
+    owner: str | None = field(
+        default=None, validator=_question_only, metadata={"since": 5}
+    )
+    when: str | None = field(
+        default=None, validator=_question_only, metadata={"since": 5}
+    )
+    scope: DirectiveScope = field(
+        default=DirectiveScope.WORK,
+        validator=_operator_directive_only,
+        metadata={"since": 5},
     )
 
 
@@ -3389,6 +3435,17 @@ class ProposedEntry:
         default=None,
         validator=validators.optional(_bounded_text),
         metadata={"since": 3},
+    )
+    owner: str | None = field(
+        default=None, validator=_question_only, metadata={"since": 5}
+    )
+    when: str | None = field(
+        default=None, validator=_question_only, metadata={"since": 5}
+    )
+    scope: DirectiveScope = field(
+        default=DirectiveScope.WORK,
+        validator=_operator_directive_only,
+        metadata={"since": 5},
     )
 
     def __attrs_post_init__(self) -> None:

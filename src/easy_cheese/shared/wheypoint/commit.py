@@ -501,6 +501,9 @@ def _additions(delta: WheypointDelta) -> dict[EntryKind, list[ProtectedEntry]]:
                 blocks_continuation=entry.blocks_continuation,
                 rationale=entry.rationale,
                 quote=entry.quote,
+                owner=entry.owner,
+                when=entry.when,
+                scope=entry.scope,
             )
             for index, entry in enumerate(_proposed_entries(delta, kind))
         ]

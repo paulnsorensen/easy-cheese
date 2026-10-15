@@ -269,6 +269,7 @@ def run_list(
     edge_kind: list[str] | None = None,
     linked_to: list[str] | None = None,
     forked_from: list[str] | None = None,
+    owner: list[str] | None = None,
 ) -> dict[str, object]:
     """Every store and legacy note a caller can resume from (AC-13, G9)."""
     root_arg = Path(corpus_root) if corpus_root is not None else paths.project_corpus_root()
@@ -300,6 +301,7 @@ def run_list(
         edge_kind=edge_kind or (),
         linked_to=linked_to or (),
         forked_from=forked_from or (),
+        owner=owner or (),
     )
     items = [hit_item(hit) for hit in result.hits]
     lines = _tsv_lines(

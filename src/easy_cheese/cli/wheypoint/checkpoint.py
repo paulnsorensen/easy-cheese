@@ -71,6 +71,10 @@ class IntentFlags:
     withdraw: Sequence[str] = ()
     supersede: Sequence[str] = ()
     by: Sequence[str] = ()
+    owner: Sequence[str] = ()
+    when: Sequence[str] = ()
+    operator_directive: Sequence[str] = ()
+    operator_quote: Sequence[str] = ()
     orientation: str | None = None
     next: str | None = None
     artifact: str | None = None
@@ -106,6 +110,10 @@ class IntentFlags:
                 withdraw=self.withdraw,
                 supersede=self.supersede,
                 by=self.by,
+                owner=self.owner,
+                when=self.when,
+                operator_directive=self.operator_directive,
+                operator_quote=self.operator_quote,
                 orientation=self.orientation,
                 next=self.next,
                 artifact=self.artifact,

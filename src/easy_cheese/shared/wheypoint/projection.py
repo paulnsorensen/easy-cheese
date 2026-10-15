@@ -33,6 +33,7 @@ from easy_cheese_schemas import (
     WheypointStatus,
     WorktreeStrategy,
 )
+from easy_cheese_schemas.contracts import DirectiveScope
 from easy_cheese_schemas.handback_status import (
     MAX_REASON_LENGTH,
     render_status_field,
@@ -72,6 +73,7 @@ _LEGACY_GATES_HEADING = "## Gating entries"
 _OPEN_HEADING = "## Open entries"
 _DECISIONS_HEADING = "## Decisions"
 _DIRECTIVES_HEADING = "## Directives"
+_OPERATOR_HEADING = "## Operator preferences"
 _NOTES_HEADING = "## Notes"
 _SUPERSEDED_HEADING = "## Superseded"
 _CONTEXT_HEADING = "## Context"
@@ -159,7 +161,41 @@ def _field_text(value: str | WorktreeStrategy) -> str:
 
 
 def _entry_line(entry: ProtectedEntry) -> str:
-    return f"- {entry.entry_id} ({entry.kind.value}) — {escape(entry.summary)}"
+    line = f"- {entry.entry_id} ({entry.kind.value}) — {escape(entry.summary)}"
+    return f"{line} (when: {escape(entry.when)})" if entry.when else line
+
+
+_UNASSIGNED = "unassigned"
+
+
+def _open_lines(open_entries: list[ProtectedEntry]) -> list[str]:
+    """Open questions, one subheading per owner once any question has one.
+
+    Owners match case-insensitively and show as first spelled; unowned
+    questions go last under `unassigned`. With no owner anywhere the list stays
+    flat, so a record written before owners existed renders as it did.
+    """
+    if not any(e.owner for e in open_entries):
+        return [_entry_line(e) for e in open_entries] or [_NONE]
+    groups: dict[str | None, tuple[str, list[ProtectedEntry]]] = {}
+    for entry in open_entries:
+        key = entry.owner.lower() if entry.owner else None
+        groups.setdefault(key, (entry.owner or _UNASSIGNED, []))[1].append(entry)
+    ordered = sorted(groups, key=lambda key: (key is None, key or ""))
+    lines: list[str] = []
+    for key in ordered:
+        name, members = groups[key]
+        lines += [f"### {escape(name)}", "", *(_entry_line(e) for e in members), ""]
+    return lines[:-1]
+
+
+def _quoted(entries: list[ProtectedEntry]) -> list[str]:
+    lines: list[str] = []
+    for entry in entries:
+        lines.append(_entry_line(entry))
+        if entry.quote:
+            lines.extend(f"  > {part}" for part in entry.quote.splitlines() or [""])
+    return lines
 
 
 def _drift_marker(record: WheypointRecord) -> list[str]:
@@ -198,7 +234,7 @@ def _body(record: WheypointRecord) -> list[str]:
         if e.kind is EntryKind.QUESTION and not e.blocks_continuation
     ]
     lines += [_OPEN_HEADING, ""]
-    lines += [_entry_line(e) for e in open_entries] or [_NONE]
+    lines += _open_lines(open_entries)
     lines += ["", _DECISIONS_HEADING, ""]
     decisions = [e for e in active if e.kind is EntryKind.DECISION]
     for entry in decisions:
@@ -208,13 +244,17 @@ def _body(record: WheypointRecord) -> list[str]:
     if not decisions:
         lines.append(_NONE)
     lines += ["", _DIRECTIVES_HEADING, ""]
-    directives = [e for e in active if e.kind is EntryKind.DIRECTIVE]
-    for entry in directives:
-        lines.append(_entry_line(entry))
-        if entry.quote:
-            lines.extend(f"  > {part}" for part in entry.quote.splitlines() or [""])
-    if not directives:
-        lines.append(_NONE)
+    directives = [
+        e for e in active
+        if e.kind is EntryKind.DIRECTIVE and e.scope is DirectiveScope.WORK
+    ]
+    lines += _quoted(directives) or [_NONE]
+    operator = [
+        e for e in active
+        if e.kind is EntryKind.DIRECTIVE and e.scope is DirectiveScope.OPERATOR
+    ]
+    if operator:
+        lines += ["", _OPERATOR_HEADING, "", *_quoted(operator)]
     lines += ["", _NOTES_HEADING, "", *_drift_marker(record)]
     # A notes line that looks like a heading would split the parsed sections.
     lines += (
@@ -290,11 +330,16 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
         _GATES_HEADING,
         "",
     ]
-    summaries = {e.entry_id: e.summary for e in records.entries(record)}
+    by_id = {e.entry_id: e for e in records.entries(record)}
     if projection.gating_entry_ids:
         for entry_id in projection.gating_entry_ids:
-            summary = summaries.get(entry_id)
-            lines.append(f"- {entry_id}" + (f" — {escape(summary)}" if summary else ""))
+            entry = by_id.get(entry_id)
+            line = f"- {entry_id}" + (f" — {escape(entry.summary)}" if entry else "")
+            if entry and entry.owner:
+                line += f" (owner: {escape(entry.owner)})"
+            if entry and entry.when:
+                line += f" (when: {escape(entry.when)})"
+            lines.append(line)
     else:
         lines.append(_NONE)
     lines += ["", *_body(record)]

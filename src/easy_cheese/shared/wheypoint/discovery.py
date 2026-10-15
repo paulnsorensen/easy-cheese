@@ -107,10 +107,12 @@ def _apply_filters(
     edge_kind: Sequence[str] = (),
     linked_to: Sequence[str] = (),
     forked_from: Sequence[str] = (),
+    owner: Sequence[str] = (),
 ) -> list[Candidate]:
     needles = [term.lower() for term in grep if term]
     since_date = _dt.date.fromisoformat(since) if since else None
     matchers = [_link_matcher(value) for value in linked_to]
+    owners = {name.lower() for name in owner}
     kept: list[Candidate] = []
     for candidate in candidates:
         hit = candidate.hit
@@ -138,6 +140,8 @@ def _apply_filters(
             continue
         if forked_from and hit.forked_from not in forked_from:
             continue
+        if owners and owners.isdisjoint(candidate.owners):
+            continue
         kept.append(candidate)
     return kept
 
@@ -162,6 +166,7 @@ def discover(
     edge_kind: Sequence[str] = (),
     linked_to: Sequence[str] = (),
     forked_from: Sequence[str] = (),
+    owner: Sequence[str] = (),
 ) -> DiscoveryResult:
     """Every store and legacy note a caller can resume from, filtered and
     sorted newest first.
@@ -180,7 +185,8 @@ def discover(
     gating entries. `edge_kind` matches a held edge's kind, `forked_from` a
     parent work id, and `linked_to` any held edge target or artifact-link
     ref equal to the normalized ref; a `wheypoint:` ref without `@rev` or
-    `#entry` matches the work at any pin.
+    `#entry` matches the work at any pin. `owner` keeps records with an
+    active question owned by any named person, compared case-insensitively.
     """
     machine = scope == "machine"
     store_candidates, store_searched, store_errors = discovery_stores.discover(
@@ -207,6 +213,7 @@ def discover(
         edge_kind=edge_kind,
         linked_to=linked_to,
         forked_from=forked_from,
+        owner=owner,
     )
     candidates.sort(key=lambda c: (-c.hit.updated, str(c.hit.path)))
     if limit is not None:

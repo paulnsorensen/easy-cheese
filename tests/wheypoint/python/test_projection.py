@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from attrs import evolve
+from easy_cheese_schemas.contracts import DirectiveScope
 from easy_cheese_schemas import (
     Durability,
     EntryKind,
@@ -743,3 +744,151 @@ def test_superseded_section_is_absent_without_superseded_entries(
     make_record: Callable[..., WheypointRecord],
 ) -> None:
     assert "## Superseded" not in _render(make_record(decisions=[_decision("d-one")]))
+
+
+def _question(entry_id: str, **fields: object) -> ProtectedEntry:
+    base: dict[str, object] = {
+        "entry_id": entry_id,
+        "kind": EntryKind.QUESTION,
+        "summary": f"Question {entry_id}?",
+        "state": EntryState.ACTIVE,
+        "blocks_continuation": False,
+    }
+    return ProtectedEntry(**{**base, **fields})  # pyright: ignore[reportArgumentType]
+
+
+def _open_section(markdown: str) -> list[str]:
+    lines = markdown.splitlines()
+    start = lines.index("## Open entries") + 1
+    end = next(i for i in range(start, len(lines)) if lines[i].startswith("## "))
+    return [line for line in lines[start:end] if line]
+
+
+def test_owner_group_puts_each_owner_under_a_subheading_and_unowned_under_unassigned(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        questions=[
+            _question("q-loose"),
+            _question("q-bo", owner="Bo", when="before launch"),
+            _question("q-ana", owner="Ana"),
+            _question("q-bo2", owner="bo"),
+        ]
+    )
+
+    markdown = _render(record)
+    section = _open_section(markdown)
+
+    assert section == [
+        "### Ana",
+        "- q-ana (question) — Question q-ana?",
+        "### Bo",
+        "- q-bo (question) — Question q-bo? (when: before launch)",
+        "- q-bo2 (question) — Question q-bo2?",
+        "### unassigned",
+        "- q-loose (question) — Question q-loose?",
+    ]
+    assert projection.parse(markdown).work_id == record.work_id
+
+
+def test_owner_group_keeps_the_flat_list_when_no_question_has_an_owner(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(questions=[_question("q-one"), _question("q-two", when="soon")])
+
+    assert _open_section(_render(record)) == [
+        "- q-one (question) — Question q-one?",
+        "- q-two (question) — Question q-two? (when: soon)",
+    ]
+
+
+def _directive(entry_id: str, **fields: object) -> ProtectedEntry:
+    base: dict[str, object] = {
+        "entry_id": entry_id,
+        "kind": EntryKind.DIRECTIVE,
+        "summary": f"Directive {entry_id}",
+        "state": EntryState.ACTIVE,
+        "blocks_continuation": False,
+        "quote": f"words of {entry_id}",
+    }
+    return ProtectedEntry(**{**base, **fields})  # pyright: ignore[reportArgumentType]
+
+
+def test_operator_preferences_render_apart_from_work_directives(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        directives=[
+            _directive("p-work"),
+            _directive("p-style", scope=DirectiveScope.OPERATOR),
+        ]
+    )
+
+    markdown = _render(record)
+    lines = markdown.splitlines()
+    directives = lines[lines.index("## Directives") : lines.index("## Operator preferences")]
+    operator = lines[lines.index("## Operator preferences") : lines.index("## Notes")]
+
+    assert any("p-work" in line for line in directives)
+    assert not any("p-style" in line for line in directives)
+    assert any("p-style" in line for line in operator)
+    assert "  > words of p-style" in operator
+    assert operator == [
+        "## Operator preferences",
+        "",
+        "- p-style (directive) — Directive p-style",
+        "  > words of p-style",
+        "",
+    ]
+    assert directives[-1] == ""
+    assert projection.parse(markdown).work_id == record.work_id
+
+
+def test_operator_preferences_section_is_absent_without_operator_directives(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(directives=[_directive("p-work")])
+
+    assert "## Operator preferences" not in _render(record)
+    assert "scope" not in records.unstructure(record)["directives"][0]  # pyright: ignore[reportIndexIssue]
+
+
+def test_a_gated_question_keeps_its_owner_and_when_and_parses_back_to_its_id(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        questions=[
+            _question(
+                "q-gate",
+                blocks_continuation=True,
+                owner="Ana",
+                when="before launch",
+            ),
+            _question("q-plain-gate", blocks_continuation=True),
+        ]
+    )
+
+    markdown = _render(record)
+    lines = markdown.splitlines()
+    gates = lines[lines.index("## Gates") + 2 : lines.index("## Open entries") - 1]
+
+    assert gates == [
+        "- q-gate — Question q-gate? (owner: Ana) (when: before launch)",
+        "- q-plain-gate — Question q-plain-gate?",
+    ]
+    assert projection.parse(markdown).gating_entry_ids == ["q-gate", "q-plain-gate"]
+
+
+def test_an_owner_literally_named_unassigned_stays_apart_from_unowned_questions(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        questions=[_question("q-loose"), _question("q-named", owner="Unassigned")]
+    )
+
+    assert _open_section(_render(record)) == [
+        "### Unassigned",
+        "- q-named (question) — Question q-named?",
+        "### unassigned",
+        "- q-loose (question) — Question q-loose?",
+    ]

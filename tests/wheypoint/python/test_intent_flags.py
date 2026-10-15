@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from easy_cheese_schemas import CheckpointIntent, EntryKind, TransitionAction
+from easy_cheese_schemas import CheckpointIntent, EntryKind, TransitionAction, load
 from easy_cheese_schemas.contracts import EdgeKind
 
 from easy_cheese.shared.wheypoint import (
@@ -295,3 +295,138 @@ def test_supersede_pairing_refuses_a_by_count_that_differs() -> None:
             by=["d-c"],
             rationale=["x", "y"],
         )
+
+
+def test_question_owner_and_when_pair_by_position_with_the_questions() -> None:
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        question=["A?", "B?"],
+        owner=["Ana", "Bo"],
+        when=["soon", "later"],
+    )
+
+    assert _intent(payload).entries is not None
+    assert payload["entries"] == [
+        {
+            "kind": "question",
+            "summary": "A?",
+            "blocks_continuation": False,
+            "owner": "Ana",
+            "when": "soon",
+        },
+        {
+            "kind": "question",
+            "summary": "B?",
+            "blocks_continuation": False,
+            "owner": "Bo",
+            "when": "later",
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        {"question": ["A?", "B?"], "owner": ["Ana"]},
+        {"question": ["A?"], "when": ["soon", "later"]},
+        {"owner": ["Ana"]},
+    ],
+)
+def test_owner_and_when_counts_that_differ_from_question_refuse(
+    flags: dict[str, object],
+) -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing"):
+        _ = intent_flags.overlay({}, work_id=WORK_ID, **flags)  # pyright: ignore[reportArgumentType]
+
+
+def test_owner_on_a_non_question_is_refused_by_the_schema() -> None:
+    payload = {
+        "work_id": WORK_ID,
+        "entries": [
+            {"kind": "decision", "summary": "D", "rationale": "r", "owner": "Ana"}
+        ],
+    }
+
+    loaded = load(payload, CheckpointIntent, strict=True, forbid_unknown=True)
+
+    assert loaded.value is None
+    assert any("owner" in problem for problem in loaded.problems)
+
+
+def test_operator_directive_flag_adds_a_scope_operator_directive_after_work_ones() -> None:
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        directive=["Work rule"],
+        quote=["work words"],
+        operator_directive=["Style rule"],
+        operator_quote=["style words"],
+    )
+
+    assert _intent(payload).entries is not None
+    assert payload["entries"] == [
+        {"kind": "directive", "summary": "Work rule", "quote": "work words"},
+        {
+            "kind": "directive",
+            "summary": "Style rule",
+            "quote": "style words",
+            "scope": "operator",
+        },
+    ]
+
+
+def test_each_quote_flag_pairs_only_with_its_own_directive_flag() -> None:
+    # CLI order is operator first; the quotes must not follow it.
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        operator_directive=["B"],
+        operator_quote=["qb"],
+        directive=["A"],
+        quote=["qa"],
+    )
+
+    assert payload["entries"] == [
+        {"kind": "directive", "summary": "A", "quote": "qa"},
+        {"kind": "directive", "summary": "B", "quote": "qb", "scope": "operator"},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("directive", "quote", "operator_directive", "operator_quote", "flag"),
+    [
+        ([], [], ["Style rule"], [], "--operator-quote"),
+        ([], ["stray"], ["Style rule"], ["words"], "--quote"),
+        (["Work rule"], ["words"], [], ["stray"], "--operator-quote"),
+        (["Work rule"], [], [], [], "--quote"),
+    ],
+)
+def test_a_quote_count_that_differs_from_its_directive_count_refuses(
+    directive: list[str],
+    quote: list[str],
+    operator_directive: list[str],
+    operator_quote: list[str],
+    flag: str,
+) -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match=f"^flag-pairing.*{flag}"):
+        _ = intent_flags.overlay(
+            {},
+            work_id=WORK_ID,
+            directive=directive,
+            quote=quote,
+            operator_directive=operator_directive,
+            operator_quote=operator_quote,
+        )
+
+
+def test_scope_operator_on_a_question_is_refused_by_the_schema() -> None:
+    payload = {
+        "work_id": WORK_ID,
+        "entries": [{"kind": "question", "summary": "Q?", "scope": "operator"}],
+    }
+
+    loaded = load(payload, CheckpointIntent, strict=True, forbid_unknown=True)
+
+    assert loaded.value is None
+    assert any("scope" in problem for problem in loaded.problems)

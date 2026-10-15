@@ -562,8 +562,11 @@ def test_ac12_linked_to_matches_a_repo_link_by_its_path(
     assert _keys(hits) == {("proj-a", "with-spec")}
 
 
-def _question(entry_id: str, state: EntryState) -> ProtectedEntry:
+def _question(
+    entry_id: str, state: EntryState, owner: str | None = None
+) -> ProtectedEntry:
     return ProtectedEntry(
+        owner=owner,
         entry_id=entry_id,
         kind=EntryKind.QUESTION,
         summary=f"Question {entry_id}?",
@@ -658,3 +661,26 @@ def test_forked_from_and_edge_kind_filters_find_the_child(
     assert _keys(forked) == {("proj-a", "child")}
     assert forked[0].forked_from == "parent"
     assert _keys(by_kind) == {("proj-a", "child")}
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_list_owner_matches_active_question_owners_case_insensitively(
+    tmp_path: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    corpus = tmp_path / "cheese" / "proj-a"
+    seed = functools.partial(_seed_fields, corpus, make_record, make_promotion)
+    seed("ana-open", questions=[_question("q-a", EntryState.ACTIVE, owner="Ana")])
+    seed("ana-done", questions=[_question("q-b", EntryState.RESOLVED, owner="Ana")])
+    seed("bo-open", questions=[_question("q-c", EntryState.ACTIVE, owner="Bo")])
+    seed("unowned", questions=[_question("q-d", EntryState.ACTIVE)])
+
+    def owned_by(*owner: str) -> set[tuple[str, str]]:
+        return _keys(
+            discovery.discover(start=tmp_path, corpus_root=corpus, owner=owner).hits
+        )
+
+    assert owned_by("aNa") == {("proj-a", "ana-open")}
+    assert owned_by("ana", "BO") == {("proj-a", "ana-open"), ("proj-a", "bo-open")}
+    assert owned_by("carl") == set()
