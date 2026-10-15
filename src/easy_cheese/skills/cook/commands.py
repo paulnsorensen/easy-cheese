@@ -174,6 +174,13 @@ def _handoff(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("validate-result")
+def _validate_result(argv: list[str]) -> int:
+    from easy_cheese.shared.validate_result_cli import main
+
+    return main(argv)
+
+
 @bundle_command("render-html")
 def _render_html(argv: list[str]) -> int:
     from easy_cheese.shared.html_report_cli import main
@@ -264,6 +271,10 @@ COMMANDS = (
     derive_command(
         _render_html,
         "Render a markdown report into one self-contained offline HTML file",
+    ),
+    derive_command(
+        _validate_result,
+        "Validate a ready Mold finalization result before any writer starts",
     ),
 )
 

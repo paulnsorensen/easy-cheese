@@ -40,6 +40,8 @@ from easy_cheese.shared.artifacts import (
 from easy_cheese.shared.bounded_read import BoundedReadOverflow, read_bounded_file
 
 
+_DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
+
 __all__ = [
     "BoundedReadOverflow",
     "CorruptLeftoverError",
@@ -327,6 +329,10 @@ def _read_pointer(path: Path) -> _StoredPublication:
             raise ValueError("invalid publication index")
         data = cast("dict[str, object]", decoded)
         if set(data) != {"request", "payload"}:
+            if "request" not in data and {"operation_id", "request_digest"} <= set(data):
+                raise ValueError(
+                    "legacy handoff pointer format; re-run finalization to republish it"
+                )
             raise ValueError("invalid publication index")
         raw_request = data["request"]
         raw_payload = data["payload"]
@@ -348,7 +354,7 @@ def _read_pointer(path: Path) -> _StoredPublication:
         )
         if _pointer_path(path.resolve().parent.parent, request.operation_id).resolve() != path.resolve():
             raise ValueError("operation index path does not match operation_id")
-        if re.fullmatch(r"sha256:[0-9a-f]{64}", request.request_digest) is None:
+        if _DIGEST_RE.fullmatch(request.request_digest) is None:
             raise ValueError("invalid request digest")
         if set(payload_data) != {
             "artifact_id", "role", "uri", "digest", "size_bytes",
@@ -411,6 +417,12 @@ def _resolve_pointer(
     request: _PublicationRequest,
     artifact_root: Path,
 ) -> CanonicalArtifact:
+    if pointer.request.payload_schema_uri != request.payload_schema_uri:
+        raise ContractValidationError(
+            "unsupported-pointer-schema: pointer schema "
+            + f"{pointer.request.payload_schema_uri!r} does not match consumer "
+            + f"{request.payload_schema_uri!r}"
+        )
     if pointer.request.destination_phase != request.destination_phase:
         raise ContractValidationError(
             f"pointer destination {pointer.request.destination_phase!r} does not match "
@@ -490,7 +502,7 @@ def publish_canonical(
         destination_phase=destination_phase,
         payload_schema_uri=payload_schema_uri,
     )
-    if re.fullmatch(r"sha256:[0-9a-f]{64}", request.request_digest) is None:
+    if _DIGEST_RE.fullmatch(request.request_digest) is None:
         raise PublicationError("invalid request_digest")
     return _publish_canonical(
         request=request,
