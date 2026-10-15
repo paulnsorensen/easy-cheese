@@ -315,8 +315,14 @@ def test_v4_nonblocking_blocker_stays_a_nonblocking_question(tmp_path: Path) -> 
     assert record.status is WheypointStatus.OK
 
 
-def test_contracts_simplify_projection_is_shorter(tmp_path: Path) -> None:
-    """AC-13: the v5 projection of the lived record is at least 25% shorter."""
+def test_contracts_simplify_projection_is_shorter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-13: the v5 projection of the lived record is at least 25% shorter.
+
+    Rendered outside a checkout, so no Git-ignored path adds a local-reference list.
+    """
+    monkeypatch.chdir(tmp_path)
     store = open_fixture("contracts-simplify-v4", tmp_path)
     record = store.read_record()
     assert record is not None

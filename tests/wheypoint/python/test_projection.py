@@ -243,6 +243,7 @@ def test_a_caller_cannot_hand_build_an_ok_projection_over_a_gate(
 # across the whole package, including modules added after this was written.
 READ_ONLY_GIT = {
     ("git", "cat-file", "-e", None),
+    ("git", "check-ignore", "-q", "--", None),
     ("git", "merge-base", "--is-ancestor", None, "HEAD"),
     ("git", "rev-list", "--count", None),
     ("git", "rev-parse", "--show-toplevel"),
@@ -315,7 +316,10 @@ def test_every_git_invocation_in_the_runtime_is_on_the_read_only_allowlist() -> 
 
 def test_ac15_projection_body_renders_the_record_as_markdown_and_lints_clean(
     make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     from easy_cheese_schemas import ArtifactLink, EntryKind, EntryState, ProtectedEntry
 
     directive = ProtectedEntry(
@@ -843,3 +847,78 @@ def test_operator_preferences_section_is_absent_without_operator_directives(
 
     assert "## Operator preferences" not in _render(record)
     assert "scope" not in records.unstructure(record)["directives"][0]  # pyright: ignore[reportIndexIssue]
+
+
+def _git(root: Path, *args: str) -> None:
+    import subprocess
+
+    _ = subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+
+def test_local_reference_section_lists_xdg_absolute_and_ignored_paths(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from easy_cheese_schemas import ArtifactLink
+
+    repo = tmp_path / "repo"
+    (repo / ".cheese").mkdir(parents=True)
+    _ = (repo / ".cheese" / "plan.md").write_text("plan\n", encoding="utf-8")
+    _ = (repo / ".gitignore").write_text(".cheese/\n", encoding="utf-8")
+    _ = (repo / "tracked.py").write_text("x\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+    monkeypatch.chdir(repo)
+    elsewhere = tmp_path / "other-worktree" / "notes.md"
+    record = make_record(
+        working_context=["see .cheese/plan.md:4 and tracked.py:2"],
+        artifact_links=[
+            ArtifactLink(path="xdg-doc", ref="xdg:proj/doc.md"),
+            ArtifactLink(path=str(elsewhere)),
+            ArtifactLink(path="tracked.py"),
+            ArtifactLink(path=".cheese/cook/x.md"),
+        ],
+    )
+
+    lines = _render(record).splitlines()
+    section = lines[lines.index("## Local references") + 2 :]
+    listed = section[: section.index("")] if "" in section else section
+
+    assert listed == [
+        "- xdg:proj/doc.md",
+        f"- {elsewhere}",
+        "- .cheese/cook/x.md",
+        "- .cheese/plan.md:4",
+    ]
+
+
+def test_local_reference_outside_a_checkout_keeps_xdg_and_absolute_only(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from easy_cheese_schemas import ArtifactLink
+
+    monkeypatch.chdir(tmp_path)
+    record = make_record(
+        artifact_links=[
+            ArtifactLink(path="xdg-doc", ref="xdg:proj/doc.md"),
+            ArtifactLink(path="/tmp/elsewhere/notes.md"),
+            ArtifactLink(path=".cheese/cook/x.md"),
+        ],
+    )
+
+    markdown = _render(record)
+
+    assert "- xdg:proj/doc.md\n- /tmp/elsewhere/notes.md\n" in markdown
+    assert markdown.count("- .cheese/cook/x.md") == 1
+
+
+def test_local_reference_section_is_absent_without_local_refs(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    assert "## Local references" not in _render(make_record())

@@ -20,14 +20,18 @@ question needs a rationale; a plain question takes none.
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping, Sequence
+import re
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import cast
 
 from easy_cheese_schemas.contracts import EdgeKind
 
 from . import commit, ref_grammar
 
-__all__ = ["IntentFlagError", "overlay"]
+__all__ = ["UNPINNED_LINE_REF", "IntentFlagError", "overlay", "pin_line_refs"]
+
+UNPINNED_LINE_REF = "unpinned-line-ref"
 
 
 class IntentFlagError(ValueError):
@@ -137,6 +141,74 @@ def overlay(
     _extend(result, "add_edges", edges)
     _extend(result, "artifact_links", links)
     return result
+
+
+def pin_line_refs(
+    payload: Mapping[str, object],
+    *,
+    checkout: Path | None,
+    head: str | None,
+) -> tuple[dict[str, object], list[str]]:
+    """`payload` with each bare `path:line` pinned to `head`, and the warnings.
+
+    Only `working_context` items and `artifact_links` are read. A token pins
+    when it names an existing file in `checkout`; `path#symbol` and an already
+    pinned token stay as written. With no checkout or no `head`, a token that
+    looks like `path:line` stays unpinned and the warning `unpinned-line-ref`
+    names it once. The pin is made at checkpoint and never on read.
+    """
+    result: dict[str, object] = copy.deepcopy(dict(payload))
+    unpinned = False
+
+    def pin(text: str) -> str:
+        def swap(match: re.Match[str]) -> str:
+            nonlocal unpinned
+            if checkout is None or head is None:
+                unpinned = True
+                return match.group(0)
+            if not _is_checkout_file(checkout, match["path"]):
+                return match.group(0)
+            return f"{match['path']}:{match['line']}@{head}"
+
+        return ref_grammar.LINE_REF_RE.sub(swap, text)
+
+    context = result.get("working_context")
+    if isinstance(context, list):
+        result["working_context"] = [
+            pin(item) if isinstance(item, str) else item
+            for item in cast(list[object], context)
+        ]
+    links = result.get("artifact_links")
+    if isinstance(links, list):
+        result["artifact_links"] = [
+            _pin_link(cast(Mapping[str, object], item), pin)
+            if isinstance(item, Mapping)
+            else item
+            for item in cast(list[object], links)
+        ]
+    return result, [UNPINNED_LINE_REF] if unpinned else []
+
+
+def _pin_link(
+    link: Mapping[str, object], pin: Callable[[str], str]
+) -> dict[str, object]:
+    """A copy of `link` whose `path` and `repo:` ref are pinned."""
+    pinned = dict(link)
+    path = pinned.get("path")
+    if isinstance(path, str):
+        pinned["path"] = pin(path)
+    ref = pinned.get("ref")
+    if isinstance(ref, str) and ref.startswith("repo:"):
+        pinned["ref"] = "repo:" + pin(ref[len("repo:") :])
+    return pinned
+
+
+def _is_checkout_file(checkout: Path, relative: str) -> bool:
+    try:
+        resolved = (checkout / relative).resolve()
+        return resolved.is_file() and resolved.is_relative_to(checkout.resolve())
+    except (OSError, RuntimeError):
+        return False
 
 
 def _check_pairing(

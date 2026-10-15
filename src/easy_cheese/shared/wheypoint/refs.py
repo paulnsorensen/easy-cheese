@@ -11,7 +11,9 @@ from `ref_grammar` and owns the digest a reference pins:
 | `milknado:`  | `milknado:<project_key>/<node_key>`                     | none |
 | `https:`     | a PR, issue, or URL                                     | none |
 
-A `repo:` or `xdg:` path that climbs out of its root is refused, and a
+A `:line`, `:line@sha`, or `#symbol` locator on a `repo:` or `xdg:` path is
+left off when the file is found, so the digest pins the whole file. A
+`repo:` or `xdg:` path that climbs out of its root is refused, and a
 file reached through a symlink outside that root has no digest. A
 `wheypoint:` target is read without its lock: the read is a pin, not a write.
 An unpinnable scheme is never checked for existence.
@@ -26,7 +28,14 @@ from pathlib import Path
 from attrs import define
 
 from . import storage
-from .ref_grammar import ParsedRef, Scheme, is_pinnable, normalize_ref, parse_ref
+from .ref_grammar import (
+    ParsedRef,
+    Scheme,
+    is_pinnable,
+    locator_path,
+    normalize_ref,
+    parse_ref,
+)
 
 __all__ = [
     "ParsedRef",
@@ -56,10 +65,10 @@ def resolve_ref(ref: str, *, checkout: Path, corpus_home: Path) -> ResolvedRef:
     location: Path | None = None
     digest: str | None = None
     if parsed.scheme is Scheme.REPO:
-        location, digest = _file(Path(checkout), _required(parsed.path))
+        location, digest = _file(Path(checkout), locator_path(_required(parsed.path)))
     elif parsed.scheme is Scheme.XDG:
         root = Path(corpus_home) / _required(parsed.project_key)
-        location, digest = _file(root, _required(parsed.path))
+        location, digest = _file(root, locator_path(_required(parsed.path)))
     elif parsed.scheme is Scheme.WHEYPOINT:
         location, digest = _record(parsed, Path(corpus_home))
     return ResolvedRef(

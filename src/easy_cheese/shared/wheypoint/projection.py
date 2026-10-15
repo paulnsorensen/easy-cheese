@@ -16,7 +16,9 @@ Projections written at schema 4 or older opened with a pins block that held a
 from __future__ import annotations
 
 import re
+import subprocess
 from collections.abc import Sequence
+from pathlib import Path
 from typing import cast
 
 from easy_cheese_schemas import (
@@ -39,8 +41,10 @@ from easy_cheese_schemas.handback_status import (
     render_status_field,
 )
 
+from easy_cheese.shared import git_utils
+
 from . import canonical, records
-from .ref_grammar import Scheme
+from .ref_grammar import Scheme, locator_path
 
 # The shared handoff preamble: three keyed lines, then the orientation.
 _HEAD_KEYS = ("status", "next", "artifact")
@@ -76,6 +80,10 @@ _DIRECTIVES_HEADING = "## Directives"
 _OPERATOR_HEADING = "## Operator preferences"
 _NOTES_HEADING = "## Notes"
 _SUPERSEDED_HEADING = "## Superseded"
+_LOCAL_HEADING = "## Local references"
+_SCHEME_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
+_TOKEN_OPEN = "`'\"([<"
+_TOKEN_CLOSE = "`'\")]>,;.:"
 _CONTEXT_HEADING = "## Context"
 _ARTIFACTS_HEADING = "## Artifacts"
 _LINKS_HEADING = "## Links"
@@ -225,6 +233,68 @@ def _superseded(record: WheypointRecord) -> list[str]:
     return ["", _SUPERSEDED_HEADING, "", *(f"- {e.entry_id} -> {e.superseded_by}" for e in moved)]
 
 
+def _checkout() -> Path | None:
+    """The Git worktree root of the working directory, or None outside one."""
+    try:
+        top = git_utils.run_git(["rev-parse", "--show-toplevel"], timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return Path(top.stdout.strip()) if top.returncode == 0 and top.stdout.strip() else None
+
+
+def _local_references(record: WheypointRecord) -> list[str]:
+    """The `## Local references` section, or nothing when no reference is local.
+
+    A reference is local when it needs the author's machine: an `xdg:` ref, an
+    absolute path outside the checkout, or a repository path Git ignores.
+    Outside a checkout only the first two classify.
+    """
+    candidates: list[tuple[str, bool]] = []
+    for link in record.artifact_links:
+        ref = link.ref
+        candidates.append((link.path if ref is None or ref.startswith("repo:") else ref, False))
+    candidates += [(edge.to, False) for edge in record.edges]
+    for item in record.working_context:
+        for word in item.split():
+            token = word.strip(_TOKEN_OPEN).rstrip(_TOKEN_CLOSE)
+            if "/" in token or "." in token:
+                candidates.append((token, True))
+    checkout = _checkout() if candidates else None
+    found: list[str] = []
+    for text, must_exist in candidates:
+        if text not in found and _is_local(text, checkout, must_exist=must_exist):
+            found.append(text)
+    if not found:
+        return []
+    return ["", _LOCAL_HEADING, "", *(f"- {escape(text)}" for text in found)]
+
+
+def _is_local(text: str, checkout: Path | None, *, must_exist: bool) -> bool:
+    if text.lower().startswith(f"{Scheme.XDG.value}:"):
+        return True
+    path = locator_path(text)
+    path = path.removeprefix(f"{Scheme.REPO.value}:")
+    try:
+        if path.startswith("/"):
+            if checkout is None:
+                return True
+            absolute = Path(path).resolve()
+            root = checkout.resolve()
+            if not absolute.is_relative_to(root):
+                return True
+            path = absolute.relative_to(root).as_posix()
+        if checkout is None or _SCHEME_RE.match(path) or path in {"", "."}:
+            return False
+        if must_exist and not (checkout / path).exists():
+            return False
+        ignored = git_utils.run_git(
+            ["check-ignore", "-q", "--", path], cwd=checkout, timeout=5
+        )
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        return False
+    return ignored.returncode == 0
+
+
 def _body(record: WheypointRecord) -> list[str]:
     """The human sections: everything the record holds that the pins do not."""
     lines: list[str] = []
@@ -284,7 +354,7 @@ def _body(record: WheypointRecord) -> list[str]:
             lines.append(f"  rationale: {escape(edge.rationale)}")
     if not record.edges:
         lines.append(_NONE)
-    return lines + _superseded(record)
+    return lines + _superseded(record) + _local_references(record)
 
 
 def _tasks(action: NextAction) -> list[str]:

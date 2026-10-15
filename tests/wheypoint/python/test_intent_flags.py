@@ -380,3 +380,72 @@ def test_scope_operator_on_a_question_is_refused_by_the_schema() -> None:
 
     assert loaded.value is None
     assert any("scope" in problem for problem in loaded.problems)
+
+
+def _checkout(root: Path) -> Path:
+    (root / "src").mkdir(parents=True)
+    _ = (root / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+    return root
+
+
+def test_pin_line_ref_in_context_and_artifact_link(tmp_path: Path) -> None:
+    checkout = _checkout(tmp_path)
+    payload: dict[str, object] = {
+        "working_context": ["see src/app.py:12 and src/app.py:3-9, not src/gone.py:4"],
+        "artifact_links": [
+            {"path": "src/app.py:7"},
+            {"path": "src/app.py:7", "ref": "repo:src/app.py:7"},
+        ],
+    }
+
+    pinned, warnings = intent_flags.pin_line_refs(
+        payload, checkout=checkout, head="abc1234"
+    )
+
+    assert pinned["working_context"] == [
+        "see src/app.py:12@abc1234 and src/app.py:3-9@abc1234, not src/gone.py:4"
+    ]
+    assert pinned["artifact_links"] == [
+        {"path": "src/app.py:7@abc1234"},
+        {"path": "src/app.py:7@abc1234", "ref": "repo:src/app.py:7@abc1234"},
+    ]
+    assert warnings == []
+    assert payload["working_context"] == [
+        "see src/app.py:12 and src/app.py:3-9, not src/gone.py:4"
+    ]
+
+
+def test_unpinned_line_ref_without_a_checkout_warns() -> None:
+    payload: dict[str, object] = {"working_context": ["src/app.py:12"]}
+
+    pinned, warnings = intent_flags.pin_line_refs(payload, checkout=None, head=None)
+
+    assert pinned == payload
+    assert warnings == ["unpinned-line-ref"]
+
+
+def test_pin_line_ref_without_a_line_ref_stays_quiet() -> None:
+    payload: dict[str, object] = {"working_context": ["no refs here"]}
+
+    pinned, warnings = intent_flags.pin_line_refs(payload, checkout=None, head=None)
+
+    assert (pinned, warnings) == (payload, [])
+
+
+def test_symbol_ref_and_already_pinned_ref_stay_as_written(tmp_path: Path) -> None:
+    checkout = _checkout(tmp_path)
+    payload: dict[str, object] = {
+        "working_context": [
+            "src/app.py#main",
+            "src/app.py:12@0ddba11",
+            "https://example.com/src/app.py:12",
+        ],
+        "artifact_links": [{"path": "src/app.py#main"}],
+    }
+
+    pinned, warnings = intent_flags.pin_line_refs(
+        payload, checkout=checkout, head="abc1234"
+    )
+
+    assert pinned == payload
+    assert warnings == []

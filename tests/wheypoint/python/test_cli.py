@@ -2748,3 +2748,63 @@ def test_list_owner_keeps_records_with_an_active_question_owned_case_insensitive
     assert refs("--owner", "ANA") == {"ana-work"}
     assert refs("--owner", "ana", "--owner", "bo") == {"ana-work", "bo-work"}
     assert refs("--owner", "carl") == set()
+
+
+def _commit_repo(root: Path) -> str:
+    (root / "src").mkdir(parents=True)
+    _ = (root / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+    env = ["-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for args in (["init", "-q"], ["add", "."], [*env, "commit", "-q", "-m", "init"]):
+        _ = subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return head.stdout.strip()
+
+
+def _line_ref_intent(*, link: bool = True) -> str:
+    return json.dumps(
+        {
+            "work_id": WORK_ID,
+            "orientation": "Start.",
+            "next": "cook",
+            "artifact": ".cheese/cook/x.md",
+            "entries": [{"kind": "decision", "summary": "D", "rationale": "r"}],
+            "working_context": ["see src/app.py:1"],
+            **({"artifact_links": [{"path": "src/app.py:1"}]} if link else {}),
+        }
+    )
+
+
+def test_checkpoint_pin_line_ref_stores_the_short_head_sha(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = corpus_root
+    repo = tmp_path / "repo"
+    head = _commit_repo(repo)
+    monkeypatch.chdir(repo)
+
+    status, payload = _run("checkpoint", "--no-note", stdin=_line_ref_intent())
+
+    assert status == 0, payload
+    record = cast(dict[str, object], payload["record"])
+    assert record["working_context"] == [f"see src/app.py:1@{head}"]
+    links = cast(list[dict[str, object]], record["artifact_links"])
+    assert links[0]["path"] == f"src/app.py:1@{head}"
+    assert payload["warnings"] == []
+
+
+def test_checkpoint_unpinned_line_ref_warns_outside_a_checkout(
+    corpus_root: Path,
+) -> None:
+    _ = corpus_root
+
+    status, payload = _run("checkpoint", stdin=_line_ref_intent(link=False))
+
+    assert status == 0, payload
+    record = cast(dict[str, object], payload["record"])
+    assert record["working_context"] == ["see src/app.py:1"]
+    assert payload["warnings"] == ["unpinned-line-ref"]
