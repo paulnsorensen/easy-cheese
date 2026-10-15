@@ -14,6 +14,7 @@ import fromargs
 from easy_cheese.shared.publication import BoundedReadOverflow, read_bounded
 from easy_cheese_schemas.contracts import LandingShape, parse_landing_mapping
 from easy_cheese_schemas.manifest import plate_layout_for, plate_layout_for_plan
+from easy_cheese_schemas.pr_plan import PrShape
 from easy_cheese_schemas.schema_runtime import load_pr_plan
 
 _MODES = {"commit-only", "topology-preflight", "new-pr", "existing-pr", "stack-maintenance"}
@@ -168,12 +169,14 @@ def validate_publication(data: object) -> dict[str, object]:
     if not isinstance(risk, str) or not risk.strip():
         errors.append("risk must be a non-empty string")
 
+    flat_plan = False
     if "pr_plan" in state:
         plan = _object(state["pr_plan"], "pr_plan", errors)
         if plan is not None:
             loaded = load_pr_plan(plan)
             errors.extend(f"pr_plan {problem}" for problem in loaded.problems)
             if loaded.value is not None:
+                flat_plan = loaded.value.shape == PrShape.ORTHOGONAL_FLAT
                 projected = plate_layout_for_plan(loaded.value).value
                 if projected != topology:
                     errors.append(
@@ -208,7 +211,8 @@ def validate_publication(data: object) -> dict[str, object]:
         elif mode in {"new-pr", "existing-pr"}:
             if topology == "single" and provider != "ordinary":
                 errors.append("single topology requires provider ordinary")
-            if topology == "stacked" and provider not in _STACK_PROVIDERS:
+            flat_ordinary = topology == "stacked" and provider == "ordinary" and flat_plan
+            if topology == "stacked" and provider not in _STACK_PROVIDERS and not flat_ordinary:
                 errors.append("stacked topology requires a stack provider")
             if commits is not None and not commits:
                 errors.append(f"{mode} requires at least one commit")

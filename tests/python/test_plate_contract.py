@@ -21,8 +21,8 @@ def test_plate_owns_commit_stack_and_review_shape_policy() -> None:
     assert "\nmodel:" not in skill
     assert "commit-only" in skill.lower()
     assert "cohesive review unit" in topology
-    assert "proceed without asking" in topology
-    assert "independently reviewable ordered" in topology
+    assert "Proceed without asking" in topology
+    assert "each later part depends on an earlier part" in topology
     assert "never decides the shape on its own" in topology
     assert "exceeds roughly 400 changed code lines" in topology
     assert "**semantics-altering**" in topology
@@ -39,46 +39,41 @@ def test_plate_owns_commit_stack_and_review_shape_policy() -> None:
     assert "project-specific extensions" in " ".join(credits.split())
     assert "explicit user choice" in topology
     assert "It is authoritative" in topology
-    assert "genuinely ambiguous" in topology
-    assert "unchanged under `--auto`" in topology
+    assert "Never manufacture a boundary" in flat_topology
     assert "before any commit" in topology
-    assert "../cheese/references/ask-user-question.md" in topology
+    assert "It does not ask the user" in topology
     assert "Existing PR" in skill
-    assert "do not ask" in topology
+    assert "detect its ordinary or stacked topology" in topology
     # The review-shape policy is one hop away, never duplicated in the core body.
     assert "semantics-altering" not in skill
     assert "plate-layout" not in skill
 
 
-def test_plate_topology_question_record_is_valid_and_normalized() -> None:
-    """Parse the emitted question record instead of matching phrases."""
-    import yaml
-
+def test_plate_topology_decides_every_shape_without_a_question() -> None:
+    """Topology resolves single, independent, or stacked PRs and never asks."""
     topology = read("skills/plate/references/topology.md")
-    block = topology.split("```yaml\n", maxsplit=1)[1].split("\n```", maxsplit=1)[0]
-    question = cast(dict[str, object], yaml.safe_load(block)["question"])
-    assert set(question) == {"id", "prompt", "recommended", "multi", "options"}
-    assert question["id"] == "plate-layout"
-    assert question["multi"] is False
-    assert question["recommended"] == "<single | stacked>"
-    options = cast(list[dict[str, object]], question["options"])
-    assert [option["id"] for option in options] == ["single", "stacked"]
-    for option in options:
-        assert set(option) == {"id", "label", "description"}
-        assert cast(str, option["label"]).strip()
-        assert cast(str, option["description"]).strip()
-
-    normalization = topology.split("## Answer normalization", maxsplit=1)[1].split(
-        "\n## ", maxsplit=1
-    )[0]
-    flat = " ".join(normalization.split())
-    assert "returns free text with an `other:` prefix" in flat
-    assert "only when its text is unambiguous" in flat
-    assert "Ask one clarification question for every other answer" in flat
-    assert "Halt at `topology` when the clarification is also ambiguous" in flat
-    assert "Persist only `single` or `stacked`. Never persist free text." in flat
-    # `--auto` must not bypass the question.
-    assert "unchanged under `--auto`" in topology
+    flat = " ".join(topology.split())
+    assert "```yaml" not in topology
+    assert "plate-layout" not in topology
+    assert "## Answer normalization" not in topology
+    table = topology.split("| Evidence | Shape |", maxsplit=1)[1].split("\n\n", maxsplit=1)[0]
+    rows = [line for line in table.splitlines() if line.strip().startswith("| ")][1:]
+    row_shapes = [row.split("|")[2].strip() for row in rows]
+    assert "`diamond_stack` is allowed only when an explicit choice names it" in flat
+    assert [shape.split("`")[1] for shape in row_shapes] == [
+        "single",
+        "single",
+        "orthogonal_flat",
+        "stacked_linear",
+        "stacked_linear",
+        "single",
+    ]
+    assert "Merge parts that edit the same hunks into one part" in flat
+    assert "joins the part whose source generates it" in flat
+    assert "Never stack parts that do not depend on each other" in flat
+    assert "With no clean boundary, choose `single`" in flat
+    assert "`Plated as <shape>: <reason>`" in flat
+    assert "map a legacy `stacked` shape to `stacked_linear`" in flat
 
 
 def test_plate_repair_topology_requires_run_branch_and_one_overlap_rule() -> None:
@@ -143,7 +138,7 @@ def test_plate_loads_one_reference_at_a_time_in_a_named_sequence() -> None:
     assert "Load one reference at a time" in flat
     assert "Load each reference alone. Close it before you load the next one." in flat
     topology = flat.index("Load `references/topology.md`")
-    execution = flat.index("Load `references/ordinary-pr.md` for single topology")
+    execution = flat.index("Load `references/ordinary-pr.md` for the `single` or `orthogonal_flat` shape")
     provider = flat.index("Load exactly one provider reference")
     assert topology < execution < provider
     # Stack inspection without a requested change leaves Plate for the `gh` CLI.
@@ -325,7 +320,7 @@ def test_plate_stack_flow_is_per_layer_and_metadata_is_resolved() -> None:
     layer_gate = stacks.index("Run the final writing gate for that layer")
     submit = stacks.index("Submit the complete chain")
     assert provider < lineage < layer_gate < submit
-    assert "explicit split boundaries" in stacks
+    assert "the clean parts from `topology.md`" in stacks
     assert "bottom/common layer" in stacks
     assert "git rev-parse --git-dir" in stacks
     assert ".git/" not in stacks
@@ -476,12 +471,11 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     seed = skill.index("**Seed (coder).**")
     assert preflight < seed
     assert "before Phase 1 seed or any worker commit" in skill
-    assert "persist `single` without asking" in skill
-    assert "stacked is recommended or shape is ambiguous" in skill
-    assert "do not ask twice" in skill
+    assert "decides `single`, `orthogonal_flat`, or `stacked_linear` without asking the user" in skill
+    assert "do not decide twice" in skill
     assert '"plate_layout"' in schema
     assert '"single", "stacked"' in schema
-    assert "explicit choice, cohesive-single inference, or user confirmation" in schema
+    assert "explicit choice or topology decision" in schema
     # The pr-plan reference JSON is generated from the registered v1 contract:
     # the v1 root, never `plate_layout`.
     assert '"plate_layout"' not in plan_schema
@@ -492,9 +486,12 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     assert "contract_version" in planner
     assert "target_branch: main" in planner
     assert "plate_layout: single | stacked" not in planner
-    assert "owns the size gate" in planner
+    assert "owns the size rule" in planner
     assert "skills/plate/references/topology.md" in planner
     assert "~400" not in planner
+    # The planner receives the resolved shape, not only the binary layout.
+    assert "Pass both values to the PR planner as `{plate_layout}` and `{shape}`." in skill
+    assert "Emit `shape: {shape}` when `{shape}` is set." in planner
 
 
 def test_cure_open_pr_dispatch_obeys_plate_policy() -> None:
@@ -503,8 +500,8 @@ def test_cure_open_pr_dispatch_obeys_plate_policy() -> None:
         (cure_dir / "references" / f"{name}.md").read_text()
         for name in ("auto-mode", "selection", "post-pr-writeback")
     )
-    assert "explicit topology choices and obviously cohesive work proceed without asking" in cure
-    assert "stack-sized or ambiguous work asks before commit or branch-layout mutation" in cure
+    assert "`/plate` decides the topology without asking the user" in cure
+    assert "resolves the shape before commit or branch-layout mutation" in cure
 
 
 def test_plate_routes_review_to_age_from_both_sides() -> None:
@@ -572,10 +569,10 @@ def test_landing_block_answers_the_layout_question() -> None:
     flat_topology = " ".join(topology.split())
     assert "`landing` block" in topology
     assert "names the layer and the files in conflict" in flat_topology
-    assert "Never ask the plain layout question while a `landing` block exists" in flat_topology
+    assert "collapse to `single` and state the deviation" in flat_topology
     assert "`easy_cheese_schemas.manifest.plate_layout_for`" in fan_pathway
     assert "`easy_cheese_schemas.manifest.plate_layout_for`" in topology
-    assert "Ask only when the spec has no `landing` block" in fan_pathway
+    assert "`/plate` decides the shape from the curd plan" in fan_pathway
     assert "--spec <spec-path>" in cook_skill
     assert "refused before coder dispatch" in cook_skill
     mini_spec = read("skills/mold/references/mini-spec-mode.md")
