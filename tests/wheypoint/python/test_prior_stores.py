@@ -25,7 +25,7 @@ from easy_cheese_schemas import (
     WheypointStatus,
 )
 
-from easy_cheese.shared.wheypoint import commit, records, refs, storage
+from easy_cheese.shared.wheypoint import commit, records, refs, resolve, storage
 from easy_cheese.shared.wheypoint import projection as projection_mod
 
 STORES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "stores"
@@ -244,6 +244,39 @@ def test_prior_store_loads_as_v5(name: str, stamp: int, tmp_path: Path) -> None:
     for entry in records.entries(record):
         assert not any(hasattr(entry, key) for key in ("origin", "copies", "successor"))
     assert tree_hashes(store.root) == before, "a read wrote to the store"
+
+
+@pytest.mark.parametrize("name", [param.values[0] for param in PRIOR_STORES])
+def test_prior_store_resolves_and_the_resolve_writes_nothing(
+    name: str, tmp_path: Path
+) -> None:
+    store = open_fixture(name, tmp_path)
+    record = store.read_record()
+    assert record is not None
+    before = tree_hashes(store.root)
+    # The fixture workspace holds none of the linked artifacts, so each link
+    # reads back its own stored digest; the check under test is the store.
+    linked = {
+        records.effective_ref(link): link.digest
+        for link in record.artifact_links
+        if link.digest is not None
+    }
+
+    resolution = resolve.resolve(
+        record.work_id,
+        corpus_root=tmp_path,
+        project_key=record.project_key,
+        workspace_root=tmp_path,
+        artifact_digest=linked.get,
+    )
+
+    expected = (
+        resolve.ResolutionOutcome.GATED
+        if name == "v4-blocker"
+        else resolve.ResolutionOutcome.AUTHORITATIVE
+    )
+    assert resolution.outcome is expected, resolution
+    assert tree_hashes(store.root) == before, "resolve wrote to the store"
 
 
 def test_v4_blocker_loads_as_a_blocking_question(tmp_path: Path) -> None:

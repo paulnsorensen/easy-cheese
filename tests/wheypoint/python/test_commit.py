@@ -767,8 +767,8 @@ def test_lineage_reads_the_current_receipt_once_per_commit(
     make_promotion: Callable[..., Promotion],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Lineage structures the whole chain from the one receipt scan, so the
-    record's own pointer costs no second read of the receipt it names."""
+    """Lineage reads only the head receipt, once, so a commit costs the same
+    however long the history is."""
     seed = _seed(store, make_promotion)
     second = commit.commit(
         _delta(seed.record.revision_id, orientation="Second."), store=store
@@ -794,7 +794,7 @@ def test_lineage_reads_the_current_receipt_once_per_commit(
         _delta(third.record.revision_id, orientation="Fourth."), store=store
     )
 
-    assert [reads.count(receipt.name) for receipt in receipts] == [1, 1, 1]
+    assert [reads.count(receipt.name) for receipt in receipts] == [0, 0, 1]
 
 
 def test_a_held_record_lock_blocks_the_transaction_until_it_is_released(

@@ -391,23 +391,13 @@ def _finalize(
 
 
 def _check_lineage(store: storage.WorkStore, current: WheypointRecord) -> None:
-    stored = store.stored_receipts()
-    found = next(
-        (
-            receipt
-            for receipt in stored
-            if receipt.revision.revision_id == current.revision_id
-            and receipt.revision.revision_number == current.revision_number
-        ),
-        None,
-    )
-    parent = None if found is None else found.revision
-    if parent is None:
+    found = store.stored_receipt(current.revision_number, current.revision_id)
+    if found is None:
         raise CommitError(
             f"current revision {current.revision_id!r} has no immutable receipt "
             + "in this store"
         )
-    if found is None or found.digest != current.revision_digest:
+    if found.digest != current.revision_digest:
         raise CommitError(
             f"current revision {current.revision_id!r} does not match the digest "
             + "the record quotes"

@@ -103,6 +103,10 @@ writer read. This keeps every phase ready for a compaction.
 - Keep `record.revision_id` from the `authoritative` phase-entry resolve as `<base>`.
 - Pass `--base <base>` to each handoff write over an existing record.
 - Omit `--base` only when no record exists yet for the slug.
+- Pass `--base` only for chain phases. The writer refuses it for any other phase.
+- One exception: the workflow runtime's budget checkpoint has no earlier read
+  to name. It reads the record under one artifact lock and binds that revision
+  itself. No agent-facing write may do this.
 - After a compaction, resolve again before you write.
 - A `base-revision-required` or `stale-parent` refusal means: resolve again,
   apply your result again, then write.

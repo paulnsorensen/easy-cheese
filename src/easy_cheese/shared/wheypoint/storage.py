@@ -360,6 +360,23 @@ class WorkStore:
         receipts.sort(key=lambda receipt: receipt.revision.revision_number)
         return tuple(receipts)
 
+    def stored_receipt(self, number: int, revision_id: str) -> StoredReceipt | None:
+        """The one receipt for this revision, or None when it is absent or unreadable.
+
+        Reads and hashes only that file, so a caller that checks the head does
+        not pay for the whole history.
+        """
+        path = self.revision_path(number, revision_id)
+        if not path.is_file():
+            return None
+        structured = self._structure_receipt(path)
+        if isinstance(structured, str):
+            return None
+        revision = structured.revision
+        if revision.revision_id != revision_id or revision.revision_number != number:
+            return None
+        return structured
+
     def survey_receipts(self) -> ReceiptSurvey:
         """Reconcile the record against its receipts without hashing a projection.
 

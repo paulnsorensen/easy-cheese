@@ -362,11 +362,23 @@ def _preamble(lines: list[str], body_start: int) -> dict[str, str]:
     values.update(_keyed(lines, ("artifact",), artifact_line))
     orientation_line = artifact_line + 1
     identifiers = _identifiers_start(lines, body_start)
+    orientation_start = orientation_line
     if identifiers is None:
         # Schema 4 and older: the pins sit above the title.
-        start = _meta_start(lines, body_start)
-        orientation_end = start - 1
         keys = _LEGACY_META_KEYS
+        try:
+            start = _meta_start(lines, body_start)
+            orientation_end = start - 1
+        except ProjectionParseError:
+            # Schema 1 stored the pins right after the artifact line, with the
+            # orientation below them.
+            if not lines[orientation_line].startswith(f"{keys[0]}: "):
+                raise
+            start = orientation_line
+            orientation_start = start + len(keys)
+            orientation_end = body_start - 2
+            if orientation_end < orientation_start or lines[orientation_end].strip():
+                raise ProjectionParseError("the orientation must end with a blank line") from None
     else:
         start = identifiers + 2
         orientation_end = body_start - 2
@@ -375,7 +387,7 @@ def _preamble(lines: list[str], body_start: int) -> dict[str, str]:
             raise ProjectionParseError("the orientation must end with a blank line")
         if lines[identifiers + 1].strip():
             raise ProjectionParseError(f"{_IDENTIFIERS_HEADING!r} must be followed by a blank line")
-    orientation = "\n".join(lines[orientation_line:orientation_end]).strip()
+    orientation = "\n".join(lines[orientation_start:orientation_end]).strip()
     if not orientation:
         raise ProjectionParseError("orientation line must be non-empty")
     values["orientation"] = orientation
