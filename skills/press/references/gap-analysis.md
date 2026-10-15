@@ -67,6 +67,7 @@ Do not add tests for unchanged or out-of-contract code.
 - A second `coverage_gap` in one Cook run stops with `status: halt: coverage-gap` and `next: done`.
 - Press allows at most 2 Cook corrections for the same attack. A third finding on that attack stops with `status: halt: correction-cap` and `next: done`.
 - Cook counts the rounds and passes the round number and attack identity. Press halts only from that number. A manual run reads prior rounds from `.cheese/press/<slug>.md`.
+- A Cook run allows at most 6 Press rounds in total, on both the linear and fan paths. The sixth round that does not end green halts with `status: halt: press-round-limit`. In the linear path that halt reports `next: done`. In the fan path the orchestrator blocks the curd and routes to Mold.
 - Invalid evidence and production changes stop.
 - That stop is `blocked`. It reports `status: halt: <reason>` and `next: done`.
 

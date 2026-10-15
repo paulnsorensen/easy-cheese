@@ -8,3 +8,5 @@ input_schema_uris:
 outputs:
   - destination: age
     payload_schema_uri: https://schemas.easy-cheese.dev/curd-result
+  - destination: cook
+    payload_schema_uri: https://schemas.easy-cheese.dev/curd-result

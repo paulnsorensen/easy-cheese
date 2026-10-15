@@ -5,7 +5,7 @@
 ## Propagation graph
 
 ```
-/cheese --hard → /mold → /cook → /press → /age → /cure → /plate --hard
+/cheese --hard → /mold → /cook (⇄ /press) → /age → /cure → /plate --hard
                                                                     │
                                                                     └──► /hard-cheese
 ```
