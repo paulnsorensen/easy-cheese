@@ -17,7 +17,7 @@ When zero triggers fire, invoke `/mold`'s agent mode to write a mini-specificati
 Never name a literal specification path for `/mold`.
 Return the spec; do not dispatch Cook yet.
 Dispatch Cook only after the user selects Cook. The coherence self-check in [`../../mold/references/handshake.md`](../../mold/references/handshake.md) is the only execution gate.
-Tier 1 is standalone work: dispatch `/cook --spec <spec-path>` with no finalize step.
+Tier 1 is standalone work: dispatch `/cook --spec <spec-path>` with no finalize step. Cook applies its spec-hold refusal first.
 Add `--auto` only when the user chose it.
 Bound curd work belongs to `/mold`'s Full path.
 Dispatch the exact `command` that finalize prints.
@@ -62,7 +62,7 @@ Act on the result, do not guess:
 
 1. **One clear match (high confidence)** — surface the resolved specification path in one line.
    A Full or planned match goes to `/mold` finalize and its printed `--result` command.
-   Any other match dispatches `/cook --spec <resolved-spec-path>`; add `--auto` only when the user chose it.
+   Any other match dispatches `/cook --spec <resolved-spec-path>` (Cook applies its spec-hold refusal first); add `--auto` only when the user chose it.
    Do not write a duplicate.
 2. **Multiple plausible matches or one weak match** — under `--safe`, let the user select a candidate.
    Without `--safe`, ignore the weak match and fall through to the tier-1 leverage check above. A fired trigger still dispatches `/mold`'s user mode; only zero fired triggers mint a new mini-specification.
