@@ -12,7 +12,7 @@ from `ref_grammar` and owns the digest a reference pins:
 | `https:`     | a PR, issue, or URL                                     | none |
 
 A `:line`, `:line@sha`, or `#symbol` locator on a `repo:` or `xdg:` path is
-left off when the file is found, so the digest pins the whole file. A
+left off when the literal path is not a file, so the digest pins the whole file. A
 `repo:` or `xdg:` path that climbs out of its root is refused, and a
 file reached through a symlink outside that root has no digest. A
 `wheypoint:` target is read without its lock: the read is a pin, not a write.
@@ -35,6 +35,7 @@ from .ref_grammar import (
     locator_path,
     normalize_ref,
     parse_ref,
+    strip_pin,
 )
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "parse_ref",
     "pin_record",
     "resolve_ref",
+    "strip_pin",
 ]
 
 
@@ -65,10 +67,10 @@ def resolve_ref(ref: str, *, checkout: Path, corpus_home: Path) -> ResolvedRef:
     location: Path | None = None
     digest: str | None = None
     if parsed.scheme is Scheme.REPO:
-        location, digest = _file(Path(checkout), locator_path(_required(parsed.path)))
+        location, digest = _file(Path(checkout), _required(parsed.path))
     elif parsed.scheme is Scheme.XDG:
         root = Path(corpus_home) / _required(parsed.project_key)
-        location, digest = _file(root, locator_path(_required(parsed.path)))
+        location, digest = _file(root, _required(parsed.path))
     elif parsed.scheme is Scheme.WHEYPOINT:
         location, digest = _record(parsed, Path(corpus_home))
     return ResolvedRef(
@@ -125,7 +127,15 @@ def _required(value: str | None) -> str:
     return value
 
 
-def _file(root: Path, relative: str) -> tuple[Path, str | None]:
+def _file(root: Path, text: str) -> tuple[Path, str | None]:
+    """The file `text` names: the literal path first, then without a locator."""
+    location, digest = _digest_file(root, text)
+    if digest is not None:
+        return location, digest
+    return _digest_file(root, locator_path(text))
+
+
+def _digest_file(root: Path, relative: str) -> tuple[Path, str | None]:
     location = root / relative
     try:
         resolved_root = root.resolve()

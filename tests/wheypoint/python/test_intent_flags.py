@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -423,6 +424,13 @@ def test_scope_operator_on_a_question_is_refused_by_the_schema() -> None:
 def _checkout(root: Path) -> Path:
     (root / "src").mkdir(parents=True)
     _ = (root / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+    _ = (root / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    for args in (
+        ["init", "-q"],
+        ["add", "-A"],
+        ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
+    ):
+        _ = subprocess.run(["git", "-C", str(root), *args], check=True)
     return root
 
 
@@ -447,7 +455,7 @@ def test_pin_line_ref_in_context_and_artifact_link(tmp_path: Path) -> None:
         {"path": "src/app.py:7@abc1234"},
         {"path": "src/app.py:7@abc1234", "ref": "repo:src/app.py:7@abc1234"},
     ]
-    assert warnings == []
+    assert warnings == ["unpinned-line-ref"]
     assert payload["working_context"] == [
         "see src/app.py:12 and src/app.py:3-9, not src/gone.py:4"
     ]
@@ -487,3 +495,33 @@ def test_symbol_ref_and_already_pinned_ref_stay_as_written(tmp_path: Path) -> No
 
     assert pinned == payload
     assert warnings == []
+
+
+def test_untracked_and_ignored_files_stay_unpinned_and_warn(tmp_path: Path) -> None:
+    checkout = _checkout(tmp_path)
+    _ = (checkout / "new.py").write_text("y = 2\n", encoding="utf-8")
+    _ = (checkout / "scratch.log").write_text("z\n", encoding="utf-8")
+    payload: dict[str, object] = {
+        "working_context": ["new.py:1", "scratch.log:2", "src/gone.py:4"]
+    }
+
+    pinned, warnings = intent_flags.pin_line_refs(
+        payload, checkout=checkout, head="abc1234"
+    )
+
+    assert pinned == payload
+    assert warnings == ["unpinned-line-ref"]
+
+
+def test_a_host_and_port_is_not_a_line_ref(tmp_path: Path) -> None:
+    payload: dict[str, object] = {
+        "working_context": ["curl 127.0.0.1:8080 and example.com:443"]
+    }
+
+    assert intent_flags.pin_line_refs(payload, checkout=None, head=None) == (
+        payload,
+        [],
+    )
+    assert intent_flags.pin_line_refs(
+        payload, checkout=_checkout(tmp_path), head="abc1234"
+    ) == (payload, [])

@@ -21,17 +21,24 @@ from __future__ import annotations
 
 import copy
 import re
+import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
 from easy_cheese_schemas.contracts import EdgeKind
 
+from easy_cheese.shared import git_utils
+
 from . import commit, ref_grammar
 
 __all__ = ["UNPINNED_LINE_REF", "IntentFlagError", "overlay", "pin_line_refs"]
 
 UNPINNED_LINE_REF = "unpinned-line-ref"
+# A name that ends in one of these, with no `/`, reads as a host and port.
+_HOST_SUFFIXES = frozenset(
+    {"com", "org", "net", "io", "dev", "ai", "local", "localhost", "internal"}
+)
 
 
 class IntentFlagError(ValueError):
@@ -154,10 +161,12 @@ def pin_line_refs(
     """`payload` with each bare `path:line` pinned to `head`, and the warnings.
 
     Only `working_context` items and `artifact_links` are read. A token pins
-    when it names an existing file in `checkout`; `path#symbol` and an already
-    pinned token stay as written. With no checkout or no `head`, a token that
-    looks like `path:line` stays unpinned and the warning `unpinned-line-ref`
-    names it once. The pin is made at checkpoint and never on read.
+    when its path is in the `head` commit of `checkout`; `path#symbol` and an
+    already pinned token stay as written. Any other `path:line` token stays
+    unpinned and the warning `unpinned-line-ref` names it once: no checkout,
+    no commit, or a file `head` does not hold (untracked or ignored). A host
+    and port such as `example.com:443` is not a line reference. The pin is
+    made at checkpoint and never on read.
     """
     result: dict[str, object] = copy.deepcopy(dict(payload))
     unpinned = False
@@ -165,12 +174,15 @@ def pin_line_refs(
     def pin(text: str) -> str:
         def swap(match: re.Match[str]) -> str:
             nonlocal unpinned
-            if checkout is None or head is None:
+            if (
+                checkout is not None
+                and head is not None
+                and _in_head(checkout, match["path"])
+            ):
+                return f"{match['path']}:{match['line']}@{head}"
+            if not _is_host_port(match["path"]):
                 unpinned = True
-                return match.group(0)
-            if not _is_checkout_file(checkout, match["path"]):
-                return match.group(0)
-            return f"{match['path']}:{match['line']}@{head}"
+            return match.group(0)
 
         return ref_grammar.LINE_REF_RE.sub(swap, text)
 
@@ -205,12 +217,22 @@ def _pin_link(
     return pinned
 
 
-def _is_checkout_file(checkout: Path, relative: str) -> bool:
+def _in_head(checkout: Path, relative: str) -> bool:
     try:
-        resolved = (checkout / relative).resolve()
-        return resolved.is_file() and resolved.is_relative_to(checkout.resolve())
-    except (OSError, RuntimeError):
+        found = git_utils.run_git(
+            ["cat-file", "-e", f"HEAD:{relative}"], cwd=checkout, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
         return False
+    return found.returncode == 0
+
+
+def _is_host_port(path: str) -> bool:
+    """Whether `path` reads as a host (`127.0.0.1`, `example.com`), not a file."""
+    if "/" in path:
+        return False
+    last = path.rsplit(".", 1)[-1].lower()
+    return last.isdigit() or last in _HOST_SUFFIXES
 
 
 def _check_pairing(

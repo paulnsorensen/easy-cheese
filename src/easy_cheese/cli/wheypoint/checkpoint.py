@@ -408,7 +408,7 @@ def _held_covers(held: Sequence[tuple[str, Sequence[str]]], ref: str) -> list[st
 
 def _normalized(ref: str) -> str:
     try:
-        return ref_grammar.normalize_ref(ref)
+        return ref_grammar.strip_pin(ref_grammar.normalize_ref(ref))
     except ValueError:
         return ref
 

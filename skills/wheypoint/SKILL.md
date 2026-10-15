@@ -78,7 +78,8 @@ The runtime refuses an intent instead of dropping data.
 
 - It refuses an unknown key and names its path.
 - It refuses a first checkpoint that carries no entry and no notes.
-- It refuses `next: affinage` without a PR reference in `artifact`, and `next: cook` without an `artifact`.
+- It refuses `next: affinage` without a PR reference in `artifact`.
+- It refuses `next: cook` without an `artifact`.
 - It refuses text that matches a credential pattern and names the field.
 - It refuses an empty `artifact_links` or `remove_artifact_links` list.
 - It derives `status:` from the gating entries per the [handback contract](../cheese/references/handback-contract.md); no author sets it.
@@ -87,7 +88,8 @@ The runtime refuses an intent instead of dropping data.
 - It derives every identifier, digest, and revision.
 - It refuses an agent-authored `fork` transition and a `forked_from` edge in a delta.
 - It refuses `notes` over 6000 characters.
-- It pins a bare `path:line` in `working_context` or an artifact link to `path:line@<short HEAD sha>` when the file exists in the checkout, warns with `unpinned-line-ref` when no checkout exists, and lists each local reference (an `xdg:` ref, an absolute path outside the checkout, or a Git-ignored path) under `## Local references`.
+- It pins a bare `path:line` in `working_context` or an artifact link to `path:line@<short HEAD sha>` when `HEAD` holds the file, and otherwise warns with `unpinned-line-ref` (no checkout or commit, or an untracked, ignored, or absent file).
+- It lists each local reference (an `xdg:` ref, an absolute path outside the checkout, or a Git-ignored path) under `## Local references`.
 - It warns with `stale-notes` when a decision changes and `notes` stay as they were, marks that drift at the top of `## Notes`, and lists an entry that `checkpoint --supersede <old> [--by <new>] --rationale <why>` replaced under `## Superseded`.
 
 Fix a refused intent and run `checkpoint` again.
@@ -113,9 +115,7 @@ The projection is never the authority; never edit it and never resume from it by
 The meaning of each `next:` value is in [`references/intent-contract.md`](references/intent-contract.md); `briesearch` and `culture` are read-only kickoffs, and `tasks` follows [`references/parallel-handoffs.md`](references/parallel-handoffs.md).
 A missing `next:` makes the handoff malformed; use `hold` when no action follows.
 Derive `next:` and `status:` from the open questions, not from expected success.
-
 Use `status: gated:` for every human decision; the resumed agent asks through the shared [handoff gate](../cheese/references/handoff-gate.md) before it dispatches.
-
 Handwritten notes, their legacy values, and their provenance fields are in [`references/legacy-notes.md`](references/legacy-notes.md) and [`references/provenance-fields.md`](references/provenance-fields.md).
 
 ## Rules

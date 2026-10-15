@@ -41,8 +41,6 @@ from easy_cheese_schemas.handback_status import (
     render_status_field,
 )
 
-from easy_cheese.shared import git_utils
-
 from . import canonical, records
 from .ref_grammar import Scheme, locator_path
 
@@ -233,21 +231,13 @@ def _superseded(record: WheypointRecord) -> list[str]:
     return ["", _SUPERSEDED_HEADING, "", *(f"- {e.entry_id} -> {e.superseded_by}" for e in moved)]
 
 
-def _checkout() -> Path | None:
-    """The Git worktree root of the working directory, or None outside one."""
-    try:
-        top = git_utils.run_git(["rev-parse", "--show-toplevel"], timeout=5)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return Path(top.stdout.strip()) if top.returncode == 0 and top.stdout.strip() else None
-
-
-def _local_references(record: WheypointRecord) -> list[str]:
+def _local_references(record: WheypointRecord, checkout: Path | None) -> list[str]:
     """The `## Local references` section, or nothing when no reference is local.
 
     A reference is local when it needs the author's machine: an `xdg:` ref, an
-    absolute path outside the checkout, or a repository path Git ignores.
-    Outside a checkout only the first two classify.
+    absolute path outside `checkout`, or a repository path Git ignores.
+    Without a checkout only the first two classify. The section depends on
+    `checkout`, never on the working directory.
     """
     candidates: list[tuple[str, bool]] = []
     for link in record.artifact_links:
@@ -259,26 +249,36 @@ def _local_references(record: WheypointRecord) -> list[str]:
             token = word.strip(_TOKEN_OPEN).rstrip(_TOKEN_CLOSE)
             if "/" in token or "." in token:
                 candidates.append((token, True))
-    checkout = _checkout() if candidates else None
-    found: list[str] = []
+    verdicts: dict[str, bool | str] = {}
     for text, must_exist in candidates:
-        if text not in found and _is_local(text, checkout, must_exist=must_exist):
-            found.append(text)
+        if text not in verdicts:
+            verdicts[text] = _classify(text, checkout, must_exist=must_exist)
+    to_check = sorted({v for v in verdicts.values() if isinstance(v, str)})
+    ignored: set[str] = _ignored(to_check, checkout) if checkout is not None else set()
+    found = [
+        text
+        for text, verdict in verdicts.items()
+        if verdict is True or (isinstance(verdict, str) and verdict in ignored)
+    ]
     if not found:
         return []
     return ["", _LOCAL_HEADING, "", *(f"- {escape(text)}" for text in found)]
 
 
-def _is_local(text: str, checkout: Path | None, *, must_exist: bool) -> bool:
+def _classify(text: str, checkout: Path | None, *, must_exist: bool) -> bool | str:
+    """True when `text` is local, False when it is not, or the checkout-relative
+    path whose Git-ignored state decides it."""
     if text.lower().startswith(f"{Scheme.XDG.value}:"):
         return True
     path = locator_path(text)
     path = path.removeprefix(f"{Scheme.REPO.value}:")
     try:
         if path.startswith("/"):
+            absolute = Path(path).resolve()
+            if must_exist and not absolute.exists():
+                return False
             if checkout is None:
                 return True
-            absolute = Path(path).resolve()
             root = checkout.resolve()
             if not absolute.is_relative_to(root):
                 return True
@@ -287,15 +287,34 @@ def _is_local(text: str, checkout: Path | None, *, must_exist: bool) -> bool:
             return False
         if must_exist and not (checkout / path).exists():
             return False
-        ignored = git_utils.run_git(
-            ["check-ignore", "-q", "--", path], cwd=checkout, timeout=5
-        )
-    except (OSError, RuntimeError, subprocess.SubprocessError):
+    except (OSError, RuntimeError):
         return False
-    return ignored.returncode == 0
+    return path
 
 
-def _body(record: WheypointRecord) -> list[str]:
+def _ignored(candidates: list[str], checkout: Path) -> set[str]:
+    """The members of `candidates` Git ignores in `checkout`, in one call."""
+    if not candidates:
+        return set()
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--stdin", "-z"],
+            cwd=checkout,
+            input="\0".join(candidates) + "\0",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if result.returncode not in (0, 1):
+        return set()
+    return {item for item in result.stdout.split("\0") if item}
+
+
+def _body(record: WheypointRecord, checkout: Path | None) -> list[str]:
     """The human sections: everything the record holds that the pins do not."""
     lines: list[str] = []
     active = [e for e in records.entries(record) if e.state is EntryState.ACTIVE]
@@ -354,7 +373,7 @@ def _body(record: WheypointRecord) -> list[str]:
             lines.append(f"  rationale: {escape(edge.rationale)}")
     if not record.edges:
         lines.append(_NONE)
-    return lines + _superseded(record) + _local_references(record)
+    return lines + _superseded(record) + _local_references(record, checkout)
 
 
 def _tasks(action: NextAction) -> list[str]:
@@ -378,8 +397,16 @@ def _tasks(action: NextAction) -> list[str]:
     return lines
 
 
-def render(projection: WheypointProjection, record: WheypointRecord) -> str:
+def render(
+    projection: WheypointProjection,
+    record: WheypointRecord,
+    *,
+    checkout: Path | None = None,
+) -> str:
     """Render the projection with the human body sections from `record`.
+
+    `checkout` is the repository root that classifies local references; None
+    means no checkout. The output never depends on the working directory.
 
     The gates, the tasks and the identifiers come from the
     projection and are parsed back; the body is derived from the record and is
@@ -412,7 +439,7 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
             lines.append(line)
     else:
         lines.append(_NONE)
-    lines += ["", *_body(record)]
+    lines += ["", *_body(record, checkout)]
     lines += _tasks(action)
     lines += [
         "",
@@ -429,7 +456,10 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
 
 
 def build_projection(
-    record: WheypointRecord, *, durability: Durability
+    record: WheypointRecord,
+    *,
+    durability: Durability,
+    checkout: Path | None = None,
 ) -> tuple[WheypointProjection, str]:
     """Derive the projection for `record` and render it, in one step."""
     projection = WheypointProjection(
@@ -441,7 +471,7 @@ def build_projection(
         gating_entry_ids=list(record.gating_entry_ids),
         durability=durability,
     )
-    return projection, render(projection, record)
+    return projection, render(projection, record, checkout=checkout)
 
 
 def _keyed(lines: list[str], keys: Sequence[str], start: int) -> dict[str, str]:

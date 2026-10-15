@@ -527,3 +527,15 @@ def test_a_line_or_symbol_locator_digests_the_whole_file(
     assert whole is not None
     for ref in ("repo:a.py:3", "repo:a.py:3-9@abc1234", "repo:a.py#main"):
         assert refs.digest_ref(ref, checkout=checkout, corpus_home=corpus_root) == whole
+
+
+def test_a_file_whose_name_holds_a_locator_shape_digests_that_file(
+    checkout: Path, corpus_root: Path
+) -> None:
+    _ = (checkout / "a#1.md").write_text("literal\n", encoding="utf-8")
+    _ = (checkout / "a.md").write_text("plain\n", encoding="utf-8")
+
+    literal = refs.digest_ref("repo:a#1.md", checkout=checkout, corpus_home=corpus_root)
+    plain = refs.digest_ref("repo:a.md", checkout=checkout, corpus_home=corpus_root)
+
+    assert literal is not None and literal != plain

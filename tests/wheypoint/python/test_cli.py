@@ -3035,6 +3035,82 @@ def test_checkpoint_unpinned_line_ref_warns_outside_a_checkout(
     assert payload["warnings"] == ["unpinned-line-ref"]
 
 
+def _commit_again(root: Path) -> str:
+    _ = (root / "src" / "app.py").write_text("x = 2\n", encoding="utf-8")
+    env = ["-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for args in (["add", "."], [*env, "commit", "-q", "-m", "again"]):
+        _ = subprocess.run(
+            ["git", "-C", str(root), *args], check=True, capture_output=True
+        )
+    head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return head.stdout.strip()
+
+
+def test_a_line_ref_repinned_at_a_new_head_replaces_the_old_pin_and_keeps_coverage(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = corpus_root
+    repo = tmp_path / "repo"
+    first_head = _commit_repo(repo)
+    monkeypatch.chdir(repo)
+    seeded = _seed(entries=[{"kind": "decision", "summary": "D.", "rationale": "R."}])
+    decision = _decision_ids(seeded)[0]
+    status, payload = _run(
+        "checkpoint",
+        "--no-note",
+        stdin=_intent_json(
+            artifact_links=[{"path": "src/app.py:1", "covers_entry_ids": [decision]}]
+        ),
+    )
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert [link["path"] for link in links] == [f"src/app.py:1@{first_head}"]
+    second_head = _commit_again(repo)
+    assert second_head != first_head
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--no-note", "--link", "repo:src/app.py:1",
+        "--kind", "supersedes",
+    )
+
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert [link["path"] for link in links] == [f"src/app.py:1@{second_head}"]
+    assert links[0]["covers_entry_ids"] == [decision]
+
+    status, payload = _run(
+        "checkpoint",
+        "--no-note",
+        stdin=_intent_json(remove_artifact_links=["src/app.py:1"]),
+    )
+    assert status == 0, payload
+    assert _get(payload, "record", "artifact_links") == []
+
+
+def test_checkpoint_leaves_an_untracked_line_ref_unpinned_and_warns(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = corpus_root
+    repo = tmp_path / "repo"
+    _ = _commit_repo(repo)
+    _ = (repo / "new.py").write_text("y = 1\n", encoding="utf-8")
+    monkeypatch.chdir(repo)
+    intent = cast("dict[str, object]", json.loads(_line_ref_intent(link=False)))
+    intent["working_context"] = ["see new.py:1"]
+
+    status, payload = _run("checkpoint", "--no-note", stdin=json.dumps(intent))
+
+    assert status == 0, payload
+    record = cast(dict[str, object], payload["record"])
+    assert record["working_context"] == ["see new.py:1"]
+    assert payload["warnings"] == ["unpinned-line-ref"]
+
+
 def _two_decisions() -> tuple[str, str]:
     seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
     status, added = _run(
