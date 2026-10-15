@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from easy_cheese_schemas._schema_catalog import (
+from easy_cheese_schemas import (
     CURD_PLAN_SCHEMA_URI,
     CURD_RESULT_SCHEMA_URI,
     MOLD_COOK_HANDOFF_SCHEMA_URI,
