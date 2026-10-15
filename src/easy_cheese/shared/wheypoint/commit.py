@@ -705,7 +705,9 @@ def _apply(
         digest_of=digest_of,
         decisions_moved=bool(additions[EntryKind.DECISION])
         or any(
-            _names_decision(current, transition.entry_id) for transition in transitions
+            (entry := records.find_entry(current, transition.entry_id)) is not None
+            and entry.kind is EntryKind.DECISION
+            for transition in transitions
         ),
     )
     merged = _merge_edges(
@@ -963,11 +965,6 @@ def _draft_record(
         )
     except ValueError as exc:
         raise CommitError(f"the delta does not produce a legal record: {exc}") from exc
-
-
-def _names_decision(record: WheypointRecord, entry_id: str) -> bool:
-    """Whether `entry_id` names one of the record's decisions."""
-    return any(entry.entry_id == entry_id for entry in record.decisions)
 
 
 def _replaced(proposed: object, carried: object) -> object:
