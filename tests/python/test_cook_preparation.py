@@ -7,6 +7,7 @@ import inspect
 import json
 import shutil
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -240,7 +241,9 @@ def test_pointer_for_another_schema_keeps_its_specific_code_and_path(
     tmp_path: Path,
 ) -> None:
     pointer, _, _ = published_handoff(tmp_path / "artifacts", "operation-other-schema")
-    index = json.loads(pointer.read_text(encoding="utf-8"))
+    index = cast(
+        dict[str, dict[str, object]], json.loads(pointer.read_text(encoding="utf-8"))
+    )
     other = "https://schemas.easy-cheese.dev/curd-plan"
     index["request"]["payload_schema_uri"] = other
     index["payload"]["schema_uri"] = other
