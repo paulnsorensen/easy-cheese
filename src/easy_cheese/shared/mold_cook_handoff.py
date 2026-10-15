@@ -641,6 +641,16 @@ def validate_bound_execution(
     readiness = evaluate_mold_cook_spec(spec_content, spec_ref=spec_ref, plan=plan)
     if readiness.holds:
         raise ContractValidationError("spec retains execution holds")
+    if readiness.lifecycle != "approved":
+        raise ContractValidationError(
+            f"spec lifecycle {readiness.lifecycle!r} is not approved"
+        )
+    document, _, _ = typed_mold_document(spec_content.decode("utf-8"))
+    if document.frontmatter.gates_overridden:
+        raise ContractValidationError(
+            "spec overrides handshake gates: "
+            + ", ".join(document.frontmatter.gates_overridden)
+        )
     directive = request_directive(spec_content.decode("utf-8"))
     if directive is not None:
         raise ContractValidationError(

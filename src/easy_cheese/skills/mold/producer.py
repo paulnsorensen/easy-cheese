@@ -411,9 +411,15 @@ def _save_result(root: Path, operation_id: str, output: Mapping[str, object]) ->
     path = _result_path(root, operation_id)
     payload = (json.dumps(output, sort_keys=True, indent=2) + "\n").encode()
     if path.exists():
-        if path.read_bytes() != payload:
+        existing = path.read_bytes()
+        if existing != payload:
+            try:
+                status = json.loads(existing).get("status", "unknown")
+            except (ValueError, AttributeError):
+                status = "unreadable"
             raise FinalizationError(
-                f"operation id {operation_id!r} already holds a different ready result"
+                f"operation id {operation_id!r} already holds a different result "
+                f"(status {status!r}); increase the ordinal to use a new operation id"
             )
         return path
     _write_bounded(path, payload)
