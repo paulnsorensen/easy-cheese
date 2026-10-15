@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, TextIO, cast
@@ -115,6 +116,7 @@ def run_resolve(
             project_key=project_key_,
             workspace_root=workspace_root,
             require_workspace=project_key_ is not None,
+            fuzzy=True,
         )
     )
     payload = resolve_cli.resolve_payload(resolution, ref, workspace_root=workspace_root)
@@ -281,8 +283,15 @@ def run_list(
     _ = enum_values("--edge-kind", edge_kind or (), EdgeKind, "flag-kind")
     _ = enum_values("--entry-kind", entry_kind or (), EntryKind, "flag-entry")
     _ = enum_values("--entry-state", entry_state or (), EntryState, "flag-entry")
-    # Only the default scope falls back: an explicit --scope keeps its meaning.
-    fallback = scope is None and not projects and paths.git_toplevel() is None
+    # Only the default scope falls back: an explicit --scope, --corpus-root, or
+    # $EASY_CHEESE_PROJECT names where to look, so it keeps its meaning.
+    fallback = (
+        scope is None
+        and not projects
+        and corpus_root is None
+        and not os.environ.get("EASY_CHEESE_PROJECT", "").strip()
+        and paths.outside_git_repository()
+    )
     effective_scope = "machine" if projects or fallback else scope or "project"
     result = discovery.discover(
         scope=effective_scope,

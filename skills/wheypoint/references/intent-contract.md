@@ -139,7 +139,7 @@ A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error"
 - **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `bridge`.
 - **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`, `bridge`.
 - **`fork`** replies are in [`work-graph.md`](work-graph.md).
-- **`list`** returns `corpus_root`, `items`, and `lines`.
+- **`list`** returns `corpus_root`, `items`, and `lines`, plus `scope-fallback` only when the scope fell back.
 - **`log`** returns `work_id`, `revisions`, `lines`, and `unreadable`.
 - **`turns`** returns `transcript`, `count`, `skipped_lines`, `turns`, and `lines`.
 
@@ -160,6 +160,8 @@ This escaping keeps one line one record.
 `skipped_lines` (from `turns`) counts transcript lines that could not be parsed as a turn.
 `count` (from `turns`) is the number of turns returned.
 `corpus_root` (from `list`) is the resolved root directory the listing scanned.
+`scope-fallback` (from `list`) is `machine` when `list` ran with no `--scope`, `--project`, `--corpus-root`, or `$EASY_CHEESE_PROJECT` outside a Git checkout, and so searched machine scope.
+Under that fallback, `corpus_root` is the project corpus root that would apply, not the root scanned; the scan covered every project corpus.
 
 Exit `0` means the command succeeded; the reply carries the command's own fields.
 Exit `1` means the command refused the request; the stderr line carries `error` and `exit_code`.

@@ -70,6 +70,7 @@ def run(
     workspace_root: Path | None = None,
     git_object_exists: Callable[[str], bool] = lambda obj: True,
     artifact_digest: Callable[[str], str | None] = lambda path: None,
+    fuzzy: bool = False,
 ) -> resolve_mod.Resolution:
     return resolve_mod.resolve(
         ref,
@@ -78,6 +79,7 @@ def run(
         workspace_root=workspace_root,
         git_object_exists=git_object_exists,
         artifact_digest=artifact_digest,
+        fuzzy=fuzzy,
     )
 
 
@@ -1458,7 +1460,7 @@ def test_a_unique_slug_prefix_resolves_authoritative(
 ) -> None:
     _seed_slugs(corpus_root, make_record, make_promotion, ("alpha-build", "beta-ship"))
 
-    found = run("alpha", corpus_root)
+    found = run("alpha", corpus_root, fuzzy=True)
 
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.work_id == "work-0001"
@@ -1476,7 +1478,7 @@ def test_an_ambiguous_slug_prefix_lists_every_candidate(
         ("alpha-build", "alpha-ship", "beta-ship"),
     )
 
-    found = run("alpha", corpus_root)
+    found = run("alpha", corpus_root, fuzzy=True)
 
     assert found.outcome is resolve_mod.ResolutionOutcome.AMBIGUOUS
     assert found.matches == ("work-0001", "work-0002")
@@ -1489,7 +1491,7 @@ def test_a_unique_slug_substring_resolves_when_no_prefix_matches(
 ) -> None:
     _seed_slugs(corpus_root, make_record, make_promotion, ("alpha-build", "beta-ship"))
 
-    found = run("ship", corpus_root)
+    found = run("ship", corpus_root, fuzzy=True)
 
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.work_id == "work-0002"
@@ -1507,7 +1509,7 @@ def test_an_ambiguous_slug_substring_lists_every_candidate(
         ("alpha-ship", "beta-ship", "gamma-build"),
     )
 
-    found = run("ship", corpus_root)
+    found = run("ship", corpus_root, fuzzy=True)
 
     assert found.outcome is resolve_mod.ResolutionOutcome.AMBIGUOUS
     assert found.matches == ("work-0001", "work-0002")
@@ -1525,7 +1527,7 @@ def test_an_exact_slug_beats_a_prefix_and_substring_match(
         ("widget-extra", "widget", "my-widget"),
     )
 
-    found = run("widget", corpus_root)
+    found = run("widget", corpus_root, fuzzy=True)
 
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.work_id == "work-0002"
@@ -1538,10 +1540,66 @@ def test_a_slug_prefix_beats_a_substring_match(
 ) -> None:
     _seed_slugs(corpus_root, make_record, make_promotion, ("my-widget", "widget-extra"))
 
-    found = run("widget", corpus_root)
+    found = run("widget", corpus_root, fuzzy=True)
 
     assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
     assert found.work_id == "work-0002"
+
+
+def test_a_fuzzy_match_names_how_it_matched_and_the_ambiguous_detail_lists_slugs(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root,
+        make_record,
+        make_promotion,
+        ("alpha-build", "alpha-ship", "beta-ship"),
+    )
+
+    unique = run("beta", corpus_root, fuzzy=True)
+    ambiguous = run("alpha", corpus_root, fuzzy=True)
+
+    assert unique.detail is not None
+    assert "matched by prefix" in unique.detail
+    assert ambiguous.detail is not None
+    assert "work-0001 (alpha-build)" in ambiguous.detail
+    assert "work-0002 (alpha-ship)" in ambiguous.detail
+
+
+def test_phase_entry_resolve_stays_exact_and_never_guesses_a_slug(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root, make_record, make_promotion, ("alpha-build", "alpha-ship")
+    )
+
+    assert (
+        run("alpha", corpus_root).outcome is resolve_mod.ResolutionOutcome.NOT_FOUND
+    )
+    assert run("build", corpus_root).outcome is resolve_mod.ResolutionOutcome.NOT_FOUND
+
+
+def test_a_phase_artifact_beats_a_fuzzy_slug_match(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    tmp_path: Path,
+) -> None:
+    _seed_slugs(corpus_root, make_record, make_promotion, ("foo-bar",))
+    workspace = tmp_path / "workspace"
+    (workspace / ".cheese" / "age").mkdir(parents=True)
+    _ = (workspace / ".cheese" / "age" / "foo.md").write_text(
+        "status: ok\nnext: cook\nartifact: none\nFrom age.\n", encoding="utf-8"
+    )
+
+    for fuzzy in (False, True):
+        found = run("foo", corpus_root, workspace_root=workspace, fuzzy=fuzzy)
+        assert found.source is resolve_mod.ResolutionSource.PHASE_ARTIFACT
+        assert found.outcome is resolve_mod.ResolutionOutcome.LEGACY
 
 
 def test_a_future_schema_record_errors_by_slug_and_by_work_id_without_a_write(

@@ -8,7 +8,9 @@ then the legacy fallback:
 3. a *unique* slug in that corpus;
 4. `.cheese/{cure,age,press,cook}/<slug>.md` in fixed order;
 5. a safe legacy slug or exact `.cheese/notes/<slug>.md` path after an
-   authoritative miss.
+   authoritative miss;
+6. only when the caller asks for `fuzzy`, a unique slug prefix, then a unique
+   slug substring, after every tier above misses.
 
 A slug is an alias, not an identity, so two work ids answering to one slug is an
 ambiguity that names both. Nothing here breaks a tie by modification time,
@@ -168,8 +170,13 @@ def resolve(
     git_object_exists: Callable[[str], bool] | None = None,
     require_workspace: bool = False,
     artifact_digest: Callable[[str], str | None] | None = None,
+    fuzzy: bool = False,
 ) -> Resolution:
-    """Resolve an authoritative reference, then fall back to one legacy note."""
+    """Resolve an authoritative reference, then fall back to one legacy note.
+
+    `fuzzy` adds slug prefix, then substring, matching as the last tier, after
+    the exact slug, phase-artifact, and legacy lookups all miss.
+    """
     if not ref.strip():
         return Resolution(ResolutionOutcome.ERROR, detail="reference is empty")
 
@@ -260,6 +267,15 @@ def resolve(
         legacy = resolve_legacy(ref, start=root)
         if legacy.outcome is not ResolutionOutcome.NOT_FOUND:
             return legacy
+    if (
+        fuzzy
+        and not _is_path_ref(ref)
+        and authoritative.outcome is ResolutionOutcome.NOT_FOUND
+    ):
+        # Only a user-facing lookup guesses, and only after every exact tier missed.
+        guessed = _resolve_fuzzy_slug(ref, checks)
+        if guessed.outcome is not ResolutionOutcome.NOT_FOUND:
+            return guessed
     return authoritative
 
 
@@ -347,19 +363,13 @@ def _raw_slug(record_path: Path) -> str | None:
     return claimed if isinstance(claimed, str) else None
 
 
-def _slug_matches(
-    slug: str, checks: _Checks, *, mode: str = "exact"
-) -> tuple[str, ...]:
-    """Every work id whose record slug matches `slug` under `mode`, in work-id order.
+def _slug_records(checks: _Checks) -> Generator[tuple[str, str], None, None]:
+    """Each readable record's (work id, claimed slug), in work-id order.
 
-    `mode` is `exact`, `prefix`, or `substring`. Work-id order is reporting
-    order for an ambiguity, never a preference. An exact walk stops at the
-    second match, so an ambiguous slug never pays for a full corpus scan; a
-    prefix or substring walk lists every candidate.
+    Work-id order is reporting order for an ambiguity, never a preference.
     """
     if not checks.work_root.is_dir():
-        return ()
-    matched: list[str] = []
+        return
     for directory in sorted(checks.work_root.iterdir(), key=lambda p: p.name):
         record_path = directory / storage.RECORD_FILENAME
         if not record_path.is_file():
@@ -377,29 +387,41 @@ def _slug_matches(
             claimed = _raw_slug(record_path)
         except (storage.StorageError, ValueError, OSError):
             continue
-        if claimed is not None and _slug_fits(claimed, slug, mode):
-            matched.append(directory.name)
-            if mode == "exact" and len(matched) > 1:
+        if claimed is not None:
+            yield directory.name, claimed
+
+
+def _exact_slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
+    """Work ids whose slug equals `slug`; the walk stops at the second match."""
+    matched: list[str] = []
+    for work_id, claimed in _slug_records(checks):
+        if claimed == slug:
+            matched.append(work_id)
+            if len(matched) > 1:
                 break
     return tuple(matched)
 
 
-def _slug_fits(claimed: str, text: str, mode: str) -> bool:
-    if mode == "prefix":
-        return claimed.startswith(text)
-    if mode == "substring":
-        return text in claimed
-    return claimed == text
+def _fuzzy_slug_matches(
+    text: str, checks: _Checks
+) -> tuple[str, tuple[tuple[str, str], ...]]:
+    """One corpus read, classified in memory.
+
+    Returns the first of prefix then substring with any hit, as
+    `(mode, ((work_id, slug), ...))`, or `("", ())` on a miss.
+    """
+    records_ = tuple(_slug_records(checks))
+    prefix = tuple(item for item in records_ if item[1].startswith(text))
+    if prefix:
+        return "prefix", prefix
+    substring = tuple(item for item in records_ if text in item[1])
+    if substring:
+        return "substring", substring
+    return "", ()
 
 
 def _resolve_slug(slug: str, checks: _Checks) -> Resolution:
-    # An exact slug always wins; a unique prefix, then a unique substring, is
-    # the fallback. Several fallback matches are refused as ambiguous.
-    work_ids = _slug_matches(slug, checks)
-    for mode in ("prefix", "substring"):
-        if work_ids:
-            break
-        work_ids = _slug_matches(slug, checks, mode=mode)
+    work_ids = _exact_slug_matches(slug, checks)
     searched = _corpus_locations(slug, checks)
     if not work_ids:
         return Resolution(
@@ -424,6 +446,34 @@ def _resolve_slug(slug: str, checks: _Checks) -> Resolution:
         checks,
         searched=searched,
     )
+
+
+def _resolve_fuzzy_slug(slug: str, checks: _Checks) -> Resolution:
+    """A unique prefix, then a unique substring; several matches are ambiguous."""
+    mode, hits = _fuzzy_slug_matches(slug, checks)
+    searched = _corpus_locations(slug, checks)
+    if not hits:
+        return Resolution(
+            ResolutionOutcome.NOT_FOUND,
+            source=ResolutionSource.SLUG,
+            searched=searched,
+        )
+    if len(hits) > 1:
+        return Resolution(
+            ResolutionOutcome.AMBIGUOUS,
+            source=ResolutionSource.SLUG,
+            matches=tuple(work_id for work_id, _ in hits),
+            searched=searched,
+            detail=(
+                f"slug {slug!r} is a {mode} of {len(hits)} work records: "
+                + ", ".join(f"{work_id} ({claimed})" for work_id, claimed in hits)
+            ),
+        )
+    work_id, claimed = next(iter(hits))
+    resolution = _validate(work_id, ResolutionSource.SLUG, checks, searched=searched)
+    note = f"matched by {mode}: {slug!r} -> slug {claimed!r}"
+    detail = note if resolution.detail is None else f"{resolution.detail}; {note}"
+    return evolve(resolution, detail=detail)
 
 
 def _resolve_phase_artifact(

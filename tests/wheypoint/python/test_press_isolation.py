@@ -63,7 +63,7 @@ def test_list_project_scope_leaks_notes_from_beneath_a_shared_git_ancestor(
     )
     assert checkpoint_status == 0
 
-    status, payload = run_cli(["list", "--scope", "project"])
+    status, payload = run_cli(["list"])
     assert status == 0
     lines = cast(list[str], payload["lines"])
     third_cells = {line.split("\t")[2] for line in lines}

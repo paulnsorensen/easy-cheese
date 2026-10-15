@@ -19,6 +19,7 @@ from typing import cast
 
 import pytest
 
+from easy_cheese.shared import git_utils, paths
 from easy_cheese.shared.wheypoint import commit, records, resolve_cli, storage
 from easy_cheese.cli import wheypoint
 from easy_cheese.cli.wheypoint import queries as queries_mod
@@ -949,7 +950,7 @@ def test_ac13_list_prints_one_line_per_work_item(corpus_root: Path) -> None:
         stdin=_first_intent(work_id="other-work", orientation="Other.\nMore."),
     )
 
-    status, payload = _run("list", "--scope", "project")
+    status, payload = _run("list")
     assert status == 0
     lines = cast(list[str], payload["lines"])
     assert len(lines) == 2
@@ -1807,9 +1808,20 @@ def test_list_rejects_a_bad_since_or_limit_as_usage(flags: tuple[str, str]) -> N
     assert flags[0] in cast(str, error["message"])
 
 
-@pytest.mark.usefixtures("corpus_root")
-def test_list_scope_fallback_reports_machine_outside_a_checkout() -> None:
+def _checkpoint_in_a_machine_corpus(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "cheese"))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-a")
     _ = _run("checkpoint", stdin=_first_intent())
+    return tmp_path / "cheese" / "proj-a"
+
+
+def test_list_scope_fallback_reports_machine_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _checkpoint_in_a_machine_corpus(tmp_path, monkeypatch)
+    monkeypatch.delenv("EASY_CHEESE_PROJECT")
 
     status, payload = _run("list")
 
@@ -1832,6 +1844,102 @@ def test_list_explicit_project_scope_has_no_scope_fallback() -> None:
     assert status == 0
     assert payload["scope"] == "project"
     assert "scope-fallback" not in payload
+
+
+def test_list_explicit_corpus_root_has_no_scope_fallback_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _checkpoint_in_a_machine_corpus(tmp_path, monkeypatch)
+    monkeypatch.delenv("EASY_CHEESE_PROJECT")
+
+    status, payload = _run("list", "--corpus-root", str(root))
+
+    assert status == 0
+    assert payload["scope"] == "project"
+    assert payload["corpus_root"] == str(root)
+    assert "scope-fallback" not in payload
+    assert [line.split("\t")[2] for line in cast("list[str]", payload["lines"])] == [
+        WORK_ID
+    ]
+
+
+def test_list_project_env_override_has_no_scope_fallback_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _checkpoint_in_a_machine_corpus(tmp_path, monkeypatch)
+
+    status, payload = _run("list")
+
+    assert status == 0
+    assert payload["scope"] == "project"
+    assert "scope-fallback" not in payload
+    assert [line.split("\t")[2] for line in cast("list[str]", payload["lines"])] == [
+        WORK_ID
+    ]
+
+
+def test_list_project_flag_has_no_scope_fallback_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _checkpoint_in_a_machine_corpus(tmp_path, monkeypatch)
+    monkeypatch.delenv("EASY_CHEESE_PROJECT")
+
+    status, payload = _run("list", "--project", "proj-a")
+
+    assert status == 0
+    assert payload["scope"] == "machine"
+    assert "scope-fallback" not in payload
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stderr", "expected"),
+    [
+        (128, "fatal: not a git repository (or any of the parent directories): .git", True),
+        (128, "fatal: detected dubious ownership in repository at '/x'", False),
+        (0, "", False),
+    ],
+)
+def test_outside_git_repository_only_trusts_git_not_a_repository(
+    monkeypatch: pytest.MonkeyPatch, returncode: int, stderr: str, expected: bool
+) -> None:
+    def fake(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], returncode, "", stderr)
+
+    monkeypatch.setattr(git_utils, "run_git", fake)
+
+    assert paths.outside_git_repository() is expected
+
+
+@pytest.mark.parametrize(
+    "failure", [subprocess.TimeoutExpired("git", 5), FileNotFoundError("git")]
+)
+def test_outside_git_repository_is_false_when_git_cannot_answer(
+    monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    def boom(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise failure
+
+    monkeypatch.setattr(git_utils, "run_git", boom)
+
+    assert paths.outside_git_repository() is False
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cli_resolve_matches_a_slug_by_prefix_but_phase_entry_stays_exact() -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _, exact = _run("resolve", "--ref", WORK_ID)
+    slug = cast(dict[str, object], exact["record"])["slug"]
+    assert isinstance(slug, str)
+    partial = slug[:6]
+
+    status, fuzzy = _run("resolve", "--ref", partial)
+    phase = resolve_cli.resolve(ref=partial)
+
+    assert status == 0
+    assert fuzzy["outcome"] == "authoritative"
+    assert fuzzy["work_id"] == WORK_ID
+    assert "matched by prefix" in cast(str, fuzzy["detail"])
+    assert phase["outcome"] == "not-found"
 
 
 def test_list_project_flag_implies_machine_scope(
