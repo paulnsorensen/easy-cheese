@@ -2708,10 +2708,10 @@ def test_operator_directive_flag_stores_scope_operator_and_plain_directive_stays
         "Ship small PRs",
         "--operator-directive",
         "Lead with the answer",
+        "--operator-quote",
+        "lead with the answer",
         "--quote",
         "ship small PRs please",
-        "--quote",
-        "lead with the answer",
     )
 
     assert status == 0, payload

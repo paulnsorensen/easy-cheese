@@ -177,11 +177,11 @@ def _open_lines(open_entries: list[ProtectedEntry]) -> list[str]:
     """
     if not any(e.owner for e in open_entries):
         return [_entry_line(e) for e in open_entries] or [_NONE]
-    groups: dict[str, tuple[str, list[ProtectedEntry]]] = {}
+    groups: dict[str | None, tuple[str, list[ProtectedEntry]]] = {}
     for entry in open_entries:
-        key = (entry.owner or _UNASSIGNED).lower()
+        key = entry.owner.lower() if entry.owner else None
         groups.setdefault(key, (entry.owner or _UNASSIGNED, []))[1].append(entry)
-    ordered = sorted(groups, key=lambda key: (key == _UNASSIGNED, key))
+    ordered = sorted(groups, key=lambda key: (key is None, key or ""))
     lines: list[str] = []
     for key in ordered:
         name, members = groups[key]
@@ -330,11 +330,16 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
         _GATES_HEADING,
         "",
     ]
-    summaries = {e.entry_id: e.summary for e in records.entries(record)}
+    by_id = {e.entry_id: e for e in records.entries(record)}
     if projection.gating_entry_ids:
         for entry_id in projection.gating_entry_ids:
-            summary = summaries.get(entry_id)
-            lines.append(f"- {entry_id}" + (f" — {escape(summary)}" if summary else ""))
+            entry = by_id.get(entry_id)
+            line = f"- {entry_id}" + (f" — {escape(entry.summary)}" if entry else "")
+            if entry and entry.owner:
+                line += f" (owner: {escape(entry.owner)})"
+            if entry and entry.when:
+                line += f" (when: {escape(entry.when)})"
+            lines.append(line)
     else:
         lines.append(_NONE)
     lines += ["", *_body(record)]

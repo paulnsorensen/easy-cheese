@@ -833,6 +833,14 @@ def test_operator_preferences_render_apart_from_work_directives(
     assert not any("p-style" in line for line in directives)
     assert any("p-style" in line for line in operator)
     assert "  > words of p-style" in operator
+    assert operator == [
+        "## Operator preferences",
+        "",
+        "- p-style (directive) — Directive p-style",
+        "  > words of p-style",
+        "",
+    ]
+    assert directives[-1] == ""
     assert projection.parse(markdown).work_id == record.work_id
 
 
@@ -843,3 +851,44 @@ def test_operator_preferences_section_is_absent_without_operator_directives(
 
     assert "## Operator preferences" not in _render(record)
     assert "scope" not in records.unstructure(record)["directives"][0]  # pyright: ignore[reportIndexIssue]
+
+
+def test_a_gated_question_keeps_its_owner_and_when_and_parses_back_to_its_id(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        questions=[
+            _question(
+                "q-gate",
+                blocks_continuation=True,
+                owner="Ana",
+                when="before launch",
+            ),
+            _question("q-plain-gate", blocks_continuation=True),
+        ]
+    )
+
+    markdown = _render(record)
+    lines = markdown.splitlines()
+    gates = lines[lines.index("## Gates") + 2 : lines.index("## Open entries") - 1]
+
+    assert gates == [
+        "- q-gate — Question q-gate? (owner: Ana) (when: before launch)",
+        "- q-plain-gate — Question q-plain-gate?",
+    ]
+    assert projection.parse(markdown).gating_entry_ids == ["q-gate", "q-plain-gate"]
+
+
+def test_an_owner_literally_named_unassigned_stays_apart_from_unowned_questions(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        questions=[_question("q-loose"), _question("q-named", owner="Unassigned")]
+    )
+
+    assert _open_section(_render(record)) == [
+        "### Unassigned",
+        "- q-named (question) — Question q-named?",
+        "### unassigned",
+        "- q-loose (question) — Question q-loose?",
+    ]

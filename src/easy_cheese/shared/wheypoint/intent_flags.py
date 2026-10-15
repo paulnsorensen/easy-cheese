@@ -51,6 +51,7 @@ def overlay(
     owner: Sequence[str] = (),
     when: Sequence[str] = (),
     operator_directive: Sequence[str] = (),
+    operator_quote: Sequence[str] = (),
     orientation: str | None = None,
     next: str | None = None,
     artifact: str | None = None,
@@ -63,13 +64,14 @@ def overlay(
 ) -> dict[str, object]:
     """`payload` (an intent file's JSON, or `{}`) with the flags applied.
 
-    `owner` and `when` pair by position with `question`. `quote` pairs with
-    `directive` first, then `operator_directive`.
+    `owner` and `when` pair by position with `question`. `quote` pairs by
+    position with `directive`, and `operator_quote` with `operator_directive`.
     """
     _check_pairing(
         owner=owner,
         when=when,
         operator_directive=operator_directive,
+        operator_quote=operator_quote,
         supersede=supersede,
         by=by,
         question=question,
@@ -114,12 +116,12 @@ def overlay(
             ),
             *(
                 {"kind": "directive", "summary": text, "quote": words}
-                for text, words in zip(directive, quote, strict=False)
+                for text, words in zip(directive, quote, strict=True)
             ),
             *(
                 {"kind": "directive", "summary": text, "quote": words, "scope": "operator"}
                 for text, words in zip(
-                    operator_directive, quote[len(directive) :], strict=True
+                    operator_directive, operator_quote, strict=True
                 )
             ),
         ],
@@ -144,6 +146,7 @@ def _check_pairing(
     owner: Sequence[str],
     when: Sequence[str],
     operator_directive: Sequence[str],
+    operator_quote: Sequence[str],
     supersede: Sequence[str],
     by: Sequence[str],
     question: Sequence[str],
@@ -173,12 +176,14 @@ def _check_pairing(
             raise IntentFlagError(
                 f"flag-pairing: {len(values)} {flag} for {len(question)} --question"
             )
-    quoted = len(directive) + len(operator_directive)
-    if len(quote) != quoted:
-        raise IntentFlagError(
-            f"flag-pairing: {len(quote)} --quote for {quoted} "
-            + "--directive and --operator-directive"
-        )
+    for flag, quotes, directives, directive_flag in (
+        ("--quote", quote, directive, "--directive"),
+        ("--operator-quote", operator_quote, operator_directive, "--operator-directive"),
+    ):
+        if len(quotes) != len(directives):
+            raise IntentFlagError(
+                f"flag-pairing: {len(quotes)} {flag} for {len(directives)} {directive_flag}"
+            )
     if len(kind) != len(link):
         raise IntentFlagError(
             f"flag-pairing: {len(kind)} --kind for {len(link)} --link"
