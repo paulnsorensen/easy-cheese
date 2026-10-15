@@ -91,6 +91,7 @@ def resolve_payload(
             else handoff.slug_payload(resolution.phase_slug)
         ),
         "detail": resolution.detail,
+        "matched_by": resolution.matched_by,
         "bridge": bridge,
     }
 

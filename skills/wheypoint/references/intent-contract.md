@@ -112,7 +112,7 @@ Flags ignore stdin unless the intent argument is `-`.
 
 The flag form refuses with these codes:
 
-- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, and withdraws, a `--quote`, `--operator-quote`, or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
+- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, withdraws, and supersedes (so a `--supersede` with no `--rationale` refuses), a `--by` count differs from the `--supersede` count, a `--supersede` without `--by` has no resolvable successor (its id prefix names no entry kind, the checkpoint does not add exactly one entry of that kind, or the work id or `--base` is missing), an `--owner` or `--when` count differs from the `--question` count, a `--quote`, `--operator-quote`, or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
 - `flag-kind`: a `--kind` names no edge kind.
 - `flag-link`: a `--link` is not a valid typed ref.
 - `flag-conflict`: the intent file holds a non-list value at a key a flag extends.
@@ -137,7 +137,8 @@ A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error"
 - **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`, `derived_entry_ids`, `applied_transitions`, `applied_edges`, `removed_edges`, and `warnings`.
 - **`validate`** returns `valid` and `work_id`.
 - **`schema`** returns `slug` and `schema`.
-- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `bridge`.
+- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `matched_by`, `bridge`.
+  `matched_by` is `exact`, `prefix`, or `substring`, or `null` when nothing matched. A prefix or substring match still dispatches.
 - **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`, `bridge`.
 - **`fork`** replies are in [`work-graph.md`](work-graph.md).
 - **`list`** returns `corpus_root`, `items`, and `lines`, plus `scope-fallback` only when the scope fell back.

@@ -78,7 +78,7 @@ def test_ready_result_for_reused_operation_id_is_exclusive(tmp_path: Path) -> No
 
     assert save(tmp_path, "op-1", {"status": "ready", "request_id": "a"}) == path
     assert path.read_bytes() == before
-    with pytest.raises(FinalizationError, match="different ready result"):
+    with pytest.raises(FinalizationError, match="different result .*increase the ordinal"):
         _ = save(tmp_path, "op-1", {"status": "ready", "request_id": "b"})
     assert path.read_bytes() == before
 
