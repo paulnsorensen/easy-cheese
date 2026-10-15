@@ -84,7 +84,7 @@ jobs:
 
       - name: Install test dependencies
         run: |
-          pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
+          pip install --no-cache-dir pytest==9.0.3 pytest-xdist==3.8.0 pyyaml==6.0.2
           pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
 
       - name: Gate the checked-in runtime
@@ -93,17 +93,19 @@ jobs:
       - name: Check committed skill archives
         run: just wedge-check
 
+      # This job is the workflow's critical path. The suites are
+      # subprocess-heavy, so run them with xdist as `just test` does.
       - name: Run melt script tests
-        run: python3 -m pytest tests/python -q
+        run: python3 -m pytest tests/python -q -p xdist -n auto
 
       - name: Run shared script tests
-        run: python3 -m pytest tests/shared/python -q
+        run: python3 -m pytest tests/shared/python -q -p xdist -n auto
 
       - name: Run fan-out script tests
-        run: python3 -m pytest tests/fanout/python -q
+        run: python3 -m pytest tests/fanout/python -q -p xdist -n auto
 
       - name: Run schema conformance tests
-        run: python3 -m pytest tests/schemas/python -q
+        run: python3 -m pytest tests/schemas/python -q -p xdist -n auto
 
   install-script:
     name: test install.sh (macOS)
