@@ -16,11 +16,11 @@ import fromargs
 import pytest
 
 from easy_cheese.shared.wheypoint import commit as commit_module
-from easy_cheese.shared.wheypoint import lint as lint_module
+from easy_cheese.shared.wheypoint import lint_types as lint_module
 from easy_cheese.shared.wheypoint import resolve as resolve_module
 from easy_cheese.shared.wheypoint import storage as wheypoint_storage
 
-from easy_cheese_schemas.contracts import CheckpointIntent, NextMove, WheypointDelta
+from easy_cheese_schemas.contracts import CheckpointIntent, NextMove
 from easy_cheese.shared.wheypoint import checkpoint
 
 if TYPE_CHECKING:
@@ -61,6 +61,7 @@ class _WriterModule(Protocol):
         baseline: str | None = None,
         grounded: Sequence[str] = (),
         corpus_root: Path | str | None = None,
+        base_revision_id: str | None = None,
     ) -> Path: ...
 
     def main(self, argv: list[str]) -> int: ...
@@ -227,9 +228,12 @@ class TestRerunOverwrite:
             grounded=("context.md#1-1",),
             **common,
         )
+        landed = wheypoint_storage.WorkStore.open("rerun").read_record()
+        assert landed is not None
         rewritten = writer.write_artifact(
             orientation="second pass",
             grounded=("context.md#1-1",),
+            base_revision_id=landed.revision_id,
             **common,
         )
         assert rewritten == target
@@ -967,6 +971,8 @@ class TestWheypointCommitFailure:
             grounded=("context.md#1-1",),
         )
         _ = capsys.readouterr()
+        landed = wheypoint_storage.WorkStore.open("commit-failed").read_record()
+        assert landed is not None
 
         def fail(*_args: object, **_kwargs: object) -> commit_module.CommitResult:
             raise commit_module.CommitError("corpus unavailable")
@@ -983,6 +989,7 @@ class TestWheypointCommitFailure:
                 body=None,
                 root=tmp_path,
                 grounded=("context.md#1-1",),
+                base_revision_id=landed.revision_id,
             )
         assert target.is_file()
         assert "second pass" in target.read_text(encoding="utf-8")
@@ -1173,6 +1180,27 @@ class TestWheypointCommitFailure:
         assert "Traceback" in capsys.readouterr().err
 
 
+class TestBaseRejectedOnNonChainPhase:
+    def test_base_on_a_non_chain_phase_is_refused_and_writes_nothing(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(
+            fromargs.CliError, match="--base is only valid for chain phases"
+        ):
+            _ = writer.write_artifact(
+                slug="non-chain",
+                status="ok",
+                phase="mold",
+                next_skill="cook",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                base_revision_id="rev-abc",
+            )
+        assert not (tmp_path / ".cheese" / "mold" / "non-chain.md").exists()
+
+
 class TestGroundedRejectedOnNonChainPhase:
     def test_grounded_on_a_non_chain_phase_is_caller_usage(
         self, writer: _WriterModule, tmp_path: Path
@@ -1241,7 +1269,7 @@ class TestSuccessTelemetry:
         assert record is not None
         assert (
             f"wheypoint: revision work_id=reported "
-            f"revision_id={record.revision_id} revision_number=1 retried=false"
+            f"revision_id={record.revision_id} revision_number=1"
         ) in capsys.readouterr().err
 
 
@@ -1396,8 +1424,11 @@ class TestSiblingArtifactLinks:
     def test_a_phase_commit_does_not_repin_a_sibling_artifact(
         self, writer: _WriterModule, tmp_path: Path
     ) -> None:
-        def write(phase: str, next_skill: str, orientation: str) -> Path:
+        def write(
+            phase: str, next_skill: str, orientation: str, base: str | None = None
+        ) -> Path:
             return writer.write_artifact(
+                base_revision_id=base,
                 slug="siblings",
                 status="ok",
                 phase=phase,
@@ -1410,8 +1441,10 @@ class TestSiblingArtifactLinks:
             )
 
         cook_target = write("cook", "press", "cook pass")
-        _ = write("press", "age", "press pass")
         store = wheypoint_storage.WorkStore.open("siblings")
+        after_cook = store.read_record()
+        assert after_cook is not None
+        _ = write("press", "age", "press pass", after_cook.revision_id)
         after_press = store.read_record()
         assert after_press is not None
         pinned = {link.path: link.digest for link in after_press.artifact_links}
@@ -1421,7 +1454,7 @@ class TestSiblingArtifactLinks:
         ]
 
         _ = cook_target.write_text("edited after cook committed\n", encoding="utf-8")
-        _ = write("press", "age", "press second pass")
+        _ = write("press", "age", "press second pass", after_press.revision_id)
         after_second = store.read_record()
         assert after_second is not None
         repinned = {link.path: link.digest for link in after_second.artifact_links}
@@ -1433,50 +1466,46 @@ class TestSiblingArtifactLinks:
         )
 
 
-class TestWheypointConflictRetry:
-    def test_retry_rebinds_base_and_drops_genesis_notes(
+def _seed_genesis(store: wheypoint_storage.WorkStore, root: Path, work_id: str) -> str:
+    target = root / ".cheese" / "cook" / f"{work_id}.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _ = target.write_text("phase\n", encoding="utf-8")
+    genesis_delta = checkpoint.build_delta(
+        CheckpointIntent(
+            work_id=work_id,
+            orientation="genesis handoff",
+            notes="genesis handoff",
+            next=NextMove("press"),
+            artifact=f"{work_id}.md",
+            working_context=["context.md#1-1"],
+        ),
+        None,
+    )
+    result = commit_module.commit(genesis_delta, store=store, artifact_root=root)
+    return result.revision.revision_id
+
+
+class TestPhaseBaseRevisionGate:
+    """A phase write over an existing record names the revision the writer read."""
+
+    def _commit(
         self,
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
+        store: wheypoint_storage.WorkStore,
+        *,
+        base_revision_id: str | None,
+        writes: list[str],
+    ) -> object:
         from easy_cheese.shared.wheypoint import phase_commit
 
         target = tmp_path / ".cheese" / "cook" / "seam.md"
-        target.parent.mkdir(parents=True)
-        _ = target.write_text("phase\n", encoding="utf-8")
+        target.parent.mkdir(parents=True, exist_ok=True)
 
-        store = wheypoint_storage.WorkStore.open("seam")
-        real_commit = commit_module.commit
-        calls = {"n": 0}
+        def write_contents() -> None:
+            writes.append("written")
+            _ = target.write_text("rewritten\n", encoding="utf-8")
 
-        def commit_with_concurrent_landing(
-            delta: WheypointDelta,
-            *,
-            store: wheypoint_storage.WorkStore,
-            artifact_root: Path | str | None = None,
-        ) -> commit_module.CommitResult:
-            calls["n"] += 1
-            if calls["n"] == 1:
-                concurrent_delta = checkpoint.build_delta(
-                    CheckpointIntent(
-                        work_id="seam",
-                        orientation="concurrent handoff",
-                        working_context=["context.md#1-1"],
-                        notes="concurrent handoff",
-                        next=NextMove("press"),
-                        artifact="seam.md",
-                    ),
-                    None,
-                )
-                _ = real_commit(
-                    concurrent_delta, store=store, artifact_root=artifact_root
-                )
-            return real_commit(delta, store=store, artifact_root=artifact_root)
-
-        monkeypatch.setattr(commit_module, "commit", commit_with_concurrent_landing)
-
-        outcome = phase_commit.commit_phase_revision(
+        return phase_commit.commit_phase_revision(
             work_id="seam",
             phase="cook",
             next_skill="press",
@@ -1485,106 +1514,147 @@ class TestWheypointConflictRetry:
             grounded=("context.md#1-1",),
             root=tmp_path,
             store=store,
-            write_contents=lambda: None,
+            write_contents=write_contents,
+            base_revision_id=base_revision_id,
         )
-        current = store.read_record()
-        assert current is not None
-        assert outcome.retried is True
-        assert outcome.result.record.revision_id == current.revision_id
-        assert outcome.result.revision.parent_revision_id is not None
-        assert outcome.result.record.working_context == ["context.md#1-1"]
-        assert [link.path for link in outcome.result.record.artifact_links] == [
-            ".cheese/cook/seam.md"
-        ]
-        err = capsys.readouterr().err
-        assert "wheypoint: retry work_id=seam phase=cook stale_parent=genesis" in err
-        assert (
-            f"wheypoint: retry outcome=committed work_id=seam phase=cook "
-            f"revision_id={outcome.result.revision.revision_id}"
-        ) in err
 
-    def test_retry_refuses_an_ungrounded_genesis_retry(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """A record that vanished under the retry must not commit a bare genesis."""
-        from easy_cheese.shared.wheypoint import phase_commit
-
-        target = tmp_path / ".cheese" / "cook" / "vanished.md"
-        target.parent.mkdir(parents=True)
-        _ = target.write_text("phase\n", encoding="utf-8")
-
-        store = wheypoint_storage.WorkStore.open("vanished")
-        genesis_delta = checkpoint.build_delta(
-            CheckpointIntent(
-                work_id="vanished",
-                orientation="genesis handoff",
-                notes="genesis handoff",
-                next=NextMove("press"),
-                artifact="vanished.md",
-                working_context=["context.md#1-1"],
-            ),
-            None,
-        )
-        _ = commit_module.commit(genesis_delta, store=store, artifact_root=tmp_path)
-        seeded = store.read_record()
-        assert seeded is not None
-
-        reads = [seeded, None]
-
-        def read_record(_self: object) -> object:
-            if not reads:
-                raise AssertionError("read_record called more than twice")
-            return reads.pop(0)
-
-        def always_conflict(*_args: object, **_kwargs: object) -> None:
-            raise commit_module.StaleParentError("race")
-
-        monkeypatch.setattr(type(store), "read_record", read_record)
-        monkeypatch.setattr(commit_module, "commit", always_conflict)
-
-        with pytest.raises(phase_commit.ArtifactOrphaned) as excinfo:
-            _ = phase_commit.commit_phase_revision(
-                work_id="vanished",
-                phase="cook",
-                next_skill="press",
-                artifact=str(target),
-                orientation="demo",
-                grounded=(),
-                root=tmp_path,
-                store=store,
-                write_contents=lambda: None,
-            )
-        assert isinstance(excinfo.value.cause, commit_module.CommitError)
-        assert "at least one --grounded entry" in str(excinfo.value.cause)
-
-    def test_persistent_parent_conflict_stops_after_one_retry(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+    def test_missing_base_on_an_existing_record_is_refused_and_writes_nothing(
+        self, tmp_path: Path
     ) -> None:
         from easy_cheese.shared.wheypoint import phase_commit
-
-        target = tmp_path / ".cheese" / "cook" / "seam.md"
-        target.parent.mkdir(parents=True)
-        _ = target.write_text("phase\n", encoding="utf-8")
 
         store = wheypoint_storage.WorkStore.open("seam")
-        genesis_delta = checkpoint.build_delta(
-            CheckpointIntent(
-                work_id="seam",
-                orientation="genesis handoff",
-                notes="genesis handoff",
-                next=NextMove("press"),
-                artifact="seam.md",
-                working_context=["context.md#1-1"],
-            ),
-            None,
-        )
-        _ = commit_module.commit(genesis_delta, store=store, artifact_root=tmp_path)
+        current = _seed_genesis(store, tmp_path, "seam")
+        writes: list[str] = []
 
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(tmp_path, store, base_revision_id=None, writes=writes)
+
+        assert str(excinfo.value).startswith("base-revision-required:")
+        assert current in str(excinfo.value)
+        assert writes == []
+        record = store.read_record()
+        assert record is not None
+        assert record.revision_id == current
+        assert (tmp_path / ".cheese" / "cook" / "seam.md").read_text(
+            encoding="utf-8"
+        ) == "phase\n"
+
+    def test_stale_base_is_refused_and_writes_nothing(self, tmp_path: Path) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        current = _seed_genesis(store, tmp_path, "seam")
+        writes: list[str] = []
+
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(
+                tmp_path, store, base_revision_id="rev-000000000000", writes=writes
+            )
+
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert current in str(excinfo.value)
+        assert writes == []
+        record = store.read_record()
+        assert record is not None
+        assert record.revision_id == current
+        assert (tmp_path / ".cheese" / "cook" / "seam.md").read_text(
+            encoding="utf-8"
+        ) == "phase\n"
+
+    def test_stated_base_with_no_record_is_refused_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        writes: list[str] = []
+
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(
+                tmp_path, store, base_revision_id="rev-000000000000", writes=writes
+            )
+
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert "no record exists" in str(excinfo.value)
+        assert writes == []
+        assert store.read_record() is None
+        assert not (tmp_path / ".cheese" / "cook" / "seam.md").exists()
+
+    def test_correct_base_commits_a_child_revision(self, tmp_path: Path) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        current = _seed_genesis(store, tmp_path, "seam")
+        writes: list[str] = []
+
+        outcome = cast(
+            "commit_module.CommitResult",
+            getattr(
+                self._commit(tmp_path, store, base_revision_id=current, writes=writes),
+                "result",
+            ),
+        )
+
+        assert writes == ["written"]
+        assert outcome.revision.parent_revision_id == current
+        assert outcome.revision.revision_number == 2
+
+    def test_genesis_needs_no_base(self, tmp_path: Path) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        writes: list[str] = []
+
+        outcome = cast(
+            "commit_module.CommitResult",
+            getattr(
+                self._commit(tmp_path, store, base_revision_id=None, writes=writes),
+                "result",
+            ),
+        )
+
+        assert writes == ["written"]
+        assert outcome.revision.revision_number == 1
+
+    def test_writer_cli_refuses_a_missing_base_with_the_current_revision(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        _ = writer.write_artifact(
+            slug="gated",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="first pass",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        record = wheypoint_storage.WorkStore.open("gated").read_record()
+        assert record is not None
+
+        with pytest.raises(fromargs.CliError) as excinfo:
+            _ = writer.write_artifact(
+                slug="gated",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="second pass",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+
+        assert "base-revision-required" in str(excinfo.value)
+        assert record.revision_id in str(excinfo.value)
+        target = tmp_path / ".cheese" / "cook" / "gated.md"
+        assert "first pass" in target.read_text(encoding="utf-8")
+
+    def test_lock_time_conflict_surfaces_as_orphaned_without_a_retry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        current = _seed_genesis(store, tmp_path, "seam")
         commits: list[object] = []
 
         def always_conflict(*_args: object, **_kwargs: object) -> None:
@@ -1594,19 +1664,37 @@ class TestWheypointConflictRetry:
         monkeypatch.setattr(commit_module, "commit", always_conflict)
 
         with pytest.raises(phase_commit.ArtifactOrphaned) as excinfo:
-            _ = phase_commit.commit_phase_revision(
-                work_id="seam",
-                phase="cook",
-                next_skill="press",
-                artifact=str(target),
-                orientation="demo",
-                grounded=("context.md#1-1",),
-                root=tmp_path,
-                store=store,
-                write_contents=lambda: None,
-            )
+            _ = self._commit(tmp_path, store, base_revision_id=current, writes=[])
+
         assert isinstance(excinfo.value.cause, commit_module.StaleParentError)
-        assert len(commits) == 2
-        err = capsys.readouterr().err
-        assert "wheypoint: retry work_id=seam phase=cook" in err
-        assert "wheypoint: retry outcome=failed work_id=seam phase=cook" in err
+        assert len(commits) == 1
+
+    def test_cli_base_flag_binds_the_revision_the_writer_read(
+        self, writer: _WriterModule
+    ) -> None:
+        argv = [
+            "--slug",
+            "flagged",
+            "--status",
+            "ok",
+            "--phase",
+            "cook",
+            "--next",
+            "press",
+            "--artifact",
+            "",
+            "--orientation",
+            "demo",
+            "--grounded",
+            "context.md#1-1",
+        ]
+        assert writer.main(argv) == 0
+        record = wheypoint_storage.WorkStore.open("flagged").read_record()
+        assert record is not None
+
+        assert writer.main(argv) != 0
+        assert writer.main([*argv, "--base", "rev-000000000000"]) != 0
+        assert writer.main([*argv, "--base", record.revision_id]) == 0
+        updated = wheypoint_storage.WorkStore.open("flagged").read_record()
+        assert updated is not None
+        assert updated.revision_number == 2

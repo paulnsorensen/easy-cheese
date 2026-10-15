@@ -22,15 +22,27 @@ from conftest import WORK_ID, Promotion
 HAND_WRITTEN: dict[str, object] = {
     "work_id": WORK_ID,
     "entries": [
-        {"kind": "question", "summary": "Q", "blocks_continuation": True},
+        {
+            "kind": "question",
+            "summary": "Q",
+            "blocks_continuation": True,
+            "rationale": "Why.",
+        },
         {"kind": "directive", "summary": "D", "quote": "d"},
     ],
 }
 
 
-def _flag_form() -> dict[str, object]:
+def _flag_form(base: str | None = None) -> dict[str, object]:
     return intent_flags.overlay(
-        {}, work_id=WORK_ID, question=["Q"], gates=True, directive=["D"], quote=["d"]
+        {},
+        work_id=WORK_ID,
+        base=base,
+        question=["Q"],
+        gates=True,
+        rationale=["Why."],
+        directive=["D"],
+        quote=["d"],
     )
 
 
@@ -47,8 +59,11 @@ def test_ac14_both_forms_fingerprint_the_same_delta(
 ) -> None:
     current = make_promotion(gating=True).record
 
-    flag_delta = checkpoint.build_delta(_intent(_flag_form()), current)
-    file_delta = checkpoint.build_delta(_intent(HAND_WRITTEN), current)
+    base = current.revision_id
+    flag_delta = checkpoint.build_delta(_intent(_flag_form(base)), current)
+    file_delta = checkpoint.build_delta(
+        _intent({**HAND_WRITTEN, "base_revision_id": base}), current
+    )
 
     assert records.request_fingerprint(flag_delta) == records.request_fingerprint(
         file_delta
@@ -59,10 +74,16 @@ def test_ac14_both_forms_commit_the_same_revision(
     tmp_path: Path, make_promotion: Callable[..., Promotion]
 ) -> None:
     revision_ids: list[str] = []
-    for form, payload in (("flags", _flag_form()), ("file", HAND_WRITTEN)):
+    for form in ("flags", "file"):
         store = storage.WorkStore.open(WORK_ID, corpus_root=tmp_path / form)
         seed = make_promotion(gating=True)
         store.promote(seed.record, seed.revision, seed.markdown)
+        base = seed.record.revision_id
+        payload = (
+            _flag_form(base)
+            if form == "flags"
+            else {**HAND_WRITTEN, "base_revision_id": base}
+        )
         delta = checkpoint.build_delta(_intent(payload), store.read_record())
         revision_ids.append(commit.commit(delta, store=store).record.revision_id)
 
@@ -75,13 +96,13 @@ def test_overlay_appends_after_the_payload_and_overrides_scalars() -> None:
         "work_id": "from-file",
         "next": "cook",
         "working_context": ["a.py"],
-        "entries": [{"kind": "blocker", "summary": "From the file."}],
+        "entries": [{"kind": "question", "summary": "From the file."}],
     }
 
     result = intent_flags.overlay(
         payload,
         work_id=WORK_ID,
-        blocker=["From a flag."],
+        question=["From a flag."],
         decision=["Cap it."],
         rationale=["Pool saturates."],
         orientation="Oriented.",
@@ -99,12 +120,16 @@ def test_overlay_appends_after_the_payload_and_overrides_scalars() -> None:
         "notes": "Body.",
         "working_context": ["a.py", "b.py"],
         "entries": [
-            {"kind": "blocker", "summary": "From the file."},
-            {"kind": "blocker", "summary": "From a flag.", "blocks_continuation": False},
+            {"kind": "question", "summary": "From the file."},
+            {
+                "kind": "question",
+                "summary": "From a flag.",
+                "blocks_continuation": False,
+            },
             {"kind": "decision", "summary": "Cap it.", "rationale": "Pool saturates."},
         ],
     }
-    assert payload["entries"] == [{"kind": "blocker", "summary": "From the file."}]
+    assert payload["entries"] == [{"kind": "question", "summary": "From the file."}]
     assert payload["working_context"] == ["a.py"]
 
 
@@ -135,12 +160,12 @@ def test_link_pairs_with_kind_and_pins_only_a_pinnable_scheme() -> None:
         {},
         work_id=WORK_ID,
         link=["repo:docs/spec.md", "milknado:proj/node-1"],
-        kind=["informs", "checkpoints"],
+        kind=["supersedes", "checkpoints"],
         covers=["q-aaaaaaaaaaaa"],
     )
 
     assert result["add_edges"] == [
-        {"to": "repo:docs/spec.md", "kind": "informs"},
+        {"to": "repo:docs/spec.md", "kind": "supersedes"},
         {"to": "milknado:proj/node-1", "kind": "checkpoints"},
     ]
     assert result["artifact_links"] == [
@@ -153,7 +178,7 @@ def test_link_pairs_with_kind_and_pins_only_a_pinnable_scheme() -> None:
     intent = _intent(result)
     assert intent.add_edges is not None
     assert [edge.kind for edge in intent.add_edges] == [
-        EdgeKind.INFORMS,
+        EdgeKind.SUPERSEDES,
         EdgeKind.CHECKPOINTS,
     ]
 
@@ -168,9 +193,10 @@ def test_link_pairs_with_kind_and_pins_only_a_pinnable_scheme() -> None:
         ({"quote": ["d"]}, "flag-pairing"),
         ({"link": ["repo:a.md"]}, "flag-pairing"),
         ({"gates": True}, "flag-pairing"),
+        ({"question": ["Q"], "gates": True}, "flag-pairing"),
         ({"covers": ["q-aaaaaaaaaaaa"]}, "flag-pairing"),
         ({"link": ["repo:a.md"], "kind": ["parent_of"]}, "flag-kind"),
-        ({"link": ["nowhere:a"], "kind": ["informs"]}, "flag-link"),
+        ({"link": ["nowhere:a"], "kind": ["checkpoints"]}, "flag-link"),
     ],
 )
 def test_overlay_refuses_flags_that_do_not_pair(

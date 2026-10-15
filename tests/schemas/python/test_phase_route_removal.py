@@ -13,7 +13,10 @@ from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS, registered_cont
 
 
 def test_phase_contract_is_not_published() -> None:
-    assert "https://schemas.easy-cheese.dev/phase-contract" not in REGISTERED_CONTRACT_SCHEMA_URIS
+    assert (
+        "https://schemas.easy-cheese.dev/phase-contract"
+        not in REGISTERED_CONTRACT_SCHEMA_URIS
+    )
     assert "phase-contract" not in {slug for slug, _ in registered_contracts()}
 
 
@@ -31,7 +34,9 @@ def test_terminal_transition_rejects_payload_schema() -> None:
         validate_route("cook", "done", "https://schemas.easy-cheese.dev/curd-result")
 
 
-def test_writer_rejects_invalid_route_without_creating_directory(tmp_path: Path) -> None:
+def test_writer_rejects_invalid_route_without_creating_directory(
+    tmp_path: Path,
+) -> None:
     with pytest.raises(fromargs.CliError, match="mold -> cure is not declared"):
         _ = write_artifact(
             slug="bad-route",
@@ -47,7 +52,9 @@ def test_writer_rejects_invalid_route_without_creating_directory(tmp_path: Path)
     assert not (tmp_path / ".cheese").exists()
 
 
-def test_writer_rejects_wrong_schema_before_creating_directories(tmp_path: Path) -> None:
+def test_writer_rejects_wrong_schema_before_creating_directories(
+    tmp_path: Path,
+) -> None:
     with pytest.raises(fromargs.CliError, match="payload schema .* not declared"):
         _ = write_artifact(
             slug="wrong-schema",
@@ -63,7 +70,9 @@ def test_writer_rejects_wrong_schema_before_creating_directories(tmp_path: Path)
     assert not (tmp_path / ".cheese").exists()
 
 
-def test_writer_rejects_missing_phase_before_creating_directories(tmp_path: Path) -> None:
+def test_writer_rejects_missing_phase_before_creating_directories(
+    tmp_path: Path,
+) -> None:
     with pytest.raises(fromargs.CliError, match="--phase must be non-empty"):
         _ = write_artifact(
             slug="missing-phase",
@@ -78,7 +87,9 @@ def test_writer_rejects_missing_phase_before_creating_directories(tmp_path: Path
     assert not (tmp_path / ".cheese").exists()
 
 
-def test_writer_rejects_unknown_phase_before_creating_directories(tmp_path: Path) -> None:
+def test_writer_rejects_unknown_phase_before_creating_directories(
+    tmp_path: Path,
+) -> None:
     with pytest.raises(fromargs.CliError, match="unknown source phase 'unknown'"):
         _ = write_artifact(
             slug="unknown-phase",
@@ -93,7 +104,11 @@ def test_writer_rejects_unknown_phase_before_creating_directories(tmp_path: Path
     assert not (tmp_path / ".cheese").exists()
 
 
-def test_writer_never_follows_preplaced_predictable_tmp_symlink(tmp_path: Path) -> None:
+def test_writer_never_follows_preplaced_predictable_tmp_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "corpus"))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "route-removal-tests")
     target_dir = tmp_path / ".cheese" / "press"
     target_dir.mkdir(parents=True)
     sentinel = tmp_path / "sentinel"

@@ -47,8 +47,9 @@ from easy_cheese_schemas.validate import is_int
 # the exact ancestor it was written against. 3 adds strict unknown-key
 # rejection on the write path (`load(..., forbid_unknown=True)`) and an Enum
 # hook that names the offending value, not just the allowed set. 4 adds work
-# edges, the forked entry state, typed refs, and a wider notes bound.
-SCHEMA_VERSION = 4
+# edges, the forked entry state, typed refs, and a wider notes bound. 5 drops
+# projection_digest and preserved_entry_ids from the receipt and projection.
+SCHEMA_VERSION = 5
 MIN_READABLE = 1  # oldest readable schema version; raise it to drop old records
 STAMP_KEY = "schema_version"
 

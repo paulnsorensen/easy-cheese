@@ -22,7 +22,6 @@ __all__ = [
     "Candidate",
     "DiscoveryResult",
     "Hit",
-    "backlinks",
     "discover",
     "suggestions",
 ]
@@ -218,30 +217,6 @@ def discover(
         hidden_mirrors=hidden,
         errors=tuple(store_errors) + tuple(note_errors),
     )
-
-
-def backlinks(
-    ref: str,
-    *,
-    start: Path | str,
-    scope: str = "project",
-    corpus_root: Path | str | None = None,
-    projects: Sequence[str] = (),
-    roots: Sequence[Path | str] = (),
-) -> tuple[Hit, ...]:
-    """Every record in scope whose edges or links name `ref`.
-
-    This is `discover(linked_to=(ref,))` by construction, so both return the
-    same set; it never picks one record.
-    """
-    return discover(
-        scope=scope,
-        start=start,
-        corpus_root=corpus_root,
-        projects=projects,
-        roots=roots,
-        linked_to=(ref,),
-    ).hits
 
 
 def suggestions(

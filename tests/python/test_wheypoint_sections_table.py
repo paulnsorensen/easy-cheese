@@ -1,11 +1,10 @@
-"""Guards for the dossier contract after the wheypoint-ergonomics spec.
+"""Guards for the blocking-question rationale contract.
 
 The old `## Required body sections by state` table and its `## Document`
-chapter were prose the runtime never enforced; the spec retired them (S7
-notes body, dossier rule in the schema). What must survive in the docs is the
-*semantic* contract: a gating entry needs a dossier fork, a fork carries four
-elements, and a parked fork may exist without gating (ADR
-wheypoint-ergonomics-001).
+chapter were prose the runtime never enforced; the spec retired them. The
+wheypoint-contract-simplify spec retired the decision dossier too. What must
+survive in the docs is the *semantic* contract: a blocking question needs a
+rationale, and a parked fork is a question.
 """
 
 from __future__ import annotations
@@ -27,27 +26,28 @@ def test_wheypoint_skill_exists() -> None:
     assert INTENT_CONTRACT.exists(), f"intent contract moved or renamed: {INTENT_CONTRACT}"
 
 
-def test_a_gating_entry_requires_a_dossier_fork_and_the_runtime_enforces_it() -> None:
+def test_a_blocking_question_requires_a_rationale_and_the_runtime_enforces_it() -> None:
     body = _read(WHEYPOINT_SKILL)
-    assert re.search(r"requires a dossier fork for each gating entry", body), (
-        "SKILL.md must state that the runtime requires a dossier fork for each gating entry"
+    assert re.search(r"requires a rationale for each blocking question", body), (
+        "SKILL.md must state that the runtime requires a rationale for each blocking question"
     )
     assert "The runtime refuses an intent instead of dropping data." in body
 
 
-def test_a_parked_fork_may_exist_without_gating() -> None:
+def test_a_parked_fork_is_a_question_and_no_dossier_remains() -> None:
     body = _read(WHEYPOINT_SKILL) + _read(INTENT_CONTRACT)
-    assert re.search(r"A fork may describe any active question", body), (
-        "the docs must allow a dossier fork on a non-gating question (ADR wheypoint-ergonomics-001)"
-    )
-    assert "Record a parked fork in `decision_dossier`" in body
+    assert "Record a parked fork as a `question`" in body
+    assert "dossier" not in body.lower().replace("no dossier", "")
+    assert "decision_dossier" not in body
 
 
-def test_the_dossier_contract_spells_out_all_four_elements() -> None:
+def test_the_blocking_question_contract_spells_out_the_rationale() -> None:
     contract = _read(INTENT_CONTRACT)
-    line = next(row for row in contract.splitlines() if "**`decision_dossier`**" in row)
-    for element in ("fork", "option", "evidence", "breaks", "prior_leaning"):
-        assert element in line, f"dossier contract line must name {element!r}: {line}"
+    line = next(
+        row for row in contract.splitlines() if "A `question` with `blocks_continuation: true`" in row
+    )
+    for element in ("rationale", "options", "evidence", "prior leaning"):
+        assert element in line, f"blocking-question line must name {element!r}: {line}"
 
 
 def test_notes_replaced_the_document_chapter() -> None:

@@ -176,14 +176,14 @@ class TestAffinageResumeNormalizesItsReference:
 class TestLintChecksOneProjection:
     """`edge-cheese-wheypoint.md` medium: Cheese overstated the lint command."""
 
-    def test_resume_sends_lineage_questions_to_resolve(self) -> None:
+    def test_resume_sends_validation_questions_to_resolve(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
-        assert "`resolve` is the only command that checks the complete lineage." in body
+        assert "`resolve` is the only validation command; no lint command exists." in body
 
-    def test_resume_scopes_lint_to_the_projection(self) -> None:
+    def test_resume_names_no_lint_command(self) -> None:
         body = _text(REFERENCES / "continue-resume.md")
-        assert "That command derives the document digest and the status again." in body
-        assert "It does not check the lineage." in body
+        assert "/wheypoint lint" not in body
+        assert "wheypoint.pyz lint" not in body
 
 
 class TestResumeRoutesByDisposition:

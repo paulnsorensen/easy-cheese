@@ -19,6 +19,7 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    It finally checks legacy notes in the current `.cheese/notes/` directory and each sibling worktree.
    Use `git worktree list --porcelain` to identify sibling worktrees.
    Dispatch only the validated authoritative current revision.
+   Pass its `record.revision_id` as `--base` to every later write over that record; a `base-revision-required` or `stale-parent` refusal means: resolve again, re-apply, then write.
    The runtime generates the Markdown as a projection.
    The runtime does not treat it as authoritative.
    A `.cheese/` parent identifies the original repository root for legacy notes.
@@ -49,24 +50,18 @@ Also use it when the user manually resumes the pipeline from a cleared context.
    - a missing declared Git object;
    - a record or projection digest mismatch;
    - a receipt that does not pin its recorded ancestor;
-   - a protected entry that the lineage records but the record does not contain;
-   - an unresolved compaction lineage;
+   - a record stamped with a newer schema than the archive reads (`schema-version-future`);
    - a project identity mismatch;
    - missing or stale required artifact coverage; or
    - `status: gated:`.
-   A compaction lineage is unresolved when a revision rehydrates from the wrong parent.
-   It is also unresolved when ancestry does not contain a recorded prior compaction.
    Each condition requires a user decision.
    Do not guess a default.
    Resolution validates the complete immutable chain behind the current revision.
    It does not validate only the slug.
    Therefore, each condition breaks the chain and is not a naming problem.
    Never commit, push, or publish to Git to make a resume work.
-   Use the `/wheypoint resolve` findings to inspect a lineage failure.
-   `resolve` is the only command that checks the complete lineage.
-   Run `/wheypoint lint <projection-path>` to check one projection.
-   That command derives the document digest and the status again.
-   It does not check the lineage.
+   Use the `/wheypoint resolve` findings to inspect a failure.
+   `resolve` is the only validation command; no lint command exists.
 4. When resolution reports a miss, report every searched location.
    Then offer to start the pipeline again.
    Use `/mold` for a fuzzy specification.
@@ -163,7 +158,7 @@ Also use it when the user manually resumes the pipeline from a cleared context.
      If the accompanying message contains directives or already answers the gate, follow the live-message action.
      `execute them and surface the gate as one line of plain text`.
      Do not raise the structured question.
-     Otherwise, report the decision from `status:` and the open questions or blockers.
+    Otherwise, report the decision from `status:` and the open questions.
      Ask the user which direction to take: research, decide, or build.
      Classify each open gate item as mechanical or design through [`ask-user-question.md`](ask-user-question.md) section “When to structure.”
      A mechanical item may go straight to that structured question.
@@ -233,19 +228,13 @@ These kickoff skills are read-only.
 
 ## Work-graph keys
 
-Read `bridge` and `pending` from the resolve payload.
-Neither key changes the outcome or the dispatch decision.
+Read `bridge` from the resolve payload.
+This key does not change the outcome or the dispatch decision.
 
 - When `bridge.state` is `bound`, report `bridge.node_ref`.
   Scope the next milknado to-do call to that node.
 - When `bridge.state` is `bridge-inactive` or `unbound`, dispatch unchanged.
   Put the state in the reply.
-- When `pending` holds a `fork` entry, print one `fork-pending` line beside the gate line.
-- When `pending` holds a link entry, print one `link-pending` line beside the gate line.
-
-A pending fork or link never changes dispatch.
-The resolved record applies it at its own next checkpoint.
-The `fork-pending` line format is in [`../../wheypoint/references/delta-contract.md`](../../wheypoint/references/delta-contract.md).
 
 ## --reground
 

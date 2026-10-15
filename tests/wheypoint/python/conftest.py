@@ -23,8 +23,6 @@ from attrs import define, evolve  # noqa: E402
 from easy_cheese_schemas import (  # noqa: E402
     SCHEMA_VERSION,
     ArtifactLink,
-    DecisionFork,
-    DossierOption,
     Durability,
     EntryKind,
     EntryState,
@@ -36,7 +34,7 @@ from easy_cheese_schemas import (  # noqa: E402
     WheypointRevision,
 )
 
-from easy_cheese.shared.wheypoint import canonical, projection, records  # noqa: E402
+from easy_cheese.shared.wheypoint import canonical, projection, records, storage  # noqa: E402
 
 PLACEHOLDER_DIGEST = "sha256:" + "0" * 64
 WORK_ID = "work-0001"
@@ -81,20 +79,7 @@ def _gate_entry() -> ProtectedEntry:
         summary="Should durability default to repo-snapshot?",
         state=EntryState.ACTIVE,
         blocks_continuation=True,
-    )
-
-
-def _dossier() -> DecisionFork:
-    return DecisionFork(
-        fork="Durability default",
-        options=[
-            DossierOption(
-                option="canonical-local",
-                evidence=["no git side effect"],
-                breaks="nothing outside the corpus survives",
-            )
-        ],
-        prior_leaning="canonical-local",
+        rationale="Durability decides where the checkpoint survives.",
     )
 
 
@@ -113,9 +98,7 @@ class _RecordFields(TypedDict):
     next_action: NextAction
     decisions: list[ProtectedEntry]
     questions: list[ProtectedEntry]
-    blockers: list[ProtectedEntry]
     artifact_links: list[ArtifactLink]
-    decision_dossier: list[DecisionFork]
 
 
 def _record(**overrides: object) -> WheypointRecord:
@@ -135,9 +118,7 @@ def _record(**overrides: object) -> WheypointRecord:
         "next_action": _next_action(),
         "decisions": [],
         "questions": [_gate_entry()] if gating else [],
-        "blockers": [],
         "artifact_links": [],
-        "decision_dossier": [_dossier()] if gating else [],
     }
     fields.update(overrides)
     return WheypointRecord(**cast(_RecordFields, cast(object, fields)))
@@ -151,12 +132,11 @@ def _promotion(
     record: WheypointRecord | None = None,
     gating: bool = False,
     additions: list[ProtectedEntry] | None = None,
-    preserved: list[str] | None = None,
 ) -> Promotion:
     base = record or _record(
         revision_id=revision_id, revision_number=number, gating=gating
     )
-    projected, markdown = projection.build_projection(
+    _, markdown = projection.build_projection(
         base, durability=Durability.CANONICAL_LOCAL
     )
     # A parent given as a Promotion is the real ancestor, so the receipt can pin
@@ -182,9 +162,7 @@ def _promotion(
         record_digest=records.record_digest(base),
         applied_additions=list(additions or []),
         applied_transitions=[],
-        preserved_entry_ids=list(preserved or []),
         projection_path=f"projections/{base.revision_number}-{base.revision_id}.md",
-        projection_digest=projected.projection_digest,
         repository=RepositoryProvenance(branch="claude/wheypoint", commit="abc1234"),
     )
     # The record's pointer at its receipt is the last thing to settle: the
@@ -218,8 +196,55 @@ def corpus_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 _CODED_ERROR = re.compile(r"([a-z][a-z0-9-]*): (.*)", re.DOTALL)
 
 
-def run_cli(argv: list[str], *, stdin: str = "") -> tuple[int, dict[str, object]]:
+_NOTE_FLAGS = frozenset({"--note-dir", "--no-note"})
+
+
+def _read_base(argv: list[str], stdin: str) -> tuple[list[str], str]:
+    """`argv`/`stdin` for a checkpoint that names the revision it read.
+
+    A well-behaved writer resolves first and writes with the revision it saw.
+    This reads the record the way that writer would and supplies the base, so
+    a test that is not about the base rule still writes like one. A record that
+    does not exist yet gets no base: genesis needs none.
+    """
+    if not argv or argv[0] != "checkpoint" or "--base" in argv:
+        return argv, stdin
+    try:
+        payload = cast(object, json.loads(stdin)) if stdin.strip() else None
+    except ValueError:
+        payload = None
+    work_id = WORK_ID
+    fields = cast(dict[str, object], payload) if isinstance(payload, dict) else {}
+    named = fields.get("work_id")
+    if isinstance(named, str):
+        work_id = named
+    elif "--work-id" in argv:
+        work_id = argv[argv.index("--work-id") + 1]
+    elif len(argv) > 1 and not argv[1].startswith("-") and not Path(argv[1]).exists():
+        work_id = argv[1]
+    try:
+        record = storage.WorkStore.open(work_id).read_record()
+    except (storage.StorageError, ValueError, OSError):
+        return argv, stdin
+    if record is None:
+        return argv, stdin
+    if isinstance(payload, dict) and "base_revision_id" in payload:
+        return argv, stdin
+    flagged = any(
+        arg.startswith("--") and arg not in _NOTE_FLAGS for arg in argv[1:]
+    )
+    if isinstance(payload, dict) and not flagged and not Path(*argv[1:2] or [""]).is_file():
+        return argv, json.dumps({**payload, "base_revision_id": record.revision_id})
+    return [*argv, "--base", record.revision_id], stdin
+
+
+def run_cli(
+    argv: list[str], *, stdin: str = "", read_first: bool = True
+) -> tuple[int, dict[str, object]]:
     """Run `wheypoint.main` and parse the stream fromargs writes for its status.
+
+    `read_first` makes a checkpoint name the revision it read (see `_read_base`);
+    pass False to exercise the base rule itself.
 
     Exit 0 prints one JSON document on stdout. Any other status prints nothing
     on stdout and one JSON line on stderr, `{"error": ..., "exit_code": n}`.
@@ -228,6 +253,8 @@ def run_cli(argv: list[str], *, stdin: str = "") -> tuple[int, dict[str, object]
     """
     from easy_cheese.cli import wheypoint
 
+    if read_first:
+        argv, stdin = _read_base(argv, stdin)
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stderr(err):
         status = wheypoint.main(argv, stdin=io.StringIO(stdin), stdout=out)

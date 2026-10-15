@@ -101,6 +101,14 @@ def _write_args(
     return args
 
 
+def _read_base(root: Path, env: dict[str, str]) -> list[str]:
+    """The `--base` a phase writer passes after it reads the current record."""
+    shown = _run("wheypoint", "show", "--work-id", SLUG, cwd=root, env=env)
+    assert shown.returncode == 0, shown.stderr
+    record = cast(dict[str, object], _json(shown)["record"])
+    return ["--base", cast(str, record["revision_id"])]
+
+
 def _seed_git(root: Path) -> None:
     _ = (root / ".gitignore").write_text(".cheese/\n", encoding="utf-8")
     _ = (root / "seed.txt").write_text("seed\n", encoding="utf-8")
@@ -188,7 +196,10 @@ def test_curd_2_chain_writes_revisions_and_validates_grounded_genesis(
     record = cast(dict[str, object], _json(shown)["record"])
     assert record["working_context"] == list(entries)
 
-    carried = _run("cook", *_write_args(genesis, "cook"), cwd=genesis, env=env)
+    base = _read_base(genesis, env)
+    carried = _run(
+        "cook", *_write_args(genesis, "cook"), *base, cwd=genesis, env=env
+    )
     assert carried.returncode == 0, carried.stderr
     carried_show = _run("wheypoint", "show", "--work-id", SLUG, cwd=genesis, env=env)
     assert carried_show.returncode == 0, carried_show.stderr
@@ -300,7 +311,10 @@ def test_curd_3_resolves_phase_artifacts_and_reports_stale_inputs(
     assert payload["outcome"] == "gated"
     assert payload["dispatchable"] is False
 
-    carried = _run("cook", *_write_args(lint_root, "cook"), cwd=lint_root, env=lint_env)
+    base = _read_base(lint_root, lint_env)
+    carried = _run(
+        "cook", *_write_args(lint_root, "cook"), *base, cwd=lint_root, env=lint_env
+    )
     assert carried.returncode == 0, carried.stderr
     shown = _run("wheypoint", "show", "--work-id", SLUG, cwd=lint_root, env=lint_env)
     assert shown.returncode == 0, shown.stderr
@@ -388,11 +402,9 @@ def _seed_ambiguous_slug(corpus_root: Path, slug: str, project_key: str) -> None
             next_action=NextAction(move=NextMove.COOK, orientation="proceed"),
             decisions=[],
             questions=[],
-            blockers=[],
             artifact_links=[],
-            decision_dossier=[],
         )
-        projected, markdown = projection.build_projection(
+        _, markdown = projection.build_projection(
             record, durability=Durability.CANONICAL_LOCAL
         )
         revision = WheypointRevision(
@@ -406,9 +418,7 @@ def _seed_ambiguous_slug(corpus_root: Path, slug: str, project_key: str) -> None
             record_digest=records.record_digest(record),
             applied_additions=[],
             applied_transitions=[],
-            preserved_entry_ids=[],
             projection_path=f"projections/{record.revision_number}-{record.revision_id}.md",
-            projection_digest=projected.projection_digest,
             repository=RepositoryProvenance(
                 branch="claude/wheypoint", commit="abc1234"
             ),

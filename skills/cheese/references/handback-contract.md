@@ -95,6 +95,22 @@ A worker that writes a durable artifact hands back the same `status:` /
 `next:` it wrote there, with `artifact:` pointing at the report it consumed.
 The two must never tell different stories.
 
+## Base revision
+
+Every durable write over an existing Wheypoint record names the revision the
+writer read. This keeps every phase ready for a compaction.
+
+- Keep `record.revision_id` from the `authoritative` phase-entry resolve as `<base>`.
+- Pass `--base <base>` to each handoff write over an existing record.
+- Omit `--base` only when no record exists yet for the slug.
+- Pass `--base` only for chain phases. The writer refuses it for any other phase.
+- One exception: the workflow runtime's budget checkpoint has no earlier read
+  to name. It reads the record under one artifact lock and binds that revision
+  itself. No agent-facing write may do this.
+- After a compaction, resolve again before you write.
+- A `base-revision-required` or `stale-parent` refusal means: resolve again,
+  apply your result again, then write.
+
 ## Boundaries
 
 | Boundary | Producer | Consumer | Required fields | Optional fields |
@@ -103,7 +119,7 @@ The two must never tell different stories.
 | Durable report | the same phases, via the artifact writer | the next phase, `/cheese --continue` | same preamble + body | same |
 | Unregistered report | `/affinage`, `/pasteurize` | `/cheese --continue` | same preamble, written by hand | same |
 | Fan phase router | a fan-out phase handback | `/cook`'s fan pathway phase decision | `status` (routed by disposition), `next` | — |
-| Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | decision dossier body |
+| Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | notes body |
 | Grading receipt (distinct vocabulary, not a handback) | `/hard-cheese` | the attempt log | `status: PASS \| FAIL \| FAILED \| LOGGED` | `attempts` |
 
 Routes live in the private `_ROUTES` table in `src/easy_cheese/shared/phase_routes.py`.

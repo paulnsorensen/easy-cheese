@@ -36,6 +36,7 @@ Run `python3 skills/cook/scripts/cook.pyz wheypoint-resolve --ref <slug>`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
 Show advisory `stale-commit` and `grounded-path-missing` findings.
+Keep its `record.revision_id` as `<base>` ([§ Base revision](../cheese/references/handback-contract.md#base-revision)).
 
 ## Inputs
 
@@ -125,7 +126,6 @@ Do not remove, skip, or weaken unrelated tests to make the change pass.
 
 Use the baseline for gate failures.
 [`references/quality-gates.md`](references/quality-gates.md) defines the policy, the classification terms, and the baseline artifact.
-Each downstream phase links to this reference instead of repeating it.
 
 [`references/writer-views.md`](references/writer-views.md) generates schemas for writer-view payloads inline.
 The `normalize` and `validate` CLIs apply these schemas before agent-authored JSON reaches host-owned identifiers.
@@ -139,8 +139,6 @@ Use [`references/package-report.md`](references/package-report.md) to report fil
 
 Write a minimum-shape handoff slug at the top of `.cheese/cook/<slug>.md`.
 Use the same file for the report; do not create a second file.
-This slug lets downstream phases resume or chain without rereading the full report.
-The fan pathway also uses it during wave orchestration.
 Use this schema:
 
 ```markdown
@@ -153,21 +151,20 @@ baseline: none | <path to the baseline artifact — shape in references/quality-
 <one-line orientation: what cook changed>
 ```
 
-The [handback contract](../cheese/references/handback-contract.md) defines the canonical `status:` grammar, including `ok` and `halt`.
+The handback contract defines the canonical `status:` grammar, including `ok` and `halt`.
 Only `next:` and the additional keyed lines are specific to a phase.
 
 `artifact:` names the upstream artifact that this run consumed.
 For a Mold route, use the approved spec path.
 Leave `artifact:` empty when this run consumed no upstream artifact.
 Do not point `artifact:` at this Cook report.
-`/cheese` forwards the same path to the next phase.
 
 Use the canonical boundary writer when you emit this handoff for the typed fan result.
 Carry the result schema explicitly:
 
 ```text
 python3 skills/cook/scripts/cook.pyz write-handoff-artifact \
-  --slug <slug> --status <status> --phase cook --next age \
+  --slug <slug> --status <status> --phase cook --next age [--base <base>] \
   --artifact <artifact-path> --orientation "<one-line orientation>" \
   --payload-schema https://schemas.easy-cheese.dev/curd-result \
   --grounded <path[#start-end]> \

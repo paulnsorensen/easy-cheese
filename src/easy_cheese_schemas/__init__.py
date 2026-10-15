@@ -88,7 +88,6 @@ from easy_cheese_schemas.contracts import (  # wheypoint continuity types
     CurdResult,
     CurdResultWriterView,
     RemediationCureWriterView,
-    DecisionFork,
     DeliverableWriterView,
     DiagnosisCause,
     DiagnosisCauseWriterView,
@@ -98,7 +97,6 @@ from easy_cheese_schemas.contracts import (  # wheypoint continuity types
     DiagnosisRequest,
     DiagnosisResult,
     DiagnosisResultWriterView,
-    DossierOption,
     Durability,
     EdgeKind,
     EntryKind,
@@ -233,7 +231,7 @@ from easy_cheese_schemas.schema_runtime import (
     validate_curd_plan,
 )
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 
 __all__ = [
     "AcceptedArtifact",
@@ -281,7 +279,6 @@ __all__ = [
     "DOCUMENT_SCHEMA_URIS",
     "DRAFT_2020_12",
     "FORK_TASTE_VERDICT_SCHEMA_URI",
-    "DecisionFork",
     "DecomposedCurd",
     "DeliverableWriterView",
     "DiagnosisCause",
@@ -293,7 +290,6 @@ __all__ = [
     "DiagnosisResult",
     "DiagnosisResultWriterView",
     "Disposition",
-    "DossierOption",
     "DuplicateAdapterError",
     "Durability",
     "EdgeKind",

@@ -20,7 +20,7 @@ than to whoever is holding it:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Container, Sequence
+from collections.abc import Callable, Container, Mapping, Sequence
 from enum import Enum
 from typing import Protocol, TypeVar, cast, runtime_checkable
 
@@ -34,8 +34,10 @@ from easy_cheese_schemas import (
     ProtectedEntry,
     WheypointDelta,
     WheypointRecord,
+    WheypointRevision,
     load,
 )
+from easy_cheese_schemas.compat import STAMP_KEY
 
 from . import canonical, ref_grammar
 
@@ -43,6 +45,9 @@ T = TypeVar("T")
 
 # The record's pointer at its own receipt: see the module docstring.
 _RECEIPT_POINTER = "revision_digest"
+# Records and receipts stamped below this version are digested from their raw
+# parsed payload; the schema has dropped receipt fields since.
+RAW_DIGEST_BELOW = 5
 
 
 class RecordError(ValueError):
@@ -120,6 +125,84 @@ def structure(payload: object, cls: type[T], *, forbid_unknown: bool = False) ->
     return loaded.value
 
 
+_KEPT_EDGE_KINDS = frozenset({"forked_from", "supersedes", "checkpoints"})
+_REMOVED_ENTRY_KEYS = ("origin", "successor", "copies")
+
+
+def _plain_entry(entry: object, *, blocker: bool = False) -> object:
+    """A stored entry without the keys schema 5 dropped; a blocker becomes a question."""
+    if not isinstance(entry, dict):
+        return entry
+    plain = {
+        key: value
+        for key, value in cast("dict[str, object]", entry).items()
+        if key not in _REMOVED_ENTRY_KEYS
+    }
+    if blocker:
+        plain["kind"] = "question"
+    return plain
+
+
+def _entry_list(value: object) -> list[object]:
+    return list(cast("list[object]", value)) if isinstance(value, list) else []
+
+
+def _kept_edges(value: object) -> object:
+    if not isinstance(value, list):
+        return value
+    kept: list[object] = [
+        edge
+        for edge in cast("list[object]", value)
+        if not isinstance(edge, dict)
+        or cast("dict[str, object]", edge).get("kind") in _KEPT_EDGE_KINDS
+    ]
+    return kept
+
+
+def normalize_stored(payload: object) -> object:
+    """A pre-v5 stored payload shaped for the v5 types; the input is untouched.
+
+    Drops the keys schema 5 removed (dossier, entry lineage, edges of removed
+    kinds) and turns each blocker into a question with the same id, summary, and
+    stored blocks_continuation. Reads only: nothing here is written back, and the agreement checks
+    hash the raw payload before this runs. A v5 payload passes through.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    stored = cast("dict[str, object]", payload)
+    if not _hashed_raw(stored):
+        return stored
+    out = dict(stored)
+    _ = out.pop("decision_dossier", None)
+    blockers = _entry_list(out.pop("blockers", None))
+    if "questions" in out or blockers:
+        out["questions"] = [
+            *(_plain_entry(entry) for entry in _entry_list(out.get("questions"))),
+            *(_plain_entry(entry, blocker=True) for entry in blockers),
+        ]
+    for name in ("decisions", "directives"):
+        if name in out:
+            out[name] = [_plain_entry(entry) for entry in _entry_list(out[name])]
+    if "applied_additions" in out:
+        out["applied_additions"] = [
+            _plain_entry(
+                entry,
+                blocker=isinstance(entry, dict)
+                and cast("dict[str, object]", entry).get("kind") == "blocker",
+            )
+            for entry in _entry_list(out["applied_additions"])
+        ]
+    for name in ("edges", "applied_edges", "removed_edges"):
+        if name in out:
+            out[name] = _kept_edges(out[name])
+    return out
+
+
+def structure_stored(payload: object, cls: type[T]) -> T:
+    """`structure` for a payload read from disk, normalizing a pre-v5 stamp."""
+    return structure(normalize_stored(payload), cls)
+
+
 def canonical_payload(obj: AttrsInstance) -> bytes:
     """The exact bytes a schema instance is stored and hashed as."""
     return canonical.canonical_bytes(unstructure(obj))
@@ -135,6 +218,34 @@ def revision_digest(revision: AttrsInstance) -> str:
     return canonical.digest_value(unstructure(revision))
 
 
+def _hashed_raw(payload: Mapping[str, object]) -> bool:
+    """Whether a stored payload's digest is taken over its raw parsed bytes."""
+    stamp = payload.get(STAMP_KEY)
+    return isinstance(stamp, int) and stamp < RAW_DIGEST_BELOW
+
+
+def stored_record_digest(payload: Mapping[str, object], record: WheypointRecord) -> str:
+    """The `record_digest` a stored record's writer hashed.
+
+    A record stamped below 5 is hashed from its raw parsed payload, minus the
+    receipt pointer, before any normalization: a later schema must not make an
+    older store look inconsistent. A v5 record re-serializes to its own bytes.
+    """
+    if not _hashed_raw(payload):
+        return record_digest(record)
+    return canonical.digest_value(
+        {key: value for key, value in payload.items() if key != _RECEIPT_POINTER}
+    )
+
+
+def stored_revision_digest(
+    payload: Mapping[str, object], revision: WheypointRevision
+) -> str:
+    """The `revision_digest` a stored receipt's writer hashed; see above."""
+    if not _hashed_raw(payload):
+        return revision_digest(revision)
+    return canonical.digest_value(dict(payload))
+
 def request_fingerprint(delta: WheypointDelta) -> str:
     """Identity of one request, so an identical replay is recognisable.
 
@@ -145,8 +256,8 @@ def request_fingerprint(delta: WheypointDelta) -> str:
 
 
 def entries(record: WheypointRecord) -> tuple[ProtectedEntry, ...]:
-    """Every protected entry: decisions, questions, blockers, then directives."""
-    return (*record.decisions, *record.questions, *record.blockers, *record.directives)
+    """Every protected entry: decisions, questions, then directives."""
+    return (*record.decisions, *record.questions, *record.directives)
 
 
 def find_entry(record: WheypointRecord, entry_id: str) -> ProtectedEntry | None:
