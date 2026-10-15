@@ -1,12 +1,12 @@
 ---
 name: culture
-description: Models problems and trade-offs without writing code or specifications. Use when a workflow needs silent reasoning, or the user asks for "/culture", "no writes", "rubber-duck this", or "understand this problem at several altitudes before solutions".
+description: Models problems and trade-offs without writing code or specifications. Use when a workflow needs silent reasoning, or the user asks for "/culture", "no writes", "rubber-duck this", or "these bugs feel connected".
 license: MIT
 ---
 
 # /culture
 
-Two modes:
+Two invocation contexts; users do not select a mode:
 
 1. **Internal mode (default).** Other workflow skills — and `/cheese` itself — invoke `/culture` silently as a thinking pass: restate the question, list assumptions, name candidate options, run a quick shape check, pick the next action. The dialogue does not surface to the user; only the resulting decision (carrying its record ledger) and any code edits the calling skill makes do. The most common callers are:
    - `/cheese` step 1 — silent classification reasoning before announce.
@@ -16,13 +16,18 @@ Two modes:
 
 Do not use the user-facing mode when the user wants a written spec (`/mold`), implementation (`/cook`), review (`/age`), or external evidence gathering (`/briesearch`) — those targets get the internal-mode call instead, and the calling skill does the work.
 
-## Problem altitudes (prototype)
+## Conversational navigation (prototype)
 
-`/culture --altitudes <goal or problem>` selects user-facing problem framing before solution design.
-Also use this mode when the user explicitly asks to understand a problem at several altitudes before solutions.
-Read [Problem altitudes](references/problem-altitudes.md) only for this mode; it replaces the numbered Flow below.
+Use `/culture <goal or problem>` or ordinary conversation; interpret intent and context, not reserved keywords.
+Altitude navigation belongs to normal user-facing Culture and supplements the Flow below.
+Suggest a useful change of altitude when evidence indicates a pattern or a gap between behavior and goals.
+State the interpretation and stay within the agreed evidence scope.
+A suggestion does not authorize a broad audit or downstream transition.
+Read [Problem altitudes](references/problem-altitudes.md) when moving between levels, testing shared causes, or drawing relationships.
+Cues such as “zoom out” and “make that concrete” are optional examples, not commands or a mode menu.
+Keep simple local questions local; do not require a full altitude tour, table, or diagram.
+Keep silent internal reasoning unchanged; it does not load the reference or start a user interview.
 Culture still owns the record ledger and session-end handoff.
-Keep the silent internal mode unchanged.
 For behavioral evaluation, use [the pressure scenarios](references/problem-altitudes-evals.md).
 
 ## Invariant

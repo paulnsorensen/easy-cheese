@@ -27,15 +27,22 @@ The change applies to user-facing mode only. Internal mode (the silent reasoning
 
 ## Problem-altitude prototype
 
-Culture's `--altitudes` prototype extends user-facing problem framing before solution design.
-It connects events, patterns, structure, outcomes, and purpose without treating a shared cause as proven.[^altitudes]
-The prototype remains a proposal under review, not a new execution contract.
+Culture uses intent-driven altitude navigation in ordinary user-facing conversation, without a required mode flag or exact keyword.[^altitudes]
+The user approves this direction for the prototype; publication remains under review.
+Conversational cues such as “zoom out” and “make that concrete” are examples, not reserved commands.
+Culture combines problem level, evidence source, and thinking move instead of selecting an exclusive mode.[^altitudes]
+
+Culture suggests a useful change of altitude when evidence indicates a pattern or a gap between behavior and goals.
+It states its interpretation and stays within the agreed evidence scope.
+A suggestion does not authorize a full audit, project mutation, or a move to Mold.
+Simple local questions do not require a full altitude tour, table, or diagram.[^altitudes]
 
 Problem framing reuses Culture's record ledger and Wheypoint session handoff.
 The problem brief travels through that handoff; it does not introduce another artifact schema.
 Silent internal mode stays light and unchanged.
-Mold receives the user's selected problem and unresolved hypotheses, not an approved implementation.[^altitudes]
+Mold receives the user's selected problem and unresolved hypotheses, not an approved implementation.[^handoff]
 
-[^altitudes]: skills/culture/SKILL.md:19-26; skills/culture/references/problem-altitudes.md:25-39,107-128
+[^altitudes]: skills/culture/SKILL.md:19-31; skills/culture/references/problem-altitudes.md:14-63
+[^handoff]: skills/culture/references/problem-altitudes.md:135-156
 
-_Source: Culture problem-altitude prototype · Updated: 2026-10-14 · Supersedes: none_
+_Source: User-approved Culture navigation revision · Updated: 2026-10-15 · Supersedes: explicit `--altitudes` prototype selection · 2026-10-14_

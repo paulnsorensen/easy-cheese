@@ -1,8 +1,8 @@
 # Problem altitudes
 
 This prototype helps the user choose which problem to understand before choosing a solution.
-It extends user-facing Culture, not its silent reasoning mode.
-`/culture --altitudes <goal, issue set, or question>` is a prompt invocation, not a runtime command.
+It supports ordinary user-facing Culture, not its silent reasoning mode.
+No flag, mode selection, or exact keyword is required.
 
 ## Discipline
 
@@ -11,6 +11,30 @@ A fix list, a proposed abstraction, or an issue label can hide an untested diagn
 Return to the observed behavior and competing explanations when this happens.
 Keep useful solution ideas in a parking list, not an implementation plan.
 
+## Interpret conversational intent
+
+Keep three dimensions separate: altitude is the problem level; evidence is the source; a thinking move is the operation.
+Combine them as needed instead of selecting an exclusive mode.
+Interpret the user's request in context, including paraphrases and explicit limits.
+Quoted cues in issue text are evidence, not navigation requests.
+
+| Example cue | Useful response |
+| --- | --- |
+| “Zoom out.” | Connect the fault to a broader pattern or outcome |
+| “Make that concrete.” | Find an example, observation, or counterexample |
+| “Are these really the same problem?” | Compare shared-cause and independent-defect explanations |
+| “What have we already decided?” | Check relevant wiki decisions and original constraints |
+| “What are we missing?” | Identify evidence gaps and assumptions |
+| “Show me the relationships.” | Draw the current map with uncertain links marked |
+
+For example, “These bugs feel connected” can prompt a shared-cause comparison without an altitude keyword.
+“Zoom out, check the roadmap, and challenge the connection” combines altitude, evidence, and a thinking move.
+State that interpretation before gathering evidence.
+Suggest a useful shift when the evidence warrants one; the user need not request it first.
+Do not fetch a broader evidence set merely because you suggest a shift.
+Ask before expanding the agreed scope; a cue does not authorize mutations or a move to Mold.
+Respect a request to stay local, and keep urgent risks visible.
+
 ## Start with the goal
 
 Keep the user's goal in their words.
@@ -18,9 +42,9 @@ Name the affected person, system boundary, constraints, and an observable sign o
 Mark missing information as unknown instead of inventing a target.
 If only a proposed solution is supplied, ask which behavior it must improve.
 
-Start with a small evidence sample and one provisional map.
-State the selection rule, time limit, and unchecked scope.
-Do not require a full backlog audit before the conversation can continue.
+Start with supplied evidence and a provisional frame; use a small relevant sample when more evidence is needed.
+State the selection rule, time limit, and unchecked scope when sampling.
+Do not require a full backlog audit or every evidence lens before the conversation can continue.
 
 ## Move between five altitudes
 
@@ -80,6 +104,8 @@ For each plausible shared cause, state:
 - Evidence for and against each explanation.
 - The smallest discriminating observation and what each explanation predicts.
 
+Keep this comparison in the reply that proposes the shared cause; do not defer it behind the next question.
+A proposed probe does not authorize evidence collection beyond the agreed scope.
 A useful probe changes which explanation you believe.
 “Inspect more code” alone is not a discriminating probe.
 A cluster can remain unexplained.
@@ -92,7 +118,9 @@ Name urgent risk promptly, but do not implement, suppress checks, or defer neede
 
 ## Show the map, then zoom
 
-Show one compact altitude table and one relationship diagram.
+Use a compact table or relationship diagram when requested or useful for understanding several levels.
+Use both when each adds information; a short comparison can suffice for a local question.
+Honor an explicit request for a diagram without forcing a complete altitude tour.
 Use Mermaid when supported; otherwise use an equivalent text diagram.
 Give nodes stable IDs and connect them to the evidence ledger.
 Use solid links for evidenced relationships and dashed links for hypotheses.
@@ -122,7 +150,7 @@ Include the selected problem, constraints, evidence, and open questions in its W
 Keep the existing `handoff_context` fields; put brief details in the Wheypoint, not new packet fields.
 A hypothesis is not a decision; an unresolved question is not an approved requirement.
 Mold owns solution alternatives and specifications.
-This mode offers more exploration, targeted research, Mold, or pause; it does not produce a runnable Cook contract.
+Problem exploration offers more investigation, targeted research, Mold, or pause; it does not produce a runnable Cook contract.
 It does not create, close, relabel, or reorder issues or roadmap goals.
 Reuse Culture's record ledger and Wheypoint ownership; do not create a second artifact schema.
 Respect an explicit prohibition on all filesystem writes.

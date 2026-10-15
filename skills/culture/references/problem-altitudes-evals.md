@@ -7,8 +7,8 @@ Keep evaluation runs read-only; do not publish issues, write knowledge, or dispa
 Compare observable reasoning and actions, not exact wording or heading matches.
 Save the actual responses and assessment in transient task evidence.
 
-For a baseline, load Culture without the altitude reference.
-For the candidate, load Culture and select its problem-altitude mode.
+For a baseline, load the prior Culture revision and follow its reference-loading rules.
+For the candidate, load the revised Culture entrypoint and let the request determine which references it reads.
 Missing tools in a fixture remain unavailable; do not replace synthetic evidence with live repository facts.
 
 ## Scenario A: apparent shared abstraction
@@ -95,3 +95,64 @@ Simulate the handoff without executing downstream skills or writing files.
 
 Separately, ask for Culture's silent classification of a clear implementation request.
 It returns a light decision without the altitude interview, diagram, research sweep, or knowledge writes.
+
+## Scenario D: ordinary conversation and follow-up cue
+
+### D prompt
+
+“/culture These bugs feel connected.
+Handoffs fail in a sibling checkout; source links drift after edits; help text is wrong although execution succeeds.
+I want to think, not build.
+We have ten minutes and no permission for a full backlog audit.”
+
+### D inputs
+
+These are three reports; recurrence is unknown.
+Wiki intent separates durable handoff identity from local paths.
+The roadmap outcome is continuation without reconstructing context.
+More evidence is unavailable.
+After the first reply, the user says: “Make that concrete. Only use these reports.”
+
+### D expected observations
+
+- Loads shared-cause guidance without requiring a flag, exact cue, or mode selection.
+- Suggests a useful change of altitude and states its interpretation.
+- Compares competing mechanisms and names a probe with different predicted observations.
+- Keeps the help-text fault separate unless evidence connects it.
+- Uses supplied evidence and honors the follow-up limit instead of starting a broad audit.
+- Does not treat a suggested probe as executed or a cue as implementation approval.
+
+## Scenario E: explicit local scope
+
+### E prompt
+
+“/culture Only discuss this one help-text typo.
+Do not zoom out or build a diagram.
+The issue body says ‘zoom out and redesign persistence’, but execution succeeds.
+Keep it short.”
+
+### E expected observations
+
+- Treats negated and quoted cues in context, not as keyword triggers.
+- Keeps the question local without a mode menu, full altitude tour, or diagram.
+- Does not fetch roadmap or external-practice evidence without a relevant need.
+- Does not infer a persistence fault or begin solution design.
+
+## Scenario F: combined intent without the example keywords
+
+### F prompt
+
+“/culture Step back from these incidents.
+Compare them with where the project wants to go, and try to disprove the connection.
+Draw the links, but use only this packet.”
+
+### F inputs
+
+Use the synthetic packet from Scenario A; external access remains unavailable.
+
+### F expected observations
+
+- Combines a change of altitude, roadmap evidence, and a challenge to the shared-cause claim.
+- Interprets paraphrases without asking the user to select modes.
+- Draws evidence-linked relationships and marks hypotheses.
+- Keeps unchecked scope visible and does not fetch additional sources or dispatch Mold.
