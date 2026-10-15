@@ -111,7 +111,7 @@ Flags ignore stdin unless the intent argument is `-`.
 
 The flag form refuses with these codes:
 
-- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, and withdraws, a `--quote`, `--operator-quote`, or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
+- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, and withdraws, an `--owner` or `--when` count differs from the `--question` count, a `--quote`, `--operator-quote`, or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
 - `flag-kind`: a `--kind` names no edge kind.
 - `flag-link`: a `--link` is not a valid typed ref.
 - `flag-conflict`: the intent file holds a non-list value at a key a flag extends.
