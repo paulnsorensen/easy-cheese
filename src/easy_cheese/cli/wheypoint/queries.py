@@ -253,7 +253,7 @@ def _tsv_lines(
 def run_list(
     *,
     corpus_root: str | None = None,
-    scope: Literal["project", "machine"] = "project",
+    scope: Literal["project", "machine"] | None = None,
     project: list[str] | None = None,
     root: list[str] | None = None,
     grep: list[str] | None = None,
@@ -280,7 +280,9 @@ def run_list(
     _ = enum_values("--edge-kind", edge_kind or (), EdgeKind, "flag-kind")
     _ = enum_values("--entry-kind", entry_kind or (), EntryKind, "flag-entry")
     _ = enum_values("--entry-state", entry_state or (), EntryState, "flag-entry")
-    effective_scope = "machine" if projects else scope
+    # Only the default scope falls back: an explicit --scope keeps its meaning.
+    fallback = scope is None and not projects and paths.git_toplevel() is None
+    effective_scope = "machine" if projects or fallback else scope or "project"
     result = discovery.discover(
         scope=effective_scope,
         start=Path.cwd(),
@@ -305,7 +307,7 @@ def run_list(
     lines = _tsv_lines(
         items, ("source", "project", "ref", "status", "next", "orientation")
     )
-    return {
+    payload: dict[str, object] = {
         "corpus_root": str(root_arg),
         "scope": effective_scope,
         "items": items,
@@ -314,6 +316,9 @@ def run_list(
         "hidden_mirrors": result.hidden_mirrors,
         "errors": list(result.errors),
     }
+    if fallback:
+        payload["scope-fallback"] = "machine"
+    return payload
 
 
 def run_log(

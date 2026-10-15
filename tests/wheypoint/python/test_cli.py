@@ -949,7 +949,7 @@ def test_ac13_list_prints_one_line_per_work_item(corpus_root: Path) -> None:
         stdin=_first_intent(work_id="other-work", orientation="Other.\nMore."),
     )
 
-    status, payload = _run("list")
+    status, payload = _run("list", "--scope", "project")
     assert status == 0
     lines = cast(list[str], payload["lines"])
     assert len(lines) == 2
@@ -1805,6 +1805,33 @@ def test_list_rejects_a_bad_since_or_limit_as_usage(flags: tuple[str, str]) -> N
     error = cast(dict[str, object], payload["error"])
     assert error["code"] == ""
     assert flags[0] in cast(str, error["message"])
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_scope_fallback_reports_machine_outside_a_checkout() -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    status, payload = _run("list")
+
+    assert status == 0
+    assert payload["scope"] == "machine"
+    assert payload["scope-fallback"] == "machine"
+    refs = [
+        cast(dict[str, object], item)["ref"]
+        for item in cast("list[object]", payload["items"])
+    ]
+    assert WORK_ID in refs
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_explicit_project_scope_has_no_scope_fallback() -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    status, payload = _run("list", "--scope", "project")
+
+    assert status == 0
+    assert payload["scope"] == "project"
+    assert "scope-fallback" not in payload
 
 
 def test_list_project_flag_implies_machine_scope(

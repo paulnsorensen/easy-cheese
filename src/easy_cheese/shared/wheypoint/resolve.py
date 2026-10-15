@@ -347,12 +347,15 @@ def _raw_slug(record_path: Path) -> str | None:
     return claimed if isinstance(claimed, str) else None
 
 
-def _slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
-    """Every work id whose record claims `slug`, in work-id order.
+def _slug_matches(
+    slug: str, checks: _Checks, *, mode: str = "exact"
+) -> tuple[str, ...]:
+    """Every work id whose record slug matches `slug` under `mode`, in work-id order.
 
-    Work-id order is reporting order for an ambiguity, never a preference: a
-    second match is refused, not ranked -- and the walk stops there, so an
-    ambiguous slug never pays for a full corpus scan.
+    `mode` is `exact`, `prefix`, or `substring`. Work-id order is reporting
+    order for an ambiguity, never a preference. An exact walk stops at the
+    second match, so an ambiguous slug never pays for a full corpus scan; a
+    prefix or substring walk lists every candidate.
     """
     if not checks.work_root.is_dir():
         return ()
@@ -374,15 +377,29 @@ def _slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
             claimed = _raw_slug(record_path)
         except (storage.StorageError, ValueError, OSError):
             continue
-        if claimed == slug:
+        if claimed is not None and _slug_fits(claimed, slug, mode):
             matched.append(directory.name)
-            if len(matched) > 1:
+            if mode == "exact" and len(matched) > 1:
                 break
     return tuple(matched)
 
 
+def _slug_fits(claimed: str, text: str, mode: str) -> bool:
+    if mode == "prefix":
+        return claimed.startswith(text)
+    if mode == "substring":
+        return text in claimed
+    return claimed == text
+
+
 def _resolve_slug(slug: str, checks: _Checks) -> Resolution:
+    # An exact slug always wins; a unique prefix, then a unique substring, is
+    # the fallback. Several fallback matches are refused as ambiguous.
     work_ids = _slug_matches(slug, checks)
+    for mode in ("prefix", "substring"):
+        if work_ids:
+            break
+        work_ids = _slug_matches(slug, checks, mode=mode)
     searched = _corpus_locations(slug, checks)
     if not work_ids:
         return Resolution(

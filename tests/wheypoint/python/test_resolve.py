@@ -1435,6 +1435,115 @@ def test_resolving_a_slug_reads_each_candidate_once_and_revalidates_the_winner(
     assert set(ambiguous.matches) == {"work-0003", "work-0004"}
 
 
+def _seed_slugs(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+    slugs: tuple[str, ...],
+) -> None:
+    for number, slug in enumerate(slugs, start=1):
+        _ = seed(
+            corpus_root,
+            make_record,
+            make_promotion,
+            work_id=f"work-{number:04d}",
+            slug=slug,
+        )
+
+
+def test_a_unique_slug_prefix_resolves_authoritative(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(corpus_root, make_record, make_promotion, ("alpha-build", "beta-ship"))
+
+    found = run("alpha", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0001"
+
+
+def test_an_ambiguous_slug_prefix_lists_every_candidate(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root,
+        make_record,
+        make_promotion,
+        ("alpha-build", "alpha-ship", "beta-ship"),
+    )
+
+    found = run("alpha", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AMBIGUOUS
+    assert found.matches == ("work-0001", "work-0002")
+
+
+def test_a_unique_slug_substring_resolves_when_no_prefix_matches(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(corpus_root, make_record, make_promotion, ("alpha-build", "beta-ship"))
+
+    found = run("ship", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0002"
+
+
+def test_an_ambiguous_slug_substring_lists_every_candidate(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root,
+        make_record,
+        make_promotion,
+        ("alpha-ship", "beta-ship", "gamma-build"),
+    )
+
+    found = run("ship", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AMBIGUOUS
+    assert found.matches == ("work-0001", "work-0002")
+
+
+def test_an_exact_slug_beats_a_prefix_and_substring_match(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(
+        corpus_root,
+        make_record,
+        make_promotion,
+        ("widget-extra", "widget", "my-widget"),
+    )
+
+    found = run("widget", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0002"
+
+
+def test_a_slug_prefix_beats_a_substring_match(
+    corpus_root: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    _seed_slugs(corpus_root, make_record, make_promotion, ("my-widget", "widget-extra"))
+
+    found = run("widget", corpus_root)
+
+    assert found.outcome is resolve_mod.ResolutionOutcome.AUTHORITATIVE
+    assert found.work_id == "work-0002"
+
+
 def test_a_future_schema_record_errors_by_slug_and_by_work_id_without_a_write(
     corpus_root: Path,
     make_record: Callable[..., WheypointRecord],
