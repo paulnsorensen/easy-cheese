@@ -88,7 +88,7 @@ Two carriers, one contract:
 - The **durable artifact** is `.cheese/<phase>/<slug>.md`, written atomically by
   the handoff-artifact writer: the identical preamble as its first lines,
   a blank line, then the report body. The write validates `phase → next:`
-  against the phase-transition registry before it touches the filesystem, so an
+  against the private route table `_ROUTES` before it touches the filesystem, so an
   artifact that exists is an artifact whose transition is legal.
 
 A worker that writes a durable artifact hands back the same `status:` /
@@ -122,11 +122,11 @@ writer read. This keeps every phase ready for a compaction.
 | Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | notes body |
 | Grading receipt (distinct vocabulary, not a handback) | `/hard-cheese` | the attempt log | `status: PASS \| FAIL \| FAILED \| LOGGED` | `attempts` |
 
-`schema-intertwine.md` lists the registered source phases.
-Only a registered phase can use the artifact writer, because the writer validates `phase -> next:` first.
-`/affinage` and `/pasteurize` have no registered transition today.
+Routes live in the private `_ROUTES` table in `src/easy_cheese/shared/phase_routes.py`.
+Only a source phase in `_ROUTES` can use the artifact writer, because the writer validates `phase -> next:` against that table first.
+`/affinage` and `/pasteurize` have no route in `_ROUTES` today.
 They write the same preamble by hand and do not call the writer.
-Register their transitions before you route them through the writer.
+To route them through the writer, add their routes to `_ROUTES`.
 
 ## Wire-format limits
 

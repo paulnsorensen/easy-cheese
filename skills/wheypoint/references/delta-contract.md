@@ -80,8 +80,8 @@ A gating finding remains a stop even when advisory findings are also present.
 A checkpoint result carries a `warnings` list.
 `stale-notes` means a decision was added or transitioned and `notes` stayed as they were. The commit stamps `notes_revision_number` when it replaces `notes` and `decisions_revision_number` when it adds or transitions a decision, so a later projection shows the drift as a marker line at the top of `## Notes`. A `supersede` transition names its successor in `target_entry_id`; that entry may be one the same delta adds. The projection omits a superseded entry from its kind section and lists `- <id> -> <successor id>` under `## Superseded`, before `## Identifiers`.
 Rewrite `notes` and checkpoint again when the notes now contradict the decision.
-`unpinned-line-ref` means a context item or artifact link held a bare `path:line` that the checkpoint could not pin, because no checkout or no commit exists. The reference stays as written. When the file exists in the checkout, the checkpoint stores `path:line@<short HEAD sha>` instead and gives no warning. A `path#symbol` ref and an already pinned ref are stored unchanged. A digest for a `repo:` or `xdg:` link covers the whole file; its locator does not change the digest.
-The projection lists each local reference under `## Local references`, before `## Identifiers`, and only when one exists. A local reference is an `xdg:` ref, an absolute path outside the checkout, or a repository path that `git check-ignore` reports, such as `.cheese/`. Outside a checkout only `xdg:` refs and absolute paths count. The reader sees which references need the author's machine.
+`unpinned-line-ref` means a context item or artifact link held a bare `path:line` that the checkpoint could not pin, because no checkout or no commit exists, or because the file is untracked, ignored, or absent. The reference stays as written. When `HEAD` holds the file, the checkpoint stores `path:line@<short HEAD sha>` instead and gives no warning. A `path#symbol` ref and an already pinned ref are stored unchanged. A digest for a `repo:` or `xdg:` link covers the whole file; its locator does not change the digest.
+The projection lists each local reference under `## Local references`, before `## Identifiers`, and only when one exists. A local reference is an `xdg:` ref, an absolute path or a `..` or symlink path that leaves the checkout, or a repository path that `git check-ignore` reports, such as `.cheese/`. When `git check-ignore` fails, every repository path counts as local. Outside a checkout only `xdg:` refs and absolute paths count. The reader sees which references need the author's machine.
 
 ## Work-graph key in the resolve payload
 
@@ -89,6 +89,7 @@ The resolve payload carries `bridge` beside the outcome.
 
 - `bridge` is `{state, node_ref, wheypoint_ref}`, or `null` when no record resolved.
 - `bridge.state` is `bound`, `bridge-inactive`, or `unbound`, and it never changes `dispatchable`.
+- `matched_by` is `exact`, `prefix`, or `substring`, or `null` when nothing matched. A unique prefix or substring match still dispatches; callers read `matched_by` to see the guess.
 
-A schema-3 link that holds only `path` reads as `repo:<path>`.
-The resolve payload does not carry the normalization receipts.
+A schema-3 link that holds only `path` reads as `repo:<path>` without changing stored bytes.
+The resolve payload does not carry a receipt for this read.

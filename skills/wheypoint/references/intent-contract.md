@@ -101,7 +101,7 @@ Flags ignore stdin unless the intent argument is `-`.
 - `--decision` adds a decision, and `--directive` adds a directive with the paired `--quote`.
 - `--operator-directive` adds a directive with `scope: operator`: how the user wants to be worked with, not an instruction for this work. Pair each with an `--operator-quote`; `--quote` pairs only with `--directive`. The projection lists it under `## Operator preferences`, apart from `## Directives`.
 - `--owner` and `--when` store free-text `owner` and `when` on a question. Give none, or one per `--question`; they pair by order. A different count refuses with `flag-pairing` and writes nothing. The projection groups open questions under one `###` subheading per owner (matched case-insensitively), puts unowned ones under `unassigned`, and prints `(when: <trigger>)` after the summary. A blocking question's gate line also shows `(owner: <who>)` and `(when: <trigger>)`. With no owner on any question the list stays flat.
-- A checkpoint pins each bare `path:line` (or `path:line-line`) in `--context` items, in intent `working_context`, and in artifact links to `path:line@<short HEAD sha>`, when the path is an existing file in the checkout. It never pins on read. Outside a checkout the text stays unpinned and the result warns `unpinned-line-ref`. `path#symbol` and already pinned refs stay as written. A pin changes the intent, so the same intent at a later HEAD is a new revision.
+- A checkpoint pins each bare `path:line` (or `path:line-line`) in `--context` items, in intent `working_context`, and in artifact links to `path:line@<short HEAD sha>`, when `HEAD` holds the file. It never pins on read. The text stays unpinned and the result warns `unpinned-line-ref` when there is no checkout or commit, or the file is untracked, ignored, or absent. `path#symbol` and already pinned refs stay as written. A pin changes the intent, so the same intent at a later HEAD is a new revision.
 - `--resolve` and `--withdraw` add transitions for carried entry ids.
 - `--supersede <old>` adds a `supersede` transition that sets `superseded_by` on `<old>`. `--by <new>` names the successor entry id; give one `--by` per `--supersede`. Without `--by`, the successor is the one entry of the same kind that the same checkpoint adds, and that needs the revision you read (`--base`). If no successor resolves, the checkpoint refuses with `flag-pairing` and writes nothing.
 - `--rationale` values pair in order with each blocking question, then each `--decision`, then each `--resolve`, then each `--withdraw`, then each `--supersede`.
@@ -112,7 +112,7 @@ Flags ignore stdin unless the intent argument is `-`.
 
 The flag form refuses with these codes:
 
-- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, and withdraws, a `--quote`, `--operator-quote`, or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
+- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, withdraws, and supersedes (so a `--supersede` with no `--rationale` refuses), a `--by` count differs from the `--supersede` count, a `--supersede` without `--by` has no resolvable successor (its id prefix names no entry kind, the checkpoint does not add exactly one entry of that kind, or the work id or `--base` is missing), an `--owner` or `--when` count differs from the `--question` count, a `--quote`, `--operator-quote`, or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
 - `flag-kind`: a `--kind` names no edge kind.
 - `flag-link`: a `--link` is not a valid typed ref.
 - `flag-conflict`: the intent file holds a non-list value at a key a flag extends.
@@ -137,7 +137,8 @@ A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error"
 - **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`, `derived_entry_ids`, `applied_transitions`, `applied_edges`, `removed_edges`, and `warnings`.
 - **`validate`** returns `valid` and `work_id`.
 - **`schema`** returns `slug` and `schema`.
-- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `bridge`.
+- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `matched_by`, `bridge`.
+  `matched_by` is `exact`, `prefix`, or `substring`, or `null` when nothing matched. A prefix or substring match still dispatches.
 - **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`, `bridge`.
 - **`fork`** replies are in [`work-graph.md`](work-graph.md).
 - **`list`** returns `corpus_root`, `items`, and `lines`, plus `scope-fallback` only when the scope fell back.

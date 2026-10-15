@@ -346,7 +346,9 @@ def outside_git_repository() -> bool:
     """
     try:
         result: subprocess.CompletedProcess[str] = git_utils.run_git(
-            ["rev-parse", "--show-toplevel"], timeout=5
+            ["rev-parse", "--show-toplevel"],
+            timeout=5,
+            env={**os.environ, "LC_ALL": "C", "LANGUAGE": "C"},
         )
     except (OSError, subprocess.SubprocessError):
         return False

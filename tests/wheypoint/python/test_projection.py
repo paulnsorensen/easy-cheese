@@ -904,6 +904,66 @@ def test_local_reference_section_lists_xdg_absolute_and_ignored_paths(
     ]
 
 
+def test_a_relative_reference_that_leaves_the_checkout_is_local_and_keeps_ignored_refs(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+) -> None:
+    from easy_cheese_schemas import ArtifactLink
+
+    repo = tmp_path / "repo"
+    (repo / ".cheese").mkdir(parents=True)
+    _ = (repo / ".gitignore").write_text(".cheese/\n", encoding="utf-8")
+    _ = (repo / "tracked.py").write_text("x\n", encoding="utf-8")
+    (repo / "link").symlink_to(tmp_path)
+    _git(repo, "init", "-q")
+    record = make_record(
+        artifact_links=[
+            ArtifactLink(path="../out.md"),
+            ArtifactLink(path="link/out.md"),
+            ArtifactLink(path="tracked.py"),
+            ArtifactLink(path=".cheese/cook/x.md"),
+        ],
+    )
+
+    lines = _render(record, checkout=repo).splitlines()
+    section = lines[lines.index("## Local references") + 2 :]
+    listed = section[: section.index("")] if "" in section else section
+
+    assert listed == ["- ../out.md", "- link/out.md", "- .cheese/cook/x.md"]
+
+
+def test_a_failed_check_ignore_fails_closed_and_is_visible(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+
+    from easy_cheese_schemas import ArtifactLink
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = (repo / "tracked.py").write_text("x\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+
+    def broken(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 128, "", "fatal: boom")
+
+    monkeypatch.setattr(projection.subprocess, "run", broken)
+    record = make_record(artifact_links=[ArtifactLink(path="tracked.py")])
+
+    with pytest.raises(projection.CheckIgnoreError, match="exited 128"):
+        _ = projection._ignored(["tracked.py"], repo)  # pyright: ignore[reportPrivateUsage]
+    assert "- tracked.py" in _render(record, checkout=repo)
+
+    def timed_out(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired("git", 5)
+
+    monkeypatch.setattr(projection.subprocess, "run", timed_out)
+    with pytest.raises(projection.CheckIgnoreError):
+        _ = projection._ignored(["tracked.py"], repo)  # pyright: ignore[reportPrivateUsage]
+
+
 def test_local_reference_outside_a_checkout_keeps_xdg_and_absolute_only(
     make_record: Callable[..., WheypointRecord],
 ) -> None:

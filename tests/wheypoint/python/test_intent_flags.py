@@ -212,6 +212,18 @@ def test_overlay_refuses_a_payload_list_field_that_is_not_a_list() -> None:
         _ = intent_flags.overlay({"entries": "oops"}, question=["Q"])
 
 
+def test_supersede_without_by_refuses_when_the_added_entry_has_no_summary() -> None:
+    payload: dict[str, object] = {
+        "work_id": WORK_ID,
+        "base_revision_id": "rev-abc",
+        "entries": [{"kind": "decision"}],
+    }
+    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing: "):
+        _ = intent_flags.overlay(
+            payload, supersede=["d-aaaaaaaaaaaa"], rationale=["why"]
+        )
+
+
 def test_supersede_flags_build_a_supersede_transition_with_its_successor() -> None:
     payload = intent_flags.overlay(
         {},

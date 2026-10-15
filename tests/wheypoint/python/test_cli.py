@@ -1920,6 +1920,24 @@ def test_outside_git_repository_only_trusts_git_not_a_repository(
     assert paths.outside_git_repository() is expected
 
 
+def test_outside_git_repository_forces_the_c_locale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return subprocess.CompletedProcess([], 128, "", "fatal: not a git repository")
+
+    monkeypatch.setattr(git_utils, "run_git", fake)
+    monkeypatch.setenv("LC_ALL", "de_DE.UTF-8")
+
+    assert paths.outside_git_repository() is True
+    env = cast(dict[str, str], seen["env"])
+    assert env["LC_ALL"] == "C"
+    assert env["LANGUAGE"] == "C"
+
+
 @pytest.mark.parametrize(
     "failure", [subprocess.TimeoutExpired("git", 5), FileNotFoundError("git")]
 )
@@ -1949,7 +1967,23 @@ def test_cli_resolve_matches_a_slug_by_prefix_but_phase_entry_stays_exact() -> N
     assert fuzzy["outcome"] == "authoritative"
     assert fuzzy["work_id"] == WORK_ID
     assert "matched by prefix" in cast(str, fuzzy["detail"])
+    assert fuzzy["matched_by"] == "prefix"
     assert phase["outcome"] == "not-found"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cli_resolve_reports_matched_by_for_exact_and_substring() -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _, by_id = _run("resolve", "--ref", WORK_ID)
+    slug = cast(dict[str, object], by_id["record"])["slug"]
+    assert isinstance(slug, str)
+    _, by_slug = _run("resolve", "--ref", slug)
+    _, by_part = _run("resolve", "--ref", slug[1:6])
+
+    assert by_id["matched_by"] == "exact"
+    assert by_slug["matched_by"] == "exact"
+    assert by_part["matched_by"] == "substring"
+    assert by_part["work_id"] == WORK_ID
 
 
 def test_list_project_flag_implies_machine_scope(

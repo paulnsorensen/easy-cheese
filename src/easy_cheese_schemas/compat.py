@@ -191,6 +191,7 @@ _ = _converter.register_structure_hook_factory(_is_list_annotation, _guarded_lis
 _ = _converter.register_structure_hook_factory(
     _is_variadic_tuple_annotation, _guarded_tuple
 )
+_ = _strict_converter.register_structure_hook_factory(attrs.has, _guarded_class_strict)
 
 # A second converter for the write path (S6): identical primitive handling,
 # but an unknown key on any nested class is a refused write, not an ignored
@@ -198,7 +199,6 @@ _ = _converter.register_structure_hook_factory(
 # A copy keeps every primitive rule the read path uses; only the attrs-class
 # factory is swapped, so read and write can never disagree on what a primitive is.
 _strict_converter = _converter.copy()
-_ = _strict_converter.register_structure_hook_factory(attrs.has, _guarded_class_strict)
 
 
 class Provenance(Enum):
@@ -677,8 +677,8 @@ def check_adapter_sunsets(reference_date: date) -> None:
 
 # Reference-only registry: no runtime consumer reads these adapters. The
 # workflow-layer migration module that called `adapter_for` is gone, and Cook
-# now reports a historical pointer as an unmet requirement instead of migrating
-# it (wiki adr/legacy-migration-withdrawal-001). The exact-adapter and sunset
+# now rejects a historical pointer as invalid instead of migrating it
+# (wiki adr/legacy-migration-withdrawal-001). The exact-adapter and sunset
 # rules stay in wiki adr/legacy-adapter-lifecycle-004 for the next migration
 # that needs them.
 register_adapter(_BUILTIN_CURD_PLAN_ADAPTER)

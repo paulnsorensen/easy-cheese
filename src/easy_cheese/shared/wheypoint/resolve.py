@@ -99,6 +99,14 @@ class Resolution:
     legacy_slug: legacy_mod.LegacyHandoffSlug | None = None
     phase_slug: handoff.HandoffSlug | None = None
     detail: str | None = None
+    fuzzy_mode: str | None = None
+
+    @property
+    def matched_by(self) -> str | None:
+        """How the reference matched: exact, prefix, or substring; None on a miss."""
+        if self.outcome in {ResolutionOutcome.NOT_FOUND, ResolutionOutcome.ERROR}:
+            return None
+        return self.fuzzy_mode or "exact"
 
     @property
     def dispatchable(self) -> bool:
@@ -464,6 +472,7 @@ def _resolve_fuzzy_slug(slug: str, checks: _Checks) -> Resolution:
             source=ResolutionSource.SLUG,
             matches=tuple(work_id for work_id, _ in hits),
             searched=searched,
+            fuzzy_mode=mode,
             detail=(
                 f"slug {slug!r} is a {mode} of {len(hits)} work records: "
                 + ", ".join(f"{work_id} ({claimed})" for work_id, claimed in hits)
@@ -473,7 +482,7 @@ def _resolve_fuzzy_slug(slug: str, checks: _Checks) -> Resolution:
     resolution = _validate(work_id, ResolutionSource.SLUG, checks, searched=searched)
     note = f"matched by {mode}: {slug!r} -> slug {claimed!r}"
     detail = note if resolution.detail is None else f"{resolution.detail}; {note}"
-    return evolve(resolution, detail=detail)
+    return evolve(resolution, detail=detail, fuzzy_mode=mode)
 
 
 def _resolve_phase_artifact(
