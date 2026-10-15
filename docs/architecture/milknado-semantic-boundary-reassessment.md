@@ -55,7 +55,7 @@ also completed `import -> graph -> typed outcome -> CurdResult`.
 ### Volatility
 
 Easy Cheese owns the version catalog, Draft 2020-12 schema generation,
-migration policy, phase registry, workflow orchestration, and result
+migration policy, private handoff routes, workflow orchestration, and result
 normalization. Milknado owns only physical graph/runtime state. That split keeps
 semantic version changes in one package while allowing Milknado's scheduling
 and persistence internals to evolve independently.
