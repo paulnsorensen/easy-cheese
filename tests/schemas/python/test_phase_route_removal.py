@@ -26,6 +26,11 @@ def test_private_handoff_route_accepts_active_destination() -> None:
     validate_route("cook", "press", "https://schemas.easy-cheese.dev/curd-result")
 
 
+def test_terminal_transition_rejects_payload_schema() -> None:
+    with pytest.raises(RouteError, match="terminal transition cannot carry a payload schema"):
+        validate_route("cook", "done", "https://schemas.easy-cheese.dev/curd-result")
+
+
 def test_writer_rejects_invalid_route_without_creating_directory(tmp_path: Path) -> None:
     with pytest.raises(fromargs.CliError, match="mold -> cure is not declared"):
         _ = write_artifact(
