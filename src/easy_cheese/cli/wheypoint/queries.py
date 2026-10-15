@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, TextIO, cast
@@ -115,6 +116,7 @@ def run_resolve(
             project_key=project_key_,
             workspace_root=workspace_root,
             require_workspace=project_key_ is not None,
+            fuzzy=True,
         )
     )
     payload = resolve_cli.resolve_payload(resolution, ref, workspace_root=workspace_root)
@@ -253,7 +255,7 @@ def _tsv_lines(
 def run_list(
     *,
     corpus_root: str | None = None,
-    scope: Literal["project", "machine"] = "project",
+    scope: Literal["project", "machine"] | None = None,
     project: list[str] | None = None,
     root: list[str] | None = None,
     grep: list[str] | None = None,
@@ -281,7 +283,16 @@ def run_list(
     _ = enum_values("--edge-kind", edge_kind or (), EdgeKind, "flag-kind")
     _ = enum_values("--entry-kind", entry_kind or (), EntryKind, "flag-entry")
     _ = enum_values("--entry-state", entry_state or (), EntryState, "flag-entry")
-    effective_scope = "machine" if projects else scope
+    # Only the default scope falls back: an explicit --scope, --corpus-root, or
+    # $EASY_CHEESE_PROJECT names where to look, so it keeps its meaning.
+    fallback = (
+        scope is None
+        and not projects
+        and corpus_root is None
+        and not os.environ.get("EASY_CHEESE_PROJECT", "").strip()
+        and paths.outside_git_repository()
+    )
+    effective_scope = "machine" if projects or fallback else scope or "project"
     result = discovery.discover(
         scope=effective_scope,
         start=Path.cwd(),
@@ -307,7 +318,7 @@ def run_list(
     lines = _tsv_lines(
         items, ("source", "project", "ref", "status", "next", "orientation")
     )
-    return {
+    payload: dict[str, object] = {
         "corpus_root": str(root_arg),
         "scope": effective_scope,
         "items": items,
@@ -316,6 +327,9 @@ def run_list(
         "hidden_mirrors": result.hidden_mirrors,
         "errors": list(result.errors),
     }
+    if fallback:
+        payload["scope-fallback"] = "machine"
+    return payload
 
 
 def run_log(

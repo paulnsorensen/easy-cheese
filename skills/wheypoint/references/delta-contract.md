@@ -87,6 +87,7 @@ The resolve payload carries `bridge` beside the outcome.
 
 - `bridge` is `{state, node_ref, wheypoint_ref}`, or `null` when no record resolved.
 - `bridge.state` is `bound`, `bridge-inactive`, or `unbound`, and it never changes `dispatchable`.
+- `matched_by` is `exact`, `prefix`, or `substring`, or `null` when nothing matched. A unique prefix or substring match still dispatches; callers read `matched_by` to see the guess.
 
 A schema-3 link that holds only `path` reads as `repo:<path>` without changing stored bytes.
 The resolve payload does not carry a receipt for this read.

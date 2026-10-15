@@ -43,10 +43,10 @@ python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientati
 python3 skills/wheypoint/scripts/wheypoint.pyz handoff render | parse | dispatch
 ```
 
-Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term.
+Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term; outside a Git checkout, `list` with no `--scope` searches machine scope and reports `scope-fallback: machine`, while an explicit `--scope` keeps its meaning.
 `fork` writes only a child genesis record with one `forked_from` edge; [`references/work-graph.md`](references/work-graph.md) gives refs, edge kinds, and the `list` graph filters.
 Create a link with `checkpoint --link`; there is no separate link command.
-`resolve` validates artifact links, grounded paths, Git objects, and coverage.
+`resolve` validates artifact links, grounded paths, Git objects, and coverage; a slug with no exact match resolves by unique prefix, then unique substring, and several matches return `ambiguous` with every candidate.
 `resolve`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
 `/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
 Foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
