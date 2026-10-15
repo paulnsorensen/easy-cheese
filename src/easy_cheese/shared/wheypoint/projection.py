@@ -16,7 +16,9 @@ Projections written at schema 4 or older opened with a pins block that held a
 from __future__ import annotations
 
 import re
+import subprocess
 from collections.abc import Sequence
+from pathlib import Path
 from typing import cast
 
 from easy_cheese_schemas import (
@@ -40,7 +42,7 @@ from easy_cheese_schemas.handback_status import (
 )
 
 from . import canonical, records
-from .ref_grammar import Scheme
+from .ref_grammar import Scheme, locator_path
 
 # The shared handoff preamble: three keyed lines, then the orientation.
 _HEAD_KEYS = ("status", "next", "artifact")
@@ -76,6 +78,10 @@ _DIRECTIVES_HEADING = "## Directives"
 _OPERATOR_HEADING = "## Operator preferences"
 _NOTES_HEADING = "## Notes"
 _SUPERSEDED_HEADING = "## Superseded"
+_LOCAL_HEADING = "## Local references"
+_SCHEME_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:")
+_TOKEN_OPEN = "`'\"([<"
+_TOKEN_CLOSE = "`'\")]>,;.:"
 _CONTEXT_HEADING = "## Context"
 _ARTIFACTS_HEADING = "## Artifacts"
 _LINKS_HEADING = "## Links"
@@ -225,7 +231,115 @@ def _superseded(record: WheypointRecord) -> list[str]:
     return ["", _SUPERSEDED_HEADING, "", *(f"- {e.entry_id} -> {e.superseded_by}" for e in moved)]
 
 
-def _body(record: WheypointRecord) -> list[str]:
+def _local_references(record: WheypointRecord, checkout: Path | None) -> list[str]:
+    """The `## Local references` section, or nothing when no reference is local.
+
+    A reference is local when it needs the author's machine: an `xdg:` ref, an
+    absolute path outside `checkout`, or a repository path Git ignores.
+    Without a checkout only the first two classify. The section depends on
+    `checkout`, never on the working directory.
+    """
+    candidates: list[tuple[str, bool]] = []
+    for link in record.artifact_links:
+        ref = link.ref
+        candidates.append((link.path if ref is None or ref.startswith("repo:") else ref, False))
+    candidates += [(edge.to, False) for edge in record.edges]
+    for item in record.working_context:
+        for word in item.split():
+            token = word.strip(_TOKEN_OPEN).rstrip(_TOKEN_CLOSE)
+            if "/" in token or "." in token:
+                candidates.append((token, True))
+    verdicts: dict[str, bool | str] = {}
+    for text, must_exist in candidates:
+        if text not in verdicts:
+            verdicts[text] = _classify(text, checkout, must_exist=must_exist)
+    to_check = sorted({v for v in verdicts.values() if isinstance(v, str)})
+    ignored: set[str] = set()
+    if checkout is not None:
+        try:
+            ignored = _ignored(to_check, checkout)
+        except CheckIgnoreError:
+            # Fail closed: when Git cannot say what it ignores, hide nothing.
+            ignored = set(to_check)
+    found = [
+        text
+        for text, verdict in verdicts.items()
+        if verdict is True or (isinstance(verdict, str) and verdict in ignored)
+    ]
+    if not found:
+        return []
+    return ["", _LOCAL_HEADING, "", *(f"- {escape(text)}" for text in found)]
+
+
+def _classify(text: str, checkout: Path | None, *, must_exist: bool) -> bool | str:
+    """True when `text` is local, False when it is not, or the checkout-relative
+    path whose Git-ignored state decides it."""
+    if text.lower().startswith(f"{Scheme.XDG.value}:"):
+        return True
+    path = locator_path(text)
+    path = path.removeprefix(f"{Scheme.REPO.value}:")
+    try:
+        if path.startswith("/"):
+            absolute = Path(path).resolve()
+            if must_exist and not absolute.exists():
+                return False
+            if checkout is None:
+                return True
+            root = checkout.resolve()
+            if not absolute.is_relative_to(root):
+                return True
+            path = absolute.relative_to(root).as_posix()
+        if checkout is None or _SCHEME_RE.match(path) or path in {"", "."}:
+            return False
+        if must_exist and not (checkout / path).exists():
+            return False
+        # Resolve `..` and symlinks: Git refuses a path that leaves the
+        # checkout or passes through a link, so those never reach check-ignore.
+        root = checkout.resolve()
+        resolved = (root / path).resolve()
+        if not resolved.is_relative_to(root):
+            return True
+        path = resolved.relative_to(root).as_posix()
+        if path == ".":
+            return False
+    except (OSError, RuntimeError):
+        return False
+    return path
+
+
+class CheckIgnoreError(RuntimeError):
+    """`git check-ignore` could not answer: bad exit, timeout, or no git."""
+
+
+def _ignored(candidates: list[str], checkout: Path) -> set[str]:
+    """The members of `candidates` Git ignores in `checkout`, in one call.
+
+    Raises `CheckIgnoreError` when Git cannot answer. A caller must not read
+    that as "nothing is ignored".
+    """
+    if not candidates:
+        return set()
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "--stdin", "-z"],
+            cwd=checkout,
+            input="\0".join(candidates) + "\0",
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise CheckIgnoreError(f"git check-ignore did not run: {error}") from error
+    if result.returncode not in (0, 1):
+        raise CheckIgnoreError(
+            f"git check-ignore exited {result.returncode}: {result.stderr.strip()}"
+        )
+    return {item for item in result.stdout.split("\0") if item}
+
+
+def _body(record: WheypointRecord, checkout: Path | None) -> list[str]:
     """The human sections: everything the record holds that the pins do not."""
     lines: list[str] = []
     active = [e for e in records.entries(record) if e.state is EntryState.ACTIVE]
@@ -284,7 +398,7 @@ def _body(record: WheypointRecord) -> list[str]:
             lines.append(f"  rationale: {escape(edge.rationale)}")
     if not record.edges:
         lines.append(_NONE)
-    return lines + _superseded(record)
+    return lines + _superseded(record) + _local_references(record, checkout)
 
 
 def _tasks(action: NextAction) -> list[str]:
@@ -308,8 +422,16 @@ def _tasks(action: NextAction) -> list[str]:
     return lines
 
 
-def render(projection: WheypointProjection, record: WheypointRecord) -> str:
+def render(
+    projection: WheypointProjection,
+    record: WheypointRecord,
+    *,
+    checkout: Path | None = None,
+) -> str:
     """Render the projection with the human body sections from `record`.
+
+    `checkout` is the repository root that classifies local references; None
+    means no checkout. The output never depends on the working directory.
 
     The gates, the tasks and the identifiers come from the
     projection and are parsed back; the body is derived from the record and is
@@ -342,7 +464,7 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
             lines.append(line)
     else:
         lines.append(_NONE)
-    lines += ["", *_body(record)]
+    lines += ["", *_body(record, checkout)]
     lines += _tasks(action)
     lines += [
         "",
@@ -359,7 +481,10 @@ def render(projection: WheypointProjection, record: WheypointRecord) -> str:
 
 
 def build_projection(
-    record: WheypointRecord, *, durability: Durability
+    record: WheypointRecord,
+    *,
+    durability: Durability,
+    checkout: Path | None = None,
 ) -> tuple[WheypointProjection, str]:
     """Derive the projection for `record` and render it, in one step."""
     projection = WheypointProjection(
@@ -371,7 +496,7 @@ def build_projection(
         gating_entry_ids=list(record.gating_entry_ids),
         durability=durability,
     )
-    return projection, render(projection, record)
+    return projection, render(projection, record, checkout=checkout)
 
 
 def _keyed(lines: list[str], keys: Sequence[str], start: int) -> dict[str, str]:

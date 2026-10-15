@@ -238,6 +238,7 @@ def commit(
                     project_key=paths.project_key(digest_root),
                     durability=durability,
                     digest_of=digest_of,
+                    checkout=digest_root,
                     fork_edge=fork_edge,
                 ),
                 finalize=finalize,
@@ -272,6 +273,7 @@ def commit(
                 fingerprint=fingerprint,
                 repository=repository_value,
                 digest_of=digest_of,
+                checkout=digest_root,
                 durability=durability,
                 fork_edge=fork_edge,
             ),
@@ -586,9 +588,11 @@ def _merge_artifact_links(
             for key in [k for k in by_ref if k != ref and _record_target(k) == target]:
                 del by_ref[key]
                 order[order.index(key)] = ref
-        if ref not in order:
-            order.append(ref)
-        by_ref[ref] = evolve(
+        # A line ref pinned at a new HEAD replaces the one pinned at an old HEAD.
+        key = refs.strip_pin(ref)
+        if key not in order:
+            order.append(key)
+        by_ref[key] = evolve(
             link,
             ref=ref,
             path=ref.partition(":")[2],
@@ -634,7 +638,7 @@ def _unpinned_record(ref: str) -> str | None:
 def _link_key(link: ArtifactLink) -> str:
     ref = records.effective_ref(link)
     try:
-        return refs.normalize_ref(ref)
+        return refs.strip_pin(refs.normalize_ref(ref))
     except ValueError:
         return ref
 
@@ -642,7 +646,7 @@ def _link_key(link: ArtifactLink) -> str:
 def _removal_key(value: str) -> str:
     """A removal names a reference, or a bare path read as `repo:`."""
     try:
-        return refs.normalize_ref(value)
+        return refs.strip_pin(refs.normalize_ref(value))
     except ValueError:
         return _link_key(ArtifactLink(path=value))
 
@@ -668,6 +672,7 @@ def _apply(
     fingerprint: str,
     repository: RepositoryProvenance,
     digest_of: Callable[[str], str | None],
+    checkout: Path,
     durability: Durability,
     fork_edge: WorkEdge | None,
 ) -> PendingRevision:
@@ -730,6 +735,7 @@ def _apply(
         removed_edges=merged.removed,
         repository=repository,
         durability=durability,
+        checkout=checkout,
     )
 
 
@@ -750,6 +756,7 @@ def _genesis(
     repository: RepositoryProvenance,
     project_key: str,
     digest_of: Callable[[str], str | None],
+    checkout: Path,
     durability: Durability,
     fork_edge: WorkEdge | None,
 ) -> PendingRevision:
@@ -841,6 +848,7 @@ def _genesis(
         removed_edges=merged.removed,
         repository=repository,
         durability=durability,
+        checkout=checkout,
     )
 
 
@@ -880,9 +888,12 @@ def _finish(
     removed_edges: tuple[WorkEdgeKey, ...],
     repository: RepositoryProvenance,
     durability: Durability,
+    checkout: Path,
 ) -> PendingRevision:
     """Render the draft into one typed pending revision."""
-    projected, markdown = projection_mod.build_projection(draft, durability=durability)
+    projected, markdown = projection_mod.build_projection(
+        draft, durability=durability, checkout=checkout
+    )
     revision = WheypointRevision(
         schema_version=SCHEMA_VERSION,
         work_id=store.work_id,

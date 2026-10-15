@@ -497,3 +497,45 @@ def test_ac3_coverage_on_an_unpinnable_ref_fails_the_claim(
     )
 
     assert [failure.reason for failure in report.failures] == ["unpinnable-scheme"]
+
+
+def test_locator_path_strips_line_pin_and_symbol_locators() -> None:
+    from easy_cheese.shared.wheypoint import ref_grammar
+
+    assert ref_grammar.locator_path("src/a.py:12") == "src/a.py"
+    assert ref_grammar.locator_path("src/a.py:12-20@abc1234") == "src/a.py"
+    assert ref_grammar.locator_path("src/a.py#main") == "src/a.py"
+    assert ref_grammar.locator_path("src/a.py") == "src/a.py"
+
+
+def test_local_reference_grammar_matches_only_bare_line_refs() -> None:
+    from easy_cheese.shared.wheypoint import ref_grammar
+
+    def found(text: str) -> list[str]:
+        return [m.group(0) for m in ref_grammar.LINE_REF_RE.finditer(text)]
+
+    assert found("a src/a.py:12, b.md:3-4.") == ["src/a.py:12", "b.md:3-4"]
+    assert found("src/a.py:12@abc1234 src/a.py#sym https://h/x.py:9") == []
+
+
+def test_a_line_or_symbol_locator_digests_the_whole_file(
+    checkout: Path, corpus_root: Path
+) -> None:
+    _ = (checkout / "a.py").write_text("x = 1\n", encoding="utf-8")
+    whole = refs.digest_ref("repo:a.py", checkout=checkout, corpus_home=corpus_root)
+
+    assert whole is not None
+    for ref in ("repo:a.py:3", "repo:a.py:3-9@abc1234", "repo:a.py#main"):
+        assert refs.digest_ref(ref, checkout=checkout, corpus_home=corpus_root) == whole
+
+
+def test_a_file_whose_name_holds_a_locator_shape_digests_that_file(
+    checkout: Path, corpus_root: Path
+) -> None:
+    _ = (checkout / "a#1.md").write_text("literal\n", encoding="utf-8")
+    _ = (checkout / "a.md").write_text("plain\n", encoding="utf-8")
+
+    literal = refs.digest_ref("repo:a#1.md", checkout=checkout, corpus_home=corpus_root)
+    plain = refs.digest_ref("repo:a.md", checkout=checkout, corpus_home=corpus_root)
+
+    assert literal is not None and literal != plain

@@ -11,7 +11,9 @@ from `ref_grammar` and owns the digest a reference pins:
 | `milknado:`  | `milknado:<project_key>/<node_key>`                     | none |
 | `https:`     | a PR, issue, or URL                                     | none |
 
-A `repo:` or `xdg:` path that climbs out of its root is refused, and a
+A `:line`, `:line@sha`, or `#symbol` locator on a `repo:` or `xdg:` path is
+left off when the literal path is not a file, so the digest pins the whole file. A
+`repo:` or `xdg:` path that climbs out of its root is refused, and a
 file reached through a symlink outside that root has no digest. A
 `wheypoint:` target is read without its lock: the read is a pin, not a write.
 An unpinnable scheme is never checked for existence.
@@ -26,7 +28,15 @@ from pathlib import Path
 from attrs import define
 
 from . import storage
-from .ref_grammar import ParsedRef, Scheme, is_pinnable, normalize_ref, parse_ref
+from .ref_grammar import (
+    ParsedRef,
+    Scheme,
+    is_pinnable,
+    locator_path,
+    normalize_ref,
+    parse_ref,
+    strip_pin,
+)
 
 __all__ = [
     "ParsedRef",
@@ -39,6 +49,7 @@ __all__ = [
     "parse_ref",
     "pin_record",
     "resolve_ref",
+    "strip_pin",
 ]
 
 
@@ -116,7 +127,15 @@ def _required(value: str | None) -> str:
     return value
 
 
-def _file(root: Path, relative: str) -> tuple[Path, str | None]:
+def _file(root: Path, text: str) -> tuple[Path, str | None]:
+    """The file `text` names: the literal path first, then without a locator."""
+    location, digest = _digest_file(root, text)
+    if digest is not None:
+        return location, digest
+    return _digest_file(root, locator_path(text))
+
+
+def _digest_file(root: Path, relative: str) -> tuple[Path, str | None]:
     location = root / relative
     try:
         resolved_root = root.resolve()

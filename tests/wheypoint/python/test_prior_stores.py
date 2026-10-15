@@ -316,7 +316,10 @@ def test_v4_nonblocking_blocker_stays_a_nonblocking_question(tmp_path: Path) -> 
 
 
 def test_contracts_simplify_projection_is_shorter(tmp_path: Path) -> None:
-    """AC-13: the v5 projection of the lived record is at least 25% shorter."""
+    """AC-13: the v5 projection of the lived record is at least 25% shorter.
+
+    Rendered with no checkout, so no Git-ignored path adds a local-reference list.
+    """
     store = open_fixture("contracts-simplify-v4", tmp_path)
     record = store.read_record()
     assert record is not None

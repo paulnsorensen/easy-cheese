@@ -88,6 +88,8 @@ The runtime refuses an intent instead of dropping data.
 - It derives every identifier, digest, and revision.
 - It refuses an agent-authored `fork` transition and a `forked_from` edge in a delta.
 - It refuses `notes` over 6000 characters.
+- It pins a bare `path:line` in `working_context` or an artifact link to `path:line@<short HEAD sha>` when `HEAD` holds the file, and otherwise warns with `unpinned-line-ref` (no checkout or commit, or an untracked, ignored, or absent file).
+- It lists each local reference (an `xdg:` ref, an absolute path outside the checkout, or a Git-ignored path) under `## Local references`.
 - It warns with `stale-notes` when a decision changes and `notes` stay as they were, marks that drift at the top of `## Notes`, and lists an entry that `checkpoint --supersede <old> [--by <new>] --rationale <why>` replaced under `## Superseded`.
 
 Fix a refused intent and run `checkpoint` again.
@@ -113,9 +115,7 @@ The projection is never the authority; never edit it and never resume from it by
 The meaning of each `next:` value is in [`references/intent-contract.md`](references/intent-contract.md); `briesearch` and `culture` are read-only kickoffs, and `tasks` follows [`references/parallel-handoffs.md`](references/parallel-handoffs.md).
 A missing `next:` makes the handoff malformed; use `hold` when no action follows.
 Derive `next:` and `status:` from the open questions, not from expected success.
-
 Use `status: gated:` for every human decision; the resumed agent asks through the shared [handoff gate](../cheese/references/handoff-gate.md) before it dispatches.
-
 Handwritten notes, their legacy values, and their provenance fields are in [`references/legacy-notes.md`](references/legacy-notes.md) and [`references/provenance-fields.md`](references/provenance-fields.md).
 
 ## Rules

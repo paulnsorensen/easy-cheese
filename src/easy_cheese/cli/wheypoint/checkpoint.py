@@ -12,6 +12,7 @@ import contextlib
 import json
 import os
 import re
+import subprocess
 from collections.abc import Callable, Sequence
 from enum import Enum
 from pathlib import Path
@@ -28,7 +29,7 @@ from easy_cheese_schemas import (
     WheypointRecord,
 )
 
-from easy_cheese.shared import paths
+from easy_cheese.shared import git_utils, paths
 from easy_cheese.shared.wheypoint import canonical
 from easy_cheese.shared.wheypoint import checkpoint as checkpoint_mod
 from easy_cheese.shared.wheypoint import commit as commit_mod
@@ -304,6 +305,14 @@ def commit_intent(
             + "compaction proofs are no longer accepted.",
             exit_code=1,
         )
+    pin_warnings: list[str] = []
+    if isinstance(payload, dict):
+        checkout = paths.git_toplevel()
+        payload, pin_warnings = intent_flags.pin_line_refs(
+            cast(dict[str, object], payload),
+            checkout=checkout,
+            head=None if checkout is None else _head_sha(checkout),
+        )
     try:
         intent = records.structure(payload, CheckpointIntent, forbid_unknown=True)
     except records.RecordError as exc:
@@ -335,12 +344,25 @@ def commit_intent(
         raise fromargs.CliError(f"base-revision-required: {exc}", exit_code=1) from exc
     except checkpoint_mod.IntentError as exc:
         raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
-    return _promote(
+    reply = _promote(
         delta,
         store,
         note_dir=note_dir_for(note_dir=note_dir, no_note=no_note),
         request_identity=request_identity,
     )
+    reply["warnings"] = [*cast(list[str], reply["warnings"]), *pin_warnings]
+    return reply
+
+
+def _head_sha(checkout: Path) -> str | None:
+    """The short sha of `checkout`'s HEAD, or None when it has no commit."""
+    try:
+        head = git_utils.run_git(
+            ["rev-parse", "--short", "HEAD"], cwd=checkout, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return head.stdout.strip() or None if head.returncode == 0 else None
 
 
 def carry_coverage(
@@ -386,7 +408,7 @@ def _held_covers(held: Sequence[tuple[str, Sequence[str]]], ref: str) -> list[st
 
 def _normalized(ref: str) -> str:
     try:
-        return ref_grammar.normalize_ref(ref)
+        return ref_grammar.strip_pin(ref_grammar.normalize_ref(ref))
     except ValueError:
         return ref
 

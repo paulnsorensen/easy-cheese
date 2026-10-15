@@ -183,6 +183,7 @@ def test_a_schema_4_layout_with_pins_above_the_title_still_parses(
     assert "## Identifiers" not in legacy
     assert projection.parse(legacy) == built
 
+
 @pytest.mark.parametrize(
     "broken",
     [
@@ -243,6 +244,7 @@ def test_a_caller_cannot_hand_build_an_ok_projection_over_a_gate(
 # across the whole package, including modules added after this was written.
 READ_ONLY_GIT = {
     ("git", "cat-file", "-e", None),
+    ("git", "check-ignore", "--stdin", "-z"),
     ("git", "merge-base", "--is-ancestor", None, "HEAD"),
     ("git", "rev-list", "--count", None),
     ("git", "rev-parse", "--show-toplevel"),
@@ -640,8 +642,10 @@ def _notes_section(markdown: str) -> list[str]:
     return [line for line in lines[start:end] if line]
 
 
-def _render(record: WheypointRecord) -> str:
-    return projection.build_projection(record, durability=Durability.CANONICAL_LOCAL)[1]
+def _render(record: WheypointRecord, *, checkout: Path | None = None) -> str:
+    return projection.build_projection(
+        record, durability=Durability.CANONICAL_LOCAL, checkout=checkout
+    )[1]
 
 
 def test_drift_marker_names_both_revisions_when_decisions_are_newer(
@@ -668,7 +672,9 @@ def test_drift_marker_shows_when_decisions_are_stamped_and_notes_are_not(
 
     section = _notes_section(_render(record))
 
-    assert section[0].startswith("> notes may be stale: decisions changed at revision 2")
+    assert section[0].startswith(
+        "> notes may be stale: decisions changed at revision 2"
+    )
     assert "unstamped" in section[0]
 
 
@@ -794,7 +800,9 @@ def test_owner_group_puts_each_owner_under_a_subheading_and_unowned_under_unassi
 def test_owner_group_keeps_the_flat_list_when_no_question_has_an_owner(
     make_record: Callable[..., WheypointRecord],
 ) -> None:
-    record = make_record(questions=[_question("q-one"), _question("q-two", when="soon")])
+    record = make_record(
+        questions=[_question("q-one"), _question("q-two", when="soon")]
+    )
 
     assert _open_section(_render(record)) == [
         "- q-one (question) — Question q-one?",
@@ -826,7 +834,9 @@ def test_operator_preferences_render_apart_from_work_directives(
 
     markdown = _render(record)
     lines = markdown.splitlines()
-    directives = lines[lines.index("## Directives") : lines.index("## Operator preferences")]
+    directives = lines[
+        lines.index("## Directives") : lines.index("## Operator preferences")
+    ]
     operator = lines[lines.index("## Operator preferences") : lines.index("## Notes")]
 
     assert any("p-work" in line for line in directives)
@@ -851,6 +861,169 @@ def test_operator_preferences_section_is_absent_without_operator_directives(
 
     assert "## Operator preferences" not in _render(record)
     assert "scope" not in records.unstructure(record)["directives"][0]  # pyright: ignore[reportIndexIssue]
+
+
+def _git(root: Path, *args: str) -> None:
+    import subprocess
+
+    _ = subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+
+def test_local_reference_section_lists_xdg_absolute_and_ignored_paths(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+) -> None:
+    from easy_cheese_schemas import ArtifactLink
+
+    repo = tmp_path / "repo"
+    (repo / ".cheese").mkdir(parents=True)
+    _ = (repo / ".cheese" / "plan.md").write_text("plan\n", encoding="utf-8")
+    _ = (repo / ".gitignore").write_text(".cheese/\n", encoding="utf-8")
+    _ = (repo / "tracked.py").write_text("x\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+    elsewhere = tmp_path / "other-worktree" / "notes.md"
+    record = make_record(
+        working_context=["see .cheese/plan.md:4 and tracked.py:2"],
+        artifact_links=[
+            ArtifactLink(path="xdg-doc", ref="xdg:proj/doc.md"),
+            ArtifactLink(path=str(elsewhere)),
+            ArtifactLink(path="tracked.py"),
+            ArtifactLink(path=".cheese/cook/x.md"),
+        ],
+    )
+
+    lines = _render(record, checkout=repo).splitlines()
+    section = lines[lines.index("## Local references") + 2 :]
+    listed = section[: section.index("")] if "" in section else section
+
+    assert listed == [
+        "- xdg:proj/doc.md",
+        f"- {elsewhere}",
+        "- .cheese/cook/x.md",
+        "- .cheese/plan.md:4",
+    ]
+
+
+def test_a_relative_reference_that_leaves_the_checkout_is_local_and_keeps_ignored_refs(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+) -> None:
+    from easy_cheese_schemas import ArtifactLink
+
+    repo = tmp_path / "repo"
+    (repo / ".cheese").mkdir(parents=True)
+    _ = (repo / ".gitignore").write_text(".cheese/\n", encoding="utf-8")
+    _ = (repo / "tracked.py").write_text("x\n", encoding="utf-8")
+    (repo / "link").symlink_to(tmp_path)
+    _git(repo, "init", "-q")
+    record = make_record(
+        artifact_links=[
+            ArtifactLink(path="../out.md"),
+            ArtifactLink(path="link/out.md"),
+            ArtifactLink(path="tracked.py"),
+            ArtifactLink(path=".cheese/cook/x.md"),
+        ],
+    )
+
+    lines = _render(record, checkout=repo).splitlines()
+    section = lines[lines.index("## Local references") + 2 :]
+    listed = section[: section.index("")] if "" in section else section
+
+    assert listed == ["- ../out.md", "- link/out.md", "- .cheese/cook/x.md"]
+
+
+def test_a_failed_check_ignore_fails_closed_and_is_visible(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+
+    from easy_cheese_schemas import ArtifactLink
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _ = (repo / "tracked.py").write_text("x\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+
+    def broken(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 128, "", "fatal: boom")
+
+    monkeypatch.setattr(subprocess, "run", broken)
+    record = make_record(artifact_links=[ArtifactLink(path="tracked.py")])
+
+    with pytest.raises(projection.CheckIgnoreError, match="exited 128"):
+        _ = projection._ignored(["tracked.py"], repo)  # pyright: ignore[reportPrivateUsage]
+    assert "- tracked.py" in _render(record, checkout=repo)
+
+    def timed_out(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired("git", 5)
+
+    monkeypatch.setattr(subprocess, "run", timed_out)
+    with pytest.raises(projection.CheckIgnoreError):
+        _ = projection._ignored(["tracked.py"], repo)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_local_reference_outside_a_checkout_keeps_xdg_and_absolute_only(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    from easy_cheese_schemas import ArtifactLink
+
+    record = make_record(
+        artifact_links=[
+            ArtifactLink(path="xdg-doc", ref="xdg:proj/doc.md"),
+            ArtifactLink(path="/tmp/elsewhere/notes.md"),
+            ArtifactLink(path=".cheese/cook/x.md"),
+        ],
+    )
+
+    markdown = _render(record)
+
+    assert "- xdg:proj/doc.md\n- /tmp/elsewhere/notes.md\n" in markdown
+    assert markdown.count("- .cheese/cook/x.md") == 1
+
+
+def test_local_reference_section_is_absent_without_local_refs(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    assert "## Local references" not in _render(make_record())
+
+
+def test_a_free_text_slash_command_is_not_a_local_reference(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    record = make_record(
+        working_context=["run /cook then call /api/v1/users or see /etc/hosts"]
+    )
+
+    markdown = _render(record, checkout=repo)
+
+    assert "- /cook" not in markdown
+    assert "- /api/v1/users" not in markdown
+    assert "- /etc/hosts" in markdown
+
+
+def test_local_references_do_not_depend_on_the_working_directory(
+    make_record: Callable[..., WheypointRecord],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    (repo / ".cheese").mkdir(parents=True)
+    _ = (repo / ".cheese" / "plan.md").write_text("plan\n", encoding="utf-8")
+    _ = (repo / ".gitignore").write_text(".cheese/\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    record = make_record(working_context=["see .cheese/plan.md:4"])
+
+    assert "- .cheese/plan.md:4" in _render(record, checkout=repo)
+    assert "## Local references" not in _render(record)
 
 
 def test_a_gated_question_keeps_its_owner_and_when_and_parses_back_to_its_id(
