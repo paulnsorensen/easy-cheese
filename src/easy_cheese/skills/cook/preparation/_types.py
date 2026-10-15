@@ -31,5 +31,5 @@ class CookExecutionOutcome:
     remediation_request_ref: ArtifactRef | None = None
     execution_result_refs: tuple[ArtifactRef, ...] = attrs.field(factory=tuple)
     scope_summaries: Mapping[str, ScopeRemediationSummary] = attrs.field(
-        factory=lambda: dict[str, ScopeRemediationSummary]()
+        factory=dict[str, ScopeRemediationSummary]
     )

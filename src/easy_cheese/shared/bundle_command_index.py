@@ -80,6 +80,7 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'validate-manifest': ('cook',),
     'validate-pr-plan': ('cook',),
     'validate-publication': ('plate',),
+    'validate-result': ('cook',),
     'validate-spec': ('mold',),
     'wheypoint-resolve': ('affinage', 'age', 'cook', 'cure', 'plate', 'press'),
     'wiring-topo-sort': ('cook',),

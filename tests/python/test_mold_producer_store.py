@@ -70,6 +70,18 @@ def test_retained_artifact_resolves_from_the_shared_store(tmp_path: Path) -> Non
     assert Path(resolved.path) == retained
     assert resolved.content == retained.read_bytes()
 
+
+def test_ready_result_for_reused_operation_id_is_exclusive(tmp_path: Path) -> None:
+    save = producer._save_result  # pyright: ignore[reportPrivateUsage]
+    path = save(tmp_path, "op-1", {"status": "ready", "request_id": "a"})
+    before = path.read_bytes()
+
+    assert save(tmp_path, "op-1", {"status": "ready", "request_id": "a"}) == path
+    assert path.read_bytes() == before
+    with pytest.raises(FinalizationError, match="different ready result"):
+        _ = save(tmp_path, "op-1", {"status": "ready", "request_id": "b"})
+    assert path.read_bytes() == before
+
 def test_failed_retention_leaves_no_temporary_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

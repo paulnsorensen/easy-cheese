@@ -281,6 +281,6 @@ Generated bundle command inventory: [`references/commands.md`](references/comman
 A saved Mold spec is not execution authority. Start Cook only when the user requests the selected scope and route.
 A standalone task, including `--spec` alone, may skip finalization.
 Refuse a non-`ready` `--result` file. Read its `request_id`, `spec_ref`, `planner_result_ref`, `plan_ref`, and `coverage`.
-Pass these and one artifact root to `easy_cheese.skills.cook.execute_bound_plan`. Validate holds, scope, digests, and runner setup evidence before writer dispatch.
+Run `cook.pyz validate-result --result <path> --artifact-root <root>` first; refuse on non-zero exit. Then pass the values to `execute_bound_plan`.
 Follow [`references/fan-pathway.md`](references/fan-pathway.md) § Direct Mold-to-Cook ingress.
 Run the fresh-agent regression scenarios in [`references/evals.md`](references/evals.md) when this boundary changes.

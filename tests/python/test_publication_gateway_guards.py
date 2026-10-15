@@ -162,8 +162,8 @@ def test_accept_rejects_unknown_index_field(tmp_path: Path) -> None:
 
 
 def test_accept_names_a_legacy_flat_pointer(tmp_path: Path) -> None:
-    handoff = _prepared_handoff(tmp_path)
-    _ = _publish(tmp_path, handoff, operation_id="op-legacy")
+    plan = _prepared_plan(tmp_path)
+    _ = _publish(tmp_path, plan, operation_id="op-legacy")
     path = tmp_path / "pointers" / "op-legacy.json"
     index = _read_pointer_json(path)
     request = cast("dict[str, object]", index.pop("request"))
@@ -171,21 +171,21 @@ def test_accept_names_a_legacy_flat_pointer(tmp_path: Path) -> None:
     _ = path.write_text(json.dumps(index), encoding="utf-8")
 
     with pytest.raises(ContractValidationError, match="legacy handoff pointer format"):
-        _ = mold_cook_handoff.accept_mold_cook_handoff(path, artifact_root=tmp_path)
+        _ = _accept(path, artifact_root=tmp_path)
 
 
 def test_accept_refuses_a_pointer_for_another_schema(tmp_path: Path) -> None:
-    handoff = _prepared_handoff(tmp_path)
-    _ = _publish(tmp_path, handoff, operation_id="op-other-schema")
+    plan = _prepared_plan(tmp_path)
+    _ = _publish(tmp_path, plan, operation_id="op-other-schema")
     path = tmp_path / "pointers" / "op-other-schema.json"
     index = _read_pointer_json(path)
-    other = "https://schemas.easy-cheese.dev/curd-plan"
+    other = "https://schemas.easy-cheese.dev/curd-result"
     cast("dict[str, object]", index["request"])["payload_schema_uri"] = other
     cast("dict[str, object]", index["payload"])["schema_uri"] = other
     _ = path.write_text(json.dumps(index), encoding="utf-8")
 
     with pytest.raises(ContractValidationError, match="unsupported-pointer-schema"):
-        _ = mold_cook_handoff.accept_mold_cook_handoff(path, artifact_root=tmp_path)
+        _ = _accept(path, artifact_root=tmp_path)
 
 
 def test_accept_rejects_payload_outside_artifact_root(tmp_path: Path) -> None:
