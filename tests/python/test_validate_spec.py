@@ -1151,3 +1151,81 @@ def test_mini_spec_mode_template_landing_block_validates(
     result = _run(path, "--strict")
     assert result.returncode == 0, result.stdout + result.stderr
     assert not _error_lines(result)
+
+
+_BINDING_DECLARATIONS = {
+    "block-flow-noun-only": 'entity_referent_bindings:\n  - {noun: "advisor"}\n',
+    "block-flow-full-record": (
+        "entity_referent_bindings:\n"
+        + '  - {noun: "advisor", verdict: bound, referent: "advise()", '
+        + 'citation: "a.js:1", note: "x"}\n'
+    ),
+    "flow-list-with-nested-citation": (
+        'entity_referent_bindings: [{noun: "advisor", verdict: "bound", '
+        + 'referent: "advise()", citation: ["a.js:1"], note: "x"}]\n'
+    ),
+    "empty-list-trailing-comment": "entity_referent_bindings: []   # note\n",
+    "string-list-trailing-comment": "gates_overridden: []   # note\n",
+    "hold-list-trailing-comment": "execution_holds: []   # note\n",
+}
+
+
+@pytest.mark.parametrize(
+    "declaration", _BINDING_DECLARATIONS.values(), ids=_BINDING_DECLARATIONS.keys()
+)
+def test_documented_frontmatter_lists_pass_strict_validation(
+    tmp_path: Path, _run: _RunFn, declaration: str
+) -> None:
+    """Issue #778: documented binding records and a trailing comment on a
+    frontmatter list keep the list a list under strict validation."""
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n" + declaration + "---",
+        1,
+    )
+    result = _run(_write(tmp_path, "spec.md", text), "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+def test_curdle_template_binding_line_passes_strict_validation(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    """The Curdle template's commented `entity_referent_bindings` line
+    validates as copied."""
+    curdle = (REPO_ROOT / "skills" / "mold" / "references" / "curdle.md").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"^entity_referent_bindings: \[\] +#.*\n", curdle, re.MULTILINE)
+    assert match is not None
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n" + match.group(0) + "---",
+        1,
+    )
+    result = _run(_write(tmp_path, "spec.md", text), "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "entity_referent_bindings:\n  - advisor\n",
+        "entity_referent_bindings: [advisor]\n",
+        'entity_referent_bindings: [{noun: "advisor"]\n',
+    ],
+    ids=["block-scalar-item", "flow-scalar-item", "unbalanced-flow"],
+)
+def test_malformed_binding_declaration_is_rejected(
+    tmp_path: Path, _run: _RunFn, declaration: str
+) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n" + declaration + "---",
+        1,
+    )
+    result = _run(_write(tmp_path, "spec.md", text), "--strict")
+    assert any("entity_referent_bindings" in line for line in _error_lines(result)), (
+        result.stderr
+    )

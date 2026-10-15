@@ -36,7 +36,11 @@ from easy_cheese_schemas.spec_format import (
     _HARDENED_SOURCES,  # pyright: ignore[reportPrivateUsage]
 )
 
-from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
+from easy_cheese.shared.frontmatter_lists import (
+    frontmatter_mapping_list,
+    frontmatter_string_list,
+    strip_flow_comment,
+)
 
 
 class _GroundingRowFactory(Protocol):
@@ -455,6 +459,8 @@ def is_new_mold_spec(spec: object) -> bool:
 
 def _scalar(value: str) -> object:
     value = value.strip()
+    if value.startswith(("[", "{")):
+        value = strip_flow_comment(value)
     if value in {"{}", "[]"}:
         return {} if value == "{}" else []
     if value.lower() in {"true", "false"}:
@@ -668,9 +674,13 @@ def _typed_mold_document(
                 agent_introduced_scope=cast(
                     tuple[str, ...], merged.get("agent_introduced_scope", ())
                 ),
-                entity_referent_bindings=cast(
-                    tuple[Mapping[str, object], ...],
-                    merged.get("entity_referent_bindings", ()),
+                entity_referent_bindings=(
+                    cast(
+                        tuple[Mapping[str, object], ...],
+                        raw_spec["entity_referent_bindings"],
+                    )
+                    if "entity_referent_bindings" in raw_spec
+                    else frontmatter_mapping_list(text, "entity_referent_bindings")
                 ),
                 execution_holds=(
                     cast(tuple[str, ...], raw_spec["execution_holds"])
