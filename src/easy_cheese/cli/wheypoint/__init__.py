@@ -294,7 +294,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         ref
             an absolute projection path, a work id, or a slug
         legacy
-            resolve a pre-kernel .cheese/notes/<slug>.md instead
+            resolve a pre-kernel .cheese/notes/`<slug>`.md instead
         corpus_root
             the corpus to resolve in; defaults to this project's XDG corpus
         project
