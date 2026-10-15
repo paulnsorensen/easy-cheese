@@ -136,7 +136,8 @@ A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error"
 - **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`, `derived_entry_ids`, `applied_transitions`, `applied_edges`, `removed_edges`, and `warnings`.
 - **`validate`** returns `valid` and `work_id`.
 - **`schema`** returns `slug` and `schema`.
-- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `bridge`.
+- **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `matched_by`, `bridge`.
+  `matched_by` is `exact`, `prefix`, or `substring`, or `null` when nothing matched. A prefix or substring match still dispatches.
 - **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`, `bridge`.
 - **`fork`** replies are in [`work-graph.md`](work-graph.md).
 - **`list`** returns `corpus_root`, `items`, and `lines`, plus `scope-fallback` only when the scope fell back.
