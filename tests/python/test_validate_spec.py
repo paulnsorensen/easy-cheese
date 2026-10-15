@@ -170,6 +170,137 @@ def test_parent_link_error_branches_are_rejected(
         result.stdout + result.stderr
     )
 
+
+_DEMONSTRATION_RE = re.compile(
+    r"## Acceptance demonstration\n.*?(?=\n## )", re.DOTALL
+)
+
+
+def _with_demonstration(spec: str, replacement: str) -> str:
+    assert _DEMONSTRATION_RE.search(spec)
+    return _DEMONSTRATION_RE.sub(lambda _: replacement, spec, count=1)
+
+
+def _demonstration_errors(
+    tmp_path: Path, spec: str, *flags: str
+) -> list[str]:
+    result = _run_pyz(_write(tmp_path, "spec.md", spec), *flags)
+    return [
+        line for line in _error_lines(result) if "acceptance-demonstration-complete" in line
+    ]
+
+
+def test_strict_rejects_a_spec_without_the_demonstration(tmp_path: Path) -> None:
+    spec = _with_demonstration(BASE_SPEC, "")
+    assert _demonstration_errors(tmp_path, spec, "--strict")
+    assert _run_pyz(_write(tmp_path, "ok.md", spec)).returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("case", "old", "new"),
+    [
+        ("empty-field", "| Input | A strict spec file with a tracer row and a contract-matrix row |", "| Input |  |"),
+        ("missing-field", "| Entrypoint | `validate-spec --strict <spec>` |\n", ""),
+        ("duplicate-field", "| Input |", "| Evidence | again |\n| Input |"),
+    ],
+)
+def test_strict_rejects_an_incomplete_demonstration_table(
+    tmp_path: Path, case: str, old: str, new: str
+) -> None:
+    spec = BASE_SPEC.replace(old, new, 1)
+    assert spec != BASE_SPEC, case
+    assert _demonstration_errors(tmp_path, spec, "--strict"), case
+
+
+def test_strict_rejects_an_empty_na_reason(tmp_path: Path) -> None:
+    spec = _with_demonstration(BASE_SPEC, "## Acceptance demonstration\n\nn/a:\n")
+    assert _demonstration_errors(tmp_path, spec, "--strict")
+
+
+def test_strict_accepts_the_full_table_and_an_na_line(tmp_path: Path) -> None:
+    assert _run_pyz(_write(tmp_path, "full.md", BASE_SPEC), "--strict").returncode == 0
+    na = _with_demonstration(
+        BASE_SPEC, "## Acceptance demonstration\n\nn/a: docs-only change\n"
+    )
+    result = _run_pyz(_write(tmp_path, "na.md", na), "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_demonstration_order_relative_to_acceptance_is_not_enforced(
+    tmp_path: Path,
+) -> None:
+    match = _DEMONSTRATION_RE.search(BASE_SPEC)
+    assert match
+    block = match.group(0)
+    moved = BASE_SPEC.replace(block + "\n", "", 1).replace(
+        "## Acceptance\n", block + "\n## Acceptance\n", 1
+    )
+    assert moved != BASE_SPEC
+    result = _run_pyz(_write(tmp_path, "moved.md", moved), "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_strict_mini_spec_requires_the_demonstration(tmp_path: Path) -> None:
+    spec = _with_demonstration(MINI_SPEC, "")
+    assert _demonstration_errors(tmp_path, spec, "--strict")
+
+
+def test_strict_curd_mini_spec_requires_the_demonstration(tmp_path: Path) -> None:
+    spec = _with_demonstration(
+        MINI_SPEC.replace("source: agent-mini-spec", "source: mold-curd-mini-spec"),
+        "",
+    ) + (
+        "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+        "- Depends on: none\n- Frozen decisions: F-1\n"
+    )
+    errors = _demonstration_errors(tmp_path, spec, "--strict")
+    assert len(errors) == 1
+    assert "missing-required-section" in errors[0]
+
+
+@pytest.mark.parametrize(
+    ("case", "section"),
+    [
+        (
+            "unknown-field",
+            None,
+        ),
+        (
+            "table-and-na",
+            "TABLE\nn/a: also not behavior\n",
+        ),
+        ("na-then-prose", "n/a: docs-only change\nplus more prose\n"),
+        ("empty-section", ""),
+        ("wrong-header", "| Name | Value |\n| --- | --- |\n| User task | x |\n"),
+    ],
+)
+def test_strict_rejects_malformed_demonstration_shapes(
+    tmp_path: Path, case: str, section: str | None
+) -> None:
+    match = _DEMONSTRATION_RE.search(BASE_SPEC)
+    assert match
+    block = match.group(0)
+    if section is None:
+        spec = BASE_SPEC.replace(
+            "| Input |", "| Surprise | extra |\n| Input |", 1
+        )
+    else:
+        body = section.replace("TABLE\n", block.split("\n", 1)[1].strip() + "\n")
+        spec = _with_demonstration(
+            BASE_SPEC, "## Acceptance demonstration\n\n" + body
+        )
+    errors = _demonstration_errors(tmp_path, spec, "--strict")
+    assert len(errors) == 1, (case, errors)
+
+
+def test_spec_format_section_literal_matches_the_schema_constant() -> None:
+    from easy_cheese_schemas import contracts, spec_format
+
+    assert (
+        spec_format._DEMONSTRATION_SECTION  # pyright: ignore[reportPrivateUsage]
+        == contracts.ACCEPTANCE_DEMONSTRATION_SECTION
+    )
+
 # --- lenient syntax-repair classes (AC-1 half) ---------------------------
 
 

@@ -2941,6 +2941,62 @@ GROUNDING_TABLE_RULE = TableRule(
 )
 
 
+ACCEPTANCE_DEMONSTRATION_SECTION = "Acceptance demonstration"
+
+ACCEPTANCE_DEMONSTRATION_FIELDS: tuple[str, ...] = (
+    "User task",
+    "Input",
+    "Entrypoint",
+    "Expected result",
+    "Real boundaries",
+    "False success",
+    "Evidence",
+)
+
+ACCEPTANCE_DEMONSTRATION_COLUMNS: tuple[str, ...] = ("Field", "Value")
+
+ACCEPTANCE_DEMONSTRATION_TABLE_RULE = TableRule(
+    columns=ACCEPTANCE_DEMONSTRATION_COLUMNS,
+    per_row=(
+        "the seven declared Field names each appear exactly once",
+        "every Value cell is non-empty",
+        "non-behavior work uses one 'n/a: <reason>' line instead",
+    ),
+)
+
+
+@define(frozen=True)
+class AcceptanceDemonstration:
+    """The demonstration of how the spec's behavior is shown to work.
+
+    Behavior work fills ``fields`` (Field -> Value) with every declared field;
+    non-behavior work sets ``na_reason`` and leaves ``fields`` empty.
+    """
+
+    fields: Mapping[str, str] = field(factory=lambda: cast(Mapping[str, str], {}))
+    na_reason: str = field(default="", validator=validators.instance_of(str))
+
+    def __attrs_post_init__(self) -> None:
+        if self.na_reason.strip():
+            if self.fields:
+                raise ValueError(
+                    f"{ACCEPTANCE_DEMONSTRATION_SECTION} is either a field table or an n/a line, not both"
+                )
+            return
+        if self.na_reason:
+            raise ValueError(f"{ACCEPTANCE_DEMONSTRATION_SECTION} n/a reason is empty")
+        missing = [
+            name
+            for name in ACCEPTANCE_DEMONSTRATION_FIELDS
+            if not self.fields.get(name, "").strip()
+        ]
+        unknown = sorted(set(self.fields) - set(ACCEPTANCE_DEMONSTRATION_FIELDS))
+        if missing or unknown:
+            raise ValueError(
+                f"{ACCEPTANCE_DEMONSTRATION_SECTION} must fill every field: empty-or-missing={missing} unknown={unknown}"
+            )
+
+
 TEST_CONTRACT_COLUMNS: tuple[str, ...] = (
     "Acceptance ID",
     "Interface referent",
@@ -2968,6 +3024,11 @@ MOLD_SPEC_SECTIONS: tuple[Section, ...] = (
     Section("Approach"),
     Section("Decisions"),
     Section("Acceptance"),
+    Section(
+        ACCEPTANCE_DEMONSTRATION_SECTION,
+        optional=True,
+        table=ACCEPTANCE_DEMONSTRATION_TABLE_RULE,
+    ),
     Section("Test Contracts", optional=True, table=TEST_CONTRACT_TABLE_RULE),
     Section("Interface sketches"),
     Section("Risks"),
@@ -2988,6 +3049,10 @@ MOLD_SPEC_ENUMS: dict[str, tuple[str, ...]] = {
 }
 
 MOLD_SPEC_CROSS_FIELD_RULES: tuple[CrossFieldRule, ...] = (
+    CrossFieldRule(
+        rule_id="acceptance-demonstration-complete",
+        description="Strict validation requires seven non-empty demonstration fields or an n/a line.",
+    ),
     CrossFieldRule(
         rule_id="ac-coverage-exactly-once",
         description="Every Acceptance ID must appear exactly once in the Test Contracts table.",
@@ -3032,6 +3097,10 @@ class MoldSpecDocument:
     )
     grounding_rows: tuple[GroundingRow, ...] = field(
         factory=tuple, converter=_tuple_sequence, validator=_list_of(GroundingRow)
+    )
+    acceptance_demonstration: AcceptanceDemonstration | None = field(
+        default=None,
+        validator=validators.optional(validators.instance_of(AcceptanceDemonstration)),
     )
 
     slug: ClassVar[str] = "mold-spec"

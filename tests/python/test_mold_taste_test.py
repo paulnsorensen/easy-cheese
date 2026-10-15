@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -777,6 +778,58 @@ def test_goal_coverage_passes_when_every_clause_has_a_disposition(
     )
     assert result.passed, result.acceptance_gaps
 
+
+def test_acceptance_demonstration_heading_never_overwrites_the_acceptance_body(
+    taste: _MoldTasteTestModule,
+) -> None:
+    demonstration = (
+        "## Acceptance demonstration\n\n"
+        "| Field | Value |\n| --- | --- |\n| User task | tagless row |\n\n"
+    )
+    ac_two = "- AC-2: WHEN x THE SYSTEM SHALL z (F-2, G-2, G-4)"
+    after = COVERAGE_DRAFT.replace(ac_two, ac_two + "\n\n" + demonstration, 1)
+    before = COVERAGE_DRAFT.replace(
+        "## Acceptance\n", demonstration + "## Acceptance\n", 1
+    )
+    assert after != COVERAGE_DRAFT and before != COVERAGE_DRAFT
+    for draft in (after, before):
+        assert taste.lexical_precheck(draft, COVERAGE_LEDGER) == ()
+        assert taste.goal_coverage(draft, COVERAGE_LEDGER)["G-4"] == "covered"
+
+
+def test_precheck_cli_keeps_the_acceptance_body_beside_the_demonstration(
+    tmp_path: Path,
+) -> None:
+    demonstration = (
+        "## Acceptance demonstration\n\n"
+        "| Field | Value |\n| --- | --- |\n| User task | tagless row |\n\n"
+    )
+    ac_two = "- AC-2: WHEN x THE SYSTEM SHALL z (F-2, G-2, G-4)"
+    draft = tmp_path / "draft.md"
+    ledger = tmp_path / "ledger.json"
+    _ = ledger.write_text(json.dumps(COVERAGE_LEDGER), encoding="utf-8")
+    mold = Path(__file__).resolve().parents[2] / "skills" / "mold" / "scripts" / "mold.pyz"
+    for text in (
+        COVERAGE_DRAFT.replace(ac_two, ac_two + "\n\n" + demonstration, 1),
+        COVERAGE_DRAFT.replace("## Acceptance\n", demonstration + "## Acceptance\n", 1),
+    ):
+        _ = draft.write_text(text, encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(mold),
+                "taste-test",
+                "--precheck",
+                "--draft",
+                str(draft),
+                "--ledger",
+                str(ledger),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert json.loads(result.stdout) == {"gaps": []}
 
 def test_goal_coverage_names_each_uncovered_clause(
     taste: _MoldTasteTestModule,
