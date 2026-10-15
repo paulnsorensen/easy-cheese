@@ -202,7 +202,7 @@ Default targets per intent:
 
 - **clarify** — single targeted question; no skills run until the answer arrives.
 - **research** — `/briesearch` (recommended). No auto variant.
-- **rubber-duck** — `/culture` (recommended). Only reached when the user explicitly opted out of writes. No auto variant.
+- **rubber-duck** — `/culture` (recommended). Only reached when the user opted out of writes or asked to think through a problem. No auto variant.
 - **mold** — `/mold` (recommended). Safe-mode alternative: `/briesearch first` when external evidence is missing.
 - **cook** — default: `/cook --auto <slug-or-path>`.
   Safe-mode alternatives are `/cook <slug-or-path>` and `/mold first`.
@@ -211,12 +211,9 @@ Default targets per intent:
 - **prototype** — `/cook --prototype <idea>` (recommended). No auto variant.
 - **ultracook (retired)** — `/ultracook <slug-or-path>` resolves to `/cook <slug-or-path>`, carrying forward `--open-pr`/`--resume`/`--auto`/`--hard`.
 - **plate** — `/plate` handles commits, ordinary pull requests, and pull request stacks.
-  New pull requests infer an obviously cohesive single change.
-  They recommend reviewable ordered stacks.
-  `/plate` asks before mutation when it recommends a stack.
-  `/plate` also asks before mutation when the shape is ambiguous.
+  `/plate` decides `single`, `orthogonal_flat`, or `stacked_linear` for a new pull request without asking.
   Explicit choices win.
-- **debug** — default: `/pasteurize --auto <input>`. Safe-mode alternatives: `/pasteurize <input>` (no auto), `/culture` only when the user explicitly wants no-write diagnosis.
+- **debug** — default: `/pasteurize --auto <input>`. Safe-mode alternatives: `/pasteurize <input>` (no auto), `/culture` only when the user wants no-write diagnosis or asks to think through the problem before fixing it.
 - **affinage** — `/affinage <pr>` (recommended).
   Use bare `/affinage` when the input names no pull request.
   Send `--auto` only with an explicit `--stake <floor>` value.
