@@ -213,14 +213,19 @@ def _lone_successor(result: Mapping[str, object], entry_id: str) -> str:
     Added entries take ids from the parent revision, so the base must be known.
     """
     kind = commit.kind_of_entry_id(entry_id)
+    if kind is None:
+        raise IntentFlagError(
+            f"flag-pairing: --supersede {entry_id} has no --by and its id prefix "
+            + "names no entry kind"
+        )
     entries = result.get("entries")
     proposals = [
         cast(Mapping[str, object], item)
         for item in (cast(list[object], entries) if isinstance(entries, list) else [])
         if isinstance(item, Mapping)
-        and cast(Mapping[str, object], item).get("kind") == getattr(kind, "value", None)
+        and cast(Mapping[str, object], item).get("kind") == kind.value
     ]
-    if kind is None or len(proposals) != 1:
+    if len(proposals) != 1:
         raise IntentFlagError(
             f"flag-pairing: --supersede {entry_id} has no --by and the checkpoint "
             + f"does not add exactly one entry of its kind (found {len(proposals)})"
