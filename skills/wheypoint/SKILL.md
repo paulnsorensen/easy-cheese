@@ -34,7 +34,7 @@ python3 skills/wheypoint/scripts/wheypoint.pyz turns [--session <id> | --transcr
 python3 skills/wheypoint/scripts/wheypoint.pyz show <work-id> [--project <key>]
 python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json] [--base <revision_id>]
 python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [intent.json] [--base <revision_id>]
-python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint <work-id> [--base <revision_id>] --question "<q>" --gates --rationale "<why>" --decision "<d>" --directive "<d>" --operator-directive "<style>" --quote "<words>" [--owner <who> --when <trigger>] --link <ref> --kind <edge-kind> [--covers <id>]...
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint <work-id> [--base <revision_id>] --question "<q>" --gates --rationale "<why>" --decision "<d>" --directive "<d>" --quote "<words>" --operator-directive "<style>" --operator-quote "<words>" [--owner <who> --when <trigger>] --link <ref> --kind <edge-kind> [--covers <id>]...
 python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
 python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
 python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]... [--entry-kind <k>]... [--entry-state <s>]... [--gated | --no-gated] [--edge-kind <k>]... [--linked-to <ref>]... [--forked-from <work-id>]... [--owner <who>]...
@@ -88,7 +88,7 @@ The runtime refuses an intent instead of dropping data.
 - It derives every identifier, digest, and revision.
 - It refuses an agent-authored `fork` transition and a `forked_from` edge in a delta.
 - It refuses `notes` over 6000 characters.
-- It warns with `stale-notes` when a decision changes and `notes` stay as they were, marks that drift at the top of `## Notes`, and lists a decision that `checkpoint --supersede <old> [--by <new>] --rationale <why>` replaced under `## Superseded`.
+- It warns with `stale-notes` when a decision changes and `notes` stay as they were, marks that drift at the top of `## Notes`, and lists an entry that `checkpoint --supersede <old> [--by <new>] --rationale <why>` replaced under `## Superseded`.
 
 Fix a refused intent and run `checkpoint` again.
 

@@ -347,8 +347,9 @@ def test_operator_directive_flag_adds_a_scope_operator_directive_after_work_ones
         {},
         work_id=WORK_ID,
         directive=["Work rule"],
+        quote=["work words"],
         operator_directive=["Style rule"],
-        quote=["work words", "style words"],
+        operator_quote=["style words"],
     )
 
     assert _intent(payload).entries is not None
@@ -363,10 +364,47 @@ def test_operator_directive_flag_adds_a_scope_operator_directive_after_work_ones
     ]
 
 
-def test_operator_directive_without_its_quote_refuses_with_flag_pairing() -> None:
-    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing"):
+def test_each_quote_flag_pairs_only_with_its_own_directive_flag() -> None:
+    # CLI order is operator first; the quotes must not follow it.
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        operator_directive=["B"],
+        operator_quote=["qb"],
+        directive=["A"],
+        quote=["qa"],
+    )
+
+    assert payload["entries"] == [
+        {"kind": "directive", "summary": "A", "quote": "qa"},
+        {"kind": "directive", "summary": "B", "quote": "qb", "scope": "operator"},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("directive", "quote", "operator_directive", "operator_quote", "flag"),
+    [
+        ([], [], ["Style rule"], [], "--operator-quote"),
+        ([], ["stray"], ["Style rule"], ["words"], "--quote"),
+        (["Work rule"], ["words"], [], ["stray"], "--operator-quote"),
+        (["Work rule"], [], [], [], "--quote"),
+    ],
+)
+def test_a_quote_count_that_differs_from_its_directive_count_refuses(
+    directive: list[str],
+    quote: list[str],
+    operator_directive: list[str],
+    operator_quote: list[str],
+    flag: str,
+) -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match=f"^flag-pairing.*{flag}"):
         _ = intent_flags.overlay(
-            {}, work_id=WORK_ID, operator_directive=["Style rule"]
+            {},
+            work_id=WORK_ID,
+            directive=directive,
+            quote=quote,
+            operator_directive=operator_directive,
+            operator_quote=operator_quote,
         )
 
 

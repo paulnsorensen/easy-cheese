@@ -99,8 +99,8 @@ Flags ignore stdin unless the intent argument is `-`.
 - `--question` adds a question entry; `--gates` makes every question in the call block continuation.
 - A blocking question needs a `--rationale`; the rationale pairs by order, see below.
 - `--decision` adds a decision, and `--directive` adds a directive with the paired `--quote`.
-- `--operator-directive` adds a directive with `scope: operator`: how the user wants to be worked with, not an instruction for this work. Its `--quote` follows the `--directive` quotes. The projection lists it under `## Operator preferences`, apart from `## Directives`.
-- `--owner` and `--when` store free-text `owner` and `when` on a question. Give none, or one per `--question`; they pair by order. A different count refuses with `flag-pairing` and writes nothing. The projection groups open questions under one `###` subheading per owner (matched case-insensitively), puts unowned ones under `unassigned`, and prints `(when: <trigger>)` after the summary. With no owner on any question the list stays flat.
+- `--operator-directive` adds a directive with `scope: operator`: how the user wants to be worked with, not an instruction for this work. Pair each with an `--operator-quote`; `--quote` pairs only with `--directive`. The projection lists it under `## Operator preferences`, apart from `## Directives`.
+- `--owner` and `--when` store free-text `owner` and `when` on a question. Give none, or one per `--question`; they pair by order. A different count refuses with `flag-pairing` and writes nothing. The projection groups open questions under one `###` subheading per owner (matched case-insensitively), puts unowned ones under `unassigned`, and prints `(when: <trigger>)` after the summary. A blocking question's gate line also shows `(owner: <who>)` and `(when: <trigger>)`. With no owner on any question the list stays flat.
 - `--resolve` and `--withdraw` add transitions for carried entry ids.
 - `--supersede <old>` adds a `supersede` transition that sets `superseded_by` on `<old>`. `--by <new>` names the successor entry id; give one `--by` per `--supersede`. Without `--by`, the successor is the one entry of the same kind that the same checkpoint adds, and that needs the revision you read (`--base`). If no successor resolves, the checkpoint refuses with `flag-pairing` and writes nothing.
 - `--rationale` values pair in order with each blocking question, then each `--decision`, then each `--resolve`, then each `--withdraw`, then each `--supersede`.
@@ -111,7 +111,7 @@ Flags ignore stdin unless the intent argument is `-`.
 
 The flag form refuses with these codes:
 
-- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, and withdraws, a `--quote` or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
+- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, and withdraws, a `--quote`, `--operator-quote`, or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
 - `flag-kind`: a `--kind` names no edge kind.
 - `flag-link`: a `--link` is not a valid typed ref.
 - `flag-conflict`: the intent file holds a non-list value at a key a flag extends.

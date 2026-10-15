@@ -81,6 +81,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         owner: list[str] | None = None,
         when: list[str] | None = None,
         operator_directive: list[str] | None = None,
+        operator_quote: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -136,8 +137,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             paired by order (repeatable)
         operator_directive
             add an operator-preference directive (how the user wants to be
-            worked with); pair each with a --quote, after the --directive
-            quotes (repeatable)
+            worked with); pair each with an --operator-quote (repeatable)
+        operator_quote
+            the user's own words for each --operator-directive (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -173,6 +175,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             owner=owner or (),
             when=when or (),
             operator_directive=operator_directive or (),
+            operator_quote=operator_quote or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -213,6 +216,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         owner: list[str] | None = None,
         when: list[str] | None = None,
         operator_directive: list[str] | None = None,
+        operator_quote: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -263,8 +267,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             paired by order (repeatable)
         operator_directive
             add an operator-preference directive (how the user wants to be
-            worked with); pair each with a --quote, after the --directive
-            quotes (repeatable)
+            worked with); pair each with an --operator-quote (repeatable)
+        operator_quote
+            the user's own words for each --operator-directive (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -300,6 +305,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             owner=owner or (),
             when=when or (),
             operator_directive=operator_directive or (),
+            operator_quote=operator_quote or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
