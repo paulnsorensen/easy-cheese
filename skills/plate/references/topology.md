@@ -1,18 +1,18 @@
 # New-PR topology policy
 
 Load this reference for the **topology preflight** and **new PR** modes. It resolves only the review shape.
-Execution continues in `ordinary-pr.md` for `single` and `orthogonal_flat`, or in `stacks.md` for a stacked chain.
+Execution continues in `ordinary-pr.md` for `single` and `orthogonal_flat`, or in `stacks.md` for `stacked_linear` and `diamond_stack`.
 
 Plate decides the review shape. It does not ask the user.
-A layout question delays publication and adds no information: in past sessions, users took the recommended option every time.
-This policy is unchanged under `--auto`.
 Resolve the shape before any commit or branch-layout mutation.
 
 ## Decide the shape
 
 1. Honor an explicit user choice from the current request, verified workflow state, or the spec's `landing` block. It is authoritative.
    Derive the topology from `landing.shape` via `easy_cheese_schemas.manifest.plate_layout_for`, with `landing.layers` as the proposed layer boundaries.
+   A `landing.shape` of `diamond_stack` is allowed only when an explicit choice names it.
    A choice of shape without boundaries ("make this a stack") still needs boundaries. Derive them with step 3.
+   When step 3 finds no clean boundary, apply the conflict rule below: collapse to `single` and state the deviation.
 2. Classify each production change:
    - Use **semantics-altering** for features, fixes, or externally observable contract changes.
    - Use **semantics-preserving** for behavior-preserving refactors, internal moves, internal renames, or formatting-only changes.
@@ -20,8 +20,10 @@ Resolve the shape before any commit or branch-layout mutation.
    - A move or rename is semantics-altering if it changes an externally observable name, path, API, or configuration key.
      Use the same classification for a changed serialized shape, command, or documented contract.
 3. Partition the work into parts. A part is a set of commits or whole files with one purpose.
+   A part becomes one `pr_plan` group and one stack layer.
    Use only existing commit boundaries or whole-file partitions. Never manufacture a boundary that splits a hunk or rewrites a commit.
-   Merge parts that edit the same hunks into one part. This rule overrides a spec that asks for one PR per issue; state why.
+   Merge parts that edit the same hunks into one part.
+   This rule overrides a spec that asks for one PR per issue. State why.
    Tests, docs, and durable artifacts join the part whose decision they verify or describe.
    A generated artifact, such as a `.pyz` archive or a lockfile, joins the part whose source generates it.
    An incidental fix that is unrelated to the main change is its own part.
@@ -33,7 +35,8 @@ Resolve the shape before any commit or branch-layout mutation.
    | A split needs a history rewrite, or a lower part fails the quality gate alone | `single` |
    | Two or more parts that share no file, import, or configuration, and each applies to the trunk alone | `orthogonal_flat` |
    | Ordered parts where each later part depends on an earlier part, and each part passes the gate on its parent | `stacked_linear` |
-   | Independent parts mixed with a dependent chain | `stacked_linear` for the chain; then publish each independent part as its own `single` PR in a separate Plate transaction |
+   | Independent parts mixed with a dependent chain | `stacked_linear` for the chain. Publish each independent part through `ordinary-pr.md` § Independent PRs, and exclude it from the stack partition |
+   | Any other case, such as independent parts that share a file without hunk overlap | `single`; name the shared file in the reason |
 
    Put a semantics-preserving part below the semantic change that depends on its reorganization.
    Never stack parts that do not depend on each other. Independent parts merge and revert alone.
@@ -41,7 +44,8 @@ Resolve the shape before any commit or branch-layout mutation.
    When the semantics-altering surface exceeds roughly 400 changed code lines, look again for clean boundaries.
    Reviewer defect detection falls off sharply past that size (SmartBear/Cisco review data).
    With no clean boundary, choose `single`. State the size risk in the PR body and give a reading order.
-   At topology preflight, before a diff exists, estimate the parts from the spec or curd plan. Re-evaluate on the real diff at publication.
+   At topology preflight, before a diff exists, estimate the parts from the spec or curd plan. At publication, reuse the preflight result.
+   Decide again only when the real diff breaks the preflight parts.
 6. Record the decision as one line in the completion report and the PR body: `Plated as <shape>: <reason>`.
    Proceed without asking.
 
@@ -49,7 +53,6 @@ A `landing` block that the finished diff cannot meet does not stop publication.
 A layer that depends on files a later layer owns, or commits that cannot split on the layer boundaries, is a conflict.
 Re-layer on the clean boundaries from step 3 when they exist. Otherwise collapse to `single`.
 State the deviation in the PR body. The statement names the layer and the files in conflict.
-Never ask the plain layout question while a `landing` block exists, and never ask it without one.
 
 ## Plan and persistence
 
@@ -59,13 +62,14 @@ Repair a malformed plan instead of halting: map a legacy `stacked` shape to `sta
 Keep the plan's groups, branches, and bases when they satisfy step 3.
 
 A prior `/plate` **topology preflight** for the same run is the resolution. Reuse it. Do not decide twice.
-Persist it as `plate_layout: single | stacked` in workflow state. `stacked` covers every multi-PR shape.
+Persist `plate_layout: single | stacked` and the chosen `shape` in workflow state. `stacked` covers every multi-PR shape.
 Choose the `pr_plan` `shape` from this resolution: `single`, `orthogonal_flat`, or `stacked_linear`.
+Choose `diamond_stack` only when an explicit `landing.shape` names it.
 `plate_layout_for` projects `plate_layout` from `shape`, not the other way. The v1 plan never carries `plate_layout`.
 At terminal publication, verify that both values agree.
 Apply this policy again when the record is missing, conflicting, or unverified.
 
-For an **Existing PR**, detect its ordinary or stacked topology. Do not ask the layout question.
+For an **Existing PR**, detect its ordinary or stacked topology.
 Preserve that topology. Use its matching update path.
 A request to move part of an existing PR into a separate PR creates a new `orthogonal_flat` branch from the trunk.
 Removing that part from the existing branch rewrites published history, so it needs explicit user authorization.

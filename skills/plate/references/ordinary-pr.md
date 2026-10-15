@@ -6,7 +6,7 @@ It covers the `single` shape and the `orthogonal_flat` shape (independent PRs of
 
 ## New PR
 
-1. Confirm that `/plate` resolved the new PR as `single`. Accept an explicit choice or the topology decision.
+1. Confirm that `/plate` resolved the new PR as `single`, or as one group of an `orthogonal_flat` resolution. Accept an explicit choice or the topology decision.
 2. Resolve the trunk and current branch. Reject publication from the trunk.
 3. Draft a title and body per `## Body contract` below.
 4. Write the body to a temporary or transient file. Pass that file through `--body-file`.
@@ -24,7 +24,9 @@ Do not use `--fill` when it would omit artifact or verification details.
 
 ## Independent PRs
 
-Use this section for the `orthogonal_flat` shape. Every group is based on the trunk and has no `depends_on`.
+Use this section for the `orthogonal_flat` shape. Base every group on the trunk. A group has no `depends_on`.
+Record the evidence as topology `stacked`, provider `ordinary`, and a `pr_plan` with shape `orthogonal_flat`.
+`validate-publication` accepts provider `ordinary` with topology `stacked` only for that plan shape.
 For each group, in plan order:
 
 1. Create the group branch from the trunk: `git switch -c <branch> <trunk>`.
@@ -39,10 +41,12 @@ Leave the source branch unchanged. Report every PR URL in plan order.
 ## Existing ordinary PR
 
 Detect the PR with `gh pr view --json number,baseRefName,headRefName,url`. Then inspect the provider metadata.
-A stacked topology leaves this file for `stacks.md`. Do not ask the layout question.
+A stacked topology leaves this file for `stacks.md`.
 Read the base and head with `gh pr view`. Commit the validated named files.
 Push the exact head branch. Then read the PR back.
 Update the title or body only when the new work makes existing metadata inaccurate.
+To move part of the PR into a separate PR, create a new `orthogonal_flat` branch from the trunk.
+Removing that part from the existing branch rewrites published history. It needs explicit user authorization.
 
 ## Failures
 
@@ -70,15 +74,16 @@ If a PR exists, switch to the existing-PR path. Do not rely on a failed create c
 
 A reviewer reads a short body. Agent-written bodies that claim changes the diff lacks lose reviewer trust.
 When the repository tracks `.github/PULL_REQUEST_TEMPLATE.md`, use its section headings.
-Otherwise use `## Why`, `## What changed`, `## How to verify`, and `## Risk`.
+Otherwise use `## Why`, `## What changed`, `## Non-obvious changes`, `## How to verify`, and `## Risk`.
 Keep the body file transient unless the repository tracks PR templates or release artifacts.
 Leave a transient body file unstaged after verification.
 
 Length and tone:
 
-- Keep the body at 40 lines or fewer, not counting one diagram. Keep a small change at 20 lines or fewer.
+- Count non-blank lines. Do not count one diagram or the checklist of a repository PR template.
+- Keep the body at 40 lines or fewer. Keep a small change at 20 lines or fewer.
 - Give each prose section one to three sentences or bullets. Write `None` for an empty template section.
-- Open with why in one or two sentences. A purpose that needs more than one sentence means a wrong topology. Decide it again.
+- Open with why in one or two sentences.
 - Do not restate the diff or list every file. When the change exceeds about 200 lines or 5 files, give a reading order.
 - Use plain words. Do not use filler such as comprehensive, robust, seamless, leverage, significantly, or dramatically.
 - Rewrite a supplied draft body. Keep only the facts that the evidence supports.
@@ -89,6 +94,7 @@ Claims:
 - List each verification as one line: the command and its result (`pass`, `fail`, or `not run`).
   List only checks that ran in this session. List a relevant check that did not run as `not run`.
   Never claim a benchmark, platform, harness, or speedup that no command measured.
+- Link the spec, plan, or spike branch, and list deferred follow-ups, when they exist.
 - A semantics-preserving change says so in its first line. It names the mechanism and states the invariant to verify.
   Examples include a behavior-preserving refactor, an internal move, an internal rename, or a formatting-only change.
   For example, a move states that it drops nothing and duplicates nothing.

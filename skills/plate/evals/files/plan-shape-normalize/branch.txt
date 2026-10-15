@@ -3,13 +3,13 @@ Quality gate: `just check` passed at HEAD and at each commit (exit 0 each).
 Installed stack tools: Git Town (configured, main branch = main). gh stack and Graphite are absent.
 
 $ git log --oneline --reverse main..HEAD
-f01 feat(press): add the test matrix model         +160 lines
-f02 feat(press): run the matrix in press rounds    +240 lines, imports f01
+a1b2c3d feat(press): add the test matrix model         +160 lines
+e4f5a6b feat(press): run the matrix in press rounds    +240 lines, imports a1b2c3d
 
 An upstream /cook run left this plan at .cheese/pr-plan.json:
 {"shape": "stacked", "target_branch": "main", "groups": [
-  {"branch": "press-matrix-model", "title": "feat(press): add the test matrix model", "base": "main", "commits": ["f01"]},
-  {"branch": "press-matrix-run", "title": "feat(press): run the matrix in press rounds", "base": "press-matrix-model", "commits": ["f02"], "depends_on": ["press-matrix-model"]}]}
+  {"branch": "press-matrix-model", "title": "feat(press): add the test matrix model", "base": "main", "commits": ["a1b2c3d"]},
+  {"branch": "press-matrix-run", "title": "feat(press): run the matrix in press rounds", "base": "press-matrix-model", "commits": ["e4f5a6b"], "depends_on": ["press-matrix-model"]}]}
 
 `python3 skills/plate/scripts/plate.pyz validate-publication` rejected an earlier attempt with:
   shape: unknown value 'stacked' (expected one of single, orthogonal_flat, stacked_linear, diamond_stack)

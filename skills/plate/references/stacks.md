@@ -1,7 +1,7 @@
 # Stack maintenance
 
 Load this reference for the **stack maintenance** mode. Also load it for any new or
-existing pull request whose resolved topology is stacked.
+existing pull request whose resolved shape is `stacked_linear` or `diamond_stack`.
 Ordinary single pull request work never reads this file.
 
 ## Per-layer stack transaction
@@ -13,7 +13,8 @@ Ordinary single pull request work never reads this file.
    Classify the production implementation decision. Tests, docs, and durable artifacts inherit its layer.
    They inherit the layer when they directly verify or describe the decision.
    Each layer's implementation preserves semantics or alters them, never both.
-   Each layer's pull request body follows `ordinary-pr.md` § Body contract, including `## Non-obvious changes`, the stack position line, and the stack diagram.
+   Each layer's pull request body follows `ordinary-pr.md` § Body contract, including `## Non-obvious changes` and the stack position line.
+   A stack layer always carries the stack-order diagram.
    Put semantics-preserving layers below the semantic changes that depend on their reorganization.
 3. Create or adopt provider lineage in the approved bottom-to-top order.
 4. Read the spec's `landing.per_layer_green` before publishing any layer.

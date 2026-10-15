@@ -6,17 +6,19 @@ $ git log --oneline main..HEAD
 9c41d2e feat(wheypoint): add search verb that ranks handoffs by term overlap
 
 $ git diff --stat main...HEAD
- src/easy_cheese/skills/wheypoint/search.py        | 188 +++++++++++++
- src/easy_cheese/cli/wheypoint.py                  |  41 ++-
+ src/easy_cheese/skills/wheypoint/search.py        | 392 ++++++++++++++
+ src/easy_cheese/cli/wheypoint.py                  |  46 ++-
  tests/python/test_wheypoint_search.py             | 236 ++++++++++++++++
  skills/wheypoint/SKILL.md                         |  22 +-
- skills/wheypoint/scripts/wheypoint.pyz            | Bin 81234 -> 83310 bytes
- 5 files changed, 479 insertions(+), 8 deletions(-)
+ skills/wheypoint/scripts/wheypoint.pyz            | Bin 81234 -> 86410 bytes
+ 5 files changed, 692 insertions(+), 4 deletions(-)
 
 Notes from the implementer:
 - search.py is one function family: tokenize, score, rank. The CLI verb is a thin wrapper.
 - The tests drive the CLI verb end to end; no test touches search.py privately.
 - There is no refactor, rename, or unrelated change in the diff.
+- The semantics-altering surface is about 438 production code lines (search.py 392, wheypoint.py 46), past the ~400-line size rule.
+- No part of search.py splits on a clean commit or whole-file boundary, because the one commit holds tokenize, score, and rank together.
 - The .pyz is the regenerated archive; `just wedge-check` fails without it.
 
 Key hunk (src/easy_cheese/cli/wheypoint.py):

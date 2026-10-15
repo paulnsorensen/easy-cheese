@@ -203,9 +203,9 @@ Preserve an explicit choice.
 
 `/plate` decides `single`, `orthogonal_flat`, or `stacked_linear` without asking the user.
 
-Record `plate_layout` in the typed handoff evidence.
+Record `plate_layout` and the chosen `shape` in the typed handoff evidence.
 
-Read `plate_layout` from that evidence.
+Read `plate_layout` and `shape` from that evidence.
 
 Apply the policy `do not decide twice`.
 

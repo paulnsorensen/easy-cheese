@@ -40,11 +40,10 @@ def test_plate_owns_commit_stack_and_review_shape_policy() -> None:
     assert "explicit user choice" in topology
     assert "It is authoritative" in topology
     assert "Never manufacture a boundary" in flat_topology
-    assert "unchanged under `--auto`" in topology
     assert "before any commit" in topology
     assert "It does not ask the user" in topology
     assert "Existing PR" in skill
-    assert "Do not ask the layout question" in topology
+    assert "detect its ordinary or stacked topology" in topology
     # The review-shape policy is one hop away, never duplicated in the core body.
     assert "semantics-altering" not in skill
     assert "plate-layout" not in skill
@@ -58,8 +57,17 @@ def test_plate_topology_decides_every_shape_without_a_question() -> None:
     assert "plate-layout" not in topology
     assert "## Answer normalization" not in topology
     table = topology.split("| Evidence | Shape |", maxsplit=1)[1].split("\n\n", maxsplit=1)[0]
-    for shape in ("`single`", "`orthogonal_flat`", "`stacked_linear`"):
-        assert shape in table, shape
+    rows = [line for line in table.splitlines() if line.strip().startswith("| ")][1:]
+    row_shapes = [row.split("|")[2].strip() for row in rows]
+    assert "`diamond_stack` is allowed only when an explicit choice names it" in flat
+    assert [shape.split("`")[1] for shape in row_shapes] == [
+        "single",
+        "single",
+        "orthogonal_flat",
+        "stacked_linear",
+        "stacked_linear",
+        "single",
+    ]
     assert "Merge parts that edit the same hunks into one part" in flat
     assert "joins the part whose source generates it" in flat
     assert "Never stack parts that do not depend on each other" in flat
@@ -467,7 +475,7 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     assert "do not decide twice" in skill
     assert '"plate_layout"' in schema
     assert '"single", "stacked"' in schema
-    assert "explicit choice, cohesive-single inference, or user confirmation" in schema
+    assert "explicit choice or topology decision" in schema
     # The pr-plan reference JSON is generated from the registered v1 contract:
     # the v1 root, never `plate_layout`.
     assert '"plate_layout"' not in plan_schema
@@ -478,7 +486,7 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     assert "contract_version" in planner
     assert "target_branch: main" in planner
     assert "plate_layout: single | stacked" not in planner
-    assert "owns the size gate" in planner
+    assert "owns the size rule" in planner
     assert "skills/plate/references/topology.md" in planner
     assert "~400" not in planner
 
@@ -558,7 +566,7 @@ def test_landing_block_answers_the_layout_question() -> None:
     flat_topology = " ".join(topology.split())
     assert "`landing` block" in topology
     assert "names the layer and the files in conflict" in flat_topology
-    assert "Never ask the plain layout question while a `landing` block exists" in flat_topology
+    assert "collapse to `single` and state the deviation" in flat_topology
     assert "`easy_cheese_schemas.manifest.plate_layout_for`" in fan_pathway
     assert "`easy_cheese_schemas.manifest.plate_layout_for`" in topology
     assert "`/plate` decides the shape from the curd plan" in fan_pathway
