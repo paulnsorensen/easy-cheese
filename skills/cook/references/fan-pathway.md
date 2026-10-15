@@ -195,21 +195,21 @@ Complete this decision before Phase 1 seed or any worker commit.
 
 Derive `plate_layout` from the spec's `landing.shape` first, via `easy_cheese_schemas.manifest.plate_layout_for`.
 
-Record that derivation and skip the question. Ask only when the spec has no `landing` block.
+Record that derivation. When the spec has no `landing` block, `/plate` decides the shape from the curd plan.
 
 Apply `/plate`'s review-shape policy.
 
 Preserve an explicit choice.
 
-For one cohesive review unit, persist `single` without asking.
+`/plate` decides `single`, `orthogonal_flat`, or `stacked_linear` without asking the user.
 
-Ask only once when stacked is recommended or shape is ambiguous.
+Record `plate_layout` and the chosen `shape` in the typed handoff evidence.
 
-Record `plate_layout` in the typed handoff evidence.
+Read `plate_layout` and `shape` from that evidence.
 
-Read `plate_layout` from that evidence.
+Pass both values to the PR planner as `{plate_layout}` and `{shape}`.
 
-Apply the policy `do not ask twice`.
+Apply the policy `do not decide twice`.
 
 Do not use a legacy manifest to make this decision.
 
