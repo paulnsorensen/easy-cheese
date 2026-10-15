@@ -57,23 +57,27 @@ def _rows(payload: dict[str, object], key: str) -> list[dict[str, object]]:
     return cast(list[dict[str, object]], payload[key])
 
 
-# --- 1. link --rationale ----------------------------------------------------
+# --- 1. edge rationale ------------------------------------------------------
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_link_with_rationale_stores_it_exactly_on_the_edge() -> None:
+def test_edge_with_rationale_stores_it_exactly_on_the_edge() -> None:
     _seed()
     ref = "https://example.com/doc"
-
-    status, payload = run_cli(
-        ["link", WORK_ID, ref, "--kind", "relates_to", "--rationale", "why"]
+    intent = json.dumps(
+        {
+            "work_id": WORK_ID,
+            "add_edges": [{"to": ref, "kind": "supersedes", "rationale": "why"}],
+        }
     )
+
+    status, payload = run_cli(["checkpoint", "-"], stdin=intent)
     assert status == 0, payload
 
     status, payload = run_cli(["show", "--work-id", WORK_ID])
     assert status == 0, payload
     edges = cast(list[dict[str, object]], payload_at(payload, "record", "edges"))
-    matching = [e for e in edges if e["to"] == ref and e["kind"] == "relates_to"]
+    matching = [e for e in edges if e["to"] == ref and e["kind"] == "supersedes"]
     assert len(matching) == 1, edges
     assert matching[0]["rationale"] == "why"
 
@@ -166,32 +170,26 @@ def test_list_filters_return_exact_sets() -> None:
     assert status == 0, payload
 
     ref = "https://example.com/doc"
-    status, payload = run_cli(["link", "work-a", ref, "--kind", "relates_to"])
+    status, payload = run_cli(
+        ["checkpoint", "work-a", "--link", ref, "--kind", "supersedes"]
+    )
     assert status == 0, payload
 
-    dossier_intent = json.dumps(
+    gated_intent = json.dumps(
         {
             "work_id": "work-c",
             "orientation": "Gated.\nbody",
             "working_context": ["x"],
             "next": "hold",
-            "decision_dossier": [
-                {
-                    "fork": "Which store?",
-                    "options": [
-                        {"option": "sqlite", "evidence": ["fast"], "breaks": "nothing"}
-                    ],
-                    "prior_leaning": "sqlite",
-                }
-            ],
         }
     )
     status, payload = run_cli(
-        ["checkpoint", "-", "--question", "Q?", "--gates"], stdin=dossier_intent
+        ["checkpoint", "-", "--question", "Q?", "--gates", "--rationale", "Why."],
+        stdin=gated_intent,
     )
     assert status == 0, payload
 
-    status, payload = run_cli(["list", "--edge-kind", "relates_to"])
+    status, payload = run_cli(["list", "--edge-kind", "supersedes"])
     assert status == 0, payload
     assert {item["ref"] for item in _rows(payload, "items")} == {"work-a"}
 
@@ -204,60 +202,11 @@ def test_list_filters_return_exact_sets() -> None:
     assert {item["ref"] for item in _rows(payload, "items")} == {"work-a", "work-b"}
 
 
-# --- 4. shape --depth ---------------------------------------------------------
-
-
-@pytest.mark.usefixtures("corpus_root")
-def test_shape_depth_grows_the_component_by_hop_count() -> None:
-    _seed("a")
-    _seed("b")
-    _seed("c")
-    for source, target in (("a", "b"), ("b", "c")):
-        status, payload = run_cli(
-            [
-                "link",
-                source,
-                f"wheypoint:paulnsorensen-easy-cheese/{target}",
-                "--kind",
-                "relates_to",
-            ]
-        )
-        assert status == 0, payload
-
-    status, payload = run_cli(["shape", "--work-id", "a", "--depth", "0"])
-    assert status == 0, payload
-    assert {node["work_id"] for node in _rows(payload, "nodes")} == {"a"}
-
-    status, payload = run_cli(["shape", "--work-id", "a", "--depth", "1"])
-    assert status == 0, payload
-    assert {node["work_id"] for node in _rows(payload, "nodes")} == {"a", "b"}
-
-
-# --- 5. backlinks --project ---------------------------------------------------
-
-
-def test_backlinks_project_scopes_to_the_named_project(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    ref = "https://example.com/doc"
-    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "cheese"))
-
-    for project, work_id in (("proj-a", "work-a"), ("paulnsorensen-easy-cheese", "work-b")):
-        monkeypatch.setenv("EASY_CHEESE_PROJECT", project)
-        _seed(work_id)
-        status, payload = run_cli(["link", work_id, ref, "--kind", "relates_to"])
-        assert status == 0, payload
-
-    status, payload = run_cli(["backlinks", ref, "--project", "proj-a"])
-    assert status == 0, payload
-    assert [item["ref"] for item in _rows(payload, "items")] == ["work-a"]
-
-
 # --- 6. storage-error mapping -------------------------------------------------
 
 
 @pytest.mark.usefixtures("corpus_root")
-def test_link_maps_an_unexpected_storage_error_to_storage_error_code(
+def test_checkpoint_maps_an_unexpected_storage_error_to_storage_error_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _seed()
@@ -268,7 +217,7 @@ def test_link_maps_an_unexpected_storage_error_to_storage_error_code(
     monkeypatch.setattr(storage.WorkStore, "open", _refuse_open)
 
     status, payload = run_cli(
-        ["link", WORK_ID, "https://example.com/doc", "--kind", "relates_to"]
+        ["checkpoint", WORK_ID, "--link", "https://example.com/doc", "--kind", "supersedes"]
     )
 
     assert status == 1

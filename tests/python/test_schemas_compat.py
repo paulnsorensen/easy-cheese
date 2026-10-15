@@ -313,13 +313,13 @@ class TestVariadicTupleFields:
 
 
 class TestSchemaVersionBump:
-    def test_schema_version_is_4(self) -> None:
-        assert SCHEMA_VERSION == 4
+    def test_schema_version_is_5(self) -> None:
+        assert SCHEMA_VERSION == 5
 
     def test_classify_stamp_prior_current_future(self) -> None:
-        assert classify_stamp(3) is Provenance.PRIOR
-        assert classify_stamp(4) is Provenance.CURRENT
-        assert classify_stamp(5) is Provenance.FUTURE
+        assert classify_stamp(4) is Provenance.PRIOR
+        assert classify_stamp(5) is Provenance.CURRENT
+        assert classify_stamp(6) is Provenance.FUTURE
 
 
 class TestLoadedShape:

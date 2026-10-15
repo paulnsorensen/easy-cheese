@@ -47,8 +47,6 @@ _MOVED_CONTRACT_NAMES = (
     "ArtifactLink",
     "CheckpointIntent",
     "CompactionRecord",
-    "DecisionFork",
-    "DossierOption",
     "Durability",
     "EntryKind",
     "EntryState",
@@ -77,21 +75,6 @@ OTHER_DIGEST = "sha256:" + "1" * 64
 def merged(base: dict[str, object], overrides: dict[str, object]) -> dict[str, object]:
     return {**base, **overrides}
 
-
-def dossier() -> list[dict[str, object]]:
-    return [
-        {
-            "fork": "store status or derive it",
-            "options": [
-                {
-                    "option": "derive from protected entries",
-                    "evidence": ["src/easy_cheese_schemas/wheypoint.py:1"],
-                    "breaks": "callers that wrote a status literal",
-                }
-            ],
-            "prior_leaning": "derive",
-        }
-    ]
 
 
 def entry(entry_id: str, **overrides: object) -> dict[str, object]:
@@ -131,10 +114,8 @@ def record(**overrides: object) -> dict[str, object]:
             "orientation": "schema types drafted, tests failing",
             "working_context": ["src/easy_cheese_schemas/wheypoint.py"],
             "next_action": next_action(),
-            "decision_dossier": [],
             "decisions": [],
             "questions": [],
-            "blockers": [],
             "artifact_links": [],
         },
         overrides,
@@ -160,12 +141,10 @@ def revision(**overrides: object) -> dict[str, object]:
             "record_digest": OTHER_DIGEST,
             "applied_additions": [],
             "applied_transitions": [],
-            "preserved_entry_ids": [],
             "compaction": None,
             "session_provenance": None,
             "repository": {"branch": "main", "commit": "a" * 40},
             "projection_path": "projections/3-rev-0003.md",
-            "projection_digest": DIGEST,
         },
         overrides,
     )
@@ -178,10 +157,8 @@ def projection(**overrides: object) -> dict[str, object]:
             "work_id": "wheypoint-continuity-kernel",
             "revision_id": "rev-0003",
             "record_digest": DIGEST,
-            "projection_digest": OTHER_DIGEST,
             "next_action": next_action(),
             "gating_entry_ids": [],
-            "decision_dossier": [],
             "durability": "canonical-local",
         },
         overrides,
@@ -313,15 +290,22 @@ def test_bounded_collections_of_entries_are_capped() -> None:
 
 
 def largest_legal_record() -> dict[str, object]:
-    """Every protected list at its cap, every question and blocker gating."""
+    """Every protected list at its cap, every question gating."""
     return record(
         decisions=[
             entry(f"d{index}", kind="decision", blocks_continuation=False)
             for index in range(_MAX_ITEMS)
         ],
         questions=[entry(f"q{index}") for index in range(_MAX_ITEMS)],
-        blockers=[entry(f"b{index}", kind="blocker") for index in range(_MAX_ITEMS)],
-        decision_dossier=dossier(),
+        directives=[
+            entry(
+                f"v{index}",
+                kind="directive",
+                blocks_continuation=False,
+                quote="do it",
+            )
+            for index in range(_MAX_ITEMS)
+        ],
     )
 
 
@@ -333,13 +317,12 @@ def test_the_largest_legal_record_round_trips_through_receipt_and_projection() -
     value = structured(largest_legal_record(), WheypointRecord)
     preserved = [
         protected.entry_id
-        for protected in (*value.decisions, *value.questions, *value.blockers)
+        for protected in (*value.decisions, *value.questions, *value.directives)
     ]
     assert len(preserved) == _MAX_LEDGER
 
     receipt = structured(
         revision(
-            preserved_entry_ids=preserved,
             applied_additions=[
                 entry(f"n{index}", kind="decision", blocks_continuation=False)
                 for index in range(_MAX_LEDGER)
@@ -347,25 +330,17 @@ def test_the_largest_legal_record_round_trips_through_receipt_and_projection() -
         ),
         WheypointRevision,
     )
-    assert receipt.preserved_entry_ids == preserved
     assert len(receipt.applied_additions) == _MAX_LEDGER
 
     gating = list(value.gating_entry_ids)
-    assert len(gating) == 2 * _MAX_ITEMS
+    assert len(gating) == _MAX_ITEMS
     view = structured(
-        projection(gating_entry_ids=gating, decision_dossier=dossier()),
+        projection(gating_entry_ids=gating),
         WheypointProjection,
     )
     assert view.gating_entry_ids == gating
     assert view.status is WheypointStatus.GATED
 
-
-def test_the_ledger_bound_is_the_central_aggregate_constant() -> None:
-    ids = [f"e{index}" for index in range(_MAX_LEDGER)]
-    _ = structured(revision(preserved_entry_ids=ids), WheypointRevision)
-    problems = refused(revision(preserved_entry_ids=[*ids, "extra"]), WheypointRevision)
-    assert blames(problems, "WheypointRevision.preserved_entry_ids")
-    assert str(_MAX_LEDGER) in " ".join(problems)
 
 
 # --- acceptance 2: malformed identifiers, text, digests, provenance ---------
@@ -459,13 +434,17 @@ def test_revision_number_must_be_positive() -> None:
     )
 
 
-def test_revision_preservation_ledger_holds_entry_ids() -> None:
-    value = structured(revision(preserved_entry_ids=["d1", "q2"]), WheypointRevision)
-    assert value.preserved_entry_ids == ["d1", "q2"]
-    assert blames(
-        refused(revision(preserved_entry_ids=["D1"]), WheypointRevision),
-        "WheypointRevision.preserved_entry_ids",
+def test_ac16_the_published_revision_schema_drops_the_removed_receipt_fields() -> None:
+    document = cast(
+        dict[str, dict[str, dict[str, dict[str, object]]]],
+        json.loads(schema_runtime.schema_bytes(WheypointRevision)),
     )
+    properties = document["$defs"]["WheypointRevision"]["properties"]
+    assert "projection_digest" not in properties
+    assert "preserved_entry_ids" not in properties
+    # A schema-4 receipt still loads: the removed keys are dropped on read.
+    old = revision(preserved_entry_ids=["d1"], projection_digest=DIGEST)
+    assert structured(old, WheypointRevision).record_digest == OTHER_DIGEST
 
 
 # --- acceptance 2: protected-entry transitions ------------------------------
@@ -533,11 +512,15 @@ def test_entry_ids_are_unique_across_every_protected_list() -> None:
     problems = refused(
         record(
             questions=[entry("x1", blocks_continuation=False)],
-            blockers=[entry("x1", kind="blocker", blocks_continuation=False)],
+            directives=[
+                entry(
+                    "x1", kind="directive", blocks_continuation=False, quote="do it"
+                )
+            ],
         ),
         WheypointRecord,
     )
-    assert blames(problems, "WheypointRecord.blockers")
+    assert blames(problems, "WheypointRecord.directives")
 
 
 def test_a_repeated_entry_id_is_blamed_on_the_list_it_appears_in() -> None:
@@ -549,7 +532,7 @@ def test_a_repeated_entry_id_is_blamed_on_the_list_it_appears_in() -> None:
         WheypointRecord,
     )
     assert blames(problems, "WheypointRecord.questions")
-    assert not blames(problems, "WheypointRecord.blockers")
+    assert not blames(problems, "WheypointRecord.directives")
     assert "'x1'" in " ".join(problems)
 
     within_one_list = refused(
@@ -574,7 +557,7 @@ def test_an_unknown_entry_kind_is_rejected() -> None:
     assert "'bogus'" in problems[0]
     assert all(
         allowed in problems[0]
-        for allowed in ("decision", "question", "blocker", "directive")
+        for allowed in ("decision", "question", "directive")
     )
 
 
@@ -588,7 +571,16 @@ def test_delta_additions_carry_no_entry_id() -> None:
         "overwrite an existing protected entry"
     )
     value = structured(
-        delta(add_questions=[{"kind": "question", "summary": "which store?", "blocks_continuation": True}]),
+        delta(
+            add_questions=[
+                {
+                    "kind": "question",
+                    "summary": "which store?",
+                    "blocks_continuation": True,
+                    "rationale": "the human owns the store",
+                }
+            ]
+        ),
         WheypointDelta,
     )
     assert value.add_questions is not None
@@ -599,7 +591,6 @@ def test_omitted_semantic_fields_stay_none_and_an_empty_list_is_explicit() -> No
     omitted = structured(delta(), WheypointDelta)
     assert omitted.working_context is None
     assert omitted.add_questions is None
-    assert omitted.decision_dossier is None
 
     explicit = structured(delta(working_context=[], add_questions=[]), WheypointDelta)
     assert explicit.working_context == []
@@ -742,26 +733,23 @@ def test_no_type_stores_a_status_field() -> None:
 
 def test_a_stored_status_key_is_ignored_rather_than_trusted() -> None:
     value = structured(
-        projection(status="ok", gating_entry_ids=["q1"], decision_dossier=dossier()),
+        projection(status="ok", gating_entry_ids=["q1"]),
         WheypointProjection,
     )
     assert value.status is WheypointStatus.GATED
 
 
 @pytest.mark.parametrize(
-    ("questions", "blockers", "expected_gating"),
+    ("questions", "expected_gating"),
     [
-        ([], [], ()),
-        ([entry("q1", blocks_continuation=False)], [], ()),
-        ([], [entry("b1", kind="blocker", blocks_continuation=False)], ()),
-        ([entry("q1")], [], ("q1",)),
-        ([], [entry("b1", kind="blocker")], ("b1",)),
-        ([entry("q1")], [entry("b1", kind="blocker")], ("q1", "b1")),
+        ([], ()),
+        ([entry("q1", blocks_continuation=False)], ()),
+        ([entry("q1", rationale="needs a human")], ("q1",)),
         (
-            [entry("q1", state="resolved", rationale="answered")],
-            [entry("b1", kind="blocker", state="withdrawn", rationale="moot")],
-            (),
+            [entry("q1", rationale="a"), entry("q2", rationale="b")],
+            ("q1", "q2"),
         ),
+        ([entry("q1", state="resolved", rationale="answered")], ()),
         (
             [
                 entry(
@@ -772,85 +760,27 @@ def test_a_stored_status_key_is_ignored_rather_than_trusted() -> None:
                 ),
                 entry("q2", blocks_continuation=False),
             ],
-            [],
             (),
         ),
     ],
 )
 def test_record_status_is_derived_from_active_blocking_entries(
     questions: list[dict[str, object]],
-    blockers: list[dict[str, object]],
     expected_gating: tuple[str, ...],
 ) -> None:
     gated = bool(expected_gating)
-    value = structured(
-        record(
-            questions=questions,
-            blockers=blockers,
-            decision_dossier=dossier() if gated else [],
-        ),
-        WheypointRecord,
-    )
+    value = structured(record(questions=questions), WheypointRecord)
     assert value.gating_entry_ids == expected_gating
     assert value.status is (WheypointStatus.GATED if gated else WheypointStatus.OK)
 
 
-def test_a_gated_record_requires_a_decision_dossier() -> None:
-    problems = refused(
-        record(questions=[entry("q1")], decision_dossier=[]), WheypointRecord
-    )
-    assert blames(problems, "WheypointRecord.decision_dossier")
-
-
-def test_a_gated_projection_requires_a_decision_dossier() -> None:
-    problems = refused(
-        projection(gating_entry_ids=["q1"], decision_dossier=[]), WheypointProjection
-    )
-    assert blames(problems, "WheypointProjection.decision_dossier")
-    value = structured(
-        projection(gating_entry_ids=["q1"], decision_dossier=dossier()),
-        WheypointProjection,
-    )
+def test_a_gated_projection_derives_gated() -> None:
+    value = structured(projection(gating_entry_ids=["q1"]), WheypointProjection)
     assert value.status is WheypointStatus.GATED
-
 
 def test_an_ungated_projection_derives_ok() -> None:
     assert structured(projection(), WheypointProjection).status is WheypointStatus.OK
 
-
-def test_a_decision_dossier_fork_needs_options_with_evidence() -> None:
-    cases: list[tuple[list[dict[str, object]], str]] = [
-        ([{"fork": "which store", "options": []}], "options"),
-        (
-            [{"fork": "", "options": dossier()[0]["options"]}],
-            "fork",
-        ),
-    ]
-    for bad, path in cases:
-        problems = refused(
-            record(questions=[entry("q1")], decision_dossier=bad), WheypointRecord
-        )
-        assert blames(problems, f"WheypointRecord.decision_dossier[1].{path}"), problems
-
-
-def test_an_ungated_record_may_carry_a_decision_dossier_for_an_active_question() -> None:
-    """ADR wheypoint-ergonomics-001: a fork may reference any active question,
-    not only one that already gates. The record still derives `status: ok`."""
-    active = entry("q1", blocks_continuation=False)
-    value = structured(
-        record(questions=[active], decision_dossier=dossier()), WheypointRecord
-    )
-    assert value.status is WheypointStatus.OK
-    assert len(value.decision_dossier) == 1
-
-
-def test_an_ungated_projection_may_carry_a_decision_dossier() -> None:
-    value = structured(
-        projection(gating_entry_ids=[], decision_dossier=dossier()),
-        WheypointProjection,
-    )
-    assert value.status is WheypointStatus.OK
-    assert len(value.decision_dossier) == 1
 
 
 @pytest.mark.parametrize("level", ["canonical-local", "repo-snapshot", "published"])
@@ -914,9 +844,8 @@ def test_checkpoint_intent_schema_carries_the_runtime_constraints() -> None:
 
 
 def test_every_since_4_ref_property_carries_the_ref_pattern_and_length() -> None:
-    """`origin`, `successor`, `copies` items, `WorkEdge.to`, and
-    `ArtifactLink.ref` all validate through `_ref` at runtime, so the
-    published schema must publish the same pattern and length bound for
+    """`WorkEdge.to` and `ArtifactLink.ref` validate through `_ref` at runtime,
+    so the published schema must publish the same pattern and length bound for
     each of them -- not just for the ones that happened to be decorated."""
     ref_pattern = contracts._URI_RE.pattern  # pyright: ignore[reportPrivateUsage]
     ref_max_length = contracts._MAX_TEXT  # pyright: ignore[reportPrivateUsage]
@@ -933,14 +862,7 @@ def test_every_since_4_ref_property_carries_the_ref_pattern_and_length() -> None
     entry_properties = cast(
         dict[str, dict[str, object]], record_defs["ProtectedEntry"]["properties"]
     )
-    # A `str | None` ref field publishes its pattern/length bound on the
-    # property dict itself, alongside the `anyOf` the union produces --
-    # not on one member inside it.
-    _assert_ref_bounds(entry_properties["origin"])
-    _assert_ref_bounds(entry_properties["successor"])
-    _assert_ref_bounds(
-        cast(dict[str, object], entry_properties["copies"]["items"])
-    )
+    assert not {"origin", "successor", "copies"} & set(entry_properties)
 
     edge_properties = cast(
         dict[str, dict[str, object]], record_defs["WorkEdge"]["properties"]
@@ -1035,3 +957,57 @@ def test_a_prior_record_payload_loads_with_v3_fields_at_their_defaults() -> None
     assert loaded.value is not None, loaded.problems
     assert loaded.value.notes is None
     assert loaded.value.directives == []
+
+
+def _schema_defs(cls: type) -> dict[str, dict[str, object]]:
+    document = cast(dict[str, object], json.loads(schema_runtime.schema_bytes(cls)))
+    assert document["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+    return cast(dict[str, dict[str, object]], document["$defs"])
+
+
+def _schema_properties(cls: type) -> set[str]:
+    return set(cast(dict[str, object], _schema_defs(cls)[cls.__name__]["properties"]))
+
+
+def test_published_schemas_lack_the_removed_wheypoint_fields() -> None:
+    assert not {"decision_dossier", "blockers"} & _schema_properties(WheypointRecord)
+    assert not {"decision_dossier", "remove_dossier_forks", "add_blockers"} & (
+        _schema_properties(CheckpointIntent)
+    )
+    kind = cast(
+        dict[str, dict[str, object]], _schema_defs(contracts.WorkEdge)["WorkEdge"]["properties"]
+    )["kind"]
+    edge_kind = kind["enum"]
+    assert sorted(cast(list[str], edge_kind)) == [
+        "checkpoints",
+        "forked_from",
+        "supersedes",
+    ]
+
+
+def test_a_v4_record_with_removed_keys_still_structures_via_the_read_path() -> None:
+    from easy_cheese.shared.wheypoint import records
+
+    stored = record(
+        schema_version=4,
+        decision_dossier=cast(
+            list[object], [{"fork": "f", "options": [], "prior_leaning": None}]
+        ),
+        blockers=[
+            {
+                "entry_id": "b-1",
+                "kind": "blocker",
+                "summary": "Waiting",
+                "state": "active",
+                "blocks_continuation": True,
+                "rationale": None,
+                "superseded_by": None,
+            }
+        ],
+    )
+
+    value = records.structure_stored(stored, WheypointRecord)
+
+    assert [q.entry_id for q in value.questions] == ["b-1"]
+    assert value.gating_entry_ids == ("b-1",)
+    assert not hasattr(value, "blockers")

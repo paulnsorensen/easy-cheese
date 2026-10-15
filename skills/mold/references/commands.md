@@ -7,7 +7,7 @@
 | `artifact-path` | Resolve the durable or transient artifact path for a phase and slug |  |
 | `curd-count` | Count candidate curds in a spec and recommend the next skill |  |
 | `domain-model-target` | Resolve the domain-model store from explicit Hallouminate probe results |  |
-| `finalize` | Finalize a Mold spec and publish only a consumer-valid handoff |  |
+| `finalize` | Finalize a Mold spec and print a ready result for bound Cook execution |  |
 | `gate-graph` | Render the gate state machine as dot, svg, png, or mermaid |  |
 | `normalize-planner` | Materialize a planner writer envelope into a canonical PlannerResult |  |
 | `render-html` | Render a markdown report into one self-contained offline HTML file |  |

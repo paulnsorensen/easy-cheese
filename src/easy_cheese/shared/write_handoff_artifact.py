@@ -18,7 +18,7 @@ contents land in a tmp file inside the target directory and are then
 so readers never observe a half-written file.
 
 ``--phase`` is mandatory and names *this* phase's own directory. The value is
-validated against the generated phase registry before any output directory or
+validated against the private route table before any output directory or
 file is created. ``--next`` is preamble-content only — it tells the *next*
 phase where the chain should go, but does not influence where this artifact
 lands.
@@ -37,13 +37,11 @@ import fromargs
 
 from easy_cheese.shared import handoff, paths
 
-from easy_cheese_schemas.phase_contracts import (
-    COMPILED_TRANSITION_REGISTRY,
+from easy_cheese.shared.phase_routes import RouteError, validate_route
+from easy_cheese_schemas.handback_status import (
     StatusError,
-    TransitionError,
     parse_status_field,
     status_vocabulary,
-    validate_transition,
 )
 
 # Exit codes a caller branches on. Plain integers, identical on every host: a
@@ -57,13 +55,8 @@ def _validate_transition(
     source: str, destination: str, payload_schema_uri: str | None, *, slug: str
 ) -> None:
     try:
-        _ = validate_transition(
-            COMPILED_TRANSITION_REGISTRY,
-            source=source,
-            destination=destination,
-            payload_schema_uri=payload_schema_uri,
-        )
-    except TransitionError as exc:
+        validate_route(source, destination, payload_schema_uri)
+    except RouteError as exc:
         raise fromargs.contract_error(exc, context=f"--phase {source} --slug {slug}") from exc
 
 def _render_preamble(
@@ -192,6 +185,7 @@ def _wheypoint_revision(
     root: Path,
     corpus_root: Path | str | None,
     write_contents: Callable[[], None],
+    base_revision_id: str | None,
 ) -> None:
     """Adapt the CLI to the phase-commit producer; write directly otherwise.
 
@@ -218,6 +212,7 @@ def _wheypoint_revision(
             root=root,
             store=store,
             write_contents=write_contents,
+            base_revision_id=base_revision_id,
         )
     except fromargs.CliError:
         # The writer's own refusal (e.g. a failed atomic write) already carries
@@ -241,8 +236,7 @@ def _wheypoint_revision(
     revision = outcome.result.revision
     print(
         f"wheypoint: revision work_id={slug} revision_id={revision.revision_id}"
-        + f" revision_number={revision.revision_number}"
-        + f" retried={str(outcome.retried).lower()}",
+        + f" revision_number={revision.revision_number}",
         file=sys.stderr,
     )
 
@@ -277,6 +271,7 @@ def write_artifact(
     grounded: Sequence[str] = (),
     corpus_root: Path | str | None = None,
     before_write: Callable[[str, str, Path], None] | None = None,
+    base_revision_id: str | None = None,
 ) -> Path:
     """Write the artifact atomically; return the final path.
 
@@ -322,8 +317,7 @@ def write_artifact(
     root_path = paths.resolve_repo_root(root)
     cheese_root = root_path / ".cheese"
     target = cheese_root / phase / f"{slug}.md"
-    # Phase names are validated against the compiled registry and therefore
-    # select exactly one directory beneath .cheese/.
+    # Validated phase names select one directory beneath .cheese/.
     if cheese_root not in target.resolve().parents:
         raise fromargs.CliError(f"--phase must stay under .cheese/: {phase!r}")
 
@@ -346,6 +340,7 @@ def write_artifact(
         root=root_path,
         corpus_root=effective_corpus_root,
         write_contents=lambda: _atomic_write(target, contents),
+        base_revision_id=base_revision_id,
     )
 
     return target
@@ -374,6 +369,7 @@ def build_app(
         payload_schema: str | None = None,
         root: str | None = None,
         corpus_root: str | None = None,
+        base: str | None = None,
     ) -> Path:
         """Write .cheese/<phase>/<slug>.md atomically and print its path.
 
@@ -406,6 +402,10 @@ def build_app(
             Repo root (default: the git toplevel, else cwd).
         corpus_root
             Wheypoint corpus root override (default: the per-project XDG corpus).
+        base
+            Revision id you read from the wheypoint (resolve); required for a
+            chain phase when the record exists, so a write never lands on
+            state you did not read.
         """
         body: str | None = None
         if body_file is not None:
@@ -429,6 +429,7 @@ def build_app(
             grounded=grounded or (),
             corpus_root=corpus_root,
             before_write=before_write,
+            base_revision_id=base,
         )
 
     return fromargs.App(

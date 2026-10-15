@@ -15,10 +15,11 @@ ambiguity that names both. Nothing here breaks a tie by modification time,
 session, or which slug was written last, and a miss reports the exact locations
 that were probed rather than a bare "not found".
 
-Whatever the lookup finds is then re-validated from disk by `lint`, and only a
-clean record with no active gate comes back `authoritative`. Everything else --
-tampering, an unresolved parent, another project's record, a commit that no
-longer exists, a stale coverage claim, an open question -- comes back `gated`
+Whatever the lookup finds is then re-validated from disk by `_check_work`, and
+only a clean record with no active gate comes back `authoritative`. Everything else --
+an inconsistent or incomplete store, a projection that describes another record,
+another project's record, a commit that no longer exists, a stale coverage
+claim or artifact link, an open question -- comes back `gated`
 or `error`, which is the whole point: the caller has no branch that dispatches
 on a checkpoint it could not verify.
 
@@ -28,25 +29,34 @@ non-authoritative context and never become dispatchable.
 
 from __future__ import annotations
 
+import functools
+import json
 import re
 import subprocess
-from collections.abc import Callable
+import sys
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
+from typing import cast
 
 from attrs import define, evolve, field
 from easy_cheese_schemas import (
     WheypointProjection,
     WheypointRecord,
+    WheypointRevision,
     WheypointStatus,
-    phase_contracts,
 )
 
+from easy_cheese_schemas.compat import Provenance, classify_stamp
+from easy_cheese_schemas.handback_status import PROCEED
 from easy_cheese.shared import git_utils, handoff, paths
 
 from . import checkpoint as checkpoint_mod
+from . import commit as commit_mod
 from . import legacy as legacy_mod
-from . import edges, fork_reconcile, lint, lint_freshness, lint_types, records, storage
+from . import grounded, lint_types, records, refs, storage
+from . import projection as projection_mod
 
 _IDENTIFIER_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
 # A parent may live outside every worktree, but only as a reference someone can
@@ -87,8 +97,6 @@ class Resolution:
     legacy_slug: legacy_mod.LegacyHandoffSlug | None = None
     phase_slug: handoff.HandoffSlug | None = None
     detail: str | None = None
-    pending: tuple[edges.PendingEdge, ...] = field(default=())
-    pending_forks: tuple[fork_reconcile.PendingFork, ...] = field(default=())
 
     @property
     def dispatchable(self) -> bool:
@@ -121,7 +129,7 @@ def _corpus_address(ref: str) -> tuple[Path, str] | None:
         _ = storage.WorkStore.open(work_id, corpus_root=paths.corpus_home() / project)
     except storage.StorageError:
         return None
-    projection = lint.lint_projection_file(path).projection
+    projection = _read_projection(path)[0]
     if projection is None or projection.work_id != work_id:
         return None
     return paths.corpus_home() / project, project
@@ -219,10 +227,8 @@ def resolve(
         workspace_root=root,
         corpus_root=resolved_corpus_root,
         project_key=resolved_project_key,
-        git_object_exists=(
-            git_object_exists or lint_freshness.git_object_exists_in(root)
-        ),
-        artifact_digest=artifact_digest or lint_freshness.artifact_digest_in(root),
+        git_object_exists=git_object_exists or _git_object_exists_in(root),
+        artifact_digest=artifact_digest or _artifact_digest_in(root),
         alias_binding=alias_binding,
         context_findings=context_findings,
     )
@@ -300,34 +306,45 @@ def _resolve_path(ref: str, checks: _Checks) -> Resolution:
             source=ResolutionSource.PATH,
             searched=(str(path),),
         )
-    report = lint.lint_projection_file(path)
+    parsed, document_findings = _read_projection(path)
     try:
         path = path.resolve()
         inside_corpus = path.is_relative_to(checks.corpus_root.resolve())
     except OSError:
         inside_corpus = False
-    if not inside_corpus and report.projection is not None:
+    if not inside_corpus and parsed is not None:
         return Resolution(
             ResolutionOutcome.NOT_FOUND,
             source=ResolutionSource.PATH,
             searched=(str(path),),
         )
-    if report.projection is None:
+    if parsed is None:
         return Resolution(
             ResolutionOutcome.ERROR,
             source=ResolutionSource.PATH,
             searched=(str(path),),
-            findings=report.findings,
+            findings=document_findings,
             detail=f"{path} is not a Wheypoint projection",
         )
     return _validate(
-        report.projection.work_id,
+        parsed.work_id,
         ResolutionSource.PATH,
         checks,
         searched=(str(path),),
-        document_findings=report.findings,
-        expected_revision_id=report.projection.revision_id,
+        document_findings=document_findings,
+        expected_revision_id=parsed.revision_id,
     )
+
+
+def _raw_slug(record_path: Path) -> str | None:
+    try:
+        raw = cast(object, json.loads(record_path.read_text(encoding="utf-8")))
+    except (ValueError, OSError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    claimed = cast(dict[str, object], raw).get("slug")
+    return claimed if isinstance(claimed, str) else None
 
 
 def _slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
@@ -350,9 +367,14 @@ def _slug_matches(slug: str, checks: _Checks) -> tuple[str, ...]:
             record = storage.WorkStore.open(
                 directory.name, corpus_root=checks.corpus_root
             ).read_record()
+            claimed = None if record is None else record.slug
+        except storage.SchemaVersionFutureError:
+            # A newer runtime's record keeps its slug: it must still resolve,
+            # so that `_check_work` can report it as ahead of this runtime.
+            claimed = _raw_slug(record_path)
         except (storage.StorageError, ValueError, OSError):
             continue
-        if record is not None and record.slug == slug:
+        if claimed == slug:
             matched.append(directory.name)
             if len(matched) > 1:
                 break
@@ -438,7 +460,9 @@ def _validate(
     if checks.context_findings:
         try:
             record = store.read_record()
-        except (records.RecordError, ValueError, OSError) as exc:
+        except storage.SchemaVersionFutureError as exc:
+            return _future_error(source, work_id, exc)
+        except (records.RecordError, storage.StorageError, ValueError, OSError) as exc:
             return Resolution(
                 ResolutionOutcome.ERROR, source=source, work_id=work_id, detail=str(exc)
             )
@@ -480,7 +504,9 @@ def _validate(
                 if record is None
                 else store.read_revision(record.revision_number, record.revision_id)
             )
-        except (records.RecordError, ValueError, OSError) as exc:
+        except storage.SchemaVersionFutureError as exc:
+            return _future_error(source, work_id, exc)
+        except (records.RecordError, storage.StorageError, ValueError, OSError) as exc:
             return Resolution(
                 ResolutionOutcome.ERROR, source=source, work_id=work_id, detail=str(exc)
             )
@@ -528,19 +554,31 @@ def _validate(
                 "alias project binding requires the pinned commit in this checkout",
             )
     try:
-        report = lint.lint_work(
-            store,
-            project_key=checks.project_key,
-            git_object_exists=checks.git_object_exists,
-            artifact_digest=checks.artifact_digest,
-            repository_root=checks.workspace_root,
-        )
-    except (records.RecordError, ValueError, OSError) as exc:
+        with _git_warnings_once():
+            report = _check_work(store, checks)
+    except (records.RecordError, storage.StorageError, ValueError, OSError) as exc:
         return Resolution(
             ResolutionOutcome.ERROR, source=source, work_id=work_id, detail=str(exc)
         )
 
     findings = (*document_findings, *report.findings, *checks.context_findings)
+    future = next(
+        (
+            f
+            for f in report.findings
+            if f.code is lint_types.LintCode.SCHEMA_VERSION_FUTURE
+        ),
+        None,
+    )
+    if future is not None:
+        return Resolution(
+            ResolutionOutcome.ERROR,
+            source=source,
+            work_id=work_id,
+            findings=findings,
+            searched=searched,
+            detail=f"{storage.FUTURE_STAMP_CODE}: {future.detail}",
+        )
     if report.record is None:
         return Resolution(
             ResolutionOutcome.ERROR,
@@ -559,8 +597,6 @@ def _validate(
         projection=report.projection,
         findings=findings,
         searched=searched,
-        pending=report.pending,
-        pending_forks=report.pending_forks,
     )
     gating = tuple(f for f in findings if lint_types.gates_continuation(f))
     if gating:
@@ -582,8 +618,325 @@ def _validate(
     return resolution
 
 
+def _future_error(
+    source: ResolutionSource, work_id: str, exc: storage.SchemaVersionFutureError
+) -> Resolution:
+    return Resolution(
+        ResolutionOutcome.ERROR,
+        source=source,
+        work_id=work_id,
+        detail=f"{storage.FUTURE_STAMP_CODE}: {exc}",
+    )
+
+
 def _gate(resolution: Resolution, detail: str) -> Resolution:
     return evolve(resolution, outcome=ResolutionOutcome.GATED, detail=detail)
+
+
+@define(frozen=True)
+class _WorkReport:
+    """What reading one work store found: findings plus what was readable."""
+
+    findings: tuple[lint_types.LintFinding, ...] = field(default=())
+    record: WheypointRecord | None = None
+    projection: WheypointProjection | None = None
+
+
+def _read_projection(
+    path: Path | str,
+) -> tuple[WheypointProjection | None, tuple[lint_types.LintFinding, ...]]:
+    """Parse one projection document, or name why it cannot be read."""
+    try:
+        return projection_mod.parse(Path(path).read_text(encoding="utf-8")), ()
+    except (OSError, projection_mod.ProjectionParseError) as exc:
+        return None, (
+            lint_types.LintFinding(lint_types.LintCode.PROJECTION_UNREADABLE, str(exc)),
+        )
+
+
+def _projection_mismatch(
+    record: WheypointRecord,
+    current: WheypointRevision,
+    projection: WheypointProjection | None,
+) -> tuple[lint_types.LintFinding, ...]:
+    """Name a current projection that describes a different record.
+
+    The digest is the one the current receipt stored, which the survey already
+    checked against the raw record: a recomputed digest would differ for a
+    pre-v5 record once it is normalized.
+    """
+    if projection is None:
+        return ()
+    mismatches: list[str] = []
+    if projection.work_id != record.work_id:
+        mismatches.append(f"work_id {projection.work_id!r} != {record.work_id!r}")
+    if projection.revision_id != record.revision_id:
+        mismatches.append(
+            f"revision_id {projection.revision_id!r} != {record.revision_id!r}"
+        )
+    if projection.record_digest != current.record_digest:
+        mismatches.append(
+            f"record_digest {projection.record_digest} != {current.record_digest}"
+        )
+    if not mismatches:
+        return ()
+    return (
+        lint_types.LintFinding(
+            lint_types.LintCode.PROJECTION_RECORD_MISMATCH,
+            "the current projection describes a different record: "
+            + "; ".join(mismatches),
+        ),
+    )
+
+
+def _check_work(store: storage.WorkStore, checks: _Checks) -> _WorkReport:
+    """Everything a caller must trust before acting on one work's checkpoint.
+
+    Nothing here writes. A finding is a reason not to dispatch, never a repair.
+    """
+    survey = store.survey_receipts()
+    record = survey.record
+    stamped = survey.stamped_schema_version
+    if stamped is not None and classify_stamp(stamped) is Provenance.FUTURE:
+        # The stamp is read from the raw bytes: a future record this reader
+        # cannot structure is still reported as ahead of the runtime, not as
+        # store corruption (ADR wheypoint-ergonomics-004).
+        detail = storage.future_stamp_detail(stamped, f"record for work {store.work_id!r}")
+        return _WorkReport(
+            findings=(
+                lint_types.LintFinding(lint_types.LintCode.SCHEMA_VERSION_FUTURE, detail),
+            )
+        )
+    findings = [
+        lint_types.LintFinding(lint_types.LintCode.STORE_INCONSISTENT, problem)
+        for problem in survey.problems
+    ]
+    incomplete = [
+        lint_types.LintFinding(lint_types.LintCode.REVISION_INCOMPLETE, detail)
+        for detail in survey.incomplete
+    ]
+    if record is None:
+        if not findings:
+            findings.append(
+                lint_types.LintFinding(
+                    lint_types.LintCode.RECORD_MISSING,
+                    f"no record at {store.record_path}",
+                )
+            )
+        return _WorkReport(findings=(*findings, *incomplete))
+    findings.extend(incomplete)
+
+    if record.project_key != checks.project_key:
+        findings.append(
+            lint_types.LintFinding(
+                lint_types.LintCode.PROJECT_MISMATCH,
+                f"record belongs to project {record.project_key!r}, not "
+                + f"{checks.project_key!r}",
+            )
+        )
+    # A missing current receipt is already a store problem in the survey.
+    current = next(
+        (
+            revision
+            for revision in survey.revisions
+            if revision.revision_number == record.revision_number
+            and revision.revision_id == record.revision_id
+        ),
+        None,
+    )
+    projection = None
+    if current is not None:
+        projection, projection_findings = _read_projection(
+            store.projection_path(current.revision_number, current.revision_id)
+        )
+        findings.extend(projection_findings)
+        findings.extend(_projection_mismatch(record, current, projection))
+        findings.extend(_git_findings(current, checks))
+    digest_of = functools.cache(checks.artifact_digest)
+    findings.extend(_artifact_link_findings(record, digest_of))
+    # Only the receipts the parent pointers reach count as ancestry.
+    chain = commit_mod.ancestry(survey.revisions, current) if current else ()
+    coverage = records.coverage_report(
+        record,
+        artifact_digest=digest_of,
+        ancestor_revision_ids=frozenset(revision.revision_id for revision in chain),
+    )
+    findings.extend(
+        lint_types.LintFinding(
+            lint_types.LintCode.ARTIFACT_COVERAGE_INVALID,
+            f"{failure.path}: {failure.reason}",
+        )
+        for failure in coverage.failures
+    )
+    findings.extend(_grounded_path_findings(record, checks.workspace_root))
+    return _WorkReport(
+        findings=tuple(findings), record=record, projection=projection
+    )
+
+
+_GIT_TIMEOUT_SECONDS = 5
+# None outside a check: every failure is named. Inside one, the first failure
+# flips it and the rest of that check stays quiet -- a single unrunnable git
+# otherwise reports itself once per probe.
+_warned_within_run: bool | None = None
+# A `PR#<n>` or URL pointer in working_context references something outside the
+# checkout, so the grounded path grammar has nothing local to check it against.
+_EXTERNAL_POINTER_RE = re.compile(r"PR#[0-9]+|[a-z][a-z0-9+.-]*://.*")
+
+
+@contextmanager
+def _git_warnings_once() -> Generator[None]:
+    """Name an unrunnable git at most once for the enclosing check."""
+    global _warned_within_run
+    previous = _warned_within_run
+    _warned_within_run = False
+    try:
+        yield
+    finally:
+        _warned_within_run = previous
+
+
+def _run_git_ok(
+    args: list[str], *, cwd: Path | str
+) -> subprocess.CompletedProcess[str] | None:
+    """Run one advisory git command, or None when it could not run at all.
+
+    Advisory checks degrade to silence, but a silence with no cause is
+    indistinguishable from a pass, so the first failure names the command,
+    where it ran, and what stopped it.
+    """
+    global _warned_within_run
+    try:
+        return git_utils.run_git(args, cwd=cwd, timeout=_GIT_TIMEOUT_SECONDS)
+    except (OSError, subprocess.SubprocessError) as exc:
+        if not _warned_within_run:
+            if _warned_within_run is not None:
+                _warned_within_run = True
+            print(
+                f"wheypoint: git-unavailable command={args[0]} cwd={cwd} "
+                + f"error={type(exc).__name__}",
+                file=sys.stderr,
+            )
+        return None
+
+
+def _git_object_exists_in(root: Path | str) -> Callable[[str], bool]:
+    """Read-only `git cat-file -e <object>^{object}` in `root`."""
+
+    def exists(obj: str) -> bool:
+        completed = _run_git_ok(["cat-file", "-e", f"{obj}^{{object}}"], cwd=root)
+        return completed is not None and completed.returncode == 0
+
+    return exists
+
+
+def _artifact_digest_in(root: Path | str) -> Callable[[str], str | None]:
+    """Digest a reference, with `repo:` paths contained by `root`."""
+    return refs.digester(Path(root), paths.corpus_home())
+
+
+def _git_findings(
+    revision: WheypointRevision, checks: _Checks
+) -> list[lint_types.LintFinding]:
+    commit = revision.repository.commit
+    if commit is None:
+        return []
+    if not checks.git_object_exists(commit):
+        return [
+            lint_types.LintFinding(
+                lint_types.LintCode.GIT_OBJECT_MISSING,
+                f"revision {revision.revision_id!r} cites commit {commit}, which "
+                + "does not resolve in this repository",
+            )
+        ]
+    ancestor = _run_git_ok(
+        ["merge-base", "--is-ancestor", commit, "HEAD"], cwd=checks.workspace_root
+    )
+    if ancestor is None or ancestor.returncode != 1:
+        return []
+    distance_result = _run_git_ok(
+        ["rev-list", "--count", f"{commit}..HEAD"], cwd=checks.workspace_root
+    )
+    if distance_result is None or distance_result.returncode != 0:
+        return []
+    try:
+        distance = int(distance_result.stdout.strip())
+    except ValueError:
+        return []
+    return [
+        lint_types.LintFinding(
+            lint_types.LintCode.STALE_COMMIT,
+            f"HEAD does not descend from repository commit {commit}; "
+            + f"distance is {distance}",
+        )
+    ]
+
+
+def _artifact_link_findings(
+    record: WheypointRecord,
+    artifact_digest: Callable[[str], str | None],
+) -> list[lint_types.LintFinding]:
+    """Re-check each digest-bearing artifact link against its current target."""
+    findings: list[lint_types.LintFinding] = []
+    for link in record.artifact_links:
+        if link.digest is None:
+            continue
+        ref = records.effective_ref(link)
+        try:
+            pinnable = refs.is_pinnable(refs.parse_ref(ref).scheme)
+        except ValueError:
+            pinnable = True
+        if not pinnable:
+            continue
+        actual = artifact_digest(ref)
+        if actual == link.digest:
+            continue
+        current = "missing" if actual is None else repr(actual)
+        findings.append(
+            lint_types.LintFinding(
+                lint_types.LintCode.STALE_ARTIFACT_LINK,
+                f"{link.path}: linked digest {link.digest!r}, current file "
+                + f"digest is {current}",
+            )
+        )
+    return findings
+
+
+def _grounded_path_findings(
+    record: WheypointRecord, repository_root: Path
+) -> list[lint_types.LintFinding]:
+    """Warn when a grounded entry violates the writer's own path grammar.
+
+    Parses with `grounded.parse_grounded_entry` (the same grammar
+    `validate_grounded` enforces at write time). A `PR#<n>` or URL pointer is
+    exempt: it names something outside the checkout, so no local file can
+    confirm or deny it.
+    """
+    findings: list[lint_types.LintFinding] = []
+    resolved_root = repository_root.resolve()
+    for entry in record.working_context:
+        if _EXTERNAL_POINTER_RE.fullmatch(entry):
+            continue
+        try:
+            path_text, _range = grounded.parse_grounded_entry(entry)
+        except grounded.GroundedEntryError:
+            findings.append(
+                lint_types.LintFinding(
+                    lint_types.LintCode.GROUNDED_PATH_MISSING,
+                    f"working_context entry {entry!r} does not satisfy the "
+                    + "grounded path grammar",
+                )
+            )
+            continue
+        issue = grounded.resolve_within(path_text, resolved_root)
+        if issue is not None:
+            findings.append(
+                lint_types.LintFinding(
+                    lint_types.LintCode.GROUNDED_PATH_MISSING,
+                    f"working_context path {entry!r} {issue.value}",
+                )
+            )
+    return findings
 
 
 def _parent_tokens(raw: str) -> tuple[str, ...]:
@@ -744,7 +1097,7 @@ def resolve_legacy(
                 + "name no legacy note in any worktree and are not absolute "
                 + "http(s) URLs",
             )
-    if slug_block.disposition != phase_contracts.PROCEED:
+    if slug_block.disposition != PROCEED:
         reason = slug_block.reason or f"{slug_block.status} status"
         return _gate(found, f"legacy note {slug_block.status}: {reason}")
     return found

@@ -413,32 +413,28 @@ Before this procedure, run the digest-bound fresh-context fork taste test on the
 
 ## Finalization
 
-Finalize the spec and plan before the hand-off. The host owns three values and sets each one once:
+Finalize the selected spec and plan before bound curd execution. The host owns three values and sets each once:
 
-- `REQUEST_ID` is the `request_id` of the `PlannerRequest`. On a path with no planner, use the spec slug.
-- `ARTIFACT_ROOT` is `.cheese/cook/<slug>-artifacts`. Mold and Cook must use the same directory.
+- `REQUEST_ID` is the `request_id` of the `PlannerRequest`. Keep it stable on an identical retry.
+- `ARTIFACT_ROOT` is `.cheese/cook/<slug>-artifacts`. Mold and Cook use the same directory.
 - The operation id is `<slug>-<ordinal>`. Keep it for an identical retry. Increase the ordinal when an input changes.
 
-After the user selects Cook for the displayed scope or plan, finalize. The agent coherence self-check is the only execution gate. Finalization takes no user approval record:
+After the user selects Cook for the displayed scope or plan, finalize bound curd work. Finalization takes no user approval record or taste-result argument:
 
 ```bash
 python3 skills/mold/scripts/mold.pyz finalize "$SPEC" \
   --artifact-root "$ARTIFACT_ROOT" \
   --operation-id "<slug>-<ordinal>" \
   --request-id "$REQUEST_ID" \
-  --mode full \
   --planner-result "$PLANNER_RESULT_JSON" \
-  --taste-result "$TASTE_RESULT_JSON" \
-  --ledger "$TASTE_LEDGER_JSON"
+  --plan "$CURD_PLAN_JSON"
 ```
 
-`--taste-result` is the persisted `taste-test` verdict. `--ledger` is the decision ledger as JSON. `--plan` is optional when the `PlannerResult` embeds its plan.
+`--plan` may be omitted when `PlannerResult` embeds the exact plan. Pass `--save-approved` only to save with unchecked coherence items. It adds a hold, so the result remains `saved-not-ready`; it does not authorize Cook. A fresh user decision and updated spec are required before re-finalization.
 
-Pass `--save-approved` only when the user approved saving with unchecked coherence items. The flag adds a `save-approved` preparation hold and a `handshake-coherence` requirement, so `finalize` returns `saved-not-ready`. Only a fresh user dialogue clears that hold and requirement.
+Read `status` in the output, not only the exit status. A nonzero exit status is an input error; stop. `ready` stores `request_id`, `spec_ref`, `planner_result_ref`, `plan_ref`, and `coverage` at `result_path`. `saved-not-ready` exits zero and lists unmet `requirements` and holds, but gives no executable refs.
 
-Read `status` in the output, not only the exit status. A nonzero exit status is an input error; stop. `ready` stores a canonical `HandoffPointer` and prints the Cook `command`. `saved-not-ready` exits zero, stores no pointer, and lists each unmet `requirements` entry and hold.
-
-For `ready`, render the ready branch of [`handoff-menus.md`](handoff-menus.md). The printed `command` contains `--auto`; run it only when the user selects an automatic choice. A manual choice uses `/cook <pointer path> --spec "$SPEC"`. For `saved-not-ready`, follow the saved-not-ready branch of the same menu.
+For `ready`, render the ready branch of [`handoff-menus.md`](handoff-menus.md). The printed `command` is `/cook --auto --result <result_path>`; run it only when the user selects an automatic choice. A manual choice uses `/cook --result "$RESULT_PATH"`. Cook reads the ready refs from `result_path` and passes them to the host's `execute_bound_plan`. For `saved-not-ready`, show each hold and requirement. Do not dispatch bound execution.
 
 ## Hand-off
 
@@ -447,6 +443,7 @@ After writing, suggest the next step inline. **Never auto-invoke.**
 
 | Artifact | Suggested next step |
 | --- | --- |
-| Spec (auto) | `/cook --auto <pointer path> --spec "$SPEC"` (add `--hard` when the user passed it) |
-| Spec | `/cook <pointer path> --spec "$SPEC"` (add `--hard` when the user passed it) |
+| Spec (auto) | `/cook --auto --spec "$SPEC"` (standalone) or the printed `/cook --auto --result <result_path>` (bound) after explicit selection; add `--hard` when the user passed it |
+| Spec | `/cook --spec "$SPEC"` (standalone) or `/cook --result "$RESULT_PATH"` (bound) after explicit selection; add `--hard` when the user passed it |
+| Issues | Paste each into your tracker, or `gh issue create --body-file <path>` |
 | Issues | Paste each into your tracker, or `gh issue create --body-file <path>` |

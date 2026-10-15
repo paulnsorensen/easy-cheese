@@ -1,25 +1,16 @@
 # Handoff branch menus
 
-Read this when the user selects Cook after Mold saves a draft. A saved draft alone renders no Cook command. The `curd-count` digest is advisory sizing; finalization owns readiness and execution authority.
+Read this after the user selects Cook. A saved draft alone renders no Cook command. The `curd-count` digest guides sizing; it does not grant execution authority.
 
-- A `ready` finalization result carries a consumer-valid pointer. A
-  `saved-not-ready` result carries only durable preparation requirements and
-  holds, so render no pointer command and no automatic command. Show each
-  requirement and hold. Cook does not read these saved requirements, so offer
-  **Let Cook prepare the spec** — `/cook --spec "$SPEC"` only when the result
-  has no hold and every requirement `kind` is `approval`, `scope`, or `plan`.
-  Cook preparation then resolves each missing requirement. Offer this only after the user selects Cook. For any other
-  requirement, such as a failed taste verdict, render no Cook choice.
-- For a ready result, route to Cook
-  with the canonical pointer from finalization: auto choices use
-  `/cook --auto <pointer-path> --spec "$SPEC"` and manual choices use
-  `/cook <pointer-path> --spec "$SPEC"`.
+- A `ready` finalization result carries `request_id`, `spec_ref`, `planner_result_ref`, `plan_ref`, exact `coverage`, and a retained `result_path`.
+- A `saved-not-ready` result carries unmet requirements and holds, not runnable bound inputs. Show each item. Do not dispatch bound execution. A separate clear standalone task may use `/cook --spec "$SPEC"` only when Cook's fast-path conditions hold and the user explicitly requests that route.
+- For a ready bound result, auto choices use the printed `command` (`/cook --auto --result "$RESULT_PATH"`); manual choices use `/cook --result "$RESULT_PATH"`. For standalone work, use `/cook --auto --spec "$SPEC"` or `/cook --spec "$SPEC"`. The host passes the ready refs to `execute_bound_plan` and validates them before writer dispatch.
 
-Only after explicit Cook selection, render the branch selected by `mode`:
+After explicit Cook selection, render the branch selected by the sizing digest's `mode`:
 
 **Decomposable specs (`decomposable: true`, `candidate_curds ≥ 2`, `mode: parallel`):**
 
-- **Run the full pipeline (parallel fan-out when disjoint, else linear)** *(recommended)* — use the auto command above. Cook later uses the plan curds to select parallel or linear execution; `/plate` publishes the selected ordinary or stacked layout.
+- **Run the full pipeline (parallel fan-out when disjoint, else linear)** *(recommended)* — use the auto command above. Cook uses plan curds to select parallel or linear execution; `/plate` publishes the selected ordinary or stacked layout.
 - **Implement manually, one phase at a time** — use the manual command above.
 - **Stop** — dispatch none; leave the spec for later.
 
@@ -37,4 +28,4 @@ Only after explicit Cook selection, render the branch selected by `mode`:
 - **Research more first** — `/briesearch`.
 - **Stop** — dispatch none; leave the spec for later.
 
-`mode: parallel|linear` selects fresh-context Cook execution; `mode: null` selects the smaller in-session path. The user must still opt into `--auto`.
+`mode: parallel|linear` selects fresh-context Cook execution; `mode: null` selects the smaller in-session path. This digest mode is not a Mold-to-Cook execution gate. The user must still opt into `--auto`.

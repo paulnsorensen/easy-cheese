@@ -31,7 +31,6 @@ BASE_SPEC = (SPEC_FIXTURES / "valid_spec.md").read_text(encoding="utf-8")
 LEGACY_SPEC = (SPEC_FIXTURES / "legacy_v013_spec.md").read_text(encoding="utf-8")
 MINI_SPEC = (SPEC_FIXTURES / "valid_mini_spec.md").read_text(encoding="utf-8")
 MOLD_ARCHIVE = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
-COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
 
 
 class _RunFn(Protocol):
@@ -56,17 +55,9 @@ def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _run_cook(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
-    cook_pyz = COOK_ARCHIVE
+def _run_finalize(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [
-            sys.executable,
-            str(cook_pyz),
-            "prepare",
-            "--spec",
-            str(path),
-            *flags,
-        ],
+        [sys.executable, str(MOLD_ARCHIVE), "finalize", str(path), *flags],
         capture_output=True,
         text=True,
     )
@@ -594,24 +585,22 @@ def test_legacy_v013_spec_is_accepted_on_read(tmp_path: Path, _run: _RunFn) -> N
 def test_legacy_v013_spec_is_not_execution_authority(tmp_path: Path) -> None:
     path = _write(tmp_path, "legacy-v013.md", LEGACY_SPEC)
     original = path.read_bytes()
-    result = _run_cook(
+    result = _run_finalize(
         path,
-        "--request-id",
-        "legacy-v013",
-        "--repository-root",
-        str(tmp_path),
         "--artifact-root",
         str(tmp_path / "artifacts"),
-        "--mode",
-        "full",
+        "--operation-id",
+        "legacy-v013",
+        "--request-id",
+        "legacy-v013",
     )
 
     assert result.returncode == 0, result.stderr
-    preparation = cast(dict[str, object], json.loads(result.stdout))
-    assert preparation["outcome"] == "needs-planning"
-    assert preparation["findings"] == []
-    assert preparation["handoff_ref"] is None
-    assert preparation["approved_plan_ref"] is None
+    finalization = cast(dict[str, object], json.loads(result.stdout))
+    assert finalization["status"] == "saved-not-ready"
+    assert finalization["ready"] is False
+    requirements = cast(list[dict[str, object]], finalization["requirements"])
+    assert any(item["requirement_id"] == "spec-validation" for item in requirements)
     assert path.read_bytes() == original
 
 

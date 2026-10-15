@@ -1,8 +1,8 @@
 """Parse and validate --grounded manifest entries.
 
-Split out of `phase_commit` so `lint` can validate a record's
+Split out of `phase_commit` so `resolve` can validate a record's
 `working_context` against the same grammar the writer enforces without
-creating an import cycle: lint -> phase_commit -> commit -> lint.
+creating an import cycle.
 """
 
 from __future__ import annotations

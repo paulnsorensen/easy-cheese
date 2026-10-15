@@ -6,10 +6,9 @@ The `hard-cheese` receipt uses `status: PASS | FAIL | FAILED | LOGGED`.
 It is a grading record, not a handback.
 Neither vocabulary extends the other.
 
-`easy_cheese_schemas.phase_contracts` is the machine source of truth.
-It defines the status vocabulary, wire grammar, and phase transition registry.
-Each skill bundle contains this module.
-This file describes only rules that the module enforces.
+`easy_cheese_schemas.handback_status` defines the status vocabulary and wire grammar.
+`easy_cheese.shared.phase_routes` validates active handoff routes privately.
+Each skill bundle contains the status vocabulary it uses.
 Producers and consumers must not derive the grammar again.
 
 ## The preamble
@@ -96,6 +95,18 @@ A worker that writes a durable artifact hands back the same `status:` /
 `next:` it wrote there, with `artifact:` pointing at the report it consumed.
 The two must never tell different stories.
 
+## Base revision
+
+Every durable write over an existing Wheypoint record names the revision the
+writer read. This keeps every phase ready for a compaction.
+
+- Keep `record.revision_id` from the `authoritative` phase-entry resolve as `<base>`.
+- Pass `--base <base>` to each handoff write over an existing record.
+- Omit `--base` only when no record exists yet for the slug.
+- After a compaction, resolve again before you write.
+- A `base-revision-required` or `stale-parent` refusal means: resolve again,
+  apply your result again, then write.
+
 ## Boundaries
 
 | Boundary | Producer | Consumer | Required fields | Optional fields |
@@ -104,7 +115,7 @@ The two must never tell different stories.
 | Durable report | the same phases, via the artifact writer | the next phase, `/cheese --continue` | same preamble + body | same |
 | Unregistered report | `/affinage`, `/pasteurize` | `/cheese --continue` | same preamble, written by hand | same |
 | Fan phase router | a fan-out phase handback | `/cook`'s fan pathway phase decision | `status` (routed by disposition), `next` | — |
-| Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | decision dossier body |
+| Checkpoint note | `/wheypoint` | `/cheese --continue` | `status`, `next`, `artifact`, orientation | notes body |
 | Grading receipt (distinct vocabulary, not a handback) | `/hard-cheese` | the attempt log | `status: PASS \| FAIL \| FAILED \| LOGGED` | `attempts` |
 
 `schema-intertwine.md` lists the registered source phases.

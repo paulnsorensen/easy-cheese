@@ -1,4 +1,4 @@
-"""Execute the accepted Cook handoff and produce the browser feature."""
+"""Execute direct Cook inputs and produce the browser feature."""
 
 from __future__ import annotations
 
@@ -16,7 +16,15 @@ from easy_cheese_schemas.contracts import (
     ReviewDisposition,
     ReviewResultWriterView,
 )
-from easy_cheese.skills.cook.preparation import execute_accepted_handoff
+from easy_cheese.skills.cook.preparation import execute_bound_plan
+from easy_cheese.shared.mold_cook_handoff import (
+    SETUP_EVIDENCE_SCHEMA_URI,
+    materialize_artifact_ref,
+)
+from easy_cheese_schemas import ArtifactRef, MoldCookCoverage
+from easy_cheese_schemas.schema_runtime import (
+    _typed_host as structure_contract_value,  # pyright: ignore[reportPrivateUsage]
+)
 
 
 def _write_feature(
@@ -65,11 +73,42 @@ def _unexpected_diagnosis(_request: object) -> object:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
-        raise SystemExit("usage: outer_workflow.py POINTER REPOSITORY ARTIFACT_ROOT")
-    pointer, repository, artifact_root = (Path(value) for value in argv)
-    results = execute_accepted_handoff(
-        pointer,
+    if len(argv) not in {3, 6}:
+        raise SystemExit(
+            "usage: outer_workflow.py FINALIZATION_RESULT REPOSITORY ARTIFACT_ROOT "
+            + "[RUNNER_AUTHORIZATION RUNNER_RESPONSE SETUP_EVIDENCE]"
+        )
+    result_path, repository, artifact_root = (Path(value) for value in argv[:3])
+    finalized = cast(dict[str, object], json.loads(result_path.read_text(encoding="utf-8")))
+    refs = {
+        name: structure_contract_value(finalized[name], ArtifactRef, name)
+        for name in ("spec_ref", "planner_result_ref", "plan_ref")
+    }
+    coverage = structure_contract_value(finalized["coverage"], MoldCookCoverage, "coverage")
+    runner_authorization_ref: ArtifactRef | None = None
+    runner_response_ref: ArtifactRef | None = None
+    setup_evidence_refs: tuple[ArtifactRef, ...] = ()
+    if len(argv) == 6:
+        roles = ("runner_authorization", "dialogue", "setup_evidence")
+        references: list[ArtifactRef] = []
+        for role, raw_path in zip(roles, argv[3:], strict=True):
+            path = Path(raw_path)
+            references.append(
+                materialize_artifact_ref(
+                    path.read_bytes(), artifact_id=f"browser-{role}", role=role,
+                    uri=path.as_uri(),
+                    schema_uri=SETUP_EVIDENCE_SCHEMA_URI if role == "setup_evidence" else None,
+                )
+            )
+        runner_authorization_ref = references[0]
+        runner_response_ref = references[1]
+        setup_evidence_refs = (references[2],)
+    results = execute_bound_plan(
+        request_id=cast(str, finalized["request_id"]),
+        spec_ref=refs["spec_ref"],
+        planner_result_ref=refs["planner_result_ref"],
+        plan_ref=refs["plan_ref"],
+        coverage=coverage,
         artifact_root=artifact_root,
         repository_root=repository,
         dispatch_writer=lambda context: _write_feature(
@@ -77,6 +116,9 @@ def main(argv: list[str]) -> int:
         ),
         dispatch_review=_clean_review,
         dispatch_diagnosis=_unexpected_diagnosis,
+        runner_authorization_ref=runner_authorization_ref,
+        runner_response_ref=runner_response_ref,
+        setup_evidence_refs=setup_evidence_refs,
     )
     curd_results = results.execution_results[1]
     print(
@@ -85,6 +127,8 @@ def main(argv: list[str]) -> int:
                 "feature": "index.html",
                 "results": len(curd_results),
                 "disposition": curd_results[0].disposition.value,
+                "whole_task_complete": results.whole_task_complete,
+                "remainder": [item.description for item in results.remainder],
             }
         )
     )

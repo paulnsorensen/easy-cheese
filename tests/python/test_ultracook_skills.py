@@ -305,7 +305,7 @@ class TestMoldHighBlastHandoff:
     def test_routes_high_blast_by_work_type(self) -> None:
         body = _skill_corpus("mold")
         menu = _mold_high_blast_handoff_menu()
-        assert "/cook --auto <pointer-path>" in body
+        assert '/cook --auto --spec "$SPEC"' in body
         assert "fresh-context isolation" in menu.lower()
         assert "Behavior work continues" in menu
         assert "non-behavior work skips Press" in menu
@@ -1172,9 +1172,9 @@ class TestWheypointDeriveNextFromBlockers:
         body = _skill("wheypoint")
         body_lower = body.lower()
         # Must instruct reading the blockers section before authoring next:.
-        assert (
-            "open questions and blockers" in body_lower or "blockers" in body_lower
-        ), "wheypoint must tell the author to read the Open-questions/blockers section"
+        assert "open questions" in body_lower, (
+            "wheypoint must tell the author to read the open questions"
+        )
         # The derive-from-blockers-not-optimism rule.
         assert "optimism" in body_lower or "derive" in body_lower, (
             "wheypoint must state next: derives from blockers, not optimism"

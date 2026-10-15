@@ -18,6 +18,12 @@ from tests.python.mold_cook_transcript_checker import (
     TranscriptReport,
     check_transcript,
 )
+from easy_cheese.shared.mold_cook_handoff import validate_bound_execution
+from easy_cheese_schemas import ArtifactRef, MoldCookCoverage
+from easy_cheese_schemas.schema_runtime import (
+    ContractValidationError,
+    _typed_host as structure_contract_value,  # pyright: ignore[reportPrivateUsage]
+)
 
 MAX_RESPONSES = 32
 MAX_RESPONSE_BYTES = 4096
@@ -109,7 +115,6 @@ def run_agent_scenario(
     *,
     fixture_repository: str | Path,
     mold_bundle: str | Path,
-    cook_bundle: str | Path,
     responses: str | Path,
     output: str | Path,
     timeout: float = 300.0,
@@ -121,9 +126,8 @@ def run_agent_scenario(
     if not repository.is_dir():
         raise AgentScenarioError("fixture repository does not exist")
     mold = Path(mold_bundle).resolve()
-    cook = Path(cook_bundle).resolve()
-    if not mold.is_file() or not cook.is_file():
-        raise AgentScenarioError("both generated skill bundles are required")
+    if not mold.is_file():
+        raise AgentScenarioError("the generated Mold bundle is required")
     harness_responses = _load_responses(Path(responses))
     environment = {
         "PATH": os.environ.get("PATH", ""),
@@ -132,7 +136,6 @@ def run_agent_scenario(
         "LC_ALL": "C.UTF-8",
         "MOLD_COOK_FIXTURE_REPOSITORY": str(repository),
         "MOLD_COOK_MOLD_BUNDLE": str(mold),
-        "MOLD_COOK_COOK_BUNDLE": str(cook),
         "MOLD_COOK_TEST_ROOT": str(Path(__file__).resolve().parents[2]),
         "MOLD_COOK_HARNESS_RESPONSES": json.dumps(harness_responses, sort_keys=True),
     }
@@ -158,32 +161,30 @@ def run_agent_scenario(
     except TranscriptCheckError as exc:
         raise AgentScenarioError(f"unsafe task-agent transcript: {exc}") from exc
     if not report.artifact_refs:
-        raise AgentScenarioError("task-agent transcript has no consumer artifact")
-    pointer = (repository / report.artifact_refs[-1]).resolve()
-    if repository not in pointer.parents:
-        raise AgentScenarioError("consumer artifact escapes the fixture repository")
-    if not pointer.is_file():
-        raise AgentScenarioError(
-            "task-agent transcript names a pointer it did not create"
+        raise AgentScenarioError("task-agent transcript has no validated input artifact")
+    result_path = (repository / report.artifact_refs[-1]).resolve()
+    if repository not in result_path.parents:
+        raise AgentScenarioError("input artifact escapes the fixture repository")
+    if not result_path.is_file():
+        raise AgentScenarioError("task-agent transcript names an artifact it did not create")
+    if result_path.stat().st_size > MAX_TRACE_BYTES:
+        raise AgentScenarioError("task-agent input artifact exceeded the bounded size")
+    try:
+        finalized = cast(dict[str, object], json.loads(result_path.read_text(encoding="utf-8")))
+        refs = {
+            name: structure_contract_value(finalized[name], ArtifactRef, name)
+            for name in ("spec_ref", "planner_result_ref", "plan_ref")
+        }
+        coverage = structure_contract_value(finalized["coverage"], MoldCookCoverage, "coverage")
+        _ = validate_bound_execution(
+            spec_ref=refs["spec_ref"],
+            planner_result_ref=refs["planner_result_ref"],
+            plan_ref=refs["plan_ref"],
+            coverage=coverage,
+            artifact_root=repository / "artifacts",
         )
-    accepted_code, _accepted_stdout, accepted_stderr = _run_bounded(
-        [
-            sys.executable,
-            str(cook),
-            "accept",
-            str(pointer),
-            "--artifact-root",
-            str(repository / "artifacts"),
-        ],
-        cwd=repository,
-        env=environment,
-        timeout=timeout,
-    )
-    if accepted_code != 0:
-        raise AgentScenarioError(
-            "task-agent artifact failed real Cook acceptance: "
-            + accepted_stderr.decode(errors="replace")[-2000:]
-        )
+    except (OSError, ValueError, TypeError, KeyError, ContractValidationError) as exc:
+        raise AgentScenarioError(f"task-agent direct inputs failed validation: {exc}") from exc
     destination = Path(output)
     _ = destination.parent.mkdir(parents=True, exist_ok=True)
     _ = destination.write_text(
@@ -196,7 +197,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="mold-cook-agent-driver")
     _ = parser.add_argument("--fixture-repository", required=True, type=Path)
     _ = parser.add_argument("--mold-bundle", required=True, type=Path)
-    _ = parser.add_argument("--cook-bundle", required=True, type=Path)
     _ = parser.add_argument("--responses", required=True, type=Path)
     _ = parser.add_argument("--output", required=True, type=Path)
     _ = parser.add_argument("command", nargs="+")
@@ -207,14 +207,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             command,
             fixture_repository=cast(Path, parsed.fixture_repository),
             mold_bundle=cast(Path, parsed.mold_bundle),
-            cook_bundle=cast(Path, parsed.cook_bundle),
             responses=cast(Path, parsed.responses),
             output=cast(Path, parsed.output),
         )
     except AgentScenarioError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-    print(json.dumps({"scenario": report.scenario, "mode": report.mode}))
+    print(json.dumps({"scenario": report.scenario, "input_kind": report.input_kind}))
     return 0
 
 

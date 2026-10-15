@@ -17,7 +17,7 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from attrs import define, evolve
+from attrs import define
 
 from easy_cheese_schemas.contracts import (
     LOWER_IDENTIFIER_RE,
@@ -68,10 +68,9 @@ class ArtifactOrphaned(Exception):
 
 @define(frozen=True)
 class CommitOutcome:
-    """A phase commit's result, plus whether the stale-parent retry fired."""
+    """A phase commit's result."""
 
     result: commit.CommitResult
-    retried: bool
 
 
 def _warn(text: str) -> None:
@@ -175,6 +174,35 @@ def _base_revision_id(current: WheypointRecord | None) -> str:
     return commit.GENESIS_PARENT if current is None else current.revision_id
 
 
+def _require_read_base(
+    current: WheypointRecord | None, base_revision_id: str | None
+) -> None:
+    """Refuse a phase write over an existing record the writer has not read.
+
+    The writer names the revision it read; a missing or superseded base is
+    refused before the artifact lands, because a retry that re-bound the
+    parent would write over state the writer never re-read.
+    """
+    if current is None:
+        if base_revision_id is not None:
+            raise PhaseCommitRefusal(
+                f"stale-parent: --base {base_revision_id!r} names a revision, but "
+                + "no record exists: re-read the record, then write again"
+            )
+        return
+    if base_revision_id is None:
+        raise PhaseCommitRefusal(
+            "base-revision-required: the record already exists, so pass the revision "
+            + f"you read as --base; the current revision is {current.revision_id!r}: "
+            + "re-read the record, then write again"
+        )
+    if base_revision_id != current.revision_id:
+        raise PhaseCommitRefusal(
+            f"stale-parent: --base {base_revision_id!r} is not the current revision "
+            + f"{current.revision_id!r}: re-read the record, re-apply, then write again"
+        )
+
+
 def _require_genesis_grounding(
     current: WheypointRecord | None, grounded: Sequence[str]
 ) -> None:
@@ -217,64 +245,6 @@ def _build_delta(
         return checkpoint.build_delta(intent, current)
     except checkpoint.IntentError as exc:
         raise commit.CommitError(str(exc)) from exc
-
-
-def _retry_intent(
-    intent: CheckpointIntent,
-    *,
-    base_revision_id: str,
-    grounded: Sequence[str],
-    artifact_links: list[ArtifactLink],
-    current: WheypointRecord | None,
-) -> CheckpointIntent:
-    return evolve(
-        intent,
-        base_revision_id=base_revision_id,
-        working_context=list(grounded) if grounded else None,
-        notes=None if current is not None else intent.notes,
-        artifact_links=artifact_links,
-    )
-
-
-def _retry(
-    intent: CheckpointIntent,
-    *,
-    phase: str,
-    grounded: Sequence[str],
-    links: list[ArtifactLink],
-    store: storage.WorkStore,
-    root_path: Path,
-) -> CommitOutcome:
-    """Rebuild the intent against the record that landed first, and re-commit."""
-    work_id = intent.work_id
-    refreshed = store.read_record()
-    refreshed_base = _base_revision_id(refreshed)
-    _warn(
-        f"retry work_id={work_id} phase={phase}"
-        + f" stale_parent={intent.base_revision_id} refreshed_parent={refreshed_base}"
-    )
-    _require_genesis_grounding(refreshed, grounded)
-    retry_delta = _build_delta(
-        _retry_intent(
-            intent,
-            base_revision_id=refreshed_base,
-            grounded=grounded,
-            artifact_links=links,
-            current=refreshed,
-        ),
-        refreshed,
-    )
-    try:
-        result = commit.commit(retry_delta, store=store, artifact_root=root_path)
-    except commit.CommitError as exc:
-        _warn(f"retry outcome=failed work_id={work_id} phase={phase} error={exc}")
-        raise
-    _warn(
-        f"retry outcome=committed work_id={work_id} phase={phase}"
-        + f" revision_id={result.revision.revision_id}"
-    )
-    return CommitOutcome(result=result, retried=True)
-
 
 def _require_kebab_work_id(work_id: str) -> None:
     """Refuse a work id no `.cheese/` reader can resolve, before any write.
@@ -346,20 +316,9 @@ def _commit_written(
         session=session,
     )
     delta = _build_delta(intent, current)
-    try:
-        return CommitOutcome(
-            result=commit.commit(delta, store=store, artifact_root=root_path),
-            retried=False,
-        )
-    except (commit.StaleParentError, commit.GenesisConflictError):
-        return _retry(
-            intent,
-            phase=phase,
-            grounded=grounded,
-            links=links,
-            store=store,
-            root_path=root_path,
-        )
+    return CommitOutcome(
+        result=commit.commit(delta, store=store, artifact_root=root_path)
+    )
 
 
 def commit_phase_revision(
@@ -374,14 +333,16 @@ def commit_phase_revision(
     write_contents: Callable[[], None],
     root: Path | str | None = None,
     provenance: SessionProvenance | None = None,
+    base_revision_id: str | None = None,
 ) -> CommitOutcome:
     """Validate, write the artifact, then commit one chain-phase revision.
 
     Failure classification belongs to this producer, not its caller: everything
     before `write_contents()` raises `PhaseCommitRefusal` (caller usage, nothing
     on disk) or the kernel's own error for an environment failure, and anything
-    after it raises `ArtifactOrphaned`. One stale-parent conflict is retried
-    against the record that landed first.
+    after it raises `ArtifactOrphaned`. An existing record needs the revision
+    the writer read as `base_revision_id`; a missing or stale base is a
+    refusal, and a conflict under the lock is not retried.
     """
     try:
         root_path = paths.resolve_repo_root(root)
@@ -397,6 +358,7 @@ def commit_phase_revision(
             grounded=grounded_entries,
         )
         current = store.read_record()
+        _require_read_base(current, base_revision_id)
         _require_genesis_grounding(current, grounded_entries)
     except (commit.CommitError, GroundedEntryError) as exc:
         raise PhaseCommitRefusal(str(exc)) from exc

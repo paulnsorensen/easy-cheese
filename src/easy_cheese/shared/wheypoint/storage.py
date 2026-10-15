@@ -14,10 +14,10 @@ leave a promoted record naming a receipt that is not there.
 
 `recover` is the reader of that guarantee. It reconciles what is complete --
 a receipt that structures, whose filename matches its own identity, and whose
-projection is present and hashes to the digest the receipt claims -- and
-*reports* anything else. It writes nothing, repairs nothing, and never fills a
-gap with a guess: an interrupted promotion is a fact about the disk, not a
-state to be invented.
+projection file is present (and, for a receipt written before schema 5 that
+pins a projection digest, hashes to that digest) -- and *reports* anything
+else. It writes nothing, repairs nothing, and never fills a gap with a guess:
+an interrupted promotion is a fact about the disk, not a state to be invented.
 
 Nothing here reaches outside the corpus. Durability is reported by the
 projection; this module never publishes.
@@ -36,7 +36,13 @@ from pathlib import Path
 from typing import cast
 
 from attrs import define
-from easy_cheese_schemas import LOWER_IDENTIFIER_RE, WheypointRecord, WheypointRevision
+from easy_cheese_schemas import (
+    LOWER_IDENTIFIER_RE,
+    SCHEMA_VERSION,
+    WheypointRecord,
+    WheypointRevision,
+)
+from easy_cheese_schemas.compat import Provenance, classify_stamp
 
 try:
     import fcntl  # POSIX advisory file locks
@@ -66,14 +72,40 @@ class StorageError(RuntimeError):
     """Raised when the store is asked for something it must not do."""
 
 
+class SchemaVersionFutureError(StorageError):
+    """A newer runtime wrote this payload; this reader must not interpret it."""
+
+
+FUTURE_STAMP_CODE = "schema-version-future"
+
+
+def future_stamp_detail(stamped: int, what: str) -> str:
+    return (
+        f"{what} is stamped schema version {stamped} but this runtime reads up "
+        + f"to {SCHEMA_VERSION}: upgrade the wheypoint bundle before reading it"
+    )
+
+
 @define(frozen=True)
 class RevisionFile:
-    """A receipt whose immutable pair is complete on disk."""
+    """A receipt whose immutable pair is complete on disk.
+
+    `digest` is the `revision_digest` the receipt's writer hashed.
+    """
 
     revision: WheypointRevision
     path: Path
     projection_path: Path
+    digest: str
 
+
+@define(frozen=True)
+class StoredReceipt:
+    """A structured receipt and the digests its raw payload carried."""
+
+    revision: WheypointRevision
+    digest: str
+    legacy_projection_digest: str | None = None
 
 @define(frozen=True)
 class RevisionScan:
@@ -312,13 +344,21 @@ class WorkStore:
         `revisions()` would skip it -- both read identity through
         `_structure_receipt` -- minus the projection check.
         """
-        revisions = [
+        return tuple(receipt.revision for receipt in self.stored_receipts())
+
+    def stored_receipts(self) -> tuple[StoredReceipt, ...]:
+        """Every receipt that structures, oldest first, with its stored digest.
+
+        The digest comes from the receipt's raw bytes, so a receipt written
+        before a field was dropped still matches the pointer that quotes it.
+        """
+        receipts = [
             structured
             for _, structured in self._structured_receipts()
             if not isinstance(structured, str)
         ]
-        revisions.sort(key=lambda revision: revision.revision_number)
-        return tuple(revisions)
+        receipts.sort(key=lambda receipt: receipt.revision.revision_number)
+        return tuple(receipts)
 
     def survey_receipts(self) -> ReceiptSurvey:
         """Reconcile the record against its receipts without hashing a projection.
@@ -327,13 +367,15 @@ class WorkStore:
         record written by a newer runtime is reported as such however the
         caller found this store.
         """
-        record, problems, stamped_schema_version = self._read_record_for_recovery()
-        revisions, incomplete = self._projected_receipts()
+        record, problems, stamped_schema_version, digest = (
+            self._read_record_for_recovery()
+        )
+        receipts, incomplete = self._projected_receipts()
         if record is not None:
-            problems = [*problems, *_record_problems(record, revisions)]
+            problems = [*problems, *_record_problems(record, digest, receipts)]
         return ReceiptSurvey(
             record=record,
-            revisions=tuple(revisions),
+            revisions=tuple(receipt.revision for receipt in receipts),
             incomplete=tuple(incomplete),
             problems=tuple(problems),
             stamped_schema_version=stamped_schema_version,
@@ -341,14 +383,14 @@ class WorkStore:
 
     def _structured_receipts(
         self,
-    ) -> Iterator[tuple[Path, WheypointRevision | str]]:
-        """Each receipt file paired with its revision or its skip reason."""
+    ) -> Iterator[tuple[Path, StoredReceipt | str]]:
+        """Each receipt file paired with its receipt or its skip reason."""
         if not self.revisions_dir.is_dir():
             return
         for path in sorted(self.revisions_dir.glob("*.json")):
             yield path, self._structure_receipt(path)
 
-    def _projected_receipts(self) -> tuple[list[WheypointRevision], list[str]]:
+    def _projected_receipts(self) -> tuple[list[StoredReceipt], list[str]]:
         """Receipts whose projection is at least present, and why the rest are not.
 
         This adds the one cheap half of completeness -- the projection file
@@ -357,7 +399,7 @@ class WorkStore:
         projections no receipt claims.
         """
         projection_stems = self._projection_stems()
-        receipts: list[WheypointRevision] = []
+        receipts: list[StoredReceipt] = []
         skipped: list[str] = []
         stems: set[str] = set()
         for path, structured in self._structured_receipts():
@@ -371,7 +413,7 @@ class WorkStore:
                 skipped.append(f"{path.name}: projection file is missing")
                 continue
             receipts.append(structured)
-        receipts.sort(key=lambda revision: revision.revision_number)
+        receipts.sort(key=lambda receipt: receipt.revision.revision_number)
         skipped.sort()
         skipped.extend(_unclaimed_projections(projection_stems, stems))
         return receipts, skipped
@@ -381,14 +423,34 @@ class WorkStore:
             raw = self.record_path.read_bytes()
         except FileNotFoundError:
             return None
-        return records.structure(_parse_json(raw), WheypointRecord)
+        payload = _parse_json(raw)
+        _refuse_future_stamp(payload, f"{RECORD_FILENAME} for work {self.work_id!r}")
+        return records.structure_stored(payload, WheypointRecord)
+
+    def read_record_digest(self) -> str | None:
+        """The `record_digest` this store's writer hashed for `record.json`.
+
+        A pre-v5 record is digested from its raw payload (see
+        `records.stored_record_digest`), so a pin taken before schema 5 still
+        matches after the structured form dropped fields.
+        """
+        try:
+            raw = self.record_path.read_bytes()
+        except FileNotFoundError:
+            return None
+        payload = _parse_json(raw)
+        _refuse_future_stamp(payload, f"{RECORD_FILENAME} for work {self.work_id!r}")
+        record = records.structure_stored(payload, WheypointRecord)
+        return records.stored_record_digest(cast("dict[str, object]", payload), record)
 
     def read_revision(self, number: int, revision_id: str) -> WheypointRevision | None:
         try:
             raw = self.revision_path(number, revision_id).read_bytes()
         except FileNotFoundError:
             return None
-        return records.structure(_parse_json(raw), WheypointRevision)
+        payload = _parse_json(raw)
+        _refuse_future_stamp(payload, f"revision {revision_id!r}")
+        return records.structure_stored(payload, WheypointRevision)
 
     def revision_ids(self) -> frozenset[str]:
         """The ids of every complete immutable revision in this store."""
@@ -418,9 +480,9 @@ class WorkStore:
         """Write the immutable pair, then swap `record.json` in last.
 
         A *complete* revision is never rewritten: if this number and id already
-        name a receipt whose projection is present and hashes to what the
-        receipt claims, no property of the incoming triple can make it legal to
-        replace a receipt a reader may already have quoted -- with one
+        name a receipt whose projection file is present, no property of the
+        incoming triple can make it legal to replace a receipt a reader may
+        already have quoted -- with one
         exception that replaces nothing. A retry that produces the *identical*
         receipt bytes over that complete pair is the tail of an interrupted
         promotion: the pair landed and the record swap did not. Finishing it
@@ -432,9 +494,8 @@ class WorkStore:
         have quoted it, and re-promoting the same number and id over it is how
         the interrupted attempt gets finished rather than a rewrite of history.
 
-        The triple then has to agree before anything is written: a receipt that
-        quotes a different record, or a projection that does not hash to the
-        digest the receipt claims, is a bug upstream, and promoting it would
+        The pair then has to agree before anything is written: a receipt that
+        quotes a different record is a bug upstream, and promoting it would
         make the store permanently unreadable.
         """
         revision_path = self.revision_path(
@@ -451,16 +512,13 @@ class WorkStore:
                     raise StorageError(
                         f"{revision_path.name} already exists and is immutable"
                     )
-                # Identical receipt, and `_inspect_revision` has already proved
-                # the projection beside it hashes to the digest that receipt
-                # declares -- which `_check_agreement` is about to prove of
-                # `markdown` too. The pair on disk is this promotion's pair, so
-                # all that is left of it is the pointer.
-                self._check_agreement(record, revision, markdown)
+                # Identical receipt over a complete pair: the pair on disk is
+                # this promotion's pair, so all that is left is the pointer.
+                self._check_agreement(record, revision)
                 write_atomic(self.record_path, records.canonical_payload(record))
                 return
 
-        self._check_agreement(record, revision, markdown)
+        self._check_agreement(record, revision)
 
         self.revisions_dir.mkdir(parents=True, exist_ok=True)
         self.projections_dir.mkdir(parents=True, exist_ok=True)
@@ -473,7 +531,6 @@ class WorkStore:
         self,
         record: WheypointRecord,
         revision: WheypointRevision,
-        markdown: str,
     ) -> None:
         if revision.work_id != record.work_id or record.work_id != self.work_id:
             raise StorageError(
@@ -502,18 +559,20 @@ class WorkStore:
                 f"revision projection_path {revision.projection_path!r} is not "
                 + f"{expected_path!r}"
             )
-        if projection_mod.projection_digest_of_text(markdown) != (
-            revision.projection_digest
-        ):
-            raise StorageError("projection text does not match its declared digest")
 
     def recover(self) -> RecoveryReport:
         """Reconcile what is on disk. Reads only; invents nothing."""
         scan = self.revisions()
-        record, problems, stamped_schema_version = self._read_record_for_recovery()
+        record, problems, stamped_schema_version, digest = (
+            self._read_record_for_recovery()
+        )
         if record is not None:
             problems.extend(
-                _record_problems(record, [file.revision for file in scan.files])
+                _record_problems(
+                    record,
+                    digest,
+                    [StoredReceipt(file.revision, file.digest) for file in scan.files],
+                )
             )
         return RecoveryReport(
             record=record,
@@ -529,32 +588,39 @@ class WorkStore:
             return set()
         return {path.stem for path in self.projections_dir.glob("*.md")}
 
-    def _structure_receipt(self, path: Path) -> WheypointRevision | str:
-        """The revision this receipt holds, or why it is not one.
+    def _structure_receipt(self, path: Path) -> StoredReceipt | str:
+        """The receipt this file holds, or why it is not one.
 
         The identity half of completeness -- readable JSON, a structurable
         revision, a filename that matches the identity inside it -- stated
         once, so every reader of this store skips for the same reasons in
-        the same words.
+        the same words. The digests are taken from the raw payload here, before
+        structuring drops anything an older receipt carried.
         """
         try:
             payload = _parse_json(path.read_bytes())
         except ValueError:
             return "malformed JSON"
         try:
-            revision = records.structure(payload, WheypointRevision)
+            revision = records.structure_stored(payload, WheypointRevision)
         except records.RecordError as exc:
             return f"not a readable revision: {exc}"
         expected = self.revision_path(revision.revision_number, revision.revision_id)
         if path.name != expected.name:
             return "filename does not match the revision identity inside it"
-        return revision
+        raw = cast("dict[str, object]", payload)
+        legacy = raw.get("projection_digest")
+        return StoredReceipt(
+            revision=revision,
+            digest=records.stored_revision_digest(raw, revision),
+            legacy_projection_digest=legacy if isinstance(legacy, str) else None,
+        )
 
     def _inspect_revision(self, path: Path) -> tuple[str, RevisionFile | None]:
         structured = self._structure_receipt(path)
         if isinstance(structured, str):
             return structured, None
-        revision = structured
+        revision = structured.revision
         projection_path = self.projection_path(
             revision.revision_number, revision.revision_id
         )
@@ -562,36 +628,42 @@ class WorkStore:
             text = projection_path.read_text(encoding="utf-8")
         except OSError:
             return "projection file is missing", None
-        if projection_mod.projection_digest_of_text(text) != revision.projection_digest:
+        legacy = structured.legacy_projection_digest
+        if legacy is not None and projection_mod.projection_digest_of_text(text) != legacy:
             return "projection digest mismatch", None
         return "", RevisionFile(
-            revision=revision, path=path, projection_path=projection_path
+            revision=revision,
+            path=path,
+            projection_path=projection_path,
+            digest=structured.digest,
         )
 
     def _read_record_for_recovery(
         self,
-    ) -> tuple[WheypointRecord | None, list[str], int | None]:
+    ) -> tuple[WheypointRecord | None, list[str], int | None, str]:
+        """The record, its problems, its stamp, and the digest its writer hashed."""
         try:
             raw = self.record_path.read_bytes()
         except FileNotFoundError:
-            return None, [], None
+            return None, [], None, ""
         try:
             payload = _parse_json(raw)
         except ValueError:
-            return None, [f"{RECORD_FILENAME} is malformed JSON"], None
+            return None, [f"{RECORD_FILENAME} is malformed JSON"], None, ""
         stamped_schema_version = _stamped_version(payload)
         try:
-            return (
-                records.structure(payload, WheypointRecord),
-                [],
-                stamped_schema_version,
-            )
+            record = records.structure_stored(payload, WheypointRecord)
         except records.RecordError as exc:
             return (
                 None,
                 [f"{RECORD_FILENAME} is not a readable record: {exc}"],
                 stamped_schema_version,
+                "",
             )
+        digest = records.stored_record_digest(
+            cast("dict[str, object]", payload), record
+        )
+        return record, [], stamped_schema_version, digest
 
 
 def _unclaimed_projections(projection_stems: set[str], receipts: set[str]) -> list[str]:
@@ -609,14 +681,19 @@ def _unclaimed_projections(projection_stems: set[str], receipts: set[str]) -> li
 
 
 def _record_problems(
-    record: WheypointRecord, revisions: list[WheypointRevision]
+    record: WheypointRecord, record_digest: str, receipts: list[StoredReceipt]
 ) -> list[str]:
+    """Where the record and its receipt disagree.
+
+    `record_digest` and each receipt's `digest` are what their writers hashed,
+    taken from the raw payloads (see `records.stored_record_digest`).
+    """
     match = next(
         (
-            revision
-            for revision in revisions
-            if revision.revision_id == record.revision_id
-            and revision.revision_number == record.revision_number
+            receipt
+            for receipt in receipts
+            if receipt.revision.revision_id == record.revision_id
+            and receipt.revision.revision_number == record.revision_number
         ),
         None,
     )
@@ -626,12 +703,12 @@ def _record_problems(
             + "not a complete immutable revision"
         ]
     problems: list[str] = []
-    if match.record_digest != records.record_digest(record):
+    if match.revision.record_digest != record_digest:
         problems.append(
             f"{RECORD_FILENAME} does not match the record digest in revision "
             + f"{record.revision_id!r}"
         )
-    if record.revision_digest != records.revision_digest(match):
+    if record.revision_digest != match.digest:
         problems.append(
             f"{RECORD_FILENAME} revision_digest does not match revision "
             + f"{record.revision_id!r}"
@@ -641,6 +718,13 @@ def _record_problems(
 
 def _parse_json(raw: bytes) -> object:
     return cast(object, json.loads(raw.decode("utf-8")))
+
+
+def _refuse_future_stamp(payload: object, what: str) -> None:
+    """Refuse a payload a newer runtime stamped, before any structuring."""
+    stamped = _stamped_version(payload)
+    if stamped is not None and classify_stamp(stamped) is Provenance.FUTURE:
+        raise SchemaVersionFutureError(future_stamp_detail(stamped, what))
 
 
 def _stamped_version(payload: object) -> int | None:
