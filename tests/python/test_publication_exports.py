@@ -32,14 +32,13 @@ def test_the_live_gateway_surface_is_still_exported() -> None:
 
 
 def test_transport_contract_roots_are_not_public() -> None:
-    from easy_cheese_schemas import REGISTERED_CONTRACT_SCHEMA_URIS
     import easy_cheese_schemas as schemas
 
     for slug, name in (
         ("handoff-pointer", "HandoffPointer"),
         ("normalization-receipt", "NormalizationReceipt"),
     ):
-        assert f"https://schemas.easy-cheese.dev/{slug}" not in REGISTERED_CONTRACT_SCHEMA_URIS
+        assert f"https://schemas.easy-cheese.dev/{slug}" not in schemas.REGISTERED_CONTRACT_SCHEMA_URIS
         assert not hasattr(schemas, name)
 
 
