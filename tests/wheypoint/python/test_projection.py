@@ -949,7 +949,7 @@ def test_a_failed_check_ignore_fails_closed_and_is_visible(
     def broken(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess([], 128, "", "fatal: boom")
 
-    monkeypatch.setattr(projection.subprocess, "run", broken)
+    monkeypatch.setattr(subprocess, "run", broken)
     record = make_record(artifact_links=[ArtifactLink(path="tracked.py")])
 
     with pytest.raises(projection.CheckIgnoreError, match="exited 128"):
@@ -959,7 +959,7 @@ def test_a_failed_check_ignore_fails_closed_and_is_visible(
     def timed_out(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired("git", 5)
 
-    monkeypatch.setattr(projection.subprocess, "run", timed_out)
+    monkeypatch.setattr(subprocess, "run", timed_out)
     with pytest.raises(projection.CheckIgnoreError):
         _ = projection._ignored(["tracked.py"], repo)  # pyright: ignore[reportPrivateUsage]
 
