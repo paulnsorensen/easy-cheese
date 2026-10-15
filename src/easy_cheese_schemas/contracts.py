@@ -3705,6 +3705,19 @@ class WheypointRecord:
         validator=_edge_set(WorkEdge),
         metadata={"since": 4},
     )
+    # The `revision_number` that last replaced `notes`, and the one that last
+    # added or transitioned a decision. Absent on a record written before they
+    # existed; the projection flags drift only when decisions are the newer.
+    notes_revision_number: int | None = field(
+        default=None,
+        validator=validators.optional(validators.ge(1)),
+        metadata={"since": 5},
+    )
+    decisions_revision_number: int | None = field(
+        default=None,
+        validator=validators.optional(validators.ge(1)),
+        metadata={"since": 5},
+    )
 
     @property
     def gating_entry_ids(self) -> tuple[str, ...]:

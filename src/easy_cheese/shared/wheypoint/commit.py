@@ -422,26 +422,53 @@ def ancestry(
     return tuple(chain)
 
 
-def _entry_id(delta: WheypointDelta, proposed: ProposedEntry, index: int) -> str:
+def proposed_entry_id(
+    work_id: str,
+    parent: str,
+    kind: EntryKind,
+    summary: str,
+    blocks_continuation: bool,
+    index: int,
+) -> str:
     """A name derived from the request that proposed the entry.
 
     The parent revision and the proposal's own content and position are all in
     the hash, so two writers proposing the same entry against the same parent
     agree on its id -- and the replay of one request cannot collide with a
-    different request's entry.
+    different request's entry. `index` is the position among the proposals of
+    the same kind.
     """
     digest = canonical.digest_value(
         {
-            "work_id": delta.work_id,
-            "parent": delta.expected_revision_id,
-            "kind": proposed.kind.value,
-            "summary": proposed.summary,
-            "blocks_continuation": proposed.blocks_continuation,
+            "work_id": work_id,
+            "parent": parent,
+            "kind": kind.value,
+            "summary": summary,
+            "blocks_continuation": blocks_continuation,
             "index": index,
         }
     )
     hexdigest = digest[len(canonical.DIGEST_PREFIX) :]
-    return f"{_KIND_PREFIX[proposed.kind]}-{hexdigest[:_ID_HEX]}"
+    return f"{_KIND_PREFIX[kind]}-{hexdigest[:_ID_HEX]}"
+
+
+def kind_of_entry_id(entry_id: str) -> EntryKind | None:
+    """The kind an entry id's prefix names, or None for a foreign id."""
+    for kind, prefix in _KIND_PREFIX.items():
+        if entry_id.startswith(f"{prefix}-"):
+            return kind
+    return None
+
+
+def _entry_id(delta: WheypointDelta, proposed: ProposedEntry, index: int) -> str:
+    return proposed_entry_id(
+        delta.work_id,
+        delta.expected_revision_id,
+        proposed.kind,
+        proposed.summary,
+        proposed.blocks_continuation,
+        index,
+    )
 
 
 def _revision_id(delta: WheypointDelta, fingerprint: str) -> str:
@@ -649,7 +676,9 @@ def _apply(
             "fork transitions are host-derived, not on request "
             + f"({', '.join(forged)})"
         )
-    problems = records.validate_transitions(current, transitions)
+    additions = _additions(delta)
+    added_ids = {entry.entry_id for group in additions.values() for entry in group}
+    problems = records.validate_transitions(current, transitions, added_ids=added_ids)
     if problems:
         raise CommitError("; ".join(problems))
     by_entry = {transition.entry_id: transition for transition in transitions}
@@ -661,7 +690,6 @@ def _apply(
             _transitioned(entry, by_entry.get(entry.entry_id)) for entry in existing
         ]
 
-    additions = _additions(delta)
     revision_id = _revision_id(delta, fingerprint)
     number = current.revision_number + 1
     draft = _draft_record(
@@ -672,6 +700,10 @@ def _apply(
         kept=kept,
         additions=additions,
         digest_of=digest_of,
+        decisions_moved=bool(additions[EntryKind.DECISION])
+        or any(
+            _names_decision(current, transition.entry_id) for transition in transitions
+        ),
     )
     merged = _merge_edges(
         current.edges, delta, host=fork_edge, revision_id=revision_id
@@ -773,6 +805,8 @@ def _genesis(
             orientation=delta.orientation or "",
             working_context=list(delta.working_context or []),
             notes=delta.notes,
+            notes_revision_number=1 if delta.notes is not None else None,
+            decisions_revision_number=1 if additions[EntryKind.DECISION] else None,
             next_action=next_action,
             decisions=additions[EntryKind.DECISION],
             questions=additions[EntryKind.QUESTION],
@@ -881,8 +915,13 @@ def _draft_record(
     kept: dict[EntryKind, list[ProtectedEntry]],
     additions: dict[EntryKind, list[ProtectedEntry]],
     digest_of: Callable[[str], str | None],
+    decisions_moved: bool,
 ) -> WheypointRecord:
     """The next record: replacements where the delta spoke, carry-forward else.
+
+    `notes_revision_number` and `decisions_revision_number` move to `number`
+    exactly when the delta replaced the notes or added or transitioned a
+    decision.
 
     Every committed revision restamps `schema_version` at the runtime's
     current version, not just the genesis record. A carried-forward record
@@ -900,6 +939,13 @@ def _draft_record(
             orientation=_replaced(delta.orientation, current.orientation),
             working_context=_replaced(delta.working_context, current.working_context),
             notes=_replaced(delta.notes, current.notes),
+            notes_revision_number=_replaced(
+                None if delta.notes is None else number,
+                current.notes_revision_number,
+            ),
+            decisions_revision_number=number
+            if decisions_moved
+            else current.decisions_revision_number,
             next_action=_replaced(delta.next_action, current.next_action),
             decisions=kept[EntryKind.DECISION] + additions[EntryKind.DECISION],
             questions=kept[EntryKind.QUESTION] + additions[EntryKind.QUESTION],
@@ -914,6 +960,11 @@ def _draft_record(
         )
     except ValueError as exc:
         raise CommitError(f"the delta does not produce a legal record: {exc}") from exc
+
+
+def _names_decision(record: WheypointRecord, entry_id: str) -> bool:
+    """Whether `entry_id` names one of the record's decisions."""
+    return any(entry.entry_id == entry_id for entry in record.decisions)
 
 
 def _replaced(proposed: object, carried: object) -> object:

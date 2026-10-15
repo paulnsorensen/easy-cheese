@@ -268,9 +268,15 @@ def find_entry(record: WheypointRecord, entry_id: str) -> ProtectedEntry | None:
 
 
 def validate_transitions(
-    record: WheypointRecord, transitions: Sequence[EntryTransition]
+    record: WheypointRecord,
+    transitions: Sequence[EntryTransition],
+    *,
+    added_ids: Container[str] = (),
 ) -> tuple[str, ...]:
-    """Everything that stops these transitions from applying to this record."""
+    """Everything that stops these transitions from applying to this record.
+
+    A supersede may name an entry the same delta adds (`added_ids`).
+    """
     problems: list[str] = []
     for transition in transitions:
         entry = find_entry(record, transition.entry_id)
@@ -285,7 +291,11 @@ def validate_transitions(
             )
             continue
         target = transition.target_entry_id
-        if target is not None and find_entry(record, target) is None:
+        if (
+            target is not None
+            and find_entry(record, target) is None
+            and target not in added_ids
+        ):
             problems.append(f"transition targets unknown entry {target!r}")
     return tuple(problems)
 

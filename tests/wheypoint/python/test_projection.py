@@ -15,10 +15,13 @@ import pytest
 from attrs import evolve
 from easy_cheese_schemas import (
     Durability,
+    EntryKind,
+    EntryState,
     NextAction,
     NextMove,
     WheypointProjection,
     WheypointRecord,
+    ProtectedEntry,
     WheypointStatus,
 )
 
@@ -627,3 +630,116 @@ def test_artifacts_render_the_ref_of_a_non_repo_link_and_the_path_of_a_repo_link
         "- docs/a.md",
         "- docs/b.md",
     ]
+
+
+def _notes_section(markdown: str) -> list[str]:
+    lines = markdown.splitlines()
+    start = lines.index("## Notes") + 1
+    end = next(i for i in range(start, len(lines)) if lines[i].startswith("## "))
+    return [line for line in lines[start:end] if line]
+
+
+def _render(record: WheypointRecord) -> str:
+    return projection.build_projection(record, durability=Durability.CANONICAL_LOCAL)[1]
+
+
+def test_drift_marker_names_both_revisions_when_decisions_are_newer(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        notes="Body.", notes_revision_number=3, decisions_revision_number=5
+    )
+
+    section = _notes_section(_render(record))
+
+    assert len(section) == 2
+    assert section[0] == (
+        "> notes may be stale: decisions changed at revision 5, "
+        "notes written at revision 3"
+    )
+    assert section[1] == "Body."
+
+
+def test_drift_marker_shows_when_decisions_are_stamped_and_notes_are_not(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(notes="Body.", decisions_revision_number=2)
+
+    section = _notes_section(_render(record))
+
+    assert section[0].startswith("> notes may be stale: decisions changed at revision 2")
+    assert "unstamped" in section[0]
+
+
+@pytest.mark.parametrize(
+    ("notes_at", "decisions_at"), [(4, 4), (5, 3), (2, None), (None, None)]
+)
+def test_drift_marker_is_absent_unless_decisions_are_newer(
+    make_record: Callable[..., WheypointRecord],
+    notes_at: int | None,
+    decisions_at: int | None,
+) -> None:
+    record = make_record(
+        notes="Body.",
+        notes_revision_number=notes_at,
+        decisions_revision_number=decisions_at,
+    )
+
+    assert _notes_section(_render(record)) == ["Body."]
+
+
+def test_unstamped_record_keeps_the_canonical_bytes_it_had(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(notes="Body.")
+
+    unstructured = records.unstructure(record)
+
+    assert "notes_revision_number" not in unstructured
+    assert "decisions_revision_number" not in unstructured
+    assert "stale" not in _render(record)
+    stamped = make_record(notes="Body.", notes_revision_number=1)
+    assert records.record_digest(stamped) != records.record_digest(record)
+
+
+def _decision(entry_id: str, **fields: object) -> ProtectedEntry:
+    base: dict[str, object] = {
+        "entry_id": entry_id,
+        "kind": EntryKind.DECISION,
+        "summary": f"Decision {entry_id}",
+        "state": EntryState.ACTIVE,
+        "blocks_continuation": False,
+    }
+    return ProtectedEntry(**{**base, **fields})  # pyright: ignore[reportArgumentType]
+
+
+def test_superseded_section_lists_the_pair_and_hides_the_entry_from_its_kind(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        decisions=[
+            _decision(
+                "d-old",
+                state=EntryState.SUPERSEDED,
+                rationale="Replaced.",
+                superseded_by="d-new",
+            ),
+            _decision("d-new"),
+        ]
+    )
+
+    markdown = _render(record)
+    lines = markdown.splitlines()
+
+    assert "- d-old -> d-new" in lines
+    assert lines.index("## Superseded") < lines.index("## Identifiers")
+    decisions = lines[lines.index("## Decisions") : lines.index("## Directives")]
+    assert any("d-new" in line for line in decisions)
+    assert not any("d-old" in line for line in decisions)
+    assert projection.parse(markdown).work_id == record.work_id
+
+
+def test_superseded_section_is_absent_without_superseded_entries(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    assert "## Superseded" not in _render(make_record(decisions=[_decision("d-one")]))

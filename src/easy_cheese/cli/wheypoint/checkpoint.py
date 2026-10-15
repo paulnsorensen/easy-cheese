@@ -70,6 +70,8 @@ class IntentFlags:
     quote: Sequence[str] = ()
     resolve: Sequence[str] = ()
     withdraw: Sequence[str] = ()
+    supersede: Sequence[str] = ()
+    by: Sequence[str] = ()
     orientation: str | None = None
     next: str | None = None
     artifact: str | None = None
@@ -103,6 +105,8 @@ class IntentFlags:
                 quote=self.quote,
                 resolve=self.resolve,
                 withdraw=self.withdraw,
+                supersede=self.supersede,
+                by=self.by,
                 orientation=self.orientation,
                 next=self.next,
                 artifact=self.artifact,

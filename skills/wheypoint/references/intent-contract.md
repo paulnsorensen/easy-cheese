@@ -37,6 +37,7 @@ Run `validate` for a schema-only dry run that never opens the store.
 - **`orientation`** is free text; its first line becomes the title at genesis.
 - **`working_context`** is a list of pointers, not a paragraph.
 - **`notes`** is the Markdown body the projection renders under `## Notes`; omission carries it forward.
+- The record stamps `notes_revision_number` when a checkpoint replaces `notes`, and `decisions_revision_number` when it adds or transitions a decision. When the decision stamp is newer, or only the decision stamp exists, the projection prints one `> notes may be stale: ...` line at the top of `## Notes` that names both revisions. A record without stamps prints no marker.
 - `notes` holds at most 6000 characters.
 - **`next`** accepts `mold`, `cook`, `press`, `age`, `cure`, `affinage`, `briesearch`, `culture`, `hold`, `tasks`, or `done`.
 - **`artifact`** rides beside `next`; `affinage` needs `PR#<n>` or a PR URL, and `cook` needs a path.
@@ -99,7 +100,8 @@ Flags ignore stdin unless the intent argument is `-`.
 - A blocking question needs a `--rationale`; the rationale pairs by order, see below.
 - `--decision` adds a decision, and `--directive` adds a directive with the paired `--quote`.
 - `--resolve` and `--withdraw` add transitions for carried entry ids.
-- `--rationale` values pair in order with each blocking question, then each `--decision`, then each `--resolve`, then each `--withdraw`.
+- `--supersede <old>` adds a `supersede` transition that sets `superseded_by` on `<old>`. `--by <new>` names the successor entry id; give one `--by` per `--supersede`. Without `--by`, the successor is the one entry of the same kind that the same checkpoint adds, and that needs the revision you read (`--base`). If no successor resolves, the checkpoint refuses with `flag-pairing` and writes nothing.
+- `--rationale` values pair in order with each blocking question, then each `--decision`, then each `--resolve`, then each `--withdraw`, then each `--supersede`.
 - `--context` adds a `working_context` path.
 - `--link` adds an edge with the paired `--kind`; a pinnable ref also adds an artifact link.
 - `--covers` applies to every pinnable `--link` in the call.

@@ -2501,3 +2501,138 @@ def test_fork_refuses_a_future_stamped_parent_without_writing(
     assert status == 1
     assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
     assert _corpus_bytes(corpus_root) == before
+
+
+def _decision_ids(payload: dict[str, object]) -> list[str]:
+    record = cast(dict[str, object], payload["record"])
+    return [
+        cast(str, entry["entry_id"])
+        for entry in cast(list[dict[str, object]], record["decisions"])
+    ]
+
+
+def _entry_states(payload: dict[str, object]) -> dict[str, tuple[str, object]]:
+    record = cast(dict[str, object], payload["record"])
+    return {
+        cast(str, entry["entry_id"]): (
+            cast(str, entry["state"]),
+            entry.get("superseded_by"),
+        )
+        for entry in cast(list[dict[str, object]], record["decisions"])
+    }
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_by_names_the_successor_and_projects_it() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    status, added = _run(
+        "checkpoint", WORK_ID, "--decision", "Use B", "--rationale", "b is faster"
+    )
+    assert status == 0, added
+    new = _decision_ids(added)[1]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--supersede",
+        old,
+        "--by",
+        new,
+        "--rationale",
+        "B replaces A",
+    )
+
+    assert status == 0, payload
+    assert _entry_states(payload)[old] == ("superseded", new)
+    assert f"- {old} -> {new}" in cast(str, payload["markdown"]).splitlines()
+    transitions = cast(list[dict[str, object]], payload["applied_transitions"])
+    assert [(t["entry_id"], t["action"], t["target_entry_id"]) for t in transitions] == [
+        (old, "supersede", new)
+    ]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_without_by_takes_the_one_decision_the_checkpoint_adds() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--decision",
+        "Use B",
+        "--rationale",
+        "b is faster",
+        "--supersede",
+        old,
+        "--rationale",
+        "B replaces A",
+    )
+
+    assert status == 0, payload
+    ids = _decision_ids(payload)
+    assert len(ids) == 2
+    assert _entry_states(payload)[old] == ("superseded", ids[1])
+    assert _entry_states(payload)[ids[1]][0] == "active"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_pairing_refuses_with_no_successor_and_writes_nothing(
+    corpus_root: Path,
+) -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--supersede", old, "--rationale", "Gone."
+    )
+
+    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_pairing_refuses_two_added_entries_of_the_kind() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--decision",
+        "B",
+        "--decision",
+        "C",
+        "--rationale",
+        "b",
+        "--rationale",
+        "c",
+        "--supersede",
+        old,
+        "--rationale",
+        "Replaced.",
+    )
+
+    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_refuses_an_unknown_successor() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--supersede",
+        old,
+        "--by",
+        "d-nothing",
+        "--rationale",
+        "Replaced.",
+    )
+
+    assert status == 1
+    assert "unknown entry" in _error(payload)[1]

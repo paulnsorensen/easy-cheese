@@ -10,7 +10,10 @@ follow in the order of the keyword parameters. A scalar flag (`work_id`,
 without a refusal, because the flag is the later, more specific statement.
 
 Rationales pair in one sequence: gated questions (`--gates`) take the first
-ones, then the decisions, then each `resolve`, then each `withdraw`. A gating
+ones, then the decisions, then each `resolve`, then each `withdraw`, then each
+`supersede`. A `supersede` names its successor with `by`; with no `by`, the
+successor is the one entry of the superseded entry's kind that the checkpoint
+adds. A gating
 question needs a rationale; a plain question takes none.
 """
 
@@ -22,7 +25,7 @@ from typing import cast
 
 from easy_cheese_schemas.contracts import EdgeKind
 
-from . import ref_grammar
+from . import commit, ref_grammar
 
 __all__ = ["IntentFlagError", "overlay"]
 
@@ -43,6 +46,8 @@ def overlay(
     quote: Sequence[str] = (),
     resolve: Sequence[str] = (),
     withdraw: Sequence[str] = (),
+    supersede: Sequence[str] = (),
+    by: Sequence[str] = (),
     orientation: str | None = None,
     next: str | None = None,
     artifact: str | None = None,
@@ -55,6 +60,8 @@ def overlay(
 ) -> dict[str, object]:
     """`payload` (an intent file's JSON, or `{}`) with the flags applied."""
     _check_pairing(
+        supersede=supersede,
+        by=by,
         question=question,
         gates=gates,
         decision=decision,
@@ -83,7 +90,9 @@ def overlay(
     rest = rationale[gated:]
     decision_rationales = rest[: len(decision)]
     resolve_rationales = rest[len(decision) : len(decision) + len(resolve)]
-    withdraw_rationales = rest[len(decision) + len(resolve) :]
+    withdraw_end = len(decision) + len(resolve) + len(withdraw)
+    withdraw_rationales = rest[len(decision) + len(resolve) : withdraw_end]
+    supersede_rationales = rest[withdraw_end:]
     _extend(
         result,
         "entries",
@@ -105,6 +114,7 @@ def overlay(
         [
             *_transitions("resolve", resolve, resolve_rationales),
             *_transitions("withdraw", withdraw, withdraw_rationales),
+            *_supersessions(result, supersede, by, supersede_rationales),
         ],
     )
     edges, links = _links(link, kind, covers)
@@ -115,6 +125,8 @@ def overlay(
 
 def _check_pairing(
     *,
+    supersede: Sequence[str],
+    by: Sequence[str],
     question: Sequence[str],
     gates: bool,
     decision: Sequence[str],
@@ -127,11 +139,15 @@ def _check_pairing(
     kind: Sequence[str],
 ) -> None:
     wanted = (len(question) if gates else 0) + len(decision) + len(resolve)
-    wanted += len(withdraw)
+    wanted += len(withdraw) + len(supersede)
+    if by and len(by) != len(supersede):
+        raise IntentFlagError(
+            f"flag-pairing: {len(by)} --by for {len(supersede)} --supersede"
+        )
     if len(rationale) != wanted:
         raise IntentFlagError(
             f"flag-pairing: {len(rationale)} --rationale for {wanted} "
-            + "--gates --question, --decision, --resolve, and --withdraw flags"
+            + "--gates --question, --decision, --resolve, --withdraw, and --supersede flags"
         )
     if len(quote) != len(directive):
         raise IntentFlagError(
@@ -171,6 +187,59 @@ def _transitions(
         {"entry_id": entry_id, "action": action, "rationale": why}
         for entry_id, why in zip(entry_ids, rationales, strict=True)
     ]
+
+
+def _supersessions(
+    result: Mapping[str, object],
+    superseded: Sequence[str],
+    by: Sequence[str],
+    rationales: Sequence[str],
+) -> list[dict[str, object]]:
+    """A supersede transition per `--supersede`, each with its successor."""
+    return [
+        {
+            "entry_id": entry_id,
+            "action": "supersede",
+            "rationale": why,
+            "target_entry_id": by[index] if by else _lone_successor(result, entry_id),
+        }
+        for index, (entry_id, why) in enumerate(zip(superseded, rationales, strict=True))
+    ]
+
+
+def _lone_successor(result: Mapping[str, object], entry_id: str) -> str:
+    """The id of the one entry of `entry_id`'s kind that the checkpoint adds.
+
+    Added entries take ids from the parent revision, so the base must be known.
+    """
+    kind = commit.kind_of_entry_id(entry_id)
+    entries = result.get("entries")
+    proposals = [
+        cast(Mapping[str, object], item)
+        for item in (cast(list[object], entries) if isinstance(entries, list) else [])
+        if isinstance(item, Mapping)
+        and cast(Mapping[str, object], item).get("kind") == getattr(kind, "value", None)
+    ]
+    if kind is None or len(proposals) != 1:
+        raise IntentFlagError(
+            f"flag-pairing: --supersede {entry_id} has no --by and the checkpoint "
+            + f"does not add exactly one entry of its kind (found {len(proposals)})"
+        )
+    work_id, base = result.get("work_id"), result.get("base_revision_id")
+    if not isinstance(work_id, str) or not isinstance(base, str):
+        raise IntentFlagError(
+            f"flag-pairing: --supersede {entry_id} has no --by, so the successor's "
+            + "id needs the work id and --base"
+        )
+    proposal = proposals[0]
+    return commit.proposed_entry_id(
+        work_id,
+        base,
+        kind,
+        str(proposal["summary"]),
+        bool(proposal.get("blocks_continuation", False)),
+        0,
+    )
 
 
 def _links(

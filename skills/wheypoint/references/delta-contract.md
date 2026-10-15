@@ -78,7 +78,7 @@ A gating finding remains a stop even when advisory findings are also present.
 ## Checkpoint warnings
 
 A checkpoint result carries a `warnings` list.
-`stale-notes` means a decision was added or transitioned and `notes` stayed as they were.
+`stale-notes` means a decision was added or transitioned and `notes` stayed as they were. The commit stamps `notes_revision_number` when it replaces `notes` and `decisions_revision_number` when it adds or transitions a decision, so a later projection shows the drift as a marker line at the top of `## Notes`. A `supersede` transition names its successor in `target_entry_id`; that entry may be one the same delta adds. The projection omits a superseded entry from its kind section and lists `- <id> -> <successor id>` under `## Superseded`, before `## Identifiers`.
 Rewrite `notes` and checkpoint again when the notes now contradict the decision.
 
 ## Work-graph key in the resolve payload
