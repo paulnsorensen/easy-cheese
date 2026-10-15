@@ -15,7 +15,10 @@ The bundle is one canonical JSON object (`canonical.canonical_bytes`):
 
 Export drops operator-scope directives and local references unless asked.
 Local references are links, edges, working-context items, and path-like words in
-free text; a free-text word is replaced by `LOCAL_MARKER`. The checkout that
+free text; a free-text word is replaced by `LOCAL_MARKER`. The next action's
+`tasks` and `parallel` plan hold the author's commands and worktree paths, so
+`include_local` governs them too: a default export drops both, and a `tasks`
+move becomes `hold`. The checkout that
 decides which paths are local is passed in, never read from the working
 directory. A filtered record no longer matches the source digest, so `record_digest` covers
 the record as exported and `origin` carries the source revision and digest
@@ -45,6 +48,7 @@ from easy_cheese_schemas import (
     Durability,
     EntryKind,
     EntryState,
+    NextMove,
     ProposedEntry,
     ProtectedEntry,
     RepositoryProvenance,
@@ -56,7 +60,7 @@ from easy_cheese_schemas.contracts import DirectiveScope, EdgeKind, WorkEdge
 
 from easy_cheese.shared import paths
 
-from . import canonical, commit, projection, records, refs, storage
+from . import canonical, checkpoint, commit, projection, records, refs, storage
 
 __all__ = [
     "BUNDLE_VERSION",
@@ -103,6 +107,28 @@ def _link_text(link: ArtifactLink) -> str:
 def _needs_checkout(record: WheypointRecord) -> bool:
     """True when a link names a repository path, which only a checkout can classify."""
     return any(a.ref is None or a.ref.startswith("repo:") for a in record.artifact_links)
+
+
+_MACHINE_ROOTS = frozenset(
+    {"home", "Users", "root", "tmp", "var", "mnt", "opt", "srv", "private", "Volumes"}
+)
+
+
+def _machine_path(token: str, checkout: Path | None) -> bool:
+    """True for an absolute path under a machine-specific root, outside `checkout`.
+
+    Existence is not tested: the author's home directory is just as private when
+    the file is gone. A bare slash command such as `/cook` stays.
+    """
+    parts = token.split("/")
+    if not token.startswith("/") or len(parts) < 3 or parts[1] not in _MACHINE_ROOTS:
+        return False
+    if checkout is None:
+        return True
+    try:
+        return not Path(token).resolve().is_relative_to(checkout.resolve())
+    except (OSError, RuntimeError):
+        return True
 
 
 def _scrub(text: str, local: set[str]) -> str:
@@ -166,17 +192,29 @@ def _filtered(
             )
         local = set(projection.local_references(out, checkout))
         scrubbed = projection.local_tokens(_free_texts(out), checkout)
+        scrubbed |= {
+            t
+            for text in [*_free_texts(out), *out.working_context]
+            for t in projection.tokens(text)
+            if _machine_path(t, checkout)
+        }
         action = out.next_action
         artifact = action.artifact
         if artifact and (artifact in local or _scrub(artifact, scrubbed) != artifact):
             artifact = LOCAL_MARKER
+        move = NextMove.HOLD if action.move is NextMove.TASKS else action.move
         out = attrs.evolve(
             out,
             title=_scrub(out.title, scrubbed),
             orientation=_scrub(out.orientation, scrubbed),
             notes=None if out.notes is None else _scrub(out.notes, scrubbed),
             next_action=attrs.evolve(
-                action, orientation=_scrub(action.orientation, scrubbed), artifact=artifact
+                action,
+                move=move,
+                orientation=_scrub(action.orientation, scrubbed),
+                artifact=artifact,
+                tasks=None,
+                parallel=None,
             ),
             decisions=[_scrub_entry(e, scrubbed) for e in out.decisions],
             questions=[_scrub_entry(e, scrubbed) for e in out.questions],
@@ -186,7 +224,7 @@ def _filtered(
             working_context=[
                 item
                 for item in out.working_context
-                if not any(t in local for t in projection.tokens(item))
+                if not any(t in local or t in scrubbed for t in projection.tokens(item))
             ],
         )
     return out
@@ -283,10 +321,16 @@ def _check_origin_and_included(
         e.scope is DirectiveScope.OPERATOR for e in record.directives
     ):
         raise _invalid("included says operator directives were dropped, but the record holds one")
-    if not included["local"] and projection.local_references(record, None):
+    # Working-context words are not re-checked: export keeps a word that names no
+    # file here, and this machine's files must not decide a bundle's validity.
+    if not included["local"] and projection.local_references(
+        attrs.evolve(record, working_context=[]), None
+    ):
         raise _invalid("included says local references were dropped, but the record holds one")
+    if not included["local"] and (record.next_action.tasks or record.next_action.parallel):
+        raise _invalid("included says local references were dropped, but the record holds tasks")
     if included["operator"] and included["local"] and digest != bundle["record_digest"]:
-        raise _invalid("origin.record_digest must match an unfiltered record")
+        raise _mismatch("origin record")
 
 
 def _parse(raw: bytes) -> tuple[WheypointRecord, dict[str, object]]:
@@ -449,6 +493,12 @@ def import_bundle(
         add_artifact_links=[ArtifactLink(path=a.path, ref=a.ref) for a in kept] or None,
         session_provenance=session_provenance,
     )
+    hits = checkpoint.secret_fields(attrs.asdict(delta, recurse=True))
+    if hits:
+        raise TransferError(
+            f"secret-pattern: {hits[0]} looks like a credential: a checkpoint is "
+            + "durable, digest-protected text, so it cannot carry one"
+        )
     result = commit.commit(
         delta,
         store=target,

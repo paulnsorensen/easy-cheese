@@ -88,6 +88,9 @@ A digest proves integrity, not authorship; anyone can build a bundle with matchi
 - `bundle_digest` covers the canonical bundle without its own field.
 - `export` omits operator directives and local refs by default; `--include-operator` and `--include-local` keep them, and `included` records the choice.
 - `export` replaces a local path in free text (`notes`, `orientation`, `next_action`, entry summary, rationale, and quote) with `<local reference omitted>`; `--include-local` keeps it.
+- An absolute path under a machine root such as `/home` or `/Users` is local when it is outside the checkout, whether or not it exists.
+- `export` drops `next_action.tasks` and `next_action.parallel` by default and changes a `tasks` move to `hold`; `--include-local` keeps them.
+- When `git check-ignore` fails, `export` treats every candidate path as local and omits it.
 - A path is local by the checkout named by `--workspace-root`, else the Git toplevel, never by the working directory.
 - `export` refuses with `export-checkout-required` when no checkout exists and the record links a repository path.
 - `export` accepts an authoritative or gated record.
@@ -95,6 +98,7 @@ A digest proves integrity, not authorship; anyone can build a bundle with matchi
 - Any digest mismatch, including an origin that does not name the record, is refused as `bundle-digest-mismatch`, and nothing is written.
 - `import` also checks that `bundle_version`, `included`, and `origin` have the right types and agree with the record.
 - `import` bounds the bundle at 4 MiB and validates every key and value strictly.
+- `import` refuses a record that matches a credential pattern with `secret-pattern`, and nothing is written.
 - `import` writes one genesis revision with one `forked_from` edge to the origin record.
 - `--as` names the new work id; the default is the origin work id.
 - Only active entries import, as fresh derived entry ids; artifact-link digests and `covers` are derived again.

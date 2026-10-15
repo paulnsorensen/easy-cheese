@@ -13,14 +13,16 @@ from easy_cheese_schemas import (
     ArtifactLink,
     Durability,
     EntryKind,
+    HandoffTask,
     NextAction,
     NextMove,
+    ParallelPlan,
     ProposedEntry,
     SessionProvenance,
     WheypointDelta,
     WheypointRecord,
 )
-from easy_cheese_schemas.contracts import DirectiveScope, EdgeKind, WorkEdge
+from easy_cheese_schemas.contracts import DirectiveScope, EdgeKind, WorkEdge, WorktreeStrategy
 
 from conftest import payload_at, run_cli
 from easy_cheese.shared.wheypoint import canonical, commit, projection, records, storage
@@ -580,3 +582,148 @@ def test_import_reproduces_the_drift_marker_of_the_source_projection(
     record = resolution.record
     assert (record.notes_revision_number, record.decisions_revision_number) == (None, 1)
     assert record.revision_number == 1
+
+
+def _author_tasks(corpus_root: Path) -> WheypointRecord:
+    return commit.commit(
+        WheypointDelta(
+            work_id="alpha",
+            expected_revision_id=commit.GENESIS_PARENT,
+            orientation="Alpha work.",
+            working_context=[],
+            notes="n",
+            next_action=NextAction(
+                move=NextMove.TASKS,
+                orientation="Fan out.",
+                tasks=[
+                    HandoffTask(
+                        slug="one",
+                        intent="Do it in /home/alice/secret-plan",
+                        repo="/home/alice/repo",
+                        branch="b",
+                        branch_from="main",
+                        command="/cook --spec /home/alice/spec.md",
+                        worktree="/home/alice/wt",
+                    )
+                ],
+                parallel=ParallelPlan(
+                    isolation="worktree",
+                    worktree_strategy=WorktreeStrategy.CREATE,
+                    worktree_root="/home/alice/wts",
+                ),
+            ),
+            session_provenance=CAPTURED,
+        ),
+        store=storage.WorkStore.open("alpha", corpus_root=corpus_root),
+    ).record
+
+
+def test_default_export_omits_tasks_and_parallel(corpus_root: Path, tmp_path: Path) -> None:
+    _ = _author_tasks(corpus_root)
+    bundle = _bundle(_export(tmp_path)[0])
+    exported = records.structure(bundle["record"], WheypointRecord)
+    assert exported.next_action.tasks is None
+    assert exported.next_action.parallel is None
+    assert exported.next_action.move is NextMove.HOLD
+    assert "/home/alice" not in json.dumps(bundle)
+    assert bundle["included"] == {"operator": False, "local": False}
+
+
+def test_include_local_export_keeps_tasks_and_parallel(
+    corpus_root: Path, tmp_path: Path
+) -> None:
+    _ = _author_tasks(corpus_root)
+    bundle = _bundle(_export(tmp_path, "--include-local")[0])
+    exported = records.structure(bundle["record"], WheypointRecord)
+    assert exported.next_action.move is NextMove.TASKS
+    assert [t.slug for t in exported.next_action.tasks or []] == ["one"]
+    assert exported.next_action.parallel is not None
+
+
+def test_import_refuses_tasks_when_the_bundle_says_local_was_dropped(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _author_tasks(corpus_root)
+    bundle = _bundle(_export(tmp_path, "--include-local")[0])
+    forged = _forge(bundle, included={"operator": False, "local": False})
+    payload = _import_forged(tmp_path, monkeypatch, forged)
+    assert payload_at(payload, "error", "code") == "bundle-invalid"
+
+
+def test_export_fails_closed_when_check_ignore_fails(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _ = _author_in(
+        corpus_root,
+        repo,
+        notes="Read scratch.log now.",
+        links=[ArtifactLink(path="src/app.py"), ArtifactLink(path="scratch.log")],
+        context=["src/app.py", "scratch.log"],
+    )
+
+    def broken(_candidates: list[str], _checkout: Path) -> set[str]:
+        raise projection.CheckIgnoreError("git unavailable")
+
+    monkeypatch.setattr(projection, "_ignored", broken)
+    bundle = _bundle(_export(tmp_path, "--workspace-root", str(repo))[0])
+    exported = records.structure(bundle["record"], WheypointRecord)
+    assert exported.artifact_links == []
+    assert exported.working_context == []
+    assert not [e for e in exported.edges if e.kind.value != "forked_from"]
+    assert "scratch.log" not in json.dumps(bundle)
+
+
+def test_export_scrubs_an_absolute_path_that_does_not_exist(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _ = _author_in(
+        corpus_root,
+        repo,
+        notes="See /home/alice/private/notes.md today.",
+        links=[],
+        context=["/home/alice/private/ctx.md"],
+    )
+    out, _payload = _export(tmp_path, "--workspace-root", str(repo))
+    bundle = _bundle(out)
+    assert "/home/alice" not in json.dumps(bundle)
+    assert cast(dict[str, object], bundle["record"])["notes"] == (
+        f"See {transfer.LOCAL_MARKER} today."
+    )
+    _ = _other_machine(tmp_path, monkeypatch)
+    status, _imported = _import(out, "--as", "beta")
+    assert status == 0
+
+
+def test_import_refuses_a_credential_and_writes_nothing(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = commit.commit(
+        WheypointDelta(
+            work_id="alpha",
+            expected_revision_id=commit.GENESIS_PARENT,
+            orientation="Alpha work.",
+            working_context=[],
+            notes="deploy with password: hunter2hunter2hunter2",
+            next_action=NextAction(move=NextMove.HOLD, orientation="Wait."),
+            session_provenance=CAPTURED,
+        ),
+        store=storage.WorkStore.open("alpha", corpus_root=corpus_root),
+    )
+    out, _payload = _export(tmp_path)
+    other = _other_machine(tmp_path, monkeypatch)
+    status, payload = _import(out, "--as", "beta")
+    assert status == 1
+    assert payload_at(payload, "error", "code") == "secret-pattern"
+    assert not (other / "work").exists()
+
+
+def test_import_refuses_a_forged_origin_record_digest_as_a_digest_mismatch(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _author(corpus_root)
+    bundle = _bundle(_export(tmp_path, "--include-operator", "--include-local")[0])
+    origin = {**cast(dict[str, object], bundle["origin"]), "record_digest": "sha256:" + "2" * 64}
+    payload = _import_forged(tmp_path, monkeypatch, _forge(bundle, origin=origin))
+    assert payload_at(payload, "error", "code") == "bundle-digest-mismatch"
