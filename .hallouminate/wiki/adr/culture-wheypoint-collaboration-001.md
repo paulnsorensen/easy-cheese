@@ -23,4 +23,26 @@ This couples the two skills: wheypoint now owns the compaction, redaction, state
 
 ## Scope guard
 
-The change applies to user-facing mode only. Internal mode (the silent reasoning pass every workflow skill and `/cheese` step-1 invoke) stays silent, light, and no-writes, and inherits none of the buffs. This guard is what keeps the coupling safe: only the human-driven, opt-out-of-writes path produces a wheypoint.
+The change applies to user-facing mode only. Internal mode (the silent reasoning pass every workflow skill and `/cheese` step-1 invoke) stays silent, light, and no-writes, and inherits none of the buffs. This guard is what keeps the coupling safe: only the human-driven user-facing path produces a wheypoint. That path covers explicit no-write requests and explicit requests to think through a problem (for example, "these bugs feel connected"). Fix and diagnose requests stay on `/pasteurize`.
+
+## Problem-altitude prototype
+
+Culture uses intent-driven altitude navigation in ordinary user-facing conversation, without a required mode flag or exact keyword.[^altitudes]
+The user approves this direction for the prototype; publication remains under review.
+Conversational cues such as “zoom out” and “make that concrete” are examples, not reserved commands.
+Culture combines problem level, evidence source, and thinking move instead of selecting an exclusive mode.[^altitudes]
+
+Culture suggests a useful change of altitude when evidence indicates a pattern or a gap between behavior and goals.
+It states its interpretation and stays within the agreed evidence scope.
+A suggestion does not authorize a full audit, project mutation, or a move to Mold.
+Simple local questions do not require a full altitude tour, table, or diagram.[^altitudes]
+
+Problem framing reuses Culture's record ledger and Wheypoint session handoff.
+The problem brief travels through that handoff; it does not introduce another artifact schema.
+Silent internal mode stays light and unchanged.
+Mold receives the user's selected problem and unresolved hypotheses, not an approved implementation.[^handoff]
+
+[^altitudes]: skills/culture/SKILL.md:19-29; skills/culture/references/problem-altitudes.md:14-61
+[^handoff]: skills/culture/references/problem-altitudes.md:131-150
+
+_Source: User-approved Culture navigation revision · Updated: 2026-10-15 · Supersedes: explicit `--altitudes` prototype selection · 2026-10-14_

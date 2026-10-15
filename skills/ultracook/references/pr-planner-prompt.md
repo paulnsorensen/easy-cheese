@@ -1,6 +1,6 @@
 # PR planner sub-agent prompt template
 
-Loaded by `/cook`'s fan pathway at its PR-planning phase. Substitute `{slug}`, `{manifest_path}`, `{merged_diff_path}`, `{plate_layout}`, and `{spec_summary}` before dispatch.
+Loaded by `/cook`'s fan pathway at its PR-planning phase. Substitute `{slug}`, `{manifest_path}`, `{merged_diff_path}`, `{plate_layout}`, `{shape}`, and `{spec_summary}` before dispatch.
 
 ````text
 You are the PR planner sub-agent for /ultracook spec: {slug}
@@ -10,7 +10,7 @@ You are the PR planner sub-agent for /ultracook spec: {slug}
 Read the manifest at {manifest_path}, the merged diff at {merged_diff_path}, and the
 spec summary below. Emit a PR layout plan to
 `.cheese/ultracook/{slug}/pr-plan.yaml`.
-`/plate` resolved topology before parallel-mode commits. The persisted, authoritative resolution is `{plate_layout}`. Use it to choose `shape`: a `single` resolution maps to the `single` shape, and a `stacked` resolution maps to a multi-PR shape. The plan may explain why the decomposition supports a stack, but it must not change or re-ask an explicit or previously verified choice.
+`/plate` resolved topology before parallel-mode commits. The persisted, authoritative resolution is `{plate_layout}` with shape `{shape}`. Emit `shape: {shape}` when `{shape}` is set. Use the criteria below only when `{shape}` is empty. The plan may explain why the decomposition supports a stack, but it must not change or re-decide an explicit or previously verified choice.
 
 ## Layout shapes
 
@@ -33,7 +33,7 @@ Review-shape criteria, in priority order:
    `diamond_stack` when a shared base and final wiring surround independent
    curds. Otherwise use `stacked_linear`.
 4. Counts never decide the shape. `/plate` topology (`skills/plate/references/topology.md`
-   step 2) owns the size gate and has already resolved `{plate_layout}`. If the plan
+   step 5) owns the size rule and has already resolved `{plate_layout}`. If the plan
    cannot name honest review boundaries, report the conflict instead of manufacturing them.
 
 ## Output: pr-plan.yaml
@@ -95,5 +95,5 @@ defined by `references/pr-plan-schema.json`.
 
 ## Return
 
-Write `pr-plan.yaml` and return a one-paragraph rationale. The orchestrator passes it to `/plate` with the matching persisted resolution; `/plate` verifies the values agree and does not ask twice.
+Write `pr-plan.yaml` and return a one-paragraph rationale. The orchestrator passes it to `/plate` with the matching persisted resolution; `/plate` verifies the values agree and does not decide twice.
 ````
