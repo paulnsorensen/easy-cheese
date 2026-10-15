@@ -224,17 +224,17 @@ class TestPlateSummaryMatchesPlate:
         )
         assert "`/plate` accepts no `--open-pr` flag of its own." in body
 
-    def test_skill_names_both_plate_question_triggers(self) -> None:
+    def test_skill_states_plate_decides_without_asking(self) -> None:
         body = _text(CHEESE)
-        assert "`/plate` asks before mutation when it recommends a stack." in body
-        assert "`/plate` also asks before mutation when the shape is ambiguous." in body
-
-    def test_coherence_check_keeps_the_same_two_triggers(self) -> None:
-        body = _text(REFERENCES / "coherence-check.md")
         assert (
-            "It asks before mutation when a stack is recommended or shape is ambiguous."
-            in body
-        )
+            "`/plate` decides `single`, `orthogonal_flat`, or `stacked_linear` "
+            "for a new pull request without asking."
+        ) in body
+        assert "Explicit choices win." in body
+
+    def test_coherence_check_states_plate_decides_without_asking(self) -> None:
+        body = _text(REFERENCES / "coherence-check.md")
+        assert "It decides the shape without asking." in body
 
 
 class TestAgeAcceptsEveryReviewSource:

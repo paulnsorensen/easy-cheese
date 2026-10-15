@@ -124,6 +124,39 @@ def test_validate_publication_accepts_a_matching_v1_pr_plan() -> None:
     assert result["valid"] is True
 
 
+def _flat_plan() -> dict[str, object]:
+    plan = _pr_plan_v1(shape="orthogonal_flat")
+    plan["groups"] = [
+        {
+            "branch": name,
+            "title": f"feat: {name}",
+            "base": "main",
+            "commits": [sha],
+            "depends_on": [],
+        }
+        for name, sha in (("a", "abc1234"), ("b", "def5678"))
+    ]
+    return plan
+
+
+def test_validate_publication_accepts_flat_plan_with_ordinary_provider() -> None:
+    state = valid_publication() | {"topology": "stacked", "pr_plan": _flat_plan()}
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+
+
+def test_validate_publication_rejects_stacked_ordinary_without_flat_plan() -> None:
+    for extra in ({}, {"pr_plan": _pr_plan_v1(shape="stacked_linear")}):
+        state = valid_publication() | {"topology": "stacked"} | extra
+
+        with pytest.raises(publication.PublicationValidationError) as error:
+            _ = publication.validate_publication(state)
+
+        assert "stacked topology requires a stack provider" in error.value.errors
+
+
 def test_validate_publication_rejects_landing_topology_mismatch() -> None:
     state = valid_publication() | {
         "landing": {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
