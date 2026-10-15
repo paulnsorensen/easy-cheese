@@ -25,7 +25,8 @@ Parse the text after the skill name.
 
 - A slug, work id, or note path selects **Run** when it resolves to a wheel record.
 - Other text is the loop description for **Author**.
-- With no text, list the wheel records with `/wheypoint list --grep "wheel:"`.
+- With no text, run `/wheypoint list --grep "wheel:"` and keep only the records whose orientation starts with `wheel:`.
+  The grep also matches notes and entries; discard those hits.
   Ask the user to pick one or to describe a new loop.
 
 Resolve the argument with `/wheypoint resolve --ref <arg>` before you choose a mode.
@@ -56,7 +57,7 @@ The record `notes` hold the loop spec in this form.
 ## Wheel
 - Goal: <one sentence>
 - Step: <what one iteration does; it may name a skill, such as /cook or /affinage>
-- Done check: `<command>`; done when <result, such as exit 0 or "0 failing">
+- Done check: `<command>`; reports <a count>; done when <the count is 0, or the command exits 0>
 - Budget: <N> iterations per run, <M> iterations in total
 - Stall: <K> iterations without progress gate the loop
 - Scope: <paths, branch, and the changes the step may make>
@@ -68,13 +69,16 @@ The record `notes` hold the loop spec in this form.
 
 A done check is a command or observation that an agent verifies without judgment.
 "Looks good" and "tests mostly pass" are not done checks.
-Progress means the done-check result moves toward the done result.
+A done check reports a graded result: a count, such as failing tests or open findings, that reaches a done value.
+Progress means the count moves toward the done value since the previous check, or the step closed an item that the record names.
+An exit code alone is not graded; ask the user for a graded check or add a count command.
 Keep the last five iteration lines, and keep `notes` under 4000 characters.
 
 Record these entries in the same checkpoint:
 
-- A `directive` entry with the verbatim `quote` for each user constraint.
-- A `blocker` entry with `blocks_continuation: true` and a covering `decision_dossier` fork for each blocker.
+- A `directive` entry with the verbatim `quote` for each user constraint, including any publish permission.
+- A `question` entry with `blocks_continuation: true` and a `rationale` for each blocker.
+  The rationale states the options, the evidence, and your prior leaning.
 - A `question` entry with `blocks_continuation: false` for each open risk that does not block.
 
 ## Author
@@ -96,44 +100,53 @@ Record these entries in the same checkpoint:
 6. **Checkpoint.** Send one task to `/wheypoint` with the slug as `work_id`.
    Set the orientation to `wheel: <goal>` and `next: hold`.
    Put the spec in `notes` and the scope paths in `working_context`.
+   A first checkpoint needs no base.
    Done when `/wheypoint` reports a revision.
 7. **Stop.** Report the slug and the start command `/wheel <slug>`.
    Run no iteration in the authoring call.
 
 The blocker scan checks these items:
 
-- The done-check command runs in this checkout.
+- The done-check command runs in this checkout and reports a graded result.
 - Each skill, CLI, MCP server, and credential that the step needs is present; never print a secret.
 - The working tree is clean, or the user accepts the dirty paths.
 - Each branch, pull request, or issue that the step names exists.
 - The step needs no user decision in each iteration.
 - The step can change the done-check result, so the loop can converge.
+- A step that commits, pushes, or publishes, such as `/affinage` or `/plate`, has a `directive` entry with the user's verbatim publish quote.
+  Without that quote, the step is a blocker.
 - The slug matches `[a-z0-9][a-z0-9._-]{0,63}`, and `resolve` finds no record for it.
 
 ## Run
 
-1. **Resolve.** Stop at each runtime gate or integrity finding that `resolve` reports.
+1. **Resolve.** Stop at an integrity finding or an error that `resolve` reports.
+   A `gated` outcome is not a stop here; it goes to step 2.
+   Note the `revision_id` that `resolve` reports; each write in this run passes it as the base through `/wheypoint`.
 2. **Read the state.** For `next: done`, report the final progress and stop.
-   For `status: gated:`, show each gating entry and ask the user.
-   Checkpoint each answer as a `resolve` transition.
+   For `status: gated:`, show each gating entry with its rationale and ask the user.
+   Checkpoint each answer as a `resolve` transition with its rationale.
    Continue only when no gate remains.
 3. **Rescan.** Run the blocker scan again.
-   For a new blocker, checkpoint it as a gating `blocker` and stop.
-4. **Iterate.** In each iteration, run these steps in order:
-   1. Run the done check; a pass goes to step 5 as `done`.
-   2. Run the step once, inside the scope and the directives.
-   3. Run the done check again and compare the result with the previous result.
-   4. Update `## Progress` and checkpoint through `/wheypoint` with `next: hold`.
-5. **Stop** when the first condition below fires, and checkpoint the result:
+   For a new blocker, checkpoint it as a gating `question` with a rationale and stop.
+4. **Check once.** Run the done check and keep its result as the current result.
+   A pass goes to step 6 as `done`.
+5. **Iterate.** In each iteration, run these steps in order:
+   1. Run the step once, inside the scope and the directives.
+   2. Run the done check once; its result is the new current result.
+      Compare it with the previous current result; do not run the check a second time.
+      The next iteration reuses this result as its previous result.
+   3. Update `## Progress` and checkpoint through `/wheypoint` with `next: hold`.
+      Pass the `revision_id` from the last read or write as the base.
+6. **Stop** when the first condition below fires, and checkpoint the result:
    - `done`: the done check passes; set `next: done`.
    - `budget`: the run budget or the total budget is spent; keep `next: hold`.
    - `stall`: `K` iterations show no progress.
-     Add a gating question: change the step, change the done check, or stop.
+     Add a gating `question` with `blocks_continuation: true` and a rationale: change the step, change the done check, or stop.
    - `blocked`: a new blocker appears, or the step needs a user decision.
      A skill that the step calls can stop at its own gate.
-     Add a gating `blocker` or `question`.
+     Add a gating `question` with `blocks_continuation: true` and a rationale that states the options and your leaning.
    - `context`: the context window runs low; the next `/wheel <slug>` resumes.
-6. **Report** with the output block below.
+7. **Report** with the output block below.
 
 ## Output
 
@@ -152,5 +165,5 @@ The authoring call reports `Stopped: authored` and `Next: /wheel <slug>`.
 - It never runs an iteration in the authoring call; the user starts the loop.
 - It never sets `next: done` without a passing done check.
 - It never acts past a gate, an integrity finding, or a spent budget.
-- It never commits, pushes, or publishes unless a directive quotes the user's permission.
+- It never commits, pushes, or publishes unless a directive quotes the user's permission; the blocker scan checks this for each step.
 - It never writes wheypoint state except through `/wheypoint`.
