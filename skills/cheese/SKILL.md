@@ -201,7 +201,7 @@ Default targets per intent:
 
 - **clarify** — single targeted question; no skills run until the answer arrives.
 - **research** — `/briesearch` (recommended). No auto variant.
-- **rubber-duck** — `/culture` (recommended). Only reached when the user explicitly opted out of writes. No auto variant.
+- **rubber-duck** — `/culture` (recommended). Only reached when the user opted out of writes or asked to think through a problem. No auto variant.
 - **mold** — `/mold` (recommended). Safe-mode alternative: `/briesearch first` when external evidence is missing.
 - **cook** — default: `/cook --auto <slug-or-path>`.
   Safe-mode alternatives are `/cook <slug-or-path>` and `/mold first`.
@@ -215,7 +215,7 @@ Default targets per intent:
   `/plate` asks before mutation when it recommends a stack.
   `/plate` also asks before mutation when the shape is ambiguous.
   Explicit choices win.
-- **debug** — default: `/pasteurize --auto <input>`. Safe-mode alternatives: `/pasteurize <input>` (no auto), `/culture` only when the user explicitly wants no-write diagnosis.
+- **debug** — default: `/pasteurize --auto <input>`. Safe-mode alternatives: `/pasteurize <input>` (no auto), `/culture` only when the user wants no-write diagnosis or asks to think through the problem before fixing it.
 - **affinage** — `/affinage <pr>` (recommended).
   Use bare `/affinage` when the input names no pull request.
   Send `--auto` only with an explicit `--stake <floor>` value.
