@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import json
 import shutil
 from pathlib import Path
 
@@ -234,6 +235,29 @@ def test_canonical_pointer_outside_the_artifact_root_is_refused(
     assert result.outcome is CookPreparationOutcome.INVALID
     assert [item.code for item in result.findings] == ["pointer-outside-artifact-root"]
 
+
+def test_pointer_for_another_schema_keeps_its_specific_code_and_path(
+    tmp_path: Path,
+) -> None:
+    pointer, _, _ = published_handoff(tmp_path / "artifacts", "operation-other-schema")
+    index = json.loads(pointer.read_text(encoding="utf-8"))
+    other = "https://schemas.easy-cheese.dev/curd-plan"
+    index["request"]["payload_schema_uri"] = other
+    index["payload"]["schema_uri"] = other
+    _ = pointer.write_text(json.dumps(index), encoding="utf-8")
+
+    result = prepare(
+        pointer,
+        request_id="pointer-request",
+        repository_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        explicit_kind=MoldCookInputKind.CANONICAL_POINTER,
+    )
+
+    assert result.outcome is CookPreparationOutcome.INVALID
+    assert [(item.code, item.path) for item in result.findings] == [
+        ("unsupported-pointer-schema", str(pointer))
+    ]
 
 def _signed_plan() -> CurdPlan:
     curd = SemanticCurd(

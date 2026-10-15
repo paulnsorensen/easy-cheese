@@ -18,6 +18,7 @@ from easy_cheese_schemas.mold_cook import (
     MoldCookApproval,
     MoldCookHandoff,
 )
+from easy_cheese_schemas.schema_runtime import ContractValidationError
 from easy_cheese.shared.mold_cook_handoff import accept_mold_cook_handoff
 
 from ._types import (
@@ -65,10 +66,17 @@ def resolve_canonical_pointer(
             f"canonical pointer is outside artifact root {str(pointer_root)!r}",
             path=str(source.path),
         )
-    accepted = accept_mold_cook_handoff(
-        source.path,
-        artifact_root=pointer_root,
-    )
+    try:
+        accepted = accept_mold_cook_handoff(
+            source.path,
+            artifact_root=pointer_root,
+        )
+    except ContractValidationError as exc:
+        if not str(exc).startswith("unsupported-pointer-schema"):
+            raise
+        raise PreparationFailure(
+            "unsupported-pointer-schema", str(exc), path=str(source.path)
+        ) from exc
     refs: list[ArtifactRef] = []
     # `accept_mold_cook_handoff` already ran the shared deep validator under
     # `pointer_root`; only the setup authority Cook itself owns is left.
