@@ -107,6 +107,23 @@ If the trigger cannot be stated precisely (e.g. pure internal utilities with no 
 - AC-1: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>, <G-n>)
 - AC-2: WHEN <trigger> THE SYSTEM SHALL <response>  (<fork-id>, <G-n>)
 
+## Acceptance demonstration
+
+This section is required. Behavior work fills the table with exactly these seven rows, each non-empty.
+Non-behavior work (docs, refactor, config) replaces the table with one line: `n/a: <reason>`.
+`False success` names one plausible wrong result and how the check rejects it.
+Keep every row independent of the implementation: name what a user or caller observes.
+
+| Field | Value |
+| --- | --- |
+| User task | <what the user wants done> |
+| Input | <concrete input> |
+| Entrypoint | <command, API, or UI the user touches> |
+| Expected result | <observable outcome> |
+| Real boundaries | <real systems, files, or services crossed, not mocked> |
+| False success | <plausible wrong result and how the check rejects it> |
+| Evidence | <what artifact or output proves it> |
+
 ## Test Contracts
 
 This section is optional. Include it only when the spec benefits from it.
@@ -187,6 +204,10 @@ document mold-spec {
   section "Approach"
   section "Decisions"
   section "Acceptance"
+  section "Acceptance demonstration"? {
+    columns: ['Field', 'Value']
+    per_row: ['the seven declared Field names each appear exactly once', 'every Value cell is non-empty', "non-behavior work uses one 'n/a: <reason>' line instead"]
+  }
   section "Test Contracts"? {
     columns: ['Acceptance ID', 'Interface referent', 'Outermost stable seam', 'Expected failure', 'Mode', 'Interface version', 'Matrix rows']
     per_row: ['tracer rows leave Interface version and Matrix rows blank', 'contract-matrix rows require both Interface version and Matrix rows']
@@ -200,12 +221,18 @@ document mold-spec {
   section "References"?
 }
 
+rule acceptance-demonstration-complete: "Strict validation requires seven non-empty demonstration fields or an n/a line."
 rule ac-coverage-exactly-once: "Every Acceptance ID must appear exactly once in the Test Contracts table."
 rule tracer-row-blank-matrix-cells: "Tracer rows must leave Interface version and Matrix rows blank."
 rule contract-matrix-row-requires-both: "Contract-matrix rows require both Interface version and Matrix rows."
 rule grounding-probe-recorded: "The Grounding table must record the wiki probe exactly once with non-empty evidence."
 rule delegation-digest-recorded: "The Grounding table must record the explorer probe exactly once with non-empty evidence."
 rule landing-closed-class: "landing fields take only their declared values; layers is empty when shape is single."
+
+type AcceptanceDemonstration {
+  fields? Mapping[str, str] = {}
+  na_reason? str = ''
+}
 
 type GroundingRow {
   probe GroundingProbe
@@ -225,6 +252,7 @@ type MoldSpecDocument {
   acceptance_ids? tuple[str, ...] = ()
   test_contract_rows? tuple[TestContractRow, ...] = ()
   grounding_rows? tuple[GroundingRow, ...] = ()
+  acceptance_demonstration? AcceptanceDemonstration | None = None
 }
 
 type MoldSpecFrontmatter {

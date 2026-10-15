@@ -32,6 +32,11 @@ _HARDENED_SOURCES = frozenset(
 # happens to carry it, is validated exactly as it is for a hardened one.
 _POST_V013_SECTIONS = frozenset({"Grounding"})
 
+# Required only under ``--strict``; a non-strict read tolerates its absence.
+# This module stays stdlib-only, so it cannot import the contracts constant;
+# a test pins this literal to ``ACCEPTANCE_DEMONSTRATION_SECTION``.
+_DEMONSTRATION_SECTION = "Acceptance demonstration"
+
 _MINI_SPEC_REQUIRED_SECTIONS = frozenset({"Contract", "Acceptance", "Non-goals"})
 
 _LEGACY_NOTICE = (
@@ -51,11 +56,14 @@ class SpecFormatPolicy:
 
     legacy: bool
     _source: str | None
+    _strict: bool = False
 
     def requires_section(
         self, section_name: str, *, default_required: bool
     ) -> bool:
         """Whether a missing ``section_name`` heading is an error."""
+        if section_name == _DEMONSTRATION_SECTION:
+            return self._strict
         if self._source == "mold-curd-mini-spec":
             return section_name in _MINI_SPEC_REQUIRED_SECTIONS
         if self._source == "agent-mini-spec":
@@ -82,7 +90,9 @@ def spec_format_policy(
     source = frontmatter.get("source")
     normalized_source = source if isinstance(source, str) else None
     if strict or not frontmatter or source is not None and normalized_source is None:
-        return SpecFormatPolicy(legacy=False, _source=normalized_source)
+        return SpecFormatPolicy(
+            legacy=False, _source=normalized_source, _strict=strict
+        )
     return SpecFormatPolicy(
         legacy=source not in _HARDENED_SOURCES, _source=normalized_source
     )
