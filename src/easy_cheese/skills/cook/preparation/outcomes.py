@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from easy_cheese_schemas import (
-    SCHEMA_ROOT,
     ArtifactRef,
     canonical_bytes,
     require_contract_version,
@@ -93,7 +92,6 @@ def build_pointer_ref(
         digest=digest_bytes(content),
         size_bytes=len(content),
         media_type="application/json",
-        schema_uri=f"{SCHEMA_ROOT}/handoff-pointer",
     )
 
 

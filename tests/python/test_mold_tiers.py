@@ -70,7 +70,7 @@ def test_three_tiers_each_name_entry_runs_skips_and_handoff() -> None:
         assert len(row) == 5 and all(row), f"tier row incomplete: {row}"
     quick, light, full = rows
     assert "Standalone fast-path" in quick[1], "Quick reuses Cook's clarity check"
-    assert "mini-spec" in quick[4] and "canonical `HandoffPointer`" in quick[4]
+    assert "mini-spec" in quick[4] and "publication index path" in quick[4]
     assert "validate-spec --strict" in quick[4], "Quick still validates its spec"
     assert "agent coherence check" in light[2] and "fork taste test" in light[2], (
         "Light skips dialogue, not coherence checks"

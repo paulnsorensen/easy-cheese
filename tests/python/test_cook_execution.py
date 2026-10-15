@@ -919,9 +919,11 @@ def test_prepare_cli_emits_validated_preparation_result(
     assert [item["hold_id"] for item in holds] == ["missing-spec-cli-prepare"]
 
 
-def test_corrupt_historical_pointer_fails_closed(tmp_path: Path) -> None:
-    pointer = tmp_path / "historical.json"
-    _ = pointer.write_text('{"operation_id":"old"}', encoding="utf-8")
+def test_corrupt_publication_index_fails_closed(tmp_path: Path) -> None:
+    root = tmp_path / "artifacts"
+    pointer = root / "pointers" / "broken.json"
+    pointer.parent.mkdir(parents=True)
+    _ = pointer.write_text('{"request": {}, "payload": {}}', encoding="utf-8")
 
     result = prepare(
         pointer,
@@ -933,7 +935,7 @@ def test_corrupt_historical_pointer_fails_closed(tmp_path: Path) -> None:
     assert result.outcome is CookPreparationOutcome.INVALID
     assert result.input_kind is MoldCookInputKind.CANONICAL_POINTER
     assert result.findings
-    assert result.findings[0].code == "invalid-pointer"
+    assert result.findings[0].code == "invalid-input"
 
 
 def test_prepare_routes_runner_setup_through_the_shared_helper(

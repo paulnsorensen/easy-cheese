@@ -186,13 +186,6 @@ class CookExecutionOutcome:
     )
 
 
-@attrs.define(frozen=True)
-class LegacyPlanMigration:
-    """Typed read-only bridge from an intact historical CurdPlan pointer."""
-
-    plan: CurdPlan
-    plan_ref: ArtifactRef
-    normalization_receipt_ref: ArtifactRef | None = None
 
 
 @attrs.define(frozen=True)
@@ -255,7 +248,6 @@ class ResolvedPreparationSource:
     plan_ref: ArtifactRef | None = None
     spec_ref: ArtifactRef | None = None
     readiness: MoldCookSpecReadiness | None = None
-    legacy_mode: bool = False
 
 
 @attrs.define(frozen=True)

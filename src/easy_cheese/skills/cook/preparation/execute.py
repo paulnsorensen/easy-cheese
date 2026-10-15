@@ -38,7 +38,6 @@ from ._types import (
     CookPreparationRequest,
 )
 from .evidence import load_contract, local_path_for, persist_value
-from .legacy import pointer_artifact_root
 from .outcomes import build_pointer_ref
 from .results import validate_preparation_result
 from .setup import validate_handoff_authority
@@ -76,11 +75,12 @@ def execute_accepted_handoff(
     else:
         pointer_path = Path(pointer_source)
         handoff_ref = None
-    resolved_artifact_root = (
-        supplied_root
-        if supplied_root is not None
-        else pointer_artifact_root(pointer_path)
-    )
+    pointer_parent = pointer_path.resolve().parent
+    if supplied_root is None and pointer_parent.name != "pointers":
+        raise ContractValidationError(
+            "canonical pointer must live under <artifact_root>/pointers"
+        )
+    resolved_artifact_root = supplied_root or pointer_parent.parent
     if not pointer_path.resolve().is_relative_to(resolved_artifact_root):
         raise ContractValidationError(
             "canonical pointer is outside artifact root "

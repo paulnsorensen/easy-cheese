@@ -206,7 +206,7 @@ def _accept(pointer_path: Path, *extra_args: str) -> subprocess.CompletedProcess
 
 def _assert_canonical_wrapper(stdout: str) -> dict[str, object]:
     wrapper = cast(dict[str, object], json.loads(stdout))
-    assert sorted(wrapper) == ["digest", "normalization_receipt", "value"]
+    assert sorted(wrapper) == ["digest", "value"]
     digest = cast(str, wrapper["digest"])
     assert digest.startswith("sha256:")
     assert len(digest) == len("sha256:") + 64
@@ -228,8 +228,7 @@ def test_cook_pyz_accepts_a_real_mold_handoff_pointer(tmp_path: Path) -> None:
     result = _accept(pointer_path)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    wrapper = _assert_canonical_wrapper(result.stdout)
-    assert wrapper["normalization_receipt"] is None
+    _ = _assert_canonical_wrapper(result.stdout)
 
 
 def test_cook_pyz_accepts_the_same_pointer_idempotently(tmp_path: Path) -> None:
@@ -270,7 +269,7 @@ def test_cook_pyz_rejects_a_wrong_destination_route(tmp_path: Path) -> None:
     pointer = cast(
         dict[str, object], json.loads(pointer_path.read_text(encoding="utf-8"))
     )
-    pointer["destination_phase"] = "age"
+    cast(dict[str, object], pointer["request"])["destination_phase"] = "age"
     _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
 
     result = _accept(pointer_path)
@@ -291,7 +290,7 @@ def test_accept_main_reports_a_wrong_route_without_a_traceback(
     pointer = cast(
         dict[str, object], json.loads(pointer_path.read_text(encoding="utf-8"))
     )
-    pointer["destination_phase"] = "age"
+    cast(dict[str, object], pointer["request"])["destination_phase"] = "age"
     _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
 
     code = accept_main([str(pointer_path)])
@@ -318,7 +317,7 @@ def test_cook_pyz_rejects_a_pointer_with_the_old_plan_schema(tmp_path: Path) -> 
     result = _accept(pointer_path)
 
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "https://schemas.easy-cheese.dev/curd-plan" in result.stderr
+    assert "payload schema does not match publication request" in result.stderr
     assert result.stdout == ""
 
 
@@ -332,7 +331,7 @@ def test_cook_pyz_rejects_a_bare_handoff_payload(tmp_path: Path) -> None:
     result = _accept(bare_payload)
 
     assert result.returncode == 1, result.stdout + result.stderr
-    assert "schema" in result.stderr
+    assert "invalid publication index" in result.stderr
     assert result.stdout == ""
     assert pointer_path.is_file()
 

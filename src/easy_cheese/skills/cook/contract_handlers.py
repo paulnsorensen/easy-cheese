@@ -410,7 +410,6 @@ def accept(
     wrapper = {
         "value": handoff,
         "digest": _digest_of(accepted.canonical.canonical_bytes),
-        "normalization_receipt": accepted.normalization_receipt,
     }
     return cast("dict[str, object]", json.loads(canonical_bytes(wrapper)))
 

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import json
 import shutil
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -23,11 +25,6 @@ from easy_cheese_schemas.contracts import (
     PlannerDisposition,
     PlannerResult,
     SemanticCurd,
-)
-from easy_cheese_schemas.compat import (
-    LegacyAdapter,
-    register_adapter,
-    unregister_adapter,
 )
 from easy_cheese_schemas.mold_cook import (
     CookPreparationOutcome,
@@ -55,27 +52,36 @@ from tests.python.test_cook_contract_accept import published_handoff
 
 _SPEC_FIXTURE = Path(__file__).parent / "fixtures" / "spec_format" / "valid_spec.md"
 _SPEC_SLUG = "valid-spec-format-fixture"
-_BOUNDARY_FIXTURES = Path(__file__).parents[1] / "fixtures" / "mold_cook_boundary"
 
 
 def test_explicit_mode_wins_and_rejects_a_declared_pointer(tmp_path: Path) -> None:
     pointer = tmp_path / "misleading.md"
-    _ = pointer.write_text('{"operation_id": "stored"}', encoding="utf-8")
+    _ = pointer.write_text('{"request": {}, "payload": {}}', encoding="utf-8")
 
     with pytest.raises(CookInputError, match="declares canonical_pointer"):
         _ = classify_input(pointer, explicit_kind=MoldCookInputKind.TASK)
 
 
-def test_declared_pointer_is_classified_before_filename_suffix(tmp_path: Path) -> None:
-    pointer = tmp_path / "pointer.txt"
-    _ = pointer.write_text('{"operation_id": "stored"}', encoding="utf-8")
-
+def test_publication_index_is_classified_before_filename_suffix(tmp_path: Path) -> None:
+    pointer, _handoff, _spec = published_handoff(tmp_path / "artifacts", "op-classify")
     classified = classify_input(pointer)
 
     assert classified.kind is MoldCookInputKind.CANONICAL_POINTER
     assert classified.path == pointer
     assert classified.declared_kind is MoldCookInputKind.CANONICAL_POINTER
 
+
+def test_malformed_publication_index_never_becomes_task(tmp_path: Path) -> None:
+    root = tmp_path / "artifacts"
+    pointers = root / "pointers"
+    pointers.mkdir(parents=True)
+    pointer = pointers / "broken.json"
+    _ = pointer.write_text('{"request": {}, "payload": {}}', encoding="utf-8")
+
+    result = prepare(pointer, repository_root=tmp_path, artifact_root=root)
+
+    assert result.outcome is CookPreparationOutcome.INVALID
+    assert any(finding.code == "invalid-input" for finding in result.findings)
 
 def test_declared_projection_is_not_downgraded_to_task_text(tmp_path: Path) -> None:
     continuation = tmp_path / "notes.txt"
@@ -117,14 +123,6 @@ def _retain(root: Path, content: bytes) -> Path:
     return path
 
 
-def _historical_pointer(tmp_path: Path) -> Path:
-    for name in (
-        "historical-plan.json",
-        "historical-receipt.json",
-        "historical-pointer.json",
-    ):
-        _ = shutil.copy2(_BOUNDARY_FIXTURES / name, tmp_path / name)
-    return tmp_path / "historical-pointer.json"
 
 
 def test_request_id_separates_two_direct_specs_in_one_repository(
@@ -239,6 +237,31 @@ def test_canonical_pointer_outside_the_artifact_root_is_refused(
     assert [item.code for item in result.findings] == ["pointer-outside-artifact-root"]
 
 
+def test_pointer_for_another_schema_keeps_its_specific_code_and_path(
+    tmp_path: Path,
+) -> None:
+    pointer, _, _ = published_handoff(tmp_path / "artifacts", "operation-other-schema")
+    index = cast(
+        dict[str, dict[str, object]], json.loads(pointer.read_text(encoding="utf-8"))
+    )
+    other = "https://schemas.easy-cheese.dev/curd-plan"
+    index["request"]["payload_schema_uri"] = other
+    index["payload"]["schema_uri"] = other
+    _ = pointer.write_text(json.dumps(index), encoding="utf-8")
+
+    result = prepare(
+        pointer,
+        request_id="pointer-request",
+        repository_root=tmp_path,
+        artifact_root=tmp_path / "artifacts",
+        explicit_kind=MoldCookInputKind.CANONICAL_POINTER,
+    )
+
+    assert result.outcome is CookPreparationOutcome.INVALID
+    assert [(item.code, item.path) for item in result.findings] == [
+        ("unsupported-pointer-schema", str(pointer))
+    ]
+
 def _signed_plan() -> CurdPlan:
     curd = SemanticCurd(
         curd_id="root",
@@ -330,46 +353,6 @@ def test_prepare_no_longer_accepts_a_dead_clearances_argument() -> None:
     assert "clearances" not in inspect.signature(prepare).parameters
 
 
-def _legacy_migration(tmp_path: Path) -> tuple[Path, Path]:
-    pointer = _historical_pointer(tmp_path)
-    artifacts = tmp_path / "artifacts"
-    spec_binding = _retain(artifacts, _SPEC_FIXTURE.read_bytes())
-    return pointer, spec_binding
-
-
-_EXPIRED_ADAPTER_URI = "https://schemas.easy-cheese.dev/test-fixtures/cook-sunset"
-
-
-def test_expired_legacy_adapter_fails_the_migration_ingress(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Finding 13: the sunset rule now gates the surviving legacy ingress."""
-    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "cheese-home"))
-    pointer, spec_binding = _legacy_migration(tmp_path)
-    register_adapter(
-        LegacyAdapter(
-            source_schema_uri=_EXPIRED_ADAPTER_URI,
-            source_major="0",
-            source_minor="1",
-            target_schema_uri=_EXPIRED_ADAPTER_URI,
-            remove_after="2020-01-01",
-            convert=dict,
-        )
-    )
-    try:
-        result = prepare(
-            pointer,
-            request_id="historical-expired",
-            repository_root=tmp_path,
-            artifact_root=tmp_path / "artifacts",
-            explicit_kind=MoldCookInputKind.CANONICAL_POINTER,
-            evidence=PreparationEvidence(spec_binding=spec_binding),
-        )
-    finally:
-        unregister_adapter(_EXPIRED_ADAPTER_URI, "0", "1")
-
-    assert result.outcome is not CookPreparationOutcome.READY
-    assert b"expired legacy adapters" in canonical_bytes(result)
 
 
 def test_load_preparation_result_takes_no_artifact_root(tmp_path: Path) -> None:
@@ -390,60 +373,6 @@ def test_load_preparation_result_takes_no_artifact_root(tmp_path: Path) -> None:
             artifact_root=str(tmp_path),  # pyright: ignore[reportCallIssue]
         )
 
-
-def test_bound_legacy_plan_is_adopted_through_one_shared_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Finding 22: both legacy branches now share `_adopt_legacy_plan`."""
-    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "cheese-home"))
-    pointer, spec_binding = _legacy_migration(tmp_path)
-
-    result = prepare(
-        pointer,
-        request_id="historical-adopt",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "artifacts",
-        explicit_kind=MoldCookInputKind.CANONICAL_POINTER,
-        evidence=PreparationEvidence(spec_binding=spec_binding),
-    )
-
-    roles = [reference.role for reference in result.references]
-    assert result.requirements == ()
-    assert result.holds == ()
-    assert roles.count("curd_plan") == 1
-    assert "planner_result" in roles
-    assert "spec" in roles
-
-
-def test_legacy_migration_still_honours_a_gated_continuity_state(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Finding 9: the rebound readiness suppressed every migration hold."""
-    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "cheese-home"))
-    pointer, spec_binding = _legacy_migration(tmp_path)
-    prior = tmp_path / ".cheese" / "cook" / f"{_SPEC_SLUG}.md"
-    prior.parent.mkdir(parents=True, exist_ok=True)
-    _ = prior.write_text(
-        """\
-status: ok
-next: press
-artifact: none
-A prior Cook run already claims this spec slug.
-""",
-        encoding="utf-8",
-    )
-
-    result = prepare(
-        pointer,
-        request_id="historical-gated",
-        repository_root=tmp_path,
-        artifact_root=tmp_path / "artifacts",
-        explicit_kind=MoldCookInputKind.CANONICAL_POINTER,
-        evidence=PreparationEvidence(spec_binding=spec_binding),
-    )
-
-    assert result.outcome is CookPreparationOutcome.BLOCKED
-    assert [hold.hold_id.split("-")[0] for hold in result.holds] == ["continuity"]
 
 
 def _landing_spec(root: Path) -> Path:

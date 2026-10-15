@@ -10,7 +10,6 @@ from typing import cast
 import pytest
 from easy_cheese_schemas import (
     ArtifactLink,
-    IngressKind,
     WheypointDelta,
     WheypointRecord,
 )
@@ -343,10 +342,10 @@ def test_ac1_remove_artifact_links_accepts_a_path_or_a_ref(
     assert result.record.artifact_links == []
 
 
-# AC-2: a schema-3 record exposes path-only links as repo: refs, with receipts.
+# AC-2: a schema-3 record exposes path-only links as repo: refs.
 
 
-def test_ac2_v3_path_only_links_read_as_repo_refs_with_one_receipt_each(
+def test_ac2_v3_path_only_links_read_as_repo_refs(
     store: storage.WorkStore,
     make_promotion: Callable[..., Promotion],
     make_record: Callable[..., WheypointRecord],
@@ -363,30 +362,19 @@ def test_ac2_v3_path_only_links_read_as_repo_refs_with_one_receipt_each(
     record = store.read_record()
     assert record is not None
     digest_before = records.record_digest(record)
+    bytes_before = store.record_path.read_bytes()
 
-    links, receipts = records.normalize_links(record)
+    refs = [records.effective_ref(link) for link in record.artifact_links]
 
-    assert [link.ref for link in links] == ["repo:.cheese/cook/a.md", "repo:docs/b.md"]
-    assert [link.path for link in links] == [".cheese/cook/a.md", "docs/b.md"]
-    assert len(receipts) == 2
-    for stored, normalized, receipt in zip(stored_links, links, receipts, strict=True):
-        assert receipt.ingress_kind is IngressKind.LEGACY_ARTIFACT
-        assert receipt.normalizer_id == "wheypoint.refs.v3-path-to-ref"
-        assert receipt.source_digest == canonical.digest_bytes(
-            records.canonical_payload(stored)
-        )
-        assert receipt.canonical_digest == canonical.digest_bytes(
-            records.canonical_payload(normalized)
-        )
-        assert receipt.source_version is not None
-        assert receipt.source_version.major == "3"
+    assert refs == ["repo:.cheese/cook/a.md", "repo:docs/b.md"]
     # Read-side only: the stored record and its digest are unchanged.
     assert record.artifact_links == stored_links
     assert records.record_digest(record) == digest_before
+    assert store.record_path.read_bytes() == bytes_before
     assert digest_before == seed.revision.record_digest
 
 
-def test_ac2_lint_of_a_v3_record_reports_receipts_and_no_failure(
+def test_ac2_lint_of_a_v3_record_has_no_failure(
     store: storage.WorkStore,
     make_promotion: Callable[..., Promotion],
     make_record: Callable[..., WheypointRecord],
@@ -408,20 +396,16 @@ def test_ac2_lint_of_a_v3_record_reports_receipts_and_no_failure(
     )
 
     assert report.findings == ()
-    assert len(report.normalizations) == 2
 
 
-def test_ac2_a_link_that_carries_a_ref_needs_no_receipt(
+def test_ac2_a_link_that_carries_a_ref_stays_unchanged(
     make_record: Callable[..., WheypointRecord],
 ) -> None:
     record = make_record(
         artifact_links=[ArtifactLink(path="a.md", ref="repo:a.md")],
     )
 
-    links, receipts = records.normalize_links(record)
-
-    assert links == tuple(record.artifact_links)
-    assert receipts == ()
+    assert records.effective_ref(record.artifact_links[0]) == "repo:a.md"
     assert records.effective_ref(ArtifactLink(path="x", ref="https://e.dev")) == (
         "https://e.dev"
     )

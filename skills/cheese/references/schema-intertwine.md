@@ -13,10 +13,8 @@ Run `scripts/render_generated_regions.py` to generate this file. Do not edit it 
 | curd-result | CurdResult |
 | diagnosis-request | DiagnosisRequest |
 | diagnosis-result | DiagnosisResult |
-| handoff-pointer | HandoffPointer |
 | mold-cook-approval | MoldCookApproval |
 | mold-cook-handoff | MoldCookHandoff |
-| normalization-receipt | NormalizationReceipt |
 | planner-request | PlannerRequest |
 | planner-result | PlannerResult |
 | pr-plan | PrPlan |

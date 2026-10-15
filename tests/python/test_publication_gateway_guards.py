@@ -97,12 +97,33 @@ def test_publish_rejects_unsafe_operation_id(
     assert not unwritten_root.exists()
 
 
+@pytest.mark.parametrize(
+    "request_digest",
+    ["", "sha256:0", "sha256:" + "G" * 64, "sha256:" + "A" * 64, "sha512:" + "0" * 64],
+)
+def test_publish_rejects_invalid_request_digest_before_writes(
+    tmp_path: Path, request_digest: str
+) -> None:
+    handoff = _prepared_handoff(tmp_path / "fixture")
+    unwritten_root = tmp_path / "unwritten"
+
+    with pytest.raises(publication.PublicationError, match="invalid request_digest"):
+        _ = _publish(
+            unwritten_root,
+            handoff,
+            operation_id="invalid-digest",
+            request_digest=request_digest,
+        )
+
+    assert not unwritten_root.exists()
+
+
 def test_publish_accepts_safe_operation_id(tmp_path: Path) -> None:
     handoff = _prepared_handoff(tmp_path)
 
     artifact = _publish(tmp_path, handoff, operation_id="safe_ID-1.0")
 
-    assert artifact.pointer.operation_id == "safe_ID-1.0"
+    assert artifact.pointer_path == tmp_path / "pointers" / "safe_ID-1.0.json"
     assert (tmp_path / "pointers" / "safe_ID-1.0.json").is_file()
 
 
@@ -110,12 +131,12 @@ def test_accept_rejects_non_file_artifact_uri(tmp_path: Path) -> None:
     """A pointer that names a remote payload is refused: the gateway never
     fetches a publication payload over the network."""
     handoff = _prepared_handoff(tmp_path)
-    published = _publish(tmp_path, handoff, operation_id="op-remote")
-    assert published.pointer.payload.uri.startswith("file://")
+    _ = _publish(tmp_path, handoff, operation_id="op-remote")
 
     pointer_path = tmp_path / "pointers" / "op-remote.json"
     pointer = _read_pointer_json(pointer_path)
     payload = cast("dict[str, object]", pointer["payload"])
+    assert cast(str, payload["uri"]).startswith("file://")
     payload["uri"] = "https://example.com/payload.json"
     _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
 
@@ -124,6 +145,60 @@ def test_accept_rejects_non_file_artifact_uri(tmp_path: Path) -> None:
             pointer_path, artifact_root=tmp_path
         )
 
+
+def test_accept_rejects_unknown_index_field(tmp_path: Path) -> None:
+    handoff = _prepared_handoff(tmp_path)
+    _ = _publish(tmp_path, handoff, operation_id="op-unknown")
+    path = tmp_path / "pointers" / "op-unknown.json"
+    index = _read_pointer_json(path)
+    index["unexpected"] = "untrusted"
+    _ = path.write_text(json.dumps(index), encoding="utf-8")
+
+    with pytest.raises(ContractValidationError, match="invalid publication index"):
+        _ = mold_cook_handoff.accept_mold_cook_handoff(path, artifact_root=tmp_path)
+
+
+def test_accept_names_a_legacy_flat_pointer(tmp_path: Path) -> None:
+    handoff = _prepared_handoff(tmp_path)
+    _ = _publish(tmp_path, handoff, operation_id="op-legacy")
+    path = tmp_path / "pointers" / "op-legacy.json"
+    index = _read_pointer_json(path)
+    request = cast("dict[str, object]", index.pop("request"))
+    index.update(request)
+    _ = path.write_text(json.dumps(index), encoding="utf-8")
+
+    with pytest.raises(ContractValidationError, match="legacy handoff pointer format"):
+        _ = mold_cook_handoff.accept_mold_cook_handoff(path, artifact_root=tmp_path)
+
+
+def test_accept_refuses_a_pointer_for_another_schema(tmp_path: Path) -> None:
+    handoff = _prepared_handoff(tmp_path)
+    _ = _publish(tmp_path, handoff, operation_id="op-other-schema")
+    path = tmp_path / "pointers" / "op-other-schema.json"
+    index = _read_pointer_json(path)
+    other = "https://schemas.easy-cheese.dev/curd-plan"
+    cast("dict[str, object]", index["request"])["payload_schema_uri"] = other
+    cast("dict[str, object]", index["payload"])["schema_uri"] = other
+    _ = path.write_text(json.dumps(index), encoding="utf-8")
+
+    with pytest.raises(ContractValidationError, match="unsupported-pointer-schema"):
+        _ = mold_cook_handoff.accept_mold_cook_handoff(path, artifact_root=tmp_path)
+
+
+def test_accept_rejects_payload_outside_artifact_root(tmp_path: Path) -> None:
+    root = tmp_path / "artifacts"
+    handoff = _prepared_handoff(root)
+    _ = _publish(root, handoff, operation_id="op-outside")
+    path = root / "pointers" / "op-outside.json"
+    index = _read_pointer_json(path)
+    payload = cast("dict[str, object]", index["payload"])
+    outside = tmp_path / "outside.json"
+    _ = outside.write_bytes(b"not trusted")
+    payload["uri"] = outside.as_uri()
+    _ = path.write_text(json.dumps(index), encoding="utf-8")
+
+    with pytest.raises(ContractValidationError, match="escapes allowed root"):
+        _ = mold_cook_handoff.accept_mold_cook_handoff(path, artifact_root=root)
 
 def test_accept_rejects_oversized_pointer_before_validation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -195,7 +270,7 @@ def test_publish_tolerates_directory_open_failure(
     monkeypatch.setattr(os, "open", _open)
     published = _publish(tmp_path, handoff, operation_id="op-dir-open")
 
-    assert published.pointer.operation_id == "op-dir-open"
+    assert published.pointer_path == pointer_dir / "op-dir-open.json"
     assert (pointer_dir / "op-dir-open.json").is_file()
 
 
@@ -225,7 +300,7 @@ def test_publish_tolerates_directory_fsync_failure(
     monkeypatch.setattr(os, "fsync", _fsync)
     published = _publish(tmp_path, handoff, operation_id="op-dir-fsync")
 
-    assert published.pointer.operation_id == "op-dir-fsync"
+    assert published.pointer_path == pointer_dir / "op-dir-fsync.json"
     assert (pointer_dir / "op-dir-fsync.json").is_file()
 
 
@@ -251,7 +326,7 @@ def test_concurrent_same_request_rehydrates_one_reveal(tmp_path: Path) -> None:
     with ThreadPoolExecutor(max_workers=2) as pool:
         first, second = pool.map(_run, (None, None))
 
-    assert first.pointer == second.pointer
+    assert first.pointer_path == second.pointer_path
     assert first.canonical.value == second.canonical.value
     assert list((tmp_path / "pointers").glob(".*")) == []
 
@@ -292,7 +367,7 @@ def test_publish_is_idempotent_on_replay(tmp_path: Path) -> None:
     first = _publish(tmp_path, handoff, operation_id="op-replay")
     second = _publish(tmp_path, handoff, operation_id="op-replay")
 
-    assert second.pointer == first.pointer
+    assert second.pointer_path == first.pointer_path
     assert second.canonical.value == first.canonical.value
 
 
@@ -318,10 +393,10 @@ def test_publish_rejects_replay_with_tampered_operation_id(tmp_path: Path) -> No
     _ = _publish(tmp_path, handoff, operation_id="op-identity")
     pointer_path = tmp_path / "pointers" / "op-identity.json"
     pointer = _read_pointer_json(pointer_path)
-    pointer["operation_id"] = "other"
+    cast(dict[str, object], pointer["request"])["operation_id"] = "other"
     _ = pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
 
-    with pytest.raises(publication.IdempotencyConflictError, match="different request"):
+    with pytest.raises(ContractValidationError, match="path does not match operation_id"):
         _ = _publish(tmp_path, handoff, operation_id="op-identity")
 
 
@@ -329,8 +404,8 @@ def test_publish_rejects_tampered_payload_on_replay(tmp_path: Path) -> None:
     """A replay revalidates the persisted payload digest instead of trusting
     the pointer that names it."""
     handoff = _prepared_handoff(tmp_path)
-    first = _publish(tmp_path, handoff, operation_id="op-tamper")
-    _flip_first_byte(Path(first.pointer.payload.uri.removeprefix("file://")))
+    _ = _publish(tmp_path, handoff, operation_id="op-tamper")
+    _flip_first_byte(next((tmp_path / "payloads").glob("*.json")))
 
     with pytest.raises(publication.PayloadDigestMismatchError):
         _ = _publish(tmp_path, handoff, operation_id="op-tamper")
@@ -373,5 +448,5 @@ def test_publish_pointer_last_survives_crash_before_reveal(tmp_path: Path) -> No
     artifact = _publish(tmp_path, handoff, operation_id="op-crash")
 
     assert pointer_path.is_file()
-    assert artifact.pointer.operation_id == "op-crash"
+    assert artifact.pointer_path == pointer_path
     assert list((tmp_path / "pointers").glob(".*")) == []

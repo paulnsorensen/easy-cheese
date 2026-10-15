@@ -212,7 +212,7 @@ def test_mold_handoff_waits_for_user_selection_and_reconciliation() -> None:
         handoff,
         "A draft offers no Cook command",
         "explicit Cook selection",
-        "consumer-valid canonical `HandoffPointer`",
+        "consumer-valid publication index path",
     )
 
     followups = _section(HANDSHAKE, "Follow-up disposition (inside the non-goals audit)")

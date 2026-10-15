@@ -1167,7 +1167,7 @@ def _finalize_publication(
             spec_ref=spec_ref,
         )
 
-    pointer = _canonical_output(published.pointer)
+    pointer = str(published.pointer_path)
     output: dict[str, object] = {
         "status": "ready",
         "ready": True,
@@ -1176,7 +1176,7 @@ def _finalize_publication(
         "command": [
             "/cook",
             "--auto",
-            str(artifact_root / "pointers" / f"{_safe_segment(operation_id)}.json"),
+            pointer,
             "--spec",
             str(spec_path),
         ],

@@ -54,5 +54,6 @@ def test_fixture_agent_reaches_ready_without_approval_and_writes_trace(
     pointer_value = cast(
         dict[str, object], json.loads(pointer.read_text(encoding="utf-8"))
     )
-    assert pointer_value["operation_id"] == "agent"
-    assert pointer_value["destination_phase"] == "cook"
+    request = cast(dict[str, object], pointer_value["request"])
+    assert request["operation_id"] == "agent"
+    assert request["destination_phase"] == "cook"

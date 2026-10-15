@@ -28,8 +28,7 @@ from ._types import (
 )
 from .classify import classify_input, coerce_kind, derive_request_id
 from .evidence import as_path, persist_request, persist_value, resolve_ref, source_ref
-from .legacy import adopt_legacy_plan, legacy_plan
-from .outcomes import build_pointer_ref, hold_result, invalid_result
+from .outcomes import hold_result, invalid_result
 from .pointer import resolve_canonical_pointer
 from .results import validate_preparation_result
 from .spec import resolve_spec_ref, spec_readiness
@@ -117,59 +116,20 @@ def bind_previous_result(ctx: PreparationContext) -> PreparationContext:
 def _resolve_pointer_source(
     ctx: PreparationContext,
 ) -> ResolvedPreparationSource | CookPreparationResult:
-    """Resolve a canonical pointer, adopting an intact historical plan."""
+    """Resolve a canonical publication index."""
 
     classified = ctx.classified
-    request = ctx.request
-    artifacts = ctx.artifacts
-    refs = ctx.refs
     if classified.path is None:
-        raise PreparationFailure(
-            "missing-pointer",
-            "canonical pointer input must name a file",
-        )
-    legacy = legacy_plan(classified, artifact_root=artifacts)
-    if legacy is None:
-        result = resolve_canonical_pointer(
-            classified,
-            request,
-            runner_approval=ctx.evidence.runner_approval,
-            setup_authorization=ctx.evidence.setup_authorization,
-            setup_evidence=ctx.evidence.setup_evidence,
-        )
-        return validate_preparation_result(
-            attrs.evolve(
-                result,
-                references=tuple((*refs, *result.references)),
-            )
-        )
-    refs.extend(
-        (
-            build_pointer_ref(classified.path, request_id=request.request_id),
-            legacy.plan_ref,
-            *(
-                (legacy.normalization_receipt_ref,)
-                if legacy.normalization_receipt_ref is not None
-                else ()
-            ),
-        )
+        raise PreparationFailure("missing-pointer", "canonical pointer input must name a file")
+    result = resolve_canonical_pointer(
+        classified,
+        ctx.request,
+        runner_approval=ctx.evidence.runner_approval,
+        setup_authorization=ctx.evidence.setup_authorization,
+        setup_evidence=ctx.evidence.setup_evidence,
     )
-    return adopt_legacy_plan(
-        legacy,
-        classified=classified,
-        request=request,
-        artifacts=artifacts,
-        refs=refs,
-        spec_binding=ctx.evidence.spec_binding,
-        previous_result=ctx.previous,
-        objective=(
-            "migrate the historical CurdPlan into a canonical Mold-to-Cook handoff"
-        ),
-        requirement_id="legacy-spec-binding",
-        requirement_description=(
-            "an intact historical CurdPlan requires a canonical "
-            "host-bound Mold spec before migration"
-        ),
+    return validate_preparation_result(
+        attrs.evolve(result, references=tuple((*ctx.refs, *result.references)))
     )
 
 
@@ -196,30 +156,9 @@ def _resolve_continuation_source(
             objective=classified.source,
         )
     if resolution.outcome is ResolutionOutcome.LEGACY:
-        legacy = (
-            legacy_plan(classified, artifact_root=artifacts)
-            if classified.path is not None
-            else None
-        )
-        if legacy is None:
-            raise PreparationFailure(
-                "legacy-continuation",
-                resolution.detail or "legacy continuation could not be adapted",
-            )
-        refs.append(legacy.plan_ref)
-        return adopt_legacy_plan(
-            legacy,
-            classified=classified,
-            request=request,
-            artifacts=artifacts,
-            refs=refs,
-            spec_binding=ctx.evidence.spec_binding,
-            previous_result=ctx.previous,
-            objective=(
-                "migrate the historical continuation into a canonical Cook handoff"
-            ),
-            requirement_id="legacy-spec-binding",
-            requirement_description="legacy continuation requires a bound spec",
+        raise PreparationFailure(
+            "legacy-continuation",
+            resolution.detail or "legacy continuation is not supported",
         )
     hold_kind = (
         CookHoldKind.INTEGRITY
