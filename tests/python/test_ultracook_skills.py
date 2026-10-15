@@ -122,17 +122,16 @@ class TestUltracookPhaseChain:
 
     def test_lists_seven_phases_in_order(self) -> None:
         body = _skill_corpus("cook")
-        # Single-coder auto chain: press -> age -> cure -> scoped re-verify
-        # age, capped at two cure passes, terminal next: done.
+        # Single-coder auto chain: age -> cure -> scoped re-verify age after
+        # Cook's own Press loop, capped at two cure passes, terminal next: done.
         auto_idx = body.find("## Auto mode")
         assert auto_idx != -1, "cook must document `## Auto mode`"
         auto_section = body[auto_idx:]
         cursor = 0
         for invocation in (
-            "/press <slug> --auto",
             "/age <slug> --auto",
             "/cure <slug> --auto --stake medium+",
-            "/age --scope <touched-paths> --auto",
+            "/age <slug> --scope <touched-paths> --auto",
         ):
             next_idx = auto_section.find(invocation, cursor)
             assert next_idx != -1, (
@@ -146,16 +145,17 @@ class TestUltracookPhaseChain:
         fan_section = " ".join(body[fan_idx:].split())
         assert "plan" in fan_section
         assert "cook(CurdPlan) → reviewer(age)" in fan_section
-        assert "one global `/press → /age → /cure` chain" in fan_section
+        assert "Each curd's Cook loop runs its own Press loop." in fan_section
+        assert "No global post-merge Press runs." in fan_section
 
     def test_propagates_auto_through_every_phase(self) -> None:
         body = _skill_corpus("cook")
         for invocation in (
-            "/press <slug> --auto",
             "/age <slug> --auto",
             "/cure <slug> --auto --stake medium+",
         ):
             assert invocation in body, f"missing `{invocation}` in cook's auto chain"
+        assert "/press <slug> --auto" not in body
         # Cure floor must be medium+ to match /cook --auto's contract.
         assert "medium+" in body
         # --auto propagates throughout both the single-coder chain and the

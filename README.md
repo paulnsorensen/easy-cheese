@@ -70,9 +70,9 @@ A Python-backed skill ships exactly one executable archive at `skills/<skill>/sc
 | `skills/briesearch/SKILL.md` | `/briesearch` | Research technical questions across docs, web, codebase, and GitHub examples with confidence-capped synthesis. |
 | `skills/mold/SKILL.md` | `/mold` | Shape fuzzy ideas into grounded specs through dialogue, validate cycles, and an agent coherence self-check plus save approval, with ceremony tiered to the size of the job (quick / light / full). |
 | `skills/culture/SKILL.md` | `/culture` | The agent's internal-thinking skill — invoked silently by `/cheese` and other workflow skills to model a problem before dispatching. Surfaces to the user only when they explicitly opted out of code writes ("no writes", "rubber-duck this"). Records the session's ideas, decisions, and info to the wiki (or tracked fallback files) and writes the `.cheese/notes/<slug>.md` handoff at session end; never code, specs, commits, or PRs. |
-| `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook → /press → /age → /cure`. |
+| `skills/pasteurize/SKILL.md` | `/pasteurize` | Diagnose hard bugs, flaky failures, and performance regressions with a feedback-loop-first investigation, then hand off into `/cook (⇄ /press) → /age → /cure`. |
 | `skills/cook/SKILL.md` | `/cook` | Single implementation orchestrator: runs a focused spec through one coder or fans a file-disjoint curd block through fresh-context phase agents. |
-| `skills/press/SKILL.md` | `/press` | Harden cooked changes with coverage, assertion, and boundary checks. |
+| `skills/press/SKILL.md` | `/press` | Attack cooked changes with one adversarial test pass. Cook runs it automatically; `/press <slug>` re-runs it by hand. |
 | `skills/age/SKILL.md` | `/age` | Review diffs across twelve staff-engineer dimensions and produce a severity-grouped findings report. |
 | `skills/affinage/SKILL.md` | `/affinage` | Triage external PR claims — review comments and CI failures — through the `/age` lens, hand the chosen fixes to `/cure`, then post replies back on GitHub. |
 | `skills/cure/SKILL.md` | `/cure` | Fix user-selected findings, validate, and prepare the branch for shipping. |
@@ -98,11 +98,11 @@ See [Installing MCP servers](#installing-mcp-servers) below — expand the tilth
 /cheese  ──►  classify intent  ──►  dispatch immediately (autonomous by default)
    ├─ need info / external evidence  ──►  /briesearch
    ├─ no-writes discussion only      ──►  /culture                  (user explicitly opted out of writes)
-   ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook --auto  ──►  /press  ──►  /age  ──►  /cure
+   ├─ fuzzy / multi-module idea       ──►  /mold        ──►  /cook --auto (⇄ press)  ──►  /age  ──►  /cure
    ├─ high-blast-radius spec          ──►  /mold        ──►  /cook --auto  (fresh-context fan pathway)
-   ├─ clear, scoped ask               ──►  /cook --auto                                                ──►  /press  ──►  /age  ──►  /cure
-   ├─ "go prototype this idea"        ──►  /cook --prototype  (plan → spike → check, repeat)  ──► stabilize ──►  /press  ──►  /age  ──►  /cure
-   ├─ debugging task                  ──►  /pasteurize --auto ──►  /cook --auto                        ──►  /press  ──►  /age  ──►  /cure
+   ├─ clear, scoped ask               ──►  /cook --auto (⇄ press)                       ──►  /age  ──►  /cure
+   ├─ "go prototype this idea"        ──►  /cook --prototype  (plan → spike → check, repeat)  ──► stabilize ──►  /age  ──►  /cure
+   ├─ debugging task                  ──►  /pasteurize --auto ──►  /cook --auto (⇄ press)  ──►  /age  ──►  /cure
    ├─ PR comments / CI failures       ──►  /affinage    ──►  /cure
    ├─ running low on context          ──►  /wheypoint  ──►  /cheese --continue <slug>   (fresh session)
    ├─ resume in fresh context         ──►  /cheese --continue <slug>
@@ -185,7 +185,7 @@ When a preferred tool is unavailable, workflow skills say so once, use the stron
 ### skills.sh (recommended)
 
 Install every skill with the [skills.sh](https://skills.sh) installer. The
-skills form one pipeline (`/cheese → /mold → /cook → /press → /age →
+skills form one pipeline (`/cheese → /mold → /cook (⇄ /press) → /age →
 /cure`), so install them together rather than cherry-picking:
 
 ```sh

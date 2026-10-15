@@ -211,7 +211,7 @@ Set `next:` by the rules in `## Handoff`.
 
 ## Handoff
 
-**Pipeline:** culture → mold → cook → press → age → cure → plate.
+**Pipeline:** culture → mold → cook (⇄ press) → age → cure → plate.
 `/affinage` runs parallel to `/age` and sends findings to `/cure`.
 
 By default, affinage acts without a prompt.
