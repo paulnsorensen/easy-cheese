@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -347,8 +348,9 @@ def test_operator_directive_flag_adds_a_scope_operator_directive_after_work_ones
         {},
         work_id=WORK_ID,
         directive=["Work rule"],
+        quote=["work words"],
         operator_directive=["Style rule"],
-        quote=["work words", "style words"],
+        operator_quote=["style words"],
     )
 
     assert _intent(payload).entries is not None
@@ -363,10 +365,47 @@ def test_operator_directive_flag_adds_a_scope_operator_directive_after_work_ones
     ]
 
 
-def test_operator_directive_without_its_quote_refuses_with_flag_pairing() -> None:
-    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing"):
+def test_each_quote_flag_pairs_only_with_its_own_directive_flag() -> None:
+    # CLI order is operator first; the quotes must not follow it.
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        operator_directive=["B"],
+        operator_quote=["qb"],
+        directive=["A"],
+        quote=["qa"],
+    )
+
+    assert payload["entries"] == [
+        {"kind": "directive", "summary": "A", "quote": "qa"},
+        {"kind": "directive", "summary": "B", "quote": "qb", "scope": "operator"},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("directive", "quote", "operator_directive", "operator_quote", "flag"),
+    [
+        ([], [], ["Style rule"], [], "--operator-quote"),
+        ([], ["stray"], ["Style rule"], ["words"], "--quote"),
+        (["Work rule"], ["words"], [], ["stray"], "--operator-quote"),
+        (["Work rule"], [], [], [], "--quote"),
+    ],
+)
+def test_a_quote_count_that_differs_from_its_directive_count_refuses(
+    directive: list[str],
+    quote: list[str],
+    operator_directive: list[str],
+    operator_quote: list[str],
+    flag: str,
+) -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match=f"^flag-pairing.*{flag}"):
         _ = intent_flags.overlay(
-            {}, work_id=WORK_ID, operator_directive=["Style rule"]
+            {},
+            work_id=WORK_ID,
+            directive=directive,
+            quote=quote,
+            operator_directive=operator_directive,
+            operator_quote=operator_quote,
         )
 
 
@@ -385,6 +424,13 @@ def test_scope_operator_on_a_question_is_refused_by_the_schema() -> None:
 def _checkout(root: Path) -> Path:
     (root / "src").mkdir(parents=True)
     _ = (root / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+    _ = (root / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    for args in (
+        ["init", "-q"],
+        ["add", "-A"],
+        ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
+    ):
+        _ = subprocess.run(["git", "-C", str(root), *args], check=True)
     return root
 
 
@@ -409,7 +455,7 @@ def test_pin_line_ref_in_context_and_artifact_link(tmp_path: Path) -> None:
         {"path": "src/app.py:7@abc1234"},
         {"path": "src/app.py:7@abc1234", "ref": "repo:src/app.py:7@abc1234"},
     ]
-    assert warnings == []
+    assert warnings == ["unpinned-line-ref"]
     assert payload["working_context"] == [
         "see src/app.py:12 and src/app.py:3-9, not src/gone.py:4"
     ]
@@ -449,3 +495,33 @@ def test_symbol_ref_and_already_pinned_ref_stay_as_written(tmp_path: Path) -> No
 
     assert pinned == payload
     assert warnings == []
+
+
+def test_untracked_and_ignored_files_stay_unpinned_and_warn(tmp_path: Path) -> None:
+    checkout = _checkout(tmp_path)
+    _ = (checkout / "new.py").write_text("y = 2\n", encoding="utf-8")
+    _ = (checkout / "scratch.log").write_text("z\n", encoding="utf-8")
+    payload: dict[str, object] = {
+        "working_context": ["new.py:1", "scratch.log:2", "src/gone.py:4"]
+    }
+
+    pinned, warnings = intent_flags.pin_line_refs(
+        payload, checkout=checkout, head="abc1234"
+    )
+
+    assert pinned == payload
+    assert warnings == ["unpinned-line-ref"]
+
+
+def test_a_host_and_port_is_not_a_line_ref(tmp_path: Path) -> None:
+    payload: dict[str, object] = {
+        "working_context": ["curl 127.0.0.1:8080 and example.com:443"]
+    }
+
+    assert intent_flags.pin_line_refs(payload, checkout=None, head=None) == (
+        payload,
+        [],
+    )
+    assert intent_flags.pin_line_refs(
+        payload, checkout=_checkout(tmp_path), head="abc1234"
+    ) == (payload, [])

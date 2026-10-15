@@ -161,8 +161,13 @@ def commit(
     finalize: Callable[[PendingRevision], None] | None = None,
     artifact_root: Path | str | None = None,
     fork_edge: WorkEdge | None = None,
+    imported_stamps: tuple[int | None, int | None] | None = None,
 ) -> CommitResult:
     """Apply `delta` to the store's current record under the record lock.
+
+    `imported_stamps` is host-only input for an import genesis: the source
+    record's `(notes_revision_number, decisions_revision_number)`, kept so the
+    drift marker the source projection showed still renders.
 
     `fork_edge` is host-only input too: the `forked_from` edge `fork()` writes
     into a child. A delta cannot author a fork edge itself.
@@ -238,7 +243,9 @@ def commit(
                     project_key=paths.project_key(digest_root),
                     durability=durability,
                     digest_of=digest_of,
+                    checkout=digest_root,
                     fork_edge=fork_edge,
+                    imported_stamps=imported_stamps,
                 ),
                 finalize=finalize,
             )
@@ -272,6 +279,7 @@ def commit(
                 fingerprint=fingerprint,
                 repository=repository_value,
                 digest_of=digest_of,
+                checkout=digest_root,
                 durability=durability,
                 fork_edge=fork_edge,
             ),
@@ -586,9 +594,11 @@ def _merge_artifact_links(
             for key in [k for k in by_ref if k != ref and _record_target(k) == target]:
                 del by_ref[key]
                 order[order.index(key)] = ref
-        if ref not in order:
-            order.append(ref)
-        by_ref[ref] = evolve(
+        # A line ref pinned at a new HEAD replaces the one pinned at an old HEAD.
+        key = refs.strip_pin(ref)
+        if key not in order:
+            order.append(key)
+        by_ref[key] = evolve(
             link,
             ref=ref,
             path=ref.partition(":")[2],
@@ -634,7 +644,7 @@ def _unpinned_record(ref: str) -> str | None:
 def _link_key(link: ArtifactLink) -> str:
     ref = records.effective_ref(link)
     try:
-        return refs.normalize_ref(ref)
+        return refs.strip_pin(refs.normalize_ref(ref))
     except ValueError:
         return ref
 
@@ -642,7 +652,7 @@ def _link_key(link: ArtifactLink) -> str:
 def _removal_key(value: str) -> str:
     """A removal names a reference, or a bare path read as `repo:`."""
     try:
-        return refs.normalize_ref(value)
+        return refs.strip_pin(refs.normalize_ref(value))
     except ValueError:
         return _link_key(ArtifactLink(path=value))
 
@@ -668,6 +678,7 @@ def _apply(
     fingerprint: str,
     repository: RepositoryProvenance,
     digest_of: Callable[[str], str | None],
+    checkout: Path,
     durability: Durability,
     fork_edge: WorkEdge | None,
 ) -> PendingRevision:
@@ -705,7 +716,9 @@ def _apply(
         digest_of=digest_of,
         decisions_moved=bool(additions[EntryKind.DECISION])
         or any(
-            _names_decision(current, transition.entry_id) for transition in transitions
+            (entry := records.find_entry(current, transition.entry_id)) is not None
+            and entry.kind is EntryKind.DECISION
+            for transition in transitions
         ),
     )
     merged = _merge_edges(
@@ -728,6 +741,7 @@ def _apply(
         removed_edges=merged.removed,
         repository=repository,
         durability=durability,
+        checkout=checkout,
     )
 
 
@@ -748,8 +762,10 @@ def _genesis(
     repository: RepositoryProvenance,
     project_key: str,
     digest_of: Callable[[str], str | None],
+    checkout: Path,
     durability: Durability,
     fork_edge: WorkEdge | None,
+    imported_stamps: tuple[int | None, int | None] | None = None,
 ) -> PendingRevision:
     """The first record for a work id, built from the delta alone.
 
@@ -808,8 +824,16 @@ def _genesis(
             orientation=delta.orientation or "",
             working_context=list(delta.working_context or []),
             notes=delta.notes,
-            notes_revision_number=1 if delta.notes is not None else None,
-            decisions_revision_number=1 if additions[EntryKind.DECISION] else None,
+            notes_revision_number=(
+                (1 if delta.notes is not None else None)
+                if imported_stamps is None
+                else (imported_stamps[0] if delta.notes is not None else None)
+            ),
+            decisions_revision_number=(
+                (1 if additions[EntryKind.DECISION] else None)
+                if imported_stamps is None
+                else imported_stamps[1]
+            ),
             next_action=next_action,
             decisions=additions[EntryKind.DECISION],
             questions=additions[EntryKind.QUESTION],
@@ -839,6 +863,7 @@ def _genesis(
         removed_edges=merged.removed,
         repository=repository,
         durability=durability,
+        checkout=checkout,
     )
 
 
@@ -878,9 +903,12 @@ def _finish(
     removed_edges: tuple[WorkEdgeKey, ...],
     repository: RepositoryProvenance,
     durability: Durability,
+    checkout: Path,
 ) -> PendingRevision:
     """Render the draft into one typed pending revision."""
-    projected, markdown = projection_mod.build_projection(draft, durability=durability)
+    projected, markdown = projection_mod.build_projection(
+        draft, durability=durability, checkout=checkout
+    )
     revision = WheypointRevision(
         schema_version=SCHEMA_VERSION,
         work_id=store.work_id,
@@ -963,11 +991,6 @@ def _draft_record(
         )
     except ValueError as exc:
         raise CommitError(f"the delta does not produce a legal record: {exc}") from exc
-
-
-def _names_decision(record: WheypointRecord, entry_id: str) -> bool:
-    """Whether `entry_id` names one of the record's decisions."""
-    return any(entry.entry_id == entry_id for entry in record.decisions)
 
 
 def _replaced(proposed: object, carried: object) -> object:

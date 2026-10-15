@@ -84,6 +84,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         owner: list[str] | None = None,
         when: list[str] | None = None,
         operator_directive: list[str] | None = None,
+        operator_quote: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -139,8 +140,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             paired by order (repeatable)
         operator_directive
             add an operator-preference directive (how the user wants to be
-            worked with); pair each with a --quote, after the --directive
-            quotes (repeatable)
+            worked with); pair each with an --operator-quote (repeatable)
+        operator_quote
+            the user's own words for each --operator-directive (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -176,6 +178,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             owner=owner or (),
             when=when or (),
             operator_directive=operator_directive or (),
+            operator_quote=operator_quote or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -216,6 +219,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         owner: list[str] | None = None,
         when: list[str] | None = None,
         operator_directive: list[str] | None = None,
+        operator_quote: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -266,8 +270,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             paired by order (repeatable)
         operator_directive
             add an operator-preference directive (how the user wants to be
-            worked with); pair each with a --quote, after the --directive
-            quotes (repeatable)
+            worked with); pair each with an --operator-quote (repeatable)
+        operator_quote
+            the user's own words for each --operator-directive (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -303,6 +308,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             owner=owner or (),
             when=when or (),
             operator_directive=operator_directive or (),
+            operator_quote=operator_quote or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -333,7 +339,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         project: str | None = None,
         workspace_root: str | None = None,
     ) -> dict[str, object]:
-        """Resolve a slug, work id, or path to the current record.
+        """Resolve a slug (exact, unique prefix, or unique substring), work id, or path to the current record.
 
         Parameters
         ----------
@@ -374,7 +380,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
     def list_(
         *,
         corpus_root: str | None = None,
-        scope: Literal["project", "machine"] = "project",
+        scope: Literal["project", "machine"] | None = None,
         project: list[str] | None = None,
         root: list[str] | None = None,
         grep: list[str] | None = None,
@@ -392,14 +398,16 @@ def build_app(stdin: TextIO) -> fromargs.App:
         forked_from: list[str] | None = None,
         owner: list[str] | None = None,
     ) -> dict[str, object]:
-        """List and search work items and notes across worktrees.
+        """List and search work items and notes across worktrees; outside a Git checkout the default scope falls back to machine.
 
         Parameters
         ----------
         corpus_root
             the per-project corpus root (default: the project's own corpus)
         scope
-            this project's worktrees (default), or the whole machine
+            this project's worktrees (default; outside a Git checkout the
+            default falls back to the whole machine and reports
+            scope-fallback: machine), or the whole machine
         project
             limit hits to this project key (repeatable; implies --scope machine)
         root
@@ -550,6 +558,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         out: str | None = None,
         include_operator: bool = False,
         include_local: bool = False,
+        workspace_root: str | None = None,
     ) -> dict[str, object]:
         """Write one canonical JSON bundle of a record, for another person to import.
 
@@ -563,6 +572,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
             keep operator-preference directives (omitted by default)
         include_local
             keep references that need this machine (omitted by default)
+        workspace_root
+            the Git checkout that owns the record's paths (default: the Git toplevel)
         """
         return _ok(
             "export",
@@ -571,6 +582,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
                 out=out,
                 include_operator=include_operator,
                 include_local=include_local,
+                workspace_root=workspace_root,
             ),
         )
 
@@ -580,6 +592,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         slug: Annotated[str | None, fromargs.Parameter(name="--as")] = None,
         note_dir: str | None = None,
         no_note: bool = False,
+        workspace_root: str | None = None,
     ) -> dict[str, object]:
         """Verify a bundle and write it as a fork child with a forked_from edge.
 
@@ -594,11 +607,17 @@ def build_app(stdin: TextIO) -> fromargs.App:
             <git toplevel>/.cheese/notes)
         no_note
             write no mirror; the import stays canonical-local
+        workspace_root
+            the Git checkout that digests artifact links (default: the Git toplevel)
         """
         return _ok(
             "import",
             transfer_mod.run_import(
-                bundle, slug=slug, note_dir=note_dir, no_note=no_note
+                bundle,
+                slug=slug,
+                note_dir=note_dir,
+                no_note=no_note,
+                workspace_root=workspace_root,
             ),
         )
 

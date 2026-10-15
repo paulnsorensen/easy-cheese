@@ -75,8 +75,8 @@ python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientati
 ## `export` and `import`
 
 ```bash
-python3 skills/wheypoint/scripts/wheypoint.pyz export <slug | work-id | path> [--out <file>] [--include-operator] [--include-local]
-python3 skills/wheypoint/scripts/wheypoint.pyz import <bundle.json> [--as <slug>] [--note-dir <dir> | --no-note]
+python3 skills/wheypoint/scripts/wheypoint.pyz export <slug | work-id | path> [--out <file>] [--include-operator] [--include-local] [--workspace-root <dir>]
+python3 skills/wheypoint/scripts/wheypoint.pyz import <bundle.json> [--as <slug>] [--note-dir <dir> | --no-note] [--workspace-root <dir>]
 ```
 
 A bundle is one canonical JSON file with these fields: `bundle_version`, `origin`, `included`, `record`, `record_digest`, `projection`, `projection_digest`, and `bundle_digest`.
@@ -87,22 +87,28 @@ A digest proves integrity, not authorship; anyone can build a bundle with matchi
 - `origin` carries the source `revision_id` and the `record_digest` of the unfiltered record.
 - `bundle_digest` covers the canonical bundle without its own field.
 - `export` omits operator directives and local refs by default; `--include-operator` and `--include-local` keep them, and `included` records the choice.
+- `export` replaces a local path in free text (`notes`, `orientation`, `next_action`, entry summary, rationale, and quote) with `<local reference omitted>`; `--include-local` keeps it.
+- A path is local by the checkout named by `--workspace-root`, else the Git toplevel, never by the working directory.
+- `export` refuses with `export-checkout-required` when no checkout exists and the record links a repository path.
 - `export` accepts an authoritative or gated record.
 - `import` checks in this order: bundle digest, record structure, record digest, projection digest, projection identifiers, origin against record.
-- Any digest mismatch is refused as `bundle-digest-mismatch`, and nothing is written.
+- Any digest mismatch, including an origin that does not name the record, is refused as `bundle-digest-mismatch`, and nothing is written.
+- `import` also checks that `bundle_version`, `included`, and `origin` have the right types and agree with the record.
 - `import` bounds the bundle at 4 MiB and validates every key and value strictly.
 - `import` writes one genesis revision with one `forked_from` edge to the origin record.
 - `--as` names the new work id; the default is the origin work id.
 - Only active entries import, as fresh derived entry ids; artifact-link digests and `covers` are derived again.
-- A local artifact link is skipped and reported as `skipped-local-link`.
-- A drift marker in the source projection is not reproduced on import.
+- A local artifact link is skipped and reported as `skipped-local-link`; on import any absolute path is local.
+- A link this machine cannot digest, such as a `wheypoint:` record or a repository path it lacks, is skipped and reported as `skipped-unresolvable-link`.
+- A source with notes drift imports with decisions stamped at revision 1 and notes unstamped, so the drift marker renders again on import with the importer's revision numbers.
 
 ### `export` and `import` refusal codes
 
 - `export-unresolved`: the ref did not resolve to one current record.
 - `bundle-unwritable`: the `--out` file could not be written.
 - `bundle-unreadable`: the bundle file could not be read.
-- `bundle-invalid`: the bundle is oversized, malformed, or fails schema validation.
+- `export-checkout-required`: the record links a repository path and no Git checkout is known.
+- `bundle-invalid`: the bundle is oversized, malformed, too deeply nested, or fails schema validation.
 - `bundle-digest-mismatch`: a digest or the origin does not match the record.
 - `invalid-slug`: the `--as` value is not a lower-case identifier.
 - `import-exists`: the target work id already has a record.

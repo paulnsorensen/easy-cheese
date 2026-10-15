@@ -278,25 +278,32 @@ def validate_transitions(
     A supersede may name an entry the same delta adds (`added_ids`).
     """
     problems: list[str] = []
+    moved_ids = {transition.entry_id for transition in transitions}
     for transition in transitions:
         entry = find_entry(record, transition.entry_id)
         if entry is None:
-            problems.append(
-                f"transition names unknown entry {transition.entry_id!r}"
-            )
+            problems.append(f"transition names unknown entry {transition.entry_id!r}")
             continue
         if entry.state is not EntryState.ACTIVE:
-            problems.append(
-                f"entry {entry.entry_id!r} is already {entry.state.value}"
-            )
+            problems.append(f"entry {entry.entry_id!r} is already {entry.state.value}")
             continue
         target = transition.target_entry_id
-        if (
-            target is not None
-            and find_entry(record, target) is None
-            and target not in added_ids
-        ):
+        if target is None:
+            continue
+        if target == transition.entry_id:
+            problems.append(f"entry {target!r} cannot supersede itself")
+            continue
+        successor = find_entry(record, target)
+        if successor is None and target not in added_ids:
             problems.append(f"transition targets unknown entry {target!r}")
+        elif successor is not None and successor.state is not EntryState.ACTIVE:
+            problems.append(
+                f"transition targets {target!r}, which is already {successor.state.value}"
+            )
+        elif target in moved_ids:
+            problems.append(
+                f"transition targets {target!r}, which this delta also transitions"
+            )
     return tuple(problems)
 
 

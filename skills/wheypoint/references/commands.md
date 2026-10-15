@@ -9,9 +9,9 @@
 | `fork` | Fork a child record from a parent; only the child is written |  |
 | `handoff` | Render, parse, and dispatch-split handoff preambles | `render`, `parse`, `dispatch` |
 | `import` | Verify a bundle and write it as a fork child record |  |
-| `list` | List and search work items and notes across worktrees |  |
+| `list` | List and search work items and notes across worktrees; outside a Git checkout the default scope falls back to machine |  |
 | `log` | Walk the revisions of one work id, oldest first |  |
-| `resolve` | Resolve a slug, work id, or path to the current record |  |
+| `resolve` | Resolve a slug (exact, unique prefix, or unique substring), work id, or path to the current record |  |
 | `schema` | Print the JSON Schema for a registered contract slug |  |
 | `show` | Print the current record for a work id |  |
 | `turns` | Print the user's own turns from a session transcript |  |

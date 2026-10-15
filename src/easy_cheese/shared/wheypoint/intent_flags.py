@@ -21,17 +21,24 @@ from __future__ import annotations
 
 import copy
 import re
+import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
 from easy_cheese_schemas.contracts import EdgeKind
 
+from easy_cheese.shared import git_utils
+
 from . import commit, ref_grammar
 
 __all__ = ["UNPINNED_LINE_REF", "IntentFlagError", "overlay", "pin_line_refs"]
 
 UNPINNED_LINE_REF = "unpinned-line-ref"
+# A name that ends in one of these, with no `/`, reads as a host and port.
+_HOST_SUFFIXES = frozenset(
+    {"com", "org", "net", "io", "dev", "ai", "local", "localhost", "internal"}
+)
 
 
 class IntentFlagError(ValueError):
@@ -55,6 +62,7 @@ def overlay(
     owner: Sequence[str] = (),
     when: Sequence[str] = (),
     operator_directive: Sequence[str] = (),
+    operator_quote: Sequence[str] = (),
     orientation: str | None = None,
     next: str | None = None,
     artifact: str | None = None,
@@ -67,13 +75,14 @@ def overlay(
 ) -> dict[str, object]:
     """`payload` (an intent file's JSON, or `{}`) with the flags applied.
 
-    `owner` and `when` pair by position with `question`. `quote` pairs with
-    `directive` first, then `operator_directive`.
+    `owner` and `when` pair by position with `question`. `quote` pairs by
+    position with `directive`, and `operator_quote` with `operator_directive`.
     """
     _check_pairing(
         owner=owner,
         when=when,
         operator_directive=operator_directive,
+        operator_quote=operator_quote,
         supersede=supersede,
         by=by,
         question=question,
@@ -118,12 +127,12 @@ def overlay(
             ),
             *(
                 {"kind": "directive", "summary": text, "quote": words}
-                for text, words in zip(directive, quote, strict=False)
+                for text, words in zip(directive, quote, strict=True)
             ),
             *(
                 {"kind": "directive", "summary": text, "quote": words, "scope": "operator"}
                 for text, words in zip(
-                    operator_directive, quote[len(directive) :], strict=True
+                    operator_directive, operator_quote, strict=True
                 )
             ),
         ],
@@ -152,10 +161,12 @@ def pin_line_refs(
     """`payload` with each bare `path:line` pinned to `head`, and the warnings.
 
     Only `working_context` items and `artifact_links` are read. A token pins
-    when it names an existing file in `checkout`; `path#symbol` and an already
-    pinned token stay as written. With no checkout or no `head`, a token that
-    looks like `path:line` stays unpinned and the warning `unpinned-line-ref`
-    names it once. The pin is made at checkpoint and never on read.
+    when its path is in the `head` commit of `checkout`; `path#symbol` and an
+    already pinned token stay as written. Any other `path:line` token stays
+    unpinned and the warning `unpinned-line-ref` names it once: no checkout,
+    no commit, or a file `head` does not hold (untracked or ignored). A host
+    and port such as `example.com:443` is not a line reference. The pin is
+    made at checkpoint and never on read.
     """
     result: dict[str, object] = copy.deepcopy(dict(payload))
     unpinned = False
@@ -163,12 +174,15 @@ def pin_line_refs(
     def pin(text: str) -> str:
         def swap(match: re.Match[str]) -> str:
             nonlocal unpinned
-            if checkout is None or head is None:
+            if (
+                checkout is not None
+                and head is not None
+                and _in_head(checkout, match["path"])
+            ):
+                return f"{match['path']}:{match['line']}@{head}"
+            if not _is_host_port(match["path"]):
                 unpinned = True
-                return match.group(0)
-            if not _is_checkout_file(checkout, match["path"]):
-                return match.group(0)
-            return f"{match['path']}:{match['line']}@{head}"
+            return match.group(0)
 
         return ref_grammar.LINE_REF_RE.sub(swap, text)
 
@@ -203,12 +217,22 @@ def _pin_link(
     return pinned
 
 
-def _is_checkout_file(checkout: Path, relative: str) -> bool:
+def _in_head(checkout: Path, relative: str) -> bool:
     try:
-        resolved = (checkout / relative).resolve()
-        return resolved.is_file() and resolved.is_relative_to(checkout.resolve())
-    except (OSError, RuntimeError):
+        found = git_utils.run_git(
+            ["cat-file", "-e", f"HEAD:{relative}"], cwd=checkout, timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
         return False
+    return found.returncode == 0
+
+
+def _is_host_port(path: str) -> bool:
+    """Whether `path` reads as a host (`127.0.0.1`, `example.com`), not a file."""
+    if "/" in path:
+        return False
+    last = path.rsplit(".", 1)[-1].lower()
+    return last.isdigit() or last in _HOST_SUFFIXES
 
 
 def _check_pairing(
@@ -216,6 +240,7 @@ def _check_pairing(
     owner: Sequence[str],
     when: Sequence[str],
     operator_directive: Sequence[str],
+    operator_quote: Sequence[str],
     supersede: Sequence[str],
     by: Sequence[str],
     question: Sequence[str],
@@ -245,12 +270,14 @@ def _check_pairing(
             raise IntentFlagError(
                 f"flag-pairing: {len(values)} {flag} for {len(question)} --question"
             )
-    quoted = len(directive) + len(operator_directive)
-    if len(quote) != quoted:
-        raise IntentFlagError(
-            f"flag-pairing: {len(quote)} --quote for {quoted} "
-            + "--directive and --operator-directive"
-        )
+    for flag, quotes, directives, directive_flag in (
+        ("--quote", quote, directive, "--directive"),
+        ("--operator-quote", operator_quote, operator_directive, "--operator-directive"),
+    ):
+        if len(quotes) != len(directives):
+            raise IntentFlagError(
+                f"flag-pairing: {len(quotes)} {flag} for {len(directives)} {directive_flag}"
+            )
     if len(kind) != len(link):
         raise IntentFlagError(
             f"flag-pairing: {len(kind)} --kind for {len(link)} --link"
@@ -316,14 +343,19 @@ def _lone_successor(result: Mapping[str, object], entry_id: str) -> str:
     Added entries take ids from the parent revision, so the base must be known.
     """
     kind = commit.kind_of_entry_id(entry_id)
+    if kind is None:
+        raise IntentFlagError(
+            f"flag-pairing: --supersede {entry_id} has no --by and its id prefix "
+            + "names no entry kind"
+        )
     entries = result.get("entries")
     proposals = [
         cast(Mapping[str, object], item)
         for item in (cast(list[object], entries) if isinstance(entries, list) else [])
         if isinstance(item, Mapping)
-        and cast(Mapping[str, object], item).get("kind") == getattr(kind, "value", None)
+        and cast(Mapping[str, object], item).get("kind") == kind.value
     ]
-    if kind is None or len(proposals) != 1:
+    if len(proposals) != 1:
         raise IntentFlagError(
             f"flag-pairing: --supersede {entry_id} has no --by and the checkpoint "
             + f"does not add exactly one entry of its kind (found {len(proposals)})"

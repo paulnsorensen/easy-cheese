@@ -20,6 +20,7 @@ __all__ = [
     "locator_path",
     "normalize_ref",
     "parse_ref",
+    "strip_pin",
 ]
 
 
@@ -45,6 +46,7 @@ LINE_REF_RE = re.compile(
     + r":(?P<line>\d+(?:-\d+)?)(?![\w@#:/-])"
 )
 _LOCATOR_RE = re.compile(r"(?::\d+(?:-\d+)?(?:@[0-9a-f]+)?|#[^/#]+)$")
+_PIN_RE = re.compile(r"(:\d+(?:-\d+)?)@[0-9a-f]+$")
 
 
 @define(frozen=True, kw_only=True)
@@ -66,6 +68,17 @@ def is_pinnable(scheme: Scheme) -> bool:
 def locator_path(text: str) -> str:
     """`text` without a trailing `:line`, `:line@sha`, or `#symbol` locator."""
     return _LOCATOR_RE.sub("", text)
+
+
+def strip_pin(ref: str) -> str:
+    """A `repo:path:line@sha` ref as `repo:path:line`; any other ref is unchanged.
+
+    The pin names the HEAD a line was read at, so two refs to one line at
+    different HEADs are one link.
+    """
+    if not ref.lower().startswith(f"{Scheme.REPO.value}:"):
+        return ref
+    return _PIN_RE.sub(r"\1", ref)
 
 
 def parse_ref(ref: str) -> ParsedRef:

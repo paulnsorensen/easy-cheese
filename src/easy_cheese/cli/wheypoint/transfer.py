@@ -36,20 +36,30 @@ def run_export(
     out: str | None = None,
     include_operator: bool = False,
     include_local: bool = False,
+    workspace_root: str | None = None,
 ) -> dict[str, object]:
-    """The bundle for the record `ref` resolves to; written to `out` when given."""
-    resolution = resolve_mod.resolve(ref)
+    """The bundle for the record `ref` resolves to; written to `out` when given.
+
+    The checkout that classifies local paths is `workspace_root`, else the Git
+    toplevel; it is passed on explicitly and never read again downstream.
+    """
+    resolution = resolve_mod.resolve(ref, workspace_root=workspace_root)
     if resolution.record is None or resolution.outcome not in _EXPORTABLE:
         raise fromargs.CliError(
             f"export-unresolved: {ref!r} resolved to {resolution.outcome.value}, "
             + f"not to one current record ({resolution.detail or 'no detail'})",
             exit_code=1,
         )
-    bundle = transfer_mod.export_bundle(
-        resolution.record,
-        include_operator=include_operator,
-        include_local=include_local,
-    )
+    checkout = paths.git_toplevel() if workspace_root is None else Path(workspace_root).resolve()
+    try:
+        bundle = transfer_mod.export_bundle(
+            resolution.record,
+            checkout=checkout,
+            include_operator=include_operator,
+            include_local=include_local,
+        )
+    except transfer_mod.TransferError as exc:
+        raise fromargs.CliError(str(exc), exit_code=1) from exc
     summary: dict[str, object] = {
         "work_id": resolution.record.work_id,
         "revision_id": resolution.record.revision_id,
@@ -85,13 +95,19 @@ def run_import(
     slug: str | None = None,
     note_dir: str | None = None,
     no_note: bool = False,
+    workspace_root: str | None = None,
 ) -> dict[str, object]:
-    """Verify `bundle`, then write it as the genesis of a fork child."""
+    """Verify `bundle`, then write it as the genesis of a fork child.
+
+    `workspace_root`, else the Git toplevel, is the checkout that digests links.
+    """
     raw = _read_bundle(bundle)
     try:
-        record, _origin = transfer_mod.parse_bundle(raw)
+        parsed = transfer_mod.parse_bundle(raw)
+        _ = transfer_mod.target_store(parsed[0], slug, paths.project_corpus_root())
     except transfer_mod.TransferError as exc:
         raise fromargs.CliError(str(exc), exit_code=1) from exc
+    record = parsed[0]
     name = record.work_id if slug is None else slug
     directory = note_dir_for(note_dir=note_dir, no_note=no_note)
     target = None if directory is None else directory / f"{name}.md"
@@ -106,11 +122,13 @@ def run_import(
     captured_at = _dt.datetime.now(_dt.timezone.utc).strftime(
         checkpoint_mod.TIMESTAMP_FORMAT
     )
+    checkout = paths.resolve_repo_root(workspace_root)
     try:
-        result, skipped = transfer_mod.import_bundle(
-            raw,
+        outcome = transfer_mod.import_bundle(
+            parsed,
             slug=slug,
             corpus_root=paths.project_corpus_root(),
+            checkout=checkout,
             session_provenance=SessionProvenance(
                 harness=None, session_id=None, captured_at=captured_at
             ),
@@ -125,10 +143,15 @@ def run_import(
         raise fromargs.CliError(str(exc), exit_code=1) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         raise refusal_for(exc) from exc
-    warnings = [f"skipped-local-link: {text} needs the author's machine" for text in skipped]
+    warnings = [
+        f"skipped-local-link: {text} needs the author's machine" for text in outcome.skipped_local
+    ] + [
+        f"skipped-unresolvable-link: {text} cannot be digested on this machine"
+        for text in outcome.skipped_unresolvable
+    ]
     return {
         **result_payload(
-            result, None if target is None else str(target), warnings=warnings
+            outcome.result, None if target is None else str(target), warnings=warnings
         ),
-        "edges": [records.unstructure(edge) for edge in result.record.edges],
+        "edges": [records.unstructure(edge) for edge in outcome.result.record.edges],
     }
