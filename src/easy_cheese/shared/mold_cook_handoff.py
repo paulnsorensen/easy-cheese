@@ -494,8 +494,6 @@ def resolve_contract_value(
     return cast(_ContractT, artifact.value)
 
 
-
-
 def _retained_runner_bytes(ref: ArtifactRef, artifact_root: str | Path) -> bytes:
     raw = _resolve_bytes(ref, artifact_root)
     digest = digest_bytes(raw)
@@ -505,6 +503,11 @@ def _retained_runner_bytes(ref: ArtifactRef, artifact_root: str | Path) -> bytes
     if ref.uri != expected:
         raise ContractValidationError("runner authority must be a retained host artifact")
     return raw
+
+
+def _names_token(text: str, token: str) -> bool:
+    """Match ``token`` as a whole identifier, not as a prefix of a longer one."""
+    return re.search(rf"(?<![\w/-]){re.escape(token)}(?![\w/-])", text) is not None
 
 
 def validate_runner_authority(
@@ -557,7 +560,7 @@ def validate_runner_authority(
     if dialogue.get("curd_ids") != list(coverage.curd_ids):
         raise ContractValidationError("runner response names different coverage")
     if not isinstance(question, str) or not all(
-        item in question for item in (digest, spec_digest, *coverage.curd_ids)
+        _names_token(question, item) for item in (digest, spec_digest, *coverage.curd_ids)
     ):
         raise ContractValidationError("runner question does not present exact limits and work")
     if not isinstance(response, str) or response.strip().lower() not in {
@@ -609,8 +612,6 @@ def _check_coverage_against_plan(
             raise ContractValidationError(
                 f"coverage for {curd_id!r} omits dependencies: {', '.join(sorted(missing))}"
             )
-
-
 
 
 def validate_bound_execution(

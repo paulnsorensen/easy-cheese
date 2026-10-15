@@ -30,6 +30,12 @@ from .fan_execute import execute_fan
 from ._types import CookExecutionOutcome
 
 
+def _require_valid_artifact_ids(template: ArtifactRef, artifact_ids: Sequence[str]) -> None:
+    """Raise when ArtifactRef validation rejects any derived artifact id."""
+    for artifact_id in artifact_ids:
+        _ = attrs.evolve(template, artifact_id=artifact_id)
+
+
 def execute_bound_plan(
     *,
     request_id: str,
@@ -62,13 +68,15 @@ def execute_bound_plan(
     )
     selected = tuple(coverage.curd_ids)
     execution_id = f"{plan.plan_id}-{request_id}"
-    for artifact_id in (
-        request_id,
-        execution_id,
-        f"{request_id}/execution-outcome",
-        *(f"{request_id}/result/{curd_id}" for curd_id in selected),
-    ):
-        _ = attrs.evolve(plan_ref, artifact_id=artifact_id)
+    _require_valid_artifact_ids(
+        plan_ref,
+        (
+            request_id,
+            execution_id,
+            f"{request_id}/execution-outcome",
+            *(f"{request_id}/result/{curd_id}" for curd_id in selected),
+        ),
+    )
     # Only a passed result for a selected curd is reusable. Every other
     # selected curd dispatches again.
     recorded = _load_execution_results(resolved_artifact_root, execution_id, plan)

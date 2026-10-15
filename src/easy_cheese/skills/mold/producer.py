@@ -409,7 +409,14 @@ def _result_path(root: Path, operation_id: str) -> Path:
 
 def _save_result(root: Path, operation_id: str, output: Mapping[str, object]) -> Path:
     path = _result_path(root, operation_id)
-    _write_bounded(path, (json.dumps(output, sort_keys=True, indent=2) + "\n").encode())
+    payload = (json.dumps(output, sort_keys=True, indent=2) + "\n").encode()
+    if path.exists():
+        if path.read_bytes() != payload:
+            raise FinalizationError(
+                f"operation id {operation_id!r} already holds a different ready result"
+            )
+        return path
+    _write_bounded(path, payload)
     return path
 
 

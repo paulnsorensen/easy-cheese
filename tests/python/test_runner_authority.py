@@ -162,3 +162,33 @@ def test_runner_rejects_widened_authorization(tmp_path: Path) -> None:
             spec_digest=spec_digest,
             coverage=MoldCookCoverage(curd_ids=("curd-1",)),
         )
+
+
+def test_runner_question_matches_curd_ids_as_whole_tokens(tmp_path: Path) -> None:
+    authorization = CookSetupAuthorization(
+        prerequisite_curd_id="setup",
+        allowed_paths=("src/limited",),
+        allowed_commands=("just setup",),
+    )
+    authorization_ref = _ref(
+        tmp_path, "authorization", canonical_bytes(authorization), "runner_authorization"
+    )
+    spec_digest = "sha256:" + "a" * 64
+    response_ref = _ref(
+        tmp_path, "dialogue",
+        canonical_bytes({
+            "question": f"Approve {canonical_digest(authorization)} for {spec_digest} and curd-10?",
+            "response": "Approve",
+            "execution_authorized": True,
+            "spec_digest": spec_digest,
+            "curd_ids": ["curd-1"],
+            "authorization_digest": canonical_digest(authorization),
+        }),
+        "dialogue",
+    )
+    with pytest.raises(ValueError, match="exact limits and work"):
+        _ = validate_runner_authority(
+            authorization_ref, response_ref, tmp_path,
+            spec_digest=spec_digest,
+            coverage=MoldCookCoverage(curd_ids=("curd-1",)),
+        )
