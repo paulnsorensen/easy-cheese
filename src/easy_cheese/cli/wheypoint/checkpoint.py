@@ -25,7 +25,6 @@ from easy_cheese_schemas import (
     LOWER_IDENTIFIER_RE,
     CheckpointIntent,
     Durability,
-    EntryKind,
     WheypointDelta,
     WheypointRecord,
 )
@@ -76,6 +75,7 @@ class IntentFlags:
     owner: Sequence[str] = ()
     when: Sequence[str] = ()
     operator_directive: Sequence[str] = ()
+    operator_quote: Sequence[str] = ()
     orientation: str | None = None
     next: str | None = None
     artifact: str | None = None
@@ -114,6 +114,7 @@ class IntentFlags:
                 owner=self.owner,
                 when=self.when,
                 operator_directive=self.operator_directive,
+                operator_quote=self.operator_quote,
                 orientation=self.orientation,
                 next=self.next,
                 artifact=self.artifact,
@@ -454,7 +455,7 @@ def _promote(
             )
         except (commit_mod.CommitError, storage.StorageError) as exc:
             raise refusal_for(exc) from exc
-        return result_payload(result, None, warnings=_warnings_for(delta, result))
+        return result_payload(result, None, warnings=_warnings_for(result))
 
     try:
         current = store.read_record()
@@ -504,7 +505,7 @@ def _promote(
             resume_target = note_dir / pending.target
             result = _resume_mirror(store, revision.revision_id, resume_target, pending)
             return result_payload(
-                result, str(resume_target), warnings=_warnings_for(delta, result)
+                result, str(resume_target), warnings=_warnings_for(result)
             )
         try:
             store.remove_pending(request_identity)
@@ -538,7 +539,7 @@ def _promote(
         _drop_uncommitted_pending(store, pending)
         raise refusal_for(exc) from exc
     _clear_pending(store, request_identity)
-    return result_payload(result, str(target), warnings=_warnings_for(delta, result))
+    return result_payload(result, str(target), warnings=_warnings_for(result))
 
 
 def mirror_finalizer(
@@ -657,29 +658,20 @@ def _resume_mirror(
     return result
 
 
-def _warnings_for(
-    delta: WheypointDelta, result: commit_mod.CommitResult
-) -> list[str]:
+def _warnings_for(result: commit_mod.CommitResult) -> list[str]:
     """Advice that does not refuse the write.
 
-    `stale-notes`: the delta added or transitioned a decision but left `notes`
-    as it was, so the free-text notes may now describe a superseded state.
-    A genesis commit, or a record that never had notes, has none to go stale.
+    `stale-notes`: this revision moved the decisions but not the notes, so the
+    free-text notes may now describe a superseded state. The revision stamps
+    carry that rule. A genesis commit, or a record that never had notes, has
+    none to go stale.
     """
-    revision = result.revision
-    if (
-        delta.notes is not None
-        or revision.parent_revision_id is None
-        or not result.record.notes
-    ):
+    record = result.record
+    if result.revision.parent_revision_id is None or not record.notes:
         return []
-    added = any(entry.kind is EntryKind.DECISION for entry in revision.applied_additions)
-    moved = any(
-        (entry := records.find_entry(result.record, item.entry_id)) is not None
-        and entry.kind is EntryKind.DECISION
-        for item in revision.applied_transitions
-    )
-    return ["stale-notes"] if added or moved else []
+    number = record.revision_number
+    moved = record.decisions_revision_number == number
+    return ["stale-notes"] if moved and record.notes_revision_number != number else []
 
 
 def result_payload(

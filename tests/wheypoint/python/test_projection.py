@@ -183,6 +183,7 @@ def test_a_schema_4_layout_with_pins_above_the_title_still_parses(
     assert "## Identifiers" not in legacy
     assert projection.parse(legacy) == built
 
+
 @pytest.mark.parametrize(
     "broken",
     [
@@ -672,7 +673,9 @@ def test_drift_marker_shows_when_decisions_are_stamped_and_notes_are_not(
 
     section = _notes_section(_render(record))
 
-    assert section[0].startswith("> notes may be stale: decisions changed at revision 2")
+    assert section[0].startswith(
+        "> notes may be stale: decisions changed at revision 2"
+    )
     assert "unstamped" in section[0]
 
 
@@ -798,7 +801,9 @@ def test_owner_group_puts_each_owner_under_a_subheading_and_unowned_under_unassi
 def test_owner_group_keeps_the_flat_list_when_no_question_has_an_owner(
     make_record: Callable[..., WheypointRecord],
 ) -> None:
-    record = make_record(questions=[_question("q-one"), _question("q-two", when="soon")])
+    record = make_record(
+        questions=[_question("q-one"), _question("q-two", when="soon")]
+    )
 
     assert _open_section(_render(record)) == [
         "- q-one (question) — Question q-one?",
@@ -830,13 +835,23 @@ def test_operator_preferences_render_apart_from_work_directives(
 
     markdown = _render(record)
     lines = markdown.splitlines()
-    directives = lines[lines.index("## Directives") : lines.index("## Operator preferences")]
+    directives = lines[
+        lines.index("## Directives") : lines.index("## Operator preferences")
+    ]
     operator = lines[lines.index("## Operator preferences") : lines.index("## Notes")]
 
     assert any("p-work" in line for line in directives)
     assert not any("p-style" in line for line in directives)
     assert any("p-style" in line for line in operator)
     assert "  > words of p-style" in operator
+    assert operator == [
+        "## Operator preferences",
+        "",
+        "- p-style (directive) — Directive p-style",
+        "  > words of p-style",
+        "",
+    ]
+    assert directives[-1] == ""
     assert projection.parse(markdown).work_id == record.work_id
 
 
@@ -922,3 +937,44 @@ def test_local_reference_section_is_absent_without_local_refs(
     monkeypatch.chdir(tmp_path)
 
     assert "## Local references" not in _render(make_record())
+
+
+def test_a_gated_question_keeps_its_owner_and_when_and_parses_back_to_its_id(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        questions=[
+            _question(
+                "q-gate",
+                blocks_continuation=True,
+                owner="Ana",
+                when="before launch",
+            ),
+            _question("q-plain-gate", blocks_continuation=True),
+        ]
+    )
+
+    markdown = _render(record)
+    lines = markdown.splitlines()
+    gates = lines[lines.index("## Gates") + 2 : lines.index("## Open entries") - 1]
+
+    assert gates == [
+        "- q-gate — Question q-gate? (owner: Ana) (when: before launch)",
+        "- q-plain-gate — Question q-plain-gate?",
+    ]
+    assert projection.parse(markdown).gating_entry_ids == ["q-gate", "q-plain-gate"]
+
+
+def test_an_owner_literally_named_unassigned_stays_apart_from_unowned_questions(
+    make_record: Callable[..., WheypointRecord],
+) -> None:
+    record = make_record(
+        questions=[_question("q-loose"), _question("q-named", owner="Unassigned")]
+    )
+
+    assert _open_section(_render(record)) == [
+        "### Unassigned",
+        "- q-named (question) — Question q-named?",
+        "### unassigned",
+        "- q-loose (question) — Question q-loose?",
+    ]

@@ -3358,6 +3358,7 @@ def _gating_kind_rule(
         )
 
 
+@schema_constraints(minLength=1, maxLength=_MAX_TEXT)
 def _question_only(
     instance: ProtectedEntry | ProposedEntry,
     attribute: _NamedAttribute,

@@ -99,8 +99,8 @@ Flags ignore stdin unless the intent argument is `-`.
 - `--question` adds a question entry; `--gates` makes every question in the call block continuation.
 - A blocking question needs a `--rationale`; the rationale pairs by order, see below.
 - `--decision` adds a decision, and `--directive` adds a directive with the paired `--quote`.
-- `--operator-directive` adds a directive with `scope: operator`: how the user wants to be worked with, not an instruction for this work. Its `--quote` follows the `--directive` quotes. The projection lists it under `## Operator preferences`, apart from `## Directives`.
-- `--owner` and `--when` store free-text `owner` and `when` on a question. Give none, or one per `--question`; they pair by order. A different count refuses with `flag-pairing` and writes nothing. The projection groups open questions under one `###` subheading per owner (matched case-insensitively), puts unowned ones under `unassigned`, and prints `(when: <trigger>)` after the summary. With no owner on any question the list stays flat.
+- `--operator-directive` adds a directive with `scope: operator`: how the user wants to be worked with, not an instruction for this work. Pair each with an `--operator-quote`; `--quote` pairs only with `--directive`. The projection lists it under `## Operator preferences`, apart from `## Directives`.
+- `--owner` and `--when` store free-text `owner` and `when` on a question. Give none, or one per `--question`; they pair by order. A different count refuses with `flag-pairing` and writes nothing. The projection groups open questions under one `###` subheading per owner (matched case-insensitively), puts unowned ones under `unassigned`, and prints `(when: <trigger>)` after the summary. A blocking question's gate line also shows `(owner: <who>)` and `(when: <trigger>)`. With no owner on any question the list stays flat.
 - A checkpoint pins each bare `path:line` (or `path:line-line`) in `--context` items, in intent `working_context`, and in artifact links to `path:line@<short HEAD sha>`, when the path is an existing file in the checkout. It never pins on read. Outside a checkout the text stays unpinned and the result warns `unpinned-line-ref`. `path#symbol` and already pinned refs stay as written. A pin changes the intent, so the same intent at a later HEAD is a new revision.
 - `--resolve` and `--withdraw` add transitions for carried entry ids.
 - `--supersede <old>` adds a `supersede` transition that sets `superseded_by` on `<old>`. `--by <new>` names the successor entry id; give one `--by` per `--supersede`. Without `--by`, the successor is the one entry of the same kind that the same checkpoint adds, and that needs the revision you read (`--base`). If no successor resolves, the checkpoint refuses with `flag-pairing` and writes nothing.
@@ -112,7 +112,7 @@ Flags ignore stdin unless the intent argument is `-`.
 
 The flag form refuses with these codes:
 
-- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, and withdraws, a `--quote` or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
+- `flag-pairing`: the `--rationale` count differs from the blocking questions, decisions, resolves, and withdraws, a `--quote`, `--operator-quote`, or `--kind` count differs from its pair, `--gates` has no question, or `--covers` has no pinnable `--link`.
 - `flag-kind`: a `--kind` names no edge kind.
 - `flag-link`: a `--link` is not a valid typed ref.
 - `flag-conflict`: the intent file holds a non-list value at a key a flag extends.
@@ -140,7 +140,7 @@ A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error"
 - **`resolve`** returns `ref`, `outcome`, `dispatchable`, `source`, `work_id`, `record`, `projection`, `findings`, `matches`, `searched`, `legacy_note`, `legacy_slug`, `phase_slug`, `detail`, `bridge`.
 - **`show`** returns `work_id`, `status`, `revision_id`, `revision_number`, `record`, `bridge`.
 - **`fork`** replies are in [`work-graph.md`](work-graph.md).
-- **`list`** returns `corpus_root`, `items`, and `lines`.
+- **`list`** returns `corpus_root`, `items`, and `lines`, plus `scope-fallback` only when the scope fell back.
 - **`log`** returns `work_id`, `revisions`, `lines`, and `unreadable`.
 - **`turns`** returns `transcript`, `count`, `skipped_lines`, `turns`, and `lines`.
 
@@ -161,6 +161,8 @@ This escaping keeps one line one record.
 `skipped_lines` (from `turns`) counts transcript lines that could not be parsed as a turn.
 `count` (from `turns`) is the number of turns returned.
 `corpus_root` (from `list`) is the resolved root directory the listing scanned.
+`scope-fallback` (from `list`) is `machine` when `list` ran with no `--scope`, `--project`, `--corpus-root`, or `$EASY_CHEESE_PROJECT` outside a Git checkout, and so searched machine scope.
+Under that fallback, `corpus_root` is the project corpus root that would apply, not the root scanned; the scan covered every project corpus.
 
 Exit `0` means the command succeeded; the reply carries the command's own fields.
 Exit `1` means the command refused the request; the stderr line carries `error` and `exit_code`.

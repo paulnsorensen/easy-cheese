@@ -81,6 +81,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         owner: list[str] | None = None,
         when: list[str] | None = None,
         operator_directive: list[str] | None = None,
+        operator_quote: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -136,8 +137,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             paired by order (repeatable)
         operator_directive
             add an operator-preference directive (how the user wants to be
-            worked with); pair each with a --quote, after the --directive
-            quotes (repeatable)
+            worked with); pair each with an --operator-quote (repeatable)
+        operator_quote
+            the user's own words for each --operator-directive (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -173,6 +175,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             owner=owner or (),
             when=when or (),
             operator_directive=operator_directive or (),
+            operator_quote=operator_quote or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -213,6 +216,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         owner: list[str] | None = None,
         when: list[str] | None = None,
         operator_directive: list[str] | None = None,
+        operator_quote: list[str] | None = None,
         orientation: str | None = None,
         next: str | None = None,
         artifact: str | None = None,
@@ -263,8 +267,9 @@ def build_app(stdin: TextIO) -> fromargs.App:
             paired by order (repeatable)
         operator_directive
             add an operator-preference directive (how the user wants to be
-            worked with); pair each with a --quote, after the --directive
-            quotes (repeatable)
+            worked with); pair each with an --operator-quote (repeatable)
+        operator_quote
+            the user's own words for each --operator-directive (repeatable)
         orientation
             the orientation; its first line is the record title
         next
@@ -300,6 +305,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             owner=owner or (),
             when=when or (),
             operator_directive=operator_directive or (),
+            operator_quote=operator_quote or (),
             orientation=orientation,
             next=next,
             artifact=artifact,
@@ -330,7 +336,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
         project: str | None = None,
         workspace_root: str | None = None,
     ) -> dict[str, object]:
-        """Resolve a slug, work id, or path to the current record.
+        """Resolve a slug (exact, unique prefix, or unique substring), work id, or path to the current record.
 
         Parameters
         ----------
@@ -371,7 +377,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
     def list_(
         *,
         corpus_root: str | None = None,
-        scope: Literal["project", "machine"] = "project",
+        scope: Literal["project", "machine"] | None = None,
         project: list[str] | None = None,
         root: list[str] | None = None,
         grep: list[str] | None = None,
@@ -389,14 +395,16 @@ def build_app(stdin: TextIO) -> fromargs.App:
         forked_from: list[str] | None = None,
         owner: list[str] | None = None,
     ) -> dict[str, object]:
-        """List and search work items and notes across worktrees.
+        """List and search work items and notes across worktrees; outside a Git checkout the default scope falls back to machine.
 
         Parameters
         ----------
         corpus_root
             the per-project corpus root (default: the project's own corpus)
         scope
-            this project's worktrees (default), or the whole machine
+            this project's worktrees (default; outside a Git checkout the
+            default falls back to the whole machine and reports
+            scope-fallback: machine), or the whole machine
         project
             limit hits to this project key (repeatable; implies --scope machine)
         root

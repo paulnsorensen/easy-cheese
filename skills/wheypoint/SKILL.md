@@ -34,7 +34,7 @@ python3 skills/wheypoint/scripts/wheypoint.pyz turns [--session <id> | --transcr
 python3 skills/wheypoint/scripts/wheypoint.pyz show <work-id> [--project <key>]
 python3 skills/wheypoint/scripts/wheypoint.pyz validate [intent.json] [--base <revision_id>]
 python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint [intent.json] [--base <revision_id>]
-python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint <work-id> [--base <revision_id>] --question "<q>" --gates --rationale "<why>" --decision "<d>" --directive "<d>" --operator-directive "<style>" --quote "<words>" [--owner <who> --when <trigger>] --link <ref> --kind <edge-kind> [--covers <id>]...
+python3 skills/wheypoint/scripts/wheypoint.pyz checkpoint <work-id> [--base <revision_id>] --question "<q>" --gates --rationale "<why>" --decision "<d>" --directive "<d>" --quote "<words>" --operator-directive "<style>" --operator-quote "<words>" [--owner <who> --when <trigger>] --link <ref> --kind <edge-kind> [--covers <id>]...
 python3 skills/wheypoint/scripts/wheypoint.pyz schema checkpoint-intent
 python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id | slug> [--project <key>] [--workspace-root <checkout>]
 python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]... [--entry-kind <k>]... [--entry-state <s>]... [--gated | --no-gated] [--edge-kind <k>]... [--linked-to <ref>]... [--forked-from <work-id>]... [--owner <who>]...
@@ -43,10 +43,10 @@ python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientati
 python3 skills/wheypoint/scripts/wheypoint.pyz handoff render | parse | dispatch
 ```
 
-Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term.
+Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term; outside a Git checkout, `list` with no `--scope` searches machine scope and reports `scope-fallback: machine`, while an explicit `--scope` keeps its meaning.
 `fork` writes only a child genesis record with one `forked_from` edge; [`references/work-graph.md`](references/work-graph.md) gives refs, edge kinds, and the `list` graph filters.
 Create a link with `checkpoint --link`; there is no separate link command.
-`resolve` validates artifact links, grounded paths, Git objects, and coverage.
+`resolve` validates artifact links, grounded paths, Git objects, and coverage; a slug with no exact match resolves by unique prefix, then unique substring, and several matches return `ambiguous` with every candidate.
 `resolve`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
 `/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
 Foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
@@ -87,8 +87,8 @@ The runtime refuses an intent instead of dropping data.
 - It derives every identifier, digest, and revision.
 - It refuses an agent-authored `fork` transition and a `forked_from` edge in a delta.
 - It refuses `notes` over 6000 characters.
-- It warns with `stale-notes` when a decision changes and `notes` stay as they were, marks that drift at the top of `## Notes`, and lists a decision that `checkpoint --supersede <old> [--by <new>] --rationale <why>` replaced under `## Superseded`.
 - It pins a bare `path:line` in `working_context` or an artifact link to `path:line@<short HEAD sha>` when the file exists in the checkout, warns with `unpinned-line-ref` when no checkout exists, and lists each local reference (an `xdg:` ref, an absolute path outside the checkout, or a Git-ignored path) under `## Local references`.
+- It warns with `stale-notes` when a decision changes and `notes` stay as they were, marks that drift at the top of `## Notes`, and lists an entry that `checkpoint --supersede <old> [--by <new>] --rationale <why>` replaced under `## Superseded`.
 
 Fix a refused intent and run `checkpoint` again.
 
