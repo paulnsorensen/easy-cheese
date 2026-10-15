@@ -102,8 +102,8 @@
 
 
 
-2026-10-14 · a0554c4dd929e3f68 · merged · adr/culture-wheypoint-collaboration-001.md · Record the Culture problem-altitude prototype and its existing handoff ownership. Exact and natural retrieval probes return the page at rank 1.
+- 2026-10-14 · a0554c4dd929e3f6 · merged · adr/culture-wheypoint-collaboration-001.md · Record the Culture problem-altitude prototype and its existing handoff ownership. Exact and natural retrieval probes return the page at rank 1.
 
 
-2026-10-15 · 5d06dbb1e665716c · merged · adr/culture-wheypoint-collaboration-001.md · Replace explicit altitude selection with user-approved conversational navigation. Frozen identity and natural-language probes return the page at rank 1.
+- 2026-10-15 · 5d06dbb1e665716c · merged · adr/culture-wheypoint-collaboration-001.md · Replace explicit altitude selection with user-approved conversational navigation. Frozen identity and natural-language probes return the page at rank 1.
 

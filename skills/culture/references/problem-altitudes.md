@@ -2,7 +2,7 @@
 
 This prototype helps the user choose which problem to understand before choosing a solution.
 It supports ordinary user-facing Culture, not its silent reasoning mode.
-No flag, mode selection, or exact keyword is required.
+Culture requires no flag, mode selection, or exact keyword.
 
 ## Discipline
 
@@ -31,7 +31,6 @@ For example, “These bugs feel connected” can prompt a shared-cause compariso
 “Zoom out, check the roadmap, and challenge the connection” combines altitude, evidence, and a thinking move.
 State that interpretation before gathering evidence.
 Suggest a useful shift when the evidence warrants one; the user need not request it first.
-Do not fetch a broader evidence set merely because you suggest a shift.
 Ask before expanding the agreed scope; a cue does not authorize mutations or a move to Mold.
 Respect a request to stay local, and keep urgent risks visible.
 
@@ -60,7 +59,6 @@ These are views of one problem, not five required interview rounds.
 Start at the user's altitude.
 Move upward to ask why it matters; move downward to ask what would demonstrate the claim.
 Higher altitude does not mean greater priority or a better fix.
-Do not turn a simple local defect into an architecture exercise.
 
 ## Gather evidence through four lenses
 
@@ -105,7 +103,6 @@ For each plausible shared cause, state:
 - The smallest discriminating observation and what each explanation predicts.
 
 Keep this comparison in the reply that proposes the shared cause; do not defer it behind the next question.
-A proposed probe does not authorize evidence collection beyond the agreed scope.
 A useful probe changes which explanation you believe.
 “Inspect more code” alone is not a discriminating probe.
 A cluster can remain unexplained.
@@ -120,7 +117,6 @@ Name urgent risk promptly, but do not implement, suppress checks, or defer neede
 
 Use a compact table or relationship diagram when requested or useful for understanding several levels.
 Use both when each adds information; a short comparison can suffice for a local question.
-Honor an explicit request for a diagram without forcing a complete altitude tour.
 Use Mermaid when supported; otherwise use an equivalent text diagram.
 Give nodes stable IDs and connect them to the evidence ledger.
 Use solid links for evidenced relationships and dashed links for hypotheses.
@@ -142,58 +138,47 @@ Keep a compact problem brief in the conversation:
 - Proposed discriminating probes, urgent risks, and parked solution ideas.
 - The user's selected focus, or an explicit statement that no focus is selected.
 
-Continue exploring while the user wants to understand the problem.
-Stop gathering evidence when it no longer changes the frame; do not declare the session finished for the user.
-
+Stop gathering evidence when it no longer changes the frame.
+Session end and handoff ownership follow the Invariant in SKILL.md.
 When the user chooses Mold, pass the brief through Culture's existing handoff context.
-Include the selected problem, constraints, evidence, and open questions in its Wheypoint.
-Keep the existing `handoff_context` fields; put brief details in the Wheypoint, not new packet fields.
+Put the selected problem, constraints, evidence, and open questions in its Wheypoint; add no packet fields and no second artifact schema.
 A hypothesis is not a decision; an unresolved question is not an approved requirement.
 Mold owns solution alternatives and specifications.
-Problem exploration offers more investigation, targeted research, Mold, or pause; it does not produce a runnable Cook contract.
-It does not create, close, relabel, or reorder issues or roadmap goals.
-Reuse Culture's record ledger and Wheypoint ownership; do not create a second artifact schema.
-Respect an explicit prohibition on all filesystem writes.
+Problem exploration offers more investigation, targeted research, Mold, or pause.
+Offer Cook only after the conversation reaches a clear, local ask; exploration alone does not produce a runnable Cook contract.
+Problem exploration does not create, close, relabel, or reorder issues or roadmap goals.
+If the user prohibits all filesystem writes, keep the record ledger and handoff details in the conversation; write no records and do not invoke Wheypoint.
 
 ## Worked example
 
-This example is synthetic, not an audit of easy-cheese.
+This example is synthetic.
 
-Evidence: E1 reports a handoff failure in another worktree.
-E2 shows a source link pointing to the wrong line after an edit.
-E3 reports wrong help text while the command works.
-W1 says durable identity should not depend on checkout paths.
-R1 names reliable continuation as an outcome.
-The user's purpose is to resume work without reconstructing context.
+Evidence: E1 reports slow report exports for large accounts.
+E2 shows nightly export timeouts.
+E3 reports a misspelled column header.
 
 | Altitude | Provisional frame |
 | --- | --- |
-| Purpose | Resume work without reconstructing context |
-| Outcomes | Reliable continuation, with acceptance still to clarify (R1) |
-| Structure | Reference lifetime may differ from task lifetime (H1, unconfirmed) |
-| Patterns | Two references lose meaning across context changes (E1, E2); recurrence is unknown |
-| Events | Worktree failure (E1), stale line (E2), incorrect help (E3) |
+| Purpose | Finance closes the month without waiting on exports |
+| Patterns | Slow and timed-out exports (E1, E2); recurrence unknown |
+| Events | Slow export (E1), nightly timeout (E2), misspelled header (E3) |
 
 ```mermaid
 flowchart TB
-  P["Purpose: resume without reconstruction"]
-  R["R1: reliable continuation"]
-  H["H1: reference lifetime mismatch"]
-  E1["E1: worktree failure - reported"]
-  E2["E2: wrong source line - observed"]
-  E3["E3: help text - separate reported fault"]
-  R -->|"serves stated goal"| P
-  E1 -->|"blocks reported outcome"| R
-  H -.->|"might explain"| E1
-  H -.->|"might explain"| E2
+  P["Purpose: timely month close"]
+  H1["H1: shared query cost - hypothesis"]
+  E1["E1: slow export - reported"]
+  E2["E2: nightly timeout - observed"]
+  E3["E3: header typo - separate fault"]
+  E1 -->|"delays"| P
+  H1 -.->|"might explain"| E1
+  H1 -.->|"might explain"| E2
 ```
 
-H2: E1 is a checkout-root resolution bug; E2 is independent line-reference drift.
-Probe: trace one failing reference from each report through its producer and consumer.
-H1 predicts a shared lifetime assumption; H2 predicts separate contracts and failure paths.
-W1 gives intended behavior, not proof that either explanation is correct.
-E3 stays outside the cluster unless new evidence connects it.
-The next question selects which claim to investigate, not which abstraction to build.
+H2: E1 is a missing index; E2 is a scheduler overlap.
+Probe: time one large export inside and outside the nightly window.
+H1 predicts slow runs in both; H2 predicts slow runs only inside the window.
+E3 stays outside the cluster.
 
 ## Basis
 

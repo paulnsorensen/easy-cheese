@@ -1,31 +1,29 @@
 ---
 name: culture
-description: Models problems and trade-offs without writing code or specifications. Use when a workflow needs silent reasoning, or the user asks for "/culture", "no writes", "rubber-duck this", or "these bugs feel connected".
+description: Models problems and trade-offs without writing code or specifications. Use when a workflow needs silent reasoning, or the user asks for "/culture", "no writes", "rubber-duck this", or "these bugs feel connected". Not for specs (/mold), code (/cook), or bug diagnosis and fixes (/pasteurize).
 license: MIT
 ---
 
 # /culture
 
-Two invocation contexts; users do not select a mode:
+Two modes; the invocation context, not a user flag, selects the mode:
 
 1. **Internal mode (default).** Other workflow skills — and `/cheese` itself — invoke `/culture` silently as a thinking pass: restate the question, list assumptions, name candidate options, run a quick shape check, pick the next action. The dialogue does not surface to the user; only the resulting decision (carrying its record ledger) and any code edits the calling skill makes do. The most common callers are:
    - `/cheese` step 1 — silent classification reasoning before announce.
    - `/cheese` **tier-2 escalation** (see `skills/cheese/SKILL.md` § Escalation) — fills missing context when the cook-fast-path clarity check fails on the raw input; the synthesis lands in the mini-spec's `## Provenance` section.
    - Other workflow skills' own pre-dispatch reasoning passes (mold, cook taste-test, etc.).
-2. **User-facing mode.** The user wants to think, not build: no production code, no spec, no PR. This is culture's sustained domain-modeling mode — investigate as deeply as the question needs, hold it open across turns and sessions rather than forcing convergence, record ideas, decisions, and info as they settle (`## Record ledger`), and end by writing a durable `/wheypoint` so the modeling resumes later. Reach this mode when the user said "no writes" / "rubber-duck this" / "just talk", or routed a thinking-and-modeling task here.
+2. **User-facing mode.** The user wants to think, not build: no production code, no spec, no PR. This is culture's sustained domain-modeling mode — investigate as deeply as the question needs, hold it open across turns and sessions rather than forcing convergence, record ideas, decisions, and info as they settle (`## Record ledger`), and end by writing a durable `/wheypoint` so the modeling resumes later. Reach this mode when the user said "no writes" / "rubber-duck this" / "just talk", asked to think through a problem ("these bugs feel connected", "I want to understand before fixing"), or routed a thinking-and-modeling task here.
 
-Do not use the user-facing mode when the user wants a written spec (`/mold`), implementation (`/cook`), review (`/age`), or external evidence gathering (`/briesearch`) — those targets get the internal-mode call instead, and the calling skill does the work.
+Do not use the user-facing mode when the user wants a written spec (`/mold`), implementation (`/cook`), a bug diagnosis or fix (`/pasteurize`), review (`/age`), or external evidence gathering (`/briesearch`) — those targets get the internal-mode call instead, and the calling skill does the work.
 
 ## Conversational navigation (prototype)
 
-Use `/culture <goal or problem>` or ordinary conversation; interpret intent and context, not reserved keywords.
-Altitude navigation belongs to normal user-facing Culture and supplements the Flow below.
+Inside a user-facing session, the user steers problem levels by ordinary conversation; this is navigation, not a separate entry path.
+Altitude navigation supplements the Flow below.
 Suggest a useful change of altitude when evidence indicates a pattern or a gap between behavior and goals.
 State the interpretation and stay within the agreed evidence scope.
 A suggestion does not authorize a broad audit or downstream transition.
 Read [Problem altitudes](references/problem-altitudes.md) when moving between levels, testing shared causes, or drawing relationships.
-Cues such as “zoom out” and “make that concrete” are optional examples, not commands or a mode menu.
-Keep simple local questions local; do not require a full altitude tour, table, or diagram.
 Keep silent internal reasoning unchanged; it does not load the reference or start a user interview.
 Culture still owns the record ledger and session-end handoff.
 For behavioral evaluation, use [the pressure scenarios](references/problem-altitudes-evals.md).

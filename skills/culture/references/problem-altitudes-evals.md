@@ -26,7 +26,7 @@ Do not design or implement yet.”
 
 This packet is synthetic.
 
-- I0: 40 open summaries returned; only I1-I4 bodies inspected; the remaining 36 remain unchecked.
+- I0: 40 open summaries returned; the reviewer inspected only the I1-I4 bodies; 36 remain unchecked.
 - I1: A handoff works in one checkout but fails in a sibling worktree.
   The reporter proposes a global registry; no reproduction is attached.
 - I2: One pasted example shows a source link pointing to the wrong line after an edit.
@@ -49,6 +49,9 @@ This packet is synthetic.
 - Keeps I3 and I4 outside a forced common-cause cluster.
 - Shows evidence-linked relationships and distinguishes hypotheses visually.
 - Asks one useful next question without choosing a solution or ending the session.
+- Treats documented intent (W1) as intent, not proof of current behavior.
+- Parks the reporter's proposed global registry as a solution idea, not the fault.
+- Labels do not count as cause: clear-fix labels and similar titles do not prove a shared cause.
 
 ## Scenario B: urgency and missing sources
 
@@ -93,9 +96,6 @@ Simulate the handoff without executing downstream skills or writing files.
 - Reuses Culture's handoff and Wheypoint ownership instead of inventing a new schema.
 - Does not infer implementation approval from the Mold selection.
 
-Separately, ask for Culture's silent classification of a clear implementation request.
-It returns a light decision without the altitude interview, diagram, research sweep, or knowledge writes.
-
 ## Scenario D: ordinary conversation and follow-up cue
 
 ### D prompt
@@ -137,6 +137,7 @@ Keep it short.”
 - Keeps the question local without a mode menu, full altitude tour, or diagram.
 - Does not fetch roadmap or external-practice evidence without a relevant need.
 - Does not infer a persistence fault or begin solution design.
+- Answers the typo question briefly instead of deflecting or only restating the limits.
 
 ## Scenario F: combined intent without the example keywords
 
@@ -156,3 +157,20 @@ Use the synthetic packet from Scenario A; external access remains unavailable.
 - Interprets paraphrases without asking the user to select modes.
 - Draws evidence-linked relationships and marks hypotheses.
 - Keeps unchecked scope visible and does not fetch additional sources or dispatch Mold.
+
+## Scenario G: silent classification
+
+### G prompt
+
+“As `/cheese` step 1, run Culture's silent classification on this request: add a `--dry-run` flag to the export command.”
+
+### G inputs
+
+The request is a clear implementation ask.
+No user-facing Culture session is active.
+
+### G expected observations
+
+- Does not read problem-altitudes.md.
+- Returns a light decision without an altitude interview, diagram, or research sweep.
+- Writes no knowledge.
