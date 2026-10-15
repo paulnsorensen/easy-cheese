@@ -27,11 +27,11 @@ from typing import Annotated
 
 import fromargs
 
-from easy_cheese_schemas.handback_status import require_single_line
 from easy_cheese_schemas.handback_status import (
     StatusError,
     parse_status_field,
     render_status_field,
+    require_single_line,
     status_disposition,
 )
 
