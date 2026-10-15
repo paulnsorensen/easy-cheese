@@ -242,12 +242,12 @@ def _checkout() -> Path | None:
     return Path(top.stdout.strip()) if top.returncode == 0 and top.stdout.strip() else None
 
 
-def _local_references(record: WheypointRecord) -> list[str]:
-    """The `## Local references` section, or nothing when no reference is local.
+def local_references(record: WheypointRecord) -> list[str]:
+    """The references that need the author's machine, in record order.
 
-    A reference is local when it needs the author's machine: an `xdg:` ref, an
-    absolute path outside the checkout, or a repository path Git ignores.
-    Outside a checkout only the first two classify.
+    A reference is local when it is an `xdg:` ref, an absolute path outside the
+    checkout, or a repository path Git ignores. Outside a checkout only the
+    first two classify.
     """
     candidates: list[tuple[str, bool]] = []
     for link in record.artifact_links:
@@ -264,6 +264,12 @@ def _local_references(record: WheypointRecord) -> list[str]:
     for text, must_exist in candidates:
         if text not in found and _is_local(text, checkout, must_exist=must_exist):
             found.append(text)
+    return found
+
+
+def _local_references(record: WheypointRecord) -> list[str]:
+    """The `## Local references` section, or nothing when no reference is local."""
+    found = local_references(record)
     if not found:
         return []
     return ["", _LOCAL_HEADING, "", *(f"- {escape(text)}" for text in found)]

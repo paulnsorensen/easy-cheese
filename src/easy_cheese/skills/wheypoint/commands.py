@@ -76,6 +76,20 @@ def _fork(argv: list[str]) -> int:
     return wheypoint.main(["fork", *argv])
 
 
+@bundle_command("export")
+def _export(argv: list[str]) -> int:
+    from easy_cheese.cli import wheypoint
+
+    return wheypoint.main(["export", *argv])
+
+
+@bundle_command("import")
+def _import(argv: list[str]) -> int:
+    from easy_cheese.cli import wheypoint
+
+    return wheypoint.main(["import", *argv])
+
+
 @bundle_command("handoff")
 def _handoff(argv: list[str]) -> int:
     from easy_cheese.shared.handoff import main
@@ -93,6 +107,8 @@ COMMANDS = (
     derive_command(_log, "Walk the revisions of one work id, oldest first"),
     derive_command(_turns, "Print the user's own turns from a session transcript"),
     derive_command(_fork, "Fork a child record from a parent; only the child is written"),
+    derive_command(_export, "Write a canonical JSON bundle of a record for another person"),
+    derive_command(_import, "Verify a bundle and write it as a fork child record"),
     derive_command(
         _handoff,
         "Render, parse, and dispatch-split handoff preambles",

@@ -1,4 +1,4 @@
-"""The nine commands the bundle exposes: checkpoint, validate, schema, resolve, show, list, log, turns, fork.
+"""The commands the bundle exposes: checkpoint, validate, schema, resolve, show, list, log, turns, fork, export, import.
 
 This package is a mouth, not a brain. Every decision it reports was made by
 `commit` or `resolve`; nothing here parses a projection, compares a
@@ -35,6 +35,7 @@ from easy_cheese.cli.wheypoint.checkpoint import (
 )
 from easy_cheese.cli.wheypoint import fork as fork_mod
 from easy_cheese.cli.wheypoint import queries as queries_mod
+from easy_cheese.cli.wheypoint import transfer as transfer_mod
 
 COMMANDS = (
     "checkpoint",
@@ -46,6 +47,8 @@ COMMANDS = (
     "log",
     "turns",
     "fork",
+    "export",
+    "import",
 )
 
 
@@ -541,6 +544,64 @@ def build_app(stdin: TextIO) -> fromargs.App:
                 project=project,
             ),
         )
+    def export(
+        ref: str,
+        *,
+        out: str | None = None,
+        include_operator: bool = False,
+        include_local: bool = False,
+    ) -> dict[str, object]:
+        """Write one canonical JSON bundle of a record, for another person to import.
+
+        Parameters
+        ----------
+        ref
+            a slug, work id, or projection path
+        out
+            write the bundle to this file (default: print it in the reply)
+        include_operator
+            keep operator-preference directives (omitted by default)
+        include_local
+            keep references that need this machine (omitted by default)
+        """
+        return _ok(
+            "export",
+            transfer_mod.run_export(
+                ref,
+                out=out,
+                include_operator=include_operator,
+                include_local=include_local,
+            ),
+        )
+
+    def import_(
+        bundle: str,
+        *,
+        slug: Annotated[str | None, fromargs.Parameter(name="--as")] = None,
+        note_dir: str | None = None,
+        no_note: bool = False,
+    ) -> dict[str, object]:
+        """Verify a bundle and write it as a fork child with a forked_from edge.
+
+        Parameters
+        ----------
+        bundle
+            path to a bundle written by export
+        slug
+            the new work id (default: the bundle's work id)
+        note_dir
+            directory the readable projection is mirrored into (default:
+            <git toplevel>/.cheese/notes)
+        no_note
+            write no mirror; the import stays canonical-local
+        """
+        return _ok(
+            "import",
+            transfer_mod.run_import(
+                bundle, slug=slug, note_dir=note_dir, no_note=no_note
+            ),
+        )
+
     _ = app.command(checkpoint, name="checkpoint")
     _ = app.command(validate, name="validate")
     _ = app.command(schema, name="schema")
@@ -550,6 +611,8 @@ def build_app(stdin: TextIO) -> fromargs.App:
     _ = app.command(log, name="log")
     _ = app.command(turns, name="turns")
     _ = app.command(fork, name="fork")
+    _ = app.command(export, name="export")
+    _ = app.command(import_, name="import")
     return app
 
 

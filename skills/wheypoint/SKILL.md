@@ -40,16 +40,16 @@ python3 skills/wheypoint/scripts/wheypoint.pyz resolve <absolute-path | work-id 
 python3 skills/wheypoint/scripts/wheypoint.pyz list [--scope project | machine] [--grep <text>]... [--status <s>]... [--next <move>]... [--project <key>]... [--entry-kind <k>]... [--entry-state <s>]... [--gated | --no-gated] [--edge-kind <k>]... [--linked-to <ref>]... [--forked-from <work-id>]... [--owner <who>]...
 python3 skills/wheypoint/scripts/wheypoint.pyz log <work-id> [--project <key>]
 python3 skills/wheypoint/scripts/wheypoint.pyz fork <parent> <child> --orientation "<child title>" [--next <move> [--artifact <a>]]
+python3 skills/wheypoint/scripts/wheypoint.pyz export <slug | work-id | path> [--out <file>] [--include-operator] [--include-local]
+python3 skills/wheypoint/scripts/wheypoint.pyz import <bundle.json> [--as <slug>] [--note-dir <dir> | --no-note]
 python3 skills/wheypoint/scripts/wheypoint.pyz handoff render | parse | dispatch
 ```
 
 Repeat `--grep`, `--status`, `--next`, or `--project` to search several values in one `list` call; a hit matching any value of one flag is kept, and distinct flags combine with AND; never loop over `list` once per term.
-`fork` writes only a child genesis record with one `forked_from` edge; [`references/work-graph.md`](references/work-graph.md) gives refs, edge kinds, and the `list` graph filters.
-Create a link with `checkpoint --link`; there is no separate link command.
-`resolve` validates artifact links, grounded paths, Git objects, and coverage.
+`fork` writes only a child genesis record with one `forked_from` edge; `import` writes only an imported record, and `bundle_digest` covers the canonical bundle with no field of its own; [`references/work-graph.md`](references/work-graph.md) gives refs, edge kinds, the bundle, and the `list` graph filters.
+Create a link with `checkpoint --link`; `resolve` validates artifact links, grounded paths, Git objects, and coverage.
 `resolve`, `list`, `log`, `show`, `schema`, and `turns` only read; direct invocations return output, and **STOP** before checkpoint writing.
-`/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model.
-Foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
+`/cheese --continue` uses `resolve` and never invokes another archive; slash commands are host renderings, not the control model; foreign machine hits require the owning checkout; follow [the continuation protocol](../cheese/references/continue-resume.md).
 The parent delegates persistence to this capability as one structured checkpoint task and runs `validate` before `checkpoint`; workers never invoke either command at a hard limit.
 Phase skills resolve with their own `wheypoint-resolve --ref <slug>` command; follow [`references/delta-contract.md`](references/delta-contract.md) for its outcomes, `working_context`, and findings.
 
