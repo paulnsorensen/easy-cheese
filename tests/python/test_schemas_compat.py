@@ -397,6 +397,9 @@ class TestAdapterSunsets:
 
         check_adapter_sunsets(date(2020, 1, 1))
 
+    def test_registered_adapters_have_not_expired_today(self) -> None:
+        check_adapter_sunsets(date.today())
+
 
 _LEGACY_CURD_PLAN_V0_9: dict[str, object] = {
     "plan_id": "legacy-plan",

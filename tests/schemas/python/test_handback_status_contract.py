@@ -1,6 +1,6 @@
 """Every handback producer and consumer speaks one status vocabulary.
 
-The regression these lock down: before the vocabulary moved into
+The regression these lock down: before the vocabulary lived in
 ``easy_cheese_schemas.handback_status`` each seam carried its own grammar, so
 ``gated:`` -- a status ``/wheypoint`` derives and ``continue-resume.md``
 documents -- was rejected by the shared preamble parser and read as "proceed"
@@ -25,17 +25,15 @@ from easy_cheese.shared.wheypoint import legacy
 import easy_cheese_schemas
 from easy_cheese_schemas import handback_status
 from easy_cheese_schemas.handback_status import (
-    MAX_REASON_LENGTH,
-    Disposition,
-    HandbackStatus,
-)
-from easy_cheese_schemas.handback_status import (
     DISPOSITIONS,
     HANDBACK_STATUSES,
+    MAX_REASON_LENGTH,
     PROCEED,
     REGISTERED_STATUSES,
     RETRY,
     STOP,
+    Disposition,
+    HandbackStatus,
     StatusError,
     parse_status_field,
     render_status_field,

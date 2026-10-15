@@ -88,5 +88,5 @@ The resolve payload carries `bridge` beside the outcome.
 - `bridge` is `{state, node_ref, wheypoint_ref}`, or `null` when no record resolved.
 - `bridge.state` is `bound`, `bridge-inactive`, or `unbound`, and it never changes `dispatchable`.
 
-A schema-3 link that holds only `path` reads as `repo:<path>`.
-The resolve payload does not carry the normalization receipts.
+A schema-3 link that holds only `path` reads as `repo:<path>` without changing stored bytes.
+The resolve payload does not carry a receipt for this read.
