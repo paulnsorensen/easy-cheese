@@ -85,9 +85,8 @@ The resolve payload carries two work-graph keys beside the outcome.
 - `bridge` is `{state, node_ref, wheypoint_ref}`, or `null` when no record resolved.
 - `bridge.state` is `bound`, `bridge-inactive`, or `unbound`, and it never changes `dispatchable`.
 
-A schema-3 link that holds only `path` reads as `repo:<path>`.
-The kernel lint report records one receipt per such link in `normalizations`.
-These receipts are data, never findings, and the resolve payload does not carry them.
+A schema-3 link that holds only `path` reads as `repo:<path>` without changing stored bytes.
+The resolve payload does not carry a receipt for this read.
 
 A pending entry never changes the outcome or dispatch.
 When the outcome is `gated` and `pending` holds a fork entry, `/cheese --continue` prints one line beside the gate:
