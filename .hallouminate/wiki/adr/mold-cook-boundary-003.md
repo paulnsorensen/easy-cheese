@@ -1,6 +1,6 @@
 # ADR: Partial plans need explicit subset approval and preserved remainder
 
-> Superseded in part by PR #774, which removed `MoldCookHandoff`, `MoldCookCoverage` carriage, and the preparation modules. See [workflow-contract-map](../architecture/workflow-contract-map.md).
+> Superseded in part by PR #774, which removed the `MoldCookHandoff` envelope, its `MoldCookCoverage` carriage, and the preparation modules. Cook still reads `MoldCookCoverage` from the saved result. See [workflow-contract-map](../architecture/workflow-contract-map.md).
 
 Status: implemented for the repository boundary; external executor integration and live evidence remain (2026-09-18).
 

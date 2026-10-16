@@ -150,11 +150,11 @@ _Code_: NEW ENTITY
 _Avoid_: HandoffPointer, NormalizationReceipt, continuity envelope
 _Code_: `src/easy_cheese/shared/publication.py`
 
-**PublishedArtifact** - producer result containing the canonical payload, pointer, and optional normalization receipt.
+**PublishedArtifact** - producer result containing the canonical payload and pointer.
 _Avoid_: uncommitted payload
 _Code_: NEW ENTITY
 
-**AcceptedArtifact** - consumer result exposed only after pointer, route, reference, receipt, and payload validation.
+**AcceptedArtifact** - consumer result exposed only after pointer, route, reference, and payload validation.
 _Avoid_: parsed bare payload
 _Code_: NEW ENTITY
 
