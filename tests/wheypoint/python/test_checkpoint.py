@@ -182,7 +182,7 @@ def test_a_genesis_replay_needs_an_explicit_captured_at() -> None:
     status, conflict = _run("checkpoint", stdin=unstamped)
 
     assert first["replayed"] is False
-    assert status == 1
+    assert status == 2
     assert _get(conflict, "error", "code") == "genesis-conflict"
 
 
@@ -243,7 +243,7 @@ def test_a_base_revision_id_that_is_not_current_refuses(
         ),
     )
 
-    assert status == 1
+    assert status == 2
     # The pinned base is passed through to the kernel, so the refusal is the
     # kernel's own -- checkpoint invents no second staleness check above it.
     assert _get(payload, "error", "code") == "stale-parent"
@@ -273,7 +273,7 @@ def test_a_base_revision_id_on_work_with_no_record_refuses() -> None:
         "checkpoint", stdin=_first(base_revision_id="rev-000000000000")
     )
 
-    assert status == 1
+    assert status == 2
     # Pinning a revision that is not the genesis sentinel says the caller read
     # a record; there is none, so the kernel refuses rather than creating one.
     assert _get(payload, "error", "code") == "commit-refused"
@@ -296,7 +296,7 @@ def test_a_write_to_an_existing_record_without_a_base_is_refused(
         read_first=False,
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "base-revision-required"
     message = cast(str, _get(payload, "error", "message"))
     assert cast(str, genesis["revision_id"]) in message
@@ -340,7 +340,7 @@ def test_a_stale_base_flag_is_refused_without_writing(
         read_first=False,
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "stale-parent"
     assert _tree_bytes(store) == before
 
@@ -383,7 +383,7 @@ def test_checkpoint_refuses_the_fields_that_belong_to_commit(
     """
     status, payload = _run("checkpoint", stdin=_intent(**{field: value}))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "commit-only-field"
     message = cast(str, _get(payload, "error", "message"))
     assert field in message
@@ -412,7 +412,7 @@ def test_checkpoint_refuses_a_field_the_record_cannot_hold(
     """
     status, payload = _run("checkpoint", stdin=_first(**{field: value}))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
     message = cast(str, _get(payload, "error", "message"))
     assert field in message
@@ -501,7 +501,7 @@ def test_a_transition_without_a_rationale_is_not_a_retirement() -> None:
         stdin=_intent(transitions=[{"entry_id": "q-nothing", "action": "resolve"}]),
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
@@ -575,7 +575,7 @@ def test_mirror_failure_then_retry_resumes_the_committed_revision(
 
     status, first = _run("checkpoint", "--note-dir", str(notes), stdin=intent)
 
-    assert status == 1
+    assert status == 2
     assert _get(first, "error", "code") == "note-unwritable"
     # The projection claims repo-snapshot durability, so a failed mirror must
     # leave no promoted record behind to carry that claim.
@@ -606,7 +606,7 @@ def test_mirror_failure_then_retry_resumes_the_committed_revision(
 def test_an_artifact_without_a_next_move_refuses() -> None:
     status, payload = _run("checkpoint", stdin=_intent(artifact=".cheese/x.md"))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
     assert "next" in cast(str, _get(payload, "error", "message"))
 
@@ -617,7 +617,7 @@ def test_a_first_checkpoint_must_say_what_comes_next() -> None:
         "checkpoint", stdin=_intent(orientation="No next move.", working_context=[])
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
@@ -625,14 +625,14 @@ def test_a_first_checkpoint_must_say_what_comes_next() -> None:
 def test_an_unknown_next_move_is_refused_as_an_intent() -> None:
     status, payload = _run("checkpoint", stdin=_intent(next="deploy"))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
 def test_checkpoint_reports_a_work_id_that_is_not_a_path_segment() -> None:
     status, payload = _run("checkpoint", stdin=json.dumps({"work_id": "../escape"}))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
@@ -821,7 +821,7 @@ def test_ac5_removed_intent_surface_is_refused_and_names_the_key_path(
 ) -> None:
     status, payload = _run("checkpoint", stdin=_first(**overrides))
 
-    assert status == 1, payload
+    assert status == 2, payload
     assert _get(payload, "error", "code") == "invalid-intent"
     assert key_path in cast(str, _get(payload, "error", "message"))
 
@@ -841,5 +841,5 @@ def test_ac6_a_blocking_question_without_a_rationale_is_refused() -> None:
         ),
     )
 
-    assert status == 1, payload
+    assert status == 2, payload
     assert "rationale" in cast(str, _get(payload, "error", "message"))

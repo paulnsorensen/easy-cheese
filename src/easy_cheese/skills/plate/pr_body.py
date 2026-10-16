@@ -83,7 +83,7 @@ def _read(path: str) -> str:
     try:
         return read_bounded(Path(path), _MAX_BODY_BYTES).decode("utf-8")
     except (OSError, BoundedReadOverflow, UnicodeDecodeError) as error:
-        raise fromargs.CliError(f"{path}: {error}", exit_code=1) from error
+        raise fromargs.CliError(f"{path}: {error}", exit_code=2) from error
 
 
 def check_cmd(
@@ -103,7 +103,7 @@ def check_cmd(
     template = _read(template_file) if template_file is not None else None
     errors = check_body(_read(body_file), stack_layer=stack_layer, template=template)
     if errors:
-        raise fromargs.CliError("\n".join(errors), exit_code=1)
+        raise fromargs.CliError("\n".join(errors), exit_code=2)
     return {"valid": True}
 
 

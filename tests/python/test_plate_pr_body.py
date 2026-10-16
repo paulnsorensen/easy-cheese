@@ -87,7 +87,7 @@ def test_cli_exits_one_and_lists_every_error(
     path = tmp_path / "body.md"
     _ = path.write_text("## Why\nrobust\n")
 
-    assert pr_body.main(["--body-file", str(path)]) == 1
+    assert pr_body.main(["--body-file", str(path)]) == 2
 
     stderr = capsys.readouterr().err
     assert "missing heading: ## Risk" in stderr

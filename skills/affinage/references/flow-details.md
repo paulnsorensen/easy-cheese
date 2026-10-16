@@ -15,7 +15,7 @@ Each failed check summary includes approximately 10 final log lines.
   Read `<run-id>` from the `/actions/runs/<id>/` URL segment or `gh pr checks`.
   Then tell the user to run `/affinage` again.
 - **A nonzero exit** means the PR or GitHub status is unavailable.
-  Exit 1 identifies a PR or API error.
+  Exit 4 identifies a PR or API error.
   Exit 2 identifies a missing `gh` binary.
   Write `status: halt: pr-status-unavailable` and stop.
 

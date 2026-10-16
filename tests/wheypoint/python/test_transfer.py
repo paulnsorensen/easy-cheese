@@ -152,7 +152,7 @@ def test_export_include_flags_keep_operator_and_local(
 @pytest.mark.usefixtures("corpus_root")
 def test_export_command_refuses_an_unknown_ref(tmp_path: Path) -> None:
     status, payload = run_cli(["export", "missing", "--out", str(tmp_path / "b.json")])
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "export-unresolved"
     assert not (tmp_path / "b.json").exists()
 
@@ -216,7 +216,7 @@ def test_import_digest_mismatch_refuses_and_writes_nothing(
     _ = bad_bundle.write_bytes(canonical.canonical_bytes(tampered))
     other = _other_machine(tmp_path, monkeypatch)
     status, payload = _import(bad_bundle, "--as", "beta")
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "bundle-digest-mismatch"
     assert not (other / "work").exists()
 
@@ -234,7 +234,7 @@ def test_import_each_inner_digest_is_checked_even_when_the_bundle_digest_is_redo
     _ = path.write_bytes(canonical.canonical_bytes(forged))
     other = _other_machine(tmp_path, monkeypatch)
     status, payload = _import(path)
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "bundle-digest-mismatch"
     assert not (other / "work").exists()
 
@@ -251,10 +251,10 @@ def test_import_refuses_oversized_malformed_and_unsafe_slug_input(
     _ = junk.write_text("[1, 2]")
     for path in (huge, junk):
         status, payload = _import(path)
-        assert status == 1
+        assert status == 2
         assert payload_at(payload, "error", "code") == "bundle-invalid"
     status, payload = _import(out, "--as", "../escape")
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "invalid-slug"
 
 
@@ -264,7 +264,7 @@ def test_import_refuses_to_overwrite_an_existing_record(
     _ = _author(corpus_root)
     out, _ = _export(tmp_path)
     status, payload = _import(out)
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "import-exists"
 
 
@@ -444,7 +444,7 @@ def _import_forged(
     _ = path.write_bytes(canonical.canonical_bytes(forged))
     other = _other_machine(tmp_path, monkeypatch)
     status, payload = _import(path)
-    assert status == 1
+    assert status == 2
     assert not (other / "work").exists()
     return payload
 
@@ -521,7 +521,7 @@ def test_import_refuses_a_deeply_nested_bundle_as_invalid(
     _ = deep.write_bytes(b"[" * 200_000)
     _ = _other_machine(tmp_path, monkeypatch)
     status, payload = _import(deep)
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "bundle-invalid"
 
 
@@ -532,9 +532,9 @@ def test_refused_import_creates_no_note_directory(
     out, _payload = _export(tmp_path)
     notes = tmp_path / "notes-dir"
     status, payload = run_cli(["import", str(out), "--as", "../escape", "--note-dir", str(notes)])
-    assert (status, payload_at(payload, "error", "code")) == (1, "invalid-slug")
+    assert (status, payload_at(payload, "error", "code")) == (2, "invalid-slug")
     status, payload = run_cli(["import", str(out), "--note-dir", str(notes)])
-    assert (status, payload_at(payload, "error", "code")) == (1, "import-exists")
+    assert (status, payload_at(payload, "error", "code")) == (2, "import-exists")
     assert not notes.exists()
 
 
@@ -714,7 +714,7 @@ def test_import_refuses_a_credential_and_writes_nothing(
     out, _payload = _export(tmp_path)
     other = _other_machine(tmp_path, monkeypatch)
     status, payload = _import(out, "--as", "beta")
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "secret-pattern"
     assert not (other / "work").exists()
 

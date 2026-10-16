@@ -230,7 +230,7 @@ def budget_check(path: str) -> dict[str, object]:
     try:
         ledger = load_ledger(manifest)
     except LedgerError as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=4) from exc
 
     report = check_ledger(ledger)
     for finding in report.findings:

@@ -50,23 +50,23 @@ def normalize(document: str, *, invocation: str) -> dict[str, object]:
     try:
         document_raw = document_path.read_bytes()
     except OSError as exc:
-        raise fromargs.CliError(f"cannot read {document_path}: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"cannot read {document_path}: {exc}", exit_code=2) from exc
     try:
         invocation_raw = invocation_path.read_bytes()
     except OSError as exc:
-        raise fromargs.CliError(f"cannot read {invocation_path}: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"cannot read {invocation_path}: {exc}", exit_code=2) from exc
     try:
         invocation_parsed = cast(object, json.loads(invocation_raw))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise fromargs.CliError(f"invalid invocation JSON: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"invalid invocation JSON: {exc}", exit_code=2) from exc
     if not isinstance(invocation_parsed, dict):
-        raise fromargs.CliError("invocation must be a JSON object", exit_code=1)
+        raise fromargs.CliError("invocation must be a JSON object", exit_code=2)
     invocation_payload = cast("dict[str, object]", invocation_parsed)
     try:
         artifact = normalize_agent_output(document_raw, invocation_payload)
         _validate_against(artifact.canonical_bytes, type(artifact.value))
     except ContractValidationError as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     wrapper = {
         "value": artifact.value,
         "digest": _digest_of(artifact.canonical_bytes),
@@ -89,14 +89,14 @@ def validate(payload: str, *, schema: str) -> str:
     try:
         raw = payload_path.read_bytes()
     except OSError as exc:
-        raise fromargs.CliError(f"cannot read {payload_path}: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"cannot read {payload_path}: {exc}", exit_code=2) from exc
     schema_uri = f"{SCHEMA_ROOT}/{schema}"
     try:
         _validate_against(raw, schema_uri)
     except KeyError as exc:
-        raise fromargs.CliError(f"unknown schema slug {schema!r}", exit_code=1) from exc
+        raise fromargs.CliError(f"unknown schema slug {schema!r}", exit_code=2) from exc
     except ContractValidationError as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     return f"OK: payload conforms to {schema!r}"
 
 

@@ -67,14 +67,14 @@ def run_show(work_id: str, *, project: str | None = None) -> dict[str, object]:
         record = store.read_record()
     except storage.SchemaVersionFutureError as exc:
         raise fromargs.CliError(
-            f"{storage.FUTURE_STAMP_CODE}: {exc}", exit_code=1
+            f"{storage.FUTURE_STAMP_CODE}: {exc}", exit_code=2
         ) from exc
     except (storage.StorageError, OSError, ValueError) as exc:
-        raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=2) from exc
     if record is None:
         raise fromargs.CliError(
             f"record-missing: work {work_id!r} has no record at {store.record_path}",
-            exit_code=1,
+            exit_code=2,
         )
     bridge = milknado_bridge.bind(record, repo_root=paths.resolve_repo_root(None))
     return {
@@ -140,7 +140,7 @@ def run_validate(
         raise fromargs.CliError(
             "invalid-intent: a checkpoint intent must be a JSON object, not "
             + f"{type(payload).__name__}",
-            exit_code=1,
+            exit_code=2,
         )
     intent_payload = cast("dict[str, object]", payload)
     problems = [
@@ -181,7 +181,7 @@ def run_validate(
             checkpoint_mod.delta_problems(action_intent, None, schema_only=True)
         )
     if problems:
-        raise fromargs.CliError("invalid-intent: " + "; ".join(problems), exit_code=1)
+        raise fromargs.CliError("invalid-intent: " + "; ".join(problems), exit_code=2)
     return {"valid": True, "work_id": loaded.value.work_id if loaded.value else None}
 
 
@@ -192,7 +192,7 @@ def run_schema(slug: str) -> dict[str, object]:
         raise fromargs.CliError(
             f"unknown-contract: no contract is registered as {slug!r}; known: "
             + f"{', '.join(sorted(table))}",
-            exit_code=1,
+            exit_code=2,
         )
     document = cast(
         dict[str, object], json.loads(schema_runtime.schema_bytes(table[slug]))
@@ -347,18 +347,18 @@ def run_log(
         try:
             record = store.read_record()
         except (storage.StorageError, OSError, ValueError) as exc:
-            raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=1) from exc
+            raise fromargs.CliError(f"record-unreadable: {exc}", exit_code=2) from exc
         if record is None:
             raise fromargs.CliError(
                 f"record-missing: work {work_id!r} has no record at "
                 + f"{store.record_path}",
-                exit_code=1,
+                exit_code=2,
             )
         raise fromargs.CliError(
             f"store-inconsistent: work {work_id!r} has a record but no complete "
             + "revisions"
             + (f": {'; '.join(skipped)}" if skipped else ""),
-            exit_code=1,
+            exit_code=2,
         )
     entries: list[dict[str, object]] = []
     for file in files:
@@ -446,17 +446,17 @@ def run_turns(
                 f"session-required: {len(listing)} transcript(s) under {directory}: "
                 + "pass --session <id> (never guessed by recency) or --transcript "
                 + f"<path>. projects_dir: {directory}. candidates: {candidates_text}",
-                exit_code=1,
+                exit_code=2,
             )
         if transcript_mod.SESSION_ID_RE.fullmatch(session) is None:
             raise fromargs.CliError(
                 f"invalid-session: session id {session!r} must be one safe "
                 + "file-name segment",
-                exit_code=1,
+                exit_code=2,
             )
         path = directory / f"{session}.jsonl"
     if not path.is_file():
-        raise fromargs.CliError(f"transcript-missing: no transcript at {path}", exit_code=1)
+        raise fromargs.CliError(f"transcript-missing: no transcript at {path}", exit_code=2)
     turns, skipped = transcript_mod.user_turns(path)
     rows: list[dict[str, object]] = [
         {"timestamp": turn["timestamp"], "text": turn["text"]} for turn in turns

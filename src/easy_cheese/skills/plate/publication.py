@@ -275,9 +275,9 @@ def validate_cmd(state: str) -> dict[str, object]:
         data = cast(object, json.loads(_read_state_text(path)))
         return validate_publication(data)
     except (OSError, json.JSONDecodeError) as error:
-        raise fromargs.CliError(str(error), exit_code=1) from error
+        raise fromargs.CliError(str(error), exit_code=2) from error
     except PublicationValidationError as error:
-        raise fromargs.CliError("\n".join(error.errors), exit_code=1) from error
+        raise fromargs.CliError("\n".join(error.errors), exit_code=2) from error
 
 
 def build_app() -> fromargs.App:

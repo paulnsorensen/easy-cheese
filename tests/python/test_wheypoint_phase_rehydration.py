@@ -565,10 +565,10 @@ def test_curd_4c_resolves_error_outcome_per_phase_bundle(
     root.mkdir()
     env = _env(root, f"{SLUG}-{phase}-error")
     result = _run(phase, "wheypoint-resolve", "--ref", "", cwd=root, env=env)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert result.stdout == ""
     envelope = cast(dict[str, object], json.loads(result.stderr))
-    assert envelope["exit_code"] == 1
+    assert envelope["exit_code"] == 2
     assert cast(str, envelope["error"]).startswith("error:")
 
 

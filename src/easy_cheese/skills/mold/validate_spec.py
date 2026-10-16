@@ -747,12 +747,12 @@ def validate_spec_cmd(spec_path: str, *, strict: bool = False) -> dict[str, obje
     """
     path = Path(spec_path)
     if not path.is_file():
-        raise fromargs.CliError(f"spec not found: {path}", exit_code=1)
+        raise fromargs.CliError(f"spec not found: {path}", exit_code=2)
 
     errors, notice = validate(path, strict=strict)
     if errors:
         message = "\n".join(errors) + f"\n\nFAIL: {len(errors)} error(s) in {path}"
-        raise fromargs.CliError(message, exit_code=1)
+        raise fromargs.CliError(message, exit_code=2)
 
     result: dict[str, object] = {"spec_path": str(path), "valid": True}
     if notice is not None:

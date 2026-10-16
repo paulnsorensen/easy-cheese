@@ -223,7 +223,7 @@ def test_gh_failure_exits_one(pr_status: _PrStatusModule, monkeypatch: pytest.Mo
     monkeypatch.setattr(subprocess, "run", runner)
     with pytest.raises(fromargs.CliError) as exc:
         _ = pr_status.fetch_checks(42)
-    assert exc.value.exit_code == 1
+    assert exc.value.exit_code == 4
 
 
 def test_extract_run_id_from_actions_url(pr_status: _PrStatusModule) -> None:
@@ -356,7 +356,7 @@ def test_unparseable_json_falls_back_then_exits_one_if_plain_also_fails(
     monkeypatch.setattr(subprocess, "run", runner)
     with pytest.raises(fromargs.CliError) as exc:
         _ = pr_status.fetch_checks(42)
-    assert exc.value.exit_code == 1
+    assert exc.value.exit_code == 4
     # The fallback was actually attempted (a plain, no-`--json` invocation ran).
     assert any("--json" not in c for c in calls if c[:3] == ["gh", "pr", "checks"])
 
@@ -459,7 +459,7 @@ def test_non_list_json_from_gh_checks_exits_one(
     monkeypatch.setattr(subprocess, "run", runner)
     with pytest.raises(fromargs.CliError) as exc:
         _ = pr_status.fetch_checks(42)
-    assert exc.value.exit_code == 1
+    assert exc.value.exit_code == 4
 
 
 def _fallback_runner(

@@ -28,13 +28,13 @@ def carve_cmd(source_branch: str, *, pr_plan: str | None = None) -> dict[str, ob
     try:
         raw = read_mapping_arg_or_stdin([pr_plan] if pr_plan else [], _USAGE)
     except ManifestLoadError as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     loaded = load_pr_plan(raw)
     if loaded.value is None:
-        raise fromargs.CliError("\n".join(loaded.problems), exit_code=1)
+        raise fromargs.CliError("\n".join(loaded.problems), exit_code=2)
     if loaded.value.shape is not PrShape.ORTHOGONAL_FLAT:
         raise fromargs.CliError(
-            f"carve-flat needs shape orthogonal_flat, got {loaded.value.shape.value}", exit_code=1
+            f"carve-flat needs shape orthogonal_flat, got {loaded.value.shape.value}", exit_code=2
         )
     return {"groups": emit_carve_commands(loaded.value, source_branch)}
 

@@ -68,7 +68,7 @@ def resolve_handle() -> str:
     raise fromargs.CliError(
         "could not resolve a GitHub handle (set RESPOND_GH_HANDLE, sign in "
         + "with gh, or set git config user.name)",
-        exit_code=1,
+        exit_code=2,
     )
 
 
@@ -76,7 +76,7 @@ def resolve_repo() -> str:
     """Resolve <owner>/<repo> from the current git remote via gh."""
     repo = _capture(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"])
     if not repo:
-        raise fromargs.CliError("could not resolve <owner>/<repo> from the current git remote", exit_code=1)
+        raise fromargs.CliError("could not resolve <owner>/<repo> from the current git remote", exit_code=2)
     return repo
 
 
@@ -106,11 +106,11 @@ def _post(api_path: str, full_body: str) -> None:
             check=False,
         )
     except FileNotFoundError as exc:
-        raise fromargs.CliError("gh CLI not found in PATH", exit_code=1) from exc
+        raise fromargs.CliError("gh CLI not found in PATH", exit_code=2) from exc
     if result.returncode != 0:
         raise fromargs.CliError(
             f"gh api POST {api_path} failed (exit {result.returncode}): {result.stderr.strip()}",
-            exit_code=1,
+            exit_code=2,
         )
     _ = sys.stdout.write(result.stdout)
 

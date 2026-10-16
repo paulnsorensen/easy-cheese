@@ -58,7 +58,7 @@ def test_unversioned_document_exits_nonzero_without_emitting(
     path = tmp_path / "plan.json"
     _ = path.write_text(json.dumps(plan))
 
-    assert pr_plan_to_branches.main([str(path)]) == 1
+    assert pr_plan_to_branches.main([str(path)]) == 4
 
     captured = capsys.readouterr()
     assert "contract_version" in captured.err
