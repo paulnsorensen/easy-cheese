@@ -1495,28 +1495,336 @@ class TestPhaseBaseRevisionGate:
         *,
         base_revision_id: str | None,
         writes: list[str],
+        contents: str = "rewritten\n",
+        orientation: str = "demo",
     ) -> object:
+        from unittest import mock
+
         from easy_cheese.shared.wheypoint import phase_commit
 
         target = tmp_path / ".cheese" / "cook" / "seam.md"
-        target.parent.mkdir(parents=True, exist_ok=True)
+        original = wheypoint_storage.write_atomic
 
-        def write_contents() -> None:
-            writes.append("written")
-            _ = target.write_text("rewritten\n", encoding="utf-8")
+        def spy(path: Path, payload: bytes) -> None:
+            if path == target:
+                writes.append("written")
+            original(path, payload)
 
-        return phase_commit.commit_phase_revision(
-            work_id="seam",
-            phase="cook",
-            next_skill="press",
-            artifact=str(target),
-            orientation="demo",
-            grounded=("context.md#1-1",),
-            root=tmp_path,
-            store=store,
-            write_contents=write_contents,
-            base_revision_id=base_revision_id,
+        with mock.patch.object(wheypoint_storage, "write_atomic", spy):
+            return phase_commit.commit_phase_revision(
+                work_id="seam",
+                phase="cook",
+                next_skill="press",
+                artifact=str(target),
+                orientation=orientation,
+                grounded=("context.md#1-1",),
+                root=tmp_path,
+                store=store,
+                contents=contents,
+                base_revision_id=base_revision_id,
+            )
+
+    def _result(self, outcome: object) -> commit_module.CommitResult:
+        return cast("commit_module.CommitResult", getattr(outcome, "result"))
+
+    def _landed_child(
+        self, tmp_path: Path, store: wheypoint_storage.WorkStore
+    ) -> tuple[str, str]:
+        parent = _seed_genesis(store, tmp_path, "seam")
+        child = self._result(
+            self._commit(tmp_path, store, base_revision_id=parent, writes=[])
         )
+        return parent, child.revision.revision_id
+
+    def _refused_retry(
+        self,
+        tmp_path: Path,
+        store: wheypoint_storage.WorkStore,
+        *,
+        base_revision_id: str,
+        contents: str = "rewritten\n",
+        orientation: str = "demo",
+    ) -> str:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        writes: list[str] = []
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(
+                tmp_path,
+                store,
+                base_revision_id=base_revision_id,
+                writes=writes,
+                contents=contents,
+                orientation=orientation,
+            )
+        assert writes == []
+        return str(excinfo.value)
+
+    def _artifact(self, tmp_path: Path) -> str:
+        return (tmp_path / ".cheese" / "cook" / "seam.md").read_text(encoding="utf-8")
+
+    def test_lost_response_retry_replays_the_landed_revision_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        writes: list[str] = []
+
+        retried = self._result(
+            self._commit(tmp_path, store, base_revision_id=parent, writes=writes)
+        )
+
+        assert retried.replayed is True
+        assert retried.revision.revision_id == child
+        assert writes == []
+        assert self._artifact(tmp_path) == "rewritten\n"
+        record = store.read_record()
+        assert record is not None
+        assert record.revision_id == child
+        assert store.revision_ids() == {parent, child}
+
+    def test_stale_base_with_changed_contents_is_refused_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+
+        message = self._refused_retry(
+            tmp_path, store, base_revision_id=parent, contents="changed\n"
+        )
+
+        assert message.startswith("stale-parent:")
+        assert child in message
+        assert self._artifact(tmp_path) == "rewritten\n"
+
+    def test_stale_base_with_the_same_bytes_and_a_new_orientation_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+
+        message = self._refused_retry(
+            tmp_path, store, base_revision_id=parent, orientation="changed plan"
+        )
+
+        assert message.startswith("stale-parent:")
+        assert store.revision_ids() == {parent, child}
+
+    def test_replay_is_refused_when_a_later_write_repinned_the_artifact(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        later = self._result(
+            self._commit(
+                tmp_path,
+                store,
+                base_revision_id=child,
+                writes=[],
+                contents="later\n",
+                orientation="later pass",
+            )
+        ).revision.revision_id
+
+        message = self._refused_retry(tmp_path, store, base_revision_id=parent)
+
+        assert message.startswith("stale-parent:")
+        assert later in message
+        assert self._artifact(tmp_path) == "later\n"
+
+    def test_replay_is_refused_when_the_artifact_changed_on_disk(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        _ = target.write_text("edited by hand\n", encoding="utf-8")
+
+        message = self._refused_retry(tmp_path, store, base_revision_id=parent)
+
+        assert message.startswith("stale-parent:")
+        assert self._artifact(tmp_path) == "edited by hand\n"
+        assert store.revision_ids() == {parent, child}
+
+    def test_session_without_a_timestamp_replays_after_the_clock_moves(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("EASY_CHEESE_HARNESS", "test-harness")
+        monkeypatch.setenv("EASY_CHEESE_SESSION_ID", "session-one")
+        ticks = iter(range(1, 60))
+        monkeypatch.setattr(
+            checkpoint, "_utc_now", lambda: f"2026-10-16T00:00:{next(ticks):02d}Z"
+        )
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+
+        retried = self._result(
+            self._commit(tmp_path, store, base_revision_id=parent, writes=[])
+        )
+
+        assert retried.replayed is True
+        assert retried.revision.revision_id == child
+
+    def test_replay_is_refused_when_the_pinned_digest_differs_from_the_retry(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        _ = target.write_text("edited by hand\n", encoding="utf-8")
+
+        message = self._refused_retry(
+            tmp_path, store, base_revision_id=parent, contents="edited by hand\n"
+        )
+
+        assert message.startswith("stale-parent:")
+        assert self._artifact(tmp_path) == "edited by hand\n"
+        assert store.revision_ids() == {parent, child}
+
+    def test_replay_is_refused_when_a_same_bytes_write_repinned_the_link(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        later = self._result(
+            self._commit(
+                tmp_path,
+                store,
+                base_revision_id=child,
+                writes=[],
+                orientation="same bytes, new plan",
+            )
+        ).revision.revision_id
+        record = store.read_record()
+        assert record is not None
+        pinned = [link for link in record.artifact_links if link.path.endswith("seam.md")]
+        assert [link.revision_id for link in pinned] == [later]
+
+        message = self._refused_retry(tmp_path, store, base_revision_id=parent)
+
+        assert message.startswith("stale-parent:")
+        assert later in message
+        assert store.revision_ids() == {parent, child, later}
+
+    def test_replay_check_runs_while_the_record_lock_is_held(
+        self, tmp_path: Path
+    ) -> None:
+        from contextlib import contextmanager
+        from unittest import mock
+
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        held = {"now": False}
+        seen: list[bool] = []
+        real_lock = wheypoint_storage.WorkStore.lock
+        real_digest = wheypoint_storage.file_digest
+
+        @contextmanager
+        def tracked_lock(self: wheypoint_storage.WorkStore):
+            with real_lock(self):
+                held["now"] = True
+                try:
+                    yield
+                finally:
+                    held["now"] = False
+
+        def racing_digest(path: Path) -> str | None:
+            seen.append(held["now"])
+            _ = target.write_text("moved under the lock\n", encoding="utf-8")
+            return real_digest(path)
+
+        with (
+            mock.patch.object(wheypoint_storage.WorkStore, "lock", tracked_lock),
+            mock.patch.object(wheypoint_storage, "file_digest", racing_digest),
+            pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo,
+        ):
+            _ = self._commit(tmp_path, store, base_revision_id=parent, writes=[])
+
+        assert seen == [True]
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert store.revision_ids() == {parent, child}
+
+    def test_replay_returns_the_landed_revision_when_the_record_moved_to_a_descendant(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        record = store.read_record()
+        assert record is not None
+        moved = commit_module.commit(
+            checkpoint.build_delta(
+                CheckpointIntent(
+                    work_id="seam",
+                    orientation="later checkpoint",
+                    next=NextMove("press"),
+                    base_revision_id=child,
+                ),
+                record,
+            ),
+            store=store,
+            artifact_root=tmp_path,
+        ).revision.revision_id
+        assert moved != child
+        writes: list[str] = []
+
+        retried = self._result(
+            self._commit(tmp_path, store, base_revision_id=parent, writes=writes)
+        )
+
+        assert retried.replayed is True
+        assert retried.revision.revision_id == child
+        assert writes == []
+        current = store.read_record()
+        assert current is not None
+        assert current.revision_id == moved
+
+    def test_writer_cli_replays_a_lost_response_retry(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def write(orientation: str, base: str | None) -> None:
+            _ = writer.write_artifact(
+                slug="retried",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation=orientation,
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+                base_revision_id=base,
+            )
+
+        store = wheypoint_storage.WorkStore.open("retried")
+        write("first pass", None)
+        first = store.read_record()
+        assert first is not None
+        write("second pass", first.revision_id)
+        second = store.read_record()
+        assert second is not None
+        _ = capsys.readouterr()
+        before = (tmp_path / ".cheese" / "cook" / "retried.md").read_bytes()
+
+        write("second pass", first.revision_id)
+
+        stderr = capsys.readouterr().err
+        assert f"revision_id={second.revision_id}" in stderr
+        assert "replayed=true" in stderr
+        assert store.revision_ids() == {first.revision_id, second.revision_id}
+        assert (tmp_path / ".cheese" / "cook" / "retried.md").read_bytes() == before
+
+        with pytest.raises(fromargs.CliError) as excinfo:
+            write("a different second pass", first.revision_id)
+
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert (tmp_path / ".cheese" / "cook" / "retried.md").read_bytes() == before
+        assert store.revision_ids() == {first.revision_id, second.revision_id}
 
     def test_missing_base_on_an_existing_record_is_refused_and_writes_nothing(
         self, tmp_path: Path

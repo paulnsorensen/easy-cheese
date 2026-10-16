@@ -184,7 +184,7 @@ def _wheypoint_revision(
     grounded: Sequence[str],
     root: Path,
     corpus_root: Path | str | None,
-    write_contents: Callable[[], None],
+    contents: str,
     base_revision_id: str | None,
 ) -> None:
     """Adapt the CLI to the phase-commit producer; write directly otherwise.
@@ -193,8 +193,9 @@ def _wheypoint_revision(
     sequence *and* the classification of its own failures, so this wrapper only
     supplies the store and maps one producer exception type onto each exit code.
     """
+
     if phase not in paths.CHAIN_PHASES:
-        write_contents()
+        _atomic_write(target, contents)
         return
 
     from easy_cheese.shared.wheypoint import phase_commit
@@ -211,7 +212,7 @@ def _wheypoint_revision(
             grounded=grounded,
             root=root,
             store=store,
-            write_contents=write_contents,
+            contents=contents,
             base_revision_id=base_revision_id,
         )
     except fromargs.CliError:
@@ -234,9 +235,10 @@ def _wheypoint_revision(
         ) from exc
 
     revision = outcome.result.revision
+    replayed = " replayed=true" if outcome.result.replayed else ""
     print(
         f"wheypoint: revision work_id={slug} revision_id={revision.revision_id}"
-        + f" revision_number={revision.revision_number}",
+        + f" revision_number={revision.revision_number}{replayed}",
         file=sys.stderr,
     )
 
@@ -341,7 +343,7 @@ def write_artifact(
         grounded=grounded,
         root=root_path,
         corpus_root=effective_corpus_root,
-        write_contents=lambda: _atomic_write(target, contents),
+        contents=contents,
         base_revision_id=base_revision_id,
     )
 

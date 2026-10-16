@@ -13,6 +13,14 @@
 - **Alternatives:** Notes split into current/history fields (rejected: larger contract change); full-history export under the same `work_id` (rejected: two writers could own one record); read-time re-anchoring via git blame (rejected: non-deterministic, needs the repository at read time); `/wheel` as the last layer (rejected: it would wait on five unrelated layers).
 - **Consequences:** The JSON-schema goldens regenerate in each field layer, and the wheypoint command count goes from 10 to 12. #756 closes without code. The `easy-cheese-schemas` package still needs its 3.0.0 bump on #776.
 
+## Later changes
+
+- PR #783 adds `matched_by` (`exact`, `prefix`, or `substring`) to the `resolve` payload. Fuzzy matches stay dispatchable.
+- PR #783 also makes `list` outside a Git checkout fall back to machine scope and report `"scope-fallback": "machine"`. An explicit `--scope` keeps its behavior.
+- PR #784 implements F-4. Checkpoint pins a bare `path:line` to `path:line@<short HEAD sha>` when the file exists in `HEAD`, and otherwise warns `unpinned-line-ref`.
+- PR #784 makes the projection's `git check-ignore` call fail closed: a Git failure raises `CheckIgnoreError` instead of emptying the ignored set.
+- PR #785 refines F-3. Export omits `tasks` and `parallel` unless `--include-local` is set, and import runs the secret scan. See [wheypoint-transfer-bundles](../architecture/wheypoint-transfer-bundles.md).
+
 ## References
 
 [^spec]: `~/.local/share/cheese/paulnsorensen-easy-cheese/specs/wheypoint-schema5-stack.md`, taste-tested 2026-10-14 (round 2 pass) — forks F-1..F-4, AC-1..AC-22.

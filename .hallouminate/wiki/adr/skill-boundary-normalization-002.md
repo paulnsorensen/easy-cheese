@@ -1,5 +1,7 @@
 # ADR: Generous writer ingress ends before canonical persistence
 
+> PRs #773 and #774 removed the `NormalizationReceipt`, `MoldCookHandoff`, and `MoldCookApproval` contracts that this ADR names. See [workflow-contract-map](../architecture/workflow-contract-map.md).
+
 Status: accepted (2026-08-24)
 
 ## Decision

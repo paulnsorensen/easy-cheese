@@ -176,7 +176,7 @@ def _handoff(argv: list[str]) -> int:
 
 @bundle_command("validate-result")
 def _validate_result(argv: list[str]) -> int:
-    from easy_cheese.shared.validate_result_cli import main
+    from easy_cheese.skills.cook.validate_result import main
 
     return main(argv)
 

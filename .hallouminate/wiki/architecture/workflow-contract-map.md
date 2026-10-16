@@ -11,8 +11,8 @@ The approved flow below is a target, not proof of end-to-end adoption.
 This inspection uses Easy Cheese commit `4639f6f5b3dfaf68a195c6d247ef65af57b0debb` from draft PR 628.
 The package extraction preserves payload semantics and does not complete the contract redesign.[^extraction-scope]
 
-Current phase declarations send Mold's `MoldCookHandoff` to Cook; the handoff references approved plan and approval evidence, while Cook still emits `CurdResult` to Press or Age.
-Press declares CurdResult output to Age, while Age declares CurdPlan output to Cure.[^declared-routes]
+The private route table sends Mold's `curd-plan` payload to Cook, and Cook emits `curd-result` to Press or Age.
+Press routes `curd-result` to Age, while Age routes `curd-plan` to Cure.[^declared-routes]
 Age's instructions instead prohibit JSON sidecars and require Cure to read Markdown directly.[^age-prose]
 These declarations and instructions do not establish one enforced evidence-to-plan handoff.
 Do not infer execution support from a registered schema or route alone.
@@ -27,13 +27,13 @@ The owner's clean-break decision supersedes compatibility-only projections and m
 It does not authorize deletion of stored user work.[^clean-break-boundary]
 
 [^extraction-scope]: .cheese/specs/schema-package-boundary.md:5-39.
-[^declared-routes]: skills/mold/phase-contract.yaml:5-10; skills/cook/phase-contract.yaml:5-16; skills/press/phase-contract.yaml:5-10; skills/age/phase-contract.yaml:5-10.
+[^declared-routes]: src/easy_cheese/shared/phase_routes.py (`_ROUTES`); PR #772 removed the per-skill `phase-contract.yaml` files.
 [^age-prose]: skills/age/SKILL.md:241-243.
 [^review-observations]: src/easy_cheese_schemas/contracts.py:1969-1976; src/easy_cheese/shared/workflow.py:528-580.
 [^clean-break-boundary]: src/easy_cheese_schemas/AGENTS.md:48-54.
 
 
-Canonical contracts, the compiled registry, and pointer-last publication have implementations.
+Canonical contracts, the private route table, and the private publication index have implementations.
 Mold exposes the publish command, while the broader skill handoffs remain split between typed and Markdown paths.[^implemented-pointer]
 CurdBlock, Decomposition, and CurdRecord still have active representations.[^current]
 
@@ -45,18 +45,16 @@ CurdBlock, Decomposition, and CurdRecord still have active representations.[^cur
 
 ### Current registered-root map
 
-The catalog contains 15 JSON roots, grouped below by their actual boundary.[^root-catalog]
+The catalog contains 16 JSON roots, grouped below by their actual boundary. PRs #772-#774 removed the `phase-contract`, `handoff-pointer`, `normalization-receipt`, `mold-cook-approval`, `mold-cook-handoff`, and `cook-preparation-result` roots.[^root-catalog]
 The map includes Python runtime uses and skill instructions; it does not claim every route has end-to-end enforcement.
 
 | Roots | Producer | Consumer and evidence |
 | --- | --- | --- |
-| PlannerRequest; PlannerResult; CurdPlan | Host request; planner writer; pure materializer | Workflow plan and Mold publication; Cook consumes a MoldCookHandoff that references the CurdPlan.[^planning-seams] |
+| PlannerRequest; PlannerResult; CurdPlan | Host request; planner writer; pure materializer | Workflow plan and Mold publication; Cook consumes the CurdPlan directly.[^planning-seams] |
 | CurdResult | Cook or Cure writer; host normalizer | Workflow review loop; declared Press and Age inputs.[^execution-seams] |
 | ReviewRequest; ReviewResult | Execution host; review writer | Workflow review normalization; Age's direct report path remains Markdown.[^review-seams] |
 | DiagnosisRequest; DiagnosisResult | Failed-criterion host; diagnosis writer | Workflow diagnosis and confirmed-cause repair path.[^diagnosis-seams] |
 | AgentWriterView | Agent output or host wrapper | Normalization before canonical construction.[^writer-seam] |
-| HandoffPointer; NormalizationReceipt | Publication host | Pointer acceptance and reference validation.[^implemented-pointer] |
-| PhaseContract | Skill-owned YAML declarations | Build compiler and immutable transition registry.[^declared-routes] |
 | CheckpointIntent; WheypointRecord; WheypointRevision | Checkpoint author; Wheypoint commit host | Checkpoint validation, record persistence, and lineage checks.[^continuity-seams] |
 
 The inspected Milknado planning and MCP entrypoints accept PlanChangeManifest with the milknado.plan.v2 stamp.
@@ -67,7 +65,7 @@ Accordingly, the Milknado importer, plan-v2 projection, and result-aggregation p
 
 [^root-catalog]: src/easy_cheese_schemas/_schema_catalog.py:5-39.
 [^planning-seams]: src/easy_cheese_schemas/planner.py:44-113,144-182; src/easy_cheese/shared/workflow.py:223-243; skills/cook/references/fan-pathway.md:56-99.
-[^execution-seams]: src/easy_cheese/shared/workflow.py:748-794,999-1139; skills/cook/phase-contract.yaml:5-16.
+[^execution-seams]: src/easy_cheese/shared/workflow.py:748-794,999-1139; src/easy_cheese/shared/phase_routes.py:16-30 (`_ROUTES`).
 [^review-seams]: src/easy_cheese/shared/workflow.py:1043-1057,554-580; skills/age/SKILL.md:235-243.
 [^diagnosis-seams]: src/easy_cheese/shared/workflow.py:1079-1097,617-630,810-829.
 [^writer-seam]: src/easy_cheese/shared/workflow.py:445-476.
@@ -84,8 +82,7 @@ flowchart LR
   D[Pasteurize DiagnosisResult] -. F001 .-> P
   P --> R[PlannerResult]
   R -->|complete or partial| C[CurdPlan]
-  C --> H[MoldCookHandoff]
-  H --> K[Cook]
+  C --> K[Cook]
   C --> U[Cure]
   C -. target only .-> I[Milknado importer]
   K --> O[CurdResult array]
@@ -107,8 +104,7 @@ flowchart LR
 | milknado.plan.v2 | Milknado physical batches and execution topology | Semantic acceptance |
 | CurdResult | One criterion-led outcome per semantic curd | Scheduler policy |
 | ArtifactRef | Validated content identity and integrity | Runtime operation or continuity envelope |
-| PhaseContract | Payload schema references and allowed destinations | Payload field definitions |
-| TransitionRegistry | Build-compiled global transition validation | Runtime capability availability |
+| `_ROUTES` (private) | Allowed phase destinations and their payload schema URIs | Payload field definitions, runtime capability availability |
 
 <certain> Root `$cheese` owns orchestration policy and intent; the selected executor owns runtime state. Human configuration outranks an agent request, which outranks executor defaults. Admission records the resolved execution choice and gates on projected cost across retries, reviews, remediation, checkpoints, and runtime capacity.[^checkpoint]
 
@@ -134,7 +130,7 @@ flowchart LR
 
 
 
-<certain> The approved executable boundary is a canonical `HandoffPointer`. Producers publish payload and optional `NormalizationReceipt` before revealing the pointer; consumers validate every reference and route before exposing an `AcceptedArtifact`. Agent writer views may receive only bounded syntax recovery, while canonical artifacts and bare persisted inputs remain strict.[^boundary-spec]
+<certain> The executable boundary is a private publication index, not a public contract. `src/easy_cheese/shared/publication.py` keeps artifact integrity and replay checks; consumers validate every reference and route before exposing an `AcceptedArtifact`. PR #773 removed the public `HandoffPointer` and `NormalizationReceipt` roots. Agent writer views may receive only bounded syntax recovery, while canonical artifacts and bare persisted inputs remain strict.[^boundary-spec]
 
 ## Evidence and execution
 
@@ -144,21 +140,21 @@ flowchart LR
 
 <certain> DiagnosisResult has symptom, reproduction, hypotheses, optional confirmed cause, regression seam, and unresolved evidence. A diagnosis without a confirmed cause does not dispatch Cure work.
 
-<certain> Cook consumes a MoldCookHandoff that references the approved CurdPlan; only a freshly accepted ready handoff reaches execution. Cure consumes CurdPlan directly after transport resolution. CurdResult has exactly one row per criterion and one result per semantic curd.
+<certain> Cook runs bound work through `execute_bound_plan` after `validate_bound_execution` checks the saved Mold result. Cure consumes CurdPlan directly after transport resolution. CurdResult has exactly one row per criterion and one result per semantic curd.
 
 <certain> Target-only Milknado flow: Milknado maps one semantic curd to one or more physical nodes, then aggregates every node outcome, including unstarted nodes, back into the source CurdResult.
 
 ## Routing boundary
 
-<certain> Domain JSON Schemas and phase routing are separate. Phase-local YAML declarations compile into TransitionRegistry at build time; runtime helpers load the compiled registry and do not parse source YAML.
+<certain> Domain JSON Schemas and phase routing are separate. A private table, `_ROUTES` in `src/easy_cheese/shared/phase_routes.py`, lists five source phases and seven routes. `validate_route` rejects an unknown source, an undeclared destination, a mismatched payload schema, and a payload on a transition to `done`.
 
-<certain> This supersedes the older runtime-YAML registry decision and declaration location while preserving legacy persisted YAML as migration evidence.[^old-adr]
+<certain> PR #772 removed the build-compiled registry, its compiler, and the `phase-contract.yaml` declarations. This supersedes the earlier compiled-registry decision in [workflow-contract-milknado-seam-005](../adr/workflow-contract-milknado-seam-005.md).[^old-adr]
 
 ## Implementation order
 
 1. Canonical contracts, deterministic schemas, validators, normalizers, and fixtures.
 2. Mold -> Planner -> CurdPlan -> Cook -> CurdResult.
-3. Lossless legacy projections and compiled transition registry.
+3. Lossless legacy projections and the phase route table.
 4. Publish the package and fixtures.
 5. Add the Milknado dependency and import CurdPlan.
 6. Map to plan v2 and aggregate CurdResult arrays.
@@ -173,32 +169,15 @@ flowchart LR
 
 <certain> Wiki-roadmap publication was attempted and rolled back. Milknado's importable roadmap format requires YAML frontmatter, while the current repository wiki validator rejects any page whose first non-blank line is not an H1.[^roadmap-format]
 
-## Mold-to-Cook boundary (2026-09-17)
+## Mold-to-Cook boundary (current, after PR #774)
 
-<certain> Mold finalization and Cook preparation now meet at the versioned
-`MoldCookHandoff` (`src/easy_cheese_schemas/mold_cook.py`). A Full handoff binds
-the canonical planner result and plan; a Light handoff authorizes exactly one
-curd and has no planner artifacts. Both producer publication and Cook
-acceptance resolve and digest-check their references before readiness.
+<certain> The typed Mold-to-Cook handoff is gone. PR #774 removed the `mold-cook-approval`, `mold-cook-handoff`, and `cook-preparation-result` schema roots, 13 Cook preparation modules, and the `cook prepare`, `resubmit`, and `accept` commands. The 2026-09-17 design (a `MoldCookHandoff` and a non-executing `CookPreparationResult`) no longer exists.
 
-<certain> Cook's `CookPreparationResult` is deliberately non-executing until
-the `ready` outcome. Scope, plan, partial-plan, and runner approvals are
-separate evidence kinds. Setup authorization names only its prerequisite curd,
-paths, and commands; setup evidence cannot clear unrelated holds.
+<certain> Mold `finalize` saves a result file and prints the next command. Bound work runs as `/cook --auto --result <result_path>`; standalone work runs as `/cook --spec <path>`. Cook validates a saved result with `validate_bound_execution` (`src/easy_cheese/shared/mold_cook_handoff.py`) and runs it with `execute_bound_plan` (`src/easy_cheese/skills/cook/preparation/execute.py`). The validator refuses a non-approved spec lifecycle and a non-empty `gates_overridden`.
 
-<certain> Partial planner output carries an exact approved subset plus the
-acknowledged remainder through `MoldCookCoverage`. A changed remainder requires
-renewed approval, and incomplete work never becomes terminal whole-task
-success. Historical pointer input is accepted only through its bounded reader
-after original integrity verification.
+<certain> The mold-to-cook route in the private route table names the `curd-plan` payload (`src/easy_cheese/shared/phase_routes.py`). A held spec stays held: see "Cook entry refuses held specs" in [workflow-invariants](../workflow-invariants.md).
 
-The hermetic cross-boundary checks live in
-`tests/python/test_mold_cook_boundary_integration.py` and
-`tests/python/test_mold_cook_publication.py`; opt-in browser and live-agent
-evidence is covered separately by
-`tests/python/test_mold_cook_browser_workflow.py` and
-`tests/python/test_mold_cook_agent_driver.py`. Frozen transcripts test
-ordering without claiming a live model run.
+The cross-boundary checks live in two files. `tests/python/test_mold_finalize_contract.py` checks that the printed command matches the dispatch form and the saved result feeds bound validation. `tests/python/test_mold_cook_boundary_integration.py` checks that Cook refuses held and tampered specs. Opt-in browser and live-agent evidence stays in `tests/python/test_mold_cook_browser_workflow.py` and `tests/python/test_mold_cook_agent_driver.py`. Frozen transcripts test ordering without claiming a live model run.
 
 ## Related
 

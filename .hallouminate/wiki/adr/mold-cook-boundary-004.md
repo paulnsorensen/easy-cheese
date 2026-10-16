@@ -1,5 +1,7 @@
 # ADR: Handoff validation binds to an explicit artifact root and affirmative consent
 
+> Superseded in part by PR #774, which removed the handoff and approval validators named here. See [workflow-contract-map](../architecture/workflow-contract-map.md).
+
 Status: implemented in the PR #699 review cure (2026-09-19).
 
 The shared Mold-to-Cook validators take no ambient defaults. Every artifact resolves under a caller-named root, consent is an explicit affirmative token, and the seam performs no network I/O.

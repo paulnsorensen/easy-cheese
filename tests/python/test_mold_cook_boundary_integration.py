@@ -17,7 +17,7 @@ from easy_cheese.shared.wheypoint.canonical import digest_bytes
 from easy_cheese_schemas import ArtifactRef, MoldCookCoverage
 from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
-    _typed_host as structure_contract_value,  # pyright: ignore[reportPrivateUsage]
+    structure_contract_value,
 )
 from easy_cheese_schemas.contracts import (
     PlannerDisposition,
