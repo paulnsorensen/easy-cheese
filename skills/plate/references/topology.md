@@ -53,6 +53,9 @@ A `landing` block that the finished diff cannot meet does not stop publication.
 A layer that depends on files a later layer owns, or commits that cannot split on the layer boundaries, is a conflict.
 Re-layer on the clean boundaries from step 3 when they exist. Otherwise collapse to `single`.
 State the deviation in the PR body. The statement names the layer and the files in conflict.
+Record the same statement in the `deviation` field of the publication evidence.
+`validate-publication` accepts a `single` plan against a multi-PR `landing` only when `deviation` is non-empty.
+When `landing` and `pr_plan` are both present, their shapes must otherwise match.
 
 ## Plan and persistence
 
