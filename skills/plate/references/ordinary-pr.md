@@ -31,14 +31,15 @@ Do not use `--fill` when it would omit artifact or verification details.
 Use this section for the `orthogonal_flat` shape. Base every group on the trunk. A group has no `depends_on`.
 Record the evidence as topology `stacked`, provider `ordinary`, and a `pr_plan` with shape `orthogonal_flat`.
 `validate-publication` accepts provider `ordinary` with topology `stacked` only for that plan shape.
+Emit the carving commands once: `python3 skills/plate/scripts/plate.pyz carve-flat --source-branch <source> --pr-plan <plan-path>`.
+The JSON `groups` list follows plan order. Each entry holds `branch`, `base`, `carve`, and `restore`.
 For each group, in plan order:
 
-1. Create the group branch from the trunk: `git switch -c <branch> <trunk>`.
-2. Cherry-pick the group's commits in their original order.
-   When one commit mixes groups, check out the group's whole files from the source branch and create a new commit.
-3. Run the quality gate on the group branch. Halt at `quality gate` for that group when it fails.
-4. Publish the group as a `## New PR`. Its body describes only its own group.
-5. Return to the source branch before the next group.
+1. Run the group's `carve` commands. They create the branch from the trunk and cherry-pick its commits in order.
+   When one commit mixes groups, check out the group's whole files from the source branch and create a new commit instead of the cherry-pick.
+2. Run the quality gate on the group branch. Halt at `quality gate` for that group when it fails.
+3. Publish the group as a `## New PR`. Its body describes only its own group.
+4. Run the group's `restore` command before the next group.
 
 Leave the source branch unchanged. Report every PR URL in plan order.
 

@@ -57,6 +57,13 @@ def _check_pr_body(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("carve-flat")
+def _carve_flat(argv: list[str]) -> int:
+    from easy_cheese.skills.plate.flat_carve import main
+
+    return main(argv)
+
+
 COMMANDS = (
     derive_command(
         _wheypoint_resolve,
@@ -80,6 +87,7 @@ COMMANDS = (
     ),
     derive_command(_validate_publication, "Validate terminal publication evidence"),
     derive_command(_check_pr_body, "Check a drafted PR body against the mechanical body rules"),
+    derive_command(_carve_flat, "Emit the branch-carving commands for an orthogonal_flat pr_plan"),
 )
 
 

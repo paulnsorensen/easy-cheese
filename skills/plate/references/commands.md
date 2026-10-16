@@ -4,6 +4,7 @@
 
 | Command | Purpose | Subcommands |
 | --- | --- | --- |
+| `carve-flat` | Emit the branch-carving commands for an orthogonal_flat pr_plan |  |
 | `check-pr-body` | Check a drafted PR body against the mechanical body rules |  |
 | `gh-stack-preflight` | Validate the gh-stack trunk and origin branch before mutation |  |
 | `gh-stack-run` | Run one gh-stack mutation and reject warning-only success |  |
