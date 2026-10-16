@@ -66,6 +66,7 @@ def _prepared_stale_tree(tmp_path: Path) -> Path:
             "dist",
             ".release-preview",
             ".cheese",
+            "target",
         ),
     )
     return tree
