@@ -27,7 +27,7 @@ from easy_cheese.shared.mold_cook_handoff import (
 from easy_cheese.skills.mold.producer import finalize_mold
 from easy_cheese_schemas import ArtifactRef, CurdPlan, MoldCookCoverage, canonical_bytes
 from easy_cheese_schemas.schema_runtime import (
-    _typed_host as structure_contract_value,  # pyright: ignore[reportPrivateUsage]
+    structure_contract_value,
 )
 from easy_cheese_schemas.mold_cook import CookSetupAuthorization
 from tests.python.test_mold_cook_producer import (

@@ -1,5 +1,7 @@
 # ADR: Schema awareness via in-place generated regions; phase registry unchanged
 
+> The phase registry and its compiler were removed by PR #772. The private `_ROUTES` table in `src/easy_cheese/shared/phase_routes.py` replaced them. The generated-region decision is unaffected.
+
 **Status:** accepted (2026-08-23)
 Spec: skills-only-spec-format-enforcement (durable specs corpus).
 

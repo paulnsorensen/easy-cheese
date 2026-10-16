@@ -1,5 +1,7 @@
 # ADR: Cross-skill execution starts from a canonical pointer
 
+> The public `HandoffPointer` contract was removed by PR #773. A private publication index keeps the integrity and replay checks. See [publication-gateway-invariants](../architecture/publication-gateway-invariants.md).
+
 Status: accepted (2026-08-24)
 
 ## Decision

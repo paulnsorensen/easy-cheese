@@ -48,6 +48,9 @@ A refusal, exit `2` or exit `4`, is reported as one stderr JSON line, `{"error":
 A successful write prints `wheypoint: revision work_id=<id> revision_id=<id> revision_number=<n>`.
 A phase writer over an existing record needs `--base <revision_id>`, the revision from the phase-entry `wheypoint-resolve`.
 A missing base is refused as `base-revision-required` and names the current revision; a superseded base is refused as `stale-parent`; both refuse before any file is written.
+An identical write retried with its original base after a lost response is not refused.
+It exits `0` and prints the original revision with `replayed=true`.
+The retry must repeat the same orientation, next move, grounded entries, and artifact bytes.
 A first write for a work id needs no base.
 The writer never retries a conflict; a conflict at commit time exits `5` and orphans the artifact.
 An unexpected failure always prints a traceback to stderr; set `EASY_CHEESE_DEBUG` or `CHEESE_DEBUG` to add one to deliberate refusals as well.

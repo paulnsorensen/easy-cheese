@@ -1,5 +1,7 @@
 # ADR: Package layout and decorators define each skill bundle
 
+> The `phase-contract.yaml` route authority named here was removed by PR #772. The private `_ROUTES` table in `src/easy_cheese/shared/phase_routes.py` is now the route authority.
+
 Status: accepted (2026-08-24)
 
 ## Decision

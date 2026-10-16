@@ -1,5 +1,7 @@
 # ADR: Partial plans need explicit subset approval and preserved remainder
 
+> Superseded in part by PR #774, which removed `MoldCookHandoff`, `MoldCookCoverage` carriage, and the preparation modules. See [workflow-contract-map](../architecture/workflow-contract-map.md).
+
 Status: implemented for the repository boundary; external executor integration and live evidence remain (2026-09-18).
 
 Cook may execute an explicitly approved partial plan. The unresolved remainder must remain durable, and subset success cannot complete the original task.

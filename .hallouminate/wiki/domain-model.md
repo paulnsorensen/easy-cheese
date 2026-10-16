@@ -62,9 +62,9 @@ _Code_: NEW ENTITY
 _Avoid_: parallel block, legacy note header
 _Code_: NEW ENTITY
 
-**runtime-behind** - the resolve/lint finding meaning a record's schema stamp is newer than the reading runtime; distinct from store-inconsistent, which means the bytes disagree with their digest under the same canonical form.
-_Avoid_: store-inconsistent (for version skew)
-_Code_: NEW ENTITY (`LintCode.RUNTIME_BEHIND`)
+**schema-version-future** - the finding that refuses a record whose schema stamp is newer than the reading runtime (above 5). Every read path returns it and writes nothing. It replaced `runtime-behind` when schema 5 removed the lint module.
+_Avoid_: runtime-behind, store-inconsistent (for version skew)
+_Code_: `src/easy_cheese/shared/wheypoint/lint_types.py:18` (`LintCode.SCHEMA_VERSION_FUTURE`)
 
 ## Semantic work contracts
 
@@ -132,13 +132,9 @@ _Code_: NEW ENTITY
 _Avoid_: lossy conversion
 _Code_: NEW ENTITY
 
-**PhaseContract** - a phase-local declaration of payload schema URIs and allowed destinations.
-_Avoid_: universal payload schema, handoff body schema
-_Code_: NEW ENTITY
-
-**TransitionRegistry** - the build-compiled authority used by helpers to validate phase transitions.
-_Avoid_: Global transition registry, hard-coded helper table
-_Code_: NEW ENTITY
+**Phase route table** - the private `_ROUTES` mapping of source phase to allowed destinations and payload schema URIs; `validate_route` checks it. It replaced the PhaseContract declarations and the TransitionRegistry in PR #772.
+_Avoid_: PhaseContract, TransitionRegistry, universal payload schema
+_Code_: `src/easy_cheese/shared/phase_routes.py`
 
 **source_plan_ref** - physical-projection provenance containing semantic plan ID, revision, and digest.
 _Avoid_: runtime plan ID
@@ -150,13 +146,9 @@ _Code_: NEW ENTITY
 
 
 
-**HandoffPointer** - canonical JSON commit record for one cross-phase publication, revealed after referenced artifacts are durable.
-_Avoid_: bare payload, continuity envelope
-_Code_: NEW ENTITY
-
-**NormalizationReceipt** - typed evidence for an accepted non-strict writer normalization or exact legacy migration.
-_Avoid_: repair log, strict-path metadata
-_Code_: NEW ENTITY
+**Publication index entry** - the private record that keeps artifact integrity and replay checks for one cross-phase publication. It replaced the public HandoffPointer and NormalizationReceipt contracts in PR #773.
+_Avoid_: HandoffPointer, NormalizationReceipt, continuity envelope
+_Code_: `src/easy_cheese/shared/publication.py`
 
 **PublishedArtifact** - producer result containing the canonical payload, pointer, and optional normalization receipt.
 _Avoid_: uncommitted payload

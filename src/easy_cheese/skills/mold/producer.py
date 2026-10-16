@@ -41,7 +41,7 @@ from easy_cheese_schemas.planner import materialize_planner_result
 # a second field-by-field structuring path.
 from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
-    _typed_host as structure_contract_value,  # pyright: ignore[reportPrivateUsage]
+    structure_contract_value,
     canonical_bytes,
     load_agent_writer_view,
 )

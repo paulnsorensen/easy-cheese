@@ -20,7 +20,7 @@ from easy_cheese.skills.cook import execute_bound_plan  # noqa: E402
 from easy_cheese.shared.mold_cook_handoff import validate_bound_execution  # noqa: E402
 from easy_cheese_schemas import ArtifactRef, MoldCookCoverage, canonical_bytes  # noqa: E402
 from easy_cheese_schemas.schema_runtime import (  # noqa: E402
-    _typed_host as structure_contract_value,  # pyright: ignore[reportPrivateUsage]
+    structure_contract_value,
 )
 from easy_cheese_schemas.contracts import (  # noqa: E402
     Criterion,

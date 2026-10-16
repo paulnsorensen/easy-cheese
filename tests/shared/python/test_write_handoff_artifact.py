@@ -1495,6 +1495,8 @@ class TestPhaseBaseRevisionGate:
         *,
         base_revision_id: str | None,
         writes: list[str],
+        contents: str = "rewritten\n",
+        contents_digest: str | None = None,
     ) -> object:
         from easy_cheese.shared.wheypoint import phase_commit
 
@@ -1503,7 +1505,7 @@ class TestPhaseBaseRevisionGate:
 
         def write_contents() -> None:
             writes.append("written")
-            _ = target.write_text("rewritten\n", encoding="utf-8")
+            _ = target.write_text(contents, encoding="utf-8")
 
         return phase_commit.commit_phase_revision(
             work_id="seam",
@@ -1516,7 +1518,91 @@ class TestPhaseBaseRevisionGate:
             store=store,
             write_contents=write_contents,
             base_revision_id=base_revision_id,
+            contents_digest=contents_digest,
         )
+
+    def _landed_child(
+        self, tmp_path: Path, store: wheypoint_storage.WorkStore
+    ) -> tuple[str, str]:
+        parent = _seed_genesis(store, tmp_path, "seam")
+        child = cast(
+            "commit_module.CommitResult",
+            getattr(
+                self._commit(tmp_path, store, base_revision_id=parent, writes=[]),
+                "result",
+            ),
+        )
+        return parent, child.revision.revision_id
+
+    def test_lost_response_retry_replays_the_landed_revision(
+        self, tmp_path: Path
+    ) -> None:
+        from easy_cheese.shared.wheypoint import canonical
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+
+        retried = cast(
+            "commit_module.CommitResult",
+            getattr(
+                self._commit(
+                    tmp_path,
+                    store,
+                    base_revision_id=parent,
+                    writes=[],
+                    contents_digest=canonical.digest_text("rewritten\n"),
+                ),
+                "result",
+            ),
+        )
+
+        assert retried.replayed is True
+        assert retried.revision.revision_id == child
+        record = store.read_record()
+        assert record is not None
+        assert record.revision_id == child
+        assert store.revision_ids() == {parent, child}
+
+    def test_stale_base_with_changed_contents_is_refused_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        from easy_cheese.shared.wheypoint import canonical, phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        writes: list[str] = []
+
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(
+                tmp_path,
+                store,
+                base_revision_id=parent,
+                writes=writes,
+                contents="changed\n",
+                contents_digest=canonical.digest_text("changed\n"),
+            )
+
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert child in str(excinfo.value)
+        assert writes == []
+        assert (tmp_path / ".cheese" / "cook" / "seam.md").read_text(
+            encoding="utf-8"
+        ) == "rewritten\n"
+
+    def test_retry_without_a_contents_digest_stays_stale_parent(
+        self, tmp_path: Path
+    ) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, _child = self._landed_child(tmp_path, store)
+        writes: list[str] = []
+
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(tmp_path, store, base_revision_id=parent, writes=writes)
+
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert writes == []
 
     def test_missing_base_on_an_existing_record_is_refused_and_writes_nothing(
         self, tmp_path: Path

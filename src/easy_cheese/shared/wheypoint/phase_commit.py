@@ -285,6 +285,80 @@ def _refuse_unbindable_intent(
         raise PhaseCommitRefusal(str(exc)) from exc
 
 
+def _phase_intent(
+    *,
+    work_id: str,
+    phase: str,
+    next_skill: str,
+    artifact_path: str,
+    orientation: str,
+    grounded: Sequence[str],
+    links: list[ArtifactLink],
+    parent: str,
+    genesis: bool,
+    session: SessionProvenance | None,
+) -> CheckpointIntent:
+    return CheckpointIntent(
+        work_id=work_id,
+        orientation=orientation,
+        working_context=list(grounded) if grounded else None,
+        notes=f"{phase} phase handoff" if genesis else None,
+        next=NextMove(next_skill),
+        artifact=artifact_path,
+        artifact_links=links,
+        base_revision_id=parent,
+        session=session,
+    )
+
+
+def _is_lost_response_retry(
+    *,
+    work_id: str,
+    phase: str,
+    next_skill: str,
+    artifact_path: str,
+    orientation: str,
+    grounded: Sequence[str],
+    current: WheypointRecord | None,
+    base_revision_id: str | None,
+    contents_digest: str | None,
+    session: SessionProvenance | None,
+    store: storage.WorkStore,
+    root_path: Path,
+) -> bool:
+    """Whether a stale base is this same write retried after its response was lost.
+
+    The kernel already holds a receipt for the identical request against the
+    caller's base, and the record still pins this artifact to that receipt with
+    the bytes this call writes. Any other stale base stays a refusal.
+    """
+    if current is None or base_revision_id is None or contents_digest is None:
+        return False
+    if base_revision_id == current.revision_id:
+        return False
+    intent = _phase_intent(
+        work_id=work_id,
+        phase=phase,
+        next_skill=next_skill,
+        artifact_path=artifact_path,
+        orientation=orientation,
+        grounded=grounded,
+        links=_phase_links(root=root_path, work_id=work_id, phase=phase),
+        parent=base_revision_id,
+        genesis=False,
+        session=session,
+    )
+    replay = commit.find_replay(store, _build_delta(intent, current))
+    if replay is None:
+        return False
+    return any(
+        link.path == artifact_path
+        and link.revision_id == replay.revision_id
+        and link.digest == contents_digest
+        for link in current.artifact_links
+    )
+
+
 def _commit_written(
     *,
     work_id: str,
@@ -294,6 +368,7 @@ def _commit_written(
     orientation: str,
     grounded: Sequence[str],
     current: WheypointRecord | None,
+    parent: str,
     session: SessionProvenance | None,
     store: storage.WorkStore,
     root_path: Path,
@@ -304,15 +379,16 @@ def _commit_written(
         raise commit.CommitError(
             f"the written phase artifact is not present: {artifact_path!r}"
         )
-    intent = CheckpointIntent(
+    intent = _phase_intent(
         work_id=work_id,
+        phase=phase,
+        next_skill=next_skill,
+        artifact_path=artifact_path,
         orientation=orientation,
-        working_context=list(grounded) if grounded else None,
-        notes=None if current is not None else f"{phase} phase handoff",
-        next=NextMove(next_skill),
-        artifact=artifact_path,
-        artifact_links=links,
-        base_revision_id=_base_revision_id(current),
+        grounded=grounded,
+        links=links,
+        parent=parent,
+        genesis=current is None,
         session=session,
     )
     delta = _build_delta(intent, current)
@@ -334,6 +410,7 @@ def commit_phase_revision(
     root: Path | str | None = None,
     provenance: SessionProvenance | None = None,
     base_revision_id: str | None = None,
+    contents_digest: str | None = None,
 ) -> CommitOutcome:
     """Validate, write the artifact, then commit one chain-phase revision.
 
@@ -343,6 +420,10 @@ def commit_phase_revision(
     after it raises `ArtifactOrphaned`. An existing record needs the revision
     the writer read as `base_revision_id`; a missing or stale base is a
     refusal, and a conflict under the lock is not retried.
+
+    `contents_digest` is the digest of the bytes `write_contents()` writes. With
+    it, a stale base that is this same write retried after a lost response
+    returns the original revision as a replay instead of `stale-parent`.
     """
     try:
         root_path = paths.resolve_repo_root(root)
@@ -357,14 +438,31 @@ def commit_phase_revision(
             orientation=orientation,
             grounded=grounded_entries,
         )
+        session = (
+            provenance
+            if provenance is not None
+            else _session_provenance_from_environment()
+        )
         current = store.read_record()
-        _require_read_base(current, base_revision_id)
+        retry = _is_lost_response_retry(
+            work_id=work_id,
+            phase=phase,
+            next_skill=next_skill,
+            artifact_path=artifact_path,
+            orientation=orientation,
+            grounded=grounded_entries,
+            current=current,
+            base_revision_id=base_revision_id,
+            contents_digest=contents_digest,
+            session=session,
+            store=store,
+            root_path=root_path,
+        )
+        if not retry:
+            _require_read_base(current, base_revision_id)
         _require_genesis_grounding(current, grounded_entries)
     except (commit.CommitError, GroundedEntryError) as exc:
         raise PhaseCommitRefusal(str(exc)) from exc
-    session = (
-        provenance if provenance is not None else _session_provenance_from_environment()
-    )
 
     write_contents()
 
@@ -377,13 +475,13 @@ def commit_phase_revision(
             orientation=orientation,
             grounded=grounded_entries,
             current=current,
+            parent=_base_revision_id(current) if base_revision_id is None else base_revision_id,
             session=session,
             store=store,
             root_path=root_path,
         )
     except Exception as exc:
         raise _orphan(exc, artifact_target) from exc
-
 
 __all__ = [
     "ArtifactOrphaned",

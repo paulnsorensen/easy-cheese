@@ -102,7 +102,7 @@ def test_saved_result_file_feeds_bound_validation(tmp_path: Path) -> None:
     from easy_cheese.shared.mold_cook_handoff import validate_bound_execution
     from easy_cheese_schemas import ArtifactRef, MoldCookCoverage
     from easy_cheese_schemas.schema_runtime import (
-        _typed_host as structure,  # pyright: ignore[reportPrivateUsage]
+        structure_contract_value as structure,
     )
 
     outcome = finalize_fixture(tmp_path)
