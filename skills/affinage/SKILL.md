@@ -1,9 +1,11 @@
 ---
 name: affinage
 description: >
-  Triage a PR's review comments, CI failures, and merge conflicts through the /age lens.
-  Use when the user asks to address PR feedback, fix CI, or resolve conflicts.
+  Triage a GitHub PR's review comments, CI failures, and merge conflicts through the /age lens.
+  Use when the user says "address the PR feedback", "fix the review comments on PR 123",
+  "fix CI on my PR", "resolve this PR's merge conflicts", or "/affinage".
   Do not use for a diff without a PR. Use /age instead.
+  Do not use for local Git conflicts without a PR. Use /melt instead.
 license: MIT
 metadata: {dispatches-agents: true}
 ---
@@ -89,11 +91,10 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
    A `logs_expired: true` field stops with `status: halt: pr-status-logs-expired`.
    A nonzero exit stops with `status: halt: pr-status-unavailable`.
    Route a conflicting or dirty merge state to `## Merge-conflict resolution`.
-3. **Run fresh review.** Run this step only in standalone mode without `--no-age`.
-   Build contextual review input and call the bundled `age-route` command.
-   Include the comment count and CI failure class.
-   Run `/age` with the complete subject plan and its evidence.
-   Tag each new finding with `[from-age:<dimension>]`.
+3. **Check out the PR.** Run `gh pr checkout <pr>`.
+   The fresh review and `/cure` read the PR head from the working tree.
+   With `--safe`, ask before the checkout.
+   A failed checkout stops with `status: halt: pr-checkout-failed`.
 4. **Fetch comments.** Fetch inline threads from `pulls/<pr>/comments`.
    Skip comments with `position: null` unless the user passes `--include-outdated`.
    Fetch review bodies from `pulls/<pr>/reviews`.
@@ -102,28 +103,42 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
 5. **Skip answered threads.** Read thread resolution state from GraphQL `reviewThreads`.
    Skip a thread that GitHub marks resolved.
    Skip a thread when the resolved GitHub handle replied after its root comment.
-6. **Grade claims.** Classify each claim by the `/age` dimension and severity rules.
+6. **Run fresh review.** Run this step only in standalone mode without `--no-age`.
+   Build contextual review input and call the bundled `age-route` command.
+   Include the unresolved thread count from step 5 and the CI failure class.
+   Run `/age` with the complete subject plan and its evidence.
+   Tag each new finding with `[from-age:<dimension>]`.
+7. **Grade claims.** Classify each claim by the `/age` dimension and severity rules.
    Do not increase severity because a reviewer selected `CHANGES_REQUESTED`.
    Put contained fixes in severity sections.
    Put claims that need outside evidence in `## Needs-investigation`.
    Put wrong, unsupported, or large claims in `## Reviewer-rejected`.
    Put claims that the current head already fixes in `## Already-addressed`.
-7. **Write report.** Write `.cheese/affinage/pr-<n>.md`.
+8. **Write report.** Write `.cheese/affinage/pr-<n>.md`.
    Start with the four-line handoff slug.
    Add the `/age` report body and the affinage sections.
    See `## Output`.
-8. **Act or ask.** Follow `## Handoff`.
-9. **Draft non-cure replies.** Draft replies for rejected and investigation claims.
-   Do not reply to CI or fresh-review findings.
-10. **Draft cure replies.** Run this step only after `/cure`.
+9. **Act or ask.** Follow `## Handoff`.
+10. **Draft non-cure replies.** Draft replies for rejected and investigation claims.
+    Do not reply to CI or fresh-review findings.
+11. **Draft cure replies.** Run this step only after `/cure`.
     Read `### Applied` and `### Deferred` from `.cheese/cure/pr-<n>.md`.
     Draft `Fixed — <applied summary>.` for applied comment findings.
     Draft `Attempted fix reverted — <reason>.` for deferred comment findings.
-11. **Post replies.** Show one reply gate that lists every drafted reply and every already-addressed thread.
+12. **Re-review the cure diff.** Run this step only after a `/cure` run without `--auto`.
+    `/cure --auto` runs its own scoped `/age` chain.
+    Run the `/age <slug> --scope <touched-path>` command that `.cheese/cure/pr-<n>.md` recommends.
+    Start each `reviewer` worker prompt with the line `Review mode: severity-report`.
+    Use the `/age` findings, not its handoff gate.
+    Send the new findings to one more `/cure` by the `## Handoff` rules.
+    Do not re-review that second `/cure`.
+    Do not draft replies for these findings.
+    Report each finding that remains as a residual.
+13. **Post replies.** Show one reply gate that lists every drafted reply and every already-addressed thread.
     Skip the gate only when `--auto` is active.
     Post approved replies with `python3 skills/affinage/scripts/affinage.pyz post-reply`.
     Resolve each approved already-addressed thread without a reply.
-12. **Publish.** Run this step only after all approved replies post.
+14. **Publish.** Run this step only after all approved replies post.
     Publish when `/cure` applies at least one fix.
     Also publish when `/melt` resolved a merge conflict.
     Send terminal `/plate [--open-pr] [--hard] [--safe]`.
@@ -231,9 +246,7 @@ Ask only when the selected fix is large, findings conflict, or `--safe` is activ
   Then wait for a selection.
   `--auto` skips this gate.
 
-Post approved replies after the selection.
-Run terminal `/plate [--open-pr] [--hard] [--safe]` only when the working tree has a change.
-A resolved merge conflict is such a change.
+Then follow Flow steps 10 through 14.
 Set `status: ok / next: done` when no action remains.
 
 Set `next: cure` when at least one finding meets the `medium+` floor.
@@ -242,20 +255,8 @@ Also set `next: done` when the selected findings are empty.
 
 ## Auto mode
 
-Skip the selection gate.
-Resolve merge conflicts through `/melt` first.
-Stop with `status: halt: merge-conflicts-need-human` when conflicts remain.
-Run the fresh review in standalone mode.
-Select each finding that meets `<floor>`.
-`--plate` uses `--stake medium+ --open-pr`.
-Send `/cure --auto --stake <floor>`.
-Post replies for the original graded claims after the cure chain stops.
-Then run terminal `/plate --open-pr [--hard]` after every reply posts.
-Skip `/plate` when the working tree has no change.
-If no finding meets the floor, skip `/cure`.
-Post only rejection and investigation replies.
-Exit with `status: ok / next: done`.
-See `references/auto-mode.md`.
+Read `references/auto-mode.md` when `--auto` or `--plate` is active.
+It defines the selection, cure chain, reply, and publication steps.
 
 ## --hard mode
 
@@ -285,14 +286,15 @@ The gate therefore runs once at the publication boundary.
 
 Read each affinage reference when its trigger applies:
 
-- `references/flow-details.md` — Flow steps 2, 3, 5, 6, 9, and 11.
-- `references/merge-conflict.md` — `pr-status` reports a conflicting or dirty merge state.
-- `references/report-template.md` — Flow step 7.
-- `references/handoff-templates.md` — you render the cure selection gate or the reply gate.
-- `references/auto-mode.md` — `--auto` or `--plate` is active.
+- `references/flow-details.md` — read when you run Flow steps 2, 5, 6, 7, 10, or 13.
+- `references/merge-conflict.md` — read when `pr-status` reports a conflicting or dirty merge state.
+- `references/report-template.md` — read when you write the report at Flow step 8.
+- `references/handoff-templates.md` — read when you render the cure selection gate or the reply gate.
+- `references/auto-mode.md` — read when `--auto` or `--plate` is active.
+- [`references/commands.md`](references/commands.md) — read when you need the exact flags of a bundled command.
+  The file is the generated command inventory.
 
 Use `../age/references/sub-agent-gate.md` for the shared agent gate.
-See the generated command inventory in [`references/commands.md`](references/commands.md).
 
 ## Agent resolution
 
