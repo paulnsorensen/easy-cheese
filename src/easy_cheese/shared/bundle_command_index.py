@@ -13,6 +13,8 @@ COMMAND_BUNDLES: dict[str, tuple[str, ...]] = {
     'baseline': ('cook',),
     'batch-resolve': ('melt',),
     'budget-check': ('briesearch',),
+    'carve-flat': ('plate',),
+    'check-pr-body': ('plate',),
     'checkpoint': ('wheypoint',),
     'conflict-pick': ('melt',),
     'conflict-summary': ('melt',),
