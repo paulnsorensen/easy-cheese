@@ -10,31 +10,9 @@ You are the PR planner sub-agent for /ultracook spec: {slug}
 Read the manifest at {manifest_path}, the merged diff at {merged_diff_path}, and the
 spec summary below. Emit a PR layout plan to
 `.cheese/ultracook/{slug}/pr-plan.yaml`.
-`/plate` resolved topology before parallel-mode commits. The persisted, authoritative resolution is `{plate_layout}` with shape `{shape}`. Emit `shape: {shape}` when `{shape}` is set. Use the criteria below only when `{shape}` is empty. The plan may explain why the decomposition supports a stack, but it must not change or re-decide an explicit or previously verified choice.
+`/plate` resolved topology before parallel-mode commits. The persisted, authoritative resolution is `{plate_layout}` with shape `{shape}`. Emit `shape: {shape}` when `{shape}` is set. The plan may explain why the decomposition supports a stack, but it must not change or re-decide an explicit or previously verified choice.
 
-## Layout shapes
-
-Choose ONE of the four shapes based on the dependency structure:
-
-| Shape | When | PR layout |
-|---|---|---|
-| `single` | The persisted choice is single; all groups form one cohesive review unit | All commits in one PR |
-| `orthogonal_flat` | The persisted choice is stacked; curds are independently reviewable with no ordering dependency | N PRs each branching from main |
-| `stacked_linear` | The persisted choice is stacked; reviewable layers have linear dependencies | provider selected by `/plate` |
-| `diamond_stack` | The persisted choice is stacked; a shared base and final wiring surround independent curds | seed PR (base) → N parallel curd PRs → wiring PR |
-
-Review-shape criteria, in priority order:
-
-1. If `{plate_layout}` is `single`, emit one `single` group. The persisted
-   choice is authoritative even when the decomposition could support a stack.
-2. For `stacked`, identify layers with a named purpose, their own validation,
-   and a stable boundary that lets each layer be reviewed independently.
-3. Use `orthogonal_flat` only when curds have no ordering dependency. Use
-   `diamond_stack` when a shared base and final wiring surround independent
-   curds. Otherwise use `stacked_linear`.
-4. Counts never decide the shape. `/plate` topology (`skills/plate/references/topology.md`
-   step 5) owns the size rule and has already resolved `{plate_layout}`. If the plan
-   cannot name honest review boundaries, report the conflict instead of manufacturing them.
+When `{shape}` is empty, read `skills/plate/references/topology.md` in the repository and choose the shape with its rules. Do not decide from your own criteria. If `{plate_layout}` is `single`, emit one `single` group.
 
 ## Output: pr-plan.yaml
 

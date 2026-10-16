@@ -171,6 +171,53 @@ def test_validate_publication_rejects_landing_topology_mismatch() -> None:
     )
 
 
+def _landing_stacked_state(shape: str, **extra: object) -> dict[str, object]:
+    landing = {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
+    topology = "single" if shape == "single" else "stacked"
+    return valid_publication() | {
+        "topology": topology,
+        "landing": landing,
+        "pr_plan": _pr_plan_v1(shape=shape),
+    } | extra
+
+
+def test_validate_publication_rejects_flat_plan_against_stacked_linear_landing() -> None:
+    state = _landing_stacked_state("orthogonal_flat")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert any(e.startswith("landing-shape-mismatch") for e in error.value.errors)
+
+
+def test_validate_publication_accepts_single_collapse_with_deviation() -> None:
+    state = _landing_stacked_state("single", deviation="layer 2 needs files layer 3 owns")
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+    assert result["deviation"] == "layer 2 needs files layer 3 owns"
+
+
+def test_validate_publication_rejects_single_collapse_without_deviation() -> None:
+    state = _landing_stacked_state("single")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert any("non-empty deviation" in e for e in error.value.errors)
+
+
+def test_validate_publication_rejects_blank_deviation() -> None:
+    state = _landing_stacked_state("single", deviation="  ")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert "deviation must be a non-empty string" in error.value.errors
+    assert any("non-empty deviation" in e for e in error.value.errors)
+
+
 def test_validate_publication_passes_landing_through_when_it_matches_topology() -> None:
     landing: dict[str, object] = {
         "shape": "single",
@@ -701,6 +748,8 @@ def test_validate_publication_pr_plan_layout_that_disagrees_with_landing_is_refu
 
     assert error.value.errors == (
         "pr_plan projects to stacked layout but topology is single",
+        "landing-shape-mismatch: landing.shape single requires pr_plan.shape single, "
+        + "got stacked_linear",
     )
 
 

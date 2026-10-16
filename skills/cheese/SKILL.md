@@ -211,8 +211,7 @@ Default targets per intent:
 - **prototype** — `/cook --prototype <idea>` (recommended). No auto variant.
 - **ultracook (retired)** — `/ultracook <slug-or-path>` resolves to `/cook <slug-or-path>`, carrying forward `--open-pr`/`--resume`/`--auto`/`--hard`.
 - **plate** — `/plate` handles commits, ordinary pull requests, and pull request stacks.
-  `/plate` decides `single`, `orthogonal_flat`, or `stacked_linear` for a new pull request without asking.
-  Explicit choices win.
+  `/plate` decides the topology of a new pull request without asking. See [`topology.md`](../plate/references/topology.md).
 - **debug** — default: `/pasteurize --auto <input>`. Safe-mode alternatives: `/pasteurize <input>` (no auto), `/culture` only when the user wants no-write diagnosis or asks to think through the problem before fixing it.
 - **affinage** — `/affinage <pr>` (recommended).
   Use bare `/affinage` when the input names no pull request.
