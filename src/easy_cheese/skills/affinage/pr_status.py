@@ -107,7 +107,7 @@ def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
-    """Invoke gh and return stdout. Raises CliError (exit 1) on failure unless allow_fail."""
+    """Invoke gh and return stdout. Raises CliError (exit 4) on failure unless allow_fail."""
     result = _gh(args)
     if result.returncode != 0:
         if allow_fail:
@@ -118,7 +118,7 @@ def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
             return ""
         raise fromargs.CliError(
             f"gh {' '.join(args)} failed (exit {result.returncode}): {result.stderr.strip()}",
-            exit_code=1,
+            exit_code=4,
         )
     return result.stdout
 
@@ -179,7 +179,7 @@ def _fetch_checks_plain(
             + f"{json_result.returncode}: {json_result.stderr.strip()}) and the "
             + f"plain fallback also failed (exit {plain.returncode}: "
             + f"{plain.stderr.strip()})",
-            exit_code=1,
+            exit_code=4,
         )
 
     checks: list[dict[str, object]] = []

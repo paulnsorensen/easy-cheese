@@ -48,7 +48,7 @@ def run_export(
         raise fromargs.CliError(
             f"export-unresolved: {ref!r} resolved to {resolution.outcome.value}, "
             + f"not to one current record ({resolution.detail or 'no detail'})",
-            exit_code=1,
+            exit_code=2,
         )
     checkout = paths.git_toplevel() if workspace_root is None else Path(workspace_root).resolve()
     try:
@@ -59,7 +59,7 @@ def run_export(
             include_local=include_local,
         )
     except transfer_mod.TransferError as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     summary: dict[str, object] = {
         "work_id": resolution.record.work_id,
         "revision_id": resolution.record.revision_id,
@@ -73,7 +73,7 @@ def run_export(
         storage.write_atomic(target, canonical.canonical_bytes(bundle) + b"\n")
     except OSError as exc:
         raise fromargs.CliError(
-            f"bundle-unwritable: {target} cannot be written: {exc}", exit_code=1
+            f"bundle-unwritable: {target} cannot be written: {exc}", exit_code=2
         ) from exc
     return {**summary, "out": str(target)}
 
@@ -85,7 +85,7 @@ def _read_bundle(path: str) -> bytes:
             return handle.read(transfer_mod.MAX_BUNDLE_BYTES + 1)
     except OSError as exc:
         raise fromargs.CliError(
-            f"bundle-unreadable: {source} cannot be read: {exc}", exit_code=1
+            f"bundle-unreadable: {source} cannot be read: {exc}", exit_code=2
         ) from exc
 
 
@@ -106,7 +106,7 @@ def run_import(
         parsed = transfer_mod.parse_bundle(raw)
         _ = transfer_mod.target_store(parsed[0], slug, paths.project_corpus_root())
     except transfer_mod.TransferError as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     record = parsed[0]
     name = record.work_id if slug is None else slug
     directory = note_dir_for(note_dir=note_dir, no_note=no_note)
@@ -117,7 +117,7 @@ def run_import(
         except OSError as exc:
             raise fromargs.CliError(
                 f"note-unwritable: note directory {directory} cannot be created: {exc}",
-                exit_code=1,
+                exit_code=2,
             ) from exc
     captured_at = _dt.datetime.now(_dt.timezone.utc).strftime(
         checkpoint_mod.TIMESTAMP_FORMAT
@@ -138,9 +138,9 @@ def run_import(
             finalize=None if target is None else mirror_finalizer(target),
         )
     except MirrorError as exc:
-        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=2) from exc
     except transfer_mod.TransferError as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         raise refusal_for(exc) from exc
     warnings = [

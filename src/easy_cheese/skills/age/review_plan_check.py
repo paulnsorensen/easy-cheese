@@ -29,7 +29,7 @@ def review_plan_check(path: str | None = None) -> dict[str, object]:
         require_exact_keys(payload, _KEYS, "request")
         return check_execution(**payload)  # pyright: ignore[reportArgumentType]
     except (TypeError, ValueError) as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=4) from exc
 
 
 def build_app() -> fromargs.App:

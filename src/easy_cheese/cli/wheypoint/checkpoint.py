@@ -54,7 +54,7 @@ def enum_values(
         return tuple(choices(value) for value in values)
     except ValueError as exc:
         known = ", ".join(cast(str, item.value) for item in choices)
-        raise fromargs.CliError(f"{code}: {flag} {exc}; known: {known}", exit_code=1) from exc
+        raise fromargs.CliError(f"{code}: {flag} {exc}; known: {known}", exit_code=2) from exc
 
 
 @define(frozen=True, kw_only=True)
@@ -95,7 +95,7 @@ class IntentFlags:
             raise fromargs.CliError(
                 "invalid-intent: flags overlay a JSON object intent, not "
                 + f"{type(payload).__name__}",
-                exit_code=1,
+                exit_code=2,
             )
         try:
             return intent_flags.overlay(
@@ -137,7 +137,7 @@ def read_notes_file(path_arg: str | None) -> str | None:
         return Path(path_arg).read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise fromargs.CliError(
-            f"notes-unreadable: {path_arg}: {exc}", exit_code=1
+            f"notes-unreadable: {path_arg}: {exc}", exit_code=2
         ) from exc
 
 
@@ -173,7 +173,7 @@ def read_payload(stdin: TextIO) -> object:
         return cast(object, json.loads(stdin.read()))
     except ValueError as exc:
         raise fromargs.CliError(
-            f"invalid-json: stdin is not one JSON value: {exc}", exit_code=1
+            f"invalid-json: stdin is not one JSON value: {exc}", exit_code=2
         ) from exc
 
 
@@ -204,7 +204,7 @@ def _read_overlaid(
                 raise fromargs.CliError(
                     f"intent-unreadable: {intent_arg!r} is not a file: pass "
                     + "--work-id to write to a work id that shares its name",
-                    exit_code=1,
+                    exit_code=2,
                 )
         base: object = {} if intent_arg is None else read_intent(intent_arg, stdin)
         return flags.apply(base), _link_count(base)
@@ -215,13 +215,13 @@ def _read_overlaid(
         raw = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise fromargs.CliError(
-            f"intent-unreadable: {intent_arg}: {exc}", exit_code=1
+            f"intent-unreadable: {intent_arg}: {exc}", exit_code=2
         ) from exc
     try:
         return cast(object, json.loads(raw)), None
     except ValueError as exc:
         raise fromargs.CliError(
-            f"invalid-json: {intent_arg} is not one JSON value: {exc}", exit_code=1
+            f"invalid-json: {intent_arg} is not one JSON value: {exc}", exit_code=2
         ) from exc
 
 
@@ -237,19 +237,19 @@ def _positional_work_id(value: str, flags: IntentFlags) -> IntentFlags:
     """`flags` writing to the work id `value`, the AC-14 positional form."""
     if value.endswith(".json") or "/" in value or os.sep in value:
         raise fromargs.CliError(
-            f"intent-unreadable: {value}: no such intent file", exit_code=1
+            f"intent-unreadable: {value}: no such intent file", exit_code=2
         )
     if not LOWER_IDENTIFIER_RE.fullmatch(value):
         raise fromargs.CliError(
             f"intent-unreadable: {value!r} is neither an intent file nor a work id: "
             + "pass `<intent-file|-> --<flag>` or `<work-id> --<flag>`",
-            exit_code=1,
+            exit_code=2,
         )
     if flags.work_id not in (None, value):
         raise fromargs.CliError(
             f"intent-ambiguous: the positional work id {value!r} and --work-id "
             + f"{flags.work_id!r} differ",
-            exit_code=1,
+            exit_code=2,
         )
     return evolve(flags, work_id=value)
 
@@ -258,7 +258,7 @@ def open_store(work_id: str, *, corpus_root: Path | None = None) -> storage.Work
     try:
         return storage.WorkStore.open(work_id, corpus_root=corpus_root)
     except storage.StorageError as exc:
-        raise fromargs.CliError(f"storage-error: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"storage-error: {exc}", exit_code=2) from exc
 
 
 def run_checkpoint(
@@ -303,7 +303,7 @@ def commit_intent(
             f"commit-only-field: checkpoint does not author {', '.join(reserved)}: "
             + "name the revision you read with base_revision_id (--base); "
             + "compaction proofs are no longer accepted.",
-            exit_code=1,
+            exit_code=2,
         )
     pin_warnings: list[str] = []
     if isinstance(payload, dict):
@@ -316,13 +316,13 @@ def commit_intent(
     try:
         intent = records.structure(payload, CheckpointIntent, forbid_unknown=True)
     except records.RecordError as exc:
-        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=2) from exc
     secret = checkpoint_mod.secret_field(intent)
     if secret is not None:
         raise fromargs.CliError(
             f"secret-pattern: {secret} looks like a credential: a checkpoint is "
             + "durable, digest-protected text, so it cannot carry one",
-            exit_code=1,
+            exit_code=2,
         )
     store = open_store(intent.work_id)
     try:
@@ -333,7 +333,7 @@ def commit_intent(
         raise fromargs.CliError(
             f"record-unreadable: work {intent.work_id!r} has a record that cannot "
             + f"be read, so no checkpoint can be bound to it: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
     if carry_from is not None:
         intent = carry_coverage(intent, current, carry_from)
@@ -341,9 +341,9 @@ def commit_intent(
     try:
         delta = checkpoint_mod.build_delta(intent, current)
     except checkpoint_mod.BaseRevisionRequiredError as exc:
-        raise fromargs.CliError(f"base-revision-required: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"base-revision-required: {exc}", exit_code=2) from exc
     except checkpoint_mod.IntentError as exc:
-        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=2) from exc
     reply = _promote(
         delta,
         store,
@@ -425,18 +425,18 @@ def refusal_for(exc: Exception) -> fromargs.CliError:
     surfaces that code; any other commit refusal is `commit-refused`.
     """
     if isinstance(exc, storage.SchemaVersionFutureError):
-        return fromargs.CliError(f"{storage.FUTURE_STAMP_CODE}: {exc}", exit_code=1)
+        return fromargs.CliError(f"{storage.FUTURE_STAMP_CODE}: {exc}", exit_code=2)
     if isinstance(exc, commit_mod.GenesisConflictError):
-        return fromargs.CliError(f"genesis-conflict: {exc}", exit_code=1)
+        return fromargs.CliError(f"genesis-conflict: {exc}", exit_code=2)
     if isinstance(exc, commit_mod.StaleParentError):
-        return fromargs.CliError(f"stale-parent: {exc}", exit_code=1)
+        return fromargs.CliError(f"stale-parent: {exc}", exit_code=2)
     if isinstance(
         exc, (commit_mod.CommitError, fork_mod.ForkError, intent_flags.IntentFlagError)
     ):
         if _CODED_REFUSAL.match(str(exc)):
-            return fromargs.CliError(str(exc), exit_code=1)
-        return fromargs.CliError(f"commit-refused: {exc}", exit_code=1)
-    return fromargs.CliError(f"storage-error: {exc}", exit_code=1)
+            return fromargs.CliError(str(exc), exit_code=2)
+        return fromargs.CliError(f"commit-refused: {exc}", exit_code=2)
+    return fromargs.CliError(f"storage-error: {exc}", exit_code=2)
 
 
 def _promote(
@@ -465,7 +465,7 @@ def _promote(
         raise fromargs.CliError(
             f"record-unreadable: work {store.work_id!r} has a record that cannot "
             + f"be read: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
     # Refuse a superseded base before the note directory or the ledger exist.
     # The commit repeats this check under the store lock as the race backstop,
@@ -488,7 +488,7 @@ def _promote(
     except OSError as exc:
         raise fromargs.CliError(
             f"note-unwritable: note directory {note_dir} cannot be created: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
 
     target = note_dir / (f"{store.work_id if current is None else current.slug}.md")
@@ -500,7 +500,7 @@ def _promote(
                 raise fromargs.CliError(
                     f"pending-corrupt: request ledger for {request_identity!r} names "
                     + f"a different request than revision {pending.revision_id!r}",
-                    exit_code=1,
+                    exit_code=2,
                 )
             resume_target = note_dir / pending.target
             result = _resume_mirror(store, revision.revision_id, resume_target, pending)
@@ -513,7 +513,7 @@ def _promote(
             raise fromargs.CliError(
                 "storage-error: request ledger "
                 + f"{store.pending_path(request_identity)} cannot be cleared: {exc}",
-                exit_code=1,
+                exit_code=2,
             ) from exc
 
     request_digest = records.request_fingerprint(delta)
@@ -534,7 +534,7 @@ def _promote(
         )
     except MirrorError as exc:
         _drop_uncommitted_pending(store, pending)
-        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=2) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         _drop_uncommitted_pending(store, pending)
         raise refusal_for(exc) from exc
@@ -572,7 +572,7 @@ def _read_pending(
         return None
     except OSError as exc:
         raise fromargs.CliError(
-            f"storage-error: request ledger {path} cannot be read: {exc}", exit_code=1
+            f"storage-error: request ledger {path} cannot be read: {exc}", exit_code=2
         ) from exc
     try:
         decoded = cast(object, json.loads(raw.decode("utf-8")))
@@ -587,11 +587,11 @@ def _read_pending(
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise fromargs.CliError(
-            f"pending-corrupt: request ledger {path} is invalid: {exc}", exit_code=1
+            f"pending-corrupt: request ledger {path} is invalid: {exc}", exit_code=2
         ) from exc
     if pending.request_identity != request_identity:
         raise fromargs.CliError(
-            f"pending-corrupt: request ledger {path} has invalid identity", exit_code=1
+            f"pending-corrupt: request ledger {path} has invalid identity", exit_code=2
         )
     return pending
 
@@ -614,7 +614,7 @@ def _write_pending(store: storage.WorkStore, pending: _PendingMirror) -> None:
     except OSError as exc:
         raise fromargs.CliError(
             f"note-unwritable: request ledger {path} cannot be written: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
 
 
@@ -634,7 +634,7 @@ def _clear_pending(store: storage.WorkStore, request_identity: str) -> None:
         raise fromargs.CliError(
             "storage-error: request ledger "
             + f"{store.pending_path(request_identity)} cannot be cleared: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
 
 
@@ -651,7 +651,7 @@ def _resume_mirror(
             finalize=mirror_finalizer(target),
         )
     except MirrorError as exc:
-        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=2) from exc
     except (commit_mod.CommitError, storage.StorageError) as exc:
         raise refusal_for(exc) from exc
     _clear_pending(store, pending.request_identity)

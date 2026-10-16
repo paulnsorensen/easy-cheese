@@ -104,7 +104,7 @@ def test_checkpoint_notes_file_missing_refuses_and_leaves_record_unchanged(
         ]
     )
 
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "notes-unreadable"
     assert record_path.read_bytes() == before
 
@@ -124,7 +124,7 @@ def test_validate_notes_file_missing_refuses(corpus_root: Path) -> None:
         ]
     )
 
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "notes-unreadable"
 
 
@@ -153,7 +153,7 @@ def test_checkpoint_notes_file_unreadable_permissions_refuses(
     finally:
         notes.chmod(0o644)
 
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "notes-unreadable"
     assert record_path.read_bytes() == before
 
@@ -220,5 +220,5 @@ def test_checkpoint_maps_an_unexpected_storage_error_to_storage_error_code(
         ["checkpoint", WORK_ID, "--link", "https://example.com/doc", "--kind", "supersedes"]
     )
 
-    assert status == 1
+    assert status == 2
     assert payload_at(payload, "error", "code") == "storage-error"

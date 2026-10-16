@@ -99,7 +99,7 @@ def resolve_payload(
 def raise_if_error(payload: Mapping[str, object]) -> None:
     """Raise a `CliError` when `payload`'s outcome is `error`; the only refusing outcome."""
     if payload.get("outcome") == resolve_mod.ResolutionOutcome.ERROR.value:
-        raise fromargs.CliError(f"error: {payload.get('detail')}", exit_code=1)
+        raise fromargs.CliError(f"error: {payload.get('detail')}", exit_code=2)
 
 
 def resolve(

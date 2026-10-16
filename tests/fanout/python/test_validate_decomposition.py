@@ -468,14 +468,14 @@ class TestCLI:
         curds[1]["files"] = _l(curds[0]["files"])[:1] + cast(list[object], ["other.ts"])
         manifest_path = tmp_path / "manifest.yaml"
         _ = manifest_path.write_text(json.dumps(_manifest(curds=_l(curds))), encoding="utf-8")
-        assert _main(validate_decomposition, [str(manifest_path)]) == 1
+        assert _main(validate_decomposition, [str(manifest_path)]) == 4
         err = capsys.readouterr().err
         assert "file-disjoint" in err or "appears in curd" in err
 
     def test_exits_nonzero_on_missing_file(
         self, tmp_path: Path, validate_decomposition: ModuleType, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        assert _main(validate_decomposition, [str(tmp_path / "nope.json")]) == 1
+        assert _main(validate_decomposition, [str(tmp_path / "nope.json")]) == 4
         assert "not found" in capsys.readouterr().err
 
     def test_reads_from_stdin_when_no_arg(

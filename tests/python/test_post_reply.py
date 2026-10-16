@@ -194,7 +194,7 @@ def test_handle_resolution_exhausted_exits_1(post_reply: _PostReplyModule, monke
             ]
         ),
     )
-    assert post_reply.main(["--issue", "--pr", "42", "--body", "Hello."]) == 1
+    assert post_reply.main(["--issue", "--pr", "42", "--body", "Hello."]) == 2
 
 
 def test_repo_resolution_failure_exits_1(post_reply: _PostReplyModule, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -208,7 +208,7 @@ def test_repo_resolution_failure_exits_1(post_reply: _PostReplyModule, monkeypat
             ]
         ),
     )
-    assert post_reply.main(["--issue", "--pr", "42", "--body", "Hello."]) == 1
+    assert post_reply.main(["--issue", "--pr", "42", "--body", "Hello."]) == 2
 
 
 # --- argument validation --------------------------------------------------
@@ -228,7 +228,7 @@ def test_post_api_failure_exits_1(post_reply: _PostReplyModule, monkeypatch: pyt
             ]
         ),
     )
-    assert post_reply.main(["--issue", "--pr", "42", "--body", "Hello."]) == 1
+    assert post_reply.main(["--issue", "--pr", "42", "--body", "Hello."]) == 2
 
 
 @pytest.mark.parametrize(

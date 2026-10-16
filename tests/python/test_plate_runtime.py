@@ -298,7 +298,7 @@ def test_validate_publication_cli_reports_every_violation(
     path = tmp_path / "state.json"
     _ = path.write_text(json.dumps(state))
 
-    assert publication.main([str(path)]) == 1
+    assert publication.main([str(path)]) == 2
 
     stderr = capsys.readouterr().err
     assert "artifacts[0].verified must be true" in stderr
@@ -763,7 +763,7 @@ def test_validate_publication_cli_reports_a_landing_topology_mismatch(
     path = tmp_path / "state.json"
     _ = path.write_text(json.dumps(state))
 
-    assert publication.main([str(path)]) == 1
+    assert publication.main([str(path)]) == 2
 
     stderr = capsys.readouterr().err
     assert (
@@ -779,7 +779,7 @@ def test_validate_publication_cli_reports_oversize_state_file(
     max_state_bytes = publication._MAX_STATE_BYTES  # pyright: ignore[reportPrivateUsage]
     _ = path.write_bytes(b" " * (max_state_bytes + 1))
 
-    assert publication.main([str(path)]) == 1
+    assert publication.main([str(path)]) == 2
 
     stderr = capsys.readouterr().err
     assert f"state file exceeds {max_state_bytes} bytes" in stderr
@@ -791,7 +791,7 @@ def test_validate_publication_cli_reports_non_utf8_state_file(
     path = tmp_path / "state.json"
     _ = path.write_bytes(b"\xff\xfe\x00\x01")
 
-    assert publication.main([str(path)]) == 1
+    assert publication.main([str(path)]) == 2
 
     stderr = capsys.readouterr().err
     assert "state file is not valid UTF-8" in stderr
