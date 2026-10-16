@@ -50,6 +50,13 @@ def _validate_publication(argv: list[str]) -> int:
     return main(argv)
 
 
+@bundle_command("check-pr-body")
+def _check_pr_body(argv: list[str]) -> int:
+    from easy_cheese.skills.plate.pr_body import main
+
+    return main(argv)
+
+
 COMMANDS = (
     derive_command(
         _wheypoint_resolve,
@@ -72,6 +79,7 @@ COMMANDS = (
         "Verify exact gh-stack PR and remote stack publication state",
     ),
     derive_command(_validate_publication, "Validate terminal publication evidence"),
+    derive_command(_check_pr_body, "Check a drafted PR body against the mechanical body rules"),
 )
 
 

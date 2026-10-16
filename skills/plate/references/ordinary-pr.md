@@ -11,6 +11,10 @@ It covers the `single` shape and the `orthogonal_flat` shape (independent PRs of
 3. Draft a title and body per `## Body contract` below.
 4. Write the body to a temporary or transient file. Pass that file through `--body-file`.
    Do not embed a markdown heredoc in `--body`.
+   Then run `python3 skills/plate/scripts/plate.pyz check-pr-body --body-file <body-path>`.
+   Add `--template-file .github/PULL_REQUEST_TEMPLATE.md` when the repository tracks that template.
+   Add `--stack-layer` for a stack layer. Fix every reported error and run the check again.
+   Do not create or edit the PR until the check exits 0.
 5. Push the named branch without force. Follow `## Push verification` before the next step.
 6. Create the PR with an explicit base and head:
 
@@ -62,7 +66,7 @@ Publication-relevant GitHub operations remain here:
 - Add `--reviewer <login>` or `--assignee <login>` only from the supplied
   publication metadata.
 - Use `gh pr edit <number> --title <title> --body-file <path>` when verified
-  commits make existing metadata inaccurate.
+  commits make existing metadata inaccurate. Run `check-pr-body` on that file first.
 - Use `gh pr ready <number>` only when asked to publish a draft.
 - Use `gh pr checks` to verify publication context. CI triage, review, comments,
   and merge stay outside `/plate`. Use the `gh` CLI directly for that work.
@@ -75,6 +79,9 @@ If a PR exists, switch to the existing-PR path. Do not rely on a failed create c
 A reviewer reads a short body. Agent-written bodies that claim changes the diff lacks lose reviewer trust.
 When the repository tracks `.github/PULL_REQUEST_TEMPLATE.md`, use its section headings.
 Otherwise use `## Why`, `## What changed`, `## Non-obvious changes`, `## How to verify`, and `## Risk`.
+`check-pr-body` enforces the 40-line cap, the required headings, the `Plated as` line, the filler-word ban,
+and, for a stack layer, the `Stack: <n> of <total>` line and the stack-order flowchart.
+The 20-line cap for a small change, the claims, and the reading order stay a judgment call.
 Keep the body file transient unless the repository tracks PR templates or release artifacts.
 Leave a transient body file unstaged after verification.
 
