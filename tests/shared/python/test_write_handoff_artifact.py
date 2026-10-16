@@ -1496,31 +1496,33 @@ class TestPhaseBaseRevisionGate:
         base_revision_id: str | None,
         writes: list[str],
         contents: str = "rewritten\n",
-        contents_digest: str | None = None,
         orientation: str = "demo",
     ) -> object:
+        from unittest import mock
+
         from easy_cheese.shared.wheypoint import phase_commit
 
         target = tmp_path / ".cheese" / "cook" / "seam.md"
-        target.parent.mkdir(parents=True, exist_ok=True)
+        original = wheypoint_storage.write_atomic
 
-        def write_contents() -> None:
-            writes.append("written")
-            _ = target.write_text(contents, encoding="utf-8")
+        def spy(path: Path, payload: bytes) -> None:
+            if path == target:
+                writes.append("written")
+            original(path, payload)
 
-        return phase_commit.commit_phase_revision(
-            work_id="seam",
-            phase="cook",
-            next_skill="press",
-            artifact=str(target),
-            orientation=orientation,
-            grounded=("context.md#1-1",),
-            root=tmp_path,
-            store=store,
-            write_contents=write_contents,
-            base_revision_id=base_revision_id,
-            contents_digest=contents_digest,
-        )
+        with mock.patch.object(wheypoint_storage, "write_atomic", spy):
+            return phase_commit.commit_phase_revision(
+                work_id="seam",
+                phase="cook",
+                next_skill="press",
+                artifact=str(target),
+                orientation=orientation,
+                grounded=("context.md#1-1",),
+                root=tmp_path,
+                store=store,
+                contents=contents,
+                base_revision_id=base_revision_id,
+            )
 
     def _result(self, outcome: object) -> commit_module.CommitResult:
         return cast("commit_module.CommitResult", getattr(outcome, "result"))
@@ -1543,7 +1545,7 @@ class TestPhaseBaseRevisionGate:
         contents: str = "rewritten\n",
         orientation: str = "demo",
     ) -> str:
-        from easy_cheese.shared.wheypoint import canonical, phase_commit
+        from easy_cheese.shared.wheypoint import phase_commit
 
         writes: list[str] = []
         with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
@@ -1553,7 +1555,6 @@ class TestPhaseBaseRevisionGate:
                 base_revision_id=base_revision_id,
                 writes=writes,
                 contents=contents,
-                contents_digest=canonical.digest_text(contents),
                 orientation=orientation,
             )
         assert writes == []
@@ -1565,20 +1566,12 @@ class TestPhaseBaseRevisionGate:
     def test_lost_response_retry_replays_the_landed_revision_and_writes_nothing(
         self, tmp_path: Path
     ) -> None:
-        from easy_cheese.shared.wheypoint import canonical
-
         store = wheypoint_storage.WorkStore.open("seam")
         parent, child = self._landed_child(tmp_path, store)
         writes: list[str] = []
 
         retried = self._result(
-            self._commit(
-                tmp_path,
-                store,
-                base_revision_id=parent,
-                writes=writes,
-                contents_digest=canonical.digest_text("rewritten\n"),
-            )
+            self._commit(tmp_path, store, base_revision_id=parent, writes=writes)
         )
 
         assert retried.replayed is True
@@ -1656,8 +1649,6 @@ class TestPhaseBaseRevisionGate:
     def test_session_without_a_timestamp_replays_after_the_clock_moves(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from easy_cheese.shared.wheypoint import canonical
-
         monkeypatch.setenv("EASY_CHEESE_HARNESS", "test-harness")
         monkeypatch.setenv("EASY_CHEESE_SESSION_ID", "session-one")
         ticks = iter(range(1, 60))
@@ -1668,32 +1659,127 @@ class TestPhaseBaseRevisionGate:
         parent, child = self._landed_child(tmp_path, store)
 
         retried = self._result(
-            self._commit(
-                tmp_path,
-                store,
-                base_revision_id=parent,
-                writes=[],
-                contents_digest=canonical.digest_text("rewritten\n"),
-            )
+            self._commit(tmp_path, store, base_revision_id=parent, writes=[])
         )
 
         assert retried.replayed is True
         assert retried.revision.revision_id == child
 
-    def test_retry_without_a_contents_digest_stays_stale_parent(
+    def test_replay_is_refused_when_the_pinned_digest_differs_from_the_retry(
         self, tmp_path: Path
     ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        _ = target.write_text("edited by hand\n", encoding="utf-8")
+
+        message = self._refused_retry(
+            tmp_path, store, base_revision_id=parent, contents="edited by hand\n"
+        )
+
+        assert message.startswith("stale-parent:")
+        assert self._artifact(tmp_path) == "edited by hand\n"
+        assert store.revision_ids() == {parent, child}
+
+    def test_replay_is_refused_when_a_same_bytes_write_repinned_the_link(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        later = self._result(
+            self._commit(
+                tmp_path,
+                store,
+                base_revision_id=child,
+                writes=[],
+                orientation="same bytes, new plan",
+            )
+        ).revision.revision_id
+        record = store.read_record()
+        assert record is not None
+        pinned = [link for link in record.artifact_links if link.path.endswith("seam.md")]
+        assert [link.revision_id for link in pinned] == [later]
+
+        message = self._refused_retry(tmp_path, store, base_revision_id=parent)
+
+        assert message.startswith("stale-parent:")
+        assert later in message
+        assert store.revision_ids() == {parent, child, later}
+
+    def test_replay_check_runs_while_the_record_lock_is_held(
+        self, tmp_path: Path
+    ) -> None:
+        from contextlib import contextmanager
+        from unittest import mock
+
         from easy_cheese.shared.wheypoint import phase_commit
 
         store = wheypoint_storage.WorkStore.open("seam")
-        parent, _child = self._landed_child(tmp_path, store)
+        parent, child = self._landed_child(tmp_path, store)
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        held = {"now": False}
+        seen: list[bool] = []
+        real_lock = wheypoint_storage.WorkStore.lock
+        real_digest = wheypoint_storage.file_digest
+
+        @contextmanager
+        def tracked_lock(self: wheypoint_storage.WorkStore):
+            with real_lock(self):
+                held["now"] = True
+                try:
+                    yield
+                finally:
+                    held["now"] = False
+
+        def racing_digest(path: Path) -> str | None:
+            seen.append(held["now"])
+            _ = target.write_text("moved under the lock\n", encoding="utf-8")
+            return real_digest(path)
+
+        with (
+            mock.patch.object(wheypoint_storage.WorkStore, "lock", tracked_lock),
+            mock.patch.object(wheypoint_storage, "file_digest", racing_digest),
+            pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo,
+        ):
+            _ = self._commit(tmp_path, store, base_revision_id=parent, writes=[])
+
+        assert seen == [True]
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert store.revision_ids() == {parent, child}
+
+    def test_replay_returns_the_landed_revision_when_the_record_moved_to_a_descendant(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        record = store.read_record()
+        assert record is not None
+        moved = commit_module.commit(
+            checkpoint.build_delta(
+                CheckpointIntent(
+                    work_id="seam",
+                    orientation="later checkpoint",
+                    next=NextMove("press"),
+                    base_revision_id=child,
+                ),
+                record,
+            ),
+            store=store,
+            artifact_root=tmp_path,
+        ).revision.revision_id
+        assert moved != child
         writes: list[str] = []
 
-        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
-            _ = self._commit(tmp_path, store, base_revision_id=parent, writes=writes)
+        retried = self._result(
+            self._commit(tmp_path, store, base_revision_id=parent, writes=writes)
+        )
 
-        assert str(excinfo.value).startswith("stale-parent:")
+        assert retried.replayed is True
+        assert retried.revision.revision_id == child
         assert writes == []
+        current = store.read_record()
+        assert current is not None
+        assert current.revision_id == moved
 
     def test_writer_cli_replays_a_lost_response_retry(
         self,
@@ -1723,12 +1809,21 @@ class TestPhaseBaseRevisionGate:
         second = store.read_record()
         assert second is not None
         _ = capsys.readouterr()
+        before = (tmp_path / ".cheese" / "cook" / "retried.md").read_bytes()
 
         write("second pass", first.revision_id)
 
         stderr = capsys.readouterr().err
         assert f"revision_id={second.revision_id}" in stderr
         assert "replayed=true" in stderr
+        assert store.revision_ids() == {first.revision_id, second.revision_id}
+        assert (tmp_path / ".cheese" / "cook" / "retried.md").read_bytes() == before
+
+        with pytest.raises(fromargs.CliError) as excinfo:
+            write("a different second pass", first.revision_id)
+
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert (tmp_path / ".cheese" / "cook" / "retried.md").read_bytes() == before
         assert store.revision_ids() == {first.revision_id, second.revision_id}
 
     def test_missing_base_on_an_existing_record_is_refused_and_writes_nothing(

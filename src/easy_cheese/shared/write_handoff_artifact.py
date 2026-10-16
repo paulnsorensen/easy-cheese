@@ -194,14 +194,11 @@ def _wheypoint_revision(
     supplies the store and maps one producer exception type onto each exit code.
     """
 
-    def write_contents() -> None:
-        _atomic_write(target, contents)
-
     if phase not in paths.CHAIN_PHASES:
-        write_contents()
+        _atomic_write(target, contents)
         return
 
-    from easy_cheese.shared.wheypoint import canonical, phase_commit
+    from easy_cheese.shared.wheypoint import phase_commit
     from easy_cheese.shared.wheypoint import storage as wheypoint_storage
 
     try:
@@ -215,9 +212,8 @@ def _wheypoint_revision(
             grounded=grounded,
             root=root,
             store=store,
-            write_contents=write_contents,
+            contents=contents,
             base_revision_id=base_revision_id,
-            contents_digest=canonical.digest_text(contents),
         )
     except fromargs.CliError:
         # The writer's own refusal (e.g. a failed atomic write) already carries

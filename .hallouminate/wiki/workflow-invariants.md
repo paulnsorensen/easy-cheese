@@ -153,11 +153,11 @@ Gotchas the r014 cure settled:
 
 
 
-The preamble key set, the single-line rule, the `--body-file` trap, the
+[architecture/handoff-preamble-grammar](./architecture/handoff-preamble-grammar.md)
+records the preamble key set, the single-line rule, the `--body-file` trap, the
 route-table gate on the canonical writer (`validate_route` in
 `src/easy_cheese/shared/phase_routes.py`), and the base-revision rule for
-phase writes are recorded in
-[architecture/handoff-preamble-grammar](./architecture/handoff-preamble-grammar.md).
+phase writes.
 
 ## Cook entry refuses held specs
 

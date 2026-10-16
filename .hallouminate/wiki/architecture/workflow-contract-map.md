@@ -177,7 +177,7 @@ flowchart LR
 
 <certain> The mold-to-cook route in the private route table names the `curd-plan` payload (`src/easy_cheese/shared/phase_routes.py`). A held spec stays held: see "Cook entry refuses held specs" in [workflow-invariants](../workflow-invariants.md).
 
-The cross-boundary checks live in `tests/python/test_mold_finalize_contract.py` (the printed command matches the dispatch form and the saved result feeds bound validation) and `tests/python/test_mold_cook_boundary_integration.py` (held and tampered specs are refused). Opt-in browser and live-agent evidence stays in `tests/python/test_mold_cook_browser_workflow.py` and `tests/python/test_mold_cook_agent_driver.py`. Frozen transcripts test ordering without claiming a live model run.
+The cross-boundary checks live in two files. `tests/python/test_mold_finalize_contract.py` checks that the printed command matches the dispatch form and the saved result feeds bound validation. `tests/python/test_mold_cook_boundary_integration.py` checks that Cook refuses held and tampered specs. Opt-in browser and live-agent evidence stays in `tests/python/test_mold_cook_browser_workflow.py` and `tests/python/test_mold_cook_agent_driver.py`. Frozen transcripts test ordering without claiming a live model run.
 
 ## Related
 

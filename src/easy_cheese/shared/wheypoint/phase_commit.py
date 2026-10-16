@@ -2,8 +2,8 @@
 
 `commit_phase_revision` owns the whole phase write: it validates the grounded
 manifest, reads the current record, refuses an ungrounded genesis write,
-collects optional session provenance, writes the artifact through the caller's
-`write_contents` callback, and only then commits. The artifact lands *before*
+collects optional session provenance, writes the caller's `contents`
+atomically, and only then commits. The artifact lands *before*
 the commit deliberately -- an artifact on disk without a revision is visible to
 the next resolve, which gates on `stale-artifact-link`, while a revision that
 pins an artifact nobody wrote is a lie no reader can detect.
@@ -30,7 +30,7 @@ from easy_cheese_schemas.contracts import (
 )
 
 from easy_cheese.shared import paths
-from easy_cheese.shared.wheypoint import checkpoint, commit, storage
+from easy_cheese.shared.wheypoint import canonical, checkpoint, commit, storage
 from easy_cheese.shared.wheypoint.grounded import (
     GroundedEntryError,
     validate_grounded,
@@ -50,7 +50,7 @@ class PhaseCommitRefusal(Exception):
 class ArtifactOrphaned(Exception):
     """The artifact landed on disk but its revision did not.
 
-    Raised for anything that fails after `write_contents()` returned. `expected`
+    Raised for anything that fails after the artifact write returned. `expected`
     says whether the underlying failure is one the kernel raises on purpose, so
     a caller prints a stack only for the ones that carry no message of their own.
     """
@@ -323,25 +323,36 @@ def _phase_intent(
 
 def _original_session(
     store: storage.WorkStore,
+    current: WheypointRecord,
+    artifact_path: str,
     base_revision_id: str,
     session: SessionProvenance | None,
 ) -> SessionProvenance | None:
     """The provenance a retry must repeat to match its original request.
 
     A session without its own timestamp gets one from the clock, so a retry
-    reuses the timestamp of the one receipt this session wrote over the base.
+    reuses the timestamp of the receipt the record pins for this artifact,
+    when that receipt sits over the base and came from this session.
     """
     if session is None or session.captured_at is not None:
         return session
-    matches = [
-        file.revision.session_provenance
-        for file in store.recover().complete
-        if file.revision.parent_revision_id == base_revision_id
-        and file.revision.session_provenance is not None
-        and file.revision.session_provenance.harness == session.harness
-        and file.revision.session_provenance.session_id == session.session_id
-    ]
-    return matches[0] if len(matches) == 1 else session
+    link = next(
+        (link for link in current.artifact_links if link.path == artifact_path),
+        None,
+    )
+    if link is None or link.revision_id is None:
+        return session
+    revision = store.find_complete_revision(link.revision_id)
+    original = None if revision is None else revision.session_provenance
+    if (
+        revision is None
+        or original is None
+        or revision.parent_revision_id != base_revision_id
+        or original.harness != session.harness
+        or original.session_id != session.session_id
+    ):
+        return session
+    return original
 
 
 def _pins_artifact(
@@ -389,7 +400,9 @@ def _replay_landed_write(
         links=_phase_links(root=root_path, work_id=work_id, phase=phase),
         parent=base_revision_id,
         genesis=False,
-        session=_original_session(store, base_revision_id, session),
+        session=_original_session(
+            store, current, artifact_path, base_revision_id, session
+        ),
     )
     delta = _build_delta(intent, current)
 
@@ -411,7 +424,8 @@ def _replay_landed_write(
             delta, store=store, artifact_root=root_path, finalize=confirm
         )
     except commit.StaleParentError as exc:
-        raise _stale_parent(base_revision_id, current.revision_id) from exc
+        latest = store.read_record() or current
+        raise _stale_parent(base_revision_id, latest.revision_id) from exc
     return CommitOutcome(result=result)
 
 
@@ -452,6 +466,22 @@ def _commit_written(
     )
 
 
+def _write_artifact(target: Path, contents: str) -> None:
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        storage.write_atomic(target, contents.encode("utf-8"))
+    except OSError as exc:
+        raise PhaseCommitRefusal(f"cannot write {target}: {exc}") from exc
+
+
+def _resolve_session(
+    provenance: SessionProvenance | None,
+) -> SessionProvenance | None:
+    if provenance is not None:
+        return provenance
+    return _session_provenance_from_environment()
+
+
 def commit_phase_revision(
     *,
     work_id: str,
@@ -461,25 +491,24 @@ def commit_phase_revision(
     orientation: str,
     grounded: Sequence[str],
     store: storage.WorkStore,
-    write_contents: Callable[[], None],
+    contents: str,
     root: Path | str | None = None,
     provenance: SessionProvenance | None = None,
     base_revision_id: str | None = None,
-    contents_digest: str | None = None,
 ) -> CommitOutcome:
     """Validate, write the artifact, then commit one chain-phase revision.
 
     Failure classification belongs to this producer, not its caller: everything
-    before `write_contents()` raises `PhaseCommitRefusal` (caller usage, nothing
+    before the artifact write raises `PhaseCommitRefusal` (caller usage, nothing
     on disk) or the kernel's own error for an environment failure, and anything
     after it raises `ArtifactOrphaned`. An existing record needs the revision
     the writer read as `base_revision_id`; a missing or stale base is a
     refusal, and a conflict under the lock is not retried.
 
-    `contents_digest` is the digest of the bytes `write_contents()` writes. With
-    it, a stale base that is this same write retried after a lost response
-    returns the original revision as a replay instead of `stale-parent`, and
-    writes nothing.
+    `contents` is the artifact text; the producer writes it atomically and
+    derives its digest. A stale base that is this same write retried after a
+    lost response returns the original revision as a replay instead of
+    `stale-parent`, and writes nothing.
     """
     try:
         root_path = paths.resolve_repo_root(root)
@@ -494,19 +523,14 @@ def commit_phase_revision(
             orientation=orientation,
             grounded=grounded_entries,
         )
-        session = (
-            provenance
-            if provenance is not None
-            else _session_provenance_from_environment()
-        )
         current = store.read_record()
         if (
             current is not None
             and base_revision_id is not None
             and base_revision_id != current.revision_id
-            and contents_digest is not None
         ):
             return _replay_landed_write(
+                session=_resolve_session(provenance),
                 work_id=work_id,
                 phase=phase,
                 next_skill=next_skill,
@@ -516,17 +540,17 @@ def commit_phase_revision(
                 grounded=grounded_entries,
                 current=current,
                 base_revision_id=base_revision_id,
-                contents_digest=contents_digest,
-                session=session,
+                contents_digest=canonical.digest_text(contents),
                 store=store,
                 root_path=root_path,
             )
         _require_read_base(current, base_revision_id)
         _require_genesis_grounding(current, grounded_entries)
+        session = _resolve_session(provenance)
     except (commit.CommitError, GroundedEntryError) as exc:
         raise PhaseCommitRefusal(str(exc)) from exc
 
-    write_contents()
+    _write_artifact(artifact_target, contents)
 
     try:
         return _commit_written(
