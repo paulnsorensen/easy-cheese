@@ -471,7 +471,8 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     seed = skill.index("**Seed (coder).**")
     assert preflight < seed
     assert "before Phase 1 seed or any worker commit" in skill
-    assert "decides `single`, `orthogonal_flat`, or `stacked_linear` without asking the user" in skill
+    assert "(../../plate/references/topology.md)" in skill
+    assert "orthogonal_flat" not in skill
     assert "do not decide twice" in skill
     assert '"plate_layout"' in schema
     assert '"single", "stacked"' in schema
@@ -486,8 +487,9 @@ def test_ultracook_preflights_parallel_publication_before_commits() -> None:
     assert "contract_version" in planner
     assert "target_branch: main" in planner
     assert "plate_layout: single | stacked" not in planner
-    assert "owns the size rule" in planner
-    assert "skills/plate/references/topology.md" in planner
+    assert "read `skills/plate/references/topology.md`" in planner
+    assert "Do not decide from your own criteria." in planner
+    assert "| `orthogonal_flat` |" not in planner
     assert "~400" not in planner
     # The planner receives the resolved shape, not only the binary layout.
     assert "Pass both values to the PR planner as `{plate_layout}` and `{shape}`." in skill
@@ -501,7 +503,8 @@ def test_cure_open_pr_dispatch_obeys_plate_policy() -> None:
         for name in ("auto-mode", "selection", "post-pr-writeback")
     )
     assert "`/plate` decides the topology without asking the user" in cure
-    assert "resolves the shape before commit or branch-layout mutation" in cure
+    assert "(../plate/references/topology.md)" in cure
+    assert "orthogonal_flat" not in cure
 
 
 def test_plate_routes_review_to_age_from_both_sides() -> None:
