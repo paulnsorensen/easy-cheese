@@ -123,6 +123,11 @@ wedge-build:
 wedge-check:
     {{wedge}} bundle --root skills --check
 
+# Register the .gitattributes merge driver for wedge archives (idempotent)
+git-merge-drivers:
+    git config merge.wedge-archive.name "keep one side; just wedge-build regenerates"
+    git config merge.wedge-archive.driver true
+
 # Write every generated runtime source that runtime_gates.py checks for staleness
 update-generated:
     {{python}} scripts/runtime_gates.py --write-generated
@@ -184,7 +189,7 @@ update-skill-budgets:
     python3 .github/scripts/validate_skills.py --write-budgets
 
 # Full local check with autofixes
-check: lint-md-fix lint-yaml-fix lint-yaml lint-py-fix lint-sh lint-py-dead-code typecheck test docs-build
+check: git-merge-drivers lint-md-fix lint-yaml-fix lint-yaml lint-py-fix wedge-build lint-sh lint-py-dead-code typecheck test docs-build
 
 # CI-mode verification (no autofixes)
 ci: lint-md lint-yaml lint-sh lint-py-dead-code typecheck test docs-build

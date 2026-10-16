@@ -1,0 +1,5 @@
+# Wedge archives are reproducible build outputs of src/. The wedge-archive
+# driver keeps one side of an archive conflict, and `just wedge-build` (run by
+# `just check`) regenerates the correct bytes. `just git-merge-drivers`
+# registers the driver; without it, Git reports the conflict as before.
+skills/*/scripts/*.pyz merge=wedge-archive

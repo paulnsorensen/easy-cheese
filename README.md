@@ -159,7 +159,7 @@ just wedge-check
 
 `just wedge-build` runs [wedge](https://github.com/paulnsorensen/skillz-that-grillz/tree/main/lib) at build time. It vendors `src/`, builds one reproducible archive per skill, and keeps archive metadata in `wedge.toml`. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The archive resolves a selected target lazily and calls it with only that command's arguments.
 
-`just check` runs `just wedge-check`, which executes `wedge bundle --check` and fails on a missing, corrupt, or stale committed archive. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
+`just check` runs `just wedge-build` before the tests, so a local check always leaves current archives. The tests and CI run `just wedge-check`, which executes `wedge bundle --check` and fails on a missing, corrupt, or stale committed archive. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
 
 ## Optional tools
 

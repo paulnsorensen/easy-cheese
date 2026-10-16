@@ -6,7 +6,7 @@ This document is for LLMs, agents, and automation tools working in this reposito
 
 **Always run `just check` before declaring work done — before any commit, push, PR open, or hand-off.** Treat green from `just check` as the only signal that a change is shippable.
 
-`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`validate_skills.py`), shell lint, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
+`just check` autofixes lint (markdown, yaml, python via `ruff`), regenerates the Wedge archives, and runs the full local build: skill frontmatter validation (`validate_skills.py`), shell lint, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
 
 ```bash
 just check
@@ -52,10 +52,13 @@ them while enforcement is implemented separately.
   `COMMANDS`. Runtime use performs no archive download, loader lookup, or
   sidecar-lock verification. Shiv's transparent cache extraction remains
   part of the archive runtime; caller-managed extraction is prohibited.
-- Wedge is a build-time dependency only. `just wedge-build` regenerates
-  committed archives after source changes, and `just wedge-check` fails on a
-  missing, corrupt, stale, or non-executable archive. Hand-written Python never
-  lives under `skills/`; archive metadata remains in `wedge.toml`.
+- Wedge is a build-time dependency only. `just wedge-build` (run by
+  `just check`) regenerates committed archives after source changes, and
+  `just wedge-check` fails on a missing, corrupt, stale, or non-executable
+  archive. Resolve an archive conflict by regenerating it, never by hand; the
+  `wedge-archive` merge driver in `.gitattributes` keeps one side for that.
+  Hand-written Python never lives under `skills/`; archive metadata remains
+  in `wedge.toml`.
 
 The durable rationale and migration boundary live in
 [the skill Python bundle doctrine](.hallouminate/wiki/architecture/skill-python-bundle-doctrine.md).

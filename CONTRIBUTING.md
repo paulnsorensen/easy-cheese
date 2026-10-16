@@ -50,6 +50,14 @@ The archive closure comes from `uv.lock`: the schemas' dependencies plus the `ru
 To bump `fromargs`, update the `runtime` group in `pyproject.toml`, run `uv lock`, update `requirements/runtime.txt` and `requirements/typing.txt`, then run `just wedge-build`.
 To bump Wedge, change the commit in `tools/wedge/pyproject.toml`, run `uv lock --project tools/wedge`, then run `just wedge-build`.
 
+`just check` runs `just wedge-build`, and wedge builds are reproducible.
+Thus an archive conflict never needs a manual resolution.
+`.gitattributes` assigns the `wedge-archive` merge driver to every archive.
+`just check` registers the driver through `just git-merge-drivers`.
+The driver keeps one side of each archive conflict, so a merge, rebase, or cherry-pick stops only on source conflicts.
+After the operation, run `just check` or `just wedge-build` to regenerate the archives from the merged source.
+CI rejects an archive that you did not regenerate.
+
 Each Python skill declares its public subcommands in `commands.py`.
 Declare each handler with the `@bundle_command("<name>")` decorator at its definition site.
 The decorator records the command name on the function. It does not create a mutable registry.
