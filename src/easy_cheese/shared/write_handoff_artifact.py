@@ -193,6 +193,7 @@ def _wheypoint_revision(
     sequence *and* the classification of its own failures, so this wrapper only
     supplies the store and maps one producer exception type onto each exit code.
     """
+
     def write_contents() -> None:
         _atomic_write(target, contents)
 

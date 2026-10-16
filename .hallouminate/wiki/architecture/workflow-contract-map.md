@@ -65,7 +65,7 @@ Accordingly, the Milknado importer, plan-v2 projection, and result-aggregation p
 
 [^root-catalog]: src/easy_cheese_schemas/_schema_catalog.py:5-39.
 [^planning-seams]: src/easy_cheese_schemas/planner.py:44-113,144-182; src/easy_cheese/shared/workflow.py:223-243; skills/cook/references/fan-pathway.md:56-99.
-[^execution-seams]: src/easy_cheese/shared/workflow.py:748-794,999-1139; skills/cook/phase-contract.yaml:5-16.
+[^execution-seams]: src/easy_cheese/shared/workflow.py:748-794,999-1139; src/easy_cheese/shared/phase_routes.py:16-30 (`_ROUTES`).
 [^review-seams]: src/easy_cheese/shared/workflow.py:1043-1057,554-580; skills/age/SKILL.md:235-243.
 [^diagnosis-seams]: src/easy_cheese/shared/workflow.py:1079-1097,617-630,810-829.
 [^writer-seam]: src/easy_cheese/shared/workflow.py:445-476.

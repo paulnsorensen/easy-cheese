@@ -919,13 +919,13 @@ def _typed_host(value: object, type_: type[_T], path: str) -> _T:
     return cast(_T, _structure(value, type_, path))
 
 
-
 def structure_contract_value(value: object, type_: type[_T], path: str) -> _T:
     """Structure one decoded JSON value as `type_`, or raise at `path`.
 
     A value that is already a `type_` instance passes through unchanged.
     """
     return _typed_host(value, type_, path)
+
 
 def _host_mapping(invocation: Mapping[str, object], name: str) -> Mapping[str, object]:
     value = _invocation_value(invocation, name, {})

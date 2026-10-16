@@ -306,17 +306,6 @@ def _refuse_over_existing_history(store: storage.WorkStore) -> None:
     )
 
 
-def find_replay(
-    store: storage.WorkStore, delta: WheypointDelta
-) -> WheypointRevision | None:
-    """The receipt this exact request already produced against its parent.
-
-    A read-only probe for a caller that must decide before it writes; `commit`
-    makes the same check again under the record lock.
-    """
-    return _find_replay(store, delta, records.request_fingerprint(delta))
-
-
 def _find_replay(
     store: storage.WorkStore, delta: WheypointDelta, fingerprint: str
 ) -> WheypointRevision | None:

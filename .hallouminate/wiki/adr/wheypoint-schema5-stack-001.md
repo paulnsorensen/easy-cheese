@@ -16,6 +16,8 @@
 ## Later changes
 
 - PR #783 adds `matched_by` (`exact`, `prefix`, or `substring`) to the `resolve` payload. Fuzzy matches stay dispatchable.
+- PR #783 also makes `list` outside a Git checkout fall back to machine scope and report `"scope-fallback": "machine"`. An explicit `--scope` keeps its behavior.
+- PR #784 implements F-4. Checkpoint pins a bare `path:line` to `path:line@<short HEAD sha>` when the file exists in `HEAD`, and otherwise warns `unpinned-line-ref`.
 - PR #784 makes the projection's `git check-ignore` call fail closed: a Git failure raises `CheckIgnoreError` instead of emptying the ignored set.
 - PR #785 refines F-3. Export omits `tasks` and `parallel` unless `--include-local` is set, and import runs the secret scan. See [wheypoint-transfer-bundles](../architecture/wheypoint-transfer-bundles.md).
 

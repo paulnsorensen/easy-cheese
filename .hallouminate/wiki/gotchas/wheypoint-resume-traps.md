@@ -16,7 +16,7 @@ The model layer rejects a later revision with no parent. The r014 cure added a l
 
 ## Every write names its read revision
 
-PR #776 removed compaction-proof verification and the `--compacted` flag. The proof protected only sessions that knew they were compacted. Every write to an existing record now names the revision it read: pass `--base <revision_id>` (or `base_revision_id`). A missing base returns `base-revision-required` and a stale base returns `stale-parent`; nothing is written. Stored receipts that hold a compaction record still load. `write-handoff-artifact --base` follows the same rule.
+PR #776 removed compaction-proof verification and the `--compacted` flag. The proof protected only sessions that knew they were compacted. Every write to an existing record now names the revision it read: pass `--base <revision_id>` (or `base_revision_id`). A missing base returns `base-revision-required` and a stale base returns `stale-parent`; nothing is written. One exception applies: an identical phase write retried with its original base replays the revision that already landed, and writes nothing (see [handoff-preamble-grammar](../architecture/handoff-preamble-grammar.md)). Stored receipts that hold a compaction record still load. `write-handoff-artifact --base` follows the same rule.
 
 ## Promote only after the mirror is durable
 
