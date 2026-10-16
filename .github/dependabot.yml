@@ -4,6 +4,7 @@
 # Python in .github/scripts/ (CI helpers) is pinned inline in workflows and
 # is not tracked here. The docs/ pip manifest is tracked below, as is the root,
 # which covers the runtime/build locks and pyproject.toml's published floors.
+# The root proposes only fromargs; its dependency closure moves with it by hand.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -20,6 +21,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    allow:
+      - dependency-name: fromargs
     groups:
       runtime-minor-and-patch:
         update-types: [minor, patch]
