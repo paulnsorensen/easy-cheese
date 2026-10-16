@@ -231,10 +231,10 @@ class TestPlateSummaryMatchesPlate:
     def test_skill_states_plate_decides_without_asking(self) -> None:
         body = _text(CHEESE)
         assert (
-            "`/plate` decides `single`, `orthogonal_flat`, or `stacked_linear` "
-            "for a new pull request without asking."
+            "`/plate` decides the topology of a new pull request without asking. "
+            "See [`topology.md`](../plate/references/topology.md)."
         ) in body
-        assert "Explicit choices win." in body
+        assert "orthogonal_flat" not in body
 
     def test_coherence_check_states_plate_decides_without_asking(self) -> None:
         body = _text(REFERENCES / "coherence-check.md")

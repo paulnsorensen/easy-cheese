@@ -232,8 +232,7 @@ It posts the GitHub replies before it dispatches `/plate`.
 - With an open PR, dispatch `/plate [--hard]`.
   It performs its final write gate, commit, topology update, and publication.
 - With no open PR, use `--open-pr` to dispatch `/plate [--hard]`.
-  `/plate` decides the topology without asking the user.
-  It honors an explicit topology choice and resolves the shape before commit or branch-layout mutation.
+  `/plate` decides the topology without asking the user. See [`topology.md`](../plate/references/topology.md).
 - Without `--open-pr`, leave the remote unchanged.
   Report `no open PR — pass --open-pr or run /plate`.
 - Run § Post-PR write-back before every `/plate` dispatch.

@@ -197,11 +197,7 @@ Derive `plate_layout` from the spec's `landing.shape` first, via `easy_cheese_sc
 
 Record that derivation. When the spec has no `landing` block, `/plate` decides the shape from the curd plan.
 
-Apply `/plate`'s review-shape policy.
-
-Preserve an explicit choice.
-
-`/plate` decides `single`, `orthogonal_flat`, or `stacked_linear` without asking the user.
+The decision rules live in [`../../plate/references/topology.md`](../../plate/references/topology.md). Follow them. Do not restate them here.
 
 Record `plate_layout` and the chosen `shape` in the typed handoff evidence.
 
