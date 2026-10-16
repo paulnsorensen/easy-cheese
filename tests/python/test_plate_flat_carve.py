@@ -70,7 +70,7 @@ def test_carve_never_pushes_or_creates_prs(tmp_path: Path) -> None:
 def test_carve_rejects_other_shapes(tmp_path: Path) -> None:
     path = _write(tmp_path, _plan("single", groups=1))
 
-    assert flat_carve.main(["--source-branch", "work", "--pr-plan", path]) == 1
+    assert flat_carve.main(["--source-branch", "work", "--pr-plan", path]) == 2
 
 
 def test_cli_prints_json_for_a_flat_plan(

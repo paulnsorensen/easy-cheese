@@ -618,17 +618,17 @@ def detect_squash_residue_cmd(
         Branch to check (default: current).
     """
     if not _SAFE_REF.match(base) or base.startswith("-"):
-        raise fromargs.CliError(f"--base {base!r} contains unsafe characters", exit_code=1)
+        raise fromargs.CliError(f"--base {base!r} contains unsafe characters", exit_code=2)
 
     resolved_branch = branch or _current_branch() or _branch_during_rebase()
     if not resolved_branch:
         raise fromargs.CliError(
-            "cannot determine current branch — pass --branch <name>", exit_code=1
+            "cannot determine current branch — pass --branch <name>", exit_code=2
         )
 
     if not _SAFE_REF.match(resolved_branch) or resolved_branch.startswith("-"):
         raise fromargs.CliError(
-            f"branch {resolved_branch!r} contains unsafe characters", exit_code=1
+            f"branch {resolved_branch!r} contains unsafe characters", exit_code=2
         )
 
     base_short = base.split("/")[-1]

@@ -132,7 +132,7 @@ The flag form refuses with these codes:
 ## Reply envelope
 
 A success reply prints one indented JSON document to stdout: `{"ok": true, "command": "<name>", ...fields}`.
-A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error": "<code>: <message>", "exit_code": 1}`.
+A refusal writes one JSON line to stderr and prints nothing to stdout: `{"error": "<code>: <message>", "exit_code": 2}`.
 
 - **`checkpoint`** returns `note_path`, `replayed`, `work_id`, `revision_id`, `revision_number`, `parent_revision_id`, `status`, `durability`, `projection_path`, `record`, `revision`, `markdown`, `derived_entry_ids`, `applied_transitions`, `applied_edges`, `removed_edges`, and `warnings`.
 - **`validate`** returns `valid` and `work_id`.
@@ -166,8 +166,7 @@ This escaping keeps one line one record.
 Under that fallback, `corpus_root` is the project corpus root that would apply, not the root scanned; the scan covered every project corpus.
 
 Exit `0` means the command succeeded; the reply carries the command's own fields.
-Exit `1` means the command refused the request; the stderr line carries `error` and `exit_code`.
-Exit `2` means the command-line usage was wrong, before any command ran.
+Exit `2` means the command refused the request or the command-line usage was wrong; a refusal stderr line carries `error` and `exit_code`.
 Exit `3` means the reply violated its own schema contract.
 An unexpected crash also exits `1`, but the stderr line names the exception class and points to a `traceback` file; it carries no refusal code.
 

@@ -21,7 +21,7 @@ def test_normalize_rejects_host_owned_field(capsys: pytest.CaptureFixture[str]) 
         ]
     )
     captured = capsys.readouterr()
-    assert exit_code == 1
+    assert exit_code == 2
     assert "$.payload.plan_id supplies host-owned field 'plan_id'" in captured.err
 
 
@@ -37,7 +37,7 @@ def test_normalize_rejects_invocation_key_inside_document(
         ]
     )
     captured = capsys.readouterr()
-    assert exit_code == 1
+    assert exit_code == 2
     assert "host-owned field" in captured.err
     assert "$.invocation" in captured.err
 
@@ -52,10 +52,10 @@ def test_normalize_rejects_deeply_nested_document(capsys: pytest.CaptureFixture[
         ]
     )
     captured = capsys.readouterr()
-    assert exit_code == 1
+    assert exit_code == 2
     assert captured.out == ""
     envelope = cast(dict[str, object], json.loads(captured.err))
-    assert envelope["exit_code"] == 1
+    assert envelope["exit_code"] == 2
     assert "MAX_CONTRACT_DEPTH" in cast(str, envelope["error"])
 
 
@@ -69,7 +69,7 @@ def test_normalize_rejects_duplicate_key_document(capsys: pytest.CaptureFixture[
         ]
     )
     captured = capsys.readouterr()
-    assert exit_code == 1
+    assert exit_code == 2
     assert "duplicate field 'kind'" in captured.err
 
 
@@ -85,7 +85,7 @@ def test_normalize_rejects_unsupported_contract_version(
         ]
     )
     captured = capsys.readouterr()
-    assert exit_code == 1
+    assert exit_code == 2
     assert "unsupported contract version 99.0" in captured.err
     assert "expected" in captured.err
 
@@ -126,7 +126,7 @@ def test_validate_rejects_nonconforming_payload(capsys: pytest.CaptureFixture[st
         ]
     )
     captured = capsys.readouterr()
-    assert exit_code == 1
+    assert exit_code == 2
     assert "$.kind" in captured.err
 
 
@@ -154,7 +154,7 @@ def test_validate_rejects_unknown_schema_slug(capsys: pytest.CaptureFixture[str]
         ]
     )
     captured = capsys.readouterr()
-    assert exit_code == 1
+    assert exit_code == 2
     assert "unknown schema slug" in captured.err
 
 

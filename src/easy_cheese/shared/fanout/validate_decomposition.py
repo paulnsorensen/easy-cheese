@@ -122,12 +122,12 @@ def check(path: str | None = None) -> dict[str, object]:
             argv, "usage: validate_decomposition.py [<manifest.yaml|json>]"
         )
     except ManifestLoadError as exc:
-        exit_code = 2 if str(exc).startswith("usage:") else 1
+        exit_code = 2 if str(exc).startswith("usage:") else 4
         raise fromargs.CliError(str(exc), exit_code=exit_code) from exc
 
     errors = validate_manifest(manifest)
     if errors:
-        raise fromargs.CliError("\n".join(f"ERROR: {e}" for e in errors), exit_code=1)
+        raise fromargs.CliError("\n".join(f"ERROR: {e}" for e in errors), exit_code=4)
 
     curds_field = manifest.get("curds", [])
     curd_count = len(cast("list[object]", curds_field)) if isinstance(curds_field, list) else 0

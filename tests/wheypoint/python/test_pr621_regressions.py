@@ -111,7 +111,7 @@ def test_b2_credentials_refuse_validate_and_checkpoint(
     value = prefix + "aB_9-" * 20
     for command in ("validate", "checkpoint"):
         status, reply = _run(command, **_intent(notes=value))
-        assert status == 1, reply
+        assert status == 2, reply
         assert "credential" in cast(str, _error(reply)["message"])
         assert value not in json.dumps(reply)
     assert store.read_record() is None
@@ -130,7 +130,7 @@ def test_b3_task_fields_without_next_refuse_without_a_revision(
         fields["parallel"] = {"isolation": "worktree", "worktree_strategy": "existing"}
     for command in ("validate", "checkpoint"):
         status, reply = _run(command, **fields)
-        assert status == 1, reply
+        assert status == 2, reply
         assert "explicit next" in cast(str, _error(reply)["message"])
     assert store.read_record() == before
     assert len(store.revisions().files) == 1
@@ -210,7 +210,7 @@ def test_h2_directives_require_quote_at_each_boundary(
     assert loaded.value is None
     assert any("quote" in problem for problem in loaded.problems)
     status, reply = _run("checkpoint", **_intent(entries=[entry]))
-    assert status == 1, reply
+    assert status == 2, reply
     assert "quote" in cast(str, _error(reply)["message"])
     assert store.read_record() is None
 
@@ -266,7 +266,7 @@ def test_m2_validation_keeps_independent_diagnostics(
             **extra,
         ),
     )
-    assert status == 1
+    assert status == 2
     message = cast(str, _error(reply)["message"])
     assert "bogus" in message
     assert "PR#" in message
@@ -286,7 +286,7 @@ def test_m3_log_refuses_missing_immutable_history(
     status, reply = _run(
         "log", "--work-id", store.work_id, "--corpus-root", str(corpus_root)
     )
-    assert (status, _error(reply)["code"]) == (1, "store-inconsistent")
+    assert (status, _error(reply)["code"]) == (2, "store-inconsistent")
 
 
 @pytest.mark.parametrize("problem", ["json", "directory"])
@@ -305,7 +305,7 @@ def test_m3_log_maps_unreadable_record_without_history(
     status, reply = _run(
         "log", "--work-id", store.work_id, "--corpus-root", str(corpus_root)
     )
-    assert (status, _error(reply)["code"]) == (1, "record-unreadable")
+    assert (status, _error(reply)["code"]) == (2, "record-unreadable")
     assert "Traceback" not in capsys.readouterr().err
 
 
@@ -319,7 +319,7 @@ def test_m4_show_maps_expected_read_failures(
     else:
         store.record_path.mkdir()
     status, reply = _run("show", "--work-id", store.work_id)
-    assert (status, _error(reply)["code"]) == (1, "record-unreadable")
+    assert (status, _error(reply)["code"]) == (2, "record-unreadable")
     assert "Traceback" not in capsys.readouterr().err
 
 
@@ -327,7 +327,7 @@ def test_l1_reserved_field_guidance_names_current_checkpoint_options(
     store: storage.WorkStore,
 ) -> None:
     status, reply = _run("checkpoint", **_intent(expected_revision_id="rev-0001"))
-    assert (status, _error(reply)["code"]) == (1, "commit-only-field")
+    assert (status, _error(reply)["code"]) == (2, "commit-only-field")
     message = cast(str, _error(reply)["message"])
     assert "base_revision_id" in message
     assert "--base" in message

@@ -26,7 +26,7 @@ classifiers = [
 # compat.py reaches cattrs.cols.list_structure_factory and the structural
 # AttributeValidationNote / IterableValidationNote, so a lower floor would be an
 # untested claim rather than a supported configuration.
-dependencies = ["attrs>=26.1.0", "cattrs>=26.2.0"]
+dependencies = ["attrs>=26.1.0", "cattrs>=26.2.1"]
 
 [project.urls]
 Homepage = "https://github.com/paulnsorensen/easy-cheese"
@@ -111,4 +111,4 @@ ignore_decorators = [
 # published easy-cheese-schemas wheel's own dependencies. Keep the pin equal
 # to requirements/runtime.txt; a test compares the two.
 [dependency-groups]
-runtime = ["fromargs==0.1.0"]
+runtime = ["fromargs==0.2.0"]

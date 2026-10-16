@@ -95,7 +95,7 @@ def _normalize_planner(
         ValueError,
         json.JSONDecodeError,
     ) as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     return payload
 
 
@@ -143,7 +143,7 @@ def _finalize(
         ValueError,
         json.JSONDecodeError,
     ) as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     return outcome.to_dict()
 
 

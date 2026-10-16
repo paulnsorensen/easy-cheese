@@ -469,7 +469,7 @@ def test_ac3_checkpoint_reply_names_unpinnable_scheme(
         ["checkpoint"], stdin=_first_intent(artifact_links=[link])
     )
 
-    assert status == 1
+    assert status == 2
     error = cast(dict[str, str], payload["error"])
     assert "unpinnable-scheme: " in error["text"]
     assert not (corpus_root / "work" / WORK_ID / storage.RECORD_FILENAME).exists()

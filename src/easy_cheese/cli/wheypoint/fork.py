@@ -44,7 +44,7 @@ def _next_move(value: str | None, artifact: str | None) -> NextMove | None:
     try:
         checkpoint_mod.check_move_artifact(move, artifact)
     except checkpoint_mod.IntentError as exc:
-        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=2) from exc
     return move
 
 
@@ -75,7 +75,7 @@ def run_fork(
         raise fromargs.CliError(
             f"record-unreadable: work {parent!r} has a record that cannot be read, "
             + f"so no fork can be taken from it: {exc}",
-            exit_code=1,
+            exit_code=2,
         ) from exc
     captured_at = _dt.datetime.now(_dt.timezone.utc).strftime(
         checkpoint_mod.TIMESTAMP_FORMAT
@@ -88,7 +88,7 @@ def run_fork(
         except OSError as exc:
             raise fromargs.CliError(
                 f"note-unwritable: note directory {note_dir} cannot be created: {exc}",
-                exit_code=1,
+                exit_code=2,
             ) from exc
     try:
         result = fork_mod.fork(
@@ -110,11 +110,11 @@ def run_fork(
             finalize=None if target is None else mirror_finalizer(target),
         )
     except MirrorError as exc:
-        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"note-unwritable: {exc}", exit_code=2) from exc
     except (fork_mod.ForkError, commit_mod.CommitError, storage.StorageError) as exc:
         raise refusal_for(exc) from exc
     except ValueError as exc:
-        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=1) from exc
+        raise fromargs.CliError(f"invalid-intent: {exc}", exit_code=2) from exc
     return {
         **result_payload(result, None if target is None else str(target)),
         "edges": [records.unstructure(edge) for edge in result.record.edges],

@@ -132,7 +132,7 @@ def test_checkpoint_refuses_a_genesis_intent_over_a_live_record(
         ),
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "genesis-conflict"
     assert "never replaces a live one" in cast(str, _get(payload, "error", "message"))
     assert store.record_path.read_bytes() == before
@@ -155,7 +155,7 @@ def test_checkpoint_reports_a_stale_parent_as_its_own_code() -> None:
         ),
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "stale-parent"
 
 
@@ -181,7 +181,7 @@ def test_stale_base_with_a_note_dir_leaves_no_note_dir_or_ledger(
         ),
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "stale-parent"
     assert not notes.exists()
     assert not store.pending_dir.exists() or not list(store.pending_dir.iterdir())
@@ -194,7 +194,7 @@ def test_checkpoint_refuses_an_intent_without_a_next_move(
     del intent["next"], intent["artifact"]
     status, payload = _run("checkpoint", stdin=json.dumps(intent))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
     assert "next" in cast(str, _get(payload, "error", "message"))
     assert store.read_record() is None
@@ -204,7 +204,7 @@ def test_checkpoint_refuses_an_intent_without_a_next_move(
 def test_checkpoint_refuses_stdin_that_is_not_json() -> None:
     status, payload = _run("checkpoint", stdin="not json at all")
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-json"
 
 
@@ -214,7 +214,7 @@ def test_checkpoint_refuses_json_that_is_not_an_intent() -> None:
         "checkpoint", stdin=json.dumps({"work_id": WORK_ID, "bogus": 1})
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
@@ -222,7 +222,7 @@ def test_checkpoint_refuses_json_that_is_not_an_intent() -> None:
 def test_checkpoint_refuses_a_work_id_that_is_not_a_safe_path_segment() -> None:
     status, payload = _run("checkpoint", stdin=json.dumps({"work_id": "../escape"}))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") in {"invalid-intent", "storage-error"}
 
 
@@ -342,11 +342,11 @@ def test_checkpoint_refuses_when_the_note_dir_cannot_be_created(tmp_path: Path) 
         stdin=_first_intent(),
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "note-unwritable"
     # The refusal lands before the promotion, so nothing was committed either.
     show_status, show_payload = _run("show", "--work-id", WORK_ID)
-    assert show_status == 1
+    assert show_status == 2
     assert _get(show_payload, "error", "code") == "record-missing"
 
 
@@ -370,7 +370,7 @@ def test_show_returns_the_current_record() -> None:
 def test_show_refuses_work_that_has_no_record() -> None:
     status, payload = _run("show", "--work-id", WORK_ID)
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "record-missing"
 
 
@@ -378,7 +378,7 @@ def test_show_refuses_work_that_has_no_record() -> None:
 def test_show_refuses_an_unsafe_work_id() -> None:
     status, payload = _run("show", "--work-id", "../escape")
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "storage-error"
 
 
@@ -527,7 +527,7 @@ def test_resolve_answers_not_found_without_calling_it_a_failure() -> None:
 def test_resolve_refuses_a_reference_it_cannot_interpret() -> None:
     status, payload = _run("resolve", "--ref", "   ")
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "error"
     assert _get(payload, "error", "message") == "reference is empty"
 
@@ -672,7 +672,7 @@ def _error(payload: dict[str, object]) -> tuple[str, str]:
 def test_ac1_an_unknown_key_is_refused_by_path_on_every_write_path() -> None:
     status, payload = _run("checkpoint", stdin=_first_intent(bogus=1))
     code, message = _error(payload)
-    assert (status, code) == (1, "invalid-intent")
+    assert (status, code) == (2, "invalid-intent")
     assert "bogus" in message and "unknown field" in message
 
     status, payload = _run(
@@ -682,7 +682,7 @@ def test_ac1_an_unknown_key_is_refused_by_path_on_every_write_path() -> None:
         ),
     )
     code, message = _error(payload)
-    assert (status, code) == (1, "invalid-intent")
+    assert (status, code) == (2, "invalid-intent")
     assert "entries[" in message and "nested_bogus" in message
 
     # AC-10: the raw-delta surface is gone, so checkpoint is the only write path.
@@ -752,7 +752,7 @@ def test_ac25_a_directive_keeps_its_quote_and_is_carried_forward() -> None:
             entries=[{"kind": "directive", "summary": "x", "blocks_continuation": True}]
         ),
     )
-    assert status == 1 and "directive" in _error(payload)[1]
+    assert status == 2 and "directive" in _error(payload)[1]
 
 
 @pytest.mark.usefixtures("store")
@@ -803,14 +803,14 @@ def test_ac9_tasks_persist_typed_and_an_empty_tasks_move_is_refused() -> None:
 
     status, payload = _run("checkpoint", stdin=_intent_json(next="tasks"))
     assert (
-        status == 1
+        status == 2
         and "tasks must be non-empty when move is 'tasks'" in _error(payload)[1]
     )
     status, payload = _run(
         "checkpoint", stdin=_intent_json(next="cook", artifact="x.md", tasks=[task])
     )
     assert (
-        status == 1
+        status == 2
         and "tasks may only be set when move is 'tasks'" in _error(payload)[1]
     )
 
@@ -844,13 +844,13 @@ def test_ac4_ac5_ac6_ac23_artifact_links_are_a_set_pinned_by_the_host(
     before = store.read_record()
     status, payload = _run("checkpoint", stdin=_intent_json(artifact_links=[]))
     code, message = _error(payload)
-    assert (status, code) == (1, "invalid-intent") and "artifact_links" in message
+    assert (status, code) == (2, "invalid-intent") and "artifact_links" in message
     assert store.read_record() == before
 
     status, payload = _run(
         "checkpoint", stdin=_intent_json(remove_artifact_links=["nope.md"])
     )
-    assert status == 1 and "does not carry" in _error(payload)[1]
+    assert status == 2 and "does not carry" in _error(payload)[1]
 
     status, payload = _run(
         "checkpoint", stdin=_intent_json(remove_artifact_links=["doc.md"])
@@ -863,13 +863,13 @@ def test_ac19_next_and_artifact_must_cohere() -> None:
     status, payload = _run(
         "checkpoint", stdin=_first_intent(next="affinage", artifact="a report")
     )
-    assert status == 1 and "PR#" in _error(payload)[1]
+    assert status == 2 and "PR#" in _error(payload)[1]
     status, payload = _run(
         "checkpoint", stdin=_first_intent(next="affinage", artifact="PR#615")
     )
     assert status == 0, payload
     status, payload = _run("checkpoint", stdin=_intent_json(next="cook"))
-    assert status == 1 and "artifact is required" in _error(payload)[1]
+    assert status == 2 and "artifact is required" in _error(payload)[1]
 
 
 @pytest.mark.usefixtures("store")
@@ -879,7 +879,7 @@ def test_ac20_a_secret_pattern_refuses_the_checkpoint_naming_the_field() -> None
         "checkpoint", stdin=_first_intent(orientation=f"token {token} pasted")
     )
     code, message = _error(payload)
-    assert (status, code) == (1, "secret-pattern")
+    assert (status, code) == (2, "secret-pattern")
     assert message.startswith("orientation (GitHub token)")
 
 
@@ -890,7 +890,7 @@ def test_ac26_a_genesis_without_entries_or_notes_creates_no_store(
     del intent["notes"]
     status, payload = _run("checkpoint", stdin=json.dumps(intent))
     code, message = _error(payload)
-    assert (status, code) == (1, "commit-refused")
+    assert (status, code) == (2, "commit-refused")
     assert "first checkpoint must capture" in message
     assert store.read_record() is None
     assert not store.record_path.exists()
@@ -920,13 +920,13 @@ def test_ac11_validate_reports_every_problem_and_never_opens_the_store(
     store: storage.WorkStore,
 ) -> None:
     status, payload = _run("validate", stdin=_first_intent(bogus=1, compacted=True))
-    assert status == 1
+    assert status == 2
     message = cast(str, _get(payload, "error", "message"))
     assert "bogus" in message and "compacted" in message
     status, payload = _run(
         "validate", stdin=_first_intent(next="affinage", artifact="x")
     )
-    assert status == 1
+    assert status == 2
     assert "PR#" in cast(str, _get(payload, "error", "message"))
     assert not store.record_path.exists()
 
@@ -944,7 +944,7 @@ def test_ac12_schema_prints_the_registered_json_schema() -> None:
     assert "work_id" in json.dumps(schema)
 
     status, payload = _run("schema", "nope")
-    assert (status, _error(payload)[0]) == (1, "unknown-contract")
+    assert (status, _error(payload)[0]) == (2, "unknown-contract")
     message = cast(str, _get(payload, "error", "message"))
     known = message.split("known: ", 1)[1]
     assert "checkpoint-intent" in known
@@ -997,7 +997,7 @@ def test_ac14_log_walks_revisions_oldest_first() -> None:
     assert second[3] == "+0"
 
     status, payload = _run("log", "--work-id", "never-written")
-    assert (status, _error(payload)[0]) == (1, "record-missing")
+    assert (status, _error(payload)[0]) == (2, "record-missing")
 
 
 def _transcript(path: Path) -> None:
@@ -1054,7 +1054,7 @@ def test_ac27_turns_prints_the_users_turns_from_a_transcript(tmp_path: Path) -> 
         "2026-09-05T06:20:00Z\tDouble down on ergonomics.",
     ]
     status, payload = _run("turns", "--transcript", str(tmp_path / "missing.jsonl"))
-    assert (status, _error(payload)[0]) == (1, "transcript-missing")
+    assert (status, _error(payload)[0]) == (2, "transcript-missing")
     assert str(tmp_path / "missing.jsonl") in _error(payload)[1]
 
 
@@ -1077,7 +1077,7 @@ def test_ac28_turns_derives_the_projects_dir_and_never_guesses_a_session(
     monkeypatch.chdir(cwd)
 
     status, payload = _run("turns")
-    assert (status, _error(payload)[0]) == (1, "session-required")
+    assert (status, _error(payload)[0]) == (2, "session-required")
     message = cast(str, _get(payload, "error", "message"))
     assert "projects_dir" in message
     assert "aaa" in message and "bbb" in message
@@ -1105,7 +1105,7 @@ def test_cure_secret_scan_covers_every_string_field() -> None:
         "checkpoint", stdin=_first_intent(next="tasks", artifact=None, tasks=[task])
     )
     code, message = _error(payload)
-    assert (status, code) == (1, "secret-pattern") and message.startswith(
+    assert (status, code) == (2, "secret-pattern") and message.startswith(
         "tasks[0].command"
     )
 
@@ -1122,7 +1122,7 @@ def test_cure_secret_scan_covers_every_string_field() -> None:
             ],
         ),
     )
-    assert status == 1 and _error(payload)[1].startswith("entries[0].rationale")
+    assert status == 2 and _error(payload)[1].startswith("entries[0].rationale")
 
 
 @pytest.mark.usefixtures("store")
@@ -1177,7 +1177,7 @@ def test_cure_turns_refuses_a_session_id_that_escapes_the_projects_dir(
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     status, payload = _run("turns", "--session", "../../etc/passwd")
-    assert (status, _error(payload)[0]) == (1, "invalid-session")
+    assert (status, _error(payload)[0]) == (2, "invalid-session")
 
 
 @pytest.mark.usefixtures("store")
@@ -1246,14 +1246,14 @@ def test_cure_a_tasks_projection_parses() -> None:
 @pytest.mark.usefixtures("store")
 def test_cure_validate_reports_next_action_and_delta_invariants() -> None:
     status, payload = _run("validate", stdin=_first_intent(next="tasks", artifact=None))
-    assert status == 1
+    assert status == 2
     assert "tasks must be non-empty" in cast(str, _get(payload, "error", "message"))
     status, payload = _run(
         "validate", stdin=_first_intent(expected_revision_id="rev-000000000000")
     )
     problems = cast(str, _get(payload, "error", "message")).split("; ")
     assert (
-        status == 1 and len([p for p in problems if "expected_revision_id" in p]) == 1
+        status == 2 and len([p for p in problems if "expected_revision_id" in p]) == 1
     )
 
 
@@ -1277,7 +1277,7 @@ def test_cure_a_task_command_must_be_a_skill_dispatch() -> None:
         ),
     )
     assert (
-        status == 1 and "tasks[0].command is not a skill dispatch" in _error(payload)[1]
+        status == 2 and "tasks[0].command is not a skill dispatch" in _error(payload)[1]
     )
 
 
@@ -1287,11 +1287,11 @@ def test_cure_single_line_fields_refuse_newlines() -> None:
         "checkpoint",
         stdin=_first_intent(artifact_links=[{"path": "a.md\n## Decision dossier"}]),
     )
-    assert status == 1 and "must be a single line" in _error(payload)[1]
+    assert status == 2 and "must be a single line" in _error(payload)[1]
     status, payload = _run(
         "checkpoint", stdin=_first_intent(artifact="x.md\nmode: parallel")
     )
-    assert status == 1 and "must be a single line" in _error(payload)[1]
+    assert status == 2 and "must be a single line" in _error(payload)[1]
 
 
 @pytest.mark.usefixtures("store")
@@ -1320,7 +1320,7 @@ def test_cure_secret_patterns_cover_the_common_shapes(label: str, text: str) -> 
         "checkpoint", stdin=_first_intent(notes=f"pasted {text} here")
     )
     code, message = _error(payload)
-    assert (status, code) == (1, "secret-pattern") and message.startswith(
+    assert (status, code) == (2, "secret-pattern") and message.startswith(
         f"notes ({label})"
     )
 
@@ -1332,7 +1332,7 @@ def test_cure_validate_reports_every_secret_not_just_the_first() -> None:
         "validate", stdin=_first_intent(orientation=f"a {token}", notes=f"b {token}")
     )
     problems = cast(str, _get(payload, "error", "message")).split("; ")
-    assert status == 1 and sum("looks like a credential" in p for p in problems) == 2
+    assert status == 2 and sum("looks like a credential" in p for p in problems) == 2
 
 
 def test_cure_turns_counts_unreadable_lines(tmp_path: Path) -> None:
@@ -1442,7 +1442,7 @@ def test_cure_validate_reports_the_next_action_gate_and_the_task_command_togethe
         stdin=_first_intent(next="affinage", artifact="x", tasks=[task]),
     )
 
-    assert status == 1
+    assert status == 2
     message = cast(str, _get(payload, "error", "message"))
     assert "PR#" in message
     assert "tasks[0].command is not a skill dispatch" in message
@@ -1541,7 +1541,7 @@ def test_cure_turns_lists_a_candidate_even_when_stat_fails(
 
     status, payload = _run("turns")
 
-    assert (status, _error(payload)[0]) == (1, "session-required")
+    assert (status, _error(payload)[0]) == (2, "session-required")
     message = cast(str, _get(payload, "error", "message"))
     assert "aaa (modified unknown)" in message
     assert "bbb (modified unknown)" not in message and "bbb (modified" in message
@@ -1679,10 +1679,10 @@ def test_checkpoint_and_validate_read_an_intent_path_same_as_stdin(
 def test_checkpoint_and_validate_refuse_a_missing_intent_path() -> None:
     """AC-2: a missing intent path is a refusal, not a traceback."""
     status, payload = _run("checkpoint", "/no/such/intent.json")
-    assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
 
     status, payload = _run("validate", "/no/such/intent.json")
-    assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -1703,7 +1703,7 @@ def test_checkpoint_and_validate_refuse_invalid_utf8_intent(tmp_path: Path) -> N
 
     for command in ("checkpoint", "validate"):
         status, payload = _run(command, str(intent_path))
-        assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+        assert (status, _error(payload)[0]) == (2, "intent-unreadable")
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -2084,7 +2084,7 @@ def test_show_project_flag_reads_another_projects_store(
 
     monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-b")
     status, payload = _run("show", "--work-id", WORK_ID)
-    assert (status, _error(payload)[0]) == (1, "record-missing")
+    assert (status, _error(payload)[0]) == (2, "record-missing")
 
     status, payload = _run("show", "--project", "proj-a", "--work-id", WORK_ID)
     assert status == 0 and payload["work_id"] == WORK_ID
@@ -2179,11 +2179,11 @@ def test_ac4_fork_refusals_surface_their_own_code() -> None:
     _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
 
     status, payload = _run("fork", "no-such-work", "child", "--orientation", "C.")
-    assert (status, _error(payload)[0]) == (1, "unknown-parent")
+    assert (status, _error(payload)[0]) == (2, "unknown-parent")
 
     assert _run("fork", WORK_ID, "child", "--orientation", "C.")[0] == 0
     status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
-    assert (status, _error(payload)[0]) == (1, "fork-exists")
+    assert (status, _error(payload)[0]) == (2, "fork-exists")
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -2300,7 +2300,7 @@ def test_ac14_validate_accepts_the_same_flags_and_names_pairing_errors() -> None
     assert (status, payload["valid"], payload["work_id"]) == (0, True, WORK_ID)
 
     status, payload = _run("validate", "--work-id", WORK_ID, "--directive", "D")
-    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
 
 
 def test_ac17_a_milknado_checkpoints_edge_binds_only_when_milknado_is_present(
@@ -2354,7 +2354,7 @@ def test_graph_an_unpinnable_link_that_covers_entries_is_refused() -> None:
             ]
         ),
     )
-    assert (status, _error(payload)[0]) == (1, "unpinnable-scheme")
+    assert (status, _error(payload)[0]) == (2, "unpinnable-scheme")
 
     status, payload = _run(
         "checkpoint",
@@ -2366,7 +2366,7 @@ def test_graph_an_unpinnable_link_that_covers_entries_is_refused() -> None:
         "--covers",
         decision,
     )
-    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -2408,7 +2408,7 @@ def test_cure_fork_next_move_needs_the_artifact_checkpoint_needs() -> None:
     status, payload = _run(
         "fork", WORK_ID, "child", "--orientation", "C.", "--next", "cook"
     )
-    assert (status, _error(payload)[0]) == (1, "invalid-intent")
+    assert (status, _error(payload)[0]) == (2, "invalid-intent")
 
     status, payload = _run(
         "fork",
@@ -2421,7 +2421,7 @@ def test_cure_fork_next_move_needs_the_artifact_checkpoint_needs() -> None:
         "--artifact",
         "spec.md",
     )
-    assert (status, _error(payload)[0]) == (1, "invalid-intent")
+    assert (status, _error(payload)[0]) == (2, "invalid-intent")
 
     status, payload = _run(
         "fork",
@@ -2489,7 +2489,7 @@ def test_cure_relinking_a_covered_ref_keeps_its_coverage(
 @pytest.mark.usefixtures("corpus_root")
 def test_cure_a_positional_that_is_neither_file_nor_work_id_names_both_forms() -> None:
     status, payload = _run("checkpoint", "Not A Work", "--question", "Q")
-    assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
     message = _error(payload)[1]
     assert "intent file" in message and "work id" in message
 
@@ -2524,7 +2524,7 @@ def test_cure_flags_leave_stdin_unread_unless_the_intent_is_dash(
 def test_cure_a_positional_work_id_that_differs_from_work_id_is_ambiguous() -> None:
     _ = _seed()
     status, payload = _run("checkpoint", WORK_ID, "--work-id", OTHER, "--question", "Q")
-    assert (status, _error(payload)[0]) == (1, "intent-ambiguous")
+    assert (status, _error(payload)[0]) == (2, "intent-ambiguous")
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -2543,14 +2543,14 @@ def test_cure_a_missing_intent_file_or_a_directory_is_never_a_work_id(
         "--context",
         "x",
     )
-    assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
     assert "new.json" in _error(payload)[1]
     status, _ = _run("show", "new.json")
     assert status != 0
 
     (tmp_path / OTHER).mkdir()
     status, payload = _run("checkpoint", OTHER, "--question", "Q")
-    assert (status, _error(payload)[0]) == (1, "intent-unreadable")
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
     assert "Errno" not in _error(payload)[1]
 
 
@@ -2631,14 +2631,14 @@ def test_cure_fork_from_an_unreadable_parent_is_refused(corpus_root: Path) -> No
     _ = parent.record_path.write_text("{not json", encoding="utf-8")
 
     status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
-    assert (status, _error(payload)[0]) == (1, "record-unreadable")
+    assert (status, _error(payload)[0]) == (2, "record-unreadable")
 
 
 @pytest.mark.usefixtures("corpus_root")
 def test_cure_fork_input_errors_are_invalid_intent_not_record_unreadable() -> None:
     _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
     status, payload = _run("fork", WORK_ID, "child", "--orientation", "")
-    assert (status, _error(payload)[0]) == (1, "invalid-intent")
+    assert (status, _error(payload)[0]) == (2, "invalid-intent")
     status, payload = _run(
         "fork",
         WORK_ID,
@@ -2650,7 +2650,7 @@ def test_cure_fork_input_errors_are_invalid_intent_not_record_unreadable() -> No
         "--artifact",
         "",
     )
-    assert (status, _error(payload)[0]) == (1, "invalid-intent")
+    assert (status, _error(payload)[0]) == (2, "invalid-intent")
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -2694,7 +2694,7 @@ def test_cure_a_bad_enum_value_is_refused_with_its_code(
 ) -> None:
     _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
     status, payload = _run(*argv)
-    assert (status, _error(payload)[0]) == (1, code)
+    assert (status, _error(payload)[0]) == (2, code)
 
 
 def _corpus_bytes(root: Path) -> dict[str, bytes]:
@@ -2720,7 +2720,7 @@ def test_show_refuses_a_future_stamped_record_without_writing(
 
     status, payload = _run("show", WORK_ID)
 
-    assert status == 1
+    assert status == 2
     assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
     assert _corpus_bytes(corpus_root) == before
 
@@ -2739,7 +2739,7 @@ def test_checkpoint_refuses_a_future_stamped_record_without_writing(
         ),
     )
 
-    assert status == 1
+    assert status == 2
     assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
     assert _corpus_bytes(corpus_root) == before
 
@@ -2753,7 +2753,7 @@ def test_fork_refuses_a_future_stamped_parent_without_writing(
 
     status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
 
-    assert status == 1
+    assert status == 2
     assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
     assert _corpus_bytes(corpus_root) == before
 
@@ -2844,7 +2844,7 @@ def test_supersede_pairing_refuses_with_no_successor_and_writes_nothing(
         "checkpoint", WORK_ID, "--supersede", old, "--rationale", "Gone."
     )
 
-    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
     assert _corpus_bytes(corpus_root) == before
 
 
@@ -2870,7 +2870,7 @@ def test_supersede_pairing_refuses_two_added_entries_of_the_kind() -> None:
         "Replaced.",
     )
 
-    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
 
 
 @pytest.mark.usefixtures("corpus_root")
@@ -2890,7 +2890,7 @@ def test_supersede_refuses_an_unknown_successor(corpus_root: Path) -> None:
         "Replaced.",
     )
 
-    assert status == 1
+    assert status == 2
     assert "unknown entry" in _error(payload)[1]
     assert _corpus_bytes(corpus_root) == before
 
@@ -2950,7 +2950,7 @@ def test_question_owner_or_when_count_mismatch_refuses_and_writes_nothing(
         "solo",
     )
 
-    assert (status, _error(payload)[0]) == (1, "flag-pairing")
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
     assert _corpus_bytes(corpus_root) == before
 
 
@@ -3169,7 +3169,7 @@ def test_supersede_refuses_an_entry_superseding_itself(corpus_root: Path) -> Non
         "checkpoint", WORK_ID, "--supersede", old, "--by", old, "--rationale", "Self."
     )
 
-    assert status == 1
+    assert status == 2
     assert "cannot supersede itself" in _error(payload)[1]
     assert _corpus_bytes(corpus_root) == before
 
@@ -3192,7 +3192,7 @@ def test_supersede_refuses_a_successor_that_is_not_active(corpus_root: Path) -> 
         "checkpoint", WORK_ID, "--supersede", third, "--by", old, "--rationale", "No."
     )
 
-    assert status == 1
+    assert status == 2
     assert "already superseded" in _error(payload)[1]
     assert _corpus_bytes(corpus_root) == before
 
@@ -3219,7 +3219,7 @@ def test_supersede_refuses_a_cycle_in_one_delta(corpus_root: Path) -> None:
         "B to A.",
     )
 
-    assert status == 1
+    assert status == 2
     assert "also transitions" in _error(payload)[1]
     assert _corpus_bytes(corpus_root) == before
 
