@@ -53,6 +53,7 @@
 - [outer-tdd-gates-004](./outer-tdd-gates-004.md) — ADR: Mold owns Test Contracts and a bounded fresh-context taste gate
 - [outer-tdd-gates-005](./outer-tdd-gates-005.md) — ADR: Gate applicability is explicit and uses existing project runners
 - [plate-publication-boundary-001](./plate-publication-boundary-001.md) — ADR: plate owns the commit-to-PR publication boundary
+- [plate-publication-boundary-002](./plate-publication-boundary-002.md) — ADR: Plate decides PR topology without asking
 - [post-pr-wiki-writeback-001](./post-pr-wiki-writeback-001.md) — ADR: curdle wiki writes enforced by gate node + read-back verify, not a Stop-hook
 - [post-pr-wiki-writeback-002](./post-pr-wiki-writeback-002.md) — ADR: post-PR learnings write-back reuses wiki-ingest, not the personal wiki-curator skill
 - [pyz-pipeline-contracts-001](./pyz-pipeline-contracts-001.md) — ADR: Bundle builds verify the staged import closure, including function-body imports

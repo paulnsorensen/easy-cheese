@@ -167,12 +167,12 @@ and records `{target, backend, verified}`.[^plate-writes] A required write that 
 verified stops publication.
 
 For every new PR, an explicit topology choice is authoritative. Otherwise `/plate`
-selects a single PR without asking only for one cohesive review unit; it recommends a
-stack and asks when the work has independently reviewable ordered layers, and asks when
-review shape is genuinely ambiguous. The policy uses cohesion and stable layer
-boundaries, not line or file counts. `/cook`'s parallel fan pathway (`--open-pr`) runs that policy
-before seed or worker commits, records `plate_layout` in its manifest and PR plan, and
-reuses the resolution at terminal publication. A supplied plan cannot override an
+decides the shape without asking: `single`, `orthogonal_flat`, `stacked_linear`, or a
+dependent chain plus independent PRs ([[plate-publication-boundary-002]]). It never
+stacks parts that do not depend on each other. Dependency and cohesion decide the shape;
+size never decides it alone. `/cook`'s parallel fan pathway (`--open-pr`) runs that policy
+before seed or worker commits, records `plate_layout` and `shape` in its manifest and PR
+plan, and reuses the resolution at terminal publication. A supplied plan cannot override an
 explicit choice. Existing PR updates preserve detected topology. A stack runs the write,
 validation, named-stage, commit, and verification transaction once per layer before
 whole-chain submission; shared durable writes belong on the bottom/common branch or an
