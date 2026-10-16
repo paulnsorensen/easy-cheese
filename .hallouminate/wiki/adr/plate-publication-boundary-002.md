@@ -27,7 +27,7 @@
 - Autonomous pipelines no longer pause before publication for a topology question.
 - Callers that want a stack must state it explicitly or supply a dependent `pr_plan`.
 - A caller that requests a stack of independent parts makes an explicit choice. Plate honors it, so caller prompts must not request stacks by default.
-- Issue #789 tracks the open validator gap. `validate-publication` compares `landing` with the plan by layout, not by exact shape, and has no `deviation` field.
+- PR #799 (issue #789) makes `validate-publication` match `landing.shape` against the plan shape exactly. A `single` collapse records its reason in a `deviation` field.
 
 Related: [[plate-publication-boundary-001]], [[workflow-invariants]], [[plate-runtime-contract]].
 
