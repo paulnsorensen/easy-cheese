@@ -91,8 +91,11 @@ test('annotate mode pins numbered notes and explore mode hides them', async ({pa
 
     await page.getByRole('button', {name: 'Add note on diagram › Write path'}).click();
     await page.getByLabel('Note text').fill('b');
+    const savedBoth = page.waitForResponse(res => res.url().endsWith('/api/autosave')
+      && res.request().postData()?.includes('2. b (diagram') && res.ok());
     await page.getByRole('button', {name: 'queue note'}).click();
     await expect(queue).toContainText('queued · 2');
+    await savedBoth;
     await expect.poll(async () => {
       const review = await request.get(`${new URL(s.url).origin}/api/review`, {headers: {'X-Mold-Token': s.token}}).then(r => r.json());
       return review.working?.[review.revision.number]?.annotations;
