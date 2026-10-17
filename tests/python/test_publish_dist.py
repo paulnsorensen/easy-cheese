@@ -18,6 +18,7 @@ import publish_dist  # noqa: E402
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "publish-dist.yml"
 VALIDATE = REPO_ROOT / ".github" / "workflows" / "validate.yml"
+RELEASE = REPO_ROOT / ".github" / "workflows" / "release.yml"
 ARCHIVE = "skills/cook/scripts/cook.pyz"
 
 
@@ -249,3 +250,13 @@ def test_validate_runs_the_publish_checks_before_merge() -> None:
         next(i for i, run in enumerate(runs) if "--help" in run),
     ]
     assert order == sorted(order)
+
+
+@pytest.mark.parametrize(
+    "workflow", [WORKFLOW, VALIDATE, RELEASE], ids=["publish-dist", "validate", "release"]
+)
+def test_gh_install_makes_no_api_call(workflow: Path) -> None:
+    """An unauthenticated API call hits the shared runner rate limit and fails with 403."""
+    text = workflow.read_text(encoding="utf-8")
+    assert "gh skill publish --dry-run" in text
+    assert "api.github.com" not in text
