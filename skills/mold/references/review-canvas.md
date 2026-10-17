@@ -12,6 +12,23 @@ Use the bundled review canvas when visual artifacts or browser interaction help 
 6. When feedback carries `end_session: true`, run `python3 skills/mold/scripts/mold.pyz review close --state-dir DIR` and stop polling. This flag marks the user's choice to end the session, not approval.
 7. Stop the server with `python3 skills/mold/scripts/mold.pyz review close --state-dir DIR` when the review ends for another reason.
 
+## Remote access over Tailscale
+
+Use this mode only when the user asks to open the canvas from another tailnet device.
+
+1. Read the node name from `tailscale status --json` at `Self.DNSName`, without the trailing dot.
+2. Add `--trusted-host NODE.TAILNET.ts.net` to `review serve`.
+3. Give the user the `tailscale_serve` command from the launch output, and give them `remote_url`.
+4. Tell the user that the `tailscale_serve` command replaces an existing HTTPS mapping on port 443.
+   To keep that mapping, add `--https=PORT` to the command and add `:PORT` to the host in `remote_url`.
+5. After the review closes, tell the user to remove the mapping with `tailscale serve --https=PORT off`.
+
+The server still binds `127.0.0.1` and never starts or stops `tailscale serve` itself.
+It accepts the trusted host only with `X-Forwarded-Proto: https` and an `https://` origin.
+It refuses every request that carries `Tailscale-Funnel-Request`, so Funnel never exposes the canvas.
+The launch token still protects every request.
+The tailnet needs MagicDNS and HTTPS certificates.
+
 ## Review document
 
 The canvas requires only `questions`. Every other field is optional, and the canvas hides a view when its field is absent.
@@ -43,4 +60,4 @@ Autosave only preserves a working copy. `Send to agent` creates feedback, not ap
 
 Browser feedback never satisfies the taste gate, typed-plan gate, or coherence self-check.
 
-The canvas is optional. It is a local-only review aid, not an approval mechanism. It must not request approval, bypass the taste gate, bypass the typed-plan gate, or bypass the coherence self-check.
+The canvas is optional. It is a loopback-bound review aid, not an approval mechanism. It must not request approval, bypass the taste gate, bypass the typed-plan gate, or bypass the coherence self-check.
