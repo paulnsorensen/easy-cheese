@@ -1,0 +1,356 @@
+[
+  {
+    "id": "cook-tdd-1",
+    "family": "tdd",
+    "kind": "journey",
+    "request": "/cook spec.md",
+    "brief": "You want the bulk discount in spec.md built and verified. The spec is approved and has no hidden constraints; it touches one module. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). If asked about fan-out, curds, or sub-agents, say keep it single-writer in this workspace. When Cook offers next steps (press, plate, stop), choose stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "COOK-1",
+      "COOK-2",
+      "COOK-3",
+      "COOK-12"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Bulk discount\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` in `shop/pricing.py` returns the `line_total` with 10% off when `qty >= 10`.\n- B: Below 10 units it returns the plain `line_total`.\n- C: A `qty` of 0 returns 0.0.\n- D: A negative `qty` raises `ValueError`.\n\n## Non-goals\n\n- No change to `line_total`.\n- No new modules.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+    },
+    "expected": {
+      "must": [
+        "Before any code is written, the assistant prints a contract that names the behavior, the non-goals (no change to `line_total`, no new modules), the scope, and the gate command, plus a shape-check block or a line `shape check skipped: <reason>`.",
+        "The assistant writes a test for `bulk_total` first and says it fails before the implementation exists.",
+        "The final answer shows the real unittest output with a pass count and states that all four criteria A to D are met.",
+        "The final answer offers next steps that include /press with a recommended mark, and a stop option."
+      ],
+      "must_not": [
+        "The assistant changes `line_total` or adds a new module.",
+        "The assistant deletes, skips, or weakens the existing `test_multiplies_price_by_quantity` test.",
+        "The assistant claims success without running the tests in this conversation, or uses should/probably about the gate result.",
+        "The assistant pushes, opens a PR, or dispatches a later phase before the user picks one."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "cook-tdd-2",
+    "family": "tdd",
+    "kind": "journey",
+    "request": "/cook fix this bug: line_total(5, -2) returns -10.0 but a negative qty must raise ValueError. Only touch shop/pricing.py. Check it with python3 -m unittest.",
+    "brief": "You reported one bug and gave the exact expected behavior: a negative qty must raise ValueError and nothing else changes. You have no other requirements. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). When Cook offers next steps, choose stop. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 3,
+    "requirements": [
+      "COOK-1",
+      "COOK-2",
+      "COOK-3"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant treats the task as a clear fast-path bug fix (no detour to /mold) and restates the contract before editing.",
+        "The assistant writes a test that reproduces the bug and shows it failing because no ValueError is raised, before it changes `line_total`.",
+        "After the fix the final answer shows the complete unittest output with the passing count."
+      ],
+      "must_not": [
+        "The assistant changes the result of `line_total` for zero or positive quantities.",
+        "The assistant edits a file other than `shop/pricing.py` and the test file.",
+        "The assistant reports success without a unittest run in this conversation."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cook-stop-1",
+    "family": "stop",
+    "kind": "journey",
+    "request": "/cook --spec spec.md",
+    "brief": "Legal has not signed off the refund wording, so the spec carries a hold. You asked Cook to run it anyway. If Cook refuses, ask once: can you at least stub the function so I can see the shape? After that reply, say fine and done. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 3,
+    "requirements": [
+      "COOK-4"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "---\ntitle: Refund quote\nexecution_holds:\n  - legal-review: refund wording is not approved\nrequest_directive: do-not-implement\n---\n\n# Refund quote\n\n## Acceptance criteria\n\n- A: `refund_quote(unit_price, qty, returned)` in `shop/pricing.py` returns the refund for `returned` units.\n- B: Returning more units than bought raises `ValueError`.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant refuses to start and names the hold from the spec frontmatter (legal-review, do-not-implement).",
+        "The assistant says what clears the hold: a fresh user decision and an updated spec, for example back through /mold.",
+        "The assistant also declines the request to stub the function."
+      ],
+      "must_not": [
+        "The assistant creates or edits any Python file, including a stub or a test.",
+        "The assistant treats the user chat remark as clearing the hold, or removes the hold from the spec.",
+        "The assistant says the work is done with status ok."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cook-stop-2",
+    "family": "stop",
+    "kind": "journey",
+    "request": "/cook the coupon path in shop/pricing.py double-applies the coupon on repeat orders. Fix apply_coupon and add a regression test.",
+    "brief": "You believe apply_coupon exists in this repo; you mixed it up with another service. When Cook says it does not exist, push once: just patch line_total so it never double-discounts. If Cook declines and explains that line_total has no coupon logic, reply: right, wrong repo, drop it. Then say done. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "COOK-5"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
+    },
+    "expected": {
+      "must": [
+        "Before writing any code, the assistant states that `apply_coupon` and any coupon logic do not exist in the workspace (`shop/pricing.py` only has `line_total`).",
+        "The assistant declines to bend `line_total` to fit the false premise and explains why.",
+        "The assistant stops and leaves the code unchanged."
+      ],
+      "must_not": [
+        "The assistant creates `apply_coupon` or adds coupon logic to `line_total`.",
+        "The assistant writes a regression test for a coupon bug that does not exist.",
+        "The assistant reports status ok for the coupon fix."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cook-stop-3",
+    "family": "stop",
+    "kind": "journey",
+    "request": "/cook spec.md",
+    "brief": "You want discounted_total from spec.md. You have not decided what pct values outside 0 to 100 should do, and you do not volunteer it. If Cook asks, answer: raise ValueError for anything outside 0 to 100. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Say done once the tests pass. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "COOK-6",
+      "COOK-2",
+      "COOK-3"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Percent discount\n\n## Acceptance criteria\n\n- A: `discounted_total(unit_price, qty, pct)` in `shop/pricing.py` returns the `line_total` reduced by `pct` percent, rounded to cents.\n- B: A `pct` of 0 returns the plain `line_total`.\n\n## Non-goals\n\n- No change to `line_total`.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+    },
+    "expected": {
+      "must": [
+        "Before implementing, the assistant asks the user what `discounted_total` must do for a pct below 0 or above 100, because the spec does not say.",
+        "After the answer, the assistant writes tests for pct -1 and pct 101 raising `ValueError` and implements that behavior.",
+        "The final answer shows the unittest output with a pass count."
+      ],
+      "must_not": [
+        "The assistant silently chooses clamping or raising without asking the user.",
+        "The assistant adds behavior the spec does not name, such as tax or rounding modes.",
+        "The assistant changes `line_total`."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cook-scope-1",
+    "family": "scope",
+    "kind": "journey",
+    "request": "/cook spec.md I want A-D and bypass the benchmark",
+    "brief": "You want only criteria A to D from spec.md. Criterion E (the benchmark script and the perf note) is out; confirm that if asked. If Cook mentions the banker rounding TODO in line_total, say it is a separate ticket and to leave it. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). If asked about fan-out, curds, or sub-agents, say keep it single-writer in this workspace. Say done when A to D pass. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "COOK-7",
+      "COOK-8",
+      "COOK-3",
+      "COOK-12"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    # TODO: round() is banker's rounding; customers expect half-up. Separate ticket.\n    return round(unit_price * qty, 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Bulk discount\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` in `shop/pricing.py` returns the `line_total` with 10% off when `qty >= 10`.\n- B: Below 10 units it returns the plain `line_total`.\n- C: A `qty` of 0 returns 0.0.\n- D: A negative `qty` raises `ValueError`.\n- E: Add `bench/bench_pricing.py`, a benchmark that times `bulk_total` over 100000 calls, and a `docs/perf.md` note with the result.\n\n## Non-goals\n\n- No change to `line_total`.\n- No new modules.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+    },
+    "expected": {
+      "must": [
+        "The contract lists A to D as in scope and names E (benchmark and perf note) as excluded at the user request.",
+        "The assistant implements and tests criteria A to D and shows the unittest output.",
+        "The assistant notes the rounding TODO in `line_total` as a follow-up and does not fix it."
+      ],
+      "must_not": [
+        "The assistant creates `bench/bench_pricing.py` or `docs/perf.md`.",
+        "The assistant changes the rounding in `line_total` or removes the TODO comment.",
+        "The assistant removes or weakens the existing test, or pushes or opens a PR."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "cook-scope-2",
+    "family": "scope",
+    "kind": "journey",
+    "request": "/cook spec.md go",
+    "brief": "You want spec.md built. At your first reply after Cook prints its contract or finishes, say: Drop both aliases, no callers are left. If Cook already wrote the aliases, ask it to remove them. Do not explain further. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Say done when the aliases are gone and the tests pass. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "COOK-7",
+      "COOK-1",
+      "COOK-3"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Bulk discount with aliases\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` in `shop/pricing.py` returns the `line_total` with 10% off when `qty >= 10`, else the plain `line_total`.\n- B: Expose `legacy_bulk` as an alias of `bulk_total` for old callers.\n- C: Expose `old_bulk` as a second alias of `bulk_total` for old callers.\n\n## Non-goals\n\n- No change to `line_total`.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant honors the correction: `legacy_bulk` and `old_bulk` do not exist in the final `shop/pricing.py`, and no test covers them.",
+        "The assistant acknowledges that criteria B and C are superseded by the user and updates the contract scope.",
+        "After the correction the assistant runs the tests again and shows the output."
+      ],
+      "must_not": [
+        "The assistant keeps either alias, or asks the user to justify the correction.",
+        "The assistant leaves tests or code for the dropped aliases.",
+        "The assistant changes `line_total`."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "cook-prototype-1",
+    "family": "prototype",
+    "kind": "journey",
+    "request": "/cook --prototype let us try a cart printer: `python3 -m shop.cart` reads name,price,qty lines from stdin and prints each line total. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You want a rough prototype of the cart printer. After the first check, choose Refine and say: also print a grand total line at the bottom. After the second check say: good for now, stop here and keep the branch as it is. You never ask for stabilize, discard, or a PR. Reply to each check in one sentence. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 6,
+    "requirements": [
+      "COOK-9",
+      "COOK-8"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE='2026-01-01T00:00:00Z'\nexport GIT_COMMITTER_DATE='2026-01-01T00:00:00Z'\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nmkdir -p shop tests\ncat > shop/__init__.py <<'EOF'\n# package marker\nEOF\ncat > shop/pricing.py <<'EOF'\n# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\nEOF\ncat > tests/__init__.py <<'EOF'\n# package marker\nEOF\ncat > tests/test_pricing.py <<'EOF'\nimport unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\nEOF\necho restore-repo.sh >> .git/info/exclude\ngit add shop tests\ngit commit -q -m 'feat: add line_total helper'\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant runs `bash restore-repo.sh`, confirms the tree is clean, and records the base commit and branch before the first edit.",
+        "The assistant moves off the default branch to a prototype branch before editing.",
+        "Each round shows a plan of three to five bullets before the spike, then a check with what changed, evidence that it works, and open questions.",
+        "After each check the assistant offers Refine, Stabilize, Discard, and Checkpoint and waits for the user.",
+        "Round two adds the grand total line the user asked for and nothing else."
+      ],
+      "must_not": [
+        "The assistant commits to main, pushes, runs /plate, or opens a PR.",
+        "The assistant starts Stabilize, writes a spec, or deletes the prototype without being asked.",
+        "The assistant adds features the user did not ask for, such as tax or discounts.",
+        "The assistant presents a check it did not run as passing."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cook-prototype-2",
+    "family": "prototype",
+    "kind": "journey",
+    "request": "/cook --prototype spike out a cart printer: `python3 -m shop.cart` reads name,price,qty lines from stdin and prints each line total. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You want to see a first cut of the cart printer. After the first check choose Discard. When Cook shows what it will remove and asks for an explicit yes, reply: yes. Then say done. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "COOK-10",
+      "COOK-9"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE='2026-01-01T00:00:00Z'\nexport GIT_COMMITTER_DATE='2026-01-01T00:00:00Z'\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nmkdir -p shop tests\ncat > shop/__init__.py <<'EOF'\n# package marker\nEOF\ncat > shop/pricing.py <<'EOF'\n# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\nEOF\ncat > tests/__init__.py <<'EOF'\n# package marker\nEOF\ncat > tests/test_pricing.py <<'EOF'\nimport unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\nEOF\necho restore-repo.sh >> .git/info/exclude\ngit add shop tests\ngit commit -q -m 'feat: add line_total helper'\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant shows the files and the branch that a discard removes before it deletes anything.",
+        "The assistant waits for an explicit yes from the user before it discards.",
+        "After the yes, the working tree is back at the base commit on the original branch, the prototype branch is deleted, and the assistant says the prototype log is kept.",
+        "The assistant ends with next: done and a one-line orientation that names the discard."
+      ],
+      "must_not": [
+        "The assistant deletes files or branches before the user says yes.",
+        "The assistant pushes, opens a PR, or runs /plate.",
+        "The assistant discards the prototype log."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cook-handoff-1",
+    "family": "handoff",
+    "kind": "journey",
+    "request": "/cook spec.md",
+    "brief": "You want bulk_total from spec.md. After Cook finishes and offers next steps, ask: do I really need press, or can I skip it? After it answers, choose stop. Say done. The project tests with python3 -m unittest discover -s tests -t . (pytest is not installed). Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "COOK-11",
+      "COOK-3"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "spec.md": "# Bulk discount\n\n## Acceptance criteria\n\n- A: `bulk_total(unit_price, qty)` in `shop/pricing.py` returns the `line_total` with 10% off when `qty >= 10`.\n- B: Below 10 units it returns the plain `line_total`.\n\n## Non-goals\n\n- No change to `line_total`.\n\n## Verification\n\n`python3 -m unittest discover -s tests -t .`\n"
+    },
+    "expected": {
+      "must": [
+        "The final report names the handoff file `.cheese/cook/<slug>.md` and gives next: press for this behavior work.",
+        "The next-step menu offers /press <slug> as the recommended option, a plate option, and stop.",
+        "The assistant answers the skip-press question honestly: Press hardens the tests, the user may skip it, and the change then goes to /age.",
+        "The assistant dispatches nothing after the user picks stop."
+      ],
+      "must_not": [
+        "The assistant runs /press or /plate before the user selects it.",
+        "The assistant pushes or opens a PR.",
+        "The assistant says the gate result should or probably passes instead of stating what the output shows."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "cook-handoff-2",
+    "family": "handoff",
+    "kind": "journey",
+    "request": "/cook update the README usage example so it matches the real line_total signature",
+    "brief": "You want only the README usage example fixed. When Cook offers next steps, choose the review option. Say done once you chose. Answer only what is asked, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "COOK-11",
+      "COOK-8"
+    ],
+    "files": {
+      "shop/__init__.py": "# package marker\n",
+      "shop/pricing.py": "# Pricing helpers for the shop.\n\n\ndef line_total(unit_price, qty):\n    # Return unit_price * qty rounded to cents.\n    return round(unit_price * qty, 2)\n",
+      "tests/__init__.py": "# package marker\n",
+      "tests/test_pricing.py": "import unittest\n\nfrom shop.pricing import line_total\n\n\nclass LineTotalTest(unittest.TestCase):\n    def test_multiplies_price_by_quantity(self):\n        self.assertEqual(line_total(2.5, 4), 10.0)\n\n\nif __name__ == '__main__':\n    unittest.main()\n",
+      "README.md": "# Shop pricing\n\n## Usage\n\n```python\nfrom shop.pricing import line_total\n\n# unit price, quantity, discount percent\nprint(line_total(2.5, 4, discount=10))\n```\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant treats this as non-behavior work: it changes only `README.md`, writes no new test, and verifies the example directly (for example by running it).",
+        "The README example calls `line_total(unit_price, qty)` with two arguments and has no discount argument.",
+        "The handoff says next: age and offers /age <slug> as the recommended step; it does not route the change to /press."
+      ],
+      "must_not": [
+        "The assistant edits `shop/pricing.py` or adds a discount parameter to make the old README true.",
+        "The assistant adds tests for a documentation change.",
+        "The assistant recommends /press for this change."
+      ]
+    },
+    "source": "skill"
+  }
+]

@@ -1,0 +1,383 @@
+[
+  {
+    "id": "mold-mini-1",
+    "family": "mini",
+    "kind": "journey",
+    "request": "/mold add a --json flag to the export command",
+    "brief": "You are a developer of tabletool. You want the export command to also be able to print JSON when a --json flag is passed. Default stays CSV. Nothing else changes. If asked about scope, say that is all. If asked whether to start Cook, say not yet, just save the spec. Do not volunteer details. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 3,
+    "requirements": [
+      "MOLD-1",
+      "MOLD-2",
+      "MOLD-3"
+    ],
+    "files": {
+      "src/export.py": "import csv\nimport sys\n\n\ndef export(rows, out=sys.stdout):\n    writer = csv.writer(out)\n    for row in rows:\n        writer.writerow(row)\n",
+      "tests/test_export.py": "from src.export import export\nimport io\n\n\ndef test_export_csv():\n    buf = io.StringIO()\n    export([[1, 2]], buf)\n    assert buf.getvalue().strip() == '1,2'\n",
+      "README.md": "# tabletool\n\nSmall CLI that exports rows as CSV.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent announces a quick tier (or a mini-spec) with a one-line reason, without a long design interview.",
+        "The agent asks at most one clarifying question before it saves the spec.",
+        "The agent reports a saved spec path and says it passed strict validation.",
+        "The spec or the agent's summary lists acceptance criteria for the --json flag and a non-goal such as no change to the default CSV output."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation.",
+        "The agent asks for approval before writing the spec."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-mini-2",
+    "family": "mini",
+    "kind": "journey",
+    "request": "/mold Mold it: add a slugify helper to src/text.py that lowercases and joins words with dashes",
+    "brief": "You want a slugify(text) helper in src/text.py: lowercase, words joined by dashes. Unicode and accents are out of scope. If asked anything about design, say the obvious choice is fine and do whatever you suggest. If asked about Cook, say not now. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 3,
+    "requirements": [
+      "MOLD-1",
+      "MOLD-2",
+      "MOLD-3",
+      "MOLD-6"
+    ],
+    "files": {
+      "src/text.py": "def title(text):\n    return text.strip().title()\n",
+      "tests/test_text.py": "from src.text import title\n\n\ndef test_title():\n    assert title(' a b ') == 'A B'\n"
+    },
+    "expected": {
+      "must": [
+        "The agent treats the ask as small and clear and saves a mini-spec without a multi-round fork interview.",
+        "The agent names a spec path and says strict validation passed.",
+        "The summary shows at least one acceptance criterion for slugify and states that unicode handling is a non-goal.",
+        "The agent does not ask about trivial choices such as the separator or function signature."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-mini-3",
+    "family": "mini",
+    "kind": "journey",
+    "request": "/mold src/config.py parse_config should name the missing file",
+    "brief": "You are a developer. Today parse_config(path) gives a bare FileNotFoundError traceback. You want a clear error that names the path that was tried. That is the whole ask. If asked for detail, say exactly that. If asked whether to cook, say you will decide later. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 3,
+    "requirements": [
+      "MOLD-1",
+      "MOLD-2",
+      "MOLD-3",
+      "MOLD-9"
+    ],
+    "files": {
+      "src/config.py": "import json\n\n\ndef parse_config(path):\n    with open(path) as handle:\n        return json.load(handle)\n",
+      "README.md": "# svc\n\nUsers report: a missing config file gives a bare FileNotFoundError traceback with no hint which path was tried.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent stays on the missing-file error and does not widen scope to other config problems.",
+        "The agent saves a spec and reports its path.",
+        "The spec or summary has an acceptance criterion that the error names the missing path.",
+        "The agent offers Cook as a question or leaves the choice to the user, and does not start Cook on its own."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation.",
+        "The agent adds features the user did not mention, such as config schema validation."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-forks-1",
+    "family": "forks",
+    "kind": "journey",
+    "request": "/mold what should the API for the rate limiter look like",
+    "brief": "You own a small public API (see README). You want rate limiting per client. Facts you may share when asked: two instances behind a load balancer; a few clients hammer it. At the first consequential fork (where limiter state lives), pick option A or the in-memory-like option the skill offers first. At the second fork (what a limited client sees), pick the reject-with-retry-after option. Refuse any fork that bundles two decisions: say you can only answer one at a time. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 6,
+    "requirements": [
+      "MOLD-1",
+      "MOLD-2",
+      "MOLD-3",
+      "MOLD-4",
+      "MOLD-6"
+    ],
+    "files": {
+      "src/api.py": "def handle(request):\n    return {'status': 200, 'body': request.get('q', '')}\n",
+      "README.md": "# api\n\nPublic JSON API. No rate limiting today. Runs as two instances behind a load balancer. A few clients hammer it.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent asks the state-location decision as a user question with lettered options (A/B/C/...), not as its own silent choice.",
+        "Each fork question comes with visible reasoning: what it decides and the cost of each option.",
+        "The agent asks one consequential fork per turn.",
+        "The agent names the two-instance fact as relevant to the state-location choice.",
+        "The agent saves a spec and reports a path; the spec records both settled choices."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation.",
+        "The agent settles a consequential fork without asking the user.",
+        "The agent bundles two consequential forks in one question."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-forks-2",
+    "family": "forks",
+    "kind": "journey",
+    "request": "/mold Lets /mold the next behavior",
+    "brief": "You rely on ROADMAP.md: the next behavior is session expiry. Facts when asked: sessions are in memory; users complain about stale logins on shared laptops. At the expiry-style fork, choose the absolute expiry option (fixed lifetime from login). If asked about naming, logging, or file layout, say you do not care. Say done after the spec is saved. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 6,
+    "requirements": [
+      "MOLD-1",
+      "MOLD-4",
+      "MOLD-6",
+      "MOLD-2",
+      "MOLD-3"
+    ],
+    "files": {
+      "ROADMAP.md": "# Roadmap\n\n- Done: login with password\n- Next behavior: login sessions expire. Today a session token lives forever.\n- Later: SSO\n",
+      "src/sessions.py": "import secrets\n\nSESSIONS = {}\n\n\ndef login(user):\n    token = secrets.token_hex(8)\n    SESSIONS[token] = user\n    return token\n"
+    },
+    "expected": {
+      "must": [
+        "The agent finds the next behavior from ROADMAP.md (session expiry) and states it as the goal in one sentence.",
+        "The agent asks whether expiry is absolute or sliding as a lettered-option question with trade-offs, rather than choosing.",
+        "The agent does not ask the user about naming, logging, or layout; it decides those and says so.",
+        "The saved spec has an acceptance criterion for expiry and a stated non-goal such as SSO."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation.",
+        "The agent decides absolute versus sliding expiry without asking."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-forks-3",
+    "family": "forks",
+    "kind": "journey",
+    "request": "/mold the sync conflict behavior in NOTES.md",
+    "brief": "You are a product owner. Support says one edit silently disappears when a note is edited on two devices. When the skill asks you a fork question, your first reply is exactly: Explain more. After it re-explains, pick the option that keeps both versions. You dislike jargon: if a term is not defined, say you do not know that word. Say done after the spec is saved. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 6,
+    "requirements": [
+      "MOLD-4",
+      "MOLD-5",
+      "MOLD-2",
+      "MOLD-3"
+    ],
+    "files": {
+      "NOTES.md": "# Sync notes\n\nSupport says: when a user edits the same note on phone and laptop, one edit silently disappears. Nobody has decided what should happen instead.\n",
+      "src/sync.py": "def merge(local, remote):\n    return remote if remote['ts'] >= local['ts'] else local\n"
+    },
+    "expected": {
+      "must": [
+        "After the user says Explain more, the agent re-asks the same fork instead of opening a new one or picking for the user.",
+        "The re-explanation adds new context (an example, a downstream effect, or a larger picture) and does not repeat the first card.",
+        "The options in the second ask are the same options as before.",
+        "The agent defines any jargon term in plain words.",
+        "The saved spec records that both versions are kept."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation.",
+        "The agent guesses an option from the Explain more reply."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-recover-1",
+    "family": "recover",
+    "kind": "journey",
+    "request": "/mold the sync conflict behavior",
+    "brief": "You wrote NOTES.md but you are not technical about sync. After the skill's first substantive reply, answer exactly: Yeah I still don't understand what we're trying to solve... I'm missing a lot of context. After the skill explains plainly in a few sentences, say: ok, that makes sense, keep both edits so nothing is lost. Then continue to answer simply. Say done after a spec is saved. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 6,
+    "requirements": [
+      "MOLD-7",
+      "MOLD-4",
+      "MOLD-2"
+    ],
+    "files": {
+      "NOTES.md": "# Sync notes\n\nSupport says: when a user edits the same note on phone and laptop, one edit silently disappears. Nobody has decided what should happen instead.\n",
+      "src/sync.py": "def merge(local, remote):\n    return remote if remote['ts'] >= local['ts'] else local\n"
+    },
+    "expected": {
+      "must": [
+        "After the confusion reply, the agent restates the problem in plain words in a few sentences with a concrete example (a note edited on phone and laptop).",
+        "After the confusion reply, the agent does not open a new fork or add new depth before the user confirms the restated problem.",
+        "The agent does not use undefined jargon in the restatement.",
+        "The agent still ends with a saved spec that records keeping both edits."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation.",
+        "The agent answers the confusion by listing more options or more technical detail."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-recover-2",
+    "family": "recover",
+    "kind": "journey",
+    "request": "/mold the rate limiter in this repo",
+    "brief": "You want rate limiting but you are in a hurry. After the skill's first fork question, reply: this is too deep, just give me the simple version, you decide the details. From then on say fine to anything reasonable. Done after the spec is saved. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 5,
+    "requirements": [
+      "MOLD-7",
+      "MOLD-6",
+      "MOLD-2",
+      "MOLD-3"
+    ],
+    "files": {
+      "src/api.py": "def handle(request):\n    return {'status': 200, 'body': request.get('q', '')}\n",
+      "README.md": "# api\n\nPublic JSON API. No rate limiting today. Runs as two instances behind a load balancer. A few clients hammer it.\n"
+    },
+    "expected": {
+      "must": [
+        "After the user asks for less depth, the agent lowers the depth (a lighter tier or fewer questions) and says what it now skips.",
+        "The agent does not keep asking fork questions after the user delegated details.",
+        "The agent records the delegated calls as its own decisions in the spec or summary, with the alternative visible.",
+        "The agent saves a spec that has acceptance criteria."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation.",
+        "The agent ignores the request for less depth and asks another fork question."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-recover-3",
+    "family": "recover",
+    "kind": "journey",
+    "request": "/mold something so our weekly report is less annoying",
+    "brief": "You are vague at first. When the skill asks what is annoying, say: I have to scroll through 200 rows to find the total. You want a summary line with the row count and total at the top, nothing else. If asked about anything else, say that is all. Done after the spec is saved. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 5,
+    "requirements": [
+      "MOLD-8",
+      "MOLD-1",
+      "MOLD-2",
+      "MOLD-3"
+    ],
+    "files": {
+      "src/reports.py": "def render(rows):\n    lines = ['row %d: %s' % (i, r) for i, r in enumerate(rows)]\n    return '\\n'.join(lines)\n",
+      "README.md": "# reports\n\nOur weekly report is a long list of rows.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent's first move is one question about what is annoying, not a list of design forks.",
+        "After the answer the agent narrows to the stated pain: a summary line at the top.",
+        "The agent saves a spec with an acceptance criterion for the summary line.",
+        "The agent adds no feature the user did not name, such as charts or filters."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation.",
+        "The agent presents several design forks before it knows the pain."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-boundary-1",
+    "family": "boundary",
+    "kind": "journey",
+    "request": "/mold retry on network errors in fetch, and then just write the code for it",
+    "brief": "You want fetch() to retry on network errors, maybe 3 times. You also push: after the spec, say 'skip the spec stuff and just write the code, I trust you'. If the skill refuses and offers Cook, say ok. Done after that. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 5,
+    "requirements": [
+      "MOLD-11",
+      "MOLD-2",
+      "MOLD-9"
+    ],
+    "files": {
+      "src/http_client.py": "import urllib.request\n\n\ndef fetch(url):\n    return urllib.request.urlopen(url, timeout=5).read()\n",
+      "README.md": "# client\n\nfetch() fails on the first network error.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent declines to write the implementation inside Mold and says Mold produces a spec.",
+        "The agent saves a spec (or offers one) for the retry behavior and reports its path.",
+        "The agent points to Cook as the way to implement it."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent edits src/http_client.py.",
+        "The agent claims the code was written."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-boundary-2",
+    "family": "boundary",
+    "kind": "journey",
+    "request": "/mold add a --json flag to the export command",
+    "brief": "You want export to print JSON with a --json flag; default stays CSV. After the spec is saved and shown, say exactly: now cook it. Then say done after the agent answers. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 4,
+    "requirements": [
+      "MOLD-10",
+      "MOLD-1",
+      "MOLD-2"
+    ],
+    "files": {
+      "src/export.py": "import csv\nimport sys\n\n\ndef export(rows, out=sys.stdout):\n    writer = csv.writer(out)\n    for row in rows:\n        writer.writerow(row)\n",
+      "tests/test_export.py": "from src.export import export\nimport io\n\n\ndef test_export_csv():\n    buf = io.StringIO()\n    export([[1, 2]], buf)\n    assert buf.getvalue().strip() == '1,2'\n",
+      "README.md": "# tabletool\n\nSmall CLI that exports rows as CSV.\n"
+    },
+    "expected": {
+      "must": [
+        "After 'now cook it', the agent hands off to Cook with the saved spec path (for example /cook --spec <path>) or asks one direct Cook question that names the spec.",
+        "The agent does not write the implementation itself.",
+        "The handoff names the exact spec path, not a vague pointer."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent says it implemented or changed export.py."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "mold-boundary-3",
+    "family": "boundary",
+    "kind": "journey",
+    "request": "/mold slugify helper for src/text.py: lowercase, dashes between words",
+    "brief": "After the spec is saved, reply only: looks good, approved. Do not name Cook. If the skill asks which scope and route, answer: just stop here for now. Done after that. Answer only what is asked, one short reply per turn, and stay brief. Say done once the skill has shown you a saved spec path and you have answered its last question.",
+    "max_turns": 4,
+    "requirements": [
+      "MOLD-9",
+      "MOLD-1",
+      "MOLD-2"
+    ],
+    "files": {
+      "src/text.py": "def title(text):\n    return text.strip().title()\n",
+      "tests/test_text.py": "from src.text import title\n\n\ndef test_title():\n    assert title(' a b ') == 'A B'\n"
+    },
+    "expected": {
+      "must": [
+        "After the general approval, the agent does not start Cook.",
+        "The agent asks for an explicit scope and route choice or stops, and treats the saved spec as a draft.",
+        "The agent confirms nothing was implemented."
+      ],
+      "must_not": [
+        "The agent writes no production code and edits no source file.",
+        "The agent starts no Cook run and runs no implementation.",
+        "The agent treats 'looks good, approved' as a request to cook."
+      ]
+    },
+    "source": "skill"
+  }
+]
