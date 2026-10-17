@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
@@ -439,4 +440,178 @@ def test_verify_publication_rejects_boolean_pr_number(
     monkeypatch.setattr(gh_stack, "_run", run)
 
     with pytest.raises(gh_stack.GhStackValidationError, match=message):
+        _ = gh_stack.verify_publication(tmp_path, "main", "origin")
+
+
+def _layer(name: str, number: int, *, merged: bool = False, queued: bool = False) -> dict[str, object]:
+    return {
+        "name": name,
+        "isMerged": merged,
+        "isQueued": queued,
+        "needsRebase": False,
+        "pr": {"number": number, "state": "MERGED" if merged else "OPEN"},
+    }
+
+
+def _partly_merged_run(
+    stack_view: dict[str, object], remote_stack: list[dict[str, object]]
+) -> Callable[..., subprocess.CompletedProcess[str]]:
+    bases = {"feature-three": "main", "feature-four": "feature-three"}
+    numbers = {13: "feature-three", 14: "feature-four"}
+
+    def run(
+        args: list[str], _cwd: Path, _timeout: float = 10
+    ) -> subprocess.CompletedProcess[str]:
+        key = tuple(args)
+        if key == ("git", "check-ref-format", "--branch", "main"):
+            return completed(args)
+        if key == ("git", "remote", "get-url", "origin"):
+            return completed(args, stdout="git@github.com:example/repo.git\n")
+        if key == ("gh", "stack", "view", "--json"):
+            return completed(args, stdout=json.dumps(stack_view))
+        if key[:3] == ("git", "rev-parse", "--verify"):
+            branch = key[3].removeprefix("refs/heads/")
+            return completed(args, stdout=f"sha-{branch}\n")
+        if key[:5] == ("git", "ls-remote", "--exit-code", "--heads", "origin"):
+            branch = key[5].removeprefix("refs/heads/")
+            return completed(args, stdout=f"sha-{branch}\trefs/heads/{branch}\n")
+        if key[:3] == ("gh", "pr", "view"):
+            number = int(key[3])
+            branch = numbers[number]
+            return completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "number": number,
+                        "url": f"https://example.test/pull/{number}",
+                        "baseRefName": bases[branch],
+                        "headRefName": branch,
+                        "headRefOid": f"sha-{branch}",
+                        "state": "OPEN",
+                        "autoMergeRequest": None,
+                    }
+                ),
+            )
+        if key[:2] == ("gh", "api"):
+            return completed(args, stdout=json.dumps(remote_stack))
+        raise AssertionError(args)
+
+    return run
+
+
+def _remote_layer(name: str, number: int, *, merged: bool = False) -> dict[str, object]:
+    return {
+        "number": number,
+        "state": "closed" if merged else "open",
+        "merged_at": "2026-10-01T00:00:00Z" if merged else None,
+        "head": {"ref": name, "sha": f"sha-{name}"},
+    }
+
+
+def test_verify_publication_skips_merged_and_queued_bottom_layers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stack_view: dict[str, object] = {
+        "trunk": "main",
+        "currentBranch": "feature-four",
+        "branches": [
+            _layer("feature-one", 11, merged=True),
+            _layer("feature-two", 12, queued=True),
+            _layer("feature-three", 13),
+            _layer("feature-four", 14),
+        ],
+    }
+    remote_stack: list[dict[str, object]] = [
+        {
+            "id": 99,
+            "number": 7,
+            "open": True,
+            "base": {"ref": "main"},
+            "pull_requests": [
+                _remote_layer("feature-one", 11, merged=True),
+                _remote_layer("feature-two", 12),
+                _remote_layer("feature-three", 13),
+                _remote_layer("feature-four", 14),
+            ],
+        }
+    ]
+    monkeypatch.setattr(gh_stack, "_run", _partly_merged_run(stack_view, remote_stack))
+
+    result = gh_stack.verify_publication(tmp_path, "main", "origin")
+
+    assert result["valid"] is True
+    assert result["stack"] == {"id": 99, "number": 7}
+    assert result["skipped"] == ["feature-one", "feature-two"]
+    prs = cast("list[dict[str, object]]", result["prs"])
+    assert [(pr["number"], pr["base"]) for pr in prs] == [
+        (13, "main"),
+        (14, "feature-three"),
+    ]
+
+
+def test_verify_publication_rejects_merged_layer_above_an_open_layer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stack_view: dict[str, object] = {
+        "trunk": "main",
+        "currentBranch": "feature-four",
+        "branches": [
+            _layer("feature-three", 13),
+            _layer("feature-two", 12, merged=True),
+            _layer("feature-four", 14),
+        ],
+    }
+    monkeypatch.setattr(gh_stack, "_run", _partly_merged_run(stack_view, []))
+
+    with pytest.raises(
+        gh_stack.GhStackValidationError, match="'feature-two' is merged or queued"
+    ):
+        _ = gh_stack.verify_publication(tmp_path, "main", "origin")
+
+
+def test_verify_publication_rejects_a_stack_with_no_open_layer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stack_view: dict[str, object] = {
+        "trunk": "main",
+        "currentBranch": "feature-two",
+        "branches": [
+            _layer("feature-one", 11, merged=True),
+            _layer("feature-two", 12, merged=True),
+        ],
+    }
+    monkeypatch.setattr(gh_stack, "_run", _partly_merged_run(stack_view, []))
+
+    with pytest.raises(gh_stack.GhStackValidationError, match="no open layer"):
+        _ = gh_stack.verify_publication(tmp_path, "main", "origin")
+
+
+def test_verify_publication_rejects_remote_mapping_that_differs_at_a_merged_layer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stack_view: dict[str, object] = {
+        "trunk": "main",
+        "currentBranch": "feature-four",
+        "branches": [
+            _layer("feature-one", 11, merged=True),
+            _layer("feature-three", 13),
+            _layer("feature-four", 14),
+        ],
+    }
+    remote_stack: list[dict[str, object]] = [
+        {
+            "id": 99,
+            "number": 7,
+            "open": True,
+            "base": {"ref": "main"},
+            "pull_requests": [
+                _remote_layer("feature-other", 10, merged=True),
+                _remote_layer("feature-three", 13),
+                _remote_layer("feature-four", 14),
+            ],
+        }
+    ]
+    monkeypatch.setattr(gh_stack, "_run", _partly_merged_run(stack_view, remote_stack))
+
+    with pytest.raises(gh_stack.GhStackValidationError, match="mapping differs at merged or queued layer .feature-one."):
         _ = gh_stack.verify_publication(tmp_path, "main", "origin")
