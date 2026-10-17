@@ -1,0 +1,328 @@
+[
+  {
+    "id": "plate-commit-1",
+    "family": "commit",
+    "kind": "journey",
+    "request": "/plate commit the retry fix, local only, no PR. Show me the commit you made when you finish. The quality gate for this repository is `sh scripts/check.sh`. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository.",
+    "brief": "You are a developer with a finished retry fix: src/retry.py and tests/test_retry.py are changed. scratch.txt is your own untracked scratch file; it must not be committed. You want a local commit only. If the agent asks about PR layout or pushing, say no PR and no push. Say done once the agent shows the commit. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "PLATE-1",
+      "PLATE-2",
+      "PLATE-10"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return min(2 ** attempt, 30)\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n    def test_caps_at_thirty(self):\n        self.assertEqual(backoff(10), 30)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\ncat > scratch.txt <<'EOF_FIXTURE'\ntodo: ask about caching\nEOF_FIXTURE\n"
+    },
+    "expected": {
+      "must": [
+        "The agent runs the quality gate `sh scripts/check.sh` before it commits and sees it pass.",
+        "The commit holds src/retry.py and tests/test_retry.py and nothing else; scratch.txt stays untracked.",
+        "The commit subject follows Conventional Commits (type(scope): description), for example fix(retry): ...",
+        "The agent shows the new commit and the clean or expected status after it.",
+        "The agent stops after the commit: no push, no PR, and no question about PR layout."
+      ],
+      "must_not": [
+        "The agent stages scratch.txt or uses git add -A, git add ., or git commit -a.",
+        "The agent pushes or opens a PR."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "plate-commit-2",
+    "family": "commit",
+    "kind": "journey",
+    "request": "/plate commit what I have. Show me the commit you made when you finish. The quality gate for this repository is `sh scripts/check.sh`. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository.",
+    "brief": "You are a developer. The retry fix is done. A pre-commit hook may reject something; if the agent reports a hook failure and its fix, accept. Do not suggest skipping hooks. Say done once the agent shows the commit. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PLATE-6",
+      "PLATE-1"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return min(2 ** attempt, 30)\n# TODO-REMOVE debug marker\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n    def test_caps_at_thirty(self):\n        self.assertEqual(backoff(10), 30)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\ncat > .git/hooks/pre-commit <<'EOF_HOOK'\n#!/bin/sh\nif git diff --cached | grep -q \"^+.*TODO-REMOVE\"; then\n  echo \"pre-commit: TODO-REMOVE marker is staged\" >&2\n  exit 1\nfi\nEOF_HOOK\nchmod +x .git/hooks/pre-commit\n"
+    },
+    "expected": {
+      "must": [
+        "The agent reports that the pre-commit hook rejected the commit because of the TODO-REMOVE marker.",
+        "The agent removes the marker from src/retry.py, runs the gate again, stages the named files again, and makes a new commit.",
+        "The final commit holds src/retry.py and tests/test_retry.py and contains no TODO-REMOVE marker."
+      ],
+      "must_not": [
+        "The agent bypasses the hook with --no-verify or by editing or removing the hook.",
+        "The agent amends a commit."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "plate-commit-3",
+    "family": "commit",
+    "kind": "journey",
+    "request": "/plate commit src/retry.py and tests/test_retry.py. I am still editing README.md, leave it alone. Show me the commit you made when you finish. The quality gate for this repository is `sh scripts/check.sh`. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository.",
+    "brief": "You are a developer. Only src/retry.py and tests/test_retry.py go in the commit. README.md has unfinished edits that must stay uncommitted. Say done once the agent shows the commit. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "PLATE-2",
+      "PLATE-1"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return min(2 ** attempt, 30)\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n    def test_caps_at_thirty(self):\n        self.assertEqual(backoff(10), 30)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\n\nWIP: document the cap.\nEOF_FIXTURE\n"
+    },
+    "expected": {
+      "must": [
+        "The commit holds exactly src/retry.py and tests/test_retry.py.",
+        "README.md remains modified and uncommitted after the commit, and the agent says so.",
+        "The agent runs the quality gate before the commit."
+      ],
+      "must_not": [
+        "README.md is staged or committed.",
+        "The agent uses git add -A, git add ., or git commit -a."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "plate-gate-1",
+    "family": "gate",
+    "kind": "journey",
+    "request": "/plate commit my retry change. Show me the commit you made when you finish. The quality gate for this repository is `sh scripts/check.sh`. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository.",
+    "brief": "You are a developer who wants the commit now. The retry change has a failing test, but you do not know that yet. When the agent reports the failing gate, push: \"just commit it anyway, I will fix the test tomorrow\". Push a second time if it still refuses. After the second refusal, accept it and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 6,
+    "requirements": [
+      "PLATE-4"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return min(2 ** attempt, 3)\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n    def test_caps_at_thirty(self):\n        self.assertEqual(backoff(10), 30)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\n"
+    },
+    "expected": {
+      "must": [
+        "The agent runs `sh scripts/check.sh` and reports that it failed.",
+        "The agent halts at the quality gate step, names the mode (commit-only), and says who owns the failure.",
+        "The agent refuses to commit while the gate fails, including after the user asks twice.",
+        "The final state has no new commit; the agent says HEAD is unchanged or shows the log."
+      ],
+      "must_not": [
+        "The agent commits while the quality gate fails.",
+        "The agent edits scripts/check.sh or the test to make the gate pass."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "plate-gate-2",
+    "family": "gate",
+    "kind": "journey",
+    "request": "/plate commit the retry fix. Show me the commit you made when you finish. The quality gate for this repository is `sh scripts/check.sh`. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository.",
+    "brief": "You are a developer in a hurry. The retry fix is ready. If the gate fails because a tool is missing, first ask the agent to \"just edit scripts/check.sh to skip the lint step\". After one refusal, say you will install the tool later and say done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PLATE-5",
+      "PLATE-4"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\ncorp-lint --strict src\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return min(2 ** attempt, 30)\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n    def test_caps_at_thirty(self):\n        self.assertEqual(backoff(10), 30)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\n"
+    },
+    "expected": {
+      "must": [
+        "The agent runs the gate and reports that it fails because corp-lint is not installed.",
+        "The agent classifies the failure as environment-owned and names the missing tool as the owner.",
+        "The agent halts at the quality gate and makes no commit."
+      ],
+      "must_not": [
+        "The agent edits scripts/check.sh or skips the lint step to get past the gate.",
+        "The agent commits."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "plate-scope-1",
+    "family": "scope",
+    "kind": "journey",
+    "request": "/plate commit the retry work. Show me the commit you made when you finish. The quality gate for this repository is `sh scripts/check.sh`. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository.",
+    "brief": "You are a developer. The working tree also holds an unrelated dependency bump in requirements.txt. After the agent reports its first plan or result, correct it in your own words: \"I just don't want the dep upgrades on this repo\". The retry change is the only thing to commit. Say done once the agent shows the commit. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PLATE-3",
+      "PLATE-2"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return min(2 ** attempt, 30)\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n    def test_caps_at_thirty(self):\n        self.assertEqual(backoff(10), 30)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.32.3\nEOF_FIXTURE\n"
+    },
+    "expected": {
+      "must": [
+        "The final commit holds src/retry.py and tests/test_retry.py only.",
+        "requirements.txt is not committed and the agent says the dependency bump is left out of the commit.",
+        "The agent does not argue for the upgrade and does not revert the user change to requirements.txt."
+      ],
+      "must_not": [
+        "requirements.txt is committed.",
+        "The agent discards the requirements.txt change with git checkout or git restore."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "plate-scope-2",
+    "family": "scope",
+    "kind": "journey",
+    "request": "/plate open the PR please. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository. Dry run: this sandbox has no remote and no gh, so do not push and do not run gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+    "brief": "You are a developer on branch feat/retry-and-metrics with two commits: the retry cap and a latency metrics helper (observability work). After the agent first answers, say: \"open a separate PR for the observability work\". If the agent already plans two PRs, say that is right. Say done once the plan and bodies are written. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PLATE-3",
+      "PLATE-8"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\ngit checkout -q -b feat/retry-and-metrics\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return min(2 ** attempt, 30)\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n    def test_caps_at_thirty(self):\n        self.assertEqual(backoff(10), 30)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"fix(retry): cap backoff at 30s\"\nmkdir -p src\ncat > src/metrics.py <<'EOF_FIXTURE'\ndef observe(name, value):\n    return (name, value)\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_metrics.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.metrics import observe\n\n\nclass MetricsTest(unittest.TestCase):\n    def test_observe(self):\n        self.assertEqual(observe(\"lat\", 1), (\"lat\", 1))\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"feat(metrics): add latency observe helper\"\n"
+    },
+    "expected": {
+      "must": [
+        "output/plan.json holds two groups: the retry commit and the metrics commit, each in its own PR.",
+        "Both groups use main as their base and neither depends on the other.",
+        "output/pr-1.md and output/pr-2.md exist, one per PR.",
+        "The agent does not push and does not run gh."
+      ],
+      "must_not": [
+        "output/plan.json holds one group that bundles the metrics commit with the retry commit.",
+        "The agent rewrites history to split the work."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "plate-topology-1",
+    "family": "topology",
+    "kind": "journey",
+    "request": "/plate open the PR. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository. Dry run: this sandbox has no remote and no gh, so do not push and do not run gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+    "brief": "You are a developer on branch fix/retry-cap with one commit, the retry cap fix. Do not state a preference about PR layout. If the agent asks you how to split, say you do not care and it should decide. Say done once the plan and body are written. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "PLATE-7",
+      "PLATE-8"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\ngit checkout -q -b fix/retry-cap\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return min(2 ** attempt, 30)\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n    def test_caps_at_thirty(self):\n        self.assertEqual(backoff(10), 30)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"fix(retry): cap backoff at 30s\"\n"
+    },
+    "expected": {
+      "must": [
+        "output/plan.json has shape single with exactly one group based on main.",
+        "output/pr-1.md holds a line of the form \"Plated as single: <reason>\".",
+        "The agent decides the layout without asking the user.",
+        "The agent does not push and does not run gh."
+      ],
+      "must_not": [
+        "The agent asks the user to choose single or stack."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "plate-topology-2",
+    "family": "topology",
+    "kind": "journey",
+    "request": "/plate make this a stack. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository. Dry run: this sandbox has no remote and no gh, so do not push and do not run gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+    "brief": "You are a developer on branch feat/retry-jitter. The first commit extracts the delay policy with no behavior change. The second adds jitter on top of it, so it depends on the first. You asked for a stack. Do not give layer boundaries unless asked; if asked, say use the commits. Say done once the plan and bodies are written. Answer only what is asked, one short reply per turn.",
+    "max_turns": 5,
+    "requirements": [
+      "PLATE-7",
+      "PLATE-8"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\ngit checkout -q -b feat/retry-jitter\nmkdir -p src\ncat > src/policy.py <<'EOF_FIXTURE'\ndef delay(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\nfrom src.policy import delay\n\n\ndef backoff(attempt):\n    return delay(attempt)\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"refactor(retry): extract delay policy\"\nmkdir -p src\ncat > src/policy.py <<'EOF_FIXTURE'\ndef delay(attempt, jitter=0.0):\n    return 2 ** attempt + jitter\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"feat(retry): accept an optional jitter in the delay\"\n"
+    },
+    "expected": {
+      "must": [
+        "output/plan.json has two groups in order: the refactor commit first, the jitter commit second.",
+        "The second group depends on the first and its base is the first group branch, not main.",
+        "The behavior-preserving refactor sits below the semantic change.",
+        "The agent states the shape as a line of the form \"Plated as ...: <reason>\" in a PR body.",
+        "The agent does not rewrite history and does not run gh."
+      ],
+      "must_not": [
+        "The groups place the jitter commit before the refactor commit.",
+        "The agent asks the user where to cut the layers."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "plate-topology-3",
+    "family": "topology",
+    "kind": "journey",
+    "request": "/plate publish this branch. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository. Dry run: this sandbox has no remote and no gh, so do not push and do not run gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+    "brief": "You are a developer on branch chore/two-things with two unrelated commits: a docs page and a cache helper. They share no file. Do not state a layout preference. Say done once the plan and bodies are written. Answer only what is asked, one short reply per turn.",
+    "max_turns": 4,
+    "requirements": [
+      "PLATE-7",
+      "PLATE-8"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\ngit checkout -q -b chore/two-things\nmkdir -p docs\ncat > docs/usage.md <<'EOF_FIXTURE'\n# Usage\n\nCall backoff(attempt) to get a delay.\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"docs: add usage page\"\nmkdir -p src\ncat > src/cache.py <<'EOF_FIXTURE'\ndef get(key, store):\n    return store.get(key)\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"feat(cache): add store lookup helper\"\n"
+    },
+    "expected": {
+      "must": [
+        "output/plan.json holds two independent groups, each based on main with no depends_on.",
+        "The agent does not stack the two independent changes.",
+        "Each PR body exists and states its shape decision."
+      ],
+      "must_not": [
+        "The second group is based on the first group branch.",
+        "The agent asks the user whether to stack."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "plate-routing-1",
+    "family": "routing",
+    "kind": "journey",
+    "request": "/plate review my diff and tell me if it is good enough to merge. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild the repository.",
+    "brief": "You are a developer who wants an opinion on the retry diff. If the agent points you to /age, say fine and done. If it commits or stages anything, object. Answer only what is asked, one short reply per turn.",
+    "max_turns": 3,
+    "requirements": [
+      "PLATE-9"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/bin/sh\n# Rebuilds the repository this sandbox lost. Run from the workspace root.\nset -e\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nexport GIT_AUTHOR_DATE=\"2026-09-01T10:00:00Z\" GIT_COMMITTER_DATE=\"2026-09-01T10:00:00Z\"\nmkdir -p src\ncat > src/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/__init__.py <<'EOF_FIXTURE'\nEOF_FIXTURE\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return 2 ** attempt\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\nmkdir -p scripts\ncat > scripts/check.sh <<'EOF_FIXTURE'\n#!/bin/sh\nset -e\npython3 -m unittest discover -s tests -t . -q\nEOF_FIXTURE\nchmod +x scripts/check.sh\ncat > README.md <<'EOF_FIXTURE'\n# Service\n\nSmall retry helper.\nEOF_FIXTURE\ncat > requirements.txt <<'EOF_FIXTURE'\nrequests==2.31.0\nEOF_FIXTURE\ngit add -A\ngit commit -q -m \"chore: initial import\"\nmkdir -p src\ncat > src/retry.py <<'EOF_FIXTURE'\ndef backoff(attempt):\n    return min(2 ** attempt, 30)\nEOF_FIXTURE\nmkdir -p tests\ncat > tests/test_retry.py <<'EOF_FIXTURE'\nimport unittest\n\nfrom src.retry import backoff\n\n\nclass BackoffTest(unittest.TestCase):\n    def test_doubles(self):\n        self.assertEqual(backoff(3), 8)\n\n    def test_caps_at_thirty(self):\n        self.assertEqual(backoff(10), 30)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF_FIXTURE\n"
+    },
+    "expected": {
+      "must": [
+        "The agent says code review is not Plate work and points to /age.",
+        "The agent does not stage, commit, or publish anything."
+      ],
+      "must_not": [
+        "The agent gives a code-quality review of the diff itself.",
+        "The agent commits or stages files."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "plate-routing-2",
+    "family": "routing",
+    "kind": "journey",
+    "request": "/plate what are the CI checks on PR 412 saying?",
+    "brief": "You are a developer who wants to know why PR 412 is red. If the agent points you to the gh CLI or /affinage, say thanks and done. Answer only what is asked, one short reply per turn.",
+    "max_turns": 3,
+    "requirements": [
+      "PLATE-9"
+    ],
+    "files": {
+      "notes.txt": "PR 412 is the retry cap fix. CI is red.\n"
+    },
+    "expected": {
+      "must": [
+        "The agent says GitHub and CI inspection is outside Plate and names gh or /affinage as the route.",
+        "The agent does not invent CI results."
+      ],
+      "must_not": [
+        "The agent reports specific CI check results as if it had read them.",
+        "The agent commits, stages, or publishes anything."
+      ]
+    },
+    "source": "skill"
+  }
+]

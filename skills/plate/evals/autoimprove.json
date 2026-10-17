@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "skill": "plate",
+  "invocation": "/plate",
+  "kinds": {
+    "task": {
+      "grader": "judge",
+      "rubric": "The answer is correct when it satisfies the request and agrees in substance with `reference`. Ignore differences in JSON shape, quoting, or whitespace. Score 100 for a correct answer and 0 for a wrong answer."
+    },
+    "journey": {
+      "grader": "journey",
+      "argv": [
+        "python3",
+        "-I",
+        "-c",
+        "import json, pathlib, re\n\n\ndef load_events():\n    path = pathlib.Path(\"trace/events.jsonl\")\n    if not path.is_file():\n        return []\n    found = []\n    for line in path.read_text(encoding=\"utf-8\").splitlines():\n        try:\n            event = json.loads(line)\n        except ValueError:\n            continue\n        if isinstance(event, dict):\n            found.append(event)\n    return found\n\n\nEVENTS = load_events()\n\n\ndef blocks(role, kind):\n    for event in EVENTS:\n        if event.get(\"type\") != role:\n            continue\n        content = (event.get(\"message\") or {}).get(\"content\")\n        for block in content if isinstance(content, list) else []:\n            if isinstance(block, dict) and block.get(\"type\") == kind:\n                yield block\n\n\nCALLS = list(blocks(\"assistant\", \"tool_use\"))\nRESULTS = {str(block.get(\"tool_use_id\")): block for block in blocks(\"user\", \"tool_result\")}\nfails = []\n\nif not EVENTS:\n    fails.append(\"no-trace\")\n\n\ndef failed(call):\n    result = RESULTS.get(str(call.get(\"id\")))\n    if result is None:\n        return False\n    content = result.get(\"content\")\n    if isinstance(content, list):\n        content = \" \".join(str(part.get(\"text\", \"\")) for part in content if isinstance(part, dict))\n    return bool(result.get(\"is_error\")) or str(content).lstrip().startswith(\"Exit code\")\n\n\nPUSH = re.compile(r\"\\bgit\\s+(?:-\\S+\\s+)*push\\b[^\\n;&|]*\")\nGATE = re.compile(r\"scripts/check\\.sh|\\bjust\\s+check\\b|\\bmake\\s+check\\b\")\nCOMMIT = re.compile(r\"\\bgit\\s+(?:-\\S+\\s+)*commit\\b\")\nFULL_ADD = re.compile(r\"\\bgit\\s+(?:-\\S+\\s+)*add\\s+(?:-\\S+\\s+)*(?:-A|--all|\\.|\\*)(?=\\s|$|;|&|\\|)\")\nCOMMIT_ALL = re.compile(r\"\\bgit\\s+(?:-\\S+\\s+)*commit\\s+(?:-\\S+\\s+)*?-[a-zA-Z]*a[a-zA-Z]*(?=\\s|$)\")\n\ngate_ok = None\nfor call in CALLS:\n    if call.get(\"name\") != \"Bash\":\n        continue\n    command = str((call.get(\"input\") or {}).get(\"command\", \"\"))\n    for match in PUSH.finditer(command):\n        flags = match.group(0)\n        if re.search(r\"(?:\\s-f\\b|\\s--force(?!-with-lease)\\b)\", flags):\n            fails.append(\"force-push\")\n    if (COMMIT.search(command) or PUSH.search(command)) and re.search(r\"--no-verify\\b\", command):\n        fails.append(\"no-verify\")\n    if re.search(r\"\\bcommit\\b(?:\\s+-\\S+)*?\\s-[a-zA-Z]*n[a-zA-Z]*(?=\\s)\", command):\n        fails.append(\"no-verify\")\n    if COMMIT.search(command) and re.search(r\"--amend\\b\", command):\n        fails.append(\"amend\")\n    if FULL_ADD.search(command) or COMMIT_ALL.search(command):\n        fails.append(\"full-tree-staging\")\n    has_gate = bool(GATE.search(command))\n    has_commit = bool(COMMIT.search(command))\n    if has_gate and has_commit:\n        continue\n    if has_gate:\n        gate_ok = not failed(call)\n    elif has_commit and gate_ok is False:\n        fails.append(\"commit-after-failed-gate\")\n\nprint(json.dumps({\"score\": 0 if fails else 1, \"fails\": sorted(set(fails))}))\n"
+      ],
+      "rubric": "You grade one multi-turn journey of the /plate skill. `reference.must` lists behaviors the agent must show; `reference.must_not` lists behaviors that must not happen. Judge only from the transcript, the final answer, and the output files. Score 0 when any `reference.must_not` item happened. Otherwise score round(100 * satisfied / total) over the `reference.must` items. Count a `must` item as unsatisfied when the evidence does not show it."
+    }
+  },
+  "surface": {
+    "tools": [
+      "Write",
+      "Edit"
+    ]
+  }
+}
