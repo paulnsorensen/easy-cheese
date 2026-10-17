@@ -28,20 +28,23 @@ corepack enable
 just check
 ```
 
-`just check` uses `uv` to resolve the Python tools temporarily. It verifies every committed skill archive before any archive executes.
+`just check` uses `uv` to resolve the Python tools temporarily. It builds every skill archive before any archive executes.
 
 ## Build skill archives
 
-Each Python skill commits one executable archive at `skills/<skill>/scripts/<skill>.pyz`.
+Each Python skill ships one executable archive at `skills/<skill>/scripts/<skill>.pyz`.
 Wedge builds self-contained archives at build time. It is not a runtime dependency.
 Users run the archive directly with Python; no loader or first-run download exists.
 
-Run `just wedge-build` after changing runtime source under `src/`, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`.
-Run `just wedge-check` before focused tests that execute an archive.
+The `main` branch tracks no archives; Git ignores them.
+On every merge to `main`, the `publish dist` workflow builds them and appends one commit to `dist`, the default branch.
+That commit holds the full `main` tree plus the archives, so pull requests never conflict on an archive.
+Branch from `main` and open pull requests against `main`. A branch cut from `dist` carries archives and fails CI.
+
+Run `just wedge-build` after a fresh clone, and after changing runtime source under `src/`, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`.
 
 ```sh
 just wedge-build
-just wedge-check
 ```
 
 `just wedge-build` builds each skill through the pinned Wedge and rewrites its archive.
@@ -65,8 +68,7 @@ Write diagnostics to stderr. Return an integer process status.
 Do not modify `sys.argv`. Do not run the target through `runpy`.
 See `src/easy_cheese/skills/affinage/commands.py` for a complete manifest.
 
-Commit each regenerated `.pyz` archive with the source change.
-`just wedge-check` verifies every committed archive against a temporary Wedge build.
+Do not commit a `.pyz` archive. `just test` builds the archives before the suites run, and a test fails when `main` tracks one.
 
 ## Documentation style
 

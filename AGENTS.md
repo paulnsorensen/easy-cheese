@@ -6,7 +6,7 @@ This document is for LLMs, agents, and automation tools working in this reposito
 
 **Always run `just check` before declaring work done — before any commit, push, PR open, or hand-off.** Treat green from `just check` as the only signal that a change is shippable.
 
-`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`validate_skills.py`), shell lint, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
+`just check` autofixes lint (markdown, yaml, python via `ruff`) and runs the full local build: skill frontmatter validation (`validate_skills.py`), shell lint, the Wedge archive build, python + bash test suites, and `mkdocs build --strict`. CI runs `just ci` (same checks, no autofixes).
 
 ```bash
 just check
@@ -52,10 +52,16 @@ them while enforcement is implemented separately.
   `COMMANDS`. Runtime use performs no archive download, loader lookup, or
   sidecar-lock verification. Shiv's transparent cache extraction remains
   part of the archive runtime; caller-managed extraction is prohibited.
-- Wedge is a build-time dependency only. `just wedge-build` regenerates
-  committed archives after source changes, and `just wedge-check` fails on a
-  missing, corrupt, stale, or non-executable archive. Hand-written Python never
-  lives under `skills/`; archive metadata remains in `wedge.toml`.
+- Wedge is a build-time dependency only. `main` tracks no archive:
+  `just wedge-build` writes them as ignored build output, and `just test`
+  builds them before any suite executes one. Hand-written Python never lives
+  under `skills/`; archive metadata remains in `wedge.toml`.
+- `dist` is the default branch and the published tree. The `publish dist`
+  workflow builds the archives from each `main` commit and appends one commit
+  that holds the full `main` tree plus those archives. `scripts/publish_dist.py`
+  only fast-forwards `dist` and refuses a source that does not descend from
+  the last published one. Branch from `main` and target `main`; never push to
+  or branch from `dist`.
 
 The durable rationale and migration boundary live in
 [the skill Python bundle doctrine](.hallouminate/wiki/architecture/skill-python-bundle-doctrine.md).

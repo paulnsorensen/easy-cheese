@@ -43,10 +43,11 @@ test:
     {{python}} .github/scripts/validate_wiki.py
     {{python}} scripts/render_generated_regions.py --check
 
-    # Generated runtime sources, command surfaces, and committed archives must
-    # be current before any archive executes.
+    # Generated runtime sources and command surfaces must be current, and the
+    # archives built from them, before any archive executes. Main tracks no
+    # archives, so every test run builds them.
     {{python}} scripts/runtime_gates.py
-    just wedge-check
+    just wedge-build
     background_pids=()
     # Reap every background check on every exit path, including an early `set -e`
     # exit from a foreground suite, so no orphan survives the recipe. The trap
@@ -116,13 +117,9 @@ test-skill-overlap:
     cargo test --manifest-path tools/skill-overlap/Cargo.toml
 
 # Build one executable archive per Python skill through the pinned wedge.
+# Main tracks no archives; the `publish dist` workflow commits them to dist.
 wedge-build:
     {{wedge}} bundle --root skills
-
-# Verify committed archives against temporary pinned wedge builds.
-wedge-check:
-    {{wedge}} bundle --root skills --check
-
 # Write every generated runtime source that runtime_gates.py checks for staleness
 update-generated:
     {{python}} scripts/runtime_gates.py --write-generated

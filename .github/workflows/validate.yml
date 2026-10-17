@@ -2,6 +2,7 @@ name: validate
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
 
@@ -90,8 +91,9 @@ jobs:
       - name: Gate the checked-in runtime
         run: python3 scripts/runtime_gates.py
 
-      - name: Check committed skill archives
-        run: just wedge-check
+      # Main tracks no archives; build them before any suite executes one.
+      - name: Build skill archives
+        run: just wedge-build
 
       # This job is the workflow's critical path. The suites are
       # subprocess-heavy, so run them with xdist as `just test` does.

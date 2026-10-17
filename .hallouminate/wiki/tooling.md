@@ -96,7 +96,8 @@ gate.
 
 ## `.pyz` archives
 
-Each Python skill commits one executable `skills/<skill>/scripts/<skill>.pyz`.
+Each Python skill ships one executable `skills/<skill>/scripts/<skill>.pyz`.
+`main` tracks no archive; `publish dist` commits them to `dist`, the default branch.
 The archive contains its own skill code, shared support, CLI support, schemas, and pinned dependencies.
 No launcher, sidecar lock, or first-run download is required.[^1]
 
@@ -104,16 +105,15 @@ No launcher, sidecar lock, or first-run download is required.[^1]
 Each manifest's `source_paths` preserves package paths while excluding other skill packages.
 The `runtime` group and schema dependencies define the third-party closure in `uv.lock`.[^2]
 
-`just wedge-check` rebuilds temporarily and compares committed archive contents.
-Run `just wedge-build` after changing archive inputs, then run `just check`.
-`just test` checks archive freshness before tests execute the committed artifacts.
-Focused test commands do not build archives; run `just wedge-build` and `just wedge-check` after source changes.
-Release staging copies the committed archives without a separate publication dependency.[^3]
+Run `just wedge-build` after a fresh clone or a change to archive inputs, then run `just check`.
+`just test` builds the archives before tests execute them.
+Focused test commands do not build archives; run `just wedge-build` first.
+The release workflow builds the archives before release staging copies them.[^3]
 
 See the [bundle pipeline](./architecture/pyz-bundling-pipeline.md) and
 [skill Python bundle doctrine](./architecture/skill-python-bundle-doctrine.md).
 
-[^1]: AGENTS.md; skills/*/scripts/*.pyz
+[^1]: AGENTS.md; .github/workflows/publish-dist.yml; scripts/publish_dist.py
 [^2]: skills/wedge.toml; skills/*/wedge.toml; pyproject.toml; uv.lock; tools/wedge/uv.lock
 [^3]: justfile; tests/conftest.py; scripts/stage_release.py; .github/workflows/validate.yml; CONTRIBUTING.md
 
@@ -123,15 +123,17 @@ Under `.github/workflows/`:
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `validate.yml` | push main, all PRs | frontmatter validation, archive freshness before pytest, install.sh bats + smoke, lint |
-| `release.yml` | tag `v[0-9]*` | stage slim tree, force-push `release` branch, GitHub release |
+| `validate.yml` | push main, all PRs, merge groups | frontmatter validation, archive build before pytest, install.sh bats + smoke, lint |
+| `publish-dist.yml` | push main, dispatch | build archives, append one full-tree commit to `dist` |
+| `retarget-dist-prs.yml` | PRs opened against `dist` | move the PR base to `main` |
+| `release.yml` | tag `v[0-9]*` | build archives, stage slim tree, force-push `release` branch, GitHub release |
 | `publish-pypi.yml` | push main touching `pyproject.toml`, dispatch | publish `easy-cheese-schemas` to PyPI |
 | `docs.yml` | push/PR on docs paths, dispatch | `pnpm run docs:build` (Astro/Starlight), deploy Pages on main |
 | `docs-retry.yml` | `docs` workflow_run failure | auto re-run failed `docs` jobs on main, up to 3 attempts |
 | `skill-overlap.yml` | PRs on `skills/**/*.md` + tools, weekly cron, dispatch | semantic skill-overlap ratchet (`calibrate` / `report` / `check`) |
 | `codeql.yml` | PRs, push main, weekly | CodeQL on python + actions |
 | `dependency-review.yml` | PRs to main | block vulnerable / disallowed-license deps |
-| `scorecard.yml` | push main, weekly | OpenSSF Scorecard → SARIF |
+| `scorecard.yml` | weekly, branch protection changes | OpenSSF Scorecard → SARIF (default branch only) |
 | `copilot-review.yml` | PR opened/reopened/ready | add Copilot as reviewer |
 
 ### Prerequisites
