@@ -56,6 +56,11 @@ them while enforcement is implemented separately.
   committed archives after source changes, and `just wedge-check` fails on a
   missing, corrupt, stale, or non-executable archive. Hand-written Python never
   lives under `skills/`; archive metadata remains in `wedge.toml`.
+- The `publish dist` workflow builds the archives from each `main` commit and
+  appends one commit with the whole shippable tree to the `dist` branch.
+  `scripts/publish_dist.py` only fast-forwards `dist` and refuses a source
+  that does not descend from the last published one. Never push to `dist` by
+  hand.
 
 The durable rationale and migration boundary live in
 [the skill Python bundle doctrine](.hallouminate/wiki/architecture/skill-python-bundle-doctrine.md).

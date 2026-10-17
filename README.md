@@ -203,6 +203,14 @@ To scope the install to just the current repo instead (recorded under
 npx skills@latest add paulnsorensen/easy-cheese --all
 ```
 
+Every merge to `main` also publishes one commit to the `dist` branch. That
+commit holds the skills and the archives built from that `main` commit, and
+nothing else. To install from it:
+
+```sh
+npx skills@latest add paulnsorensen/easy-cheese#dist --all --global
+```
+
 After install, start with `/cheese` if you're not sure which wheel to cut into
 first, or jump straight to a specific skill like `/cook`, `/age`, or
 `/pasteurize`. There is no required follow-up setup skill.

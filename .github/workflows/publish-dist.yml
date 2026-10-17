@@ -1,0 +1,80 @@
+name: publish dist
+
+# Each main commit publishes one dist commit: the shippable tree with archives
+# built from that commit. One push moves dist, so an install from
+# `paulnsorensen/easy-cheese#dist` sees one consistent set of skills.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One publish at a time, in push order. GitHub keeps one pending run per group,
+# so a burst of merges publishes only the newest main commit.
+concurrency:
+  group: publish-dist
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish dist branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+
+      - name: Set up just
+        run: |
+          uv tool install rust-just==1.58.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Build from source, so dist is correct even when a committed archive is stale.
+      - name: Build archives
+        run: just wedge-build
+
+      - name: Stage shippable tree
+        run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/dist"
+
+      - name: Install latest gh CLI
+        run: |
+          set -euo pipefail
+          latest=$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | jq -r .tag_name)
+          ver="${latest#v}"
+          curl -fsSL "https://github.com/cli/cli/releases/download/${latest}/gh_${ver}_linux_amd64.tar.gz" | tar -xz -C /tmp
+          sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
+          gh --version
+
+      - name: Validate staged skills
+        working-directory: ${{ runner.temp }}/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh skill publish --dry-run
+
+      - name: Run each staged archive
+        working-directory: ${{ runner.temp }}/dist
+        run: |
+          set -euo pipefail
+          for archive in skills/*/scripts/*.pyz; do
+            python3 "$archive" --help > /dev/null
+          done
+
+      - name: Publish dist commit
+        run: |-
+          python3 scripts/publish_dist.py \
+            --source "$GITHUB_SHA" --staged "$RUNNER_TEMP/dist" \
+            --remote origin --branch dist --trunk origin/main
