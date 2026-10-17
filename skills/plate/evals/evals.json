@@ -1,0 +1,406 @@
+{
+  "skill_name": "plate",
+  "evals": [
+    {
+      "id": 0,
+      "name": "commit-only",
+      "prompt": "Commit these finished changes locally; do not push or open a PR.",
+      "expected_output": "Runs final artifact inventory and read-back, then project quality gate, inspects diff, stages named files only, creates a Conventional Commit, verifies status, and stops without asking PR layout or publishing.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "cohesive-single-auto-selection",
+      "prompt": "Open a PR for this finished, cohesive feature and its tests.",
+      "expected_output": "Recognizes one cohesive review unit, selects a single PR, and proceeds without asking topology, including under auto.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "stack-recommendation-choice",
+      "prompt": "Open a PR for a change with a shared protocol layer, dependent implementation, and final wiring.",
+      "expected_output": "Names the independently reviewable ordered layers, decides stacked_linear without asking, and states the decision as one 'Plated as' line before any commit or branch-layout mutation.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "explicit-single-authoritative",
+      "prompt": "Plate this as one PR.",
+      "expected_output": "Treats the explicit single-PR choice as authoritative, decides without asking, then runs durable-write and quality gates, commits named files, pushes, creates with explicit base/head and --body-file, and verifies via gh pr view.",
+      "files": []
+    },
+    {
+      "id": 12,
+      "name": "ambiguous-review-shape",
+      "prompt": "Open a PR for this finished branch; the changes share a goal but may form separable layers.",
+      "expected_output": "Weighs the cohesion and layer evidence, decides single unless clean commit or whole-file boundaries exist, and records the reason in one line without asking the user.",
+      "files": []
+    },
+    {
+      "id": 13,
+      "name": "pr-plan-cannot-override-explicit-choice",
+      "prompt": "Use one PR. A supplied pr_plan recommends a stack.",
+      "expected_output": "Keeps the explicit single-PR choice, decides without asking, and treats the plan only as non-authoritative review-shape evidence.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "existing-pr-no-choice",
+      "prompt": "Push these fixes to the PR already open for this branch.",
+      "expected_output": "Does not ask layout. Detects ordinary versus stack metadata, commits safely, then uses the matching update path and verifies the PR.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "write-failure-halts",
+      "prompt": "Open a PR, but the promised ADR write fails read-back.",
+      "expected_output": "Halts before just check, staging, commit, push, or PR creation; reports a {target, backend, verified:false} completion row.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "hallouminate-fallback",
+      "prompt": "Publish this repo; hallouminate is unavailable and the implementation made a durable design decision.",
+      "expected_output": "Writes and reads back a tracked docs/adr fallback, includes it in the commit, and does not hand-edit a wiki.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "name": "graphite-post-merge",
+      "prompt": "The bottom Graphite PR merged. Sync and republish the remaining stack.",
+      "expected_output": "Uses gt sync, gt log short, and gt submit --stack; never bare rebase or single-branch push.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "name": "git-town-post-merge",
+      "prompt": "The bottom Git Town PR merged. Catch up the rest.",
+      "expected_output": "Uses git town sync --stack and git town branch. Conflict recovery uses git town continue/skip, not bare git rebase continuation.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "name": "gh-stack-post-merge",
+      "prompt": "The bottom gh stack PR merged. What should happen locally?",
+      "expected_output": "Uses gh stack sync to pull server-cascaded state and gh stack view; submits only for unpublished local commits.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "name": "stack-without-boundaries",
+      "prompt": "Make this a stack.",
+      "expected_output": "Honors the stack choice and derives layer boundaries from existing commits or whole files without asking; when no clean boundary exists, it collapses to single and states why instead of inventing boundaries.",
+      "files": []
+    },
+    {
+      "id": 14,
+      "name": "gh-stack-not-enabled",
+      "prompt": "Publish this as a stack. gh-stack is the only installed provider and its repository preflight answers 404.",
+      "expected_output": "Reads the stack-tools gh-stack status not-enabled from the read-only repos/{owner}/{repo}/stacks preflight, halts before any stack mutation, and reports the repository-enablement requirement rather than retrying or emulating a stack with plain pushes.",
+      "files": []
+    },
+    {
+      "id": 15,
+      "name": "gh-stack-preflight-auth-failure",
+      "prompt": "Publish this as a gh-stack stack; the enablement preflight answers 401.",
+      "expected_output": "Reports an authentication failure, not a repository-enablement requirement, and does not treat the non-200 response as proof that Stacked PRs is disabled.",
+      "files": []
+    },
+    {
+      "id": 11,
+      "name": "hard-final-state",
+      "prompt": "Plate --hard and open a PR.",
+      "expected_output": "Runs final writing gate and validation before giving hard-cheese the final artifact inventory and completion rows, then publishes only if the gate passes.",
+      "files": []
+    },
+    {
+      "id": 16,
+      "name": "malformed-durable-write",
+      "prompt": "Plate this work. The durable ADR write was rejected: the replace_text op carried start and end line numbers alongside old and new.",
+      "expected_output": "Halts at the durable write step, names the failure plate-owned because replace_text carries only old and new and never start/end, then re-runs the canonical sequence for that file \u2014 fresh tagged read, one stale-safe write with the corrected op shape, diff read-back \u2014 instead of reporting a backend outage, retrying the stale tag, or falling back to a shell redirect or host editor.",
+      "files": []
+    },
+    {
+      "id": 17,
+      "name": "review-surface-request",
+      "prompt": "Plate this branch and tell me whether the diff is safe to merge.",
+      "expected_output": "Halts at classify and names the failure plate-owned: the review judgment is /age's, not /plate's, so it never computes a review surface for its own sake. Reports the routing and either proceeds with the publication half alone or stops for the user to route the review, never blending a quality verdict into the completion record.",
+      "files": []
+    },
+    {
+      "id": 18,
+      "name": "gh-stack-warning-only-failure",
+      "prompt": "gh stack submit exited zero but warned that it failed to update the stack on GitHub. Is publication complete?",
+      "expected_output": "Treats the warning as publication failure, preserves the command output, and does not report completion until gh-stack-verify confirms every PR base, head, state, SHA, and remote stack mapping.",
+      "files": []
+    },
+    {
+      "id": 19,
+      "name": "gh-stack-wrong-trunk-recovery",
+      "prompt": "This published gh stack was initialized with origin/main as its trunk. Repair it without replacing the PRs.",
+      "expected_output": "Rejects origin/main as a remote-tracking trunk, snapshots PR identities and stack state, halts for merged, queued, auto-merge-enabled, or non-open PRs, and otherwise un-stacks and re-adopts the same branches on main before verifying the same PR numbers and exact remote mapping.",
+      "files": []
+    },
+    {
+      "id": 30,
+      "name": "single-cohesive-over-ceiling",
+      "family": "single-no-boundary",
+      "prompt": "Open a PR for this branch. Dry run: the finished branch is described in evals/files/single-cohesive-over-ceiling/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Decides single without asking the user, although the semantics-altering surface is about 440 production code lines, because it has no layer boundary. States the size in one line and gives a reading order. Keeps the regenerated .pyz in the same PR.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation; output/plan.json holds a final decision.",
+        "output/plan.json has shape single with exactly one group based on main.",
+        "The .pyz archive stays in the same PR as its source, and the body marks it as generated or rebuilt.",
+        "The PR body is at most 40 lines and names a reading order or the file to start with.",
+        "The PR body claims no verification beyond `just check`."
+      ],
+      "files": ["evals/files/single-cohesive-over-ceiling/branch.txt"]
+    },
+    {
+      "id": 31,
+      "name": "single-small-fix",
+      "family": "single-small",
+      "prompt": "/plate this. Dry run: the finished branch is described in evals/files/single-small-fix/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Single PR without asking. A short body that names the behavior change and the regression test. No diagram.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape single with one group based on main.",
+        "The PR body is at most 20 non-blank lines, not counting one diagram or a template checklist, and does not restate the diff line by line.",
+        "The PR body has no mermaid block.",
+        "The PR body names the regression test that fails before the fix."
+      ],
+      "files": ["evals/files/single-small-fix/branch.txt"]
+    },
+    {
+      "id": 32,
+      "name": "single-cure-span",
+      "family": "single-no-boundary",
+      "prompt": "plate this. Dry run: the finished branch is described in evals/files/single-cure-span/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Decides single without asking: the cure commits span every curd and the lowest curd fails the gate alone, so a stack would need history rewrites and would ship a red layer. States that reason in one line and flags the size risk.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape single.",
+        "The body or summary gives the reason a split is not clean: cure commits span all curds, or curd 1 alone fails the gate.",
+        "The PR body is at most 40 lines and does not list all 121 files.",
+        "Does not rewrite, squash, or reorder history to force a stack."
+      ],
+      "files": ["evals/files/single-cure-span/branch.txt"]
+    },
+    {
+      "id": 33,
+      "name": "stack-protocol-impl-wiring",
+      "family": "stack-dependent",
+      "prompt": "Open PRs for this branch. Dry run: the finished branch is described in evals/files/stack-protocol-impl-wiring/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Decides a three-layer stack without asking: schema, then Cook producer, then Cure consumer. Uses the commit boundaries. Each body states its stack position and links its neighbors, and carries a small mermaid graph of the stack.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape stacked_linear with three groups in schema, cook, cure order; the first is based on main and each later group is based on the previous branch.",
+        "Each PR body states its position in the stack (for example 1 of 3) and names the PR or branch below and above it, where one exists.",
+        "At least the first PR body has a mermaid flowchart or graph of the three stacked PRs; the mermaid syntax is valid (quoted labels with punctuation, no bare lowercase end node).",
+        "The schema PR body asks the reviewer to check the contract field names.",
+        "Each PR body is at most 40 lines, not counting the diagram."
+      ],
+      "files": ["evals/files/stack-protocol-impl-wiring/branch.txt"]
+    },
+    {
+      "id": 34,
+      "name": "stack-refactor-then-feature",
+      "family": "stack-refactor",
+      "prompt": "Publish this branch for review. Dry run: the finished branch is described in evals/files/stack-refactor-then-feature/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Decides a two-layer stack without asking: the semantics-preserving move at the bottom, the cache feature on top. The move PR says it is behavior-preserving in its first line and states the invariant (the move drops and duplicates nothing). Uses Graphite.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape stacked_linear: the move is the first group based on main and the cache feature is based on the move branch.",
+        "The move PR body says in its first line that behavior is unchanged and names an invariant to verify, such as similarity or that no symbol is dropped or duplicated.",
+        "The feature PR body names the changed behavior (one-hour probe cache) and its test.",
+        "The plan or summary names Graphite (gt) as the stack provider."
+      ],
+      "files": ["evals/files/stack-refactor-then-feature/branch.txt"]
+    },
+    {
+      "id": 35,
+      "name": "independent-unrelated",
+      "family": "independent-disjoint",
+      "prompt": "Ship these fixes. Dry run: the finished branch is described in evals/files/independent-unrelated/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Decides independent PRs off main without asking, one per unrelated concern, not a stack and not one mixed PR. Bodies are short.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape orthogonal_flat; every group is based on main and has empty depends_on.",
+        "The briesearch fix, the CI pin, and the melt docs fix are in different groups.",
+        "No PR body mentions changes that belong to another group.",
+        "Each PR body is at most 20 non-blank lines, not counting a template checklist, and has no mermaid block."
+      ],
+      "files": ["evals/files/independent-unrelated/branch.txt"]
+    },
+    {
+      "id": 36,
+      "name": "independent-two-routines",
+      "family": "independent-disjoint",
+      "prompt": "Open the PR for this branch. Dry run: the finished branch is described in evals/files/independent-two-routines/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Decides two independent PRs off main without asking, because the two routines share nothing and each can merge or revert alone. The summary says why it is not a stack.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape orthogonal_flat with two groups, both based on main.",
+        "The summary or bodies state that the routines are independent, so neither stacks on the other.",
+        "Each PR body is at most 40 lines."
+      ],
+      "files": ["evals/files/independent-two-routines/branch.txt"]
+    },
+    {
+      "id": 37,
+      "name": "grouped-by-shared-files",
+      "family": "independent-grouping",
+      "prompt": "Plate the backlog sweep. Dry run: the finished branch is described in evals/files/grouped-by-shared-files/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Decides without asking. Groups c101-c103 into one affinage PR because they share threads.py hunks, and opens c104, c105, c106 as separate PRs off main. States in one line why the spec's one-PR-per-issue rule bends for the affinage trio.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape orthogonal_flat with four groups based on main: one with c101-c103, and one each for c104, c105, c106.",
+        "The affinage PR body closes #701, #702, and #703; each other body closes only its own issue.",
+        "The summary or affinage body says the three affinage fixes share threads.py hunks, so they cannot ship apart."
+      ],
+      "files": ["evals/files/grouped-by-shared-files/branch.txt"]
+    },
+    {
+      "id": 38,
+      "name": "body-no-phantom-claims",
+      "family": "body-claims",
+      "prompt": "Open a PR. Dry run: the finished branch is described in evals/files/body-no-phantom-claims/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "A single PR whose body describes only the config key validation. It does not mention retry or backoff as a change, and it reports the live smoke test as not run.",
+      "assertions": [
+        "The PR body does not claim that the PR adds retry or backoff.",
+        "The verification section lists `just check` as passed and the live Tavily smoke test as not run or skipped; it claims no other check.",
+        "The PR body is at most 25 non-blank lines, not counting one diagram or a template checklist.",
+        "Does not ask the user any question."
+      ],
+      "files": ["evals/files/body-no-phantom-claims/branch.txt"]
+    },
+    {
+      "id": 39,
+      "name": "body-concise-docs",
+      "family": "body-short",
+      "prompt": "/plate. Dry run: the finished branch is described in evals/files/body-concise-docs/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "A single PR with a very short body: one-line what, one-line why, mkdocs strict build as the check, Non-obvious changes None, Risk none. No diagram, no filler.",
+      "assertions": [
+        "output/plan.json has shape single.",
+        "The PR body is at most 20 non-blank lines, not counting one diagram or a template checklist.",
+        "Each prose section is one to three sentences; the body has no marketing words such as comprehensive, robust, seamless, or significantly.",
+        "The PR body has no mermaid block.",
+        "Does not ask the user any question."
+      ],
+      "files": ["evals/files/body-concise-docs/branch.txt"]
+    },
+    {
+      "id": 40,
+      "name": "body-no-slop",
+      "family": "body-claims",
+      "prompt": "Open the PR and reuse the drafted body. Dry run: the finished branch is described in evals/files/body-no-slop/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Rewrites the drafted body instead of reusing its unsupported claims. The final body says the gate now runs once per press round, names the test, and claims only `just check`.",
+      "assertions": [
+        "The PR body does not claim a 50% CI time cut, benchmark results, or tests on every harness.",
+        "The PR body has no filler words such as comprehensive, robust, seamless, leverages, or dramatically.",
+        "The verification section names only `just check` (and optionally the new test inside it).",
+        "The PR body is at most 20 non-blank lines, not counting one diagram or a template checklist."
+      ],
+      "files": ["evals/files/body-no-slop/branch.txt"]
+    },
+    {
+      "id": 41,
+      "name": "diagram-cross-module-flow",
+      "family": "diagram-flow",
+      "prompt": "Open a PR for this. Dry run: the finished branch is described in evals/files/diagram-cross-module-flow/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "A single PR whose body has one mermaid flowchart of the new route selection: SKILL.md step, router, cache check, CLI probe, MCP probe, web fallback, report. The diagram has at most 15 nodes and only shows modules from the diff.",
+      "assertions": [
+        "The PR body has exactly one mermaid code block, and it is a flowchart or graph.",
+        "The diagram shows the router, the cache, the CLI probe, the MCP probe, and the web fallback in that decision order.",
+        "The diagram has at most 15 nodes and names no module that is absent from the diff.",
+        "The mermaid syntax is valid for GitHub: labels with punctuation are quoted, and no node id is a bare lowercase end.",
+        "The PR body is at most 40 lines, not counting the diagram."
+      ],
+      "files": ["evals/files/diagram-cross-module-flow/branch.txt"]
+    },
+    {
+      "id": 42,
+      "name": "diagram-sequence-protocol",
+      "family": "diagram-sequence",
+      "prompt": "plate it. Dry run: the finished branch is described in evals/files/diagram-sequence-protocol/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "A single PR whose body uses a mermaid sequenceDiagram to show the new Cook, coder, and reviewer message order, including the ack, the ready reply, and the 120 s timeout path.",
+      "assertions": [
+        "The PR body has one mermaid sequenceDiagram.",
+        "The diagram shows Cook, the coder, and the reviewer, with the handback, the ack, the ready reply, and then the reviewer dispatch, in that order.",
+        "The diagram or body shows the 120 s missing-ready path that marks the curd blocked.",
+        "The PR body is at most 40 lines, not counting the diagram."
+      ],
+      "files": ["evals/files/diagram-sequence-protocol/branch.txt"]
+    },
+    {
+      "id": 43,
+      "name": "explicit-one-pr-over-layers",
+      "family": "explicit-choice",
+      "prompt": "Plate this as one PR. Dry run: the finished branch is described in evals/files/explicit-one-pr-over-layers/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Honors the explicit one-PR choice without asking, although the commits form clean layers. The body gives a reading order that follows the layers.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape single.",
+        "The PR body gives a reading order: the contract first, then the sync command, then the docs.",
+        "The PR body is at most 40 lines."
+      ],
+      "files": ["evals/files/explicit-one-pr-over-layers/branch.txt"]
+    },
+    {
+      "id": 44,
+      "name": "separate-pr-request",
+      "family": "explicit-choice",
+      "prompt": "Open a separate PR for the observability work. Dry run: the finished branch is described in evals/files/separate-pr-request/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Moves e03 and e04 to a new branch off main and plans a second independent PR. Keeps PR #812 open for e01 and e02 without a force-push unless it names the force-push as a step that needs approval. Does not stack the observability PR on #812.",
+      "assertions": [
+        "output/plan.json has shape orthogonal_flat: the existing runner branch keeps e01 and e02, and a new branch based on main carries e03 and e04.",
+        "The new observability branch is based on main, not on the runner branch.",
+        "Does not plan a second PR for the runner work; PR #812 stays the runner PR.",
+        "Any history rewrite or force-push on the existing branch is named as needing explicit approval, not run silently."
+      ],
+      "files": ["evals/files/separate-pr-request/branch.txt"]
+    },
+    {
+      "id": 45,
+      "name": "push-auth-failure",
+      "family": "halt-push",
+      "prompt": "Finish publishing this fix as a PR. Dry run: the finished branch is described in evals/files/push-auth-failure/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Reads the push failure through the masked exit code, sees that the remote branch does not exist, and halts at publish as an environment-owned authentication failure. Does not create the PR.",
+      "assertions": [
+        "Writes output/halt.md and does not claim the PR was created or the push succeeded.",
+        "The halt names the publish step, git or GitHub authentication as the owner, and the exact fatal line.",
+        "The halt notes that the pipe to tail masked the push exit code, or that ls-remote shows no remote branch.",
+        "Does not plan gh pr create before a verified push, and does not suggest a force-push or a weakened gate."
+      ],
+      "files": ["evals/files/push-auth-failure/branch.txt"]
+    },
+    {
+      "id": 46,
+      "name": "plan-shape-normalize",
+      "family": "plan-repair",
+      "prompt": "Publish this stack. Dry run: the finished branch is described in evals/files/plan-shape-normalize/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Repairs the plan to the v1 contract: shape stacked_linear and a contract_version block, with the same two groups. Uses Git Town for the stack. Does not ask the user.",
+      "assertions": [
+        "output/plan.json has shape stacked_linear, not stacked, and has a contract_version object.",
+        "The plan keeps the model branch based on main and the run branch based on the model branch.",
+        "The plan or summary names Git Town as the stack provider.",
+        "Does not ask the user any question."
+      ],
+      "files": ["evals/files/plan-shape-normalize/branch.txt"]
+    },
+    {
+      "id": 47,
+      "name": "explicit-stack-no-boundaries",
+      "family": "explicit-choice",
+      "prompt": "Make this a stack. Dry run: the finished branch is described in evals/files/explicit-stack-no-boundaries/branch.txt. This sandbox has no remote and no gh, so do not run git or gh. Write the plan you would execute to output/plan.json (pr-plan v1: shape, target_branch, and groups with branch, base, title, commits, depends_on). Write each PR body you would pass to --body-file to output/pr-<n>.md, numbered from 1. If you halt instead, write the halt report to output/halt.md.",
+      "expected_output": "Honors the stack request, finds no clean commit or whole-file boundary, collapses to single without asking, and states the deviation in the PR body with the files that block a split. Does not invent boundaries.",
+      "assertions": [
+        "Does not ask the user any question and does not stop for confirmation.",
+        "output/plan.json has shape single with exactly one group based on main.",
+        "The PR body states that the requested stack collapsed to single and names the files or hunks that block a split.",
+        "Does not rewrite, squash, or reorder history, and does not split a file across groups."
+      ],
+      "files": ["evals/files/explicit-stack-no-boundaries/branch.txt"]
+    }
+  ]
+}

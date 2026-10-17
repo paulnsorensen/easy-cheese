@@ -1,0 +1,2008 @@
+"""Tests for shared/scripts/write_handoff_artifact.py."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import subprocess
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+from types import ModuleType
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
+
+import fromargs
+import pytest
+
+from easy_cheese.shared.wheypoint import commit as commit_module
+from easy_cheese.shared.wheypoint import lint_types as lint_module
+from easy_cheese.shared.wheypoint import resolve as resolve_module
+from easy_cheese.shared.wheypoint import storage as wheypoint_storage
+
+from easy_cheese_schemas.contracts import CheckpointIntent, NextMove
+from easy_cheese.shared.wheypoint import checkpoint
+
+if TYPE_CHECKING:
+    from easy_cheese.shared.handoff import HandoffParseError, HandoffSlug
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SHARED_SCRIPTS = REPO_ROOT / "src" / "easy_cheese" / "shared"
+WRITER_CLI = SHARED_SCRIPTS / "write_handoff_artifact.py"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_writer_environment(  # pyright: ignore[reportUnusedFunction]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "corpus"))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "writer-tests")
+    for name in ("EASY_CHEESE_DEBUG", "CHEESE_DEBUG"):
+        monkeypatch.delenv(name, raising=False)
+    _ = (tmp_path / "context.md").write_text("grounded\n", encoding="utf-8")
+
+
+class _WriterModule(Protocol):
+    def write_artifact(
+        self,
+        *,
+        slug: str,
+        status: str,
+        next_skill: str,
+        artifact: str,
+        orientation: str,
+        body: str | None,
+        root: Path,
+        phase: str,
+        payload_schema_uri: str | None = None,
+        taste_test: str | None = None,
+        durable_flags: str | None = None,
+        baseline: str | None = None,
+        grounded: Sequence[str] = (),
+        corpus_root: Path | str | None = None,
+        base_revision_id: str | None = None,
+    ) -> Path: ...
+
+    def main(self, argv: list[str]) -> int: ...
+
+
+class _RerunKwargs(TypedDict):
+    slug: str
+    status: str
+    phase: str
+    next_skill: str
+    artifact: str
+    body: str | None
+    root: Path
+
+
+class _HandoffModule(Protocol):
+    HandoffSlug: type[HandoffSlug]
+    HandoffParseError: type[HandoffParseError]
+
+    def parse_handoff_slug(self, text: str) -> HandoffSlug: ...
+    def render_handoff_slug(self, slug: HandoffSlug) -> str: ...
+
+
+def _load(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="module")
+def writer() -> ModuleType:
+    # handoff first so write_handoff_artifact's `import handoff` resolves.
+    if str(SHARED_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SHARED_SCRIPTS))
+    _ = _load("handoff", SHARED_SCRIPTS / "handoff.py")
+    return _load("write_handoff_artifact", WRITER_CLI)
+
+
+@pytest.fixture(scope="module")
+def handoff_mod() -> ModuleType:
+    if str(SHARED_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SHARED_SCRIPTS))
+    return _load("handoff", SHARED_SCRIPTS / "handoff.py")
+
+
+class TestPreambleRoundTrip:
+    def test_ok_status_round_trips(
+        self, writer: _WriterModule, handoff_mod: _HandoffModule, tmp_path: Path
+    ) -> None:
+        target = writer.write_artifact(
+            slug="my-task",
+            status="ok",
+            phase="press",
+            next_skill="age",
+            artifact=".cheese/press/my-task.md",
+            orientation="implemented widget",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        assert target == tmp_path / ".cheese" / "press" / "my-task.md"
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.status == "ok"
+        assert slug.halt_reason is None
+        assert slug.next_skill == "age"
+        assert slug.artifact == ".cheese/press/my-task.md"
+        assert slug.orientation == "implemented widget"
+        assert slug.taste_test is None
+        assert slug.durable_flags is None
+
+    def test_halt_status_round_trips(
+        self, writer: _WriterModule, handoff_mod: _HandoffModule, tmp_path: Path
+    ) -> None:
+        target = writer.write_artifact(
+            slug="blocked",
+            status="halt: tests failed",
+            phase="age",
+            next_skill="cure",
+            artifact=".cheese/age/blocked.md",
+            orientation="three findings remain",
+            body=None,
+            grounded=("context.md#1-1",),
+            root=tmp_path,
+        )
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.status == "halt"
+        assert slug.halt_reason == "tests failed"
+        assert slug.next_skill == "cure"
+
+
+class TestPathTraversalRejected:
+    @pytest.mark.parametrize("bad_slug", ["../escape", "a/b", "..", "win\\esc"])
+    def test_traversal_slug_rejected(
+        self, writer: _WriterModule, tmp_path: Path, bad_slug: str
+    ) -> None:
+        with pytest.raises(fromargs.CliError):
+            _ = writer.write_artifact(
+                slug=bad_slug,
+                status="ok",
+                phase="age",
+                next_skill="done",
+                artifact="",
+                orientation="x",
+                body=None,
+                root=tmp_path,
+            )
+
+    def test_traversal_phase_rejected(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(fromargs.CliError):
+            _ = writer.write_artifact(
+                slug="ok-slug",
+                status="ok",
+                next_skill="done",
+                artifact="",
+                orientation="x",
+                body=None,
+                root=tmp_path,
+                phase="../etc",
+            )
+
+    def test_genesis_requires_grounded_context(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(
+            fromargs.CliError,
+            match="a genesis phase write requires at least one --grounded entry",
+        ) as excinfo:
+            _ = writer.write_artifact(
+                slug="empty-genesis",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="x",
+                body=None,
+                root=tmp_path,
+            )
+        assert excinfo.value.exit_code == 2
+        assert not (tmp_path / ".cheese" / "cook" / "empty-genesis.md").exists()
+
+
+class TestRerunOverwrite:
+    def test_rerun_same_slug_overwrites(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        # os.replace (not os.rename) must overwrite an existing artifact cleanly
+        # on a re-run — the cross-platform atomic-overwrite contract.
+        common: _RerunKwargs = {
+            "slug": "rerun",
+            "status": "ok",
+            "phase": "press",
+            "next_skill": "age",
+            "artifact": "",
+            "body": None,
+            "root": tmp_path,
+        }
+        target = writer.write_artifact(
+            orientation="first pass",
+            grounded=("context.md#1-1",),
+            **common,
+        )
+        landed = wheypoint_storage.WorkStore.open("rerun").read_record()
+        assert landed is not None
+        rewritten = writer.write_artifact(
+            orientation="second pass",
+            grounded=("context.md#1-1",),
+            base_revision_id=landed.revision_id,
+            **common,
+        )
+        assert rewritten == target
+        assert "second pass" in target.read_text(encoding="utf-8")
+        assert "first pass" not in target.read_text(encoding="utf-8")
+
+
+class TestOptionalKeyedLines:
+    """Regression tests: optional taste_test:/durable_flags: preamble lines.
+
+    The prose slug schemas (skills/cook/SKILL.md, skills/age/SKILL.md) place
+    these keyed lines between `artifact:` and the orientation; the parser
+    must consume them instead of swallowing them as the orientation, while
+    plain four-line slugs keep parsing identically.
+    """
+
+    def test_four_line_slug_back_compat(self, handoff_mod: _HandoffModule) -> None:
+        slug = handoff_mod.parse_handoff_slug(
+            "status: ok\n"
+            + "next: cure\n"
+            + "artifact: .cheese/press/demo.md\n"
+            + "reviewed the retry path\n"
+        )
+        assert slug.orientation == "reviewed the retry path"
+        assert slug.taste_test is None
+        assert slug.durable_flags is None
+
+    def test_durable_flags_keyed_line(self, handoff_mod: _HandoffModule) -> None:
+        # The age-slug shape: durable_flags between artifact and orientation.
+        slug = handoff_mod.parse_handoff_slug(
+            "status: ok\n"
+            + "next: cure\n"
+            + "artifact: .cheese/press/demo.md\n"
+            + "durable_flags: none\n"
+            + "reviewed the retry path\n"
+        )
+        assert slug.durable_flags == "none"
+        # The keyed line must not be swallowed as the orientation.
+        assert slug.orientation == "reviewed the retry path"
+
+    def test_taste_test_and_durable_flags(self, handoff_mod: _HandoffModule) -> None:
+        # The cook-slug shape: both keyed lines before the orientation.
+        slug = handoff_mod.parse_handoff_slug(
+            "status: ok\n"
+            + "next: press\n"
+            + "artifact:\n"
+            + "taste_test: inline-pass\n"
+            + "durable_flags: keyed-line parsing added -> handoff-contract\n"
+            + "cook implemented widget\n"
+        )
+        assert slug.taste_test == "inline-pass"
+        assert slug.durable_flags == "keyed-line parsing added -> handoff-contract"
+        assert slug.orientation == "cook implemented widget"
+
+    def test_render_parse_roundtrip_with_keyed_lines(
+        self, handoff_mod: _HandoffModule
+    ) -> None:
+        original = handoff_mod.HandoffSlug(
+            status="ok",
+            halt_reason=None,
+            next_skill="cure",
+            artifact=".cheese/age/demo.md",
+            orientation="reviewed widget",
+            taste_test="dispatched-pass",
+            durable_flags="none",
+        )
+        rendered = handoff_mod.render_handoff_slug(original)
+        assert handoff_mod.parse_handoff_slug(rendered) == original
+
+    def test_duplicate_keyed_line_fails_loud(self, handoff_mod: _HandoffModule) -> None:
+        text = (
+            "status: ok\nnext: cure\nartifact:\n"
+            "durable_flags: none\ndurable_flags: none\norient\n"
+        )
+        with pytest.raises(
+            handoff_mod.HandoffParseError, match="duplicate 'durable_flags:'"
+        ):
+            _ = handoff_mod.parse_handoff_slug(text)
+
+    def test_keyed_line_without_value_fails_loud(
+        self, handoff_mod: _HandoffModule
+    ) -> None:
+        text = "status: ok\nnext: cure\nartifact:\ndurable_flags:\norient\n"
+        with pytest.raises(handoff_mod.HandoffParseError, match="requires a value"):
+            _ = handoff_mod.parse_handoff_slug(text)
+
+    def test_writer_emits_durable_flags(
+        self, writer: _WriterModule, handoff_mod: _HandoffModule, tmp_path: Path
+    ) -> None:
+        target = writer.write_artifact(
+            slug="flagged",
+            status="ok",
+            next_skill="cure",
+            artifact="",
+            orientation="reviewed widget",
+            body=None,
+            root=tmp_path,
+            phase="age",
+            grounded=("context.md#1-1",),
+            durable_flags="keyed-line contract -> handoff-contract",
+        )
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert target == tmp_path / ".cheese" / "age" / "flagged.md"
+        assert slug.durable_flags == "keyed-line contract -> handoff-contract"
+        assert slug.orientation == "reviewed widget"
+
+    def test_writer_cli_flags_roundtrip(
+        self, handoff_mod: _HandoffModule, tmp_path: Path
+    ) -> None:
+        # Locks the argparse dest wiring (--taste-test/--durable-flags).
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "cli-flagged",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "cure",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--taste-test",
+                "inline-pass",
+                "--durable-flags",
+                "none",
+                "--grounded",
+                "context.md#1-1",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, result.stderr
+        target = tmp_path / ".cheese" / "age" / "cli-flagged.md"
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.taste_test == "inline-pass"
+        assert slug.durable_flags == "none"
+
+    def test_baseline_keyed_line_present_does_not_corrupt_orientation(
+        self, handoff_mod: _HandoffModule
+    ) -> None:
+        # Repro: a `baseline:` line between artifact and orientation must be
+        # consumed as a keyed line, not swallowed as the orientation.
+        slug = handoff_mod.parse_handoff_slug(
+            "status: ok\n"
+            + "next: cure\n"
+            + "artifact: .cheese/press/demo.md\n"
+            + "baseline: none\n"
+            + "reviewed the retry path\n"
+        )
+        assert slug.baseline == "none"
+        assert slug.orientation == "reviewed the retry path"
+
+    def test_render_parse_roundtrip_with_baseline_present(
+        self, handoff_mod: _HandoffModule
+    ) -> None:
+        original = handoff_mod.HandoffSlug(
+            status="ok",
+            halt_reason=None,
+            next_skill="cure",
+            artifact=".cheese/age/demo.md",
+            orientation="reviewed widget",
+            taste_test="dispatched-pass",
+            durable_flags="none",
+            baseline="none",
+        )
+        rendered = handoff_mod.render_handoff_slug(original)
+        assert handoff_mod.parse_handoff_slug(rendered) == original
+
+    def test_render_parse_roundtrip_with_baseline_absent(
+        self, handoff_mod: _HandoffModule
+    ) -> None:
+        original = handoff_mod.HandoffSlug(
+            status="ok",
+            halt_reason=None,
+            next_skill="cure",
+            artifact=".cheese/age/demo.md",
+            orientation="reviewed widget",
+        )
+        rendered = handoff_mod.render_handoff_slug(original)
+        round_tripped = handoff_mod.parse_handoff_slug(rendered)
+        assert round_tripped == original
+        assert round_tripped.baseline is None
+
+    def test_writer_emits_baseline(
+        self, writer: _WriterModule, handoff_mod: _HandoffModule, tmp_path: Path
+    ) -> None:
+        target = writer.write_artifact(
+            slug="baselined",
+            status="ok",
+            next_skill="cure",
+            artifact="",
+            orientation="reviewed widget",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+            phase="age",
+            baseline="none",
+        )
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.baseline == "none"
+        assert slug.orientation == "reviewed widget"
+
+    def test_writer_cli_baseline_flag_roundtrip(
+        self, handoff_mod: _HandoffModule, tmp_path: Path
+    ) -> None:
+        # Locks the argparse dest wiring (--baseline).
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "cli-baselined",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "cure",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--baseline",
+                "none",
+                "--grounded",
+                "context.md#1-1",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, result.stderr
+        target = tmp_path / ".cheese" / "age" / "cli-baselined.md"
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.baseline == "none"
+
+
+class TestBodyFile:
+    def test_body_content_appended_with_blank_separator(
+        self, handoff_mod: _HandoffModule, tmp_path: Path
+    ) -> None:
+        body_src = tmp_path / "body.md"
+        body_text = "# Report\n\nLine one.\nLine two.\n"
+        _ = body_src.write_text(body_text, encoding="utf-8")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "with-body",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "cure",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--body-file",
+                str(body_src),
+                "--root",
+                str(tmp_path),
+                "--grounded",
+                "context.md#1-1",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        target = tmp_path / ".cheese" / "age" / "with-body.md"
+        assert target.exists()
+        assert cast(str, json.loads(result.stdout)).endswith("with-body.md")
+
+        content = target.read_text(encoding="utf-8")
+        lines = content.splitlines()
+        slug = handoff_mod.parse_handoff_slug(content)
+        assert slug.orientation == "demo"
+        assert slug.artifact is None
+        assert lines[4] == ""
+        assert (
+            "\n".join(lines[5:]) + ("\n" if content.endswith("\n") else "") == body_text
+        )
+
+
+class TestCliErrors:
+    def test_missing_required_flag_exits_2(self, tmp_path: Path) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "x",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--root",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert "orientation" in result.stderr.lower()
+
+    def test_missing_phase_flag_exits_2(self, tmp_path: Path) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "x",
+                "--status",
+                "ok",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert "phase" in result.stderr.lower()
+
+    def test_missing_body_file_exits_2(self, tmp_path: Path) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "x",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--body-file",
+                str(tmp_path / "nope.md"),
+                "--root",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 2
+        assert "body-file" in result.stderr.lower()
+
+
+class TestPathDerivation:
+    def test_path_is_under_root_dot_cheese_phase(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        target = writer.write_artifact(
+            slug="curd-7",
+            status="ok",
+            phase="age",
+            next_skill="done",
+            artifact="",
+            orientation="curd 7 done",
+            body=None,
+            grounded=("context.md#1-1",),
+            root=tmp_path,
+        )
+        assert target == tmp_path / ".cheese" / "age" / "curd-7.md"
+        assert target.is_file()
+
+
+class TestPhaseFlag:
+    """`--phase` names this phase's own directory; `--next` stays as preamble-only."""
+
+    def test_phase_overrides_next_for_on_disk_path(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        # Press writes its own report at .cheese/press/<slug>.md while pointing
+        # the next phase at age. Before --phase existed, the writer derived the
+        # path from --next and so dropped press's report into .cheese/age/.
+        target = writer.write_artifact(
+            slug="my-task",
+            status="ok",
+            next_skill="age",
+            artifact=".cheese/cook/my-task.md",
+            orientation="press hardened the diff",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+            phase="press",
+        )
+        assert target == tmp_path / ".cheese" / "press" / "my-task.md"
+        assert not (tmp_path / ".cheese" / "age" / "my-task.md").exists()
+
+    def test_phase_cli_flag_lands_artifact_under_phase_dir(
+        self,
+        handoff_mod: _HandoffModule,
+        tmp_path: Path,
+    ) -> None:
+        # Subprocess: --phase age --next cure means the file lives at
+        # .cheese/age/<slug>.md and the preamble names cure as next.
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "phase-flag",
+                "--status",
+                "ok",
+                "--phase",
+                "age",
+                "--next",
+                "cure",
+                "--artifact",
+                ".cheese/press/phase-flag.md",
+                "--orientation",
+                "age reviewed press output",
+                "--root",
+                str(tmp_path),
+                "--grounded",
+                "context.md#1-1",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        target = tmp_path / ".cheese" / "age" / "phase-flag.md"
+        assert target.exists()
+        assert cast(str, json.loads(result.stdout)).endswith(str(target))
+        slug = handoff_mod.parse_handoff_slug(target.read_text(encoding="utf-8"))
+        assert slug.next_skill == "cure"
+        assert slug.artifact == ".cheese/press/phase-flag.md"
+
+    def test_phase_is_required_for_direct_call(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(fromargs.CliError, match="--phase must be non-empty"):
+            _ = writer.write_artifact(
+                slug="legacy",
+                status="ok",
+                next_skill="done",
+                artifact="",
+                orientation="phase is required",
+                body=None,
+                root=tmp_path,
+                phase="",
+            )
+
+
+class TestAtomicRename:
+    def test_no_partial_file_when_rename_fails(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # Force the atomic move to fail; it must surface as a CliError (exit 2)
+        # naming the target path, not a raw traceback, and must not leak a .tmp file.
+        def boom(_src: str, _dst: str) -> None:
+            raise OSError("simulated rename failure")
+
+        monkeypatch.setattr(os, "replace", boom)
+
+        target_dir = tmp_path / ".cheese" / "age"
+        target = target_dir / "never.md"
+        with pytest.raises(fromargs.CliError) as excinfo:
+            _ = writer.write_artifact(
+                slug="never",
+                status="ok",
+                grounded=("context.md#1-1",),
+                phase="age",
+                next_skill="done",
+                artifact="",
+                orientation="will not land",
+                body=None,
+                root=tmp_path,
+            )
+
+        assert excinfo.value.exit_code == 2
+        assert str(target) in str(excinfo.value)
+        assert not target.exists()
+        leftovers = list(target_dir.glob("*.tmp")) if target_dir.exists() else []
+        assert leftovers == [], f"tmp file leaked: {leftovers}"
+
+    def test_cli_replace_failure_exits_2(self, tmp_path: Path) -> None:
+        # End-to-end: a write that fails after the tmp file lands must exit 2
+        # (I/O), not 3 (contract) and not an unhandled traceback (1).
+        target_dir = tmp_path / ".cheese" / "age"
+        target_dir.mkdir(parents=True)
+        target_dir.chmod(0o500)  # read+execute only: os.replace into it fails
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(WRITER_CLI),
+                    "--slug",
+                    "locked",
+                    "--status",
+                    "ok",
+                    "--phase",
+                    "age",
+                    "--next",
+                    "done",
+                    "--artifact",
+                    "",
+                    "--orientation",
+                    "demo",
+                    "--root",
+                    str(tmp_path),
+                    "--grounded",
+                    "context.md#1-1",
+                ],
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            target_dir.chmod(0o700)
+        assert result.returncode == 2, result.stderr
+        assert str(target_dir / "locked.md") in result.stderr
+        leftovers = list(target_dir.glob("*.tmp"))
+        assert leftovers == [], f"tmp file leaked: {leftovers}"
+
+
+class TestContractErrorContext:
+    """A rejected `--status` (or any render-time contract violation) exits 3
+    and names the `--phase`/`--slug` dispatch it came from."""
+
+    def test_bad_status_exits_3_with_phase_and_slug_context(
+        self, tmp_path: Path
+    ) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "my-task",
+                "--status",
+                "bogus-status",
+                "--phase",
+                "press",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 3, result.stderr
+        assert "--phase press" in result.stderr
+        assert "--slug my-task" in result.stderr
+
+    def test_render_time_newline_in_artifact_exits_3_before_cheese_dir_created(
+        self, tmp_path: Path
+    ) -> None:
+        # `artifact` is only validated when render_handoff_slug renders the
+        # preamble, which happens before the .cheese/<phase> directory or the
+        # tmp file are created.
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "hurt",
+                "--status",
+                "ok",
+                "--phase",
+                "press",
+                "--next",
+                "age",
+                "--artifact",
+                "line1\nline2",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 3, result.stderr
+        assert "--phase press" in result.stderr
+        assert "--slug hurt" in result.stderr
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_illegal_transition_exits_3_with_phase_and_slug_context(
+        self, tmp_path: Path
+    ) -> None:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WRITER_CLI),
+                "--slug",
+                "hop",
+                "--status",
+                "ok",
+                "--phase",
+                "cook",
+                "--next",
+                "plate",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 3, result.stderr
+        assert "--phase cook" in result.stderr
+        assert "--slug hop" in result.stderr
+        assert not (tmp_path / ".cheese").exists()
+
+
+class TestGroundedValidation:
+    @pytest.mark.parametrize(
+        ("entry", "message"),
+        [
+            ("missing.md#1-1", "path not found"),
+            ("context.md#1", "path not found"),
+            ("", "path\\[#start-end\\]"),
+            ("context.md#2-1", "range must ascend"),
+            ("/etc/passwd#1-1", "must be under root"),
+            ("../outside.md#1-1", "escapes the repository root"),
+        ],
+    )
+    def test_invalid_grounded_entry_rejected_before_write(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        entry: str,
+        message: str,
+    ) -> None:
+        with pytest.raises(fromargs.CliError, match=message):
+            _ = writer.write_artifact(
+                slug="invalid-grounded",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=(entry,),
+            )
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_grounded_cap_rejected_before_write(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        entries = tuple("context.md#1-1" for _ in range(17))
+        with pytest.raises(fromargs.CliError, match="at most 16"):
+            _ = writer.write_artifact(
+                slug="over-cap",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=entries,
+            )
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_grounded_symlink_escape_rejected(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        tmp_path_factory: pytest.TempPathFactory,
+    ) -> None:
+        outside_dir = tmp_path_factory.mktemp("outside")
+        outside = outside_dir / "secret.md"
+        _ = outside.write_text("secret\n", encoding="utf-8")
+        link = tmp_path / "linked.md"
+        link.symlink_to(outside)
+        with pytest.raises(fromargs.CliError, match="escapes the repository root"):
+            _ = writer.write_artifact(
+                slug="symlink-escape",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("linked.md#1-1",),
+            )
+        assert not (tmp_path / ".cheese").exists()
+
+
+class TestWheypointCommitFailure:
+    def test_commit_failure_keeps_written_artifact(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The artifact lands before the commit, and the next resolve gates on it."""
+        target = writer.write_artifact(
+            slug="commit-failed",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="first pass",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        _ = capsys.readouterr()
+        landed = wheypoint_storage.WorkStore.open("commit-failed").read_record()
+        assert landed is not None
+
+        def fail(*_args: object, **_kwargs: object) -> commit_module.CommitResult:
+            raise commit_module.CommitError("corpus unavailable")
+
+        monkeypatch.setattr(commit_module, "commit", fail)
+        with pytest.raises(fromargs.CliError) as excinfo:
+            _ = writer.write_artifact(
+                slug="commit-failed",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="second pass",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+                base_revision_id=landed.revision_id,
+            )
+        assert target.is_file()
+        assert "second pass" in target.read_text(encoding="utf-8")
+        assert excinfo.value.exit_code == 5
+        assert (
+            "wheypoint: artifact-orphaned .cheese/cook/commit-failed.md"
+            in capsys.readouterr().err
+        )
+
+        resolution = resolve_module.resolve("commit-failed", workspace_root=tmp_path)
+        assert resolution.outcome is resolve_module.ResolutionOutcome.GATED
+        assert lint_module.LintCode.STALE_ARTIFACT_LINK in [
+            finding.code for finding in resolution.findings
+        ]
+
+    def test_read_only_corpus_orphans_the_artifact_through_the_real_kernel(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            pytest.skip("root ignores directory permissions")
+        corpus_root = tmp_path / "ro-corpus"
+        work_dir = corpus_root / "work" / "read-only"
+        work_dir.mkdir(parents=True)
+        work_dir.chmod(0o500)
+        try:
+            with pytest.raises(fromargs.CliError) as excinfo:
+                _ = writer.write_artifact(
+                    slug="read-only",
+                    status="ok",
+                    phase="cook",
+                    next_skill="press",
+                    artifact="",
+                    orientation="demo",
+                    body=None,
+                    root=tmp_path,
+                    grounded=("context.md#1-1",),
+                    corpus_root=corpus_root,
+                )
+        finally:
+            work_dir.chmod(0o700)
+        target = tmp_path / ".cheese" / "cook" / "read-only.md"
+        assert target.is_file()
+        assert excinfo.value.exit_code == 5
+        assert (
+            "wheypoint: artifact-orphaned .cheese/cook/read-only.md"
+            in capsys.readouterr().err
+        )
+
+    def test_commit_failure_prints_traceback_for_unclassified_exception(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def fail(*_args: object, **_kwargs: object) -> commit_module.CommitResult:
+            raise KeyError("missing")
+
+        monkeypatch.setattr(commit_module, "commit", fail)
+        with pytest.raises(fromargs.CliError) as excinfo:
+            _ = writer.write_artifact(
+                slug="commit-failed-keyerror",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert "KeyError" in str(excinfo.value)
+        assert excinfo.value.exit_code == 5
+        assert "Traceback" in capsys.readouterr().err
+
+    def test_missing_grounded_on_genesis_is_caller_usage_without_a_traceback(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        with pytest.raises(fromargs.CliError, match="at least one --grounded") as e:
+            _ = writer.write_artifact(
+                slug="ungrounded",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+            )
+        assert e.value.exit_code == 2
+        assert "Traceback" not in capsys.readouterr().err
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_a_non_kebab_slug_is_refused_before_anything_is_written(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        with pytest.raises(fromargs.CliError, match="kebab-case") as excinfo:
+            _ = writer.write_artifact(
+                slug="my_slug",
+                status="ok",
+                phase="press",
+                next_skill="age",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert excinfo.value.exit_code == 2
+        assert "Traceback" not in capsys.readouterr().err
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_a_non_kebab_slug_exits_2_through_the_cli(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        code = writer.main(
+            [
+                "--slug",
+                "my_slug",
+                "--status",
+                "ok",
+                "--phase",
+                "press",
+                "--next",
+                "age",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--root",
+                str(tmp_path),
+            ]
+        )
+        assert code == 2
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_an_over_long_orientation_is_refused_before_the_write(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        with pytest.raises(fromargs.CliError, match="orientation") as excinfo:
+            _ = writer.write_artifact(
+                slug="too-long",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="x" * 2001,
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert excinfo.value.exit_code == 2
+        assert "Traceback" not in capsys.readouterr().err
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_debug_environment_prints_a_traceback_for_a_refusal(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("CHEESE_DEBUG", "1")
+        with pytest.raises(fromargs.CliError) as excinfo:
+            _ = writer.write_artifact(
+                slug="ungrounded-debug",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+            )
+        assert excinfo.value.exit_code == 2
+        assert "Traceback" in capsys.readouterr().err
+
+
+class TestBaseRejectedOnNonChainPhase:
+    def test_base_on_a_non_chain_phase_is_refused_and_writes_nothing(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(
+            fromargs.CliError, match="--base is only valid for chain phases"
+        ):
+            _ = writer.write_artifact(
+                slug="non-chain",
+                status="ok",
+                phase="mold",
+                next_skill="cook",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                base_revision_id="rev-abc",
+            )
+        assert not (tmp_path / ".cheese" / "mold" / "non-chain.md").exists()
+
+
+class TestGroundedRejectedOnNonChainPhase:
+    def test_grounded_on_a_non_chain_phase_is_caller_usage(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        with pytest.raises(
+            fromargs.CliError, match="only valid for chain phases"
+        ) as excinfo:
+            _ = writer.write_artifact(
+                slug="non-chain",
+                status="ok",
+                phase="mold",
+                next_skill="cook",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert excinfo.value.exit_code == 2
+        assert not (tmp_path / ".cheese").exists()
+
+    def test_invalid_transition_outranks_the_grounded_rule(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        # This argv trips both rules: `mold -> age` is not a declared
+        # transition, and `mold` is not a chain phase. The contract error must
+        # win, because the transition is the stronger diagnosis.
+        with pytest.raises(
+            fromargs.CliError, match="transition mold -> age is not declared"
+        ) as excinfo:
+            _ = writer.write_artifact(
+                slug="both-rules",
+                status="ok",
+                phase="mold",
+                next_skill="age",
+                artifact="",
+                orientation="demo",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+        assert excinfo.value.exit_code == 3
+        assert "only valid for chain phases" not in str(excinfo.value)
+        assert not (tmp_path / ".cheese").exists()
+
+
+class TestSuccessTelemetry:
+    def test_success_reports_the_landed_revision(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _ = writer.write_artifact(
+            slug="reported",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        record = wheypoint_storage.WorkStore.open("reported").read_record()
+        assert record is not None
+        assert (
+            f"wheypoint: revision work_id=reported "
+            f"revision_id={record.revision_id} revision_number=1"
+        ) in capsys.readouterr().err
+
+
+class TestSessionProvenanceFromEnvironment:
+    def test_valid_session_environment_lands_in_the_record(
+        self, writer: _WriterModule, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("EASY_CHEESE_SESSION_ID", "sess-01")
+        monkeypatch.setenv("EASY_CHEESE_CAPTURED_AT", "2026-01-02T03:04:05Z")
+        _ = writer.write_artifact(
+            slug="env-valid",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        record = wheypoint_storage.WorkStore.open("env-valid").read_record()
+        assert record is not None
+        assert record.created == "2026-01-02T03:04:05Z"
+
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("EASY_CHEESE_SESSION_ID", "Session One"),
+            ("CHEESE_CAPTURED_AT", "yesterday"),
+        ],
+    )
+    def test_unparseable_session_environment_is_dropped_not_fatal(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        name: str,
+        value: str,
+    ) -> None:
+        monkeypatch.setenv(name, value)
+        target = writer.write_artifact(
+            slug="env-invalid",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        assert target.is_file()
+        record = wheypoint_storage.WorkStore.open("env-invalid").read_record()
+        assert record is not None
+        assert record.created != value
+        assert f"wheypoint: ignoring {name}" in capsys.readouterr().err
+
+    def test_an_invalid_primary_falls_through_to_its_alias(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("EASY_CHEESE_CAPTURED_AT", "yesterday")
+        monkeypatch.setenv("CHEESE_CAPTURED_AT", "2026-01-02T03:04:05Z")
+        _ = writer.write_artifact(
+            slug="env-alias",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        record = wheypoint_storage.WorkStore.open("env-alias").read_record()
+        assert record is not None
+        assert record.created == "2026-01-02T03:04:05Z"
+        assert "ignoring" not in capsys.readouterr().err
+
+    def test_a_multiline_harness_is_dropped(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("EASY_CHEESE_HARNESS", "one\ntwo")
+        _ = writer.write_artifact(
+            slug="env-harness",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="demo",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        record = wheypoint_storage.WorkStore.open("env-harness").read_record()
+        assert record is not None
+        assert (
+            "wheypoint: ignoring EASY_CHEESE_HARNESS: not a single line"
+            in capsys.readouterr().err
+        )
+
+
+class TestRepoRootAnchoring:
+    def test_write_from_a_subdirectory_lands_at_the_git_toplevel(
+        self, writer: _WriterModule, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for args in (("init",), ("config", "user.email", "t@example.com")):
+            _ = subprocess.run(
+                ["git", *args], cwd=tmp_path, check=True, capture_output=True
+            )
+        subdir = tmp_path / "nested" / "deeper"
+        subdir.mkdir(parents=True)
+        monkeypatch.chdir(subdir)
+
+        status = writer.main(
+            [
+                "--slug",
+                "anchored",
+                "--status",
+                "ok",
+                "--phase",
+                "cook",
+                "--next",
+                "press",
+                "--artifact",
+                "",
+                "--orientation",
+                "demo",
+                "--grounded",
+                "context.md#1-1",
+            ]
+        )
+        assert status == 0
+        assert (tmp_path / ".cheese" / "cook" / "anchored.md").is_file()
+        assert not (subdir / ".cheese").exists()
+        record = wheypoint_storage.WorkStore.open("anchored").read_record()
+        assert record is not None
+        assert [link.path for link in record.artifact_links] == [
+            ".cheese/cook/anchored.md"
+        ]
+
+
+class TestSiblingArtifactLinks:
+    def test_a_phase_commit_does_not_repin_a_sibling_artifact(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        def write(
+            phase: str, next_skill: str, orientation: str, base: str | None = None
+        ) -> Path:
+            return writer.write_artifact(
+                base_revision_id=base,
+                slug="siblings",
+                status="ok",
+                phase=phase,
+                next_skill=next_skill,
+                artifact="",
+                orientation=orientation,
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+
+        cook_target = write("cook", "press", "cook pass")
+        store = wheypoint_storage.WorkStore.open("siblings")
+        after_cook = store.read_record()
+        assert after_cook is not None
+        _ = write("press", "age", "press pass", after_cook.revision_id)
+        after_press = store.read_record()
+        assert after_press is not None
+        pinned = {link.path: link.digest for link in after_press.artifact_links}
+        assert sorted(pinned) == [
+            ".cheese/cook/siblings.md",
+            ".cheese/press/siblings.md",
+        ]
+
+        _ = cook_target.write_text("edited after cook committed\n", encoding="utf-8")
+        _ = write("press", "age", "press second pass", after_press.revision_id)
+        after_second = store.read_record()
+        assert after_second is not None
+        repinned = {link.path: link.digest for link in after_second.artifact_links}
+        assert (
+            repinned[".cheese/cook/siblings.md"] == pinned[".cheese/cook/siblings.md"]
+        )
+        assert (
+            repinned[".cheese/press/siblings.md"] != pinned[".cheese/press/siblings.md"]
+        )
+
+
+def _seed_genesis(store: wheypoint_storage.WorkStore, root: Path, work_id: str) -> str:
+    target = root / ".cheese" / "cook" / f"{work_id}.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _ = target.write_text("phase\n", encoding="utf-8")
+    genesis_delta = checkpoint.build_delta(
+        CheckpointIntent(
+            work_id=work_id,
+            orientation="genesis handoff",
+            notes="genesis handoff",
+            next=NextMove("press"),
+            artifact=f"{work_id}.md",
+            working_context=["context.md#1-1"],
+        ),
+        None,
+    )
+    result = commit_module.commit(genesis_delta, store=store, artifact_root=root)
+    return result.revision.revision_id
+
+
+class TestPhaseBaseRevisionGate:
+    """A phase write over an existing record names the revision the writer read."""
+
+    def _commit(
+        self,
+        tmp_path: Path,
+        store: wheypoint_storage.WorkStore,
+        *,
+        base_revision_id: str | None,
+        writes: list[str],
+        contents: str = "rewritten\n",
+        orientation: str = "demo",
+    ) -> object:
+        from unittest import mock
+
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        original = wheypoint_storage.write_atomic
+
+        def spy(path: Path, payload: bytes) -> None:
+            if path == target:
+                writes.append("written")
+            original(path, payload)
+
+        with mock.patch.object(wheypoint_storage, "write_atomic", spy):
+            return phase_commit.commit_phase_revision(
+                work_id="seam",
+                phase="cook",
+                next_skill="press",
+                artifact=str(target),
+                orientation=orientation,
+                grounded=("context.md#1-1",),
+                root=tmp_path,
+                store=store,
+                contents=contents,
+                base_revision_id=base_revision_id,
+            )
+
+    def _result(self, outcome: object) -> commit_module.CommitResult:
+        return cast("commit_module.CommitResult", getattr(outcome, "result"))
+
+    def _landed_child(
+        self, tmp_path: Path, store: wheypoint_storage.WorkStore
+    ) -> tuple[str, str]:
+        parent = _seed_genesis(store, tmp_path, "seam")
+        child = self._result(
+            self._commit(tmp_path, store, base_revision_id=parent, writes=[])
+        )
+        return parent, child.revision.revision_id
+
+    def _refused_retry(
+        self,
+        tmp_path: Path,
+        store: wheypoint_storage.WorkStore,
+        *,
+        base_revision_id: str,
+        contents: str = "rewritten\n",
+        orientation: str = "demo",
+    ) -> str:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        writes: list[str] = []
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(
+                tmp_path,
+                store,
+                base_revision_id=base_revision_id,
+                writes=writes,
+                contents=contents,
+                orientation=orientation,
+            )
+        assert writes == []
+        return str(excinfo.value)
+
+    def _artifact(self, tmp_path: Path) -> str:
+        return (tmp_path / ".cheese" / "cook" / "seam.md").read_text(encoding="utf-8")
+
+    def test_lost_response_retry_replays_the_landed_revision_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        writes: list[str] = []
+
+        retried = self._result(
+            self._commit(tmp_path, store, base_revision_id=parent, writes=writes)
+        )
+
+        assert retried.replayed is True
+        assert retried.revision.revision_id == child
+        assert writes == []
+        assert self._artifact(tmp_path) == "rewritten\n"
+        record = store.read_record()
+        assert record is not None
+        assert record.revision_id == child
+        assert store.revision_ids() == {parent, child}
+
+    def test_stale_base_with_changed_contents_is_refused_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+
+        message = self._refused_retry(
+            tmp_path, store, base_revision_id=parent, contents="changed\n"
+        )
+
+        assert message.startswith("stale-parent:")
+        assert child in message
+        assert self._artifact(tmp_path) == "rewritten\n"
+
+    def test_stale_base_with_the_same_bytes_and_a_new_orientation_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+
+        message = self._refused_retry(
+            tmp_path, store, base_revision_id=parent, orientation="changed plan"
+        )
+
+        assert message.startswith("stale-parent:")
+        assert store.revision_ids() == {parent, child}
+
+    def test_replay_is_refused_when_a_later_write_repinned_the_artifact(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        later = self._result(
+            self._commit(
+                tmp_path,
+                store,
+                base_revision_id=child,
+                writes=[],
+                contents="later\n",
+                orientation="later pass",
+            )
+        ).revision.revision_id
+
+        message = self._refused_retry(tmp_path, store, base_revision_id=parent)
+
+        assert message.startswith("stale-parent:")
+        assert later in message
+        assert self._artifact(tmp_path) == "later\n"
+
+    def test_replay_is_refused_when_the_artifact_changed_on_disk(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        _ = target.write_text("edited by hand\n", encoding="utf-8")
+
+        message = self._refused_retry(tmp_path, store, base_revision_id=parent)
+
+        assert message.startswith("stale-parent:")
+        assert self._artifact(tmp_path) == "edited by hand\n"
+        assert store.revision_ids() == {parent, child}
+
+    def test_session_without_a_timestamp_replays_after_the_clock_moves(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("EASY_CHEESE_HARNESS", "test-harness")
+        monkeypatch.setenv("EASY_CHEESE_SESSION_ID", "session-one")
+        ticks = iter(range(1, 60))
+        monkeypatch.setattr(
+            checkpoint, "_utc_now", lambda: f"2026-10-16T00:00:{next(ticks):02d}Z"
+        )
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+
+        retried = self._result(
+            self._commit(tmp_path, store, base_revision_id=parent, writes=[])
+        )
+
+        assert retried.replayed is True
+        assert retried.revision.revision_id == child
+
+    def test_replay_is_refused_when_the_pinned_digest_differs_from_the_retry(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        _ = target.write_text("edited by hand\n", encoding="utf-8")
+
+        message = self._refused_retry(
+            tmp_path, store, base_revision_id=parent, contents="edited by hand\n"
+        )
+
+        assert message.startswith("stale-parent:")
+        assert self._artifact(tmp_path) == "edited by hand\n"
+        assert store.revision_ids() == {parent, child}
+
+    def test_replay_is_refused_when_a_same_bytes_write_repinned_the_link(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        later = self._result(
+            self._commit(
+                tmp_path,
+                store,
+                base_revision_id=child,
+                writes=[],
+                orientation="same bytes, new plan",
+            )
+        ).revision.revision_id
+        record = store.read_record()
+        assert record is not None
+        pinned = [link for link in record.artifact_links if link.path.endswith("seam.md")]
+        assert [link.revision_id for link in pinned] == [later]
+
+        message = self._refused_retry(tmp_path, store, base_revision_id=parent)
+
+        assert message.startswith("stale-parent:")
+        assert later in message
+        assert store.revision_ids() == {parent, child, later}
+
+    def test_replay_check_runs_while_the_record_lock_is_held(
+        self, tmp_path: Path
+    ) -> None:
+        from contextlib import contextmanager
+        from unittest import mock
+
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        target = tmp_path / ".cheese" / "cook" / "seam.md"
+        held = {"now": False}
+        seen: list[bool] = []
+        real_lock = wheypoint_storage.WorkStore.lock
+        real_digest = wheypoint_storage.file_digest
+
+        @contextmanager
+        def tracked_lock(self: wheypoint_storage.WorkStore):
+            with real_lock(self):
+                held["now"] = True
+                try:
+                    yield
+                finally:
+                    held["now"] = False
+
+        def racing_digest(path: Path) -> str | None:
+            seen.append(held["now"])
+            _ = target.write_text("moved under the lock\n", encoding="utf-8")
+            return real_digest(path)
+
+        with (
+            mock.patch.object(wheypoint_storage.WorkStore, "lock", tracked_lock),
+            mock.patch.object(wheypoint_storage, "file_digest", racing_digest),
+            pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo,
+        ):
+            _ = self._commit(tmp_path, store, base_revision_id=parent, writes=[])
+
+        assert seen == [True]
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert store.revision_ids() == {parent, child}
+
+    def test_replay_returns_the_landed_revision_when_the_record_moved_to_a_descendant(
+        self, tmp_path: Path
+    ) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        parent, child = self._landed_child(tmp_path, store)
+        record = store.read_record()
+        assert record is not None
+        moved = commit_module.commit(
+            checkpoint.build_delta(
+                CheckpointIntent(
+                    work_id="seam",
+                    orientation="later checkpoint",
+                    next=NextMove("press"),
+                    base_revision_id=child,
+                ),
+                record,
+            ),
+            store=store,
+            artifact_root=tmp_path,
+        ).revision.revision_id
+        assert moved != child
+        writes: list[str] = []
+
+        retried = self._result(
+            self._commit(tmp_path, store, base_revision_id=parent, writes=writes)
+        )
+
+        assert retried.replayed is True
+        assert retried.revision.revision_id == child
+        assert writes == []
+        current = store.read_record()
+        assert current is not None
+        assert current.revision_id == moved
+
+    def test_writer_cli_replays_a_lost_response_retry(
+        self,
+        writer: _WriterModule,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        def write(orientation: str, base: str | None) -> None:
+            _ = writer.write_artifact(
+                slug="retried",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation=orientation,
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+                base_revision_id=base,
+            )
+
+        store = wheypoint_storage.WorkStore.open("retried")
+        write("first pass", None)
+        first = store.read_record()
+        assert first is not None
+        write("second pass", first.revision_id)
+        second = store.read_record()
+        assert second is not None
+        _ = capsys.readouterr()
+        before = (tmp_path / ".cheese" / "cook" / "retried.md").read_bytes()
+
+        write("second pass", first.revision_id)
+
+        stderr = capsys.readouterr().err
+        assert f"revision_id={second.revision_id}" in stderr
+        assert "replayed=true" in stderr
+        assert store.revision_ids() == {first.revision_id, second.revision_id}
+        assert (tmp_path / ".cheese" / "cook" / "retried.md").read_bytes() == before
+
+        with pytest.raises(fromargs.CliError) as excinfo:
+            write("a different second pass", first.revision_id)
+
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert (tmp_path / ".cheese" / "cook" / "retried.md").read_bytes() == before
+        assert store.revision_ids() == {first.revision_id, second.revision_id}
+
+    def test_missing_base_on_an_existing_record_is_refused_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        current = _seed_genesis(store, tmp_path, "seam")
+        writes: list[str] = []
+
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(tmp_path, store, base_revision_id=None, writes=writes)
+
+        assert str(excinfo.value).startswith("base-revision-required:")
+        assert current in str(excinfo.value)
+        assert writes == []
+        record = store.read_record()
+        assert record is not None
+        assert record.revision_id == current
+        assert (tmp_path / ".cheese" / "cook" / "seam.md").read_text(
+            encoding="utf-8"
+        ) == "phase\n"
+
+    def test_stale_base_is_refused_and_writes_nothing(self, tmp_path: Path) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        current = _seed_genesis(store, tmp_path, "seam")
+        writes: list[str] = []
+
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(
+                tmp_path, store, base_revision_id="rev-000000000000", writes=writes
+            )
+
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert current in str(excinfo.value)
+        assert writes == []
+        record = store.read_record()
+        assert record is not None
+        assert record.revision_id == current
+        assert (tmp_path / ".cheese" / "cook" / "seam.md").read_text(
+            encoding="utf-8"
+        ) == "phase\n"
+
+    def test_stated_base_with_no_record_is_refused_and_writes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        writes: list[str] = []
+
+        with pytest.raises(phase_commit.PhaseCommitRefusal) as excinfo:
+            _ = self._commit(
+                tmp_path, store, base_revision_id="rev-000000000000", writes=writes
+            )
+
+        assert str(excinfo.value).startswith("stale-parent:")
+        assert "no record exists" in str(excinfo.value)
+        assert writes == []
+        assert store.read_record() is None
+        assert not (tmp_path / ".cheese" / "cook" / "seam.md").exists()
+
+    def test_correct_base_commits_a_child_revision(self, tmp_path: Path) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        current = _seed_genesis(store, tmp_path, "seam")
+        writes: list[str] = []
+
+        outcome = cast(
+            "commit_module.CommitResult",
+            getattr(
+                self._commit(tmp_path, store, base_revision_id=current, writes=writes),
+                "result",
+            ),
+        )
+
+        assert writes == ["written"]
+        assert outcome.revision.parent_revision_id == current
+        assert outcome.revision.revision_number == 2
+
+    def test_genesis_needs_no_base(self, tmp_path: Path) -> None:
+        store = wheypoint_storage.WorkStore.open("seam")
+        writes: list[str] = []
+
+        outcome = cast(
+            "commit_module.CommitResult",
+            getattr(
+                self._commit(tmp_path, store, base_revision_id=None, writes=writes),
+                "result",
+            ),
+        )
+
+        assert writes == ["written"]
+        assert outcome.revision.revision_number == 1
+
+    def test_writer_cli_refuses_a_missing_base_with_the_current_revision(
+        self, writer: _WriterModule, tmp_path: Path
+    ) -> None:
+        _ = writer.write_artifact(
+            slug="gated",
+            status="ok",
+            phase="cook",
+            next_skill="press",
+            artifact="",
+            orientation="first pass",
+            body=None,
+            root=tmp_path,
+            grounded=("context.md#1-1",),
+        )
+        record = wheypoint_storage.WorkStore.open("gated").read_record()
+        assert record is not None
+
+        with pytest.raises(fromargs.CliError) as excinfo:
+            _ = writer.write_artifact(
+                slug="gated",
+                status="ok",
+                phase="cook",
+                next_skill="press",
+                artifact="",
+                orientation="second pass",
+                body=None,
+                root=tmp_path,
+                grounded=("context.md#1-1",),
+            )
+
+        assert "base-revision-required" in str(excinfo.value)
+        assert record.revision_id in str(excinfo.value)
+        target = tmp_path / ".cheese" / "cook" / "gated.md"
+        assert "first pass" in target.read_text(encoding="utf-8")
+
+    def test_lock_time_conflict_surfaces_as_orphaned_without_a_retry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from easy_cheese.shared.wheypoint import phase_commit
+
+        store = wheypoint_storage.WorkStore.open("seam")
+        current = _seed_genesis(store, tmp_path, "seam")
+        commits: list[object] = []
+
+        def always_conflict(*_args: object, **_kwargs: object) -> None:
+            commits.append(object())
+            raise commit_module.StaleParentError("race")
+
+        monkeypatch.setattr(commit_module, "commit", always_conflict)
+
+        with pytest.raises(phase_commit.ArtifactOrphaned) as excinfo:
+            _ = self._commit(tmp_path, store, base_revision_id=current, writes=[])
+
+        assert isinstance(excinfo.value.cause, commit_module.StaleParentError)
+        assert len(commits) == 1
+
+    def test_cli_base_flag_binds_the_revision_the_writer_read(
+        self, writer: _WriterModule
+    ) -> None:
+        argv = [
+            "--slug",
+            "flagged",
+            "--status",
+            "ok",
+            "--phase",
+            "cook",
+            "--next",
+            "press",
+            "--artifact",
+            "",
+            "--orientation",
+            "demo",
+            "--grounded",
+            "context.md#1-1",
+        ]
+        assert writer.main(argv) == 0
+        record = wheypoint_storage.WorkStore.open("flagged").read_record()
+        assert record is not None
+
+        assert writer.main(argv) != 0
+        assert writer.main([*argv, "--base", "rev-000000000000"]) != 0
+        assert writer.main([*argv, "--base", record.revision_id]) == 0
+        updated = wheypoint_storage.WorkStore.open("flagged").read_record()
+        assert updated is not None
+        assert updated.revision_number == 2

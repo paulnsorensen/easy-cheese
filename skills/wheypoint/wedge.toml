@@ -1,0 +1,5 @@
+# Build this skill's direct archive from the shared runtime package.
+# The selected paths preserve package namespaces while excluding foreign skills.
+name = "wheypoint"
+entry = "easy_cheese.skills.wheypoint.commands:main"
+source_paths = ["__init__.py", "skills/__init__.py", "skills/wheypoint", "shared", "cli"]

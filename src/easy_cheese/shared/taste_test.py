@@ -1,0 +1,1290 @@
+#!/usr/bin/env python3
+"""Mold's applicability, contract, and fork-coherence taste gate.
+
+The canonical ``MoldSpecDocument`` validates Mold frontmatter and test contracts.
+"""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import errno
+import os
+import re
+import stat
+
+import fromargs
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import ClassVar, NoReturn, Protocol, cast
+
+from easy_cheese_schemas.contracts import (
+    GroundingOutcome,
+    GroundingProbe,
+    GroundingRow,
+    Landing,
+    MoldSpecDocument,
+    MoldSpecFrontmatter,
+    SpecConfidence,
+    TestContractMode,
+    TestContractRow,
+    parse_landing_mapping,
+)
+from easy_cheese_schemas.spec_format import (
+    _HARDENED_SOURCES,  # pyright: ignore[reportPrivateUsage]
+)
+
+from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
+
+
+class _GroundingRowFactory(Protocol):
+    def __call__(
+        self, *, probe: GroundingProbe, outcome: GroundingOutcome, evidence: str
+    ) -> GroundingRow: ...
+
+
+class _TestRowFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        acceptance_id: str,
+        interface_referent: str,
+        outermost_stable_seam: str,
+        expected_failure: str,
+        mode: TestContractMode,
+        interface_version: str,
+        matrix_rows: tuple[str, ...],
+    ) -> TestContractRow: ...
+
+
+class _FrontmatterFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        slug: str,
+        status: str,
+        source: str,
+        created: str,
+        confidence: SpecConfidence,
+        gates_overridden: tuple[str, ...],
+        agent_introduced_scope: tuple[str, ...],
+        entity_referent_bindings: tuple[Mapping[str, object], ...],
+        execution_holds: tuple[str, ...],
+        landing: Landing | None,
+    ) -> MoldSpecFrontmatter: ...
+
+
+class _DocumentFactory(Protocol):
+    def __call__(
+        self,
+        *,
+        frontmatter: MoldSpecFrontmatter,
+        acceptance_ids: tuple[str, ...],
+        test_contract_rows: tuple[TestContractRow, ...],
+        grounding_rows: tuple[GroundingRow, ...],
+    ) -> MoldSpecDocument: ...
+
+
+_grounding_row = cast(_GroundingRowFactory, cast(object, GroundingRow))
+_test_row = cast(_TestRowFactory, cast(object, TestContractRow))
+_frontmatter_model = cast(_FrontmatterFactory, cast(object, MoldSpecFrontmatter))
+_document = cast(_DocumentFactory, cast(object, MoldSpecDocument))
+DIGEST = re.compile(r"^[0-9a-fA-F]{64}$")
+NEW_MOLD_SOURCES = _HARDENED_SOURCES
+
+# Test Contracts is optional; its reflection is required only when present.
+REFLECTIONS = ("approach", "interface", "acceptance")
+TEST_CONTRACT_REFLECTION = "test-contract"
+# The pinned goal lives outside the reflection set: forks never reflect into it,
+# but the ledger's `goal` must survive into it unchanged, compared case- and
+# whitespace-insensitively (goal-drift gate).
+GOAL_SECTION = "problem"
+__all__ = [
+    "ApplicabilityError",
+    "DIGEST",
+    "ForkCoverage",
+    "ForkDecision",
+    "ForkTasteVerdict",
+    "GOAL_SECTION",
+    "NEW_MOLD_SOURCES",
+    "REFLECTIONS",
+    "TasteGateResult",
+    "TasteTestError",
+    "decomposition_gate",
+    "draft_sha256",
+    "goal_coverage",
+    "is_new_mold_spec",
+    "lexical_precheck",
+    "main",
+    "parse_landing",
+    "read_spec_text",
+    "reopen_named_forks",
+    "required_reflections",
+    "require_decomposition",
+    "taste_test",
+    "typed_mold_document",
+    "validate_taste_result",
+]
+_GOAL_HEADINGS = frozenset({"problem statement", "problem", "goal"})
+# Goal-coverage gate: the ledger's `goal_clauses` (`G-n`) must each land in
+# Acceptance (covered) or carry an explicit disposition in Non-goals, Deferred
+# follow-ups, or Open questions. At least half the clauses must be covered.
+GOAL_CLAUSE_ID = re.compile(r"^G-\d+$")
+COVERAGE_SECTIONS = ("non-goals", "follow-ups", "open-questions")
+# A structured Acceptance criterion line: an optional bullet, then `AC-<n>:`.
+# Only such a line can mark a clause covered; prose in the section cannot.
+_ACCEPTANCE_CRITERION_LINE = re.compile(r"(?m)^[ \t]*(?:[-*][ \t]*)?AC-\d+[ \t]*:.*$")
+_REFLECTION_ALIASES = {
+    "non-goals": "non-goals",
+    "non goals": "non-goals",
+    "deferred follow-ups": "follow-ups",
+    "follow-ups": "follow-ups",
+    "open questions": "open-questions",
+    "approach": "approach",
+    "interface": "interface",
+    "interfaces": "interface",
+    "interface-sketch": "interface",
+    "interface-sketches": "interface",
+    "acceptance": "acceptance",
+    "interface sketches": "interface",
+    "test contract": "test-contract",
+    "test contracts": "test-contract",
+    "test-contract": "test-contract",
+    "test-contracts": "test-contract",
+    "test_contract": "test-contract",
+    "test_contracts": "test-contract",
+}
+
+
+class TasteTestError(ValueError):
+    """A malformed or blocked Mold gate result."""
+
+    def __init__(self, message: str, problems: Sequence[str] = ()) -> None:
+        self.problems: tuple[str, ...] = tuple(problems) or (message,)
+        super().__init__(message)
+
+
+class ApplicabilityError(TasteTestError):
+    """The typed spec document has malformed Test Contracts or landing."""
+
+
+@dataclass(frozen=True)
+class ForkCoverage:
+    id: str
+    decision: object
+    reflected_in: tuple[str, ...]
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, object]) -> "ForkCoverage":
+        required = {"id", "decision", "reflected_in"}
+        keys = set(value)
+        missing = sorted(required - keys)
+        extra = sorted(keys - required)
+        if missing or extra:
+            bits: list[str] = []
+            if missing:
+                bits.append("missing=" + ",".join(missing))
+            if extra:
+                bits.append("unexpected=" + ",".join(extra))
+            raise TasteTestError("invalid-fork-shape:" + ";".join(bits))
+        fork_id = value["id"]
+        if not isinstance(fork_id, str) or not fork_id.strip():
+            raise TasteTestError("fork-id-empty")
+        reflected = value["reflected_in"]
+        if not isinstance(reflected, list):
+            raise TasteTestError(f"fork-reflected-in-not-list:{fork_id}")
+        reflected_items = cast(list[object], reflected)
+        if any(not isinstance(item, str) for item in reflected_items):
+            raise TasteTestError(f"fork-reflected-in-not-list:{fork_id}")
+        reflected_strs = cast(list[str], reflected_items)
+        normalized: list[str] = []
+        for item in reflected_strs:
+            key = _REFLECTION_ALIASES.get(item.strip().lower())
+            if key is None:
+                raise TasteTestError(f"fork-invalid-reflection:{fork_id}:{item}")
+            if key in normalized:
+                raise TasteTestError(f"fork-duplicate-reflection:{fork_id}:{key}")
+            normalized.append(key)
+        return cls(fork_id, value["decision"], tuple(normalized))
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "decision": copy.deepcopy(self.decision),
+            "reflected_in": list(self.reflected_in),
+        }
+
+
+@dataclass(frozen=True)
+class GoalClause:
+    id: str
+    text: str
+
+
+@dataclass(frozen=True)
+class ForkDecision:
+    id: str
+    decision: object
+    settled: bool = True
+    consequential: bool = True
+
+
+@dataclass(frozen=True)
+class ForkTasteVerdict:
+    draft_sha256: str
+    verdict: str
+    forks: tuple[ForkCoverage, ...]
+    contradictions: tuple[str, ...]
+    orphaned_decisions: tuple[str, ...]
+    unsupported_assumptions: tuple[str, ...]
+    acceptance_gaps: tuple[str, ...]
+
+    _FIELDS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "draft_sha256",
+            "verdict",
+            "forks",
+            "contradictions",
+            "orphaned_decisions",
+            "unsupported_assumptions",
+            "acceptance_gaps",
+        }
+    )
+
+    @classmethod
+    def from_mapping(cls, value: object) -> "ForkTasteVerdict":
+        if not isinstance(value, Mapping):
+            raise TasteTestError("verdict-must-be-object")
+        value = cast(Mapping[str, object], value)
+        missing = sorted(cls._FIELDS - set(value))
+        extra = sorted(set(value) - cls._FIELDS)
+        if missing or extra:
+            bits: list[str] = []
+            if missing:
+                bits.append("missing=" + ",".join(missing))
+            if extra:
+                bits.append("unexpected=" + ",".join(extra))
+            raise TasteTestError("invalid-verdict-shape:" + ";".join(bits))
+        digest = value["draft_sha256"]
+        if not isinstance(digest, str):
+            raise TasteTestError("draft-digest-not-string")
+        if digest.startswith("sha256:"):
+            digest = digest[7:]
+        if DIGEST.fullmatch(digest) is None:
+            raise TasteTestError("draft-digest-invalid")
+        verdict = value["verdict"]
+        if verdict not in {"pass", "fail"}:
+            raise TasteTestError("verdict-must-be-pass-or-fail")
+        verdict = cast(str, verdict)
+        raw_forks = value["forks"]
+        if not isinstance(raw_forks, list):
+            raise TasteTestError("verdict-forks-not-list")
+        raw_forks_items = cast(list[object], raw_forks)
+        forks = tuple(
+            ForkCoverage.from_mapping(cast(Mapping[str, object], item))
+            if isinstance(item, Mapping)
+            else (_raise("fork-must-be-object"))
+            for item in raw_forks_items
+        )
+        lists: dict[str, tuple[str, ...]] = {}
+        for name in (
+            "contradictions",
+            "orphaned_decisions",
+            "unsupported_assumptions",
+            "acceptance_gaps",
+        ):
+            raw = value[name]
+            if not isinstance(raw, list):
+                raise TasteTestError(f"verdict-{name}-must-be-list-of-strings")
+            raw_items = cast(list[object], raw)
+            if any(not isinstance(item, str) or not item.strip() for item in raw_items):
+                raise TasteTestError(f"verdict-{name}-must-be-list-of-strings")
+            raw_strs = cast(list[str], raw_items)
+            lists[name] = tuple(item.strip() for item in raw_strs)
+        ids = [fork.id for fork in forks]
+        if len(set(ids)) != len(ids):
+            raise TasteTestError("verdict-duplicate-fork-id")
+        return cls(digest.lower(), verdict, forks, **lists)
+
+    def __post_init__(self) -> None:
+        if DIGEST.fullmatch(self.draft_sha256) is None:
+            raise TasteTestError("draft-digest-invalid")
+        if self.verdict not in {"pass", "fail"}:
+            raise TasteTestError("verdict-must-be-pass-or-fail")
+
+    @property
+    def blockers(self) -> tuple[str, ...]:
+        return (
+            *self.contradictions,
+            *self.orphaned_decisions,
+            *self.unsupported_assumptions,
+            *self.acceptance_gaps,
+        )
+
+    @property
+    def passed(self) -> bool:
+        return self.verdict == "pass" and not self.blockers
+
+    @property
+    def reopened_forks(self) -> tuple[str, ...]:
+        """Only fork ids explicitly named by a failed verdict are reopened."""
+        deterministic = re.compile(
+            r"^(?:duplicate-fork|decision-mismatch|missing-reflection|"
+            + r"missing-section|unreflected-decision|missing-fork):([^:]+)"
+        )
+        if self.verdict != "fail":
+            return ()
+        named: list[str] = []
+        for blocker in self.blockers:
+            match = deterministic.match(blocker)
+            if match and match.group(1) not in named:
+                named.append(match.group(1))
+            for fork in self.forks:
+                if (
+                    re.search(
+                        rf"(?<![A-Za-z0-9_-]){re.escape(fork.id)}(?![A-Za-z0-9_-])",
+                        blocker,
+                    )
+                    and fork.id not in named
+                ):
+                    named.append(fork.id)
+        return tuple(named)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "draft_sha256": self.draft_sha256,
+            "verdict": self.verdict,
+            "forks": [fork.to_dict() for fork in self.forks],
+            "contradictions": list(self.contradictions),
+            "orphaned_decisions": list(self.orphaned_decisions),
+            "unsupported_assumptions": list(self.unsupported_assumptions),
+            "acceptance_gaps": list(self.acceptance_gaps),
+        }
+
+
+@dataclass(frozen=True)
+class TasteGateResult:
+    allowed: bool
+    reopened_forks: tuple[str, ...]
+    halted: bool
+    reason: str
+
+
+def _raise(message: str) -> NoReturn:
+    raise TasteTestError(message)
+
+
+def _canonical(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _draft_bytes(draft: object) -> bytes:
+    if isinstance(draft, Path):
+        return draft.read_bytes()
+    if isinstance(draft, bytes):
+        return draft
+    if isinstance(draft, str):
+        return draft.encode("utf-8")
+    return _canonical(draft).encode("utf-8")
+
+
+def draft_sha256(draft: object) -> str:
+    return hashlib.sha256(_draft_bytes(draft)).hexdigest()
+
+
+def _spec_text(spec: object) -> tuple[str, Mapping[str, object]]:
+    if isinstance(spec, Path):
+        return read_spec_text(spec), {}
+    if isinstance(spec, Mapping):
+        spec_map = cast(Mapping[str, object], spec)
+        return _canonical(spec_map), spec_map
+    if isinstance(spec, bytes):
+        return spec.decode("utf-8"), {}
+    if not isinstance(spec, str):
+        raise ApplicabilityError("spec-must-be-text-or-object")
+    try:
+        parsed = cast(object, json.loads(spec))
+    except json.JSONDecodeError:
+        return spec, {}
+    if isinstance(parsed, Mapping):
+        return spec, cast(Mapping[str, object], parsed)
+    return spec, {}
+
+
+def _merged_frontmatter(text: str, raw_spec: Mapping[str, object]) -> dict[str, object]:
+    return {**parse_spec_frontmatter(text), **raw_spec}
+
+
+def parse_spec_frontmatter(text: str) -> dict[str, object]:
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    try:
+        end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
+    except StopIteration:
+        return {}
+    result: dict[str, object] = {}
+    current: dict[str, object] | None = None
+    for line in lines[1:end]:
+        match = re.match(r"^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$", line)
+        nested = re.match(r"^\s{2,}([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$", line)
+        if nested and current is not None:
+            current[nested.group(1)] = _scalar(nested.group(2))
+        elif match:
+            key, raw = match.groups()
+            if raw:
+                result[key] = _scalar(raw)
+                current = None
+            else:
+                current = {}
+                result[key] = current
+        elif line.strip() and current is not None:
+            current = None
+    return result
+
+
+def is_new_mold_spec(spec: object) -> bool:
+    """Return whether ``spec`` came through Mold's marked production path."""
+    text, raw_spec = _spec_text(spec)
+    front = parse_spec_frontmatter(text)
+    source = raw_spec.get("source", front.get("source"))
+    return source in NEW_MOLD_SOURCES
+
+
+def _scalar(value: str) -> object:
+    value = value.strip()
+    if value in {"{}", "[]"}:
+        return {} if value == "{}" else []
+    if value.lower() in {"true", "false"}:
+        return value.lower() == "true"
+    if (value.startswith("{") and value.endswith("}")) or (
+        value.startswith("[") and value.endswith("]")
+    ):
+        try:
+            return cast(object, json.loads(value.replace("'", '"')))
+        except json.JSONDecodeError:
+            pass
+    return value.strip("'\"")
+
+
+def _section(text: str, title: str) -> str:
+    title_pattern = (
+        r"Acceptance(?: Criteria)?" if title == "Acceptance" else re.escape(title)
+    )
+    match = re.search(
+        rf"(?ims)^#{{1,6}}\s+{title_pattern}\s*$((?:(?!^#{{1,6}}\s+).)*)",
+        text,
+    )
+    return match.group(1) if match else ""
+
+
+def _acceptance_ids(text: str, spec: Mapping[str, object]) -> tuple[str, ...]:
+    raw = spec.get("acceptance_ids", spec.get("acceptance"))
+    if isinstance(raw, list):
+        raw_items = cast(list[object], raw)
+        found = [
+            item
+            for item in (re.search(r"\bAC-\d+\b", str(value)) for value in raw_items)
+            if item
+        ]
+        ids = [item.group(0) for item in found]
+    else:
+        body = _section(text, "Acceptance")
+        ids = re.findall(r"^\s*(?:[-*]\s*)?(AC-\d+)\s*:", body, re.M)
+        if not ids:
+            ids = re.findall(r"\bAC-\d+\b", body)
+    return tuple(ids)
+
+
+def _contract_items(
+    text: str, spec: Mapping[str, object]
+) -> list[Mapping[str, object]]:
+    for key in ("test_contracts", "test_contract", "contracts"):
+        value = spec.get(key)
+        if value is not None:
+            if not isinstance(value, list):
+                raise ApplicabilityError("test-contracts-must-be-list-of-objects")
+            items = cast(list[object], value)
+            if any(not isinstance(item, Mapping) for item in items):
+                raise ApplicabilityError("test-contracts-must-be-list-of-objects")
+            return cast(list[Mapping[str, object]], items)
+    body = _section(text, "Test Contracts")
+    rows: list[Mapping[str, object]] = []
+    for line in body.splitlines():
+        if not line.strip().startswith("|") or re.match(r"^\s*\|\s*:?-+", line):
+            continue
+        cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
+        if len(cells) < 5 or cells[0].lower() in {"acceptance", "acceptance id"}:
+            continue
+        row: dict[str, object] = {
+            "acceptance_id": cells[0],
+            "interface": cells[1],
+            "seam": cells[2],
+            "expected_failure": cells[3],
+            "mode": cells[4],
+        }
+        if len(cells) > 5:
+            row["interface_version"] = cells[5]
+        if len(cells) > 6:
+            row["matrix_rows"] = cells[6]
+        rows.append(row)
+    return rows
+
+
+def _matrix_rows(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return tuple(
+            row.strip().strip("`")
+            for row in re.split(r"\s*(?:<br\s*/?>|[,;])\s*", value, flags=re.I)
+            if row.strip().strip("`")
+        )
+    if isinstance(value, list):
+        rows = cast(list[object], value)
+        if all(isinstance(row, str) for row in rows):
+            str_rows = cast(list[str], rows)
+            return tuple(row.strip() for row in str_rows if row.strip())
+    raise ApplicabilityError(
+        "test-contract-matrix-rows-must-be-list-or-delimited-string"
+    )
+
+
+def _has_test_contract_section(text: str, spec: Mapping[str, object]) -> bool:
+    return any(
+        key in spec for key in ("test_contracts", "test_contract", "contracts")
+    ) or bool(re.search(r"(?im)^#{1,6}\s+Test Contracts\s*$", text))
+
+
+def _grounding_rows(text: str, spec: Mapping[str, object]) -> tuple[GroundingRow, ...]:
+    raw = spec.get("grounding_rows", spec.get("grounding"))
+    items: list[Mapping[str, object]] = []
+    if raw is not None:
+        if not isinstance(raw, list):
+            raise ApplicabilityError("grounding-must-be-list-of-objects")
+        for row in cast(list[object], raw):
+            if not isinstance(row, Mapping):
+                raise ApplicabilityError("grounding-must-be-list-of-objects")
+            items.append(cast(Mapping[str, object], row))
+    else:
+        for line in _section(text, "Grounding").splitlines():
+            if not line.strip().startswith("|") or re.match(r"^\s*\|\s*:?-+", line):
+                continue
+            cells = [
+                cell.strip().strip("`") for cell in line.strip().strip("|").split("|")
+            ]
+            if len(cells) >= 3 and cells[0].lower() != "probe":
+                items.append(
+                    {"probe": cells[0], "outcome": cells[1], "evidence": cells[2]}
+                )
+    if not items:
+        return tuple(
+            _grounding_row(
+                probe=probe,
+                outcome=GroundingOutcome.UNAVAILABLE,
+                evidence="Grounding validation belongs to the Mold document validator",
+            )
+            for probe in GroundingProbe
+        )
+    return tuple(
+        _grounding_row(
+            probe=GroundingProbe(_clean_cell(item.get("probe"))),
+            outcome=GroundingOutcome(_clean_cell(item.get("outcome"))),
+            evidence=_clean_cell(item.get("evidence")),
+        )
+        for item in items
+    )
+
+
+def _typed_landing(merged: Mapping[str, object]) -> Landing | None:
+    landing_raw = merged.get("landing")
+    if landing_raw is None:
+        return None
+    try:
+        return parse_landing_mapping(landing_raw)
+    except ValueError as exc:
+        raise ApplicabilityError(str(exc)) from exc
+
+
+def _typed_mold_document(
+    spec: object,
+) -> tuple[MoldSpecDocument, str, Mapping[str, object]]:
+    text, raw_spec = _spec_text(spec)
+    merged = _merged_frontmatter(text, raw_spec)
+    try:
+        rows: list[TestContractRow] = []
+        for item in _contract_items(text, merged):
+            ids = cast(
+                list[str],
+                re.findall(
+                    r"\bAC-\d+\b",
+                    str(item.get("acceptance_id", item.get("acceptance", ""))),
+                ),
+            )
+            if not ids:
+                raise ApplicabilityError("contract-acceptance-id-missing")
+            for acceptance_id in ids:
+                rows.append(
+                    _test_row(
+                        acceptance_id=acceptance_id,
+                        interface_referent=_clean_cell(
+                            item.get("interface", item.get("interface_referent"))
+                        ),
+                        outermost_stable_seam=_clean_cell(
+                            item.get("seam", item.get("outermost_stable_seam"))
+                        ),
+                        expected_failure=_clean_cell(item.get("expected_failure")),
+                        mode=TestContractMode(
+                            _clean_cell(item.get("mode"))
+                            .lower()
+                            .replace("testcontractmode.", "")
+                        ),
+                        interface_version=(
+                            _clean_cell(item.get("interface_version"))
+                            if item.get("interface_version") is not None
+                            else ""
+                        ),
+                        matrix_rows=_matrix_rows(item.get("matrix_rows")),
+                    )
+                )
+        acceptance_ids = _acceptance_ids(text, merged)
+        if rows and not acceptance_ids:
+            raise ApplicabilityError("acceptance-ids-required")
+        landing = _typed_landing(merged)
+        document = _document(
+            frontmatter=_frontmatter_model(
+                slug=cast(str, merged.get("slug", "legacy-spec")),
+                status=cast(str, merged.get("status", "draft")),
+                source=cast(str, merged.get("source", "legacy")),
+                created=cast(str, merged.get("created", "unknown")),
+                confidence=SpecConfidence(
+                    cast(str, merged.get("confidence", "medium"))
+                ),
+                gates_overridden=cast(
+                    tuple[str, ...], merged.get("gates_overridden", ())
+                ),
+                agent_introduced_scope=cast(
+                    tuple[str, ...], merged.get("agent_introduced_scope", ())
+                ),
+                entity_referent_bindings=cast(
+                    tuple[Mapping[str, object], ...],
+                    merged.get("entity_referent_bindings", ()),
+                ),
+                execution_holds=(
+                    cast(tuple[str, ...], raw_spec["execution_holds"])
+                    if "execution_holds" in raw_spec
+                    else frontmatter_string_list(text, "execution_holds")
+                ),
+                landing=landing,
+            ),
+            acceptance_ids=acceptance_ids,
+            test_contract_rows=tuple(rows),
+            grounding_rows=_grounding_rows(text, merged),
+        )
+    except ApplicabilityError:
+        raise
+    except (TypeError, ValueError) as exc:
+        message = str(exc)
+        if "contract-matrix mode and requires both" in message:
+            message = "contract-matrix-interface-version-required"
+        elif "matrix_rows must not contain duplicate" in message:
+            message = "contract-matrix-rows-not-unique"
+        raise ApplicabilityError(message) from exc
+    return document, text, merged
+
+
+# The public name of the strict Mold parser. Shared hosts import this one; the
+# private name stays for the in-module callers that predate it.
+typed_mold_document = _typed_mold_document
+
+
+def _clean_cell(value: object) -> str:
+    if not isinstance(value, str):
+        raise ApplicabilityError("test-contract-field-not-string")
+    return value.strip().strip("`")
+
+
+def required_reflections(spec: object) -> tuple[str, ...]:
+    """Return the reflection sections required for a consequential fork.
+
+    Test Contracts is optional, so its reflection is required only when the
+    draft carries that section.
+    """
+    text, raw_spec = _spec_text(spec)
+    if _has_test_contract_section(text, _merged_frontmatter(text, raw_spec)):
+        return (*REFLECTIONS, TEST_CONTRACT_REFLECTION)
+    return REFLECTIONS
+
+
+MAX_SPEC_BYTES = 1_000_000
+
+
+def read_spec_text(spec_path: Path) -> str:
+    """Read a caller-named spec: a regular file only, capped at ``MAX_SPEC_BYTES``, UTF-8.
+
+    Raises ``OSError`` for a missing, non-regular, or oversized path and
+    ``UnicodeDecodeError`` for bytes that are not UTF-8.
+    """
+    fd = os.open(spec_path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        mode = os.fstat(fd).st_mode
+        if stat.S_ISDIR(mode):
+            raise IsADirectoryError(
+                errno.EISDIR, os.strerror(errno.EISDIR), str(spec_path)
+            )
+        if not stat.S_ISREG(mode):
+            raise OSError(f"not a regular file: {str(spec_path)!r}")
+    except BaseException:
+        os.close(fd)
+        raise
+    with os.fdopen(fd, "rb") as handle:
+        raw = handle.read(MAX_SPEC_BYTES + 1)
+    if len(raw) > MAX_SPEC_BYTES:
+        raise OSError(f"larger than {MAX_SPEC_BYTES} bytes")
+    return raw.decode("utf-8")
+
+
+def parse_landing(spec: object) -> Landing | None:
+    """Read only the front matter's ``landing`` block; ``None`` when absent."""
+    text, raw_spec = _spec_text(spec)
+    return _typed_landing(_merged_frontmatter(text, raw_spec))
+
+
+_LEDGER_RESERVED_KEYS = frozenset({"goal", "goal_clauses"})
+
+
+def _goal_clauses(value: object) -> tuple[GoalClause, ...]:
+    """Parse the ledger's `goal_clauses`: a list of `{id: G-n, text}` records.
+    A malformed list raises `ledger-goal-clauses-invalid`; a duplicate id
+    raises `ledger-duplicate-goal-clause`."""
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise TasteTestError("ledger-goal-clauses-invalid")
+    clauses: list[GoalClause] = []
+    for item in cast("list[object] | tuple[object, ...]", value):
+        if not isinstance(item, Mapping):
+            raise TasteTestError("ledger-goal-clauses-invalid")
+        item_map = cast(Mapping[str, object], item)
+        clause_id = item_map.get("id")
+        text = item_map.get("text", item_map.get("clause"))
+        if (
+            not isinstance(clause_id, str)
+            or not GOAL_CLAUSE_ID.match(clause_id.strip())
+            or not isinstance(text, str)
+            or not text.strip()
+        ):
+            raise TasteTestError("ledger-goal-clauses-invalid")
+        clauses.append(GoalClause(clause_id.strip(), text.strip()))
+    if len({clause.id for clause in clauses}) != len(clauses):
+        raise TasteTestError("ledger-duplicate-goal-clause")
+    return tuple(clauses)
+
+
+def _normalize_ledger(
+    value: object,
+) -> tuple[
+    tuple[ForkDecision, ...], tuple[str, ...], str | None, tuple[GoalClause, ...]
+]:
+    """Normalize a ledger into (entries, problems, goal, goal_clauses).
+
+    Accepts either the `{"goal": ..., "forks": [...]}` shape or an id-keyed
+    mapping shape (each top-level key other than the reserved `goal` and
+    `goal_clauses` is a fork id). A blank or non-string `goal` raises
+    `TasteTestError("ledger-goal-empty")`. `goal_clauses` is an optional list of
+    `{id: G-n, text}` records that the goal-coverage gate consumes. The forks
+    may also arrive as a bare list, or under `decisions`, `ledger`, or
+    `settled_decisions` instead of `forks`.
+    """
+    raw: object
+    goal: str | None = None
+    clauses: tuple[GoalClause, ...] = ()
+    if isinstance(value, Mapping):
+        mapping_value = cast(Mapping[object, object], value)
+        goal_value = mapping_value.get("goal")
+        if goal_value is not None:
+            if not isinstance(goal_value, str) or not goal_value.strip():
+                raise TasteTestError("ledger-goal-empty")
+            goal = goal_value.strip()
+        clauses = _goal_clauses(mapping_value.get("goal_clauses"))
+        raw = mapping_value.get(
+            "forks",
+            mapping_value.get(
+                "decisions",
+                mapping_value.get("ledger", mapping_value.get("settled_decisions")),
+            ),
+        )
+        if raw is None:
+            raw_list: list[object] = []
+            for key, item in mapping_value.items():
+                if not isinstance(key, str) or key in _LEDGER_RESERVED_KEYS:
+                    continue
+                if isinstance(item, Mapping):
+                    raw_list.append({"id": key, **cast(Mapping[str, object], item)})
+                else:
+                    raw_list.append({"id": key, "decision": item})
+            raw = raw_list
+    else:
+        raw = value
+    if not isinstance(raw, (list, tuple)):
+        raise TasteTestError("decision-ledger-must-be-list")
+    raw_items = cast("list[object] | tuple[object, ...]", raw)
+    entries: list[ForkDecision] = []
+    problems: list[str] = []
+    for item in raw_items:
+        if not isinstance(item, Mapping):
+            problems.append("ledger-entry-must-be-object")
+            continue
+        entry_map = cast(Mapping[str, object], item)
+        fork_id = entry_map.get("id")
+        if not isinstance(fork_id, str) or not fork_id.strip():
+            problems.append("ledger-fork-id-empty")
+            continue
+        status = str(entry_map.get("status", "settled")).lower()
+        settled = bool(
+            entry_map.get(
+                "settled",
+                status in {"settled", "decided", "approved", "closed", "done"},
+            )
+        )
+        consequential = bool(
+            entry_map.get(
+                "consequential", entry_map.get("impact", "consequential") != "minor"
+            )
+        )
+        if settled and consequential:
+            entries.append(
+                ForkDecision(fork_id.strip(), entry_map.get("decision"), True, True)
+            )
+    ids = [entry.id for entry in entries]
+    if len(set(ids)) != len(ids):
+        problems.append("ledger-duplicate-fork-id")
+    return tuple(entries), tuple(problems), goal, clauses
+
+
+def _goal_gaps(sections: Mapping[str, str], goal: str | None) -> list[str]:
+    """The pinned goal must survive unchanged into the draft's problem statement,
+    compared case- and whitespace-insensitively."""
+    if goal is None:
+        return []
+    section = sections.get(GOAL_SECTION, "")
+    if not section.strip():
+        return [f"missing-section:goal:{GOAL_SECTION}"]
+    normalized_goal = " ".join(goal.split()).casefold()
+    if normalized_goal not in " ".join(section.split()).casefold():
+        return ["goal-drift"]
+    return []
+
+
+def _clause_tagged(section: str, clause_id: str) -> bool:
+    return (
+        re.search(
+            rf"(?<![A-Za-z0-9_-]){re.escape(clause_id)}(?![A-Za-z0-9_-])",
+            section,
+        )
+        is not None
+    )
+
+
+def _acceptance_criteria(section: str) -> str:
+    """Keep only structured Acceptance criterion lines (`- AC-n: ...`). A clause
+    tag in surrounding prose must not mark the clause covered. Fall back to the
+    whole section when the draft carries no structured line, so a
+    JSON-canonicalised mapping draft still resolves its tags."""
+    lines = _ACCEPTANCE_CRITERION_LINE.findall(section)
+    return "\n".join(lines) if lines else section
+
+
+def _coverage_dispositions(
+    sections: Mapping[str, str], clauses: Sequence[GoalClause]
+) -> dict[str, str]:
+    """Classify each `G-n` clause from the draft alone: `covered` when an
+    Acceptance line carries its tag, else `non-goal` / `follow-up` / `tbd` when
+    the matching section carries it, else `uncovered`. Acceptance wins ties."""
+    dispositions: dict[str, str] = {}
+    labels = {"non-goals": "non-goal", "follow-ups": "follow-up", "open-questions": "tbd"}
+    for clause in clauses:
+        if _clause_tagged(_acceptance_criteria(sections.get("acceptance", "")), clause.id):
+            dispositions[clause.id] = "covered"
+            continue
+        dispositions[clause.id] = next(
+            (
+                labels[name]
+                for name in COVERAGE_SECTIONS
+                if _clause_tagged(sections.get(name, ""), clause.id)
+            ),
+            "uncovered",
+        )
+    return dispositions
+
+
+def goal_coverage(draft: object, decision_ledger: object) -> dict[str, str]:
+    """Per-clause disposition map (`G-n` -> covered | non-goal | follow-up |
+    tbd | uncovered) for the handshake's narrowing-delta line. Empty when the
+    ledger carries no `goal_clauses`."""
+    _, _, _, clauses = _normalize_ledger(decision_ledger)
+    return _coverage_dispositions(_draft_sections(draft), clauses)
+
+
+def _coverage_gaps(
+    sections: Mapping[str, str], clauses: Sequence[GoalClause]
+) -> list[str]:
+    """The goal-coverage gate. Every clause needs a disposition, and fewer than
+    half covered means the spec is a slice of the goal: re-pin or widen."""
+    if not clauses:
+        return []
+    dispositions = _coverage_dispositions(sections, clauses)
+    gaps = [
+        f"goal-coverage:{clause_id}"
+        for clause_id, disposition in dispositions.items()
+        if disposition == "uncovered"
+    ]
+    covered = sum(1 for disposition in dispositions.values() if disposition == "covered")
+    if covered * 2 < len(clauses):
+        gaps.append(f"goal-coverage-cap:{covered}/{len(clauses)}")
+    return gaps
+
+
+def _heading_title(raw: object) -> str:
+    """Normalise a heading or mapping key so the Mapping and markdown branches
+    of `_draft_sections` agree on section names."""
+    return re.sub(r"[^a-z0-9 _-]", "", str(raw).lower()).strip()
+
+
+def _draft_sections(draft: object) -> dict[str, str]:
+    if isinstance(draft, Mapping):
+        draft_map = cast(Mapping[object, object], draft)
+        result: dict[str, str] = {}
+        for key, value in draft_map.items():
+            title = _heading_title(key)
+            if title in _GOAL_HEADINGS:
+                if GOAL_SECTION not in result:
+                    result[GOAL_SECTION] = _canonical(value)
+                continue
+            normalized = _REFLECTION_ALIASES.get(title)
+            if normalized:
+                result[normalized] = _canonical(value)
+        return result
+    text = _draft_bytes(draft).decode("utf-8")
+    headings = list(re.finditer(r"(?im)^#{1,6}\s+(.+?)\s*$", text))
+    result = {}
+    for index, heading in enumerate(headings):
+        title = _heading_title(heading.group(1))
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+        if title in _GOAL_HEADINGS:
+            if GOAL_SECTION not in result:
+                result[GOAL_SECTION] = text[heading.end() : end]
+            continue
+        key = next(
+            (
+                alias
+                for alias, _ in _REFLECTION_ALIASES.items()
+                if title == alias or title.startswith(alias + " ")
+            ),
+            None,
+        )
+        if key:
+            normalized = _REFLECTION_ALIASES[key]
+            result[normalized] = text[heading.end() : end]
+    return result
+
+
+def _mentions(section: str, fork_id: str, decision: object) -> bool:
+    haystack = section.casefold()
+    if fork_id.casefold() in haystack:
+        return True
+    if isinstance(decision, str):
+        needle = decision.strip().casefold()
+        if needle and needle in haystack:
+            return True
+        words = [
+            word
+            for word in cast(list[str], re.findall(r"[a-z0-9]{3,}", needle))
+            if word not in {"the", "and", "with", "from"}
+        ]
+        return bool(words) and all(word in haystack for word in words)
+    return _canonical(decision).casefold() in haystack
+
+
+def _failed(
+    candidate: ForkTasteVerdict, additions: Mapping[str, Sequence[str]]
+) -> ForkTasteVerdict:
+    values = candidate.to_dict()
+    values["verdict"] = "fail"
+    for name, items in additions.items():
+        existing = cast(list[str], values[name])
+        values[name] = list(dict.fromkeys([*existing, *items]))
+    return ForkTasteVerdict.from_mapping(values)
+
+
+def spec_document_gaps(draft: object) -> list[str]:
+    """Name each typed-document problem of a new Mold spec as a gap."""
+    if not is_new_mold_spec(draft):
+        return []
+    try:
+        _ = _typed_mold_document(draft)
+    except ApplicabilityError as exc:
+        return [f"spec-document:{problem}" for problem in exc.problems]
+    return []
+
+
+def lexical_precheck(draft: object, decision_ledger: object) -> tuple[str, ...]:
+    """Mechanical gaps a fresh-context reviewer cannot fix: ledger problems,
+    applicability, goal drift, goal coverage, and every settled consequential fork's
+    presence in each required reflection section. Consumes no correction round."""
+    ledger, ledger_problems, goal, clauses = _normalize_ledger(decision_ledger)
+    sections = _draft_sections(draft)
+    gaps: list[str] = [
+        *ledger_problems,
+        *spec_document_gaps(draft),
+        *_goal_gaps(sections, goal),
+        *_coverage_gaps(sections, clauses),
+    ]
+    required = required_reflections(draft)
+    for entry in ledger:
+        for location in required:
+            section = sections.get(location, "")
+            if not section:
+                gaps.append(f"missing-section:{entry.id}:{location}")
+            elif not _mentions(section, entry.id, entry.decision):
+                gaps.append(f"unreflected-decision:{entry.id}:{location}")
+    return tuple(dict.fromkeys(gaps))
+
+
+def validate_taste_result(
+    value: object,
+    *,
+    draft: object | None = None,
+    decision_ledger: object | None = None,
+) -> ForkTasteVerdict:
+    """Structure a taste verdict and optionally bind it to its draft.
+
+    A verdict is evidence about coherence, never an approval record.  When a
+    ledger is supplied, reuse :func:`taste_test` so the fresh-context verdict
+    is checked against every reflection and the exact draft bytes.  Without a
+    ledger, the draft digest is still checked; callers must decide separately
+    whether a passed verdict is sufficient for their phase.
+    """
+    if isinstance(value, Path):
+        try:
+            decoded = cast(object, json.loads(value.read_text(encoding="utf-8")))
+            value = decoded
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise TasteTestError(f"invalid taste result: {exc}") from exc
+    try:
+        candidate = (
+            value
+            if isinstance(value, ForkTasteVerdict)
+            else ForkTasteVerdict.from_mapping(value)
+        )
+    except (TypeError, ValueError) as exc:
+        raise TasteTestError(f"invalid taste result: {exc}") from exc
+    if draft is None:
+        return candidate
+    if decision_ledger is None:
+        if candidate.draft_sha256 != draft_sha256(draft):
+            raise TasteTestError("stale-draft-digest")
+        return candidate
+    return taste_test(
+        draft,
+        decision_ledger,
+        candidate,
+    )
+
+
+def taste_test(
+    draft: object,
+    decision_ledger: object,
+    reviewer_verdict: Mapping[str, object] | ForkTasteVerdict,
+    *,
+    correction_round: int = 0,
+) -> ForkTasteVerdict:
+    """Validate one fresh-context verdict against the exact draft and ledger."""
+    if correction_round < 0 or correction_round > 2:
+        raise TasteTestError("correction-round-out-of-range")
+    candidate = (
+        reviewer_verdict
+        if isinstance(reviewer_verdict, ForkTasteVerdict)
+        else ForkTasteVerdict.from_mapping(reviewer_verdict)
+    )
+    ledger, ledger_problems, goal, clauses = _normalize_ledger(decision_ledger)
+    expected = {entry.id: entry for entry in ledger}
+    sections = _draft_sections(draft)
+    additions: dict[str, list[str]] = {
+        "contradictions": [],
+        "orphaned_decisions": [],
+        "unsupported_assumptions": [],
+        "acceptance_gaps": [
+            *ledger_problems,
+            *spec_document_gaps(draft),
+            *_goal_gaps(sections, goal),
+            *_coverage_gaps(sections, clauses),
+        ],
+    }
+
+    if candidate.draft_sha256 != draft_sha256(draft):
+        additions["acceptance_gaps"].append("stale-draft-digest")
+    seen: set[str] = set()
+    required = required_reflections(draft)
+    for fork in candidate.forks:
+        if fork.id in seen:
+            additions["orphaned_decisions"].append(f"duplicate-fork:{fork.id}")
+            continue
+        seen.add(fork.id)
+        entry = expected.get(fork.id)
+        if entry is None:
+            additions["orphaned_decisions"].append(fork.id)
+            continue
+        if _canonical(fork.decision) != _canonical(entry.decision):
+            additions["contradictions"].append(f"decision-mismatch:{fork.id}")
+        for location in required:
+            if location not in fork.reflected_in:
+                additions["acceptance_gaps"].append(
+                    f"missing-reflection:{fork.id}:{location}"
+                )
+        for location in fork.reflected_in:
+            section = sections.get(location, "")
+            if not section:
+                additions["acceptance_gaps"].append(
+                    f"missing-section:{fork.id}:{location}"
+                )
+            elif not _mentions(section, fork.id, entry.decision):
+                additions["acceptance_gaps"].append(
+                    f"unreflected-decision:{fork.id}:{location}"
+                )
+    for fork_id in sorted(expected.keys() - seen):
+        additions["acceptance_gaps"].append(f"missing-fork:{fork_id}")
+    if candidate.verdict == "pass" and candidate.blockers:
+        additions["acceptance_gaps"].append("pass-with-blockers")
+    if (
+        candidate.verdict == "fail"
+        and not candidate.blockers
+        and not any(additions.values())
+    ):
+        additions["acceptance_gaps"].append("fail-without-blocker")
+    if any(additions.values()):
+        candidate = _failed(candidate, additions)
+    return candidate
+
+
+def reopen_named_forks(verdict: ForkTasteVerdict) -> tuple[str, ...]:
+    return verdict.reopened_forks
+
+
+def decomposition_gate(
+    verdict: ForkTasteVerdict,
+    *,
+    correction_round: int = 0,
+) -> TasteGateResult:
+    if correction_round < 0 or correction_round > 2:
+        raise TasteTestError("correction-round-out-of-range")
+    if verdict.passed:
+        return TasteGateResult(True, (), False, "fork-taste-test-passed")
+    halted = correction_round >= 2
+    return TasteGateResult(
+        False,
+        reopen_named_forks(verdict),
+        halted,
+        "third-failed-verdict" if halted else "reopen-named-forks",
+    )
+
+
+def require_decomposition(  # noqa: V103
+    verdict: ForkTasteVerdict, *, correction_round: int = 0
+) -> None:
+    result = decomposition_gate(verdict, correction_round=correction_round)
+    if not result.allowed:
+        suffix = ",".join(result.reopened_forks) or "none"
+        raise TasteTestError(f"{result.reason}:reopen={suffix}")
+
+
+def _load_json(path: Path) -> object:
+    return cast(object, json.loads(path.read_text(encoding="utf-8")))
+
+
+def taste_test_cmd(
+    *,
+    draft: str,
+    ledger: str,
+    correction_round: int = 0,
+    verdict: str | None = None,
+    precheck: bool = False,
+    coverage: bool = False,
+) -> dict[str, object]:
+    """Run Mold's fork-coherence taste gate against one draft and ledger.
+
+    Parameters
+    ----------
+    draft
+        Path to the draft under test.
+    ledger
+        Path to the decision ledger JSON.
+    correction_round
+        Correction round number, from 0 through 2.
+    verdict
+        Path to the fresh-context verdict JSON. Choose exactly one of
+        verdict, precheck, or coverage.
+    precheck
+        Run the lexical pre-check on the draft alone; no verdict, no round.
+    coverage
+        Report each G-n goal clause's disposition for the narrowing-delta line.
+    """
+    modes = [name for name, chosen in (
+        ("verdict", verdict is not None),
+        ("precheck", precheck),
+        ("coverage", coverage),
+    ) if chosen]
+    if len(modes) != 1:
+        raise fromargs.CliError(
+            "choose exactly one of --verdict, --precheck, or --coverage",
+            exit_code=2,
+        )
+    try:
+        draft_bytes = Path(draft).read_bytes()
+        ledger_value = _load_json(Path(ledger))
+        if precheck:
+            gaps = lexical_precheck(draft_bytes, ledger_value)
+            if gaps:
+                raise fromargs.CliError(
+                    "precheck gaps found: " + "; ".join(gaps), exit_code=4
+                )
+            return {"gaps": []}
+        if coverage:
+            dispositions = goal_coverage(draft_bytes, ledger_value)
+            covered = sum(1 for value in dispositions.values() if value == "covered")
+            return {
+                "clauses": dispositions,
+                "covered": covered,
+                "total": len(dispositions),
+            }
+        verdict_value = _load_json(Path(cast(str, verdict)))
+        result = taste_test(
+            draft_bytes,
+            ledger_value,
+            cast("Mapping[str, object] | ForkTasteVerdict", verdict_value),
+            correction_round=correction_round,
+        )
+        gate = decomposition_gate(result, correction_round=correction_round)
+        if not gate.allowed:
+            suffix = ", ".join(gate.reopened_forks) or "none"
+            raise fromargs.CliError(
+                f"{gate.reason}: reopen={suffix}", exit_code=4
+            )
+        return result.to_dict()
+    except (OSError, json.JSONDecodeError, TasteTestError) as exc:
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "taste-test",
+        help="Run Mold's fork-coherence taste gate against one draft and ledger.",
+        help_formatter="plain",
+        default_command=taste_test_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)

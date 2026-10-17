@@ -1,0 +1,8 @@
+# ADR: /pasteurize stays unchanged in v1 — the frame owns isolation and briefing  [status: accepted]
+
+Spec: baseline-repair-pathway (durable specs corpus).
+
+- **Context:** `/pasteurize` takes a symptom and builds its own repro loop; it has no worktree machinery, no side-dispatch mode, and does not commit or drive the chain. Issue #304 hands it a recorded failure list inside an isolated worktree — a new usage shape.
+- **Decision:** Pasteurize's contract is untouched in v1. The frame (cook/ultracook) creates the repair worktree via the shared primitive and dispatches `/pasteurize` inside it with the recorded failure list rendered as the symptom brief. Isolation is the frame's job; repro is pasteurize's. The brief also carries one explicit per-dispatch override — chain forward at Phase 6 with `/cook <repair-slug> --auto --open-pr` instead of pasteurize's own documented `/cook <repair-slug> --auto` — because a dispatch-time instruction in the brief is more specific than the skill's generic default and governs for that one invocation. This is the general pattern for extending a frozen-contract skill's behavior without editing its SKILL.md: the override lives in the calling prompt, not the callee's contract.
+- **Alternatives:** Teach pasteurize a `--baseline <file>` input mode (more surface; only worth it for hand-invocation, which nobody asked for).
+- **Consequences:** Zero pasteurize diff; the pathway is expressed once in `quality-gates.md` § Repair pathway and linked from both frames, matching the parent spec's single-source convention. The `repair_dispatch` link field is additive on the `baseline:` block (`{slug, branch, pr?}`, type-checked when present, absent valid) — consistent with the parent's rejected-enum ADR (baseline-quality-gate-002).

@@ -1,0 +1,72 @@
+# Escalation tiers and the spec-discovery check
+
+Read this file before you dispatch a `cook` intent.
+It defines the three escalation tiers and the tier-1 specification discovery check.
+A `mold` intent skips these tiers. Dispatch it to `/mold`'s user mode.
+
+## Escalation tiers
+
+For a `cook` intent, `/cheese` runs Cook's fast-path check and uses three escalation tiers:
+
+**Tier 1: clear.** Run the specification discovery check.
+When one specification matches, route it by the discovery result rules below.
+Otherwise, check the leverage triggers in `routing-policy.md`.
+A fired trigger dispatches `/mold`'s user mode with the trigger ids in the handoff packet; tier 1 never mints a mini-specification for it.
+When zero triggers fire, invoke `/mold`'s agent mode to write a mini-specification.
+`/mold` owns that write target and resolves it through `artifact-path specs <slug>`.
+Never name a literal specification path for `/mold`.
+Return the spec; do not dispatch Cook yet.
+Dispatch Cook only after the user selects Cook. The coherence self-check in [`../../mold/references/handshake.md`](../../mold/references/handshake.md) is the only execution gate.
+Tier 1 is standalone work: dispatch `/cook --spec <spec-path>` with no finalize step. Cook applies its spec-hold refusal first.
+Add `--auto` only when the user chose it.
+Bound curd work belongs to `/mold`'s Full path.
+Dispatch the exact `command` that finalize prints.
+It has the form `/cook --auto --result <result-path>`.
+Do not rebuild it from the spec path or a bare slug.
+When the input names a specification path, use it directly.
+Do not scan or write another specification.
+
+**Tier 2: borderline.** Invoke `/culture` or `/briesearch` internally to get the missing context.
+
+Before a `/briesearch` call, allocate the parent mini-specification slug.
+Derive that slug from the request, and pass it with the question.
+`/mold` writes the returned provenance line and artifact link into that mini-specification at tier 1.
+Set `invocation: sidechain` on every internal `/briesearch` call.
+An internal call never asks the user a question.
+It returns `needs_input` with the open question instead.
+Tier 3 owns every user question on this path.
+
+Repeat cook's fast-path check.
+When all checks pass, continue with tier 1.
+Otherwise, continue with tier 3.
+
+**Tier 3: still borderline.** Ask one targeted host-routed question that closes the failed check.
+Classify the answer again.
+This question and the tier-1 Cook consent question are the only user prompts in the default autonomous path.
+
+`--safe` does not skip escalation.
+For `--safe`, it inserts a handoff gate before the final dispatch.
+The auto variant stays recommended, and the non-auto variant stays available.
+
+## Spec-discovery check
+
+Before a tier-1 dispatch, look for an existing specification that covers the request.
+Specifications use the durable XDG corpus from `default_root_for_phase("specs")`.
+
+- **hallouminate present** — `ground` the candidate spec text against the `cheese-durable` corpus for a near-duplicate (semantic match across every project's durable specs). Detect-and-degrade per [`optional-plugins.md`](optional-plugins.md).
+- **hallouminate absent** — use `resolve_slug(candidate_slug, phase_hint="specs")` from `src/easy_cheese/shared/paths.py`.
+  Report once that matching uses names instead of semantics.
+  This preserves slug deduplication without hallouminate.
+
+Act on the result, do not guess:
+
+1. **One clear match (high confidence)** — surface the resolved specification path in one line.
+   A Full or planned match goes to `/mold` finalize and its printed `--result` command.
+   Any other match dispatches `/cook --spec <resolved-spec-path>` (Cook applies its spec-hold refusal first); add `--auto` only when the user chose it.
+   Do not write a duplicate.
+2. **Multiple plausible matches or one weak match** — under `--safe`, let the user select a candidate.
+   Without `--safe`, ignore the weak match and fall through to the tier-1 leverage check above. A fired trigger still dispatches `/mold`'s user mode; only zero fired triggers mint a new mini-specification.
+
+Skip silently when no specification exists yet.
+Also skip silently when the user already named a specification path.
+That named path is authoritative.

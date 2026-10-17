@@ -1,0 +1,160 @@
+"""Contract tests for agent-dispatch resolution across workflow skills."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import cast
+
+import yaml
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SKILLS = REPO_ROOT / "skills"
+DISPATCHING = {
+    "affinage",
+    "age",
+    "briesearch",
+    "cook",
+    "cure",
+    "hard-cheese",
+    "mold",
+    # ultracook excluded: retired to a short redirect stub that no longer
+    # dispatches agents itself (its `## Agent resolution` table moved into
+    # cook/SKILL.md's `## Fan pathway`, already covered via "cook").
+}
+TABLE_COLUMNS = (
+    "Work",
+    "Preferred types",
+    "Permissions/isolation",
+    "Minimum power",
+    "Effort",
+    "Fallback",
+)
+POWER = {"cheap", "default", "powerful"}
+EFFORT = {"low", "medium", "high"}
+
+
+def _body(name: str) -> str:
+    return (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
+
+
+def _frontmatter(body: str) -> dict[str, object]:
+    _, raw, _ = body.split("---", 2)
+    return cast(dict[str, object], yaml.safe_load(raw))
+
+
+def _dispatching_skills() -> set[str]:
+    marked: set[str] = set()
+    for path in SKILLS.glob("*/SKILL.md"):
+        metadata = cast(
+            dict[str, object],
+            _frontmatter(path.read_text(encoding="utf-8")).get("metadata", {}),
+        )
+        if metadata.get("dispatches-agents") is True:
+            marked.add(path.parent.name)
+    return marked
+
+
+def _agent_resolution_rows(body: str) -> list[list[str]]:
+    section = body.split("## Agent resolution", 1)[1]
+    lines = section.splitlines()
+    table_start = next(i for i, line in enumerate(lines) if line.startswith("| Work |"))
+    rows: list[list[str]] = []
+    for line in lines[table_start + 2 :]:
+        if not line.startswith("|"):
+            break
+        rows.append([cell.strip().strip("`") for cell in line.strip("|").split("|")])
+    return rows
+
+
+def _pipe_rows(text: str) -> list[list[str]]:
+    """Every markdown table row in `text` as stripped cells, header rows included."""
+    return [
+        [cell.strip() for cell in line.strip().strip("|").split("|")]
+        for line in text.splitlines()
+        if line.startswith("|")
+    ]
+
+
+def _has_row(text: str, cells: list[str]) -> bool:
+    """True when some table row in `text` starts with exactly `cells` (padding-insensitive)."""
+    return any(row[: len(cells)] == cells for row in _pipe_rows(text))
+
+
+def test_exact_dispatching_skill_set_is_marked() -> None:
+    assert _dispatching_skills() == DISPATCHING
+
+
+def test_shared_reference_is_normative_and_linked() -> None:
+    reference = SKILLS / "cheese" / "references" / "agent-resolution.md"
+    assert reference.is_file()
+    text = reference.read_text(encoding="utf-8")
+    for term in (
+        "capabilities",
+        "minimum power",
+        "exact easy-cheese specialist",
+        "compatible specialist",
+        "general",
+        "unknown power",
+        "prompt-only",
+        "agent_resolution",
+    ):
+        assert term in text.lower()
+
+    assert "agent-resolution.md" in (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "agent-resolution.md" in (
+        SKILLS / "cheese" / "references" / "harness-portability.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_prompt_only_fallback_covers_eligible_specialists() -> None:
+    reference = (SKILLS / "cheese" / "references" / "agent-resolution.md").read_text(
+        encoding="utf-8"
+    )
+    lowered = reference.lower()
+
+    assert "eligible specialist or general worker" in lowered
+    assert "can fill a read-only role only when the caller states an explicit no-write constraint" in lowered
+    assert "artifact-capable explorer under the same explicit no-write constraint" in lowered
+    assert "permission_enforcement: prompt-only" in lowered
+    assert "degraded: true" in lowered
+    assert "prompt-only enforcement cannot satisfy write work or stronger isolation" in lowered
+    assert "missing required tools or write capability stops dispatch" in lowered
+    assert "halt when required worktree or fresh-context isolation is unavailable" in lowered
+    assert "a general worker can fill a read-only role" not in lowered
+
+
+def test_each_dispatching_skill_has_local_resolution_contract() -> None:
+    for name in DISPATCHING:
+        body = _body(name)
+        assert "## Agent resolution" in body, name
+        assert "../cheese/references/agent-resolution.md" in body, name
+        assert "agent_resolution" in body, name
+
+        section = body.split("## Agent resolution", 1)[1]
+        header = next(line for line in section.splitlines() if line.startswith("| Work |"))
+        assert tuple(cell.strip() for cell in header.strip("|").split("|")) == TABLE_COLUMNS
+
+        rows = _agent_resolution_rows(body)
+        assert rows, name
+        assert all(len(row) == len(TABLE_COLUMNS) for row in rows), name
+        assert all(row[3] in POWER for row in rows), name
+        assert all(row[4] in EFFORT for row in rows), name
+        assert all(row[0] and row[1] and row[2] and row[5] for row in rows), name
+
+
+def test_shared_reference_uses_the_manifest_effort_vocabulary() -> None:
+    reference = (
+        SKILLS / "cheese" / "references" / "agent-resolution.md"
+    ).read_text(encoding="utf-8")
+    routing = (SKILLS / "cheese" / "references" / "routing-policy.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert _has_row(reference, ["planner / integrator", "powerful", "high (at mold)"])
+    assert _has_row(reference, ["mold", "planner / integrator", "powerful", "high"])
+    assert _has_row(
+        routing,
+        ["planner / integrator", "orchestrator", "orchestrator", "plan/default", "high at mold"],
+    )
+    assert "xhigh" not in reference, "agent-resolution.md names the retired xhigh effort"
+    assert "xhigh" not in routing, "routing-policy.md names the retired xhigh effort"

@@ -1,0 +1,114 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "easy-cheese-schemas"
+version = "3.0.0"
+description = "Shared document and manifest schemas for the easy-cheese agent workflow, with schema-version tolerance."
+readme = "docs/easy-cheese-schemas.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Paul Sorensen", email = "paulnsorensen@gmail.com" }]
+keywords = ["schema", "cattrs", "agents", "easy-cheese"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries",
+]
+# Floors match the versions admitted by requirements/runtime.txt.
+# compat.py reaches cattrs.cols.list_structure_factory and the structural
+# AttributeValidationNote / IterableValidationNote, so a lower floor would be an
+# untested claim rather than a supported configuration.
+dependencies = ["attrs>=26.1.0", "cattrs>=26.2.0"]
+
+[project.urls]
+Homepage = "https://github.com/paulnsorensen/easy-cheese"
+Repository = "https://github.com/paulnsorensen/easy-cheese"
+Issues = "https://github.com/paulnsorensen/easy-cheese/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/easy_cheese_schemas"]
+exclude = [
+  "src/easy_cheese_schemas/AGENTS.md",
+  "src/easy_cheese_schemas/CLAUDE.md",
+]
+
+# Hatchling's default sdist walks the filesystem honouring .gitignore, which
+# would ship the whole repo -- including untracked scratch and the vendored
+# trees, whose PSF/MIT licences this distribution's metadata does not declare.
+# A PyPI filename can never be reused, so an over-broad sdist is permanent.
+# docs/easy-cheese-schemas.md must stay: it is the `readme`, and building the
+# wheel from the sdist fails without it.
+[tool.hatch.build.targets.sdist]
+only-include = [
+  "src/easy_cheese_schemas",
+  "docs/easy-cheese-schemas.md",
+  "LICENSE",
+]
+# typeCheckingMode is deliberately unset: basedpyright's default "recommended"
+# tier matches the editor LSP diagnostics.
+# The venv carries the runtime deps (attrs, cattrs) plus the test/tooling
+# surface (pytest, pyyaml, vulture); `just typecheck` creates it on demand.
+[tool.basedpyright]
+include = ["src", "scripts", ".github/scripts", "tests"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv-typing"
+
+# The published easy-cheese-schemas wheel declares requires-python >=3.11, so
+# its sources must not use 3.12-only features.
+[[tool.basedpyright.executionEnvironments]]
+root = "src/easy_cheese_schemas"
+pythonVersion = "3.11"
+
+# Tests import scripts/ and .github/scripts/ modules after inserting those
+# directories onto sys.path at runtime; mirror that for static resolution.
+# tests/wheypoint/python lists itself first so `from conftest import ...`
+# resolves to the sibling conftest.py, matching pytest's rootdir insertion.
+[[tool.basedpyright.executionEnvironments]]
+root = "scripts"
+extraPaths = ["src"]
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests/schemas/python"
+extraPaths = ["tests/schemas/python", ".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests/wheypoint/python"
+extraPaths = ["tests/wheypoint/python", ".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+extraPaths = [".", "src", "scripts", ".github/scripts", "src/easy_cheese_schemas"]
+
+[tool.vulture]
+min_confidence = 60
+paths = [
+  "src",
+  "scripts",
+  ".github/scripts",
+  "tests",
+]
+# Decorator-registered entry points are invoked only through a compiled
+# dispatcher or registry (bundle commands, phase/schema contracts), never by a
+# directly-visible call vulture's scanner can see. Data-driven here so a new
+# registered entry point never needs an inline `# noqa` at its definition.
+ignore_decorators = [
+  "@bundle_command",
+  "@contract",
+  "@document_contract",
+]
+
+# The wedge runtime closure. Every skill's wedge.toml names this group, so
+# fromargs (and its Cyclopts closure) enters each archive without joining the
+# published easy-cheese-schemas wheel's own dependencies. Keep the pin equal
+# to requirements/runtime.txt; a test compares the two.
+[dependency-groups]
+runtime = ["fromargs==0.2.0"]

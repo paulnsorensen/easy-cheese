@@ -1,0 +1,335 @@
+"""Tests for the shared fan-out phase-table router via the Cook bundle.
+
+Covers the 7-entry phase table, halt short-circuit, terminal stop, and the
+age-only early-stop signal. The unit tests take the `phase_decision` module
+from the conftest fixture; CLI tests invoke the built cook archive.
+"""
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+from typing import cast
+
+import fromargs
+import pytest
+
+from easy_cheese.shared.fanout import phase_decision
+from easy_cheese.shared.fanout.phase_decision import Verdict
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
+
+
+class TestSpawnPhases:
+    """Each ok phase except the terminal one spawns the next phase."""
+
+    def test_phase_0_cook_spawns_press(self) -> None:
+        # Acceptance: phase index 0 with status=ok returns action=spawn next_phase=press.
+        result = phase_decision.decide(0, "ok")
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "press"
+
+    def test_phase_1_press_spawns_age(self) -> None:
+        result = phase_decision.decide(1, "ok")
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "age"
+
+    def test_phase_2_age_spawns_cure(self) -> None:
+        # Age with next!=done continues; the medium+ floor is not yet met.
+        result = phase_decision.decide(2, "ok", "cure")
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "cure"
+
+    def test_phase_3_cure_spawns_age(self) -> None:
+        result = phase_decision.decide(3, "ok")
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "age"
+
+    def test_phase_4_age_spawns_cure(self) -> None:
+        result = phase_decision.decide(4, "ok", "cure")
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "cure"
+
+    def test_phase_5_cure_spawns_age(self) -> None:
+        result = phase_decision.decide(5, "ok")
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "age"
+
+
+class TestStopTerminal:
+    """Phase 6 is the final age; the chain table is exhausted."""
+
+    def test_phase_6_returns_stop_when_done(self) -> None:
+        result = phase_decision.decide(6, "ok", "done")
+        assert result["action"] == "stop"
+        assert result["next_phase"] is None
+
+    def test_phase_6_halts_when_review_requests_cure(self) -> None:
+        result = phase_decision.decide(6, "ok", "cure")
+        assert result["action"] == "halt"
+        assert "not publishable" in result["exit_message"]
+
+
+class TestHaltShortCircuit:
+    """status=halt at any phase produces action=halt regardless of next_phase."""
+
+    def test_halt_at_phase_0(self) -> None:
+        # Acceptance: status=halt at any phase returns action=halt.
+        result = phase_decision.decide(0, "halt: cook gate failed")
+        assert result["action"] == "halt"
+        assert result["next_phase"] is None
+        assert "halt" in result["exit_message"].lower()
+
+    def test_halt_at_phase_3(self) -> None:
+        result = phase_decision.decide(3, "halt: cure could not apply any finding")
+        assert result["action"] == "halt"
+
+    def test_halt_at_terminal_phase(self) -> None:
+        # Even the final phase honours halt — never silently coalesce to stop.
+        result = phase_decision.decide(6, "halt: age crashed")
+        assert result["action"] == "halt"
+
+    def test_halt_case_insensitive(self) -> None:
+        result = phase_decision.decide(2, "HALT: scary thing")
+        assert result["action"] == "halt"
+
+    def test_halt_bare_word(self) -> None:
+        # "halt" alone (no colon, no reason) still short-circuits.
+        result = phase_decision.decide(1, "halt")
+        assert result["action"] == "halt"
+
+
+class TestEarlyStop:
+    """Age-only signal: next=done means the diff is clean at medium+ floor."""
+
+    def test_age_phase_2_next_done_stops_early(self) -> None:
+        result = phase_decision.decide(2, "ok", "done")
+        assert result["action"] == "stop_early"
+        assert result["next_phase"] is None
+
+    def test_age_phase_4_next_done_stops_early(self) -> None:
+        result = phase_decision.decide(4, "ok", "done")
+        assert result["action"] == "stop_early"
+
+    def test_cure_with_next_done_still_spawns(self) -> None:
+        # Cure never writes next=done per the SKILL.md contract, but if it
+        # somehow did, the orchestrator must not treat it as early-stop.
+        result = phase_decision.decide(3, "ok", "done")
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "age"
+
+    def test_age_with_other_next_keeps_spawning(self) -> None:
+        result = phase_decision.decide(2, "ok", "cure")
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "cure"
+
+    def test_age_with_no_next_keeps_spawning(self) -> None:
+        # If the handoff slug omits `next`, default to spawn — the orchestrator
+        # only stops early when the slug positively signals done.
+        result = phase_decision.decide(2, "ok")
+        assert result["action"] == "spawn"
+        assert result["next_phase"] == "cure"
+
+
+class TestInvalidIndex:
+    def test_negative_index_raises(self) -> None:
+        with pytest.raises(fromargs.CliError):
+            _ = phase_decision.decide(-1, "ok")
+
+    def test_index_past_end_raises(self) -> None:
+        with pytest.raises(fromargs.CliError):
+            _ = phase_decision.decide(7, "ok")
+
+
+class TestOutputShape:
+    def test_required_keys_present(self) -> None:
+        result = phase_decision.decide(0, "ok")
+        assert set(result.keys()) == {
+            "action",
+            "next_phase",
+            "exit_message",
+            "status",
+            "disposition",
+            "reason",
+        }
+        assert isinstance(result["exit_message"], str)
+        assert result["exit_message"]
+
+    def test_action_is_one_of_seven(self) -> None:
+        valid = {
+            "spawn",
+            "stop",
+            "stop_early",
+            "clean_complete",
+            "halt",
+            "needs_context",
+            "gated",
+        }
+        for idx, status, nxt in [
+            (0, "ok", None),
+            (6, "ok", None),
+            (2, "ok", "done"),
+            (3, "halt: oops", None),
+            (1, "needs-context: gap", None),
+            (0, "gated: decide", None),
+        ]:
+            result = phase_decision.decide(idx, status, nxt)
+            assert result["action"] in valid
+
+
+class TestVerdictFields:
+    """status/disposition/reason are populated on every routing branch."""
+
+    def test_spawn_branch_carries_parsed_fields(self) -> None:
+        result = phase_decision.decide(0, "ok")
+        assert result["status"] == "ok"
+        assert result["disposition"] == "proceed"
+        assert result["reason"] is None
+
+    def test_ok_with_concerns_appends_concern_to_exit_message(self) -> None:
+        result = phase_decision.decide(0, "ok-with-concerns: DATA LOSS RISK")
+        assert result["action"] == "spawn"
+        assert result["status"] == "ok-with-concerns"
+        assert result["disposition"] == "proceed"
+        assert result["reason"] == "DATA LOSS RISK"
+        assert result["exit_message"].endswith("; concern: DATA LOSS RISK")
+
+    def test_terminal_stop_carries_parsed_fields(self) -> None:
+        result = phase_decision.decide(6, "ok", "done")
+        assert result["status"] == "ok"
+        assert result["disposition"] == "proceed"
+        assert result["reason"] is None
+
+    def test_gated_action_and_message_distinct_from_halt(self) -> None:
+        gated = phase_decision.decide(0, "gated: needs a human call")
+        assert gated["action"] == "gated"
+        assert gated["status"] == "gated"
+        assert gated["disposition"] == "stop"
+        assert gated["reason"] == "needs a human call"
+        assert gated["exit_message"] == "cook (phase 0) gated on: needs a human call"
+
+        halted = phase_decision.decide(0, "halt: cook gate failed")
+        assert halted["action"] == "halt"
+        assert halted["status"] == "halt"
+        assert halted["disposition"] == "stop"
+        assert halted["reason"] == "cook gate failed"
+        assert halted["exit_message"] == "cook (phase 0) halted: cook gate failed"
+
+
+class TestRetryCap:
+    def test_bare_needs_context_is_a_contract_error(self) -> None:
+        with pytest.raises(fromargs.CliError) as excinfo:
+            _ = phase_decision.decide(1, "needs-context")
+        assert excinfo.value.exit_code == 3
+        assert "press (phase 1)" in str(excinfo.value)
+        assert "needs-context requires a named gap" in str(excinfo.value)
+
+    def test_first_needs_context_retries(self) -> None:
+        result = phase_decision.decide(1, "needs-context: missing fixture", retry_count=0)
+        assert result["action"] == "needs_context"
+        assert result["next_phase"] == "press"
+
+    def test_second_needs_context_halts_at_the_cap(self) -> None:
+        result = phase_decision.decide(1, "needs-context: still missing", retry_count=1)
+        assert result["action"] == "halt"
+        assert result["next_phase"] is None
+        assert "retry cap (1) reached" in result["exit_message"]
+
+    def test_negative_retry_count_is_rejected(self) -> None:
+        with pytest.raises(fromargs.CliError) as excinfo:
+            _ = phase_decision.decide(1, "needs-context: gap", retry_count=-5)
+        assert excinfo.value.exit_code == 2
+        assert str(excinfo.value) == "retry-count cannot be negative: -5"
+
+
+class TestUnknownStatusStillContractError:
+    def test_unknown_status_raises_contract_error_with_phase_context(self) -> None:
+        with pytest.raises(fromargs.CliError) as excinfo:
+            _ = phase_decision.decide(2, "haltish")
+        assert excinfo.value.exit_code == 3
+        assert "age (phase 2)" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# CLI entrypoint tests via subprocess (cli.run calls sys.exit).
+# ---------------------------------------------------------------------------
+
+
+def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(COOK_ARCHIVE), "phase_decision", *args],
+        capture_output=True,
+        text=True,
+    )
+
+
+class TestCli:
+    def test_phase_0_ok_spawns_press(self) -> None:
+        result = _run_cli("--phase-index", "0", "--status", "ok")
+        assert result.returncode == 0
+        payload = cast(Verdict, cast(object, json.loads(result.stdout)))
+        assert payload["action"] == "spawn"
+        assert payload["next_phase"] == "press"
+
+    def test_phase_6_returns_stop_when_done(self) -> None:
+        result = _run_cli("--phase-index", "6", "--status", "ok", "--next", "done")
+        assert result.returncode == 0
+        payload = cast(Verdict, cast(object, json.loads(result.stdout)))
+        assert payload["action"] == "stop"
+
+    def test_halt_returns_halt(self) -> None:
+        result = _run_cli("--phase-index", "2", "--status", "halt: oops")
+        assert result.returncode == 0
+        payload = cast(Verdict, cast(object, json.loads(result.stdout)))
+        assert payload["action"] == "halt"
+
+    def test_age_next_done_stops_early(self) -> None:
+        result = _run_cli(
+            "--phase-index", "4", "--status", "ok", "--next", "done"
+        )
+        assert result.returncode == 0
+        payload = cast(Verdict, cast(object, json.loads(result.stdout)))
+        assert payload["action"] == "stop_early"
+
+    def test_missing_phase_index_exits_2(self) -> None:
+        result = _run_cli("--status", "ok")
+        assert result.returncode == 2
+
+    def test_missing_status_exits_2(self) -> None:
+        result = _run_cli("--phase-index", "0")
+        assert result.returncode == 2
+
+    def test_invalid_phase_index_exits_2(self) -> None:
+        result = _run_cli("--phase-index", "99", "--status", "ok")
+        assert result.returncode == 2
+        assert "phase-index" in result.stderr or "ERROR" in result.stderr
+
+    def test_help_lists_required_flags(self) -> None:
+        result = _run_cli("--help")
+        assert result.returncode == 0
+        assert "--phase-index" in result.stdout
+        assert "--status" in result.stdout
+
+
+class TestNormalizationHardening:
+    """Press hardening: early-stop and halt comparisons normalise case and
+    surrounding whitespace via `.strip().lower()`. The exact-match tests above
+    stay green if that normalisation is dropped, so these lock it in — a real
+    `next:`/`status:` field parsed from a handoff slug can carry stray case or
+    spacing."""
+
+    @pytest.mark.parametrize("nxt", ["DONE", " done ", "Done"])
+    def test_age_next_done_normalised_stops_early(
+        self, nxt: str
+    ) -> None:
+        result = phase_decision.decide(2, "ok", nxt)
+        assert result["action"] == "stop_early"
+
+    @pytest.mark.parametrize("status", [" halt: boom ", "  HALT", "Halt: x"])
+    def test_halt_normalised_short_circuits(
+        self, status: str
+    ) -> None:
+        result = phase_decision.decide(2, status)
+        assert result["action"] == "halt"

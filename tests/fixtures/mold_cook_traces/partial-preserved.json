@@ -1,0 +1,9 @@
+{
+  "scenario": "partial-preserved",
+  "events": [
+    {"type": "input_classified", "input_kind": "direct_spec"},
+    {"type": "plan_materialized", "outcome": "partial"},
+    {"type": "remainder_preserved", "unresolved_work": ["curd-2"]},
+    {"type": "bound_inputs", "ready": true, "artifact_ref": "artifacts/finalization-results/partial.json"}
+  ]
+}

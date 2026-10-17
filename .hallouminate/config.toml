@@ -1,0 +1,27 @@
+# Repo-layer hallouminate config.
+#
+# Declares this repo as a hallouminate tenant so the wiki under
+# .hallouminate/wiki/ is searchable as the `repo:easy-cheese:wiki` corpus.
+# `path = "."` resolves against the repo root (the parent of .hallouminate/),
+# so this works from any checkout or worktree without per-machine config —
+# the daemon reads the repo layer fresh on every request (no restart needed).
+#
+# Do NOT also declare `[[repository]] name = "easy-cheese"` in the XDG
+# baseline: both layers would derive `repo:easy-cheese:wiki` and collide on
+# the duplicate-name check.
+[[repository]]
+name = "easy-cheese"
+path = "."
+corpus_paths = ["skills"]
+corpus_globs = ["**/*.md"]
+
+# Durable cheese artifacts for this repo (specs, research, handoffs under
+# work/). This is paths.project_corpus_root() with the default XDG data home:
+# $XDG_DATA_HOME/cheese/<git-owner>-<git-repo>. `~` passes through unresolved
+# against the repo root. Flat corpus name: it must not collide with the
+# derived repo:easy-cheese:* names or a global `cheese-durable` block.
+[[corpus]]
+name = "easy-cheese-durable"
+paths = ["~/.local/share/cheese/paulnsorensen-easy-cheese"]
+globs = ["**/*.md"]
+exclude = ["**/.git/**"]

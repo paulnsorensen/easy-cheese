@@ -1,0 +1,3351 @@
+"""The bundle's four commands: one line of JSON out, and an exit code to match.
+
+Every test drives `wheypoint.main` the way the bundle does -- a subcommand name
+in `argv[0]` -- and asserts the parsed payload and the exit code together,
+because a caller that reads one without the other cannot tell a refusal from an
+answer.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import os
+import shutil
+import subprocess
+from collections.abc import Callable
+from pathlib import Path
+from typing import cast
+
+import pytest
+
+from easy_cheese.shared import git_utils, paths
+from easy_cheese.shared.wheypoint import commit, records, resolve_cli, storage
+from easy_cheese.cli import wheypoint
+from easy_cheese.cli.wheypoint import queries as queries_mod
+
+from conftest import WORK_ID, Promotion, git_marker_ancestor, run_cli
+from conftest import payload_at as _get
+
+CAPTURED_AT = "2026-08-02T00:00:00Z"
+
+
+def _run(command: str, *args: str, stdin: str = "") -> tuple[int, dict[str, object]]:
+    """Invoke the CLI the way the bundle does; see `conftest.run_cli`."""
+    return run_cli([command, *args], stdin=stdin)
+
+
+@pytest.fixture(autouse=True)
+def _cwd_outside_a_repository(  # pyright: ignore[reportUnusedFunction]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run every command from a directory that is not a git worktree.
+
+    `commit` mirrors its projection into the repository it is invoked from, so
+    a suite that stayed in the checkout would write notes into the working tree
+    it is testing. Outside a repository there is no default mirror at all,
+    which is also the state the durability assertions below are about. It also
+    refuses to run when a `.git` entry sits above `tmp_path`, because that
+    would make project-scope note discovery sweep sibling test directories.
+    """
+    monkeypatch.chdir(tmp_path)
+    ancestor = git_marker_ancestor(tmp_path)
+    if ancestor is not None:
+        pytest.fail(
+            f"{ancestor} holds a .git entry above tmp_path; list is not hermetic"
+        )
+
+
+@pytest.fixture
+def store(corpus_root: Path) -> storage.WorkStore:
+    """The store the CLI itself will open, via the same env contract."""
+    return storage.WorkStore.open(WORK_ID, corpus_root=corpus_root)
+
+
+def test_checkpoint_creates_the_first_record_from_an_intent_on_stdin(
+    store: storage.WorkStore,
+) -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[{"kind": "decision", "summary": "Four subcommands."}]
+        ),
+    )
+
+    assert status == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "checkpoint"
+    assert payload["replayed"] is False
+    assert payload["work_id"] == WORK_ID
+    assert payload["revision_number"] == 1
+    assert payload["parent_revision_id"] is None
+    assert payload["status"] == "ok"
+    # The checkpoint has travelled nowhere; the caller is told so rather than
+    # having to lint the store to find out.
+    assert payload["durability"] == "canonical-local"
+    revision_id = payload["revision_id"]
+    assert payload["projection_path"] == f"projections/1-{revision_id}.md"
+    assert _get(payload, "record", "revision_id") == revision_id
+    assert _get(payload, "record", "title") == "Genesis orientation."
+    assert _get(payload, "record", "created") == CAPTURED_AT
+    decisions = cast(list[dict[str, object]], _get(payload, "record", "decisions"))
+    assert [d["summary"] for d in decisions] == ["Four subcommands."]
+    assert cast(str, payload["markdown"]).splitlines()[0] == "status: ok"
+
+    # The command wrote through the canonical store, not a private copy.
+    written = store.read_record()
+    assert written is not None
+    assert written.revision_id == revision_id
+    assert payload["record"] == records.unstructure(written)
+
+
+def test_checkpoint_replays_an_identical_request_instead_of_writing_twice(
+    store: storage.WorkStore,
+) -> None:
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    body = _intent_json(
+        base_revision_id=created["revision_id"],
+        orientation="Submitted twice.",
+        session={"captured_at": CAPTURED_AT},
+    )
+
+    first_status, first = _run("checkpoint", stdin=body)
+    second_status, second = _run("checkpoint", stdin=body)
+
+    assert (first_status, second_status) == (0, 0)
+    assert first["replayed"] is False
+    assert second["replayed"] is True
+    assert second["revision_id"] == first["revision_id"]
+    assert len(list(store.revisions_dir.glob("*.json"))) == 2
+
+
+def test_checkpoint_refuses_a_genesis_intent_over_a_live_record(
+    store: storage.WorkStore,
+) -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    before = store.record_path.read_bytes()
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            orientation="A second creation.", base_revision_id=commit.GENESIS_PARENT
+        ),
+    )
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "genesis-conflict"
+    assert "never replaces a live one" in cast(str, _get(payload, "error", "message"))
+    assert store.record_path.read_bytes() == before
+
+
+@pytest.mark.usefixtures("store")
+def test_checkpoint_reports_a_stale_parent_as_its_own_code() -> None:
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    _ = _run(
+        "checkpoint",
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="First writer wins."
+        ),
+    )
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="Second writer loses."
+        ),
+    )
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "stale-parent"
+
+
+@pytest.mark.usefixtures("store")
+def test_stale_base_with_a_note_dir_leaves_no_note_dir_or_ledger(
+    store: storage.WorkStore, tmp_path: Path
+) -> None:
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    _ = _run(
+        "checkpoint",
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="First writer wins."
+        ),
+    )
+    notes = tmp_path / "fresh-notes"
+
+    status, payload = _run(
+        "checkpoint",
+        "--note-dir",
+        str(notes),
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="Second writer loses."
+        ),
+    )
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "stale-parent"
+    assert not notes.exists()
+    assert not store.pending_dir.exists() or not list(store.pending_dir.iterdir())
+
+
+def test_checkpoint_refuses_an_intent_without_a_next_move(
+    store: storage.WorkStore,
+) -> None:
+    intent = cast(dict[str, object], json.loads(_first_intent()))
+    del intent["next"], intent["artifact"]
+    status, payload = _run("checkpoint", stdin=json.dumps(intent))
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "invalid-intent"
+    assert "next" in cast(str, _get(payload, "error", "message"))
+    assert store.read_record() is None
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_refuses_stdin_that_is_not_json() -> None:
+    status, payload = _run("checkpoint", stdin="not json at all")
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "invalid-json"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_refuses_json_that_is_not_an_intent() -> None:
+    status, payload = _run(
+        "checkpoint", stdin=json.dumps({"work_id": WORK_ID, "bogus": 1})
+    )
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "invalid-intent"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_refuses_a_work_id_that_is_not_a_safe_path_segment() -> None:
+    status, payload = _run("checkpoint", stdin=json.dumps({"work_id": "../escape"}))
+
+    assert status == 2
+    assert _get(payload, "error", "code") in {"invalid-intent", "storage-error"}
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_an_unexpected_crash_is_exit_1_with_a_traceback_on_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom(_work_id: str, **_kwargs: object) -> dict[str, object]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(queries_mod, "run_show", _boom)
+
+    status, payload = _run("show", "--work-id", WORK_ID)
+
+    assert status == 1
+    assert _get(payload, "error", "text") == "RuntimeError: boom"
+    assert isinstance(_get(payload, "traceback"), str)
+
+
+def test_checkpoint_mirrors_the_projection_into_an_explicit_note_dir(
+    store: storage.WorkStore, tmp_path: Path
+) -> None:
+    notes = tmp_path / "handoffs"
+
+    status, payload = _run(
+        "checkpoint", "--note-dir", str(notes), stdin=_first_intent()
+    )
+
+    assert status == 0
+    mirror = notes / f"{WORK_ID}.md"
+    assert payload["note_path"] == str(mirror)
+    markdown = cast(str, payload["markdown"])
+    # The mirror is a byte-for-byte copy of the projection the corpus holds,
+    # not a second rendering that could drift from the digest in the receipt.
+    assert mirror.read_text(encoding="utf-8") == markdown
+    stored = store.projection_path(1, cast(str, payload["revision_id"]))
+    assert stored.read_text(encoding="utf-8") == markdown
+    # The durability the caller is told is the one the document itself carries.
+    assert payload["durability"] == "repo-snapshot"
+    assert "durability: repo-snapshot" in markdown
+
+
+@pytest.mark.usefixtures("store")
+def test_checkpoint_replay_rewrites_the_identical_mirror(tmp_path: Path) -> None:
+    notes = tmp_path / "handoffs"
+    body = _first_intent(base_revision_id=commit.GENESIS_PARENT)
+
+    first_status, first = _run("checkpoint", "--note-dir", str(notes), stdin=body)
+    mirror = notes / f"{WORK_ID}.md"
+    written = mirror.read_bytes()
+    second_status, second = _run("checkpoint", "--note-dir", str(notes), stdin=body)
+
+    assert (first_status, second_status) == (0, 0)
+    assert first["replayed"] is False
+    assert second["replayed"] is True
+    assert second["note_path"] == first["note_path"]
+    assert mirror.read_bytes() == written
+
+
+@pytest.mark.usefixtures("store")
+def test_checkpoint_no_note_overrides_an_explicit_note_dir(tmp_path: Path) -> None:
+    notes = tmp_path / "handoffs"
+
+    status, payload = _run(
+        "checkpoint",
+        "--note-dir",
+        str(notes),
+        "--no-note",
+        stdin=_first_intent(),
+    )
+
+    assert status == 0
+    assert payload["note_path"] is None
+    assert not notes.exists()
+    assert payload["durability"] == "canonical-local"
+    assert "durability: canonical-local" in cast(str, payload["markdown"])
+
+
+@pytest.mark.usefixtures("store")
+def test_checkpoint_outside_a_repository_writes_no_mirror(tmp_path: Path) -> None:
+    status, payload = _run("checkpoint", stdin=_first_intent())
+
+    assert status == 0
+    assert payload["note_path"] is None
+    assert payload["durability"] == "canonical-local"
+    assert not (tmp_path / ".cheese").exists()
+
+
+@pytest.mark.usefixtures("store")
+def test_checkpoint_defaults_the_mirror_to_the_enclosing_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    _ = subprocess.run(["git", "init", "--quiet"], cwd=checkout, check=True)
+    monkeypatch.chdir(checkout)
+
+    status, payload = _run("checkpoint", stdin=_first_intent())
+
+    assert status == 0
+    assert payload["durability"] == "repo-snapshot"
+    note_path = Path(cast(str, payload["note_path"]))
+    assert note_path.parts[-3:] == (".cheese", "notes", f"{WORK_ID}.md")
+    mirror = checkout / ".cheese" / "notes" / f"{WORK_ID}.md"
+    assert mirror.read_text(encoding="utf-8") == payload["markdown"]
+
+
+@pytest.mark.usefixtures("store")
+def test_checkpoint_refuses_when_the_note_dir_cannot_be_created(tmp_path: Path) -> None:
+    blocker = tmp_path / "blocker"
+    _ = blocker.write_text("not a directory\n", encoding="utf-8")
+
+    status, payload = _run(
+        "checkpoint",
+        "--note-dir",
+        str(blocker / "notes"),
+        stdin=_first_intent(),
+    )
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "note-unwritable"
+    # The refusal lands before the promotion, so nothing was committed either.
+    show_status, show_payload = _run("show", "--work-id", WORK_ID)
+    assert show_status == 2
+    assert _get(show_payload, "error", "code") == "record-missing"
+
+
+@pytest.mark.usefixtures("store")
+def test_show_returns_the_current_record() -> None:
+    created = _run("checkpoint", stdin=_first_intent())[1]
+
+    status, payload = _run("show", "--work-id", WORK_ID)
+
+    assert status == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "show"
+    assert payload["work_id"] == WORK_ID
+    assert payload["status"] == "ok"
+    assert payload["revision_id"] == created["revision_id"]
+    assert payload["revision_number"] == 1
+    assert payload["record"] == created["record"]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_show_refuses_work_that_has_no_record() -> None:
+    status, payload = _run("show", "--work-id", WORK_ID)
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "record-missing"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_show_refuses_an_unsafe_work_id() -> None:
+    status, payload = _run("show", "--work-id", "../escape")
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "storage-error"
+
+
+@pytest.mark.usefixtures("store")
+def test_resolve_reports_a_committed_work_id_as_dispatchable() -> None:
+    created = _run("checkpoint", stdin=_first_intent())[1]
+
+    status, payload = _run("resolve", "--ref", WORK_ID)
+
+    assert status == 0
+    assert payload["ok"] is True
+    assert payload["command"] == "resolve"
+    assert payload["outcome"] == "authoritative"
+    assert payload["dispatchable"] is True
+    assert payload["source"] == "work-id"
+    assert payload["work_id"] == WORK_ID
+    assert payload["record"] == created["record"]
+    assert payload["findings"] == []
+
+
+def test_resolve_foreign_project_requires_and_accepts_workspace_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "cheese"
+    same_workspace = tmp_path / "same-checkout"
+    same_workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=same_workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/project/a.git",
+        ],
+        cwd=same_workspace,
+        check=True,
+    )
+    monkeypatch.chdir(same_workspace)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "project-a")
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    created_record = cast(dict[str, object], created["record"])
+    record_slug = cast(str, created_record["slug"])
+
+    ambient_status, ambient = _run(
+        "resolve", "--ref", WORK_ID, "--project", "project-a"
+    )
+    assert ambient_status == 0
+    assert ambient["outcome"] == "authoritative"
+    assert ambient["dispatchable"] is True
+
+    foreign_workspace = tmp_path / "foreign-checkout"
+    foreign_workspace.mkdir()
+    _ = subprocess.run(["git", "init", "-q"], cwd=foreign_workspace, check=True)
+    _ = subprocess.run(
+        [
+            "git",
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/project/b.git",
+        ],
+        cwd=foreign_workspace,
+        check=True,
+    )
+    monkeypatch.chdir(foreign_workspace)
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "project-b")
+    gated_status, gated = _run("resolve", "--ref", WORK_ID, "--project", "project-a")
+    assert gated_status == 0
+    assert gated["outcome"] == "gated"
+    assert "workspace-required" in [
+        cast(dict[str, object], finding)["code"]
+        for finding in cast("list[object]", gated["findings"])
+    ]
+
+    wrong_status, wrong = _run(
+        "resolve",
+        "--ref",
+        WORK_ID,
+        "--project",
+        "project-a",
+        "--workspace-root",
+        str(foreign_workspace),
+    )
+    assert wrong_status == 0
+    assert wrong["outcome"] == "gated"
+    assert "workspace-mismatch" in [
+        cast(dict[str, object], finding)["code"]
+        for finding in cast("list[object]", wrong["findings"])
+    ]
+
+    monkeypatch.delenv("EASY_CHEESE_PROJECT")
+    status, payload = _run(
+        "resolve",
+        "--ref",
+        WORK_ID,
+        "--project",
+        "project-a",
+        "--workspace-root",
+        str(same_workspace),
+    )
+    assert status == 0
+    assert payload["outcome"] == "authoritative"
+    assert payload["dispatchable"] is True
+
+    out = io.StringIO()
+    adapter_status = resolve_cli.main(
+        [
+            "--ref",
+            WORK_ID,
+            "--project",
+            "project-a",
+            "--workspace-root",
+            str(same_workspace),
+        ],
+        stdout=out,
+    )
+    adapter_payload = cast(dict[str, object], json.loads(out.getvalue()))
+    assert adapter_status == 0
+    assert adapter_payload["outcome"] == "authoritative"
+    assert adapter_payload["dispatchable"] is True
+    monkeypatch.chdir(same_workspace)
+    phase_out = io.StringIO()
+    phase_status = resolve_cli.main(
+        ["--ref", record_slug],
+        stdout=phase_out,
+    )
+    phase_payload = cast(dict[str, object], json.loads(phase_out.getvalue()))
+    assert phase_status == 0
+    assert phase_payload["outcome"] == "authoritative"
+    assert phase_payload["dispatchable"] is True
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_answers_not_found_without_calling_it_a_failure() -> None:
+    status, payload = _run("resolve", "--ref", "work-9999")
+
+    assert status == 0
+    assert payload["ok"] is True
+    assert payload["outcome"] == "not-found"
+    assert payload["dispatchable"] is False
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_refuses_a_reference_it_cannot_interpret() -> None:
+    status, payload = _run("resolve", "--ref", "   ")
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "error"
+    assert _get(payload, "error", "message") == "reference is empty"
+
+
+@pytest.mark.usefixtures("store")
+def test_resolve_cli_and_the_bundle_produce_byte_identical_json_for_the_same_ref() -> (
+    None
+):
+    """Both adapters share `resolve_cli.resolve_payload`; their JSON must match."""
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    _, bundle_payload = _run("resolve", "--ref", WORK_ID)
+
+    cli_out = io.StringIO()
+    cli_status = resolve_cli.main(["--ref", WORK_ID], stdout=cli_out)
+    cli_payload = cast(dict[str, object], json.loads(cli_out.getvalue()))
+
+    assert cli_status == 0
+    assert cli_payload == {**bundle_payload, "command": resolve_cli.COMMAND}
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_legacy_answers_not_found_for_an_absent_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    status, payload = _run("resolve", "--ref", "no-such-note", "--legacy")
+
+    assert status == 0
+    assert payload["outcome"] == "not-found"
+    assert payload["source"] == "legacy"
+    assert payload["dispatchable"] is False
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_refuses_a_corpus_root_given_with_legacy() -> None:
+    """A legacy note lives outside any corpus, so the pair is a usage error, not a silent drop."""
+    status, payload = _run(
+        "resolve",
+        "--ref",
+        "no-such-note",
+        "--legacy",
+        "--corpus-root",
+        "/nowhere/corpus",
+    )
+
+    assert status == 2
+    assert _get(payload, "error", "code") == ""
+    text = cast(str, _get(payload, "error", "text"))
+    assert "--legacy: not allowed with --corpus-root" in text
+
+
+@pytest.mark.parametrize("verb", ["lint", "link", "unlink", "shape", "backlinks"])
+def test_a_removed_verb_is_an_unknown_command(verb: str) -> None:
+    status, payload = _run(verb)
+
+    assert status == 2
+    assert _get(payload, "error", "code") == ""
+    text = cast(str, _get(payload, "error", "text"))
+    assert f'Unknown command "{verb}".' in text
+    assert "Available commands: checkpoint, validate" in text
+    assert verb not in wheypoint.COMMANDS
+
+
+def test_an_unknown_command_is_a_usage_error_in_the_same_json_shape() -> None:
+    status, payload = _run("destroy")
+
+    assert status == 2
+    assert _get(payload, "error", "code") == ""
+    text = cast(str, _get(payload, "error", "text"))
+    assert 'Unknown command "destroy". Available commands: checkpoint, validate' in text
+
+
+def test_a_missing_required_argument_is_a_usage_error_not_a_traceback() -> None:
+    status, payload = _run("show")
+
+    assert status == 2
+    assert _get(payload, "error", "code") == ""
+    text = cast(str, _get(payload, "error", "text"))
+    assert text == 'Command "show" parameter --work-id requires an argument.'
+
+
+@pytest.mark.usefixtures("store")
+def test_every_reply_is_one_document_of_indented_json() -> None:
+    out = io.StringIO()
+    status = wheypoint.main(
+        ["checkpoint"], stdin=io.StringIO(_first_intent()), stdout=out
+    )
+    text = out.getvalue()
+
+    assert status == 0
+    payload = cast(dict[str, object], json.loads(text))
+    assert json.dumps(payload, indent=2) + "\n" == text
+
+
+def test_the_command_surface_is_exactly_eleven_commands() -> None:
+    assert wheypoint.COMMANDS == (
+        "checkpoint",
+        "validate",
+        "schema",
+        "resolve",
+        "show",
+        "list",
+        "log",
+        "turns",
+        "fork",
+        "export",
+        "import",
+    )
+    assert "commit" not in wheypoint.COMMANDS and "create" not in wheypoint.COMMANDS
+
+
+# --------------------------------------------------------------------------
+# v3 write path (spec wheypoint-ergonomics, curd 2): tracer tests per AC.
+# --------------------------------------------------------------------------
+
+
+def _intent_json(**fields: object) -> str:
+    return json.dumps({"work_id": WORK_ID, **fields})
+
+
+def _first_intent(**fields: object) -> str:
+    base: dict[str, object] = {
+        "orientation": "Genesis orientation.\nNot the title.",
+        "working_context": [],
+        "next": "cook",
+        "artifact": ".cheese/cook/wheypoint-ergonomics.md",
+        "notes": "First record.",
+        "session": {"captured_at": CAPTURED_AT},
+    }
+    base.update(fields)
+    return _intent_json(**base)
+
+
+def _error(payload: dict[str, object]) -> tuple[str, str]:
+    error = cast(dict[str, str], payload["error"])
+    return error["code"], error["message"]
+
+
+@pytest.mark.usefixtures("store")
+def test_ac1_an_unknown_key_is_refused_by_path_on_every_write_path() -> None:
+    status, payload = _run("checkpoint", stdin=_first_intent(bogus=1))
+    code, message = _error(payload)
+    assert (status, code) == (2, "invalid-intent")
+    assert "bogus" in message and "unknown field" in message
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[{"kind": "decision", "summary": "s", "nested_bogus": 1}]
+        ),
+    )
+    code, message = _error(payload)
+    assert (status, code) == (2, "invalid-intent")
+    assert "entries[" in message and "nested_bogus" in message
+
+    # AC-10: the raw-delta surface is gone, so checkpoint is the only write path.
+    status, payload = _run("commit", stdin="{}")
+    assert status == 2
+    assert _get(payload, "error", "code") == ""
+    assert "commit" in cast(str, _get(payload, "error", "text"))
+
+
+@pytest.mark.usefixtures("store")
+def test_ac3_entries_are_promoted_per_kind_with_their_rationale() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[
+                {
+                    "kind": "decision",
+                    "summary": "Keep canonical JSON.",
+                    "rationale": "digests need it",
+                },
+                {"kind": "question", "summary": "Bump or migrate?"},
+                {
+                    "kind": "question",
+                    "summary": "Bundle is stale.",
+                    "blocks_continuation": False,
+                },
+            ]
+        ),
+    )
+    assert status == 0, payload
+    decisions = cast(list[dict[str, object]], _get(payload, "record", "decisions"))
+    assert decisions[0]["rationale"] == "digests need it"
+    assert len(cast(list[object], _get(payload, "record", "questions"))) == 2
+
+
+@pytest.mark.usefixtures("store")
+def test_ac25_a_directive_keeps_its_quote_and_is_carried_forward() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[
+                {
+                    "kind": "directive",
+                    "summary": "Prose stays STE100.",
+                    "quote": "is it all in STE100?",
+                }
+            ]
+        ),
+    )
+    assert status == 0, payload
+    directives = cast(list[dict[str, object]], _get(payload, "record", "directives"))
+    assert directives[0]["quote"] == "is it all in STE100?"
+    assert cast(str, directives[0]["entry_id"]).startswith("v-")
+
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(orientation="Says nothing new.")
+    )
+    assert status == 0, payload
+    assert (
+        cast(list[dict[str, object]], _get(payload, "record", "directives"))
+        == directives
+    )
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[{"kind": "directive", "summary": "x", "blocks_continuation": True}]
+        ),
+    )
+    assert status == 2 and "directive" in _error(payload)[1]
+
+
+@pytest.mark.usefixtures("store")
+def test_ac8_notes_are_stored_and_carried_forward_when_omitted() -> None:
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(notes="Body of the record.")
+    )
+    assert status == 0 and _get(payload, "record", "notes") == "Body of the record."
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(orientation="Only orientation.")
+    )
+    assert status == 0 and _get(payload, "record", "notes") == "Body of the record."
+    status, payload = _run("checkpoint", stdin=_intent_json(notes="Replaced."))
+    assert status == 0 and _get(payload, "record", "notes") == "Replaced."
+
+
+@pytest.mark.usefixtures("store")
+def test_ac9_tasks_persist_typed_and_an_empty_tasks_move_is_refused() -> None:
+    task = {
+        "slug": "curd-a",
+        "intent": "cook",
+        "repo": "easy-cheese",
+        "branch": "cook/curd-a",
+        "branch_from": "main",
+        "command": "/cook .cheese/specs/curd-a.md",
+    }
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            next="tasks",
+            artifact=None,
+            tasks=[task],
+            parallel={
+                "isolation": "worktree",
+                "worktree_strategy": "create",
+                "worktree_root": "../wt",
+            },
+        ),
+    )
+    assert status == 0, payload
+    assert _get(payload, "record", "next_action", "tasks") == [
+        {**task, "worktree": None}
+    ]
+    assert (
+        _get(payload, "record", "next_action", "parallel", "worktree_strategy")
+        == "create"
+    )
+
+    status, payload = _run("checkpoint", stdin=_intent_json(next="tasks"))
+    assert (
+        status == 2
+        and "tasks must be non-empty when move is 'tasks'" in _error(payload)[1]
+    )
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(next="cook", artifact="x.md", tasks=[task])
+    )
+    assert (
+        status == 2
+        and "tasks may only be set when move is 'tasks'" in _error(payload)[1]
+    )
+
+
+def test_ac4_ac5_ac6_ac23_artifact_links_are_a_set_pinned_by_the_host(
+    store: storage.WorkStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    doc = tmp_path / "doc.md"
+    _ = doc.write_text("hello\n", encoding="utf-8")
+
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(artifact_links=[{"path": "doc.md"}])
+    )
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert links[0]["digest"] == storage.file_digest(doc)
+    assert links[0]["revision_id"] == _get(payload, "record", "revision_id")
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_intent_json(
+            artifact_links=[{"path": "doc.md", "covers_entry_ids": cast(list[str], [])}]
+        ),
+    )
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert [link["path"] for link in links] == ["doc.md"]
+    assert links[0]["revision_id"] == _get(payload, "record", "revision_id")
+
+    before = store.read_record()
+    status, payload = _run("checkpoint", stdin=_intent_json(artifact_links=[]))
+    code, message = _error(payload)
+    assert (status, code) == (2, "invalid-intent") and "artifact_links" in message
+    assert store.read_record() == before
+
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(remove_artifact_links=["nope.md"])
+    )
+    assert status == 2 and "does not carry" in _error(payload)[1]
+
+    status, payload = _run(
+        "checkpoint", stdin=_intent_json(remove_artifact_links=["doc.md"])
+    )
+    assert status == 0 and _get(payload, "record", "artifact_links") == []
+
+
+@pytest.mark.usefixtures("store")
+def test_ac19_next_and_artifact_must_cohere() -> None:
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(next="affinage", artifact="a report")
+    )
+    assert status == 2 and "PR#" in _error(payload)[1]
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(next="affinage", artifact="PR#615")
+    )
+    assert status == 0, payload
+    status, payload = _run("checkpoint", stdin=_intent_json(next="cook"))
+    assert status == 2 and "artifact is required" in _error(payload)[1]
+
+
+@pytest.mark.usefixtures("store")
+def test_ac20_a_secret_pattern_refuses_the_checkpoint_naming_the_field() -> None:
+    token = "ghp_" + "a" * 36
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(orientation=f"token {token} pasted")
+    )
+    code, message = _error(payload)
+    assert (status, code) == (2, "secret-pattern")
+    assert message.startswith("orientation (GitHub token)")
+
+
+def test_ac26_a_genesis_without_entries_or_notes_creates_no_store(
+    store: storage.WorkStore,
+) -> None:
+    intent = cast(dict[str, object], json.loads(_first_intent()))
+    del intent["notes"]
+    status, payload = _run("checkpoint", stdin=json.dumps(intent))
+    code, message = _error(payload)
+    assert (status, code) == (2, "commit-refused")
+    assert "first checkpoint must capture" in message
+    assert store.read_record() is None
+    assert not store.record_path.exists()
+
+
+def test_ac10_commit_is_no_longer_a_listed_command() -> None:
+    from easy_cheese.skills.wheypoint import commands
+
+    assert "commit" not in wheypoint.COMMANDS
+    assert [command.name for command in commands.COMMANDS] == [
+        "checkpoint",
+        "validate",
+        "schema",
+        "resolve",
+        "show",
+        "list",
+        "log",
+        "turns",
+        "fork",
+        "export",
+        "import",
+        "handoff",
+    ]
+
+
+def test_ac11_validate_reports_every_problem_and_never_opens_the_store(
+    store: storage.WorkStore,
+) -> None:
+    status, payload = _run("validate", stdin=_first_intent(bogus=1, compacted=True))
+    assert status == 2
+    message = cast(str, _get(payload, "error", "message"))
+    assert "bogus" in message and "compacted" in message
+    status, payload = _run(
+        "validate", stdin=_first_intent(next="affinage", artifact="x")
+    )
+    assert status == 2
+    assert "PR#" in cast(str, _get(payload, "error", "message"))
+    assert not store.record_path.exists()
+
+    status, payload = _run("validate", stdin=_first_intent())
+    assert (status, payload["valid"]) == (0, True)
+    assert not store.record_path.exists()
+
+
+def test_ac12_schema_prints_the_registered_json_schema() -> None:
+    status, payload = _run("schema", "checkpoint-intent")
+    assert status == 0
+    schema = cast(dict[str, object], payload["schema"])
+    assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+    assert cast(str, schema["$id"]).endswith("/checkpoint-intent")
+    assert "work_id" in json.dumps(schema)
+
+    status, payload = _run("schema", "nope")
+    assert (status, _error(payload)[0]) == (2, "unknown-contract")
+    message = cast(str, _get(payload, "error", "message"))
+    known = message.split("known: ", 1)[1]
+    assert "checkpoint-intent" in known
+
+
+def test_ac13_list_prints_one_line_per_work_item(corpus_root: Path) -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(work_id="other-work", orientation="Other.\nMore."),
+    )
+
+    status, payload = _run("list")
+    assert status == 0
+    lines = cast(list[str], payload["lines"])
+    assert len(lines) == 2
+    assert lines[0].split("\t") == [
+        "store",
+        "paulnsorensen-easy-cheese",
+        "other-work",
+        "ok",
+        "cook",
+        "Other.",
+    ]
+    assert lines[1].split("\t")[2] == WORK_ID
+    assert payload["corpus_root"] == str(corpus_root)
+    assert payload["scope"] == "project"
+
+
+@pytest.mark.usefixtures("store")
+def test_ac14_log_walks_revisions_oldest_first() -> None:
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(entries=[{"kind": "decision", "summary": "One."}]),
+    )
+    _ = _run("checkpoint", stdin=_intent_json(orientation="Second."))
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+    assert status == 0
+    lines = cast(list[str], payload["lines"])
+    assert len(lines) == 2
+    first, second = (line.split("\t") for line in lines)
+    assert first[0] == "1" and second[0] == "2"
+    assert (
+        first[2] == CAPTURED_AT
+        and first[3] == "+1"
+        and first[4] == "~0"
+        and first[5] == "-"
+    )
+    assert second[3] == "+0"
+
+    status, payload = _run("log", "--work-id", "never-written")
+    assert (status, _error(payload)[0]) == (2, "record-missing")
+
+
+def _transcript(path: Path) -> None:
+    entries = [
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:17:04Z",
+            "message": {"content": "What are our gh issues?"},
+        },
+        {
+            "type": "assistant",
+            "timestamp": "2026-09-05T06:17:10Z",
+            "message": {"content": [{"type": "text", "text": "ignored"}]},
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:18:00Z",
+            "message": {"content": [{"type": "tool_result", "content": "x"}]},
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:18:30Z",
+            "message": {"content": "<system-reminder>not the user</system-reminder>"},
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:19:00Z",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Base directory for this skill: /x"}
+                ]
+            },
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-09-05T06:20:00Z",
+            "message": {
+                "content": [{"type": "text", "text": "Double down on ergonomics."}]
+            },
+        },
+    ]
+    _ = path.write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
+
+
+def test_ac27_turns_prints_the_users_turns_from_a_transcript(tmp_path: Path) -> None:
+    transcript = tmp_path / "s.jsonl"
+    _transcript(transcript)
+    status, payload = _run("turns", "--transcript", str(transcript))
+    assert status == 0
+    assert cast(list[str], payload["lines"]) == [
+        "2026-09-05T06:17:04Z\tWhat are our gh issues?",
+        "2026-09-05T06:20:00Z\tDouble down on ergonomics.",
+    ]
+    status, payload = _run("turns", "--transcript", str(tmp_path / "missing.jsonl"))
+    assert (status, _error(payload)[0]) == (2, "transcript-missing")
+    assert str(tmp_path / "missing.jsonl") in _error(payload)[1]
+
+
+def test_ac28_turns_derives_the_projects_dir_and_never_guesses_a_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    cwd = tmp_path / "Dev" / "easy.cheese_x"
+    cwd.mkdir(parents=True)
+    projects = (
+        home
+        / ".claude"
+        / "projects"
+        / str(cwd).replace("/", "-").replace(".", "-").replace("_", "-")
+    )
+    projects.mkdir(parents=True)
+    _transcript(projects / "aaa.jsonl")
+    _transcript(projects / "bbb.jsonl")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(cwd)
+
+    status, payload = _run("turns")
+    assert (status, _error(payload)[0]) == (2, "session-required")
+    message = cast(str, _get(payload, "error", "message"))
+    assert "projects_dir" in message
+    assert "aaa" in message and "bbb" in message
+
+    status, payload = _run("turns", "--session", "bbb")
+    assert status == 0 and payload["transcript"] == str(projects / "bbb.jsonl")
+    assert (payload["count"], payload["skipped_lines"]) == (2, 0)
+
+
+# --- cure of the curd 2/3 review ------------------------------------------
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_secret_scan_covers_every_string_field() -> None:
+    token = "ghp_" + "b" * 36
+    task = {
+        "slug": "s",
+        "intent": "cook",
+        "repo": "r",
+        "branch": "b",
+        "branch_from": "main",
+        "command": f"/cook --token {token}",
+    }
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(next="tasks", artifact=None, tasks=[task])
+    )
+    code, message = _error(payload)
+    assert (status, code) == (2, "secret-pattern") and message.startswith(
+        "tasks[0].command"
+    )
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[
+                {
+                    "kind": "question",
+                    "summary": "q",
+                    "blocks_continuation": True,
+                    "rationale": f"AKIA{'C' * 16}",
+                }
+            ],
+        ),
+    )
+    assert status == 2 and _error(payload)[1].startswith("entries[0].rationale")
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_pr_urls_with_a_trailing_route_satisfy_the_affinage_gate() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            next="affinage", artifact="https://github.com/o/r/pull/12/files"
+        ),
+    )
+    assert status == 0, payload
+
+
+def test_cure_turns_strips_host_wrappers_but_keeps_the_users_words(
+    tmp_path: Path,
+) -> None:
+    transcript = tmp_path / "s.jsonl"
+    entries = [
+        {
+            "type": "user",
+            "timestamp": "t1",
+            "message": {
+                "content": "<system-reminder>ignored</system-reminder>Pull the ten turns in too."
+            },
+        },
+        {
+            "type": "user",
+            "timestamp": "t2",
+            "message": {
+                "content": "Curdle.\n<task-notification><task-id>x</task-id></task-notification>"
+            },
+        },
+        {
+            "type": "user",
+            "timestamp": "t3",
+            "message": {"content": "<local-command-stdout></local-command-stdout>"},
+        },
+    ]
+    _ = transcript.write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
+    status, payload = _run("turns", "--transcript", str(transcript))
+    assert status == 0
+    assert cast(list[str], payload["lines"]) == [
+        "t1\tPull the ten turns in too.",
+        "t2\tCurdle.",
+    ]
+
+
+def test_cure_turns_refuses_a_session_id_that_escapes_the_projects_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    status, payload = _run("turns", "--session", "../../etc/passwd")
+    assert (status, _error(payload)[0]) == (2, "invalid-session")
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_artifact_digests_resolve_from_the_repository_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = tmp_path / "checkout"
+    (checkout / "sub").mkdir(parents=True)
+    _ = subprocess.run(["git", "init", "--quiet"], cwd=checkout, check=True)
+    doc = checkout / "doc.md"
+    _ = doc.write_text("root-relative\n", encoding="utf-8")
+    monkeypatch.chdir(checkout / "sub")
+    status, payload = _run(
+        "checkpoint",
+        "--no-note",
+        stdin=_first_intent(artifact_links=[{"path": "doc.md"}]),
+    )
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert links[0]["digest"] == storage.file_digest(doc)
+
+
+# --- cure of the whole-diff review ------------------------------------------
+
+
+def _tasks_intent(**fields: object) -> str:
+    task = {
+        "slug": "s",
+        "intent": "cook",
+        "repo": "r",
+        "branch": "b",
+        "branch_from": "main",
+        "command": "/cook s",
+    }
+    return _first_intent(
+        next="tasks",
+        artifact=None,
+        tasks=[task],
+        parallel={
+            "isolation": "wt",
+            "worktree_strategy": "create",
+            "worktree_root": "../wt",
+        },
+        **fields,
+    )
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_a_tasks_projection_parses() -> None:
+    from easy_cheese.shared.wheypoint import projection
+
+    status, payload = _run("checkpoint", stdin=_tasks_intent())
+    assert status == 0, payload
+    markdown = cast(str, payload["markdown"])
+    parsed = projection.parse(markdown)
+    assert (
+        parsed.next_action.tasks is not None
+        and parsed.next_action.tasks[0].command == "/cook s"
+    )
+    assert (
+        parsed.next_action.parallel is not None
+        and parsed.next_action.parallel.worktree_root == "../wt"
+    )
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_validate_reports_next_action_and_delta_invariants() -> None:
+    status, payload = _run("validate", stdin=_first_intent(next="tasks", artifact=None))
+    assert status == 2
+    assert "tasks must be non-empty" in cast(str, _get(payload, "error", "message"))
+    status, payload = _run(
+        "validate", stdin=_first_intent(expected_revision_id="rev-000000000000")
+    )
+    problems = cast(str, _get(payload, "error", "message")).split("; ")
+    assert (
+        status == 2 and len([p for p in problems if "expected_revision_id" in p]) == 1
+    )
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_a_task_command_must_be_a_skill_dispatch() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            next="tasks",
+            artifact=None,
+            tasks=[
+                {
+                    "slug": "s",
+                    "intent": "cook",
+                    "repo": "r",
+                    "branch": "b",
+                    "branch_from": "main",
+                    "command": "rm -rf /",
+                }
+            ],
+        ),
+    )
+    assert (
+        status == 2 and "tasks[0].command is not a skill dispatch" in _error(payload)[1]
+    )
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_single_line_fields_refuse_newlines() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(artifact_links=[{"path": "a.md\n## Decision dossier"}]),
+    )
+    assert status == 2 and "must be a single line" in _error(payload)[1]
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(artifact="x.md\nmode: parallel")
+    )
+    assert status == 2 and "must be a single line" in _error(payload)[1]
+
+
+@pytest.mark.usefixtures("store")
+@pytest.mark.parametrize(
+    ("label", "text"),
+    [
+        # Assembled at runtime so no literal in the repo looks like a live credential.
+        (
+            "Slack webhook",
+            "https://hooks." + "slack.com/services/" + "T000/B000/" + "X" * 24,
+        ),
+        ("Google API key", "AIza" + "A" * 35),
+        (
+            "JWT or bearer token",
+            ".".join(("eyJ" + "a" * 20, "eyJ" + "b" * 20, "c" * 40)),
+        ),
+        (
+            "URL with basic-auth credentials",
+            "https://user:hunter2hunter2@example.com/repo",
+        ),
+        ("credential assignment", "api_key = abcdefghijklmnop"),
+    ],
+)
+def test_cure_secret_patterns_cover_the_common_shapes(label: str, text: str) -> None:
+    status, payload = _run(
+        "checkpoint", stdin=_first_intent(notes=f"pasted {text} here")
+    )
+    code, message = _error(payload)
+    assert (status, code) == (2, "secret-pattern") and message.startswith(
+        f"notes ({label})"
+    )
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_validate_reports_every_secret_not_just_the_first() -> None:
+    token = "ghp_" + "c" * 36
+    status, payload = _run(
+        "validate", stdin=_first_intent(orientation=f"a {token}", notes=f"b {token}")
+    )
+    problems = cast(str, _get(payload, "error", "message")).split("; ")
+    assert status == 2 and sum("looks like a credential" in p for p in problems) == 2
+
+
+def test_cure_turns_counts_unreadable_lines(tmp_path: Path) -> None:
+    transcript = tmp_path / "s.jsonl"
+    _transcript(transcript)
+    with transcript.open("a", encoding="utf-8") as handle:
+        _ = handle.write(
+            '{"type": "user", "timestamp": "t9", "message": {"content": "truncated'
+        )
+    status, payload = _run("turns", "--transcript", str(transcript))
+    assert status == 0 and (payload["count"], payload["skipped_lines"]) == (2, 1)
+
+
+def test_cure_enumerate_ignores_directories_that_are_not_work_ids(
+    corpus_root: Path,
+) -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    rogue = corpus_root / storage.WORK_DIRNAME / "Not_A_Work-ID"
+    rogue.mkdir(parents=True)
+    _ = (rogue / storage.RECORD_FILENAME).write_text("{}", encoding="utf-8")
+    status, payload = _run("list")
+    assert status == 0
+    assert [line.split("\t")[2] for line in cast(list[str], payload["lines"])] == [
+        WORK_ID
+    ]
+
+
+# --- cure of pr-621 review findings ----------------------------------------
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_log_survives_a_corrupt_revision_and_names_it_unreadable(
+    store: storage.WorkStore,
+) -> None:
+    first = _run("checkpoint", stdin=_first_intent())[1]
+    _ = _run("checkpoint", stdin=_intent_json(orientation="Second."))
+    corrupt_path = store.revision_path(1, cast(str, first["revision_id"]))
+    _ = corrupt_path.write_text("not json", encoding="utf-8")
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+
+    assert status == 0
+    revisions = cast(list[dict[str, object]], payload["revisions"])
+    assert [r["revision_number"] for r in revisions] == [2]
+    unreadable = cast(list[dict[str, str]], payload["unreadable"])
+    assert len(unreadable) == 1
+    assert unreadable[0]["path"] == corrupt_path.name
+    assert "malformed JSON" in unreadable[0]["reason"]
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_log_survives_a_missing_projection_and_names_it_unreadable(
+    store: storage.WorkStore,
+) -> None:
+    first = _run("checkpoint", stdin=_first_intent())[1]
+    _ = _run("checkpoint", stdin=_intent_json(orientation="Second."))
+    orphan_path = store.projection_path(1, cast(str, first["revision_id"]))
+    orphan_path.unlink()
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+
+    assert status == 0
+    revisions = cast(list[dict[str, object]], payload["revisions"])
+    assert [r["revision_number"] for r in revisions] == [2]
+    unreadable = cast(list[dict[str, str]], payload["unreadable"])
+    assert len(unreadable) == 1
+    assert (
+        unreadable[0]["path"]
+        == store.revision_path(1, cast(str, first["revision_id"])).name
+    )
+    assert "projection file is missing" in unreadable[0]["reason"]
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_log_refuses_store_inconsistent_when_every_revision_is_lost(
+    store: storage.WorkStore,
+) -> None:
+    first = _run("checkpoint", stdin=_first_intent())[1]
+    second = _run("checkpoint", stdin=_intent_json(orientation="Second."))[1]
+    _ = store.revision_path(1, cast(str, first["revision_id"])).write_text(
+        "not json", encoding="utf-8"
+    )
+    _ = store.revision_path(2, cast(str, second["revision_id"])).write_text(
+        "not json", encoding="utf-8"
+    )
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+
+    assert status != 0
+    assert _error(payload)[0] == "store-inconsistent"
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_validate_reports_the_next_action_gate_and_the_task_command_together() -> (
+    None
+):
+    task = {
+        "slug": "s",
+        "intent": "cook",
+        "repo": "r",
+        "branch": "b",
+        "branch_from": "main",
+        "command": "rm -rf /",
+    }
+    status, payload = _run(
+        "validate",
+        stdin=_first_intent(next="affinage", artifact="x", tasks=[task]),
+    )
+
+    assert status == 2
+    message = cast(str, _get(payload, "error", "message"))
+    assert "PR#" in message
+    assert "tasks[0].command is not a skill dispatch" in message
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_ac7_a_non_gating_question_renders_open_entries() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            entries=[
+                {
+                    "kind": "question",
+                    "summary": "Bump or migrate?",
+                    "blocks_continuation": False,
+                }
+            ],
+        ),
+    )
+
+    assert status == 0, payload
+    assert payload["status"] == "ok"
+    assert "## Open entries" in cast(str, payload["markdown"])
+
+
+def test_cure_turns_lines_escape_a_multiline_user_turn(tmp_path: Path) -> None:
+    transcript = tmp_path / "s.jsonl"
+    entries = [
+        {
+            "type": "user",
+            "timestamp": "t1",
+            "message": {"content": [{"type": "text", "text": "Line one.\nLine two."}]},
+        },
+    ]
+    _ = transcript.write_text(
+        "\n".join(json.dumps(e) for e in entries) + "\n", encoding="utf-8"
+    )
+
+    status, payload = _run("turns", "--transcript", str(transcript))
+
+    assert status == 0
+    assert cast(list[dict[str, str]], payload["turns"]) == [
+        {"timestamp": "t1", "text": "Line one.\nLine two."}
+    ]
+    assert cast(list[str], payload["lines"]) == ["t1\tLine one.\\nLine two."]
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_list_and_log_lines_are_the_escaped_tab_join_of_typed_rows() -> None:
+    _ = _run(
+        "checkpoint", stdin=_first_intent(orientation="Tab\ttest line.\nSecond line.")
+    )
+
+    status, payload = _run("list")
+    assert status == 0
+    items = cast(list[dict[str, object]], payload["items"])
+    lines = cast(list[str], payload["lines"])
+    assert items[0]["orientation"] == "Tab\ttest line."
+    assert lines[0].split("\t")[-1] == "Tab\\ttest line."
+
+    status, payload = _run("log", "--work-id", WORK_ID)
+    assert status == 0
+    revisions = cast(list[dict[str, object]], payload["revisions"])
+    lines = cast(list[str], payload["lines"])
+    row = lines[0].split("\t")
+    assert row[0] == str(revisions[0]["revision_number"])
+    assert row[1] == revisions[0]["revision_id"]
+
+
+def test_cure_turns_lists_a_candidate_even_when_stat_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    cwd = tmp_path / "Dev" / "easy.cheese_x"
+    cwd.mkdir(parents=True)
+    projects = (
+        home
+        / ".claude"
+        / "projects"
+        / str(cwd).replace("/", "-").replace(".", "-").replace("_", "-")
+    )
+    projects.mkdir(parents=True)
+    _transcript(projects / "aaa.jsonl")
+    _transcript(projects / "bbb.jsonl")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(cwd)
+
+    real_stat = Path.stat
+
+    def flaky_stat(self: Path, *args: object, **kwargs: object) -> object:
+        if self.name == "aaa.jsonl":
+            raise OSError("boom")
+        return real_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", flaky_stat)
+
+    status, payload = _run("turns")
+
+    assert (status, _error(payload)[0]) == (2, "session-required")
+    message = cast(str, _get(payload, "error", "message"))
+    assert "aaa (modified unknown)" in message
+    assert "bbb (modified unknown)" not in message and "bbb (modified" in message
+
+
+@pytest.mark.usefixtures("store")
+def test_cure_a_resumed_promotion_never_reuses_a_prior_note_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    _ = subprocess.run(["git", "init", "--quiet"], cwd=checkout, check=True)
+    monkeypatch.chdir(checkout)
+    prior = tmp_path / "prior-notes"
+    body = _first_intent()
+
+    from easy_cheese.cli.wheypoint import checkpoint as checkpoint_mod
+
+    real_clear = checkpoint_mod._clear_pending  # pyright: ignore[reportPrivateUsage]
+
+    def crash_once(_store: storage.WorkStore, _request_identity: str) -> None:
+        monkeypatch.setattr(checkpoint_mod, "_clear_pending", real_clear)
+        raise RuntimeError("simulated crash before the ledger entry is cleared")
+
+    monkeypatch.setattr(checkpoint_mod, "_clear_pending", crash_once)
+    interrupted_status, _interrupted = _run(
+        "checkpoint", "--note-dir", str(prior), stdin=body
+    )
+    assert interrupted_status == 1
+
+    default_notes = checkout / ".cheese" / "notes" / f"{WORK_ID}.md"
+    status, payload = _run("checkpoint", stdin=body)
+
+    assert status == 0
+    assert payload["note_path"] == str(default_notes)
+    assert default_notes.read_text(encoding="utf-8") == payload["markdown"]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_answers_not_found_for_an_identifier_the_slug_grammar_rejects() -> None:
+    """A ref no artifact path could name is an answer, never an internal error."""
+    out = io.StringIO()
+
+    status = resolve_cli.main(["--ref", "my_work"], stdout=out)
+    payload = cast(dict[str, object], json.loads(out.getvalue()))
+
+    assert status == 0
+    assert payload["ok"] is True
+    assert payload["outcome"] == "not-found"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_reads_only_the_corpus_root_it_is_given(
+    tmp_path: Path, make_promotion: Callable[..., Promotion]
+) -> None:
+    """A revision in a non-default corpus is invisible until `--corpus-root` names it."""
+    other = tmp_path / "other-corpus"
+    promotion = make_promotion()
+    store = storage.WorkStore.open(WORK_ID, corpus_root=other)
+    store.promote(promotion.record, promotion.revision, promotion.markdown)
+
+    default_status, default_payload = _run("resolve", "--ref", WORK_ID)
+    scoped_status, scoped_payload = _run(
+        "resolve", "--ref", WORK_ID, "--corpus-root", str(other)
+    )
+
+    assert (default_status, default_payload["outcome"]) == (0, "not-found")
+    # The scoped read reaches the revision; it gates only because the fixture
+    # pins a commit no repository can resolve, which is a provenance lint, not
+    # a corpus-scoping signal.
+    assert (scoped_status, scoped_payload["outcome"]) == (0, "gated")
+    findings = cast(list[dict[str, object]], scoped_payload["findings"])
+    assert "git-object-missing" in [f["code"] for f in findings]
+    assert scoped_payload["work_id"] == WORK_ID
+    projection = cast(dict[str, object], scoped_payload["projection"])
+    assert projection["revision_id"] == promotion.revision.revision_id
+
+
+def test_ac11_the_old_skills_module_path_is_gone() -> None:
+    """AC-11: the CLI lives under `easy_cheese.cli`, not the retired skills path."""
+    with pytest.raises(ImportError):
+        import easy_cheese.skills.wheypoint.wheypoint  # noqa: F401  # pyright: ignore[reportMissingImports]
+
+
+# --------------------------------------------------------------------------
+# wheypoint-cli pass 2b: positional refs (G5), intent paths (G6), and G9/G10/G11
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_show_and_resolve_accept_a_positional_ref() -> None:
+    """AC-1: the positional form behaves the same as the flag form."""
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    status, payload = _run("show", WORK_ID)
+    assert status == 0 and payload["work_id"] == WORK_ID
+
+    status, payload = _run("log", WORK_ID)
+    assert status == 0 and payload["work_id"] == WORK_ID
+
+    status, payload = _run("resolve", WORK_ID)
+    assert status == 0 and payload["work_id"] == WORK_ID
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_conflicting_positional_and_flag_ref_is_a_usage_error() -> None:
+    """AC-1: a positional ref and a different --flag value exit 2, code usage."""
+    status, payload = _run("show", WORK_ID, "--work-id", "other-id")
+    assert status == 2
+    assert "Unused Tokens" in cast(str, _get(payload, "error", "text"))
+
+    status, payload = _run("resolve", WORK_ID, "--ref", "other-ref")
+    assert status == 2
+    assert "Unused Tokens" in cast(str, _get(payload, "error", "text"))
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_and_validate_read_an_intent_path_same_as_stdin(
+    tmp_path: Path,
+) -> None:
+    """AC-2: `checkpoint intent.json` and `validate intent.json` equal stdin."""
+    intent_path = tmp_path / "intent.json"
+    _ = intent_path.write_text(_first_intent(), encoding="utf-8")
+
+    stdin_status, stdin_payload = _run("validate", stdin=_first_intent())
+    file_status, file_payload = _run("validate", str(intent_path))
+    assert (stdin_status, stdin_payload) == (file_status, file_payload)
+
+    checkpoint_status, checkpoint_payload = _run("checkpoint", str(intent_path))
+    assert checkpoint_status == 0
+    assert checkpoint_payload["work_id"] == WORK_ID
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_and_validate_refuse_a_missing_intent_path() -> None:
+    """AC-2: a missing intent path is a refusal, not a traceback."""
+    status, payload = _run("checkpoint", "/no/such/intent.json")
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
+
+    status, payload = _run("validate", "/no/such/intent.json")
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
+
+
+@pytest.mark.usefixtures("corpus_root")
+@pytest.mark.parametrize("command", ["checkpoint", "validate"])
+def test_intent_dash_is_read_from_stdin(command: str) -> None:
+    for args in (("-",), ("--intent", "-")):
+        status, payload = _run(command, *args, stdin=_first_intent())
+        assert status == 0, payload
+        if command == "validate":
+            assert payload["valid"] is True
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_checkpoint_and_validate_refuse_invalid_utf8_intent(tmp_path: Path) -> None:
+    """AC-2: an intent file with invalid UTF-8 is unreadable, not internal."""
+    intent_path = tmp_path / "invalid.json"
+    _ = intent_path.write_bytes(b"\xff")
+
+    for command in ("checkpoint", "validate"):
+        status, payload = _run(command, str(intent_path))
+        assert (status, _error(payload)[0]) == (2, "intent-unreadable")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_no_command_accepts_a_format_flag() -> None:
+    """AC-4: every command refuses --format as a usage error."""
+    for command, extra in (
+        ("show", ["--work-id", WORK_ID]),
+        ("list", []),
+        ("resolve", ["--ref", WORK_ID]),
+    ):
+        status, payload = _run(command, "--format", "json", *extra)
+        assert status == 2
+        assert "Unknown option: --format" in cast(str, _get(payload, "error", "text"))
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_grep_next_source_and_limit_combine_with_and() -> None:
+    """AC-7: --grep, --next, --source, and --limit filter and combine with AND."""
+    _ = _run("checkpoint", stdin=_first_intent(orientation="Alpha work.\nMore."))
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(work_id="other-work", orientation="Beta work.\nMore."),
+    )
+
+    status, payload = _run("list", "--grep", "alpha")
+    assert status == 0
+    refs = [
+        cast(dict[str, object], item)["ref"]
+        for item in cast("list[object]", payload["items"])
+    ]
+    assert refs == [WORK_ID]
+
+    status, payload = _run(
+        "list", "--grep", "work", "--next", "cook", "--source", "store", "--limit", "1"
+    )
+    assert status == 0
+    assert len(cast("list[object]", payload["items"])) == 1
+
+    status, payload = _run("list", "--grep", "alpha", "--next", "press")
+    assert status == 0
+    assert payload["items"] == []
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_repeated_grep_searches_every_term_in_one_call() -> None:
+    """A repeated --grep keeps a hit matching any term, so no caller loops."""
+    _ = _run("checkpoint", stdin=_first_intent(orientation="Alpha work.\nMore."))
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(work_id="other-work", orientation="Beta work.\nMore."),
+    )
+    _ = _run(
+        "checkpoint",
+        stdin=_first_intent(work_id="third-work", orientation="Gamma work.\nMore."),
+    )
+
+    def refs(*argv: str) -> set[object]:
+        status, payload = _run("list", *argv)
+        assert status == 0, payload
+        return {
+            cast(dict[str, object], item)["ref"]
+            for item in cast("list[object]", payload["items"])
+        }
+
+    assert refs("--grep", "alpha", "--grep", "BETA") == {WORK_ID, "other-work"}
+    assert refs("--grep", "alpha", "--grep", "missing") == {WORK_ID}
+    assert refs("--grep", "alpha", "--grep", "beta", "--next", "press") == set()
+    assert refs("--status", "gated", "--status", "ok") == {
+        WORK_ID,
+        "other-work",
+        "third-work",
+    }
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_status_and_since_filter() -> None:
+    """AC-7: --status and --since filter; a future --since removes every hit."""
+    _ = _run("checkpoint", stdin=_first_intent(orientation="Alpha work.\nMore."))
+
+    status, payload = _run("list", "--status", "ok", "--since", "2000-01-01")
+    assert status == 0
+    assert len(cast("list[object]", payload["items"])) == 1
+
+    status, payload = _run("list", "--status", "gated")
+    assert status == 0
+    assert payload["items"] == []
+
+    status, payload = _run("list", "--since", "2999-01-01")
+    assert status == 0
+    assert payload["items"] == []
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ("--since", "yesterday"),
+        ("--since", "2026-13-01"),
+        ("--limit", "0"),
+        ("--limit", "x"),
+    ],
+)
+def test_list_rejects_a_bad_since_or_limit_as_usage(flags: tuple[str, str]) -> None:
+    """A malformed filter is a usage error (exit 2), never an internal error."""
+    status, payload = _run("list", *flags)
+    assert status == 2
+    error = cast(dict[str, object], payload["error"])
+    assert error["code"] == ""
+    assert flags[0] in cast(str, error["message"])
+
+
+def _checkpoint_in_a_machine_corpus(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "cheese"))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-a")
+    _ = _run("checkpoint", stdin=_first_intent())
+    return tmp_path / "cheese" / "proj-a"
+
+
+def test_list_scope_fallback_reports_machine_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _checkpoint_in_a_machine_corpus(tmp_path, monkeypatch)
+    monkeypatch.delenv("EASY_CHEESE_PROJECT")
+
+    status, payload = _run("list")
+
+    assert status == 0
+    assert payload["scope"] == "machine"
+    assert payload["scope-fallback"] == "machine"
+    refs = [
+        cast(dict[str, object], item)["ref"]
+        for item in cast("list[object]", payload["items"])
+    ]
+    assert WORK_ID in refs
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_explicit_project_scope_has_no_scope_fallback() -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    status, payload = _run("list", "--scope", "project")
+
+    assert status == 0
+    assert payload["scope"] == "project"
+    assert "scope-fallback" not in payload
+
+
+def test_list_explicit_corpus_root_has_no_scope_fallback_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _checkpoint_in_a_machine_corpus(tmp_path, monkeypatch)
+    monkeypatch.delenv("EASY_CHEESE_PROJECT")
+
+    status, payload = _run("list", "--corpus-root", str(root))
+
+    assert status == 0
+    assert payload["scope"] == "project"
+    assert payload["corpus_root"] == str(root)
+    assert "scope-fallback" not in payload
+    assert [line.split("\t")[2] for line in cast("list[str]", payload["lines"])] == [
+        WORK_ID
+    ]
+
+
+def test_list_project_env_override_has_no_scope_fallback_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _checkpoint_in_a_machine_corpus(tmp_path, monkeypatch)
+
+    status, payload = _run("list")
+
+    assert status == 0
+    assert payload["scope"] == "project"
+    assert "scope-fallback" not in payload
+    assert [line.split("\t")[2] for line in cast("list[str]", payload["lines"])] == [
+        WORK_ID
+    ]
+
+
+def test_list_project_flag_has_no_scope_fallback_outside_a_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _checkpoint_in_a_machine_corpus(tmp_path, monkeypatch)
+    monkeypatch.delenv("EASY_CHEESE_PROJECT")
+
+    status, payload = _run("list", "--project", "proj-a")
+
+    assert status == 0
+    assert payload["scope"] == "machine"
+    assert "scope-fallback" not in payload
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stderr", "expected"),
+    [
+        (
+            128,
+            "fatal: not a git repository (or any of the parent directories): .git",
+            True,
+        ),
+        (128, "fatal: detected dubious ownership in repository at '/x'", False),
+        (0, "", False),
+    ],
+)
+def test_outside_git_repository_only_trusts_git_not_a_repository(
+    monkeypatch: pytest.MonkeyPatch, returncode: int, stderr: str, expected: bool
+) -> None:
+    def fake(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], returncode, "", stderr)
+
+    monkeypatch.setattr(git_utils, "run_git", fake)
+
+    assert paths.outside_git_repository() is expected
+
+
+def test_outside_git_repository_forces_the_c_locale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return subprocess.CompletedProcess([], 128, "", "fatal: not a git repository")
+
+    monkeypatch.setattr(git_utils, "run_git", fake)
+    monkeypatch.setenv("LC_ALL", "de_DE.UTF-8")
+
+    assert paths.outside_git_repository() is True
+    env = cast(dict[str, str], seen["env"])
+    assert env["LC_ALL"] == "C"
+    assert env["LANGUAGE"] == "C"
+
+
+@pytest.mark.parametrize(
+    "failure", [subprocess.TimeoutExpired("git", 5), FileNotFoundError("git")]
+)
+def test_outside_git_repository_is_false_when_git_cannot_answer(
+    monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    def boom(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise failure
+
+    monkeypatch.setattr(git_utils, "run_git", boom)
+
+    assert paths.outside_git_repository() is False
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cli_resolve_matches_a_slug_by_prefix_but_phase_entry_stays_exact() -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _, exact = _run("resolve", "--ref", WORK_ID)
+    slug = cast(dict[str, object], exact["record"])["slug"]
+    assert isinstance(slug, str)
+    partial = slug[:6]
+
+    status, fuzzy = _run("resolve", "--ref", partial)
+    phase = resolve_cli.resolve(ref=partial)
+
+    assert status == 0
+    assert fuzzy["outcome"] == "authoritative"
+    assert fuzzy["work_id"] == WORK_ID
+    assert "matched by prefix" in cast(str, fuzzy["detail"])
+    assert fuzzy["matched_by"] == "prefix"
+    assert phase["outcome"] == "not-found"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cli_resolve_reports_matched_by_for_exact_and_substring() -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _, by_id = _run("resolve", "--ref", WORK_ID)
+    slug = cast(dict[str, object], by_id["record"])["slug"]
+    assert isinstance(slug, str)
+    _, by_slug = _run("resolve", "--ref", slug)
+    _, by_part = _run("resolve", "--ref", slug[1:6])
+
+    assert by_id["matched_by"] == "exact"
+    assert by_slug["matched_by"] == "exact"
+    assert by_part["matched_by"] == "substring"
+    assert by_part["work_id"] == WORK_ID
+
+
+def test_list_project_flag_implies_machine_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G9: --project limits hits to that project and implies machine scope."""
+    home = tmp_path / "cheese"
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-a")
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-b")
+    status, payload = _run("list", "--project", "proj-a")
+    assert status == 0
+    assert payload["scope"] == "machine"
+    projects = {
+        cast(dict[str, object], item)["project"]
+        for item in cast("list[object]", payload["items"])
+    }
+    assert projects == {"proj-a"}
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_lines_render_a_handwritten_note_readably(tmp_path: Path) -> None:
+    """A note without a preamble shows its title and `-` for null cells."""
+    root = tmp_path / "elsewhere"
+    note = root / ".cheese" / "notes" / "brief.md"
+    note.parent.mkdir(parents=True)
+    _ = note.write_text("# Resume brief\n\nbody\n", encoding="utf-8")
+
+    status, payload = _run(
+        "list", "--scope", "machine", "--root", str(root), "--source", "note"
+    )
+
+    assert status == 0
+    lines = cast("list[str]", payload["lines"])
+    brief = [line for line in lines if "\tbrief\t" in line]
+    assert len(brief) == 1
+    cells = brief[0].split("\t")
+    assert cells[3:] == ["-", "-", "Resume brief"]
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+@pytest.mark.usefixtures("corpus_root")
+def test_list_hides_a_mirror_note_until_mirrors_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-8: a note mirroring a store slug is hidden unless --mirrors is given."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+    _ = subprocess.run(
+        ["git", "init", "-q", "-b", "main"], cwd=repo, env=env, check=True
+    )
+    _ = subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "seed"],
+        cwd=repo,
+        env=env,
+        check=True,
+    )
+    monkeypatch.chdir(repo)
+
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    status, payload = _run("list")
+    assert status == 0
+    assert payload["hidden_mirrors"] == 1
+    sources = {
+        cast(dict[str, object], item)["source"]
+        for item in cast("list[object]", payload["items"])
+    }
+    assert sources == {"store"}
+
+    status, payload = _run("list", "--mirrors")
+    assert status == 0
+    assert payload["hidden_mirrors"] == 0
+    sources = {
+        cast(dict[str, object], item)["source"]
+        for item in cast("list[object]", payload["items"])
+    }
+    assert sources == {"store", "note"}
+
+
+def test_show_project_flag_reads_another_projects_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-9: `show --project KEY <id>` reads another project's store."""
+    home = tmp_path / "cheese"
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(home))
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-a")
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", "proj-b")
+    status, payload = _run("show", "--work-id", WORK_ID)
+    assert (status, _error(payload)[0]) == (2, "record-missing")
+
+    status, payload = _run("show", "--project", "proj-a", "--work-id", WORK_ID)
+    assert status == 0 and payload["work_id"] == WORK_ID
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_resolve_miss_lists_close_suggestions() -> None:
+    """AC-10: a near-miss id lists in `suggestions`; the outcome stays not-found."""
+    _ = _run("checkpoint", stdin=_first_intent())
+
+    status, payload = _run("resolve", "--ref", "work-0002")
+    assert status == 0
+    assert payload["outcome"] == "not-found"
+    assert WORK_ID in cast(list[str], payload["suggestions"])
+
+
+# --------------------------------------------------------------------------
+# Work graph surface (spec wheypoint-work-graph, curd surface).
+# --------------------------------------------------------------------------
+
+PROJECT = "paulnsorensen-easy-cheese"
+OTHER = "other-work"
+OTHER_REF = f"wheypoint:{PROJECT}/{OTHER}"
+
+
+def _seed(work_id: str = WORK_ID, **fields: object) -> dict[str, object]:
+    """A genesis checkpoint with a fixed clock and a title unique to `work_id`."""
+    status, payload = _run(
+        "checkpoint",
+        stdin=_first_intent(
+            work_id=work_id, orientation=f"Work {work_id}.\nSeeded.", **fields
+        ),
+    )
+    assert status == 0, payload
+    return payload
+
+
+def _edge_pairs(items: object) -> list[tuple[str, str]]:
+    return [
+        (cast(str, edge["to"]), cast(str, edge["kind"]))
+        for edge in cast(list[dict[str, object]], items)
+    ]
+
+
+def _hit_keys(payload: dict[str, object]) -> set[tuple[str, str]]:
+    return {
+        (cast(str, item["project"]), cast(str, item["ref"]))
+        for item in cast(list[dict[str, object]], payload["items"])
+    }
+
+
+def test_ac4_fork_writes_only_the_child_genesis(corpus_root: Path) -> None:
+    seeded = _seed(
+        entries=[
+            {"kind": "question", "summary": "Which store backs forks?"},
+            {"kind": "directive", "summary": "Keep forks small.", "quote": "small"},
+        ]
+    )
+    parent_revision = cast(str, seeded["revision_id"])
+    parent = storage.WorkStore.open(WORK_ID, corpus_root=corpus_root)
+    parent_bytes = parent.record_path.read_bytes()
+
+    status, payload = _run(
+        "fork",
+        WORK_ID,
+        "child-work",
+        "--orientation",
+        "Child work.\nSplit off the parent.",
+    )
+
+    assert status == 0, payload
+    assert payload["command"] == "fork"
+    assert (payload["work_id"], payload["revision_number"]) == ("child-work", 1)
+    child = storage.WorkStore.open("child-work", corpus_root=corpus_root)
+    assert [r.revision_id for r in child.receipt_revisions()] == [
+        payload["revision_id"]
+    ]
+    assert "origins" not in payload
+    child_record = cast(dict[str, object], payload["record"])
+    assert not child_record.get("questions") and not child_record.get("directives")
+    forked_from = [
+        to for to, kind in _edge_pairs(payload["edges"]) if kind == "forked_from"
+    ]
+    assert len(forked_from) == 1
+    assert forked_from[0].endswith(f"{WORK_ID}@{parent_revision}")
+    assert parent.record_path.read_bytes() == parent_bytes
+    assert len(parent.receipt_revisions()) == 1
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac4_fork_refusals_surface_their_own_code() -> None:
+    _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
+
+    status, payload = _run("fork", "no-such-work", "child", "--orientation", "C.")
+    assert (status, _error(payload)[0]) == (2, "unknown-parent")
+
+    assert _run("fork", WORK_ID, "child", "--orientation", "C.")[0] == 0
+    status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
+    assert (status, _error(payload)[0]) == (2, "fork-exists")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac12_list_linked_to_returns_the_linking_records() -> None:
+    for work_id in (WORK_ID, OTHER, "third-work"):
+        _ = _seed(work_id)
+    link = ("checkpoint", WORK_ID, "--link", OTHER_REF, "--kind", "supersedes")
+    assert _run(*link)[0] == 0
+    link = ("checkpoint", "third-work", "--link", OTHER_REF, "--kind", "checkpoints")
+    assert _run(*link)[0] == 0
+
+    status, listed = _run("list", "--linked-to", OTHER_REF)
+    assert status == 0, listed
+    assert _hit_keys(listed) == {(PROJECT, WORK_ID), (PROJECT, "third-work")}
+    item = next(
+        i for i in cast(list[dict[str, object]], listed["items"]) if i["ref"] == WORK_ID
+    )
+    edges_out = cast(list[dict[str, str]], item["edges_out"])
+    assert [(edge["kind"], edge["to"].startswith(OTHER_REF)) for edge in edges_out] == [
+        ("supersedes", True)
+    ]
+    status, everything = _run("list")
+    assert status == 0, everything
+    target = next(
+        i
+        for i in cast(list[dict[str, object]], everything["items"])
+        if i["ref"] == OTHER
+    )
+    assert sorted(
+        (edge["kind"], edge["source"])
+        for edge in cast(list[dict[str, str]], target["edges_in"])
+    ) == [
+        ("checkpoints", f"wheypoint:{PROJECT}/third-work"),
+        ("supersedes", f"wheypoint:{PROJECT}/{WORK_ID}"),
+    ]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac13_list_filters_gated_records_by_entry_kind_and_state() -> None:
+    _ = _seed(entries=[{"kind": "question", "summary": "Open but not gating?"}])
+    _ = _seed(OTHER)
+    status, gated = _run(
+        "checkpoint",
+        "--work-id",
+        OTHER,
+        "--question",
+        "Gate?",
+        "--gates",
+        "--rationale",
+        "Needs an answer.",
+    )
+    assert status == 0, gated
+
+    status, payload = _run(
+        "list", "--entry-kind", "question", "--entry-state", "active", "--gated"
+    )
+    assert status == 0, payload
+    items = cast(list[dict[str, object]], payload["items"])
+    assert [item["ref"] for item in items] == [OTHER]
+    assert items[0]["gates"] == gated["derived_entry_ids"]
+
+
+def test_ac14_checkpoint_flags_commit_the_same_revision_as_the_intent_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("EASY_CHEESE_PROJECT", PROJECT)
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "flags"))
+    _ = _seed()
+    status, by_flags = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "Q",
+        "--gates",
+        "--rationale",
+        "Why.",
+        "--directive",
+        "D",
+        "--quote",
+        "d",
+    )
+    assert status == 0, by_flags
+
+    monkeypatch.setenv("EASY_CHEESE_HOME", str(tmp_path / "file"))
+    _ = _seed()
+    intent = tmp_path / "intent.json"
+    _ = intent.write_text(
+        _intent_json(
+            entries=[
+                {
+                    "kind": "question",
+                    "summary": "Q",
+                    "blocks_continuation": True,
+                    "rationale": "Why.",
+                },
+                {"kind": "directive", "summary": "D", "quote": "d"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    status, by_file = _run("checkpoint", str(intent))
+    assert status == 0, by_file
+
+    assert by_flags["revision_id"] == by_file["revision_id"]
+    assert by_flags["revision"] == by_file["revision"]
+    added = cast(list[dict[str, str]], _get(by_flags, "revision", "applied_additions"))
+    assert by_flags["derived_entry_ids"] == [entry["entry_id"] for entry in added]
+    assert len(added) == 2
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_ac14_validate_accepts_the_same_flags_and_names_pairing_errors() -> None:
+    status, payload = _run("validate", WORK_ID, "--directive", "D", "--quote", "d")
+    assert (status, payload["valid"], payload["work_id"]) == (0, True, WORK_ID)
+
+    status, payload = _run("validate", "--work-id", WORK_ID, "--directive", "D")
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
+
+
+def test_ac17_a_milknado_checkpoints_edge_binds_only_when_milknado_is_present(
+    tmp_path: Path, corpus_root: Path
+) -> None:
+    del corpus_root
+    _ = _seed()
+    before = _run("resolve", WORK_ID)[1]
+    node = f"milknado:{PROJECT}/node-7"
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--link", node, "--kind", "checkpoints"
+    )
+    assert status == 0, payload
+
+    status, inactive = _run("resolve", WORK_ID)
+    assert status == 0, inactive
+    assert _get(inactive, "bridge", "state") == "bridge-inactive"
+    assert (inactive["outcome"], inactive["dispatchable"]) == (
+        before["outcome"],
+        before["dispatchable"],
+    )
+
+    (tmp_path / ".milknado").mkdir()
+    status, bound = _run("resolve", WORK_ID)
+    assert status == 0, bound
+    assert _get(bound, "bridge") == {
+        "state": "bound",
+        "node_ref": node,
+        "wheypoint_ref": f"wheypoint:{PROJECT}/{WORK_ID}",
+    }
+    assert bound["dispatchable"] == before["dispatchable"]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_graph_an_unpinnable_link_that_covers_entries_is_refused() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "S.", "rationale": "R."}])
+    decision = cast(list[dict[str, str]], _get(seeded, "record", "decisions"))[0][
+        "entry_id"
+    ]
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_intent_json(
+            artifact_links=[
+                {
+                    "path": "example.com",
+                    "ref": "https://example.com",
+                    "covers_entry_ids": [decision],
+                }
+            ]
+        ),
+    )
+    assert (status, _error(payload)[0]) == (2, "unpinnable-scheme")
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--link",
+        "https://example.com",
+        "--kind",
+        "supersedes",
+        "--covers",
+        decision,
+    )
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_graph_show_reports_the_bridge_state() -> None:
+    _ = _seed()
+    status, payload = _run("show", WORK_ID)
+    assert status == 0
+    assert "pending" not in payload
+    assert _get(payload, "bridge", "state") == "unbound"
+
+
+# --------------------------------------------------------------------------
+# Cure of the surface review (.cheese/age/wheypoint-work-graph-surface.md).
+# --------------------------------------------------------------------------
+
+
+def _git_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    _ = subprocess.run(["git", "init", "--quiet"], cwd=checkout, check=True)
+    _ = (checkout / "README.md").write_text("# Readme\n", encoding="utf-8")
+    monkeypatch.chdir(checkout)
+    return checkout
+
+
+def _covers(payload: dict[str, object], ref: str) -> list[str]:
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    return next(
+        cast(list[str], link["covers_entry_ids"])
+        for link in links
+        if link["ref"] == ref
+    )
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_fork_next_move_needs_the_artifact_checkpoint_needs() -> None:
+    _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
+
+    status, payload = _run(
+        "fork", WORK_ID, "child", "--orientation", "C.", "--next", "cook"
+    )
+    assert (status, _error(payload)[0]) == (2, "invalid-intent")
+
+    status, payload = _run(
+        "fork",
+        WORK_ID,
+        "child",
+        "--orientation",
+        "C.",
+        "--next",
+        "affinage",
+        "--artifact",
+        "spec.md",
+    )
+    assert (status, _error(payload)[0]) == (2, "invalid-intent")
+
+    status, payload = _run(
+        "fork",
+        WORK_ID,
+        "child",
+        "--orientation",
+        "C.",
+        "--next",
+        "cook",
+        "--artifact",
+        "spec.md",
+    )
+    assert status == 0, payload
+    assert _get(payload, "record", "next_action", "move") == "cook"
+    assert _get(payload, "record", "next_action", "artifact") == "spec.md"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_relinking_a_covered_ref_keeps_its_coverage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = _git_checkout(tmp_path, monkeypatch)
+    seeded = _seed(
+        entries=[
+            {"kind": "decision", "summary": "First.", "rationale": "R."},
+            {"kind": "decision", "summary": "Second.", "rationale": "R."},
+        ]
+    )
+    first, second = (
+        entry["entry_id"]
+        for entry in cast(list[dict[str, str]], _get(seeded, "record", "decisions"))
+    )
+    ref = "repo:README.md"
+    link = ("checkpoint", WORK_ID, "--link", ref)
+    status, payload = _run(*link, "--kind", "supersedes", "--covers", first)
+    assert status == 0, payload
+    assert _covers(payload, ref) == [first]
+
+    status, payload = _run(*link, "--kind", "supersedes")
+    assert status == 0, payload
+    assert _covers(payload, ref) == [first]
+
+    status, payload = _run(*link, "--kind", "checkpoints")
+    assert status == 0, payload
+    assert _covers(payload, ref) == [first]
+
+    status, payload = _run("checkpoint", WORK_ID, "--link", ref, "--kind", "supersedes")
+    assert status == 0, payload
+    assert _covers(payload, ref) == [first]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--link",
+        ref,
+        "--kind",
+        "checkpoints",
+        "--covers",
+        second,
+    )
+    assert status == 0, payload
+    assert _covers(payload, ref) == [second]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_a_positional_that_is_neither_file_nor_work_id_names_both_forms() -> None:
+    status, payload = _run("checkpoint", "Not A Work", "--question", "Q")
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
+    message = _error(payload)[1]
+    assert "intent file" in message and "work id" in message
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_flags_leave_stdin_unread_unless_the_intent_is_dash(
+    store: storage.WorkStore,
+) -> None:
+    _ = _seed()
+    piped = json.dumps({"work_id": WORK_ID, "notes": "Piped."})
+
+    for argv in (
+        ["checkpoint", "--work-id", WORK_ID, "--question", "Q1"],
+        ["checkpoint", WORK_ID, "--question", "Q2"],
+        ["validate", WORK_ID, "--question", "Q3"],
+    ):
+        current = store.read_record()
+        assert current is not None
+        if argv[0] == "checkpoint":
+            argv = [*argv, "--base", current.revision_id]
+        stdin, out = io.StringIO(piped), io.StringIO()
+        assert wheypoint.main(argv, stdin=stdin, stdout=out) == 0, argv
+        assert stdin.tell() == 0, argv
+        assert "Piped." not in out.getvalue(), argv
+
+    status, payload = _run("checkpoint", "-", "--question", "Q4", stdin=piped)
+    assert status == 0, payload
+    assert _get(payload, "record", "notes") == "Piped."
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_a_positional_work_id_that_differs_from_work_id_is_ambiguous() -> None:
+    _ = _seed()
+    status, payload = _run("checkpoint", WORK_ID, "--work-id", OTHER, "--question", "Q")
+    assert (status, _error(payload)[0]) == (2, "intent-ambiguous")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_a_missing_intent_file_or_a_directory_is_never_a_work_id(
+    tmp_path: Path,
+) -> None:
+    status, payload = _run(
+        "checkpoint",
+        "new.json",
+        "--orientation",
+        "New.\nWork.",
+        "--question",
+        "Q",
+        "--next",
+        "hold",
+        "--context",
+        "x",
+    )
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
+    assert "new.json" in _error(payload)[1]
+    status, _ = _run("show", "new.json")
+    assert status != 0
+
+    (tmp_path / OTHER).mkdir()
+    status, payload = _run("checkpoint", OTHER, "--question", "Q")
+    assert (status, _error(payload)[0]) == (2, "intent-unreadable")
+    assert "Errno" not in _error(payload)[1]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_a_file_link_keeps_its_explicit_empty_coverage_beside_flags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = _git_checkout(tmp_path, monkeypatch)
+    seeded = _seed(
+        entries=[{"kind": "decision", "summary": "First.", "rationale": "R."}]
+    )
+    (first,) = (
+        entry["entry_id"]
+        for entry in cast(list[dict[str, str]], _get(seeded, "record", "decisions"))
+    )
+    ref = "repo:README.md"
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--link", ref, "--kind", "supersedes", "--covers", first
+    )
+    assert status == 0, payload
+    assert _covers(payload, ref) == [first]
+
+    _ = (checkout / "clear.json").write_text(
+        json.dumps(
+            {
+                "work_id": WORK_ID,
+                "artifact_links": [
+                    {"path": "README.md", "ref": ref, "covers_entry_ids": []}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    status, payload = _run("checkpoint", "clear.json", "--question", "QX")
+    assert status == 0, payload
+    assert _covers(payload, ref) == []
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_a_pinned_link_does_not_take_another_revisions_coverage() -> None:
+    seeded = _seed(
+        entries=[{"kind": "decision", "summary": "First.", "rationale": "R."}]
+    )
+    (first,) = (
+        entry["entry_id"]
+        for entry in cast(list[dict[str, str]], _get(seeded, "record", "decisions"))
+    )
+    old = cast(str, _seed(OTHER)["revision_id"])
+    status, payload = _run("checkpoint", OTHER, "--question", "Later?")
+    assert status == 0, payload
+    new = cast(str, payload["revision_id"])
+    old_ref, new_ref = f"{OTHER_REF}@{old}", f"{OTHER_REF}@{new}"
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--link",
+        new_ref,
+        "--kind",
+        "supersedes",
+        "--covers",
+        first,
+    )
+    assert status == 0, payload
+    assert _covers(payload, new_ref) == [first]
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--link", old_ref, "--kind", "checkpoints"
+    )
+    assert status == 0, payload
+    assert (_covers(payload, old_ref), _covers(payload, new_ref)) == ([], [first])
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_fork_from_an_unreadable_parent_is_refused(corpus_root: Path) -> None:
+    _ = _seed()
+    parent = storage.WorkStore.open(WORK_ID, corpus_root=corpus_root)
+    _ = parent.record_path.write_text("{not json", encoding="utf-8")
+
+    status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
+    assert (status, _error(payload)[0]) == (2, "record-unreadable")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_fork_input_errors_are_invalid_intent_not_record_unreadable() -> None:
+    _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
+    status, payload = _run("fork", WORK_ID, "child", "--orientation", "")
+    assert (status, _error(payload)[0]) == (2, "invalid-intent")
+    status, payload = _run(
+        "fork",
+        WORK_ID,
+        "child",
+        "--orientation",
+        "C.",
+        "--next",
+        "cook",
+        "--artifact",
+        "",
+    )
+    assert (status, _error(payload)[0]) == (2, "invalid-intent")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_cure_fork_mirrors_the_child_note_except_under_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checkout = _git_checkout(tmp_path, monkeypatch)
+    _ = _seed()
+
+    status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
+    assert status == 0, payload
+    mirror = checkout / ".cheese" / "notes" / "child.md"
+    assert payload["note_path"] == str(mirror)
+    assert payload["durability"] == "repo-snapshot"
+    assert mirror.read_text(encoding="utf-8") == payload["markdown"]
+
+    status, payload = _run(
+        "fork", WORK_ID, "child-two", "--orientation", "C.", "--project", PROJECT
+    )
+    assert status == 0, payload
+    assert (payload["note_path"], payload["durability"]) == (None, "canonical-local")
+    assert not (checkout / ".cheese" / "notes" / "child-two.md").exists()
+
+
+@pytest.mark.usefixtures("corpus_root")
+@pytest.mark.parametrize(
+    ("argv", "code"),
+    [
+        (
+            ("fork", WORK_ID, "child", "--orientation", "C.", "--next", "bogus"),
+            "invalid-intent",
+        ),
+        (("checkpoint", WORK_ID, "--link", OTHER_REF, "--kind", "nope"), "flag-kind"),
+        (("list", "--edge-kind", "nope"), "flag-kind"),
+        (("list", "--entry-kind", "nope"), "flag-entry"),
+        (("list", "--entry-state", "nope"), "flag-entry"),
+    ],
+)
+def test_cure_a_bad_enum_value_is_refused_with_its_code(
+    argv: tuple[str, ...], code: str
+) -> None:
+    _ = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
+    status, payload = _run(*argv)
+    assert (status, _error(payload)[0]) == (2, code)
+
+
+def _corpus_bytes(root: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _stamp_record_future(store: storage.WorkStore) -> None:
+    payload = cast(dict[str, object], json.loads(store.record_path.read_text()))
+    payload["schema_version"] = cast(int, payload["schema_version"]) + 1
+    _ = store.record_path.write_text(json.dumps(payload))
+
+
+def test_show_refuses_a_future_stamped_record_without_writing(
+    store: storage.WorkStore, corpus_root: Path
+) -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _stamp_record_future(store)
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run("show", WORK_ID)
+
+    assert status == 2
+    assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
+    assert _corpus_bytes(corpus_root) == before
+
+
+def test_checkpoint_refuses_a_future_stamped_record_without_writing(
+    store: storage.WorkStore, corpus_root: Path
+) -> None:
+    created = _run("checkpoint", stdin=_first_intent())[1]
+    _stamp_record_future(store)
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint",
+        stdin=_intent_json(
+            base_revision_id=created["revision_id"], orientation="Past the future."
+        ),
+    )
+
+    assert status == 2
+    assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
+    assert _corpus_bytes(corpus_root) == before
+
+
+def test_fork_refuses_a_future_stamped_parent_without_writing(
+    store: storage.WorkStore, corpus_root: Path
+) -> None:
+    _ = _run("checkpoint", stdin=_first_intent())
+    _stamp_record_future(store)
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run("fork", WORK_ID, "child", "--orientation", "C.")
+
+    assert status == 2
+    assert cast(str, _get(payload, "error", "code")).startswith("schema-version-future")
+    assert _corpus_bytes(corpus_root) == before
+
+
+def _decision_ids(payload: dict[str, object]) -> list[str]:
+    record = cast(dict[str, object], payload["record"])
+    return [
+        cast(str, entry["entry_id"])
+        for entry in cast(list[dict[str, object]], record["decisions"])
+    ]
+
+
+def _entry_states(payload: dict[str, object]) -> dict[str, tuple[str, object]]:
+    record = cast(dict[str, object], payload["record"])
+    return {
+        cast(str, entry["entry_id"]): (
+            cast(str, entry["state"]),
+            entry.get("superseded_by"),
+        )
+        for entry in cast(list[dict[str, object]], record["decisions"])
+    }
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_by_names_the_successor_and_projects_it() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    status, added = _run(
+        "checkpoint", WORK_ID, "--decision", "Use B", "--rationale", "b is faster"
+    )
+    assert status == 0, added
+    new = _decision_ids(added)[1]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--supersede",
+        old,
+        "--by",
+        new,
+        "--rationale",
+        "B replaces A",
+    )
+
+    assert status == 0, payload
+    assert _entry_states(payload)[old] == ("superseded", new)
+    assert f"- {old} -> {new}" in cast(str, payload["markdown"]).splitlines()
+    transitions = cast(list[dict[str, object]], payload["applied_transitions"])
+    assert [
+        (t["entry_id"], t["action"], t["target_entry_id"]) for t in transitions
+    ] == [(old, "supersede", new)]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_without_by_takes_the_one_decision_the_checkpoint_adds() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--decision",
+        "Use B",
+        "--rationale",
+        "b is faster",
+        "--supersede",
+        old,
+        "--rationale",
+        "B replaces A",
+    )
+
+    assert status == 0, payload
+    ids = _decision_ids(payload)
+    assert len(ids) == 2
+    assert _entry_states(payload)[old] == ("superseded", ids[1])
+    assert _entry_states(payload)[ids[1]][0] == "active"
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_pairing_refuses_with_no_successor_and_writes_nothing(
+    corpus_root: Path,
+) -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--supersede", old, "--rationale", "Gone."
+    )
+
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_pairing_refuses_two_added_entries_of_the_kind() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--decision",
+        "B",
+        "--decision",
+        "C",
+        "--rationale",
+        "b",
+        "--rationale",
+        "c",
+        "--supersede",
+        old,
+        "--rationale",
+        "Replaced.",
+    )
+
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_refuses_an_unknown_successor(corpus_root: Path) -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--supersede",
+        old,
+        "--by",
+        "d-nothing",
+        "--rationale",
+        "Replaced.",
+    )
+
+    assert status == 2
+    assert "unknown entry" in _error(payload)[1]
+    assert _corpus_bytes(corpus_root) == before
+
+
+def _questions(payload: dict[str, object]) -> list[dict[str, object]]:
+    record = cast(dict[str, object], payload["record"])
+    return cast(list[dict[str, object]], record["questions"])
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_question_owner_and_when_flags_pair_by_order_and_are_stored() -> None:
+    _ = _seed()
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "Which index?",
+        "--question",
+        "Who pays?",
+        "--owner",
+        "Ana",
+        "--owner",
+        "Bo",
+        "--when",
+        "after the spike",
+        "--when",
+        "before launch",
+    )
+
+    assert status == 0, payload
+    stored = [
+        (q["summary"], q.get("owner"), q.get("when")) for q in _questions(payload)
+    ]
+    assert stored == [
+        ("Which index?", "Ana", "after the spike"),
+        ("Who pays?", "Bo", "before launch"),
+    ]
+
+
+@pytest.mark.usefixtures("corpus_root")
+@pytest.mark.parametrize("flag", ["--owner", "--when"])
+def test_question_owner_or_when_count_mismatch_refuses_and_writes_nothing(
+    corpus_root: Path, flag: str
+) -> None:
+    _ = _seed()
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "One?",
+        "--question",
+        "Two?",
+        flag,
+        "solo",
+    )
+
+    assert (status, _error(payload)[0]) == (2, "flag-pairing")
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_operator_directive_flag_stores_scope_operator_and_plain_directive_stays_work() -> (
+    None
+):
+    _ = _seed()
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--directive",
+        "Ship small PRs",
+        "--operator-directive",
+        "Lead with the answer",
+        "--operator-quote",
+        "lead with the answer",
+        "--quote",
+        "ship small PRs please",
+    )
+
+    assert status == 0, payload
+    record = cast(dict[str, object], payload["record"])
+    directives = cast(list[dict[str, object]], record["directives"])
+    assert [(d["summary"], d.get("scope", "work")) for d in directives] == [
+        ("Ship small PRs", "work"),
+        ("Lead with the answer", "operator"),
+    ]
+    assert "scope" not in directives[0]
+    assert "## Operator preferences" in cast(str, payload["markdown"]).splitlines()
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_list_owner_keeps_records_with_an_active_question_owned_case_insensitively() -> (
+    None
+):
+    _ = _seed(
+        work_id="ana-work",
+        entries=[{"kind": "question", "summary": "Q?", "owner": "Ana"}],
+    )
+    _ = _seed(
+        work_id="bo-work",
+        entries=[{"kind": "question", "summary": "Q?", "owner": "Bo"}],
+    )
+    _ = _seed(work_id="nobody-work")
+
+    def refs(*argv: str) -> set[object]:
+        status, payload = _run("list", *argv)
+        assert status == 0, payload
+        return {
+            cast(dict[str, object], item)["ref"]
+            for item in cast("list[object]", payload["items"])
+        }
+
+    assert refs("--owner", "ANA") == {"ana-work"}
+    assert refs("--owner", "ana", "--owner", "bo") == {"ana-work", "bo-work"}
+    assert refs("--owner", "carl") == set()
+
+
+def _commit_repo(root: Path) -> str:
+    (root / "src").mkdir(parents=True)
+    _ = (root / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+    env = ["-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for args in (["init", "-q"], ["add", "."], [*env, "commit", "-q", "-m", "init"]):
+        _ = subprocess.run(
+            ["git", "-C", str(root), *args], check=True, capture_output=True
+        )
+    head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return head.stdout.strip()
+
+
+def _line_ref_intent(*, link: bool = True) -> str:
+    return json.dumps(
+        {
+            "work_id": WORK_ID,
+            "orientation": "Start.",
+            "next": "cook",
+            "artifact": ".cheese/cook/x.md",
+            "entries": [{"kind": "decision", "summary": "D", "rationale": "r"}],
+            "working_context": ["see src/app.py:1"],
+            **({"artifact_links": [{"path": "src/app.py:1"}]} if link else {}),
+        }
+    )
+
+
+def test_checkpoint_pin_line_ref_stores_the_short_head_sha(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = corpus_root
+    repo = tmp_path / "repo"
+    head = _commit_repo(repo)
+    monkeypatch.chdir(repo)
+
+    status, payload = _run("checkpoint", "--no-note", stdin=_line_ref_intent())
+
+    assert status == 0, payload
+    record = cast(dict[str, object], payload["record"])
+    assert record["working_context"] == [f"see src/app.py:1@{head}"]
+    links = cast(list[dict[str, object]], record["artifact_links"])
+    assert links[0]["path"] == f"src/app.py:1@{head}"
+    assert payload["warnings"] == []
+
+
+def test_checkpoint_unpinned_line_ref_warns_outside_a_checkout(
+    corpus_root: Path,
+) -> None:
+    _ = corpus_root
+
+    status, payload = _run("checkpoint", stdin=_line_ref_intent(link=False))
+
+    assert status == 0, payload
+    record = cast(dict[str, object], payload["record"])
+    assert record["working_context"] == ["see src/app.py:1"]
+    assert payload["warnings"] == ["unpinned-line-ref"]
+
+
+def _commit_again(root: Path) -> str:
+    _ = (root / "src" / "app.py").write_text("x = 2\n", encoding="utf-8")
+    env = ["-c", "user.name=t", "-c", "user.email=t@example.com"]
+    for args in (["add", "."], [*env, "commit", "-q", "-m", "again"]):
+        _ = subprocess.run(
+            ["git", "-C", str(root), *args], check=True, capture_output=True
+        )
+    head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return head.stdout.strip()
+
+
+def test_a_line_ref_repinned_at_a_new_head_replaces_the_old_pin_and_keeps_coverage(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = corpus_root
+    repo = tmp_path / "repo"
+    first_head = _commit_repo(repo)
+    monkeypatch.chdir(repo)
+    seeded = _seed(entries=[{"kind": "decision", "summary": "D.", "rationale": "R."}])
+    decision = _decision_ids(seeded)[0]
+    status, payload = _run(
+        "checkpoint",
+        "--no-note",
+        stdin=_intent_json(
+            artifact_links=[{"path": "src/app.py:1", "covers_entry_ids": [decision]}]
+        ),
+    )
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert [link["path"] for link in links] == [f"src/app.py:1@{first_head}"]
+    second_head = _commit_again(repo)
+    assert second_head != first_head
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--no-note", "--link", "repo:src/app.py:1",
+        "--kind", "supersedes",
+    )
+
+    assert status == 0, payload
+    links = cast(list[dict[str, object]], _get(payload, "record", "artifact_links"))
+    assert [link["path"] for link in links] == [f"src/app.py:1@{second_head}"]
+    assert links[0]["covers_entry_ids"] == [decision]
+
+    status, payload = _run(
+        "checkpoint",
+        "--no-note",
+        stdin=_intent_json(remove_artifact_links=["src/app.py:1"]),
+    )
+    assert status == 0, payload
+    assert _get(payload, "record", "artifact_links") == []
+
+
+def test_checkpoint_leaves_an_untracked_line_ref_unpinned_and_warns(
+    corpus_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = corpus_root
+    repo = tmp_path / "repo"
+    _ = _commit_repo(repo)
+    _ = (repo / "new.py").write_text("y = 1\n", encoding="utf-8")
+    monkeypatch.chdir(repo)
+    intent = cast("dict[str, object]", json.loads(_line_ref_intent(link=False)))
+    intent["working_context"] = ["see new.py:1"]
+
+    status, payload = _run("checkpoint", "--no-note", stdin=json.dumps(intent))
+
+    assert status == 0, payload
+    record = cast(dict[str, object], payload["record"])
+    assert record["working_context"] == ["see new.py:1"]
+    assert payload["warnings"] == ["unpinned-line-ref"]
+
+
+def _two_decisions() -> tuple[str, str]:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    status, added = _run(
+        "checkpoint", WORK_ID, "--decision", "Use B", "--rationale", "b is faster"
+    )
+    assert status == 0, added
+    ids = _decision_ids(added)
+    assert _decision_ids(seeded)[0] == ids[0]
+    return ids[0], ids[1]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_refuses_an_entry_superseding_itself(corpus_root: Path) -> None:
+    old, _ = _two_decisions()
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--supersede", old, "--by", old, "--rationale", "Self."
+    )
+
+    assert status == 2
+    assert "cannot supersede itself" in _error(payload)[1]
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_refuses_a_successor_that_is_not_active(corpus_root: Path) -> None:
+    old, new = _two_decisions()
+    status, done = _run(
+        "checkpoint", WORK_ID, "--supersede", old, "--by", new, "--rationale", "B."
+    )
+    assert status == 0, done
+    status, added = _run(
+        "checkpoint", WORK_ID, "--decision", "Use C", "--rationale", "c is cheap"
+    )
+    assert status == 0, added
+    third = _decision_ids(added)[-1]
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint", WORK_ID, "--supersede", third, "--by", old, "--rationale", "No."
+    )
+
+    assert status == 2
+    assert "already superseded" in _error(payload)[1]
+    assert _corpus_bytes(corpus_root) == before
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_refuses_a_cycle_in_one_delta(corpus_root: Path) -> None:
+    old, new = _two_decisions()
+    before = _corpus_bytes(corpus_root)
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--supersede",
+        old,
+        "--by",
+        new,
+        "--rationale",
+        "A to B.",
+        "--supersede",
+        new,
+        "--by",
+        old,
+        "--rationale",
+        "B to A.",
+    )
+
+    assert status == 2
+    assert "also transitions" in _error(payload)[1]
+    assert _corpus_bytes(corpus_root) == before
+
+
+def _kind_ids(payload: dict[str, object], field: str) -> list[str]:
+    entries = cast(list[dict[str, str]], _get(payload, "record", field))
+    return [entry["entry_id"] for entry in entries]
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_without_by_takes_the_one_question_the_checkpoint_adds() -> None:
+    seeded = _seed(entries=[{"kind": "question", "summary": "Which store?"}])
+    old = _kind_ids(seeded, "questions")[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "Which cache?",
+        "--supersede",
+        old,
+        "--rationale",
+        "Narrowed.",
+    )
+
+    assert status == 0, payload
+    questions = cast(list[dict[str, object]], _get(payload, "record", "questions"))
+    assert len(questions) == 2
+    assert (questions[0]["state"], questions[0]["superseded_by"]) == (
+        "superseded",
+        questions[1]["entry_id"],
+    )
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_without_by_takes_the_one_gated_question_the_checkpoint_adds() -> (
+    None
+):
+    seeded = _seed(
+        entries=[
+            {
+                "kind": "question",
+                "summary": "Gate A?",
+                "blocks_continuation": True,
+                "rationale": "Needs an answer.",
+            }
+        ]
+    )
+    old = _kind_ids(seeded, "questions")[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--question",
+        "Gate B?",
+        "--gates",
+        "--rationale",
+        "Needs a new answer.",
+        "--supersede",
+        old,
+        "--rationale",
+        "Reframed.",
+    )
+
+    assert status == 0, payload
+    questions = cast(list[dict[str, object]], _get(payload, "record", "questions"))
+    assert len(questions) == 2
+    assert questions[1]["blocks_continuation"] is True
+    assert (questions[0]["state"], questions[0]["superseded_by"]) == (
+        "superseded",
+        questions[1]["entry_id"],
+    )
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_supersede_without_by_takes_the_one_directive_the_checkpoint_adds() -> None:
+    seeded = _seed(entries=[{"kind": "directive", "summary": "Use A", "quote": "a"}])
+    old = _kind_ids(seeded, "directives")[0]
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--directive",
+        "Use B",
+        "--quote",
+        "b",
+        "--supersede",
+        old,
+        "--rationale",
+        "Changed.",
+    )
+
+    assert status == 0, payload
+    directives = cast(list[dict[str, object]], _get(payload, "record", "directives"))
+    assert len(directives) == 2
+    assert (directives[0]["state"], directives[0]["superseded_by"]) == (
+        "superseded",
+        directives[1]["entry_id"],
+    )
+
+
+@pytest.mark.usefixtures("corpus_root")
+def test_a_decision_only_supersede_stamps_decisions_and_marks_notes_drift() -> None:
+    seeded = _seed(entries=[{"kind": "decision", "summary": "Use A", "rationale": "r"}])
+    old = _decision_ids(seeded)[0]
+    assert _get(seeded, "record", "notes_revision_number") == 1
+
+    status, payload = _run(
+        "checkpoint",
+        WORK_ID,
+        "--decision",
+        "Use B",
+        "--rationale",
+        "b is faster",
+        "--supersede",
+        old,
+        "--rationale",
+        "B replaces A",
+    )
+
+    assert status == 0, payload
+    assert _get(payload, "record", "decisions_revision_number") == 2
+    assert _get(payload, "record", "notes_revision_number") == 1
+    assert payload["warnings"] == ["stale-notes"]
+    lines = cast(str, payload["markdown"]).splitlines()
+    first_note_line = lines[lines.index("## Notes") + 2]
+    assert first_note_line.startswith(
+        "> notes may be stale: decisions changed at revision 2"
+    )

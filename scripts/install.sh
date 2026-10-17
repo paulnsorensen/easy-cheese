@@ -1,0 +1,676 @@
+#!/usr/bin/env bash
+#
+# easy-cheese installer — sets up the CLI tools and MCP servers used by the
+# easy-cheese skills on macOS.
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh | bash
+#
+# Or with options:
+#   curl -fsSL https://raw.githubusercontent.com/paulnsorensen/easy-cheese/main/scripts/install.sh | bash -s -- --skip-mcp
+#
+# Run `bash install.sh --help` for the full flag list.
+
+# strict-mode is enabled inside the BASH_SOURCE guard at the bottom of the
+# file so sourcing (e.g. from the bats suite) does not mutate the caller's
+# shell options.
+
+# All known CLI tools. tilth is included but installed via npm from the
+# @paulnsorensen/tilth-nightly package (not brew — tilth has no Homebrew
+# formula upstream).
+EC_KNOWN_TOOLS="gh ast-grep just mergiraf tilth"
+
+# Repository the installer pulls skills from. Centralized so discovery and
+# install both reference the same source.
+EC_SKILL_REPO="paulnsorensen/easy-cheese"
+
+# Embedded fallback list of skill names. The installer normally discovers
+# the live set via 'gh api repos/.../contents/skills' so it self-heals when
+# new skills land — this list is only used when the API call is
+# unavailable (offline, rate-limited, repo temporarily private). Kept
+# loosely in sync with skills/ but not load-bearing for happy-path runs.
+EC_FALLBACK_SKILLS="age affinage briesearch cheese cook culture cure easy-cheese-setup hard-cheese melt mold pasteurize plate press ultracook wheypoint"
+
+
+
+# Default selections.
+EC_DEFAULT_TOOLS="$EC_KNOWN_TOOLS"
+EC_DEFAULT_MCP="tilth context7 hallouminate"
+
+# Map a brew formula name to the binary it installs (when they differ).
+ec_tool_binary() {
+    case "$1" in
+        ast-grep)  echo "sg" ;;
+        *)         echo "$1" ;;
+    esac
+}
+
+ec_log() {
+    printf '\033[1;36m==>\033[0m %s\n' "$*"
+}
+
+ec_warn() {
+    printf '\033[1;33m!! \033[0m %s\n' "$*" >&2
+}
+
+ec_err() {
+    printf '\033[1;31mxx \033[0m %s\n' "$*" >&2
+}
+
+ec_usage() {
+    cat <<'USAGE'
+easy-cheese installer (macOS)
+
+Usage:
+  install.sh [options]
+
+Options:
+  --tools <list>       Comma-separated CLI tools to install. Default: all.
+                       Choices: gh, ast-grep, just, mergiraf, tilth
+  --mcp <list>         Comma-separated MCP servers to register. Default:
+                       tilth,context7,hallouminate. Choices: tilth, context7,
+                       tavily, hallouminate, milknado, none
+  --skip-mcp           Same as --mcp none.
+  --skip-tools         Skip CLI tool installs (useful for MCP-only runs).
+  --harness <selection> Harness to register skills + MCP servers with.
+                       Default: auto-detect claude-code, cursor, and codex.
+                       Accepts a single harness, a comma-separated list, or
+                       'auto'. Values are passed through to
+                       'gh skill install --agent', so use the gh skill agent
+                       names: claude-code, cursor, codex, github-copilot,
+                       gemini-cli.
+  --no-edit            Register tilth without the --edit capability.
+  --dry-run            Print what would happen without changing anything.
+  -h, --help           Show this help.
+
+Environment:
+  EC_BREW   EC_GH      Override the brew / gh binaries (used by tests).
+  EC_NPM               Override the npm binary used to install tilth.
+  EC_TILTH  EC_CLAUDE  Override the tilth / claude binaries (used by tests).
+  EC_CURSOR EC_CODEX   Override cursor / codex binaries for detection.
+  EC_NPX               Override npx (used to launch context7 / tavily MCP).
+  EC_UVX               Override uvx (used to launch milknado MCP).
+  EC_SKILL_REF         Pin skill installs to a git tag or commit SHA
+                       (passes --pin to 'gh skill install'). Used by CI
+                       to test against the commit under review.
+USAGE
+}
+
+# OS guard. Returns 0 on macOS, 1 otherwise.
+ec_detect_os() {
+    case "$(uname -s)" in
+        Darwin) return 0 ;;
+        *)      return 1 ;;
+    esac
+}
+
+ec_cmd_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+ec_brew() {
+    "${EC_BREW:-brew}" "$@"
+}
+
+# Verify Homebrew is installed; print install hint and fail otherwise.
+ec_ensure_homebrew() {
+    if ec_cmd_exists "${EC_BREW:-brew}"; then
+        return 0
+    fi
+    ec_err "Homebrew is required but was not found."
+    ec_err "Install it from https://brew.sh and re-run this script."
+    return 1
+}
+
+# Returns 0 if every comma-separated token in $1 is in the space-separated
+# list $2. Prints the offending token to stderr otherwise.
+ec_validate_selection() {
+    local list="$1" allowed="$2" token
+    local IFS=,
+    for token in $list; do
+        case " $allowed " in
+            *" $token "*) ;;
+            *)
+                ec_err "Unknown selection: $token"
+                return 1
+                ;;
+        esac
+    done
+}
+
+# Idempotently install one brew formula. Returns 0 if installed (or already
+# present), 1 if brew failed. Honors $EC_DRY_RUN.
+ec_brew_install_if_missing() {
+    local tool="$1"
+    local binary
+    binary="$(ec_tool_binary "$tool")"
+
+    if ec_cmd_exists "$binary"; then
+        ec_log "$tool: already installed ($binary on PATH)"
+        return 0
+    fi
+
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "$tool: would run 'brew install $tool'"
+        return 0
+    fi
+
+    ec_log "$tool: installing via 'brew install $tool'"
+    ec_brew install "$tool"
+}
+
+# tilth has no Homebrew formula. Install via npm from the
+# @paulnsorensen/tilth-nightly package (ships a proper `tilth` bin entry).
+# Errors out clearly if npm is unavailable.
+ec_install_tilth() {
+    local npm="${EC_NPM:-npm}"
+
+    if ec_cmd_exists tilth; then
+        ec_log "tilth: already installed (tilth on PATH)"
+        return 0
+    fi
+
+    if ec_cmd_exists "$npm"; then
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "tilth: would run '$npm install -g @paulnsorensen/tilth-nightly@latest'"
+            return 0
+        fi
+        ec_log "tilth: installing via '$npm install -g @paulnsorensen/tilth-nightly@latest'"
+        "$npm" install -g @paulnsorensen/tilth-nightly@latest
+        return $?
+    fi
+
+    ec_err "tilth: needs npm (Node 18+), which was not found."
+    ec_err "Install Node.js from https://nodejs.org and re-run."
+    return 1
+}
+
+# Install every tool in the comma-separated list. tilth is routed through
+# ec_install_tilth; everything else goes through brew.
+ec_install_tools() {
+    local list="$1" tool rc=0
+    local IFS=,
+    for tool in $list; do
+        case "$tool" in
+            tilth) ec_install_tilth || rc=1 ;;
+            *)     ec_brew_install_if_missing "$tool" || rc=1 ;;
+        esac
+    done
+    return $rc
+}
+
+# Register a single MCP server with the chosen harness.
+ec_install_mcp() {
+    local server="$1" harness="$2" with_edit="$3"
+    case "$server" in
+        tilth)
+            ec_install_mcp_tilth "$harness" "$with_edit"
+            ;;
+        context7)
+            ec_install_mcp_context7 "$harness"
+            ;;
+        tavily)
+            ec_install_mcp_tavily "$harness"
+            ;;
+        hallouminate)
+            ec_install_mcp_hallouminate "$harness"
+            ;;
+        milknado)
+            ec_install_mcp_milknado "$harness"
+            ;;
+        none)
+            ec_log "MCP: skipping (none selected)"
+            ;;
+        *)
+            ec_err "Unknown MCP server: $server"
+            return 1
+            ;;
+    esac
+}
+
+ec_install_mcp_tilth() {
+    local harness="$1" with_edit="$2"
+    # Reset IFS — ec_install_mcp_list sets it to ',' which would leak into
+    # the dry-run "${args[*]}" expansion below via dynamic scoping.
+    local IFS=$' \t\n'
+    local tilth="${EC_TILTH:-tilth}"
+    if ! ec_cmd_exists "$tilth"; then
+        ec_warn "tilth MCP: tilth CLI is not installed; include 'tilth' in --tools first."
+        return 1
+    fi
+    local args=(install "$harness")
+    if [[ "$with_edit" == "1" ]]; then
+        args+=(--edit)
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "tilth MCP: would run '$tilth ${args[*]}'"
+        return 0
+    fi
+    ec_log "tilth MCP: registering with $harness"
+    "$tilth" "${args[@]}"
+}
+
+ec_install_mcp_context7() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    local npx="${EC_NPX:-npx}"
+    if [[ "$harness" != "claude-code" ]]; then
+        ec_warn "context7 MCP: only claude-code is auto-registered; configure $harness manually."
+        return 0
+    fi
+    if ! ec_cmd_exists "$claude"; then
+        ec_warn "context7 MCP: claude CLI not found; install Claude Code first."
+        return 1
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "context7 MCP: would run '$claude mcp add context7 -- $npx -y @upstash/context7-mcp@latest'"
+        return 0
+    fi
+    ec_log "context7 MCP: registering with claude-code"
+    "$claude" mcp add context7 -- "$npx" -y @upstash/context7-mcp@latest
+}
+
+ec_install_mcp_tavily() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    local npx="${EC_NPX:-npx}"
+    if [[ "$harness" != "claude-code" ]]; then
+        ec_warn "tavily MCP: only claude-code is auto-registered; configure $harness manually."
+        return 0
+    fi
+    if ! ec_cmd_exists "$claude"; then
+        ec_warn "tavily MCP: claude CLI not found; install Claude Code first."
+        return 1
+    fi
+    if [[ -z "${TAVILY_API_KEY:-}" ]]; then
+        ec_warn "tavily MCP: TAVILY_API_KEY is not set; the server will fail until you set one."
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "tavily MCP: would run '$claude mcp add tavily -- $npx -y tavily-mcp'"
+        return 0
+    fi
+    ec_log "tavily MCP: registering with claude-code"
+    "$claude" mcp add tavily -- "$npx" -y tavily-mcp
+}
+# hallouminate is installed as a plugin by default (not opt-in). The plugin
+# ships its own .mcp.json (registering the hallouminate MCP server) and skills
+# that install/bootstrap the binary, so the whole lifecycle is delegated to the
+# harness plugin marketplace rather than a hand-rolled binary install.
+# claude-code and codex install via their plugin marketplaces; any other harness
+# has no plugin and must register the MCP manually.
+ec_install_mcp_hallouminate() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    local codex="${EC_CODEX:-codex}"
+    case "$harness" in
+        claude-code)
+            if ! ec_cmd_exists "$claude"; then
+                ec_warn "hallouminate plugin: claude CLI not found; install Claude Code first."
+                return 1
+            fi
+            if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+                ec_log "hallouminate plugin: would run '$claude plugin marketplace add paulnsorensen/hallouminate'"
+                ec_log "hallouminate plugin: would run '$claude plugin install hallouminate@hallouminate'"
+                return 0
+            fi
+            # marketplace add may exit non-zero when the marketplace is already
+            # registered on a re-run; that is non-fatal — the install below is
+            # what matters.
+            ec_log "hallouminate plugin: registering marketplace paulnsorensen/hallouminate"
+            "$claude" plugin marketplace add paulnsorensen/hallouminate || \
+                ec_warn "hallouminate plugin: marketplace add failed (already added?); continuing to install."
+            ec_log "hallouminate plugin: installing hallouminate@hallouminate"
+            "$claude" plugin install hallouminate@hallouminate
+            ;;
+        codex)
+            if ! ec_cmd_exists "$codex"; then
+                ec_warn "hallouminate plugin: codex CLI not found; install Codex first."
+                return 1
+            fi
+            if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+                ec_log "hallouminate plugin: would run '$codex plugin marketplace add paulnsorensen/hallouminate'"
+                ec_log "hallouminate plugin: would run '$codex plugin add hallouminate@hallouminate'"
+                return 0
+            fi
+            ec_log "hallouminate plugin: registering marketplace paulnsorensen/hallouminate"
+            "$codex" plugin marketplace add paulnsorensen/hallouminate || \
+                ec_warn "hallouminate plugin: marketplace add failed (already added?); continuing to install."
+            ec_log "hallouminate plugin: installing hallouminate@hallouminate"
+            # Codex may need a restart between marketplace add and plugin add;
+            # if the add fails, tell the user to restart codex and re-run.
+            if ! "$codex" plugin add hallouminate@hallouminate; then
+                ec_warn "hallouminate plugin: 'codex plugin add' failed — codex may need a restart after the marketplace add; restart codex and re-run 'install.sh --mcp hallouminate'."
+                return 1
+            fi
+            ;;
+        *)
+            ec_warn "hallouminate plugin: no plugin for $harness — register the hallouminate MCP manually per https://github.com/paulnsorensen/hallouminate#per-harness-setup"
+            return 0
+            ;;
+    esac
+}
+
+# Registers the durable cheese-durable hallouminate corpus (global leg only
+# -- local per-repo tenant registration is a skill-only interactive flow, see
+# skills/easy-cheese-setup/SKILL.md). Corpus registration is global, so this
+# runs once against a single resolved harness, not once per harness. Never
+# aborts the installer -- resolution or registration failures are warnings.
+ec_setup_cheese_corpus() {
+    local harnesses="$1" gh="${EC_GH:-gh}" harness skill_dir launcher
+    if ! ec_cmd_exists "$gh"; then
+        ec_warn "cheese corpus: gh CLI not found; skipping corpus registration."
+        return 0
+    fi
+    harness="${harnesses%%$'\n'*}"
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "cheese corpus: would resolve the easy-cheese-setup skill via '$gh skill list --agent $harness --scope user --json path,skillName' then run 'python3 <resolved-path>/scripts/easy-cheese-setup.pyz global --apply'"
+        return 0
+    fi
+    skill_dir="$("$gh" skill list --agent "$harness" --scope user --json path,skillName \
+        --jq '.[] | select(.skillName=="easy-cheese-setup") | .path' 2>/dev/null)"
+    if [[ -z "$skill_dir" ]]; then
+        ec_warn "cheese corpus: could not resolve the easy-cheese-setup skill path via gh skill list; skipping."
+        return 0
+    fi
+    # The self-contained skill archive runs directly with Python.
+    launcher="$skill_dir/scripts/easy-cheese-setup.pyz"
+    ec_log "cheese corpus: registering cheese-durable corpus"
+    if ! python3 "$launcher" global --apply; then
+        ec_warn "cheese corpus: failed to register cheese-durable corpus via $launcher"
+    fi
+    return 0
+}
+
+ec_install_mcp_milknado() {
+    local harness="$1"
+    local claude="${EC_CLAUDE:-claude}"
+    local uvx="${EC_UVX:-uvx}"
+    if [[ "$harness" != "claude-code" ]]; then
+        ec_warn "milknado MCP: only claude-code is auto-registered; configure $harness manually."
+        return 0
+    fi
+    if ! ec_cmd_exists "$claude"; then
+        ec_warn "milknado MCP: claude CLI not found; install Claude Code first."
+        return 1
+    fi
+    if ! ec_cmd_exists "$uvx"; then
+        ec_warn "milknado MCP: uvx not found — install uv from https://docs.astral.sh/uv and re-run with --mcp milknado"
+        return 0
+    fi
+    if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+        ec_log "milknado MCP: would run '$claude mcp add milknado -- $uvx --from milknado milknado-mcp'"
+        return 0
+    fi
+    ec_log "milknado MCP: registering with claude-code"
+    "$claude" mcp add milknado -- "$uvx" --from milknado milknado-mcp
+}
+
+ec_install_mcp_list() {
+    local list="$1" harness="$2" with_edit="$3" server rc=0
+    local IFS=,
+    for server in $list; do
+        ec_install_mcp "$server" "$harness" "$with_edit" || rc=1
+    done
+    return $rc
+}
+
+# Detect the main-line harness CLIs that can receive Agent Skills directly.
+# Prints one gh-skill --agent value per line.
+ec_detect_harnesses() {
+    local claude_cli="${EC_CLAUDE:-claude}"
+    local cursor_cli="${EC_CURSOR:-cursor}"
+    local codex_cli="${EC_CODEX:-codex}"
+
+    if ec_cmd_exists "$claude_cli"; then
+        printf 'claude-code\n'
+    fi
+    if ec_cmd_exists "$cursor_cli"; then
+        printf 'cursor\n'
+    fi
+    if ec_cmd_exists "$codex_cli"; then
+        printf 'codex\n'
+    fi
+}
+
+# Resolve --harness into a newline-delimited harness list. 'auto' installs to
+# every detected main-line harness, falling back to claude-code to preserve the
+# historical default on machines where no supported harness CLI is on PATH.
+ec_resolve_harnesses() {
+    local selection="$1" harnesses harness
+    if [[ "$selection" == "auto" ]]; then
+        harnesses="$(ec_detect_harnesses)"
+        if [[ -n "$harnesses" ]]; then
+            while IFS= read -r harness; do
+                printf '%s\n' "$harness"
+            done <<< "$harnesses"
+        else
+            ec_warn "No supported harness CLI detected; falling back to claude-code. Use --harness <name> to override."
+            printf 'claude-code\n'
+        fi
+        return 0
+    fi
+
+    if [[ -z "${selection//[[:space:]]/}" ]]; then
+        printf 'error: empty --harness selection. Use --harness auto or provide one or more comma-separated harness names.\n' >&2
+        return 1
+    fi
+
+    local -a harness_tokens
+    IFS=',' read -r -a harness_tokens <<< "$selection"
+    for harness in "${harness_tokens[@]}"; do
+        harness="${harness#"${harness%%[![:space:]]*}"}"
+        harness="${harness%"${harness##*[![:space:]]}"}"
+        if [[ -z "$harness" ]]; then
+            printf 'error: invalid --harness selection "%s". Harness names must be non-empty and comma-separated.\n' "$selection" >&2
+            return 1
+        fi
+        printf '%s\n' "$harness"
+    done
+}
+
+ec_install_skills_for_harnesses() {
+    local harnesses="$1" harness rc=0
+    while IFS= read -r harness; do
+        [[ -n "$harness" ]] || continue
+        ec_install_skills "$harness" || rc=1
+    done <<< "$harnesses"
+    return $rc
+}
+
+ec_install_mcp_for_harnesses() {
+    local list="$1" harnesses="$2" with_edit="$3" harness rc=0
+    while IFS= read -r harness; do
+        [[ -n "$harness" ]] || continue
+        ec_install_mcp_list "$list" "$harness" "$with_edit" || rc=1
+    done <<< "$harnesses"
+    return $rc
+}
+
+# Discover the live skill list by listing skills/ via the GitHub contents
+# API. Prints one skill name per line on success; on failure (network,
+# rate limit, private repo) returns non-zero with empty stdout and the
+# caller falls back to EC_FALLBACK_SKILLS.
+ec_discover_skills() {
+    local gh="$1"
+    local path="repos/${EC_SKILL_REPO}/contents/skills"
+    # Discovery must list skills at the SAME ref the install pins to (below),
+    # else a skill removed on this branch but still on the default branch is
+    # discovered and then fails to install at the pinned ref.
+    [[ -n "${EC_SKILL_REF:-}" ]] && path+="?ref=${EC_SKILL_REF}"
+    "$gh" api "$path" \
+        --jq '.[] | select(.type == "dir") | .name' 2>/dev/null
+}
+
+# Install the easy-cheese skill set into the picked harness via 'gh skill'.
+# User scope so they live alongside the user's other skills, not committed
+# into the project. Requires gh to be authenticated.
+#
+# `gh skill install` does not support an --all flag, so we discover the
+# live skill list via 'gh api ... contents/skills' and call gh once per
+# skill with --force for idempotent re-runs. If discovery fails we fall
+# back to EC_FALLBACK_SKILLS so the installer still does something useful
+# offline. Per-skill install failures are warned and tracked but do not
+# abort the rest of the loop. Dry-run skips discovery and uses the
+# embedded list for predictable, network-free output.
+#
+# Set EC_SKILL_REF=<tag-or-sha> to pin every install to a specific git
+# ref (passes --pin to gh skill install). Used by CI so the smoke test
+# exercises the install script against the commit being tested rather
+# than the latest released tag. End users leave it unset to get the
+# latest release.
+ec_install_skills() {
+    local harness="$1"
+    local gh="${EC_GH:-gh}"
+    if ! ec_cmd_exists "$gh"; then
+        ec_warn "easy-cheese skills: gh CLI not found; skipping. Add 'gh' to --tools first."
+        return 0
+    fi
+
+    local skills="$EC_FALLBACK_SKILLS"
+    if [[ "${EC_DRY_RUN:-0}" != "1" ]]; then
+        if ! "$gh" auth status >/dev/null 2>&1; then
+            ec_warn "easy-cheese skills: gh is not authenticated. Run 'gh auth login' and re-run."
+            return 1
+        fi
+        local discovered
+        if discovered="$(ec_discover_skills "$gh")" && [[ -n "$discovered" ]]; then
+            skills="$discovered"
+        else
+            ec_warn "easy-cheese skills: could not list skills via gh api; using embedded fallback list."
+        fi
+    fi
+
+    local skill rc=0 ref="${EC_SKILL_REF:-}" pin_log=""
+    [[ -n "$ref" ]] && pin_log=" --pin $ref"
+    for skill in $skills; do
+        local cmd=("$gh" skill install "$EC_SKILL_REPO" "$skill")
+        [[ -n "$ref" ]] && cmd+=(--pin "$ref")
+        cmd+=(--agent "$harness" --scope user --force)
+        if [[ "${EC_DRY_RUN:-0}" == "1" ]]; then
+            ec_log "easy-cheese skills: would run '$gh skill install $EC_SKILL_REPO $skill$pin_log --agent $harness --scope user --force'"
+            continue
+        fi
+        ec_log "easy-cheese skills: installing $skill into $harness (user scope)"
+        if ! "${cmd[@]}"; then
+            ec_warn "easy-cheese skills: failed to install $skill"
+            rc=1
+        fi
+    done
+    return $rc
+}
+
+# Parse argv into the EC_* config variables. Echoes nothing on success;
+# echoes an error and returns non-zero on failure.
+ec_parse_args() {
+    EC_TOOLS="$EC_DEFAULT_TOOLS"
+    EC_TOOLS="${EC_TOOLS// /,}"
+    EC_MCP="$EC_DEFAULT_MCP"
+    EC_MCP="${EC_MCP// /,}"
+    EC_HARNESS="auto"
+    EC_WITH_EDIT="1"
+    EC_DRY_RUN="${EC_DRY_RUN:-0}"
+    EC_SKIP_TOOLS="0"
+    EC_DO_HELP="0"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --tools)
+                shift
+                [[ $# -gt 0 ]] || { ec_err "--tools requires a value"; return 2; }
+                EC_TOOLS="$1"
+                ;;
+            --tools=*)
+                EC_TOOLS="${1#*=}"
+                ;;
+            --mcp)
+                shift
+                [[ $# -gt 0 ]] || { ec_err "--mcp requires a value"; return 2; }
+                EC_MCP="$1"
+                ;;
+            --mcp=*)
+                EC_MCP="${1#*=}"
+                ;;
+            --skip-mcp)
+                EC_MCP="none"
+                ;;
+            --skip-tools)
+                EC_SKIP_TOOLS="1"
+                ;;
+            --harness)
+                shift
+                [[ $# -gt 0 ]] || { ec_err "--harness requires a value"; return 2; }
+                EC_HARNESS="$1"
+                ;;
+            --harness=*)
+                EC_HARNESS="${1#*=}"
+                ;;
+            --no-edit)
+                EC_WITH_EDIT="0"
+                ;;
+            --dry-run)
+                EC_DRY_RUN="1"
+                ;;
+            -h|--help)
+                EC_DO_HELP="1"
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                ec_err "Unknown option: $1"
+                return 2
+                ;;
+            *)
+                ec_err "Unexpected positional argument: $1"
+                return 2
+                ;;
+        esac
+        shift
+    done
+
+    ec_validate_selection "$EC_TOOLS" "$EC_KNOWN_TOOLS" || return 2
+    ec_validate_selection "$EC_MCP" "tilth context7 tavily hallouminate milknado none" || return 2
+}
+
+ec_main() {
+    ec_parse_args "$@" || return $?
+
+    if [[ "$EC_DO_HELP" == "1" ]]; then
+        ec_usage
+        return 0
+    fi
+
+    if ! ec_detect_os; then
+        ec_err "easy-cheese installer currently supports macOS only."
+        ec_err "Detected: $(uname -s). See README for manual install on other platforms."
+        return 1
+    fi
+
+    if [[ "$EC_SKIP_TOOLS" != "1" ]]; then
+        ec_ensure_homebrew || return 1
+        ec_install_tools "$EC_TOOLS"
+    fi
+
+    local harnesses
+    harnesses="$(ec_resolve_harnesses "$EC_HARNESS")" || return $?
+    ec_install_skills_for_harnesses "$harnesses" || return 1
+
+    case ",$EC_MCP," in
+        *,hallouminate,*) ec_setup_cheese_corpus "$harnesses" || true ;;
+    esac
+
+    if [[ "$EC_MCP" != "none" ]]; then
+        ec_install_mcp_for_harnesses "$EC_MCP" "$harnesses" "$EC_WITH_EDIT" || return 1
+    fi
+
+    ec_log "Done. Restart your harness so skills, MCP servers, and PATH changes take effect."
+}
+
+# Only run main when executed directly, not when sourced (so tests can load
+# functions individually). strict-mode is scoped here so sourcing the file
+# does not flip -e/-u/-o pipefail in the caller's shell.
+if [[ "${BASH_SOURCE[0]:-}" == "${0}" ]]; then
+    set -euo pipefail
+    ec_main "$@"
+fi

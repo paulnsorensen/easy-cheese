@@ -1,0 +1,9 @@
+{
+  "scenario": "full-ready",
+  "events": [
+    {"type": "input_classified", "input_kind": "direct_spec", "message": "free prose is ignored"},
+    {"type": "plan_materialized", "outcome": "complete"},
+    {"type": "bound_inputs", "ready": true, "artifact_ref": "artifacts/finalization-results/full.json"},
+    {"type": "feature_write", "path": "src/feature.py", "artifact_ref": "artifacts/finalization-results/full.json"}
+  ]
+}

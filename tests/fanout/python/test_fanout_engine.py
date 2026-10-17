@@ -1,0 +1,82 @@
+"""Structural tests for the fan-out engine's shipped surface (src/fanout/ + refs).
+
+The fan-out engine is owned by /cook; prompt/schema references remain under
+skills/ultracook/references/ and implementation modules under src/easy_cheese/shared/fanout.
+This guards that every promised reference and module is present so drops surface in CI.
+frontmatter and prose are validated by .github/scripts/validate_skills.py and
+tests/python/test_ultracook_skills.py respectively.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+REFERENCES_DIR = REPO_ROOT / "skills" / "ultracook" / "references"
+SRC_FANOUT = REPO_ROOT / "src" / "easy_cheese" / "shared" / "fanout"
+
+
+class TestReferencesPresent:
+    """Every prompt / schema reference the parallel mode loads must be present."""
+
+    REQUIRED_REFERENCES: tuple[str, ...] = (
+        "decomposer-prompt.md",
+        "curd-prompt.md",
+        "wiring-prompt.md",
+        "pr-planner-prompt.md",
+        "manifest-schema.json",
+        "pr-plan-schema.json",
+        "spawn-primitive-reference.md",
+    )
+
+    def test_references_present(self) -> None:
+        for ref in self.REQUIRED_REFERENCES:
+            assert (REFERENCES_DIR / ref).is_file(), (
+                f"missing required reference: references/{ref}"
+            )
+
+
+class TestScriptsPresent:
+    """Every retained engine module must exist in src/easy_cheese/shared/fanout/."""
+
+    REQUIRED_SCRIPTS: tuple[str, ...] = (
+        "phase_decision.py",
+        "mode.py",
+        "milknado.py",
+        "validate_decomposition.py",
+        "validate_manifest.py",
+        "validate_pr_plan.py",
+        "pr_plan_to_branches.py",
+        "manifest_update.py",
+        "wiring_topo_sort.py",
+        "curd.py",
+        "wiring.py",
+    )
+
+    # The CLI validators are marked executable; the dispatcher runs every module
+    # from inside the .pyz, so only these carry the exec bit historically.
+    EXECUTABLE_SCRIPTS: tuple[str, ...] = (
+        "validate_decomposition.py",
+        "validate_manifest.py",
+        "validate_pr_plan.py",
+        "pr_plan_to_branches.py",
+    )
+
+    def test_scripts_present(self) -> None:
+        for script in self.REQUIRED_SCRIPTS:
+            assert (SRC_FANOUT / script).is_file(), (
+                f"missing required script: src/fanout/{script}"
+            )
+
+    def test_cli_validators_executable(self) -> None:
+        for script in self.EXECUTABLE_SCRIPTS:
+            mode = (SRC_FANOUT / script).stat().st_mode
+            assert mode & 0o111, f"src/fanout/{script} must be executable"
+
+
+class TestSharedHelpersPresent:
+    def test_shared_helpers_present(self) -> None:
+        for helper in ("manifest_io.py", "schema.py", "worktree.py"):
+            assert (REPO_ROOT / "src" / "easy_cheese" / "shared" / helper).is_file(), (
+                f"missing required shared helper: easy_cheese/shared/{helper}"
+            )

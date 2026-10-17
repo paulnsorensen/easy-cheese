@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Assemble the shippable release tree with one executable archive per skill.
+
+Only skill metadata and committed scripts/<skill>.pyz archives ship.
+Build configuration, source, and test tooling remain outside the release tree.
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import sys
+from collections.abc import Callable
+from pathlib import Path
+from typing import cast
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import runtime_gates  # noqa: E402  (sibling module in scripts/)
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Allowlist, not denylist: new dev scaffolding added to the repo stays out of
+# releases by default. `skills` ships wholesale; metadata files ship if present.
+SHIP = [
+    "skills",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    ".claude-plugin",
+]
+
+# Build configuration stays out of the tree; committed archives are release assets.
+SKILL_IGNORE = shutil.ignore_patterns("wedge.toml")
+
+
+def _copy(
+    src: Path,
+    dst: Path,
+    *,
+    ignore: Callable[[str, list[str]], set[str]] | None = None,
+) -> None:
+    if src.is_dir():
+        _ = shutil.copytree(src, dst, ignore=ignore)
+    else:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        _ = shutil.copy2(src, dst)
+
+
+def _guard_out(out: Path) -> None:
+    """``stage`` wipes ``out`` with rmtree — refuse paths whose loss would be
+    catastrophic: the filesystem root, the repo itself, or an ancestor of it."""
+    resolved = out.resolve()
+    if resolved == Path(resolved.anchor):
+        raise SystemExit(f"stage_release: refusing to wipe filesystem root {resolved}")
+    if resolved == REPO_ROOT or resolved in REPO_ROOT.parents:
+        raise SystemExit(
+            f"stage_release: refusing to wipe {resolved} (repo root or ancestor)"
+        )
+
+
+def stage(out: Path) -> Path:
+    """Assemble the release tree at ``out`` (wiped first). Returns ``out``."""
+    _guard_out(out)
+    if out.exists():
+        shutil.rmtree(out)
+    out.mkdir(parents=True)
+
+    for rel in SHIP:
+        src = REPO_ROOT / rel
+        if src.exists():
+            _copy(src, out / rel, ignore=SKILL_IGNORE if rel == "skills" else None)
+
+    _verify(out)
+    return out
+
+
+def _verify(out: Path) -> None:
+    """Fail loud if the staged tree is wrong — a broken release should never get
+    silently published (the v0.5.1 failure mode)."""
+    skills = out / "skills"
+    if not any(skills.glob("*/SKILL.md")):
+        raise SystemExit(f"stage_release: no skills found under {skills}")
+
+    expected = {
+        f"skills/{skill}/scripts/{skill}.pyz" for skill in runtime_gates.SKILLS
+    }
+    expected.add("skills/mold/scripts/mold.dot")
+    actual = {
+        str(relative)
+        for path in skills.rglob("*")
+        if path.is_file()
+        and "scripts" in (relative := path.relative_to(out)).parts
+    }
+    unexpected = sorted(actual - expected)
+    if unexpected:
+        raise SystemExit(
+            "stage_release: unexpected generated artifacts: " + ", ".join(unexpected)
+        )
+    for skill in runtime_gates.SKILLS:
+        archive = skills / skill / "scripts" / f"{skill}.pyz"
+        if not archive.is_file():
+            raise SystemExit(f"stage_release: missing archive {archive}")
+        if not archive.stat().st_mode & 0o111:
+            raise SystemExit(f"stage_release: archive is not executable {archive}")
+    stray = sorted(str(p.relative_to(out)) for p in skills.rglob("*.py"))
+    if stray:
+        raise SystemExit(
+            "stage_release: raw .py sources must not ship under skills/; found: "
+            + ", ".join(stray)
+        )
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Stage the shippable release tree.")
+    _ = parser.add_argument(
+        "--out", type=Path, required=True, help="Output directory (wiped first)."
+    )
+    args = parser.parse_args(argv[1:])
+    out = stage(cast(Path, args.out))
+    print(f"staged release tree at {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

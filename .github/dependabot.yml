@@ -1,0 +1,37 @@
+# Dependabot configuration — version updates only.
+# See: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Python in .github/scripts/ (CI helpers) is pinned inline in workflows and
+# is not tracked here. The docs/ pip manifest is tracked below, as is the root,
+# which covers the runtime/build locks and pyproject.toml's published floors.
+# The root proposes only fromargs; its dependency closure moves with it by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-name: fromargs
+    groups:
+      runtime-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /docs
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      docs-minor-and-patch:
+        update-types: [minor, patch]

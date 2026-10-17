@@ -1,0 +1,47 @@
+# Age review lock invariants
+
+`src/easy_cheese/skills/age/review_lock.py` binds a review to the exact tree it examined. The r014 review of Age (`.cheese/notes/r014-megamerge/review-age.md`, cured in `cure2-age.md`) turned four security findings into standing invariants. Any change to the lock must keep all of them.
+
+## Git side-channels are disabled before hashing
+
+Git runs repository-configured commands during a diff: `textconv` filters, external diff drivers, hooks, and the filesystem monitor. An automated reviewer that shells out to `git diff` executes those commands with its own privileges. The lock passes `--no-ext-diff --no-textconv` (`review_lock.py:65`) and disables hooks and `core.fsmonitor` before any Git call. Every Git error fails closed; the only tolerated failure is "not a git repository".
+
+## The digest covers the whole tree
+
+A plain `git diff` compares the worktree to the index, so a re-staged change keeps the same digest. The original lock hashed `git diff HEAD` plus untracked files and excluded `.cheese`, so two clean commits collided. `tree_digest` (`review_lock.py:134-183`) now hashes `HEAD`, includes `.cheese`, and when `HEAD` is unborn hashes the index against the empty tree plus the worktree delta.
+
+## Paths resolve to the top-level worktree
+
+The lock resolves the top-level repository root before it digests or writes, so a nested-directory invocation cannot duplicate paths or let tracked files outside the directory escape the lock. It rejects any symlink component in the lock path and writes with `O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW` (`review_lock.py:276`), because a tracked `.cheese/age` symlink could otherwise redirect the write outside the repository.
+
+## Freshness binds to the digest, not `HEAD`
+
+A gate that compares only a recorded `HEAD` SHA accepts a changed-but-uncommitted tree. The same rule applies to the hard-cheese freshness check; see [hard-cheese-gate-contract](../architecture/hard-cheese-gate-contract.md). Compare one digest over `HEAD`, the working diff, the optional specification, and prior evidence.
+
+## Orchestrator scratch under `.cheese/age` breaks the lock
+
+The digest hashes every untracked file under `.cheese` except this slug's own `<slug>-body.md`, `<slug>.md`, HTML copy, and lock (`review_lock.py:98-119`). A fan-out orchestrator that writes reconciliation scratch there (`<slug>-candidates.md`, verifier verdicts) after `review-lock` gets `the production tree changed after '<slug>'s review lock` from `write-handoff-artifact` even though `git status` is clean. Keep post-lock scratch outside `.cheese` (for example `.context/`), or write it before the lock like the packet. Observed on the PR #667/#669 review, 2026-09-13.
+
+## Evidence refresh preserves review authority
+
+The lock stores separate source and evidence identities.
+The source digest covers committed source entries, staged changes, worktree changes, and untracked source.
+It excludes `.cheese` and the commit identifier, so an evidence-only commit does not count as a source change.[^refresh]
+
+Refresh permits only a new `.cheese/age/<slug>-packet.md`.
+It refuses changed or deleted prior evidence, other new evidence, and source changes.
+A stable candidate must match the original source digest before publication.
+A refusal preserves the existing lock bytes.[^refresh]
+
+Evidence hashing streams regular files through no-follow descriptors.
+Evidence identities preserve filesystem path bytes and permission modes.
+A symlink contributes its target text, not the target file contents.[^hashing]
+
+## Age has no pass counter
+
+Age starts a fresh context on every pass and cannot observe earlier passes. The two-pass cure cap is owned by the Cook phase table (`skills/cook/references/auto-mode.md:59-81`), not by Age or Cure; see [skill-review-round-r014](../decisions/skill-review-round-r014.md).
+
+[^refresh]: src/easy_cheese/skills/age/review_lock.py:257-317,430-459,536-582; tests/python/test_age_review_lock.py:507-543.
+[^hashing]: src/easy_cheese/skills/age/review_lock.py:162-204,320-382; tests/python/test_age_review_lock.py:554-580.
+
+_Source: r014 review invariants and PR #703 cure · Updated: 2026-09-20_

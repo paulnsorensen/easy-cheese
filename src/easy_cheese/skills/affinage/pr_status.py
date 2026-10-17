@@ -1,0 +1,380 @@
+#!/usr/bin/env python3
+"""Fetch PR status (build + merge) for /affinage grading.
+
+Returns JSON on stdout:
+
+    {
+      "pr": <number>,
+      "build": {
+        "status": "passing" | "failing" | "pending",
+        "checks": [
+          {
+            "name": str,
+            "conclusion": str,
+            "url": str,
+            "failing": bool,           # True iff gh bucket == "fail" — the
+                                       # single source of truth for "this check
+                                       # made the build fail"
+            "failure_summary": str,   # last ~10 lines of the failing log
+            "failed_tests": [str]      # heuristic parse of FAILED test names
+          }
+        ]
+      },
+      "merge": {"mergeable": str, "state": str},
+      "logs_expired": bool
+    }
+
+Wraps `gh pr checks`, `gh pr view`, and `gh run view --log-failed`.
+
+`logs_expired` is the expired-Actions-logs case: the build is failing and every
+failing check whose logs are fetchable (has a `/runs/<id>` run id) produced no
+log to ground on (typically expired GitHub Actions logs past the retention
+window). Grading a blank CI line is worse than halting and asking the human to
+rerun the failed jobs first. Failing checks with no fetchable run id (external
+CI / non-Actions status checks) are excluded — rerunning them won't help — so a
+build failing solely on those reports `logs_expired: false` and they become
+Needs-investigation. The command exits 0 for every completed status fetch; the
+caller reads `logs_expired` to decide whether to halt.
+
+A fetch that cannot complete raises a CLI error instead:
+
+    1  PR / gh API error
+    2  missing gh binary
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+from typing import TypedDict, cast
+
+import fromargs
+
+FAILURE_TAIL_LINES = 10
+
+
+class _EnrichedCheck(TypedDict):
+    name: str
+    conclusion: str
+    url: str
+    failing: bool
+    failure_summary: str
+    failed_tests: list[str]
+
+
+class _BuildInfo(TypedDict):
+    status: str
+    checks: list[_EnrichedCheck]
+
+
+class _MergeInfo(TypedDict):
+    mergeable: str
+    state: str
+
+
+class _Output(TypedDict):
+    pr: int
+    build: _BuildInfo
+    merge: _MergeInfo
+    logs_expired: bool
+
+
+# Heuristic patterns for extracting failed-test names from log output.
+# Conservative — false positives are noise but not incorrect grading.
+_FAILED_TEST_PATTERNS = (
+    # pytest:  FAILED tests/auth.py::test_name
+    re.compile(r"FAILED\s+(\S+(?:::\S+)+)"),
+    # rust:    test foo::bar ... FAILED
+    re.compile(r"test\s+(\S+)\s+\.\.\.\s+FAILED"),
+    # jest:    ✗ test name
+    re.compile(r"^\s*[✗×]\s+(.+)$", re.MULTILINE),
+)
+
+
+def _gh(args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run gh, returning the completed process. Raises CliError (exit 2) if gh is not installed."""
+    try:
+        return subprocess.run(
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise fromargs.CliError("pr-status: gh CLI not found in PATH", exit_code=2) from exc
+
+
+def _run_gh(args: list[str], *, allow_fail: bool = False) -> str:
+    """Invoke gh and return stdout. Raises CliError (exit 4) on failure unless allow_fail."""
+    result = _gh(args)
+    if result.returncode != 0:
+        if allow_fail:
+            _ = sys.stderr.write(
+                f"pr-status: gh {' '.join(args)} failed (exit {result.returncode}); "
+                + "continuing with empty result\n"
+            )
+            return ""
+        raise fromargs.CliError(
+            f"gh {' '.join(args)} failed (exit {result.returncode}): {result.stderr.strip()}",
+            exit_code=4,
+        )
+    return result.stdout
+
+
+# Plain `gh pr checks` prints the `bucket` label in its STATUS column
+# (`cancel` renders as `fail`). This vocabulary is stable from pre-`--json` gh
+# (verified at v2.40.0) through current (v2.93.0), so the fallback maps bucket
+# -> state directly. Keep inverse to gh's own state -> bucket mapping.
+_BUCKET_TO_STATE = {
+    "pass": "SUCCESS",
+    "fail": "FAILURE",
+    "pending": "IN_PROGRESS",
+    "skipping": "SKIPPED",
+}
+
+
+def fetch_checks(pr: int) -> list[dict[str, object]]:
+    """Return raw check entries for ``pr``.
+
+    Fast path: `gh pr checks --json name,state,bucket,link` (gh >= 2.49.0).
+    `gh` exits non-zero when checks are *failing* yet still prints valid JSON,
+    so the fast path succeeds on any parseable list regardless of exit code.
+    If `--json` is unsupported (older gh rejects the flag, exit non-zero with
+    no JSON), fall back to parsing the plain tab-separated output. Only exit 1
+    when both paths fail.
+    """
+    json_result = _gh(["pr", "checks", str(pr), "--json", "name,state,bucket,link"])
+    raw = json_result.stdout
+    if raw.strip():
+        try:
+            data = cast(object, json.loads(raw))
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, list):
+            return cast(list[dict[str, object]], data)
+    elif json_result.returncode == 0:
+        # gh succeeded and reported no checks at all.
+        return []
+
+    return _fetch_checks_plain(pr, json_result)
+
+
+def _fetch_checks_plain(
+    pr: int, json_result: subprocess.CompletedProcess[str]
+) -> list[dict[str, object]]:
+    """Parse plain `gh pr checks` output when the `--json` fast path is unusable."""
+    plain = _gh(["pr", "checks", str(pr)])
+    text = plain.stdout
+    if not text.strip():
+        # `gh pr checks` exits non-zero with empty stdout in two cases that look
+        # alike: a PR with no checks ("no checks reported on the ... branch")
+        # and a genuine error (PR not found / API failure). Only the former is a
+        # real "passing, no checks" answer; the latter must surface as exit 1.
+        if "no checks reported" in plain.stderr.lower():
+            return []
+        raise fromargs.CliError(
+            "gh pr checks --json failed (exit "
+            + f"{json_result.returncode}: {json_result.stderr.strip()}) and the "
+            + f"plain fallback also failed (exit {plain.returncode}: "
+            + f"{plain.stderr.strip()})",
+            exit_code=4,
+        )
+
+    checks: list[dict[str, object]] = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        cols = line.split("\t")
+        name = cols[0] if cols else ""
+        bucket = (cols[1].lower() if len(cols) > 1 else "")
+        link = next((c for c in cols[2:] if c.startswith("http")), "")
+        checks.append(
+            {
+                "name": name,
+                "state": _BUCKET_TO_STATE.get(bucket, ""),
+                "bucket": bucket,
+                "link": link,
+            }
+        )
+    return checks
+
+
+def fetch_merge_state(pr: int) -> _MergeInfo:
+    raw = _run_gh(["pr", "view", str(pr), "--json", "mergeable,mergeStateStatus"])
+    if not raw.strip():
+        return {"mergeable": "UNKNOWN", "state": "UNKNOWN"}
+    try:
+        data = cast(object, json.loads(raw))
+    except json.JSONDecodeError as exc:
+        _ = sys.stderr.write(
+            f"pr-status: could not parse gh pr view JSON ({exc}); "
+            + "treating merge state as UNKNOWN\n"
+        )
+        return {"mergeable": "UNKNOWN", "state": "UNKNOWN"}
+    if not isinstance(data, dict):
+        return {"mergeable": "UNKNOWN", "state": "UNKNOWN"}
+    payload = cast(dict[str, object], data)
+    mergeable = payload.get("mergeable")
+    state = payload.get("mergeStateStatus")
+    return {
+        "mergeable": mergeable if isinstance(mergeable, str) and mergeable else "UNKNOWN",
+        "state": state if isinstance(state, str) and state else "UNKNOWN",
+    }
+
+
+def extract_run_id(link: str) -> str | None:
+    """Parse a github actions URL to extract the run id."""
+    if not link:
+        return None
+    match = re.search(r"/runs/(\d+)", link)
+    return match.group(1) if match else None
+
+
+def extract_failed_tests(log: str) -> list[str]:
+    """Heuristically pull failed-test names from a log."""
+    seen: list[str] = []
+    for pattern in _FAILED_TEST_PATTERNS:
+        for match in pattern.finditer(log):
+            name = match.group(1).strip()
+            if name and name not in seen:
+                seen.append(name)
+    return seen
+
+
+def fetch_failure_summary(link: str) -> tuple[str, list[str]]:
+    """Return (tail-summary, failed_tests) for a failing check link."""
+    run_id = extract_run_id(link)
+    if not run_id:
+        return "", []
+    raw = _run_gh(["run", "view", run_id, "--log-failed"], allow_fail=True)
+    if not raw.strip():
+        return "", []
+    lines = raw.rstrip().splitlines()
+    tail = "\n".join(lines[-FAILURE_TAIL_LINES:])
+    failed_tests = extract_failed_tests(raw)
+    return tail, failed_tests
+
+
+def _str_field(d: dict[str, object], key: str) -> str:
+    value = d.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def classify_status(checks: list[dict[str, object]]) -> str:
+    """Classify overall build state from per-check `bucket` values.
+
+    `gh pr checks` exposes a pre-classified `bucket` field (pass / fail /
+    pending / skipping) which is more stable than enumerating raw `state`
+    values across event types. Skipping counts as passing.
+    """
+    if not checks:
+        return "passing"
+    buckets = {_str_field(c, "bucket").lower() for c in checks}
+    if "fail" in buckets:
+        return "failing"
+    if "pending" in buckets:
+        return "pending"
+    return "passing"
+
+
+def build_output(pr: int) -> _Output:
+    raw_checks = fetch_checks(pr)
+    merge = fetch_merge_state(pr)
+    status = classify_status(raw_checks)
+
+    enriched: list[_EnrichedCheck] = []
+    for check in raw_checks:
+        bucket = _str_field(check, "bucket").lower()
+        # Output key stays `conclusion` per spec; we derive it from gh's
+        # canonical `state` (SUCCESS / FAILURE / CANCELLED / TIMED_OUT /
+        # SKIPPED / IN_PROGRESS / QUEUED / ...) lowercased.
+        conclusion = _str_field(check, "state").lower()
+        url = _str_field(check, "link")
+        # `failing` is the single source of truth for "this check made the
+        # build fail" — derived from gh's pre-classified `bucket`, the same
+        # signal that drives classification and enrichment. Downstream halt
+        # logic reads this, never the conclusion string, so the three stay
+        # in lockstep across every gh state that maps to bucket==fail.
+        failing = bucket == "fail"
+        failure_summary = ""
+        failed_tests: list[str] = []
+        if failing:
+            failure_summary, failed_tests = fetch_failure_summary(url)
+        enriched.append(
+            {
+                "name": _str_field(check, "name"),
+                "conclusion": conclusion,
+                "url": url,
+                "failing": failing,
+                "failure_summary": failure_summary,
+                "failed_tests": failed_tests,
+            }
+        )
+
+    output: _Output = {
+        "pr": pr,
+        "build": {"status": status, "checks": enriched},
+        "merge": merge,
+        "logs_expired": False,
+    }
+    output["logs_expired"] = all_failures_ungroundable(output)
+    return output
+
+
+def all_failures_ungroundable(output: _Output) -> bool:
+    """True when the build is failing and every failing check whose logs are
+    *fetchable* produced no log evidence — the expired-Actions-logs case, where
+    rerunning the failed jobs is the right remediation.
+
+    Only failing checks with an extractable GitHub Actions run id are counted: a
+    check whose `url` has no `/runs/<id>` segment (external CI / non-Actions
+    status check) has an empty `failure_summary` by design — `fetch_failure_summary`
+    never attempts a fetch — not because logs expired, so rerunning a run id
+    won't help. A build failing solely on such checks is NOT ungroundable; the
+    caller proceeds (exit 0) and those become Needs-investigation rather than a
+    misdirected logs-expired halt.
+
+    Returns False as soon as one fetchable failing check has a summary — that
+    finding can be graded and the empty ones become Needs-investigation.
+
+    "Failing" reads the per-check `failing` flag (gh bucket == "fail"), the same
+    signal `build_output` uses to enrich, so this never drifts from the set of
+    checks that actually made the build fail.
+    """
+    build = output["build"]
+    if build["status"] != "failing":
+        return False
+    fetchable = [c for c in build["checks"] if c["failing"] and extract_run_id(c["url"])]
+    if not fetchable:
+        return False
+    return all(not c["failure_summary"] for c in fetchable)
+
+
+def pr_status(pr: int) -> _Output:
+    """Fetch PR status (build + merge) for /affinage grading.
+
+    Parameters
+    ----------
+    pr
+        PR number.
+    """
+    return build_output(pr)
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "pr-status",
+        help="Fetch PR status (build + merge) for /affinage grading.",
+        help_formatter="plain",
+        default_command=pr_status,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,119 @@
+{
+  "goal": "Give the agent CLI a file-only database: no server, one directory, safe under concurrent agent writes.",
+  "goal_emphasis": "file-only",
+  "tier": "light",
+  "stage": "bounds",
+  "agent_status": "agent listening",
+  "summary": "Goal pinned as one sentence and split into four clauses. Tier is light. First fork: SQLite gives atomic writes for free; a JSONL log is greppable but needs its own index; one file per record is the worst under concurrent writers.",
+  "revisions": [
+    {
+      "label": "r1 · bounds pass",
+      "note": "goal pinned"
+    }
+  ],
+  "ledger": [
+    {
+      "label": "goal",
+      "tone": "dim",
+      "items": [
+        {
+          "id": "G-1",
+          "text": "no server process"
+        },
+        {
+          "id": "G-2",
+          "text": "one directory under the repo"
+        },
+        {
+          "id": "G-3",
+          "text": "concurrent writes never corrupt"
+        },
+        {
+          "id": "G-4",
+          "text": "queryable from Python, no driver"
+        }
+      ]
+    },
+    {
+      "label": "tier",
+      "text": "Light · two forks are yours: concurrency and contracts fired"
+    },
+    {
+      "label": "asking",
+      "items": [
+        {
+          "id": "F-1",
+          "text": "Storage format"
+        }
+      ]
+    },
+    {
+      "label": "agent-decided",
+      "text": "Non-goals: no remote sync, no encryption at rest · store lives at `.cheese/db/`"
+    }
+  ],
+  "gates": {
+    "items": [
+      {
+        "label": "problem statement",
+        "state": "met"
+      },
+      {
+        "label": "grounding recorded",
+        "state": "met"
+      },
+      {
+        "label": "options weighed",
+        "state": "current"
+      },
+      {
+        "label": "option grounded",
+        "state": "open"
+      },
+      {
+        "label": "interface sketches",
+        "state": "open"
+      },
+      {
+        "label": "goal coverage 0/4",
+        "state": "open"
+      },
+      {
+        "label": "reproduction",
+        "state": "na"
+      }
+    ]
+  },
+  "shape_note": "Placement and diagram appear at Sketch. Wiki grounding is unavailable here; the explorer digest is the evidence.",
+  "questions": [
+    {
+      "id": "F-1",
+      "prompt": "Which storage format?",
+      "meta": "moves AC-3, the open() seam",
+      "selection_mode": "single",
+      "recommended_option_id": "sqlite",
+      "options": [
+        {
+          "id": "sqlite",
+          "label": "SQLite, one file",
+          "tradeoff": "stdlib, atomic, WAL for readers"
+        },
+        {
+          "id": "jsonl",
+          "label": "JSONL log + index",
+          "tradeoff": "greppable; needs compaction"
+        },
+        {
+          "id": "json-per-record",
+          "label": "One JSON file per record",
+          "tradeoff": "weak under contention"
+        },
+        {
+          "id": "none",
+          "label": "Do nothing",
+          "tradeoff": "keep flat files"
+        }
+      ]
+    }
+  ]
+}

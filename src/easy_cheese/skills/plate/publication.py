@@ -1,0 +1,297 @@
+"""Validate terminal Plate publication evidence."""
+
+from __future__ import annotations
+
+import copy
+import json
+import re
+from pathlib import Path
+from typing import cast
+from urllib.parse import urlparse
+
+import fromargs
+
+from easy_cheese.shared.publication import BoundedReadOverflow, read_bounded
+from easy_cheese_schemas.contracts import LandingShape, parse_landing_mapping
+from easy_cheese_schemas.manifest import plate_layout_for, plate_layout_for_plan
+from easy_cheese_schemas.pr_plan import PrShape
+from easy_cheese_schemas.schema_runtime import load_pr_plan
+
+_MODES = {"commit-only", "topology-preflight", "new-pr", "existing-pr", "stack-maintenance"}
+_TOPOLOGIES = {"single", "stacked", "n/a"}
+_PROVIDERS = {"ordinary", "graphite", "git-town", "gh-stack", "n/a"}
+_STACK_PROVIDERS = {"graphite", "git-town", "gh-stack"}
+_REQUIRED = {"mode", "topology", "provider", "artifacts", "gate", "commits", "prs", "risk"}
+_ALLOWED = _REQUIRED | {"pr_plan", "landing", "deviation"}
+_SHA = re.compile(r"[0-9a-fA-F]{7,40}")
+
+
+def _validate_landing(
+    raw: object,
+    topology: object,
+    mode: object,
+    plan_shape: PrShape | None,
+    deviation: object,
+    errors: list[str],
+) -> None:
+    """Decode the spec's landing block with the schema's rules, then check topology."""
+    try:
+        landing = parse_landing_mapping(raw)
+    except ValueError as exc:
+        errors.append(str(exc))
+        return
+    expected = plate_layout_for(landing.shape).value
+    if plan_shape is not None:
+        collapsed = (
+            plan_shape is PrShape.SINGLE
+            and landing.shape is not LandingShape.SINGLE
+            and isinstance(deviation, str)
+            and bool(deviation.strip())
+        )
+        if plan_shape.value != landing.shape.value and not collapsed:
+            hint = (
+                "; a single collapse needs a non-empty deviation"
+                if plan_shape is PrShape.SINGLE
+                else ""
+            )
+            errors.append(
+                f"landing-shape-mismatch: landing.shape {landing.shape.value} "
+                + f"requires pr_plan.shape {landing.shape.value}, got {plan_shape.value}{hint}"
+            )
+    elif topology in {"single", "stacked"} and topology != expected:
+        errors.append(
+            f"landing-topology-mismatch: landing.shape {landing.shape.value} "
+            + f"requires topology {expected}, got {topology!r}"
+        )
+    if (
+        mode in {"new-pr", "existing-pr"}
+        and topology == "n/a"
+        and landing.shape is not LandingShape.SINGLE
+    ):
+        errors.append(
+            f"landing-topology-unresolved: landing.shape {landing.shape.value} "
+            + f"requires topology {expected}, got 'n/a'"
+        )
+
+
+class PublicationValidationError(ValueError):
+    """One or more publication evidence invariants failed."""
+
+    def __init__(self, errors: list[str]) -> None:
+        self.errors: tuple[str, ...] = tuple(errors)
+        super().__init__("; ".join(errors))
+
+
+_MAX_STATE_BYTES = 1_000_000
+
+
+def _read_state_text(path: Path) -> str:
+    """Read the state file with a bounded size cap and explicit UTF-8 decoding."""
+    try:
+        raw = read_bounded(path, _MAX_STATE_BYTES)
+    except BoundedReadOverflow as exc:
+        raise PublicationValidationError([f"state file exceeds {_MAX_STATE_BYTES} bytes"]) from exc
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise PublicationValidationError([f"state file is not valid UTF-8: {exc}"]) from exc
+
+
+def _object(value: object, path: str, errors: list[str]) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        errors.append(f"{path} must be an object")
+        return None
+    return cast("dict[str, object]", value)
+
+
+def _list(value: object, path: str, errors: list[str]) -> list[object] | None:
+    if not isinstance(value, list):
+        errors.append(f"{path} must be a list")
+        return None
+    return cast("list[object]", value)
+
+
+def _text(value: object, path: str, errors: list[str]) -> str | None:
+    if not isinstance(value, str) or not value or any(char.isspace() for char in value):
+        errors.append(f"{path} must be a non-empty string without whitespace")
+        return None
+    return value
+
+
+def _exact_fields(value: dict[str, object], required: set[str], path: str, errors: list[str]) -> None:
+    for name in sorted(required - value.keys()):
+        errors.append(f"{path}.{name} is required")
+    for name in sorted(value.keys() - required):
+        errors.append(f"{path}.{name} is not allowed")
+
+
+def validate_publication(data: object) -> dict[str, object]:
+    """Return normalized publication evidence or raise every detected violation."""
+    errors: list[str] = []
+    state = _object(data, "publication", errors)
+    if state is None:
+        raise PublicationValidationError(errors)
+
+    for name in sorted(_REQUIRED - state.keys()):
+        errors.append(f"{name} is required")
+    for name in sorted(state.keys() - _ALLOWED):
+        errors.append(f"{name} is not allowed")
+
+    mode = state.get("mode")
+    topology = state.get("topology")
+    provider = state.get("provider")
+    if mode not in _MODES:
+        errors.append(f"mode must be one of {', '.join(sorted(_MODES))}")
+    if topology not in _TOPOLOGIES:
+        errors.append(f"topology must be one of {', '.join(sorted(_TOPOLOGIES))}")
+    if provider not in _PROVIDERS:
+        errors.append(f"provider must be one of {', '.join(sorted(_PROVIDERS))}")
+
+    artifacts = _list(state.get("artifacts"), "artifacts", errors)
+    if artifacts is not None:
+        for index, raw in enumerate(artifacts):
+            item = _object(raw, f"artifacts[{index}]", errors)
+            if item is None:
+                continue
+            _exact_fields(item, {"target", "backend", "verified"}, f"artifacts[{index}]", errors)
+            _ = _text(item.get("target"), f"artifacts[{index}].target", errors)
+            _ = _text(item.get("backend"), f"artifacts[{index}].backend", errors)
+            if item.get("verified") is not True:
+                errors.append(f"artifacts[{index}].verified must be true")
+
+    gate = _object(state.get("gate"), "gate", errors)
+    if gate is not None:
+        _exact_fields(gate, {"command", "result"}, "gate", errors)
+        if not isinstance(gate.get("command"), str) or not gate.get("command"):
+            errors.append("gate.command must be a non-empty string")
+        if gate.get("result") not in {"pass", "n/a"}:
+            errors.append("gate.result must be pass or n/a")
+
+    commits = _list(state.get("commits"), "commits", errors)
+    if commits is not None:
+        for index, sha in enumerate(commits):
+            if not isinstance(sha, str) or _SHA.fullmatch(sha) is None:
+                errors.append(f"commits[{index}] must be a 7-40 character hexadecimal SHA")
+
+    prs = _list(state.get("prs"), "prs", errors)
+    if prs is not None:
+        for index, raw in enumerate(prs):
+            item = _object(raw, f"prs[{index}]", errors)
+            if item is None:
+                continue
+            _exact_fields(item, {"url", "base", "head", "verified"}, f"prs[{index}]", errors)
+            url = item.get("url")
+            parsed = urlparse(url) if isinstance(url, str) else None
+            if parsed is None or parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                errors.append(f"prs[{index}].url must be an HTTP(S) URL")
+            _ = _text(item.get("base"), f"prs[{index}].base", errors)
+            _ = _text(item.get("head"), f"prs[{index}].head", errors)
+            if item.get("verified") is not True:
+                errors.append(f"prs[{index}].verified must be true")
+
+    risk = state.get("risk")
+    if not isinstance(risk, str) or not risk.strip():
+        errors.append("risk must be a non-empty string")
+
+    flat_plan = False
+    plan_shape: PrShape | None = None
+    if "pr_plan" in state:
+        plan = _object(state["pr_plan"], "pr_plan", errors)
+        if plan is not None:
+            loaded = load_pr_plan(plan)
+            errors.extend(f"pr_plan {problem}" for problem in loaded.problems)
+            if loaded.value is not None:
+                plan_shape = loaded.value.shape
+                flat_plan = plan_shape == PrShape.ORTHOGONAL_FLAT
+                projected = plate_layout_for_plan(loaded.value).value
+                if projected != topology:
+                    errors.append(
+                        f"pr_plan projects to {projected} layout but topology is "
+                        + f"{topology}"
+                    )
+
+    if "deviation" in state:
+        deviation = state["deviation"]
+        if not isinstance(deviation, str) or not deviation.strip():
+            errors.append("deviation must be a non-empty string")
+    if "landing" in state:
+        _validate_landing(
+            state["landing"], topology, mode, plan_shape, state.get("deviation"), errors
+        )
+
+    if mode == "topology-preflight":
+        if topology not in {"single", "stacked"}:
+            errors.append("topology-preflight requires single or stacked topology")
+        if provider != "n/a":
+            errors.append("topology-preflight requires provider n/a")
+        if gate != {"command": "n/a", "result": "n/a"}:
+            errors.append("topology-preflight requires gate n/a")
+        if commits:
+            errors.append("topology-preflight requires no commits")
+        if prs:
+            errors.append("topology-preflight requires no PRs")
+    else:
+        if gate is not None and gate.get("result") != "pass":
+            errors.append("publication requires a passing gate")
+        if mode == "commit-only":
+            if topology != "n/a" or provider != "n/a":
+                errors.append("commit-only requires topology and provider n/a")
+            if commits is not None and not commits:
+                errors.append("commit-only requires at least one commit")
+            if prs:
+                errors.append("commit-only requires no PRs")
+        elif mode in {"new-pr", "existing-pr"}:
+            if topology == "single" and provider != "ordinary":
+                errors.append("single topology requires provider ordinary")
+            flat_ordinary = topology == "stacked" and provider == "ordinary" and flat_plan
+            if topology == "stacked" and provider not in _STACK_PROVIDERS and not flat_ordinary:
+                errors.append("stacked topology requires a stack provider")
+            if commits is not None and not commits:
+                errors.append(f"{mode} requires at least one commit")
+            if prs is not None and not prs:
+                errors.append(f"{mode} requires at least one verified PR")
+        elif mode == "stack-maintenance":
+            if topology != "stacked" or provider not in _STACK_PROVIDERS:
+                errors.append("stack-maintenance requires stacked topology and a stack provider")
+            if prs is not None and not prs:
+                errors.append("stack-maintenance requires at least one verified PR")
+
+    if errors:
+        raise PublicationValidationError(errors)
+    normalized = copy.deepcopy(state)
+    return {"valid": True, **normalized}
+
+
+def validate_cmd(state: str) -> dict[str, object]:
+    """Validate terminal Plate publication evidence.
+
+    Parameters
+    ----------
+    state
+        Path to the publication state JSON file.
+    """
+    path = Path(state)
+    try:
+        data = cast(object, json.loads(_read_state_text(path)))
+        return validate_publication(data)
+    except (OSError, json.JSONDecodeError) as error:
+        raise fromargs.CliError(str(error), exit_code=2) from error
+    except PublicationValidationError as error:
+        raise fromargs.CliError("\n".join(error.errors), exit_code=2) from error
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "validate-publication",
+        help="Validate terminal Plate publication evidence.",
+        help_formatter="plain",
+        default_command=validate_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

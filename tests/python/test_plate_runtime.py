@@ -1,0 +1,797 @@
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from pathlib import Path
+from typing import cast
+
+import pytest
+
+from easy_cheese.skills.plate import publication, stack_tools
+
+
+def _pr_plan_v1(shape: str = "single") -> dict[str, object]:
+    return {
+        "contract_version": {
+            "schema_uri": "https://schemas.easy-cheese.dev/pr-plan",
+            "major": "1",
+            "minor": "0",
+        },
+        "shape": shape,
+        "groups": [
+            {
+                "branch": "feature",
+                "title": "feat: ship",
+                "base": "main",
+                "commits": ["abc1234"],
+                "depends_on": [],
+            }
+        ],
+    }
+
+
+def valid_publication() -> dict[str, object]:
+    return {
+        "mode": "new-pr",
+        "topology": "single",
+        "provider": "ordinary",
+        "artifacts": [
+            {"target": "docs/adr/example.md", "backend": "tilth", "verified": True}
+        ],
+        "gate": {"command": "just check", "result": "pass"},
+        "commits": ["0022ccafb9568b5ddf04f6d3b86592885184427a"],
+        "prs": [
+            {
+                "url": "https://github.com/example/repo/pull/42",
+                "base": "main",
+                "head": "feature",
+                "verified": True,
+            }
+        ],
+        "risk": "none",
+    }
+
+
+def test_validate_publication_normalizes_valid_evidence() -> None:
+    result = publication.validate_publication(valid_publication())
+
+    assert result["valid"] is True
+    assert result["mode"] == "new-pr"
+    assert result["topology"] == "single"
+    assert result["provider"] == "ordinary"
+    assert cast(dict[str, object], cast(list[object], result["artifacts"])[0])["verified"] is True
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"provider": "graphite"}, "single topology requires provider ordinary"),
+        ({"topology": "stacked"}, "stacked topology requires a stack provider"),
+        ({"gate": {"command": "just check", "result": "fail"}}, "publication requires a passing gate"),
+        ({"commits": ["not-a-sha"]}, "commits[0] must be a 7-40 character hexadecimal SHA"),
+        ({"prs": []}, "new-pr requires at least one verified PR"),
+    ],
+)
+def test_validate_publication_rejects_impossible_states(
+    updates: dict[str, object], message: str
+) -> None:
+    state = valid_publication() | updates
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert message in error.value.errors
+
+
+def test_validate_publication_rejects_unverified_artifacts_and_pr_plan_drift() -> None:
+    state = valid_publication()
+    cast(dict[str, object], cast(list[object], state["artifacts"])[0])["verified"] = False
+    state["pr_plan"] = _pr_plan_v1(shape="stacked_linear")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert error.value.errors == (
+        "artifacts[0].verified must be true",
+        "pr_plan projects to stacked layout but topology is single",
+    )
+
+
+def test_validate_publication_rejects_plate_layout_only_pr_plan() -> None:
+    """A pre-v1 plan carrying only plate_layout is refused at the plate boundary:
+    plate_layout is not a PrPlan field and the v1 envelope is missing."""
+    state = valid_publication()
+    state["pr_plan"] = {"plate_layout": "single"}
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert error.value.errors == (
+        "pr_plan PrPlan.contract_version is required",
+        "pr_plan PrPlan.shape is required",
+        "pr_plan PrPlan.groups is required",
+        "pr_plan PrPlan.plate_layout: unknown field",
+    )
+
+
+def test_validate_publication_accepts_a_matching_v1_pr_plan() -> None:
+    state = valid_publication()
+    state["pr_plan"] = _pr_plan_v1(shape="single")
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+
+
+def _flat_plan() -> dict[str, object]:
+    plan = _pr_plan_v1(shape="orthogonal_flat")
+    plan["groups"] = [
+        {
+            "branch": name,
+            "title": f"feat: {name}",
+            "base": "main",
+            "commits": [sha],
+            "depends_on": [],
+        }
+        for name, sha in (("a", "abc1234"), ("b", "def5678"))
+    ]
+    return plan
+
+
+def test_validate_publication_accepts_flat_plan_with_ordinary_provider() -> None:
+    state = valid_publication() | {"topology": "stacked", "pr_plan": _flat_plan()}
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+
+
+def test_validate_publication_rejects_stacked_ordinary_without_flat_plan() -> None:
+    for extra in ({}, {"pr_plan": _pr_plan_v1(shape="stacked_linear")}):
+        state = valid_publication() | {"topology": "stacked"} | extra
+
+        with pytest.raises(publication.PublicationValidationError) as error:
+            _ = publication.validate_publication(state)
+
+        assert "stacked topology requires a stack provider" in error.value.errors
+
+
+def test_validate_publication_rejects_landing_topology_mismatch() -> None:
+    state = valid_publication() | {
+        "landing": {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
+    }
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert error.value.errors == (
+        "landing-topology-mismatch: landing.shape stacked_linear requires topology stacked, "
+        + "got 'single'",
+    )
+
+
+def _landing_stacked_state(shape: str, **extra: object) -> dict[str, object]:
+    landing = {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
+    topology = "single" if shape == "single" else "stacked"
+    return valid_publication() | {
+        "topology": topology,
+        "landing": landing,
+        "pr_plan": _pr_plan_v1(shape=shape),
+    } | extra
+
+
+def test_validate_publication_rejects_flat_plan_against_stacked_linear_landing() -> None:
+    state = _landing_stacked_state("orthogonal_flat")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert any(e.startswith("landing-shape-mismatch") for e in error.value.errors)
+
+
+def test_validate_publication_accepts_single_collapse_with_deviation() -> None:
+    state = _landing_stacked_state("single", deviation="layer 2 needs files layer 3 owns")
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+    assert result["deviation"] == "layer 2 needs files layer 3 owns"
+
+
+def test_validate_publication_rejects_single_collapse_without_deviation() -> None:
+    state = _landing_stacked_state("single")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert any("non-empty deviation" in e for e in error.value.errors)
+
+
+def test_validate_publication_rejects_blank_deviation() -> None:
+    state = _landing_stacked_state("single", deviation="  ")
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert "deviation must be a non-empty string" in error.value.errors
+    assert any("non-empty deviation" in e for e in error.value.errors)
+
+
+def test_validate_publication_passes_landing_through_when_it_matches_topology() -> None:
+    landing: dict[str, object] = {
+        "shape": "single",
+        "layers": [],
+        "per_layer_green": "required",
+        "review_fixes": "fold",
+    }
+    state = valid_publication() | {"landing": landing}
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+    assert result["landing"] == landing
+
+
+@pytest.mark.parametrize(
+    ("landing", "message"),
+    [
+        (
+            {"shape": "sideways"},
+            "landing-closed-class landing.shape 'sideways' is not a recognized shape",
+        ),
+        (
+            {"shape": "single", "review_fixes": "squash"},
+            "landing-closed-class landing.review_fixes 'squash' is not a recognized review_fixes",
+        ),
+        (
+            {"shape": "single", "extra": True, "bogus": 1},
+            "landing-closed-class landing.'bogus', landing.'extra' is not allowed",
+        ),
+        (
+            {"shape": "single", "layers": [["c1"]]},
+            "landing-closed-class landing-layers-require-non-single-shape",
+        ),
+        (
+            {"shape": "stacked_linear", "layers": ["c1"]},
+            "landing-closed-class landing.layers must be a list of lists of strings",
+        ),
+        (
+            {"shape": "stacked_linear", "layers": [["c1"], ["c1"]]},
+            "landing-closed-class landing-layer-curd-ids-must-be-unique: 'c1' appears twice",
+        ),
+    ],
+)
+def test_validate_publication_rejects_malformed_landing(
+    landing: dict[str, object], message: str
+) -> None:
+    state = valid_publication() | {"landing": landing}
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert message in error.value.errors
+
+
+def test_topology_preflight_requires_empty_publication_evidence() -> None:
+    overrides: dict[str, object] = {
+        "mode": "topology-preflight",
+        "provider": "n/a",
+        "gate": {"command": "n/a", "result": "n/a"},
+        "commits": [],
+        "prs": [],
+    }
+    state = valid_publication() | overrides
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+    assert result["gate"] == {"command": "n/a", "result": "n/a"}
+
+
+def test_validate_publication_cli_reports_every_violation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    state = valid_publication()
+    cast(dict[str, object], cast(list[object], state["artifacts"])[0])["verified"] = False
+    state["commits"] = ["bad"]
+    path = tmp_path / "state.json"
+    _ = path.write_text(json.dumps(state))
+
+    assert publication.main([str(path)]) == 2
+
+    stderr = capsys.readouterr().err
+    assert "artifacts[0].verified must be true" in stderr
+    assert "commits[0] must be a 7-40 character hexadecimal SHA" in stderr
+
+
+def completed(
+    args: list[str], returncode: int = 0, stdout: str = "", stderr: str = ""
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(args, returncode, stdout, stderr)
+
+
+PREFLIGHT = ["gh", "api", "--include", "repos/{owner}/{repo}/stacks"]
+ALL_TOOLS = frozenset({"git", "gt", "git-town", "gh"})
+GH_ONLY = frozenset({"git", "gh"})
+
+
+def response(status_line: str) -> str:
+    return f"{status_line}\r\nContent-Type: application/json\r\n\r\n[]\n"
+
+
+def install_stack_tool_stubs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    preflight: subprocess.CompletedProcess[str] | None,
+    extension_output: str = "gh stack\tgithub/gh-stack\tv0.1.1\n",
+    tools: frozenset[str] = ALL_TOOLS,
+) -> None:
+    """Stub every process `detect_stack_tools` shells out to.
+
+    `preflight` is what the `gh api` enablement probe returns; `None` models a
+    probe that never completed (timeout or spawn failure).
+    """
+    git_dir = tmp_path / ".git"
+    git_dir.mkdir(exist_ok=True)
+    if "gt" in tools:
+        _ = (git_dir / ".graphite_repo_config").write_text("{}")
+
+    def which(name: str) -> str | None:
+        return f"/bin/{name}" if name in tools else None
+
+    monkeypatch.setattr(shutil, "which", which)
+
+    def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args == ["git", "rev-parse", "--git-dir"]:
+            return completed(args, stdout=".git\n")
+        if args == ["git", "config", "--get", "git-town.main-branch"]:
+            return completed(args, stdout="main\n")
+        if args == ["gh", "extension", "list"]:
+            return completed(args, stdout=extension_output)
+        if args == PREFLIGHT:
+            if preflight is None:
+                raise subprocess.TimeoutExpired(args, 10)
+            return preflight
+        raise AssertionError(args)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+
+def test_stack_tools_reports_available_providers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(PREFLIGHT, stdout=response("HTTP/2.0 200 OK")),
+    )
+
+    result = stack_tools.detect_stack_tools(tmp_path)
+
+    assert result["recommended"] == "graphite"
+    assert result["providers"] == {
+        "graphite": {
+            "installed": True,
+            "repository_signal": True,
+            "status": "available",
+        },
+        "git-town": {
+            "installed": True,
+            "repository_signal": True,
+            "status": "available",
+        },
+        "gh-stack": {
+            "installed": True,
+            "repository_signal": True,
+            "status": "available",
+            "http_status": 200,
+            "exit_status": 0,
+            "stderr": None,
+        },
+    }
+
+def test_unrelated_gh_extension_does_not_match_gh_stack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(PREFLIGHT, stdout=response("HTTP/2.0 200 OK")),
+        extension_output="gh-stack\tgithub/other-extension\tv0.1.1\n",
+        tools=GH_ONLY,
+    )
+
+    result = stack_tools.detect_stack_tools(tmp_path)
+
+    providers = cast(dict[str, dict[str, object]], result["providers"])
+    assert result["recommended"] is None
+    assert providers["gh-stack"] == {
+        "installed": False,
+        "repository_signal": None,
+        "status": "not-installed",
+        "http_status": None,
+        "exit_status": None,
+        "stderr": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("preflight", "status", "signal"),
+    [
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 404 Not Found")),
+            "not-enabled",
+            False,
+        ),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 401 Unauthorized")),
+            "auth-required",
+            None,
+        ),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 403 Forbidden")),
+            "auth-required",
+            None,
+        ),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 503 Service Unavailable")),
+            "service-error",
+            None,
+        ),
+        (
+            completed(
+                PREFLIGHT,
+                returncode=1,
+                stderr="none of the git remotes point to a known GitHub host\n",
+            ),
+            "remote-check-required",
+            None,
+        ),
+        (None, "remote-check-required", None),
+    ],
+)
+def test_gh_stack_preflight_classifies_every_response(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    preflight: subprocess.CompletedProcess[str] | None,
+    status: str,
+    signal: bool | None,
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch, tmp_path, preflight=preflight, tools=GH_ONLY
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]], stack_tools.detect_stack_tools(tmp_path)["providers"]
+    )
+
+    assert providers["gh-stack"]["status"] == status
+    assert providers["gh-stack"]["repository_signal"] is signal
+
+
+def test_gh_stack_service_error_preserves_status_exit_and_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`gh-stack.md` requires the status and stderr of a service failure."""
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(
+            PREFLIGHT,
+            returncode=1,
+            stdout=response("HTTP/2.0 503 Service Unavailable"),
+            stderr="gh: Server Error (HTTP 503)\n",
+        ),
+        tools=GH_ONLY,
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]],
+        stack_tools.detect_stack_tools(tmp_path)["providers"],
+    )
+
+    assert providers["gh-stack"] == {
+        "installed": True,
+        "repository_signal": None,
+        "status": "service-error",
+        "http_status": 503,
+        "exit_status": 1,
+        "stderr": "gh: Server Error (HTTP 503)",
+    }
+
+
+def test_gh_stack_indeterminate_probe_reports_its_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(
+            PREFLIGHT,
+            returncode=1,
+            stderr="none of the git remotes point to a known GitHub host\n",
+        ),
+        tools=GH_ONLY,
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]],
+        stack_tools.detect_stack_tools(tmp_path)["providers"],
+    )
+
+    assert providers["gh-stack"]["status"] == "remote-check-required"
+    assert providers["gh-stack"]["http_status"] is None
+    assert providers["gh-stack"]["exit_status"] == 1
+    assert (
+        providers["gh-stack"]["stderr"]
+        == "none of the git remotes point to a known GitHub host"
+    )
+
+
+def test_gh_stack_stderr_is_capped_at_the_documented_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch,
+        tmp_path,
+        preflight=completed(
+            PREFLIGHT,
+            returncode=1,
+            stdout=response("HTTP/2.0 500 Internal Server Error"),
+            stderr="A" + "B" * 2500,
+        ),
+        tools=GH_ONLY,
+    )
+
+    providers = cast(
+        dict[str, dict[str, object]],
+        stack_tools.detect_stack_tools(tmp_path)["providers"],
+    )
+
+    stderr = cast(str, providers["gh-stack"]["stderr"])
+    assert len(stderr) == 2000
+    assert stderr == "B" * 2000
+
+
+@pytest.mark.parametrize(
+    ("preflight", "recommended"),
+    [
+        (completed(PREFLIGHT, stdout=response("HTTP/2.0 200 OK")), "gh-stack"),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 404 Not Found")),
+            None,
+        ),
+        (
+            completed(PREFLIGHT, returncode=1, stdout=response("HTTP/2.0 503 Service Unavailable")),
+            "gh-stack",
+        ),
+        (None, "gh-stack"),
+    ],
+)
+def test_only_a_404_preflight_withdraws_the_gh_stack_recommendation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    preflight: subprocess.CompletedProcess[str] | None,
+    recommended: str | None,
+) -> None:
+    install_stack_tool_stubs(
+        monkeypatch, tmp_path, preflight=preflight, tools=GH_ONLY
+    )
+
+    assert stack_tools.detect_stack_tools(tmp_path)["recommended"] == recommended
+
+
+def test_gh_stack_preflight_is_skipped_when_the_extension_is_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def which(name: str) -> str | None:
+        return f"/bin/{name}" if name in {"git", "gh"} else None
+
+    monkeypatch.setattr(shutil, "which", which)
+
+    def run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args == ["git", "rev-parse", "--git-dir"]:
+            return completed(args, stdout=".git\n")
+        if args == ["gh", "extension", "list"]:
+            return completed(args, stdout="github/gh-dash\tgh dash\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+    providers = cast(
+        dict[str, dict[str, object]], stack_tools.detect_stack_tools(tmp_path)["providers"]
+    )
+
+    assert providers["gh-stack"] == {
+        "installed": False,
+        "repository_signal": None,
+        "status": "not-installed",
+        "http_status": None,
+        "exit_status": None,
+        "stderr": None,
+    }
+
+
+def test_stack_tools_reports_missing_providers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def which(_name: str) -> None:
+        return None
+
+    monkeypatch.setattr(shutil, "which", which)
+
+    result = stack_tools.detect_stack_tools(tmp_path)
+
+    providers = cast(dict[str, dict[str, object]], result["providers"])
+    assert result["recommended"] is None
+    assert {provider["status"] for provider in providers.values()} == {
+        "not-installed"
+    }
+
+
+def test_validate_publication_commit_only_landing_with_na_topology_is_valid() -> None:
+    landing: dict[str, object] = {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
+    overrides: dict[str, object] = {
+        "mode": "commit-only",
+        "topology": "n/a",
+        "provider": "n/a",
+        "prs": [],
+        "landing": landing,
+    }
+    state = valid_publication() | overrides
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+    assert result["landing"] == landing
+
+
+def test_validate_publication_new_pr_landing_with_na_topology_and_single_shape_is_valid() -> None:
+    landing: dict[str, object] = {"shape": "single", "layers": []}
+    overrides: dict[str, object] = {
+        "mode": "new-pr",
+        "topology": "n/a",
+        "provider": "n/a",
+        "landing": landing,
+    }
+    state = valid_publication() | overrides
+
+    result = publication.validate_publication(state)
+
+    assert result["valid"] is True
+    assert result["landing"] == landing
+
+
+def test_validate_publication_new_pr_landing_with_na_topology_and_stacked_shape_is_unresolved() -> (
+    None
+):
+    landing: dict[str, object] = {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
+    overrides: dict[str, object] = {
+        "mode": "new-pr",
+        "topology": "n/a",
+        "provider": "n/a",
+        "landing": landing,
+    }
+    state = valid_publication() | overrides
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert error.value.errors == (
+        "landing-topology-unresolved: landing.shape stacked_linear requires topology stacked, "
+        + "got 'n/a'",
+    )
+
+
+def test_validate_publication_topology_preflight_landing_mismatch_is_rejected() -> None:
+    overrides: dict[str, object] = {
+        "mode": "topology-preflight",
+        "provider": "n/a",
+        "gate": {"command": "n/a", "result": "n/a"},
+        "commits": [],
+        "prs": [],
+        "topology": "stacked",
+        "landing": {"shape": "single", "layers": []},
+    }
+    state = valid_publication() | overrides
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert (
+        "landing-topology-mismatch: landing.shape single requires topology single, got 'stacked'"
+        in error.value.errors
+    )
+
+
+def test_validate_publication_landing_as_a_list_is_rejected() -> None:
+    overrides: dict[str, object] = {"landing": []}
+    state = valid_publication() | overrides
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert "landing-closed-class landing must be a mapping" in error.value.errors
+
+
+def test_validate_publication_rejects_explicit_null_landing() -> None:
+    overrides: dict[str, object] = {"landing": None}
+    state = valid_publication() | overrides
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert "landing-closed-class landing must be a mapping" in error.value.errors
+
+
+def test_validate_publication_rejects_explicit_null_pr_plan() -> None:
+    overrides: dict[str, object] = {"pr_plan": None}
+    state = valid_publication() | overrides
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert "pr_plan must be an object" in error.value.errors
+
+
+def test_validate_publication_pr_plan_layout_that_disagrees_with_landing_is_refused() -> None:
+    overrides: dict[str, object] = {
+        "landing": {"shape": "single"},
+        "pr_plan": _pr_plan_v1(shape="stacked_linear"),
+    }
+    state = valid_publication() | overrides
+
+    with pytest.raises(publication.PublicationValidationError) as error:
+        _ = publication.validate_publication(state)
+
+    assert error.value.errors == (
+        "pr_plan projects to stacked layout but topology is single",
+        "landing-shape-mismatch: landing.shape single requires pr_plan.shape single, "
+        + "got stacked_linear",
+    )
+
+
+def test_validate_publication_cli_reports_a_landing_topology_mismatch(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    overrides: dict[str, object] = {
+        "landing": {"shape": "stacked_linear", "layers": [["c1"], ["c2"]]}
+    }
+    state = valid_publication() | overrides
+    path = tmp_path / "state.json"
+    _ = path.write_text(json.dumps(state))
+
+    assert publication.main([str(path)]) == 2
+
+    stderr = capsys.readouterr().err
+    assert (
+        "landing-topology-mismatch: landing.shape stacked_linear requires topology stacked, "
+        + "got 'single'"
+    ) in stderr
+
+
+def test_validate_publication_cli_reports_oversize_state_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "state.json"
+    max_state_bytes = publication._MAX_STATE_BYTES  # pyright: ignore[reportPrivateUsage]
+    _ = path.write_bytes(b" " * (max_state_bytes + 1))
+
+    assert publication.main([str(path)]) == 2
+
+    stderr = capsys.readouterr().err
+    assert f"state file exceeds {max_state_bytes} bytes" in stderr
+
+
+def test_validate_publication_cli_reports_non_utf8_state_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "state.json"
+    _ = path.write_bytes(b"\xff\xfe\x00\x01")
+
+    assert publication.main([str(path)]) == 2
+
+    stderr = capsys.readouterr().err
+    assert "state file is not valid UTF-8" in stderr

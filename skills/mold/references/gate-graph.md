@@ -1,0 +1,101 @@
+# The gate graph
+
+`GATE_MODEL` in `src/easy_cheese/skills/mold/gate_graph.py` holds the one
+canonical model of Mold's runnable Cook handoff gate. Draft spec writes happen before this gate. The mold archive bundles it as the
+`gate-graph` subcommand. Both render targets derive from that one model, so
+they cannot drift. See ADR-001. The model is also the gate-prose-sync source.
+Question transport stays in [`ask-user-question.md`](../../cheese/references/ask-user-question.md). One test asserts that the handshake coherence-checklist items equal the model's
+gate nodes. No gate can therefore disappear from the prose without a failure.
+
+## Subcommand
+
+```bash
+python3 skills/mold/scripts/mold.pyz gate-graph \
+  [--state <state.json>] [--render dot|svg|png|mermaid] [--out <path>]
+```
+
+Without `--out`, the command prints one JSON document to stdout:
+`{"render": "<dot|mermaid>", "text": "<rendered source>"}`. The `render` field
+names the effective target — it differs from the requested `--render` only on
+the svg/png degrade path (below). With `--out <path>`, the command writes the
+rendered bytes to that path and prints `{"path": "<out>"}` instead.
+
+- `--render dot` (default): canonical Graphviz `.dot` as the `text` field.
+- `--render mermaid`: a fenced ```mermaid flowchart block as the `text` field —
+  renders natively in GitHub and markdown viewers, **no binary required**.
+- `--render svg|png`: shells out to Graphviz `dot` when it is on PATH; pass
+  `--out <path>` for binary targets — printing binary bytes to stdout is
+  rejected. When `dot` is absent it **degrades to mermaid** — run-anywhere by
+  construction.
+- `--state`: an optional Mold `state.json`. The command validates its shape.
+  The gate model stays static, so the state does not change the graph today.
+
+## When to use it
+
+- Onboarding a contributor to mold's flow — one picture of modes → gates →
+  execution handshake → Cook handoff.
+- Auditing that the prose checklist and the enforced gates still agree (the
+  gate-prose-sync test is the automated form; the rendered graph is the human
+  form).
+- Embedding the mermaid block in a doc or PR description where no Graphviz
+  toolchain exists.
+
+## Why dual-render from one model
+
+Requiring Graphviz would break run-anywhere (it is absent on many machines,
+including the dev box). Mermaid-only would lose the canonical `.dot` /
+enforcement angle. Emitting both from one in-memory model keeps zero hard
+dependency *and* keeps the two targets in lockstep — the no-drift guarantee is
+structural, not a convention someone has to remember.
+
+## Snapshot
+
+`skills/mold/scripts/mold.dot` is the committed canonical `.dot`. A test asserts
+it byte-matches `to_dot()`, so the snapshot can never go stale against the model.
+Regenerate it whenever the model changes:
+
+```bash
+python3 skills/mold/scripts/mold.pyz gate-graph --render dot \
+  --out skills/mold/scripts/mold.dot
+```
+
+## The non-goals gate
+
+One coherence gate is worth calling out on its own: `non-goals-audit` (rendered
+`non_goals_audit` in the `.dot`; label *Non-goals audit: every bullet traces to a
+user-stated out-of-scope item or is marked [AGENT-INTRODUCED]*). Like every gate
+node it feeds the handshake and is kept in lockstep with the `handshake.md`
+checklist. It makes the most consequential lean — narrowing scope via `Non-goals`
+— a first-class, testable gate rather than a prose-only check (ADR-002). The
+audit procedure lives in `handshake.md` § Non-goals audit.
+
+## The goal coverage gate
+
+`goal-coverage` (rendered `goal_coverage` in the `.dot`) is the subtraction
+sibling of `non-goals-audit`. The noun audits catch scope the agent added; this
+gate catches scope the agent dropped. The bounds pass splits the pinned goal
+into `G-n` clauses and records them in the ledger as `goal_clauses`. The taste
+pre-check then reads each clause's disposition from the draft alone: `covered`
+when an Acceptance line carries the tag, `non-goal` / `follow-up` / `tbd` when
+the matching section carries it, `uncovered` otherwise. An uncovered clause
+fails `goal-coverage:G-n`. Fewer than half covered fails
+`goal-coverage-cap:<covered>/<total>` and forces a re-pin-or-widen fork.
+`taste-test --coverage` prints the disposition map for the narrowing-delta
+line. Procedure: `handshake.md` § Goal coverage.
+
+## Fork taste planner gate
+`fork_taste_test_passed` is the only edge into the typed planner stage. Mold
+hashes the exact draft before it accepts a verdict. The strict
+`ForkTasteVerdict` must cover each settled consequential decision exactly once.
+
+The verdict fails for a stale digest, missing reflection, contradiction, orphan, unsupported assumption, or acceptance gap. A semantic `pass` with blockers also fails.
+
+The ledger JSON may carry the pinned goal as a top-level `goal` string beside `forks`; a blank or non-string `goal` is a ledger error, `ledger-goal-empty`. The draft's goal section is the first heading, at any level, whose text after case-folding and punctuation stripping is exactly `Problem statement`, `Problem`, or `Goal`; a heading with extra words such as `## Goal alignment` or `## Problem statement (v2)` is not the goal section, and a later goal heading never overrides the first. That section must contain the pinned sentence unchanged, compared case- and whitespace-insensitively. A reworded or dropped goal fails as `goal-drift`. A missing or unrecognised goal heading fails as `missing-section:goal:problem`. A ledger without `goal` skips the check. This is the zoom-out gate: the goal the user pinned in the bounds pass is the goal the spec ships. The devil in the details changes Acceptance or an Interface sketch; cruft changes neither, and a fork that changes neither never reaches the user.
+
+Every draft must reflect Approach, Interface sketches, and Acceptance. A draft that includes Test Contracts must reflect them too.
+
+The lexical pre-check (`taste-test --precheck`) runs the deterministic sub-checks (section presence, fork-id or decision-text mention, goal drift) against the draft alone. It runs before the reviewer dispatch. It does not count toward the two correction rounds. The full `taste-test` with `--verdict` repeats the same checks on the digest-bound verdict.
+
+A third taste failure stops typed planning and preserves the draft for review. Taste evidence does not become a Cook execution reference.
+
+Only a user-selected automatic route uses `/cook --auto`: `--spec <spec-path>` for standalone work, `--result <result-path>` for bound curd work. Cook reads the ready refs from the result without changes.

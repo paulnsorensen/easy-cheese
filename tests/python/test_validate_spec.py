@@ -1,0 +1,1142 @@
+"""Direct-invocation and archive-dispatcher coverage for
+src/easy_cheese/skills/mold/validate_spec.py (curd-ssfe-2).
+
+Exercises the dispatcher argv contract (`validate-spec <spec-path>`) that
+the mold archive's `__main__.py` dispatches, at both entry-point seams: the direct
+script (fast local seam) and the built mold archive (the seam AC-1/AC-2 declare).
+Covers the committed lenient syntax-repair classes and the strict
+semantic-rejection rules.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Protocol, cast
+
+import pytest
+
+from easy_cheese_schemas.spec_format import (
+    _LEGACY_NOTICE,  # pyright: ignore[reportPrivateUsage]
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+VALIDATOR = REPO_ROOT / "src" / "easy_cheese" / "skills" / "mold" / "validate_spec.py"
+SPEC_FIXTURES = REPO_ROOT / "tests" / "python" / "fixtures" / "spec_format"
+BASE_SPEC = (SPEC_FIXTURES / "valid_spec.md").read_text(encoding="utf-8")
+LEGACY_SPEC = (SPEC_FIXTURES / "legacy_v013_spec.md").read_text(encoding="utf-8")
+MINI_SPEC = (SPEC_FIXTURES / "valid_mini_spec.md").read_text(encoding="utf-8")
+MOLD_ARCHIVE = REPO_ROOT / "skills" / "mold" / "scripts" / "mold.pyz"
+
+
+class _RunFn(Protocol):
+    def __call__(self, path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
+        raise NotImplementedError
+
+
+def _run_direct(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(VALIDATOR), *flags, str(path)],
+        capture_output=True,
+        text=True,
+    )
+
+
+def _run_pyz(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
+    mold_pyz = MOLD_ARCHIVE
+    return subprocess.run(
+        [sys.executable, str(mold_pyz), "validate-spec", *flags, str(path)],
+        capture_output=True,
+        text=True,
+    )
+
+
+def _run_finalize(path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(MOLD_ARCHIVE), "finalize", str(path), *flags],
+        capture_output=True,
+        text=True,
+    )
+
+
+@pytest.fixture(  # noqa: V103 -- registered under name="_run", injected by pytest
+    params=[_run_direct, _run_pyz], ids=["direct-script", "mold-archive"], name="_run"
+)
+def run_fixture(request: pytest.FixtureRequest) -> _RunFn:
+    return cast(_RunFn, request.param)
+
+
+def _error_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
+    if result.returncode == 0:
+        return []
+    payload = cast(dict[str, object], json.loads(result.stderr))
+    message = cast(str, payload["error"])
+    return [line for line in message.splitlines() if line.startswith("ERROR:")]
+
+
+def _notice_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
+    if result.returncode != 0:
+        return []
+    payload = cast(dict[str, object], json.loads(result.stdout))
+    notice = payload.get("notice")
+    return [cast(str, notice)] if notice else []
+
+
+def _write(tmp_path: Path, name: str, text: str) -> Path:
+    path = tmp_path / name
+    _ = path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_early_curd_mini_spec_is_hardened_and_requires_parent(tmp_path: Path) -> None:
+    spec = MINI_SPEC.replace("source: agent-mini-spec", "source: mold-curd-mini-spec")
+    path = _write(tmp_path, "curd.md", spec)
+    result = _run_direct(path, "--strict")
+    assert any("missing-required-section" in line and "Parent" in line for line in _error_lines(result))
+
+    linked = spec + (
+        "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+        "- Depends on: none\n- Frozen decisions: F-1\n"
+    )
+    path = _write(tmp_path, "curd.md", linked)
+    result = _run_direct(path, "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    path = _write(tmp_path, "curd.md", linked.replace("G-1", "unknown"))
+    result = _run_direct(path, "--strict")
+    assert any("parent-link-invalid" in line for line in _error_lines(result))
+
+
+@pytest.mark.parametrize(
+    ("case", "parent_block"),
+    [
+        (
+            "spec-equals-child-slug",
+            "\n## Parent\n- Spec: docs-only-mini-spec\n- Goals: G-1\n"
+            + "- Depends on: none\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "bad-depends-on",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: NOT_A_SLUG!\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "depends-on-names-child-slug",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: docs-only-mini-spec\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "depends-on-names-parent-slug",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: parent-design\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "bad-frozen-decisions",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: none\n- Frozen decisions: nope\n",
+        ),
+        (
+            "duplicate-field",
+            "\n## Parent\n- Spec: parent-design\n- Spec: other-design\n"
+            + "- Goals: G-1\n- Depends on: none\n- Frozen decisions: F-1\n",
+        ),
+        (
+            "extra-field",
+            "\n## Parent\n- Spec: parent-design\n- Goals: G-1\n"
+            + "- Depends on: none\n- Frozen decisions: F-1\n- Extra: nope\n",
+        ),
+    ],
+)
+def test_parent_link_error_branches_are_rejected(
+    tmp_path: Path, case: str, parent_block: str
+) -> None:
+    spec = MINI_SPEC.replace("source: agent-mini-spec", "source: mold-curd-mini-spec")
+    path = _write(tmp_path, f"{case}.md", spec + parent_block)
+    result = _run_direct(path, "--strict")
+    assert any("parent-link-invalid" in line for line in _error_lines(result)), (
+        result.stdout + result.stderr
+    )
+
+# --- lenient syntax-repair classes (AC-1 half) ---------------------------
+
+
+def test_standalone_validator_falls_back_when_cattrs_is_missing(
+    tmp_path: Path,
+) -> None:
+    spec_path = _write(tmp_path, "spec.md", BASE_SPEC)
+    probe = """
+import builtins
+import importlib.util
+import sys
+from pathlib import Path
+
+import attrs
+
+real_import = builtins.__import__
+
+def import_without_cattrs(name, *args, **kwargs):
+    if name == "cattrs" or name.startswith("cattrs."):
+        raise ModuleNotFoundError("No module named 'cattrs'", name="cattrs")
+    return real_import(name, *args, **kwargs)
+
+builtins.__import__ = import_without_cattrs
+module_spec = importlib.util.spec_from_file_location("validate_spec", sys.argv[1])
+assert module_spec is not None and module_spec.loader is not None
+module = importlib.util.module_from_spec(module_spec)
+sys.modules[module_spec.name] = module
+module_spec.loader.exec_module(module)
+errors, notice = module.validate(Path(sys.argv[2]), strict=True)
+assert errors == [], errors
+assert notice is None
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(REPO_ROOT / "src")
+    result = subprocess.run(
+        [sys.executable, "-c", probe, str(VALIDATOR), str(spec_path)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_valid_spec_fixture_is_accepted(tmp_path: Path, _run: _RunFn) -> None:
+    path = _write(tmp_path, "spec.md", BASE_SPEC)
+    result = _run(path)
+    assert result.returncode == 0
+    assert not _error_lines(result)
+
+
+def test_lenient_heading_case_is_repaired(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace("## Problem", "## PROBLEM", 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0
+    assert not _error_lines(result)
+
+
+def test_lenient_heading_trailing_punctuation_is_repaired(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace("## Goals\n", "## Goals.\n", 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0
+    assert not _error_lines(result)
+
+
+def test_lenient_table_cell_whitespace_is_repaired(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "| AC-1 | validate-spec CLI |",
+        "|   AC-1   |  validate-spec CLI  |",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0
+    assert not _error_lines(result)
+
+
+def test_lenient_fence_dialect_is_repaired(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace("```pseudocode", "~~~pseudocode", 1).replace(
+        "```\n\n## Risks", "~~~\n\n## Risks", 1
+    )
+    assert "~~~pseudocode" in text and "~~~\n\n## Risks" in text
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0
+    assert not _error_lines(result)
+
+
+@pytest.mark.parametrize("fence", ["```", "~~~"])
+def test_fenced_fake_heading_and_table_rows_are_invisible_to_detection(
+    tmp_path: Path, _run: _RunFn, fence: str
+) -> None:
+    """A fenced fake '## Risks' heading and fenced '|' rows must not satisfy or
+    corrupt section/table detection: with the real Risks section removed, the
+    fenced impostor must not count, so the spec is still rejected for the
+    genuinely missing Risks section."""
+    text = BASE_SPEC.replace(
+        "## Risks\n\n- No other validator drift risks apply.\n\n", "", 1
+    )
+    text = text.replace(
+        "## Interface sketches",
+        f"## Interface sketches\n\n{fence}\n## Risks\n\n"
+        + f"| fake | row | that | should | not | count | anywhere |\n{fence}",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("Risks" in line for line in errors)
+
+
+# --- strict semantic-rejection rules (AC-2 half) --------------------------
+
+
+def test_missing_required_section_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "## Risks\n\n- No other validator drift risks apply.\n\n", "", 1
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "Risks" in errors[0]
+
+
+def test_acceptance_id_absent_from_table_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
+        + "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n",
+        "",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "AC-2" in errors[0]
+    assert "absent" in errors[0]
+
+
+def test_acceptance_id_duplicated_in_table_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = (
+        BASE_SPEC.replace(
+            "- AC-2: WHEN the validator runs on a valid contract-matrix spec "
+            + "THE SYSTEM SHALL exit 0.\n",
+            "",
+            1,
+        )
+        .replace(
+            "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n",
+            "",
+            1,
+        )
+        .replace(
+            "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | tracer | | |\n",
+            "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | tracer | | |\n"
+            + "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | tracer | | |\n",
+            1,
+        )
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "AC-1" in errors[0]
+    assert "duplicated=['AC-1']" in errors[0]
+
+
+def test_matrix_metadata_on_tracer_row_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = (
+        BASE_SPEC.replace(
+            "- AC-2: WHEN the validator runs on a valid contract-matrix spec "
+            + "THE SYSTEM SHALL exit 0.\n",
+            "",
+            1,
+        )
+        .replace(
+            "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n",
+            "",
+            1,
+        )
+        .replace(
+            "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | tracer | | |",
+            "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | tracer | v1 | |",
+            1,
+        )
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "AC-1" in errors[0]
+    assert "tracer" in errors[0]
+
+
+def test_contract_matrix_row_missing_interface_version_is_rejected(
+    tmp_path: Path,
+    _run: _RunFn,
+) -> None:
+    text = (
+        BASE_SPEC.replace(
+            "- AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM "
+            + "SHALL exit 0.\n",
+            "",
+            1,
+        )
+        .replace(
+            "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | tracer | | |\n",
+            "",
+            1,
+        )
+        .replace(
+            "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | contract-matrix | v1 | row-a, row-b |",
+            "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | contract-matrix | | row-a, row-b |",
+            1,
+        )
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "AC-2" in errors[0]
+    assert "contract-matrix" in errors[0]
+
+
+def test_unknown_mode_value_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+        + "| no validator exists yet | tracer | | |",
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+        + "| no validator exists yet | Tracer | | |",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("AC-1" in line and "Mode" in line for line in errors)
+
+
+def test_six_cell_row_is_a_shape_error(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+        + "| no validator exists yet | tracer | | |",
+        "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+        + "| no validator exists yet | tracer | |",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("test-contracts-table-shape" in line for line in errors)
+
+
+def test_missing_delimiter_row_is_a_shape_error(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "| Acceptance ID | Interface referent | Outermost stable seam | Expected "
+        + "failure | Mode | Interface version | Matrix rows |\n"
+        + "| --- | --- | --- | --- | --- | --- | --- |\n",
+        "| Acceptance ID | Interface referent | Outermost stable seam | Expected "
+        + "failure | Mode | Interface version | Matrix rows |\n",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("test-contracts-table-shape" in line for line in errors)
+
+
+def test_duplicate_acceptance_heading_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "## Test Contracts",
+        "## Acceptance\n\n- AC-3: duplicate heading filler.\n\n## Test Contracts",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("duplicate-heading" in line and "acceptance" in line for line in errors)
+
+
+def test_missing_frontmatter_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    end = BASE_SPEC.index("---", 3) + 3
+    text = BASE_SPEC[end:].lstrip("\n")
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path, "--strict")
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("spec-provenance-required" in line for line in errors)
+
+
+def test_spec_without_gate_applicability_passes(tmp_path: Path, _run: _RunFn) -> None:
+    assert "gate_applicability" not in BASE_SPEC
+    path = _write(tmp_path, "spec.md", BASE_SPEC)
+    for flags in ((), ("--strict",)):
+        result = _run(path, *flags)
+        assert result.returncode == 0, (flags, result.stderr)
+        assert not _error_lines(result), flags
+
+
+def _spec_without_test_contracts() -> str:
+    text = BASE_SPEC.replace(
+        "- AC-2: WHEN the validator runs on a valid contract-matrix spec "
+        + "THE SYSTEM SHALL exit 0.\n",
+        "",
+        1,
+    ).replace(
+        "- AC-1: WHEN the validator runs on a valid tracer spec THE SYSTEM "
+        + "SHALL exit 0.\n",
+        "",
+        1,
+    )
+    return _strip_test_contracts(text)
+
+
+def test_spec_without_test_contracts_section_is_accepted(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = _spec_without_test_contracts()
+    assert "## Test Contracts" not in text
+    path = _write(tmp_path, "spec.md", text)
+    for flags in ((), ("--strict",)):
+        result = _run(path, *flags)
+        assert result.returncode == 0, (flags, result.stdout + result.stderr)
+        assert not _error_lines(result), flags
+
+
+def test_present_test_contracts_table_is_still_validated(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    row = (
+        "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
+        + "| no validator exists yet | contract-matrix | v1 | row-a, row-b |\n"
+    )
+    assert row in BASE_SPEC
+    path = _write(tmp_path, "spec.md", BASE_SPEC.replace(row, "", 1))
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("AC-2" in line for line in errors)
+
+
+def test_multiple_violations_accumulate_in_one_run(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = (
+        BASE_SPEC.replace(
+            "## Risks\n\n- No other validator drift risks apply.\n\n", "", 1
+        )
+        .replace(
+            "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | tracer | | |",
+            "| AC-1 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | tracer | v1 | |",
+            1,
+        )
+        .replace(
+            "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | contract-matrix | v1 | row-a, row-b |",
+            "| AC-2 | validate-spec CLI | pytest calls the CLI as a subprocess "
+            + "| no validator exists yet | contract-matrix | | |",
+            1,
+        )
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 3
+    assert any("Risks" in line for line in errors)
+    assert any("AC-1" in line and "tracer" in line for line in errors)
+    assert any("AC-2" in line and "contract-matrix" in line for line in errors)
+
+
+# --- v0.13 legacy acceptance on read, hardened-only on mint ---------------
+
+
+def _strip_test_contracts(text: str) -> str:
+    start = text.index("## Test Contracts")
+    return text[:start] + text[text.index("## Interface sketches") :]
+
+
+def test_legacy_v013_spec_is_accepted_on_read(tmp_path: Path, _run: _RunFn) -> None:
+    path = _write(tmp_path, "spec.md", LEGACY_SPEC)
+    result = _run(path)
+    assert result.returncode == 0
+    assert not _error_lines(result)
+    notices = _notice_lines(result)
+    assert notices == [_LEGACY_NOTICE + f" in {path}"]
+
+
+def test_legacy_v013_spec_is_not_execution_authority(tmp_path: Path) -> None:
+    path = _write(tmp_path, "legacy-v013.md", LEGACY_SPEC)
+    original = path.read_bytes()
+    result = _run_finalize(
+        path,
+        "--artifact-root",
+        str(tmp_path / "artifacts"),
+        "--operation-id",
+        "legacy-v013",
+        "--request-id",
+        "legacy-v013",
+    )
+
+    assert result.returncode == 0, result.stderr
+    finalization = cast(dict[str, object], json.loads(result.stdout))
+    assert finalization["status"] == "saved-not-ready"
+    assert finalization["ready"] is False
+    requirements = cast(list[dict[str, object]], finalization["requirements"])
+    assert any(item["requirement_id"] == "spec-validation" for item in requirements)
+    assert path.read_bytes() == original
+
+
+def test_legacy_v013_spec_is_rejected_under_strict_mint(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    path = _write(tmp_path, "spec.md", LEGACY_SPEC)
+    result = _run(path, "--strict")
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert not _notice_lines(result)
+    assert any("spec-provenance-required" in line for line in errors)
+    assert not any("gate-applicability" in line for line in errors)
+    assert any(
+        "missing-required-section" in line and "Grounding" in line for line in errors
+    )
+    assert any("grounding-probe-recorded" in line for line in errors)
+
+
+def test_legacy_spec_grounding_content_is_still_validated(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = LEGACY_SPEC.replace(
+        "## Approach",
+        "## Grounding\n\n| Probe | Outcome | Evidence |\n| --- | --- | --- |\n"
+        + "| wiki | hit | adr/spec-format-enforcement-001.md |\n"
+        + "| explorer | unavailable | |\n\n## Approach",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "delegation-digest-recorded" in errors[0]
+    assert "records no evidence" in errors[0]
+
+
+def test_legacy_spec_still_fails_on_a_section_v013_required(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = LEGACY_SPEC.replace("## Risks\n", "## Hazards\n", 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any(
+        "missing-required-section" in line and "Risks" in line for line in errors
+    )
+
+
+def test_legacy_spec_test_contracts_content_is_still_validated(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = LEGACY_SPEC.replace(
+        "## Interface sketches",
+        "## Test Contracts\n\n| Acceptance ID | Mode |\n| --- | --- |\n"
+        + "| AC-1 | tracer |\n\n## Interface sketches",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("test-contracts-table-shape" in line for line in errors)
+
+
+def test_hardened_spec_without_test_contracts_is_accepted_on_read(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    path = _write(tmp_path, "spec.md", _strip_test_contracts(BASE_SPEC))
+    result = _run(path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+    assert not _notice_lines(result)
+
+
+def test_documented_mini_spec_passes_strict_validation(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    assert "gate_applicability" not in MINI_SPEC
+    result = _run(_write(tmp_path, "mini-spec.md", MINI_SPEC), "--strict")
+    assert result.returncode == 0, result.stderr
+    assert not _error_lines(result)
+    assert not _notice_lines(result)
+
+
+def test_current_format_spec_reads_and_mints_without_a_legacy_notice(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    path = _write(tmp_path, "spec.md", BASE_SPEC)
+    for flags in ((), ("--strict",)):
+        result = _run(path, *flags)
+        assert result.returncode == 0, flags
+        assert not _error_lines(result), flags
+        assert not _notice_lines(result), flags
+
+
+@pytest.mark.parametrize("flags", [(), ("--strict",)])
+def test_nested_source_is_reported_without_a_traceback(
+    tmp_path: Path, _run: _RunFn, flags: tuple[str, ...]
+) -> None:
+    text = LEGACY_SPEC.replace(
+        "status: approved\n", "status: approved\nsource:\n  value: mold-handshake\n", 1
+    )
+    result = _run(_write(tmp_path, "spec.md", text), *flags)
+    assert result.returncode == 2
+    assert any("spec-provenance-invalid" in line for line in _error_lines(result))
+    assert "Traceback" not in result.stderr
+
+
+def test_spec_without_frontmatter_is_malformed_not_legacy(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    end = BASE_SPEC.index("---", 3) + 3
+    path = _write(tmp_path, "spec.md", BASE_SPEC[end:].lstrip("\n"))
+    result = _run(path, "--strict")
+    assert result.returncode == 2
+    assert not _notice_lines(result)
+    assert any("spec-provenance-required" in line for line in _error_lines(result))
+
+
+# --- grounding gate (#553) ----------------------------------------------
+
+WIKI_ROW = (
+    "| wiki | hit | adr/spec-format-enforcement-001.md — content-schema rules "
+    "belong in the validator |\n"
+)
+EXPLORER_ROW = (
+    "| explorer | unavailable | This fixture cannot use Hallouminate. It reads "
+    "validate_spec.py directly. |\n"
+)
+
+
+def test_missing_grounding_section_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    start = BASE_SPEC.index("## Grounding")
+    end = BASE_SPEC.index("## Approach")
+    text = BASE_SPEC[:start] + BASE_SPEC[end:]
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 3
+    assert any(
+        "missing-required-section" in line and "Grounding" in line for line in errors
+    )
+    assert any("grounding-probe-recorded" in line and "wiki" in line for line in errors)
+    assert any(
+        "delegation-digest-recorded" in line and "explorer" in line for line in errors
+    )
+
+
+@pytest.mark.parametrize(
+    ("row", "rule", "probe"),
+    [
+        (WIKI_ROW, "grounding-probe-recorded", "wiki"),
+        (EXPLORER_ROW, "delegation-digest-recorded", "explorer"),
+    ],
+)
+def test_unrecorded_probe_is_rejected(
+    tmp_path: Path, _run: _RunFn, row: str, rule: str, probe: str
+) -> None:
+    text = BASE_SPEC.replace(row, "", 1)
+    assert row not in text
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert rule in errors[0]
+    assert f"record the {probe} probe exactly once, got 0" in errors[0]
+
+
+@pytest.mark.parametrize(
+    ("row", "rule", "probe"),
+    [
+        (WIKI_ROW, "grounding-probe-recorded", "wiki"),
+        (EXPLORER_ROW, "delegation-digest-recorded", "explorer"),
+    ],
+)
+def test_duplicated_probe_is_rejected(
+    tmp_path: Path, _run: _RunFn, row: str, rule: str, probe: str
+) -> None:
+    text = BASE_SPEC.replace(row, row + row, 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert rule in errors[0]
+    assert f"record the {probe} probe exactly once, got 2" in errors[0]
+
+
+def test_unavailable_probe_without_evidence_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(EXPLORER_ROW, "| explorer | unavailable | |\n", 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "delegation-digest-recorded" in errors[0]
+    assert "records no evidence" in errors[0]
+
+
+def test_unavailable_probe_with_evidence_is_accepted(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        WIKI_ROW, "| wiki | unavailable | hallouminate MCP not connected |\n", 1
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0
+    assert not _error_lines(result)
+
+
+def test_unknown_grounding_probe_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(WIKI_ROW, WIKI_ROW.replace("| wiki |", "| Wiki |", 1), 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "grounding-probe-closed-class" in errors[0]
+    assert "'Wiki'" in errors[0]
+
+
+def test_unknown_grounding_outcome_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(WIKI_ROW, WIKI_ROW.replace("| hit |", "| skipped |", 1), 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "grounding-outcome-closed-class" in errors[0]
+    assert "'skipped'" in errors[0]
+
+
+def test_grounding_table_column_drift_is_a_shape_error(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "| Probe | Outcome | Evidence |", "| Probe | Outcome | Citation |", 1
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("grounding-table-shape" in line for line in errors)
+    assert any("grounding-probe-recorded" in line for line in errors)
+    assert any("delegation-digest-recorded" in line for line in errors)
+
+
+def test_spec_without_test_contracts_still_requires_grounding(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = _spec_without_test_contracts().replace(WIKI_ROW, "", 1)
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert len(errors) == 1
+    assert "grounding-probe-recorded" in errors[0]
+
+
+@pytest.mark.parametrize("flag", ["", "--strict"])
+def test_unknown_landing_shape_is_rejected(
+    tmp_path: Path, _run: _RunFn, flag: str
+) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n  shape: stacked\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path, *([flag] if flag else []))
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("landing-closed-class" in line for line in errors)
+
+
+def test_single_shape_with_layers_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        'agent_introduced_scope: []\nlanding:\n  shape: single\n  layers: [["c1"]]\n---',
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    errors = _error_lines(result)
+    assert result.returncode == 2
+    assert any("landing-closed-class" in line for line in errors)
+
+
+@pytest.mark.parametrize("flag", ["", "--strict"])
+def test_valid_stacked_linear_landing_is_accepted(
+    tmp_path: Path, _run: _RunFn, flag: str
+) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
+        + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n'
+        + "  per_layer_green: required\n  review_fixes: fold\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path, *([flag] if flag else []))
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_unknown_landing_key_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
+        + "landing:\n  shape: single\n  per_layer_greeen: tip-only\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode != 0, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class landing.'per_layer_greeen' is not allowed" in errors
+
+
+def test_missing_landing_shape_is_rejected_without_a_sentinel(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n  per_layer_green: required\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode != 0, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class landing.shape is required" in errors
+    assert "object at 0x" not in errors
+
+
+def test_empty_landing_mapping_is_rejected(tmp_path: Path, _run: _RunFn) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding: {}\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode != 0, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class landing.shape is required" in errors
+
+
+def test_landing_layers_block_sequence_of_scalars_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    # A plausible mistake: YAML block-list syntax naming bare curd ids instead
+    # of one-element groups, i.e. `- c1` instead of `- [c1]`.
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
+        + "landing:\n  shape: stacked_linear\n  layers:\n    - c1\n    - c2\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 2, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert (
+        "landing-closed-class landing.layers must be a list of lists of strings"
+        in errors
+    )
+    assert "Traceback" not in result.stdout + result.stderr
+
+
+def test_landing_layers_with_non_string_item_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
+        + 'landing:\n  shape: stacked_linear\n  layers: [["c1", 1]]\n---',
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 2, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert (
+        "landing-closed-class landing.layers must be a list of lists of strings"
+        in errors
+    )
+
+
+def test_landing_layers_with_duplicate_curd_id_is_rejected(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\n"
+        + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c1"]]\n---',
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 2, result.stdout + result.stderr
+    errors = "\n".join(_error_lines(result))
+    assert "landing-closed-class" in errors
+    assert "landing-layer-curd-ids-must-be-unique" in errors
+
+
+def test_single_shape_with_explicit_empty_layers_is_accepted(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n  shape: single\n  layers: []\n---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+def test_legacy_spec_with_valid_landing_block_is_still_accepted(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = LEGACY_SPEC.replace(
+        "---\n\n# Legacy",
+        'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n---\n\n# Legacy',
+        1,
+    )
+    assert "landing:" in text
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+def test_spec_without_test_contracts_and_valid_landing_block_is_accepted(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    text = _spec_without_test_contracts().replace(
+        "agent_introduced_scope: []\n",
+        "agent_introduced_scope: []\n"
+        + 'landing:\n  shape: stacked_linear\n  layers: [["c1"], ["c2"]]\n',
+        1,
+    )
+    assert "landing:" in text
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+def test_curdle_spec_template_landing_block_validates(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    """The Curdle spec template's documented landing block must itself be a
+    valid, real example once an author picks one value per `a | b` line: a
+    non-single shape needs a non-empty layers list, and no line may carry an
+    inline `#` comment because the front-matter reader keeps it as the value."""
+    curdle = (REPO_ROOT / "skills" / "mold" / "references" / "curdle.md").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(
+        r"^landing:\n(  shape: .*\n  layers: .*\n  per_layer_green: .*\n"
+        + r"  review_fixes: .*\n)",
+        curdle,
+        re.MULTILINE,
+    )
+    assert match is not None
+    landing_block = match.group(1)
+    assert "#" not in landing_block
+    # Every enum line documents its allowed values as pipe-separated
+    # alternatives; an author keeps exactly one. Pick the first non-single
+    # shape and the first alternative elsewhere.
+    landing_block = landing_block.replace(
+        "  shape: single | orthogonal_flat | stacked_linear | diamond_stack\n",
+        "  shape: stacked_linear\n",
+    )
+    landing_block = landing_block.replace(
+        "  layers: []\n", '  layers: [["c1"], ["c2"]]\n'
+    )
+    landing_block = re.sub(
+        r"^(  (?:per_layer_green|review_fixes): )([^|\n]+?) \|.*$",
+        r"\1\2",
+        landing_block,
+        flags=re.MULTILINE,
+    )
+    assert 'layers: [["c1"], ["c2"]]' in landing_block
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n" + landing_block + "---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path, "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)
+
+
+def test_mini_spec_mode_template_landing_block_validates(
+    tmp_path: Path, _run: _RunFn
+) -> None:
+    """`mini-spec-mode.md`'s documented landing block, like Curdle's, must
+    validate once an author picks one value per `a | b` line and substitutes
+    a non-empty `layers` for its non-single shape."""
+    mini_spec_mode = (
+        REPO_ROOT / "skills" / "mold" / "references" / "mini-spec-mode.md"
+    ).read_text(encoding="utf-8")
+    match = re.search(
+        r"^landing:\n(  shape: .*\n  layers: .*\n)",
+        mini_spec_mode,
+        re.MULTILINE,
+    )
+    assert match is not None
+    landing_block = match.group(1)
+    assert "#" not in landing_block
+    landing_block = landing_block.replace(
+        "  shape: single | orthogonal_flat | stacked_linear | diamond_stack\n",
+        "  shape: stacked_linear\n",
+    )
+    landing_block = landing_block.replace(
+        "  layers: []\n", '  layers: [["c1"], ["c2"]]\n'
+    )
+    assert 'layers: [["c1"], ["c2"]]' in landing_block
+    text = BASE_SPEC.replace(
+        "agent_introduced_scope: []\n---",
+        "agent_introduced_scope: []\nlanding:\n" + landing_block + "---",
+        1,
+    )
+    path = _write(tmp_path, "spec.md", text)
+    result = _run(path, "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not _error_lines(result)

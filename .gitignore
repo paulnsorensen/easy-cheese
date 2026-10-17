@@ -1,0 +1,75 @@
+# Local dotenv. `set dotenv-load := true` in the justfile makes this file an
+# environment source for every recipe, so it must never be committed.
+.env
+.env.*
+!.env.example
+
+# Easy-cheese runtime scratch (research notes, age sidecars, mold state, etc.)
+.cheese/
+
+# Conductor workspace scratch
+.context/
+
+# Serena MCP project state
+.serena/
+
+# Claude Code machine-local worktree registry
+.claude/worktrees/
+
+# Coding-agent scratch dirs; keep the repo-maintained authoring skills trackable.
+# This is an allowlist: every tracked skill dir needs its own `!` line here, or
+# it is silently untracked.
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/python-authoring/
+!.agents/skills/skill-authoring/
+.claude/skills/
+
+# milknado optional-plugin runtime data (SQLite task graph)
+.milknado/
+# milknado worker brief and node worktrees created inside the project root
+RALPH.md
+milknado-*/
+
+# milknado ultracode workflow, copied in per-session by its SessionStart hook
+.claude/workflows/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.venv-typing/
+node_modules/
+tests/fixtures/mold_cook_browser/test-results/
+
+# Browser test artifacts
+/test-results/
+/playwright-report/
+frontend/mold-review/test-results/
+frontend/mold-review/playwright-report/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Rust build artifacts
+tools/skill-overlap/target/
+
+# Starlight build output and generated docs
+dist/
+.astro/
+website/sidebar.mjs
+website/content/docs/**
+!website/content/docs/
+
+# `just release-preview` staging output (hidden so validate_skills.py skips it)
+.release-preview/
+
+# `scripts/build_schema_site.py --out` output (schemas.easy-cheese.dev tree)
+/dist-schemas/
+
+# `just vendor` output — extracted wheel trees rebuilt from requirements-vendor.txt
+/vendor/

@@ -1,0 +1,684 @@
+"""Schema version tolerance: read a payload without trusting its vintage.
+
+Every document and manifest carries a ``schema_version`` stamp, so a reader
+built against version N can tell what it is holding before it acts on it --
+current, one version behind, too old to read, or written by a newer producer.
+A future stamp is not a rejection: recognized fields still parse, unknown ones
+are ignored, and the caller gets ``FUTURE`` so it can decide.
+
+``load`` never raises. It accumulates every problem it found as
+``where.key must be ...`` strings, the same format
+src/easy_cheese/shared/schema.py emits, because the fan-out validators report all problems in one pass rather
+than stopping at the first.
+
+Two things make that possible and neither is cattrs' default. Structuring
+coerces primitives -- ``str(v)``, ``int(v)``, ``list(v)`` -- so a payload that
+is wrong is silently made right; the hooks below type-check instead, because a
+reader asking "is this document trustworthy" must not be handed a repaired
+copy of an untrustworthy one. And attrs validators run inside ``__init__``,
+where cattrs cannot attribute their failures to a field, so structuring runs
+with validators disabled and the field rules are applied afterwards over the
+structured tree, which is also what makes ``curds[2].files must be ...``
+possible.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+from datetime import date
+from enum import Enum, auto
+from typing import Generic, TypeVar, cast, get_args, get_origin
+
+import attrs
+import cattrs
+from attrs import Attribute, define, field
+from cattrs.cols import homogenous_tuple_structure_factory, list_structure_factory
+from cattrs.errors import (
+    AttributeValidationNote,
+    ForbiddenExtraKeysError,
+    IterableValidationNote,
+)
+from cattrs.gen import make_dict_structure_fn
+from easy_cheese_schemas._schema_catalog import CURD_PLAN_SCHEMA_URI
+from easy_cheese_schemas.validate import is_int
+
+
+# 2 adds WheypointRevision.parent_revision_digest, which pins each receipt to
+# the exact ancestor it was written against. 3 adds strict unknown-key
+# rejection on the write path (`load(..., forbid_unknown=True)`) and an Enum
+# hook that names the offending value, not just the allowed set. 4 adds work
+# edges, the forked entry state, typed refs, and a wider notes bound. 5 drops
+# projection_digest and preserved_entry_ids from the receipt and projection.
+SCHEMA_VERSION = 5
+MIN_READABLE = 1  # oldest readable schema version; raise it to drop old records
+STAMP_KEY = "schema_version"
+
+T = TypeVar("T")
+
+__all__ = [
+    "MIN_READABLE",
+    "SCHEMA_VERSION",
+    "STAMP_KEY",
+    "AdapterSunsetError",
+    "DuplicateAdapterError",
+    "LegacyAdapter",
+    "Loaded",
+    "Provenance",
+    "adapter_for",
+    "check_adapter_sunsets",
+    "classify_stamp",
+    "load",
+    "register_adapter",
+    "registered_adapters",
+    "unregister_adapter",
+]
+
+_StructureHook = Callable[[object, object], object]
+
+
+def _fields(cls: type) -> tuple[Attribute[object], ...]:
+    return cast(tuple["Attribute[object]", ...], attrs.fields(cls))
+
+
+def _exact(
+    expected: type | tuple[type, ...], label: str, *, boolean: bool = False
+) -> _StructureHook:
+    """A structure hook that checks a primitive instead of calling it.
+
+    ``bool`` and ``int`` stay distinct in both directions: ``True`` is not an
+    integer field's value and ``1`` is not a flag's.
+
+    A `str`-valued Enum is a `str` subclass, so cattrs dispatches it here
+    ahead of its own Enum hook; the member lookup is delegated back rather than
+    shadowed, which would let any string through as a phase or a status.
+    """
+
+    def hook(value: object, _type: object = None) -> object:
+        if isinstance(_type, type) and issubclass(_type, Enum):
+            try:
+                return _type(value)
+            except ValueError:
+                allowed = ", ".join(str(cast(object, member.value)) for member in _type)
+                raise ValueError(
+                    f"unknown value {value!r} (allowed: {allowed})"
+                ) from None
+        if isinstance(value, bool) is not boolean or not isinstance(value, expected):
+            raise TypeError(f"must be {label}, not {type(value).__name__}")
+        return value
+
+    return hook
+
+
+def _guarded_list(type_: object, converter: cattrs.BaseConverter) -> _StructureHook:
+    """cattrs structures any iterable into a list, which turns a bare string
+    into its characters. Require an actual list, then structure elements the
+    ordinary way so per-index attribution survives."""
+    structure = list_structure_factory(cast(type, type_), converter)
+
+    def hook(value: object, _type: object = type_) -> object:
+        if not isinstance(value, list):
+            raise TypeError(f"must be a list, not {type(value).__name__}")
+        return cast(object, structure(value, _type))
+
+    return hook
+
+
+def _guarded_class(type_: object, converter: cattrs.BaseConverter) -> _StructureHook:
+    """cattrs asks ``field_name in obj`` before reading a field, so a *string*
+    payload answers with a substring test: every field name it does not happen
+    to contain reads as absent, and a class whose fields all have defaults
+    structures cleanly out of arbitrary text. Require an actual mapping first."""
+    structure = make_dict_structure_fn(cast("type[object]", type_), converter)
+
+    def hook(value: object, _type: object = type_) -> object:
+        if not isinstance(value, Mapping):
+            raise TypeError(f"must be an object, not {type(value).__name__}")
+        return structure(cast(Mapping[str, object], value), _type)
+
+    return hook
+
+
+def _is_list_annotation(type_: object) -> bool:
+    return get_origin(type_) is list
+
+
+def _is_variadic_tuple_annotation(type_: object) -> bool:
+    args = get_args(type_)
+    return get_origin(type_) is tuple and len(args) == 2 and args[1] is Ellipsis
+
+
+def _guarded_tuple(type_: object, converter: cattrs.BaseConverter) -> _StructureHook:
+    """cattrs structures any iterable into a tuple, which turns a bare string
+    into its characters. Require an actual list, then structure elements the
+    ordinary way so per-index attribution survives."""
+    structure = homogenous_tuple_structure_factory(cast(type, type_), converter)
+
+    def hook(value: object, _type: object = type_) -> object:
+        if not isinstance(value, list):
+            raise TypeError(f"must be a list, not {type(value).__name__}")
+        return cast(object, structure(value, _type))
+
+    return hook
+
+
+def _guarded_class_strict(
+    type_: object, converter: cattrs.BaseConverter
+) -> _StructureHook:
+    """Like :func:`_guarded_class`, but the write-path counterpart: an unknown
+    key is a refused write (S6), not a forward-compatible ignore."""
+    structure = make_dict_structure_fn(
+        cast("type[object]", type_), converter, _cattrs_forbid_extra_keys=True
+    )
+
+    def hook(value: object, _type: object = type_) -> object:
+        if not isinstance(value, Mapping):
+            raise TypeError(f"must be an object, not {type(value).__name__}")
+        return structure(cast(Mapping[str, object], value), _type)
+
+    return hook
+
+
+# Default converter semantics: unknown keys are ignored, which is exactly what
+# a FUTURE-stamped payload needs. Schema types may explicitly reject a
+# semantically misplaced key before it reaches this additive-field boundary.
+_converter = cattrs.Converter()
+_converter.register_structure_hook(str, _exact(str, "a string"))
+_converter.register_structure_hook(bool, _exact(bool, "a boolean", boolean=True))
+_converter.register_structure_hook(int, _exact(int, "an integer"))
+_converter.register_structure_hook(float, _exact((int, float), "a number"))
+_ = _converter.register_structure_hook_factory(attrs.has, _guarded_class)
+_ = _converter.register_structure_hook_factory(_is_list_annotation, _guarded_list)
+_ = _converter.register_structure_hook_factory(
+    _is_variadic_tuple_annotation, _guarded_tuple
+)
+
+# A second converter for the write path (S6): identical primitive handling,
+# but an unknown key on any nested class is a refused write, not an ignored
+# additive field. `load(..., forbid_unknown=True)` selects it.
+# A copy keeps every primitive rule the read path uses; only the attrs-class
+# factory is swapped, so read and write can never disagree on what a primitive is.
+_strict_converter = _converter.copy()
+_ = _strict_converter.register_structure_hook_factory(attrs.has, _guarded_class_strict)
+
+
+class Provenance(Enum):
+    CURRENT = auto()
+    PRIOR = auto()
+    UNSTAMPED = auto()
+    STALE = auto()
+    FUTURE = auto()
+
+
+@define(frozen=True)
+class Loaded(Generic[T]):
+    """What a payload turned out to be: the value, its vintage, and what was
+    wrong with it."""
+
+    value: T | None
+    provenance: Provenance
+    problems: tuple[str, ...] = field(converter=tuple)
+
+
+def classify_stamp(stamp: int | None) -> Provenance:
+    """Provenance of a payload stamped `stamp`; None means it carried no stamp.
+
+    A boolean is not a stamp: `True == 1` would otherwise read as CURRENT.
+    """
+    if stamp is None or isinstance(stamp, bool):
+        return Provenance.UNSTAMPED
+    if stamp > SCHEMA_VERSION:
+        return Provenance.FUTURE
+    if stamp == SCHEMA_VERSION:
+        return Provenance.CURRENT
+    if stamp >= MIN_READABLE:
+        return Provenance.PRIOR
+    return Provenance.STALE
+
+
+def load(
+    raw: object, cls: type[T], *, strict: bool, forbid_unknown: bool = False
+) -> Loaded[T]:
+    """Structure `raw` into `cls`, reporting problems instead of raising.
+
+    strict=True  -> every field rule must hold; problems are accumulated and
+                    `value` is None if there are any (except a malformed
+                    `schema_version`, which is reported without discarding an
+                    otherwise-valid payload -- so callers gate on
+                    `value is not None`, not on `problems`).
+    strict=False -> best-effort: documented defaults filled, every gap
+                    recorded in problems, still returns a usable value unless a
+                    mandatory field is missing or unusable.
+    Neither mode raises: a `cls` that is not a schema type and a `raw` that is
+    not a mapping are reported like any other problem.
+
+    Strictness is the caller's call: markdown documents are read lenient (a
+    human wrote them, so a missing optional field is a gap to report, not a
+    rejection) while machine-written manifests are read strict.
+
+    forbid_unknown=True is the write-path opt-in (S6): an unknown key on any
+    nested path is reported as `<path>: unknown field` and `value` is None,
+    rather than the read path's forward-compatible ignore. It only changes
+    `strict=True` structuring; readers keep today's lenient-on-unknown-keys
+    behaviour by leaving it at its default.
+    """
+    if forbid_unknown and not strict:
+        raise ValueError(
+            "forbid_unknown requires strict=True: the lenient read path tolerates unknown keys by design"
+        )
+    where = getattr(cls, "__name__", type(cls).__name__)
+    if not attrs.has(cls):
+        return Loaded(None, Provenance.UNSTAMPED, (f"{where} is not a schema type",))
+    if not isinstance(raw, Mapping):
+        return Loaded(
+            None,
+            Provenance.UNSTAMPED,
+            (f"{where} must be a mapping, not {type(raw).__name__}",),
+        )
+    mapping = cast(Mapping[str, object], raw)
+
+    problems: list[str] = []
+    stamp = mapping.get(STAMP_KEY)
+    if stamp is not None and not is_int(stamp):
+        problems.append(f"{where}.{STAMP_KEY} must be an integer")
+        stamp = None
+    provenance = classify_stamp(stamp)
+    forbidden = tuple(
+        field_name
+        for field_name in cast(
+            "tuple[str, ...]", getattr(cls, "__schema_forbidden_fields__", ())
+        )
+        if field_name in mapping
+    )
+    problems.extend(
+        f"{where}.{field_name} is not supported; mode belongs to each TestContract"
+        for field_name in forbidden
+    )
+
+    if strict:
+        payload = dict(mapping)
+        if forbid_unknown and STAMP_KEY not in attrs.fields_dict(cls):
+            _ = payload.pop(STAMP_KEY, None)
+        value, failures = _structure(payload, cls, where, forbid_unknown=forbid_unknown)
+        problems.extend(message for _, message in failures)
+        if forbidden:
+            value = None
+        return Loaded(value, provenance, tuple(problems))
+
+    value, gaps = _best_effort(mapping, cls, where)
+    if forbidden:
+        value = None
+    return Loaded(value, provenance, tuple(problems + gaps))
+
+
+def _structure(
+    payload: dict[str, object],
+    cls: type[T],
+    where: str,
+    *,
+    forbid_unknown: bool = False,
+) -> tuple[T | None, list[tuple[str | None, str]]]:
+    """Structure `payload`, then apply the field rules over the result.
+
+    Each problem is paired with the top-level attribute it blames, so lenient
+    mode knows what to drop.
+    """
+    converter = _strict_converter if forbid_unknown else _converter
+    try:
+        with attrs.validators.disabled():
+            value = converter.structure(payload, cls)
+    except Exception as exc:
+        return None, _flatten(exc, where)
+    failures = _field_problems(value, where)
+    return (None, failures) if failures else (value, [])
+
+
+def _best_effort(
+    raw: Mapping[str, object], cls: type[T], where: str
+) -> tuple[T | None, list[str]]:
+    """Structure what is recognizable, dropping each unusable optional field
+    back to its documented default and recording why. A mandatory field that is
+    missing or unusable has no default to fall back to, so it yields no value."""
+    problems: list[str] = []
+    payload: dict[str, object] = {}
+    for attribute in _fields(cls):
+        if attribute.name in raw:
+            payload[attribute.name] = raw[attribute.name]
+        elif attribute.default is attrs.NOTHING:
+            problems.append(f"{where}.{attribute.name} is required")
+        else:
+            problems.append(f"{where}.{attribute.name} must be present; using default")
+
+    optional = {
+        attribute.name
+        for attribute in _fields(cls)
+        if attribute.default is not attrs.NOTHING
+    }
+    while True:
+        value, failures = _structure(payload, cls, where)
+        for _, message in failures:
+            if message not in problems:
+                problems.append(message)
+        if not failures:
+            return value, problems
+        droppable = {
+            name for name, _ in failures if name in payload and name in optional
+        }
+        if not droppable:
+            return None, problems
+        for name in droppable:
+            del payload[name]
+
+
+def _field_problems(instance: object, where: str) -> list[tuple[str | None, str]]:
+    """Run every attrs validator over an already-structured tree, attributing
+    each failure to its full path. cattrs cannot do this itself: validators run
+    inside ``__init__``, outside the per-attribute error handling."""
+    problems: list[tuple[str | None, str]] = []
+    for attribute in _fields(type(instance)):
+        value = cast(object, getattr(instance, attribute.name))
+        path = f"{where}.{attribute.name}"
+        if attribute.validator is not None:
+            try:
+                attribute.validator(instance, attribute, value)
+            except Exception as exc:
+                problems.append(
+                    (attribute.name, _house(path, attribute.name, str(exc)))
+                )
+                continue
+        problems.extend(
+            (attribute.name, message) for message in _nested_problems(value, path)
+        )
+    return problems
+
+
+def _nested_problems(value: object, path: str) -> list[str]:
+    if attrs.has(type(value)):
+        return [message for _, message in _field_problems(value, path)]
+    if isinstance(value, list):
+        items = cast(list[object], value)
+        return [
+            message
+            for index, item in enumerate(items, start=1)
+            if attrs.has(type(item))
+            for _, message in _field_problems(item, f"{path}[{index}]")
+        ]
+    return []
+
+
+def _flatten(exc: BaseException, where: str) -> list[tuple[str | None, str]]:
+    """Flatten a cattrs ClassValidationError (an ExceptionGroup) into house-format
+    problems paired with the top-level attribute each one blames."""
+    problems: list[tuple[str | None, str]] = []
+    _collect(exc, (), where, problems)
+    return problems
+
+
+def _collect(
+    exc: BaseException,
+    path: tuple[tuple[str | None, str], ...],
+    where: str,
+    out: list[tuple[str | None, str]],
+) -> None:
+    path = path + _segments(exc)
+    if isinstance(exc, BaseExceptionGroup):
+        for sub in exc.exceptions:
+            _collect(sub, path, where, out)
+        return
+    if isinstance(exc, ForbiddenExtraKeysError):
+        rendered = where + "".join(text for _, text in path)
+        out.extend(
+            (None, f"{rendered}.{field_name}: unknown field")
+            for field_name in sorted(exc.extra_fields)
+        )
+        return
+    blamed = path[0][0] if path else None
+    rendered = where + "".join(text for _, text in path)
+    leaf = path[-1][0] if path else None
+    if not path:
+        out.append((None, f"{where}: {exc}"))
+    elif isinstance(exc, KeyError):
+        out.append((blamed, f"{rendered} is required"))
+    else:
+        out.append((blamed, _house(rendered, leaf, str(exc))))
+
+
+def _segments(exc: BaseException) -> tuple[tuple[str | None, str], ...]:
+    """Where in the tree cattrs was when it raised. The notes are structural --
+    ``AttributeValidationNote.name``, ``IterableValidationNote.index`` -- so the
+    path is read off them rather than parsed out of their rendered text. List
+    indexes are 1-based to match the fan-out validators' ``curds[1]``; a
+    mapping's note carries its key there instead."""
+    notes: Sequence[str]
+    try:
+        notes = exc.__notes__
+    except AttributeError:
+        notes = ()
+    segments: list[tuple[str | None, str]] = []
+    for note in notes:
+        if isinstance(note, AttributeValidationNote):
+            segments.append((note.name, f".{note.name}"))
+        elif isinstance(note, IterableValidationNote):
+            index = note.index
+            rendered = f"[{index + 1}]" if isinstance(index, int) else f"[{index!r}]"
+            segments.append((None, rendered))
+    return tuple(segments)
+
+
+def _house(path: str, name: str | None, message: str) -> str:
+    """Render one failure as ``where.key must be ...``. Validators and hooks
+    already phrase the predicate; only the subject has to be replaced with the
+    full path. Three subject spellings are recognized: the bare attribute name,
+    the name with a list index appended (``carry_forward[2] must be ...``), and
+    attrs' own quoted form (``'retry_count' must be <= 1: 5``)."""
+    if name is not None:
+        if message.startswith((f"{name} ", f"{name}[")):
+            return f"{path}{message[len(name) :]}"
+        if message.startswith(f"'{name}' "):
+            return f"{path}{message[len(name) + 2 :]}"
+    if message.startswith("must be"):
+        return f"{path} {message}"
+    return f"{path} must be valid: {message}"
+
+
+class DuplicateAdapterError(ValueError):
+    """An exact-version legacy adapter is already registered for this key."""
+
+
+class AdapterSunsetError(ValueError):
+    """An adapter whose declared ``remove_after`` has passed is still registered."""
+
+
+class LegacyConversionError(ValueError):
+    """A legacy payload does not carry the shape its adapter declares.
+
+    Conversion callbacks read persisted, untrusted bytes. A missing or
+    wrongly typed key is a rejected input, not a programming error, so the
+    callback raises this instead of leaking ``KeyError`` or ``TypeError``
+    past the caller's error contract.
+    """
+
+
+@define(frozen=True)
+class LegacyAdapter:
+    """A deterministic, exact-version transform from a persisted legacy
+    artifact shape to a current canonical payload.
+
+    No adapter applies heuristic or semantic coercion: it recognizes exactly
+    one ``(source_schema_uri, source_major, source_minor)`` and maps it to
+    exactly one ``target_schema_uri``. ``remove_after`` is declared at
+    introduction (an ISO ``YYYY-MM-DD`` date) so :func:`check_adapter_sunsets`
+    can fail a build once the adapter has outlived its planned removal.
+    """
+
+    source_schema_uri: str
+    source_major: str
+    source_minor: str
+    target_schema_uri: str
+    remove_after: str
+    convert: Callable[[Mapping[str, object]], Mapping[str, object]]
+
+
+_ADAPTERS: dict[tuple[str, str, str], LegacyAdapter] = {}
+
+_LEGACY_CURD_PLAN_MAJOR = "0"
+_LEGACY_CURD_PLAN_MINOR = "9"
+
+
+def _mapping(where: str, item: object) -> Mapping[str, object]:
+    if not isinstance(item, Mapping):
+        raise LegacyConversionError(f"{where} must be an object")
+    return cast("Mapping[str, object]", item)
+
+
+def _required(where: str, item: Mapping[str, object], key: str, kind: type) -> object:
+    if key not in item:
+        raise LegacyConversionError(f"{where}.{key} must be present")
+    value = item[key]
+    if not isinstance(value, kind):
+        raise LegacyConversionError(f"{where}.{key} must be {kind.__name__}")
+    return value
+
+
+def _str_list(where: str, item: Mapping[str, object], key: str) -> list[str]:
+    """Read an optional legacy string list, defaulting to empty."""
+    value = item.get(key, [])
+    if not isinstance(value, list):
+        raise LegacyConversionError(f"{where}.{key} must be list")
+    entries = cast("list[object]", value)
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, str):
+            raise LegacyConversionError(f"{where}.{key}[{index}] must be str")
+    return [cast(str, entry) for entry in entries]
+
+
+def _convert_criterion(where: str, index: int, item: object) -> dict[str, object]:
+    criterion = _mapping(where, item)
+    return {
+        "criterion_id": f"legacy-criterion-{index}",
+        "description": _required(where, criterion, "description", str),
+        "check": _required(where, criterion, "check", str),
+    }
+
+
+def _convert_curd(where: str, item: object) -> dict[str, object]:
+    curd = _mapping(where, item)
+    criteria = cast("list[object]", _required(where, curd, "criteria", list))
+    return {
+        "curd_id": _required(where, curd, "key", str),
+        "outcome": _required(where, curd, "goal", str),
+        "scope": {
+            "paths": _str_list(where, curd, "paths"),
+            "excluded_paths": [],
+        },
+        "inputs": [],
+        "outputs": _str_list(where, curd, "outputs"),
+        "dependencies": [],
+        "criteria": [
+            _convert_criterion(f"{where}.criteria[{index - 1}]", index, criterion)
+            for index, criterion in enumerate(criteria, start=1)
+        ],
+        "lineage": {"identity_action": "new", "source_curd_ids": []},
+    }
+
+
+def _convert_curd_plan_v0_9(payload: Mapping[str, object]) -> dict[str, object]:
+    """Convert the 0.9 curd-plan writer view to the current contract.
+
+    Raises :class:`LegacyConversionError` for any missing or wrongly typed
+    key, so a malformed persisted artifact reaches the caller as a declared
+    conversion failure rather than an uncaught lookup error.
+    """
+    raw_curds = cast("list[object]", _required("curd-plan", payload, "curds", list))
+    curds = [
+        _convert_curd(f"curd-plan.curds[{index}]", curd)
+        for index, curd in enumerate(raw_curds)
+    ]
+    unsigned = {
+        "contract_version": {
+            "schema_uri": CURD_PLAN_SCHEMA_URI,
+            "major": "1",
+            "minor": "0",
+        },
+        "plan_id": _required("curd-plan", payload, "plan_id", str),
+        "revision": _required("curd-plan", payload, "revision", int),
+        "objective": _required("curd-plan", payload, "goal", str),
+        "curds": curds,
+        "context": None,
+        "parent_plan_ref": None,
+    }
+    from easy_cheese_schemas.contracts import canonical_digest
+
+    digest = canonical_digest(unsigned)
+    return {**unsigned, "digest": digest}
+
+
+_BUILTIN_CURD_PLAN_ADAPTER = LegacyAdapter(
+    source_schema_uri=CURD_PLAN_SCHEMA_URI,
+    source_major=_LEGACY_CURD_PLAN_MAJOR,
+    source_minor=_LEGACY_CURD_PLAN_MINOR,
+    target_schema_uri=CURD_PLAN_SCHEMA_URI,
+    remove_after="2027-06-01",
+    convert=_convert_curd_plan_v0_9,
+)
+
+
+def _adapter_key(adapter: LegacyAdapter) -> tuple[str, str, str]:
+    return (adapter.source_schema_uri, adapter.source_major, adapter.source_minor)
+
+
+def register_adapter(adapter: LegacyAdapter) -> None:
+    key = _adapter_key(adapter)
+    if key in _ADAPTERS:
+        raise DuplicateAdapterError(f"adapter already registered for {key}")
+    _ADAPTERS[key] = adapter
+
+
+def unregister_adapter(
+    source_schema_uri: str, source_major: str, source_minor: str
+) -> None:
+    _ = _ADAPTERS.pop((source_schema_uri, source_major, source_minor), None)
+
+
+def adapter_for(
+    source_schema_uri: str, source_major: str, source_minor: str
+) -> LegacyAdapter | None:
+    """The adapter registered for this exact source schema and version, if any.
+
+    Lookup is exact-match only: an off-by-one minor or an unregistered schema
+    URI returns ``None`` rather than falling back to a nearby version.
+    """
+    return _ADAPTERS.get((source_schema_uri, source_major, source_minor))
+
+
+def registered_adapters() -> tuple[LegacyAdapter, ...]:
+    return tuple(_ADAPTERS.values())
+
+
+def check_adapter_sunsets(reference_date: date) -> None:
+    """Fail when any registered adapter's ``remove_after`` has passed.
+
+    ``reference_date`` is supplied by the caller (a gate script reads today's
+    date from its environment; a test controls it directly) rather than read
+    from an ambient clock here, so this check is deterministic and testable.
+    """
+    expired = tuple(
+        adapter
+        for adapter in _ADAPTERS.values()
+        if date.fromisoformat(adapter.remove_after) <= reference_date
+    )
+    if expired:
+        names = ", ".join(
+            f"{adapter.source_schema_uri}@{adapter.source_major}.{adapter.source_minor}"
+            + f" (remove_after {adapter.remove_after})"
+            for adapter in expired
+        )
+        raise AdapterSunsetError(f"expired legacy adapters still registered: {names}")
+
+
+# Reference-only registry: no runtime consumer reads these adapters. The
+# workflow-layer migration module that called `adapter_for` is gone, and Cook
+# now rejects a historical pointer as invalid instead of migrating it
+# (wiki adr/legacy-migration-withdrawal-001). The exact-adapter and sunset
+# rules stay in wiki adr/legacy-adapter-lifecycle-004 for the next migration
+# that needs them.
+register_adapter(_BUILTIN_CURD_PLAN_ADAPTER)

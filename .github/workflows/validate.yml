@@ -1,0 +1,239 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: validate skills
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # validate_skills.py imports easy_cheese.shared.paths, which needs fromargs.
+      - name: Install PyYAML and runtime deps
+        run: |
+          pip install --no-cache-dir pyyaml==6.0.2
+          pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+
+      - name: Test SKILL.md validator
+        run: python3 .github/scripts/test_validate_skills.py -v
+
+      - name: Validate SKILL.md frontmatter
+        run: python3 .github/scripts/validate_skills.py
+
+  validate-frontmatter:
+    name: validate frontmatter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # validate_skills.py imports easy_cheese.shared.paths, which needs fromargs.
+      - name: Install PyYAML and runtime deps
+        run: |
+          pip install --no-cache-dir pyyaml==6.0.2
+          pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+
+      - name: Validate SKILL.md frontmatter
+        run: python3 .github/scripts/validate_skills.py --checks frontmatter
+
+  test:
+    name: test melt + shared + fan-out scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+
+      # PyPI install: no GitHub API call, so the repo-wide GITHUB_TOKEN
+      # budget (1,000 requests/hour) is not spent on every job.
+      - name: Set up just
+        run: |
+          uv tool install rust-just==1.58.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install test dependencies
+        run: |
+          pip install --no-cache-dir pytest==9.0.3 pytest-xdist==3.8.0 pyyaml==6.0.2
+          pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+
+      - name: Gate the checked-in runtime
+        run: python3 scripts/runtime_gates.py
+
+      - name: Check committed skill archives
+        run: just wedge-check
+
+      # This job is the workflow's critical path. The suites are
+      # subprocess-heavy, so run them with xdist as `just test` does.
+      - name: Run melt script tests
+        run: python3 -m pytest tests/python -q -p xdist -n auto
+
+      - name: Run shared script tests
+        run: python3 -m pytest tests/shared/python -q -p xdist -n auto
+
+      - name: Run fan-out script tests
+        run: python3 -m pytest tests/fanout/python -q -p xdist -n auto
+
+      - name: Run schema conformance tests
+        run: python3 -m pytest tests/schemas/python -q -p xdist -n auto
+
+  install-script:
+    name: test install.sh (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install bats and shellcheck
+        run: brew install bats-core shellcheck
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          pip install --no-cache-dir pytest==9.0.3 pyyaml==6.0.2
+          pip install --disable-pip-version-check --no-cache-dir --require-hashes --requirement requirements/runtime.txt
+
+      - name: Lint install.sh
+        run: shellcheck scripts/install.sh
+
+      - name: Run install.sh tests
+        run: bats tests/bash/test_install.bats
+
+      - name: Run fan-out pr_plan_to_branches tests
+        run: bats tests/fanout/bash/test_pr_plan_to_branches.bats
+
+      # Real (un-stubbed) smoke test: actually resolve every brew formula
+      # and run the gh-skill install on a fresh macos-latest runner.
+      # Catches "phantom formula" / "tap doesn't exist" / "this skill
+      # doesn't publish" bugs that the bats suite (which stubs everything)
+      # cannot. --skip-mcp avoids needing claude/tavily creds.
+      #
+      # tilth is left out of --tools: its npm package downloads a binary
+      # from the tilth repo's rolling `nightly` release, which that repo
+      # deletes and recreates before its per-target builds finish. Until
+      # the macOS arm64 build lands (hours, when runners are queued) every
+      # Apple Silicon install 404s — see #639. That gap is upstream, not
+      # something this script can fix; the bats suite pins the npm command.
+      - name: Real install smoke test (--skip-mcp)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Pin every skill install to the commit under test so the smoke
+          # test exercises the script against this PR / push, not against
+          # the latest released tag (which can lag behind main when new
+          # skills are added).
+          EC_SKILL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bash scripts/install.sh --skip-mcp --tools gh,ast-grep,just,mergiraf
+
+  typecheck:
+    name: type-check python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+
+      # PyPI install: no GitHub API call, so the repo-wide GITHUB_TOKEN
+      # budget (1,000 requests/hour) is not spent on every job.
+      - name: Set up just
+        run: |
+          uv tool install rust-just==1.58.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: basedpyright
+        run: just typecheck
+
+  lint:
+    name: lint markdown, yaml, python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+
+      # PyPI install: no GitHub API call, so the repo-wide GITHUB_TOKEN
+      # budget (1,000 requests/hour) is not spent on every job.
+      - name: Set up just
+        run: |
+          uv tool install rust-just==1.58.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
+        with:
+          globs: |
+            skills/**/*.md
+            .agents/**/*.md
+            *.md
+
+      - name: yamllint
+        uses: ibiqlik/action-yamllint@2576378a8e339169678f9939646ee3ee325e845c # v3.1.1
+        with:
+          file_or_dir: .
+          config_file: .yamllint.yml
+          format: github
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install --no-cache-dir ruff
+
+      - name: ruff check
+        run: ruff check .
+      - name: vulture dead-code gate
+        run: just lint-py-dead-code
+
+  pr-title:
+    name: conventional commits pr title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

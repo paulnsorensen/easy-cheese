@@ -1,0 +1,17 @@
+[
+  {
+    "name": "links and prose references",
+    "text": "[Doc](../age/references/voice.md#tone) and \u0060references/formatting.md § style\u0060.",
+    "refs": ["../age/references/voice.md", "references/formatting.md"]
+  },
+  {
+    "name": "external and fragments do not count",
+    "text": "[web](https://example.test/a.md) [anchor](#section) `skills/age/SKILL.md`",
+    "refs": []
+  },
+  {
+    "name": "trailing newline before closing backtick",
+    "text": "see `references/a.md\n`",
+    "refs": ["references/a.md\n"]
+  }
+]

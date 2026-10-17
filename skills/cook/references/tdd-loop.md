@@ -1,0 +1,183 @@
+# The TDD loop: test first where it fits → implement → taste-test
+
+TDD is recommended practice in Cook. No gate enforces it. Each phase should have a clear exit before the next phase starts.
+
+Docs, refactor, test, and appearance work uses its own implementation and verification path. It changes only the requested surface.
+
+## Inner TDD — tests first where it fits
+
+When a change adds or modifies behavior, write the test before the implementation where it fits. This test is Cook's vertical loop.
+
+A test that passes against unimplemented code gives a false positive. Check that the test fails for the expected reason when that is cheap to do.
+
+## Implement — minimal green
+
+For behavior work, make the smallest production change that makes the tests green.
+
+For docs, refactor, test, or appearance work, make the requested change and verify it directly.
+
+**Implement must:**
+
+- Use existing dependencies and project patterns.
+- Run the narrowest useful inner test.
+- Run relevant wider gates: the project formatter, lint, type check, and build.
+- Stop and ask if implementation identifies a design decision that the spec does not answer.
+
+### Reviewable by construction
+
+Write the change so the taste-test and `/age` pass on the first round. Most rules below map to a taste-test lens or `/age` dimension that otherwise sends the work back; the size ceiling is enforced by `/plate`.
+
+- **Full-word identifiers.** No abbreviation or single letter whose scope outlives one short block. A conventional short name used conventionally (`i` as a loop index, `db`, `ctx`) is exempt. Reviewers find defects about 19% faster with full words (Hofmeister et al., 2019). `/age` grades this under [`deslop`](../../age/references/dimensions.md).
+- **Local reasoning.** A reviewer must understand each changed function from its own body plus the signatures it calls. Do not add monkey-patching, side-effecting decorators, `__getattr__` or `__getattribute__` tricks, operator overloading, metaclass logic, or exception-based control flow that crosses a module boundary.
+- **Let the type checker review.** Annotate every new parameter and return. Use a closed union or enum instead of a string tag. Make every `match` or `switch` over a closed union exhaustive with `assert_never` (mypy/pyright) or `assertNever` (typescript-eslint `switch-exhaustiveness-check`); never rely on a silent default arm. Idioms: [`deslop-python.md` § 15](../../age/references/deslop-python.md), [`deslop-typescript.md` § 16](../../age/references/deslop-typescript.md).
+- **Stay under the comprehension ceiling.** Keep the semantics-altering surface under roughly 400 changed code lines. When the contract needs more, name the layer boundaries under the package report's `### Risks` so `/plate` can recommend a stack.
+
+These rules do not license speculative types, helpers, or abstractions. Scope and Simplify still apply.
+
+Before handoff to Press, make every inner test and relevant gate GREEN.
+
+For non-behavior work, complete the requested non-behavior verification and taste-test. Then, hand off directly to Age. Non-behavior work has no Test Contracts for Press to attack.
+
+A corrective Cook (`correction = true`) applies only to the active Press correction. It must not weaken, replace, or bypass an existing test.
+
+If Cook reports partial or skipped work, **stop and resolve it before taste-test**.
+
+## Taste-test — drift, readability, scope, simplify, plus three fresh-context lenses
+
+After Cook says "I completed all the changes", run a taste test before Press. The taste-test is a **fresh-context review**.
+
+For a non-trivial cooked diff, dispatch the review to a read-only reviewer that did not write the code. For a small diff, use the low-cost inline check.
+
+**Cost gate — where it runs.**
+
+Dispatch the fresh-context reviewer unless all four conditions are true:
+
+- The diff changes one file.
+- The diff adds no new public surface.
+- The diff has <~40 changed lines.
+- The diff has no risk flag.
+
+If all four conditions are true, run the coder self-check. If one condition is false, route the review to 1 fresh opus reviewer.
+
+### Risk flag
+
+A risk flag identifies one of these categories:
+
+- auth/secrets/crypto/tenant isolation
+- payments/ledgers/irreversible effects
+- concurrency/idempotency/ordering/retries
+- schema/migration/protocol/public-API change
+- production-destructive ops
+- weak integration coverage around a global invariant
+
+**Who runs it.**
+
+- **Top-level `/cook`**:
+  - Resolve the fresh-context taste-test through `../../cheese/references/agent-resolution.md`.
+  - Request a read-only `reviewer (taste-test)` at `default` / `medium`.
+  - Pass `{spec/contract, diff, inner-test list, any locked/user-approved decisions}`.
+  - The reviewer returns the per-lens verdict below.
+  - The reviewer does not return a full `/age` report.
+  - A general worker can qualify only under the shared prompt-only read-only degradation.
+- **Coder-nested `/cook`**:
+  - If the active coder cannot dispatch, run the inline self-check.
+  - Record `taste_test: deferred-to-orchestrator`.
+  - The orchestrator must run the authoritative reviewer before it accepts the handoff.
+
+**Lenses.**
+
+The inline or dispatched taste-test returns `pass | revise | escalate` for each lens. The Locked-decision lens can also return `halt`.
+
+| Lens | Question | Pass criterion |
+| --- | --- | --- |
+| Spec | Did the implementation drift from the spec? | Every behavior described in the spec is present; nothing extra. |
+| Readability | Is the change as concise and clear as possible? | A reviewer can understand each changed function from its body and the signatures it calls, without external context, and the diff meets § Reviewable by construction (full-word identifiers, local reasoning). |
+| Scope | Did Cook add more than asked? | The diff matches the spec's bullets; no speculative helpers. |
+| Simplify | Does the diff reuse what exists, stay clean, and avoid wasted work? | See sub-checks below; all three must pass. |
+| Production path | Does every spec acceptance criterion have a *production* path that exercises it? | The behavior is reachable from real callers, not only from tests that manufacture the state. |
+| Wired callers | Does each new public function have a non-test caller? | A non-test caller exists, or the diff carries an explicit "wired in phase X" note. |
+| Locked-decision | If the dispatch prompt carries a locked/user-approved decision, does the diff implement *that* decision? | The diff honors the locked decision, or the reviewer returns `halt` flagging the divergence. |
+
+The last three lenses are fresh-context additions. They identify failures that the inline taste-test historically passed:
+
+- A missing production path.
+- Public functions with no non-test callers.
+- A silently substituted design decision.
+
+A `halt` from the Locked-decision lens stops the chain for a human decision. It is not a corrective Cook finding.
+On a `/cure` run, each selected finding's `recommendation:` and `invariants:` lines are the locked decision for that fix.
+
+**Escalate-unverifiable.**
+
+If available evidence cannot verify a lens claim, return `escalate` for that lens. Never return a guessed `pass` or `revise`.
+
+This rule implements cross-cutting contract 1 in the spec: "a claim no evidence can settle returns escalate, never a guessed pass or fail".
+
+The **Simplify** lens uses the same three sub-checks as `/simplify`:
+
+- **Reuse**
+  - New code must not duplicate an existing utility, helper, or component.
+  - Inline logic must use an available project helper.
+  - New code must not create a near-duplicate of an existing function.
+- **Quality**
+  - Do not add redundant state, such as a cached value that the code can derive.
+  - Do not add parameters when code restructuring is appropriate.
+  - Do not use copy-paste-with-variation.
+  - Do not create a leaky abstraction that exposes internals across a slice boundary.
+  - Do not use stringly-typed code when a constant, enum, or union exists.
+- **Efficiency**
+  - Avoid unnecessary work, including redundant compute, repeated reads, and N+1.
+  - Use concurrency for independent operations.
+  - Avoid recurring no-op state or store updates in loops or handlers.
+  - Do not use pre-existence checks when the operation can handle the resulting error.
+  - Do not use unbounded structures.
+  - Do not leak listeners or timers.
+  - Read a slice instead of a full file or dataset when a slice is sufficient.
+
+Each lens returns `pass`, `revise`, or `escalate`. The Locked-decision lens can also return `halt`.
+
+Send every `revise` finding into a bounded corrective Cook pass. Include the original spec, the Cook report, and the taste evidence.
+
+## Two-round cap
+
+```
+best:    implement → taste-test (all pass) → press
+worst:   implement → taste-test → implement → taste-test → implement (final)
+```
+
+After the second taste test, allow only one final corrective Cook pass.
+Stop when the final pass cannot resolve all taste findings.
+Report the result as **blocked**.
+Do not continue to Press.
+
+## Self-evaluation before handoff
+
+Confirm every item that the package report asserts (`package-report.md` § Self-eval). Also confirm these two items:
+
+- [ ] Spec or acceptance criteria are clear.
+- [ ] The report documents every remaining risk and every skipped check.
+
+## Boundary-specific checks
+
+For Mold-to-Cook changes, the inner test loop covers the consumer seam rather
+than only a helper function:
+
+- classify explicit mode before inference and reject malformed declared
+  pointers/projections without task fallback;
+- plan Full work on invocation, with no scope or plan approval step;
+- materialize a Full plan once and recompute coverage when the acknowledged
+  remainder changes;
+- keep holds across every resubmission and permit execution only from `ready`;
+- accept Light on invocation with no invented planner artifact;
+- reject runner evidence that is stale, failed, or outside its authorized
+  paths and commands; and
+- preserve incomplete work and exact missing-decision requests.
+
+The command under test supplies no agent callback and no user response.  The
+orchestrator supplies planner output and runner approval explicitly; the Cook
+result is recomputed from those references on each call.
+The final execution-boundary test uses
+`execute_bound_plan` with real dispatch callbacks.  It proves that
+non-ready, held, stale, and overbroad handoffs stop before `workflow.cook`,
+while a ready Full handoff forwards the exact plan curd IDs and leaves the
+canonical planner remainder untouched.

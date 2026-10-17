@@ -1,0 +1,504 @@
+"""Tests for the shared fan-out manifest update module via the Cook bundle."""
+
+from __future__ import annotations
+
+import json
+import multiprocessing
+import subprocess
+import sys
+from pathlib import Path
+from types import ModuleType
+from typing import Callable, cast
+
+import pytest
+import yaml
+
+from fromargs import CliError
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
+
+
+def _d(value: object) -> dict[str, object]:
+    return cast(dict[str, object], value)
+
+
+def _l(value: object) -> list[object]:
+    return cast(list[object], value)
+
+
+def _load(module: ModuleType, path: Path) -> tuple[dict[str, object], bytes]:
+    fn = cast(Callable[[Path], tuple[dict[str, object], bytes]], module._load_manifest)
+    return fn(path)
+
+
+def _commit(module: ModuleType, path: Path, data: dict[str, object], original: bytes) -> None:
+    fn = cast(Callable[[Path, dict[str, object], bytes], None], module._commit)
+    fn(path, data, original)
+
+
+def _curds(n: int = 5) -> list[dict[str, object]]:
+    return [
+        {
+            "id": i + 1,
+            "behavior": f"Implement feature {i + 1}",
+            "acceptance_criterion": f"AC {i + 1}",
+            "files": [f"src/feature_{i}.ts"],
+            "test_target": f"pytest src/feature_{i}.ts",
+            "status": "pending",
+            "retry_count": 0,
+        }
+        for i in range(n)
+    ]
+
+
+def _manifest() -> dict[str, object]:
+    return {
+        "slug": "feature-name",
+        "spec_path": ".cheese/specs/feature-name.md",
+        "created": "2026-05-14T10:00:00Z",
+        "phase": "gate_approved",
+        "quality_gates": ["just check"],
+        "host_capabilities": {"gh": True},
+        "agent_resolution": {
+            "request": {
+                "work": "test",
+                "preferred_types": ["planner"],
+                "required_tools": ["read"],
+                "permissions": "read-only",
+                "isolation": "fresh-context",
+                "minimum_power": "powerful",
+                "effort": "high",
+            },
+            "attempts": [{"type": "planner", "model": "test", "power": "powerful", "result": "accepted", "reason": "exact"}],
+            "resolved": {"type": "planner", "model": "test", "power": "powerful", "effort": "high", "topology": "sequential"},
+            "fallback_reason": None,
+            "degraded": False,
+            "permission_enforcement": "tool-restricted",
+        },
+        "seed": {"items": []},
+        "curds": _curds(),
+        "wiring": [
+            {
+                "id": "W1",
+                "type": "barrel_export",
+                "file": "src/index.ts",
+                "depends_on": [],
+                "status": "pending",
+            }
+        ],
+    }
+
+
+def _write_fixture(tmp_path: Path) -> Path:
+    path = tmp_path / "manifest.yaml"
+    _ = path.write_text(yaml.safe_dump(_manifest(), sort_keys=False), encoding="utf-8")
+    return path
+
+
+def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(COOK_ARCHIVE), "manifest_update", *args],
+        capture_output=True,
+        text=True,
+    )
+
+
+def _err(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
+    return _d(cast(object, json.loads(result.stderr)))
+
+
+def _validate(path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(COOK_ARCHIVE), "validate_manifest", str(path)],
+        capture_output=True,
+        text=True,
+    )
+
+
+class TestSetPhase:
+    def test_happy_path_updates_phase_and_validates(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        result = _run_cli("set-phase", "--manifest", str(path), "--phase", "seed_complete")
+        assert result.returncode == 0, result.stderr
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        assert data["phase"] == "seed_complete"
+        # The rewritten file must still pass the schema validator.
+        check = _validate(path)
+        assert check.returncode == 0, check.stderr
+
+    def test_invalid_phase_exits_2(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        original = path.read_bytes()
+        result = _run_cli("set-phase", "--manifest", str(path), "--phase", "bogus_phase")
+        assert result.returncode == 2
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "invalid phase" in cast(str, error["error"])
+        assert result.stdout == ""
+        # Original file untouched on validation gate failure.
+        assert path.read_bytes() == original
+
+    def test_missing_manifest_exits_2(self, tmp_path: Path) -> None:
+        path = tmp_path / "does-not-exist.yaml"
+        result = _run_cli("set-phase", "--manifest", str(path), "--phase", "seed_complete")
+        assert result.returncode == 2
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "manifest not found" in cast(str, error["error"])
+
+    def test_preserves_top_level_field_order(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        expected_keys = list(_manifest().keys())
+        result = _run_cli("set-phase", "--manifest", str(path), "--phase", "seed_complete")
+        assert result.returncode == 0, result.stderr
+        rewritten = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        assert list(rewritten.keys()) == expected_keys
+
+
+class TestSetCurdStatus:
+    def test_updates_status_and_commit_sha(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        result = _run_cli(
+            "set-curd-status",
+            "--manifest",
+            str(path),
+            "--curd",
+            "3",
+            "--status",
+            "completed",
+            "--commit-sha",
+            "deadbeef",
+            "--base-commit",
+            "A" * 40,
+            "--reviewed-tree-oid",
+            "b" * 64,
+            "--diff-hash",
+            "sha256:" + "C" * 64,
+            "--scope",
+            "src/feature_2.ts",
+        )
+        assert result.returncode == 0, result.stderr
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        curd = next(_d(c) for c in _l(data["curds"]) if _d(c)["id"] == 3)
+        assert curd["status"] == "completed"
+        assert curd["commit_sha"] == "deadbeef"
+        assert curd["review_context"] == {
+            "base_commit": "A" * 40,
+            "reviewed_tree_oid": "b" * 64,
+            "diff_hash": "sha256:" + "C" * 64,
+            "scope": ["src/feature_2.ts"],
+        }
+        assert _validate(path).returncode == 0
+
+    def test_completed_without_review_context_is_rejected(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        original = path.read_bytes()
+        result = _run_cli(
+            "set-curd-status",
+            "--manifest",
+            str(path),
+            "--curd",
+            "3",
+            "--status",
+            "completed",
+            "--commit-sha",
+            "deadbeef",
+        )
+        assert result.returncode == 2
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "review_context is required" in cast(str, error["error"])
+        assert path.read_bytes() == original
+
+    def test_other_curds_untouched(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        _ = _run_cli("set-curd-status", "--manifest", str(path), "--curd", "2", "--status", "running")
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        other_statuses = [_d(c)["status"] for c in _l(data["curds"]) if _d(c)["id"] != 2]
+        assert all(s == "pending" for s in other_statuses)
+
+    def test_invalid_status_exits_2(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        result = _run_cli(
+            "set-curd-status", "--manifest", str(path), "--curd", "1", "--status", "ok"
+        )
+        assert result.returncode == 2
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "invalid status" in cast(str, error["error"])
+
+    def test_missing_curd_id_exits_2(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        result = _run_cli(
+            "set-curd-status", "--manifest", str(path), "--curd", "999", "--status", "running"
+        )
+        assert result.returncode == 2
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "curd id 999 not found" in cast(str, error["error"])
+
+
+class TestSetPostReview:
+    def test_atomically_records_review_identity_and_allows_phase_advance(
+        self, tmp_path: Path
+    ) -> None:
+        path = _write_fixture(tmp_path)
+        result = _run_cli(
+            "set-post-review",
+            "--manifest",
+            str(path),
+            "--base-commit",
+            "A" * 40,
+            "--reviewed-tree-oid",
+            "b" * 64,
+            "--diff-hash",
+            "sha256:" + "C" * 64,
+            "--scope",
+            "src",
+            "--press-slug",
+            ".cheese/press/feature.md",
+            "--age-slug",
+            ".cheese/age/feature.md",
+            "--cure-slug",
+            ".cheese/cure/feature.md",
+            "--findings-applied",
+            "2",
+            "--findings-deferred",
+            "0",
+        )
+        assert result.returncode == 0, result.stderr
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        context: dict[str, object] = {
+            "base_commit": "A" * 40,
+            "reviewed_tree_oid": "b" * 64,
+            "diff_hash": "sha256:" + "C" * 64,
+            "scope": ["src"],
+        }
+        assert data["current_review"] == context
+        assert data["post_review"] == {
+            "review_context": context,
+            "press_slug": ".cheese/press/feature.md",
+            "age_slug": ".cheese/age/feature.md",
+            "cure_slug": ".cheese/cure/feature.md",
+            "findings_applied": 2,
+            "findings_deferred": 0,
+        }
+
+        advance = _run_cli(
+            "set-phase",
+            "--manifest",
+            str(path),
+            "--phase",
+            "post_review_complete",
+        )
+        assert advance.returncode == 0, advance.stderr
+        assert _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))["phase"] == "post_review_complete"
+
+
+class TestSetWiringStatus:
+    def test_updates_status_and_commit_sha(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        result = _run_cli(
+            "set-wiring-status",
+            "--manifest",
+            str(path),
+            "--wiring",
+            "W1",
+            "--status",
+            "completed",
+            "--commit-sha",
+            "abc1234",
+        )
+        assert result.returncode == 0, result.stderr
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        wiring = _d(_l(data["wiring"])[0])
+        assert wiring["status"] == "completed"
+        assert wiring["commit_sha"] == "abc1234"
+        assert _validate(path).returncode == 0
+
+    def test_missing_wiring_id_exits_2(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        result = _run_cli(
+            "set-wiring-status", "--manifest", str(path), "--wiring", "W99", "--status", "running"
+        )
+        assert result.returncode == 2
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "wiring id 'W99' not found" in cast(str, error["error"])
+
+
+class TestAtomicity:
+    def test_no_tmp_file_left_after_success(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        result = _run_cli("set-phase", "--manifest", str(path), "--phase", "seed_complete")
+        assert result.returncode == 0, result.stderr
+        leftover = list(tmp_path.glob("*.tmp"))
+        assert leftover == []
+
+    def test_failed_validation_restores_original_and_leaves_no_tmp(
+        self, tmp_path: Path, manifest_update: ModuleType
+    ) -> None:
+        # Drive failure through the in-process API so we can poison the data
+        # in a way that argparse-level guards can't catch but the validator does.
+        path = _write_fixture(tmp_path)
+        original = path.read_bytes()
+        data, original_bytes = _load(manifest_update, path)
+        # quality_gates must be a non-empty list — clearing it breaks schema.
+        data["quality_gates"] = []
+        with pytest.raises(CliError):
+            _commit(manifest_update, path, data, original_bytes)
+        assert path.read_bytes() == original
+        assert list(tmp_path.glob("*.tmp")) == []
+
+
+class TestCheckFiles:
+    def test_all_present_reports_clean(self, tmp_path: Path) -> None:
+        manifest = _manifest()
+        for curd in _l(manifest["curds"]):
+            for f in _l(_d(curd)["files"]):
+                target = tmp_path / cast(str, f)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                _ = target.write_text("", encoding="utf-8")
+        path = tmp_path / "manifest.yaml"
+        _ = path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        report = _d(cast(object, json.loads(result.stdout)))
+        assert report == {}
+
+    def test_missing_files_reported_per_curd_without_failing(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        # Fixture files are never created on disk, so every curd is "missing".
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        report = _d(cast(object, json.loads(result.stdout)))
+        assert report["1"] == ["src/feature_0.ts"]
+
+    def test_json_mode_reports_missing_per_curd_id(self, tmp_path: Path) -> None:
+        manifest = _manifest()
+        (tmp_path / "src").mkdir()
+        _ = (tmp_path / "src" / "feature_0.ts").write_text("", encoding="utf-8")
+        path = tmp_path / "manifest.yaml"
+        _ = path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        report = _d(cast(object, json.loads(result.stdout)))
+        assert "1" not in report
+        assert report["2"] == ["src/feature_1.ts"]
+
+    def test_missing_manifest_exits_2(self, tmp_path: Path) -> None:
+        path = tmp_path / "does-not-exist.yaml"
+        result = _run_cli("check-files", "--manifest", str(path))
+        assert result.returncode == 2
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "manifest not found" in cast(str, error["error"])
+
+    def test_invalid_root_exits_2(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        missing_root = tmp_path / "no-such-dir"
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(missing_root))
+        assert result.returncode == 2
+        error = _err(result)
+        assert error["exit_code"] == 2
+        assert "root is not a directory" in cast(str, error["error"])
+
+    def test_directory_where_file_expected_reported_missing(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        # Create a directory at a path where a curd expects a file: is_file()
+        # must report it missing, unlike the looser exists() check.
+        target = tmp_path / "src" / "feature_0.ts"
+        target.mkdir(parents=True)
+        result = _run_cli("check-files", "--manifest", str(path), "--root", str(tmp_path))
+        assert result.returncode == 0, result.stderr
+        report = _d(cast(object, json.loads(result.stdout)))
+        assert report["1"] == ["src/feature_0.ts"]
+
+
+def _worker(args: tuple[str, str, int]) -> tuple[int, str]:
+    """Run one status update; the archive path travels in ``args``.
+
+    A pool child must not resolve (and possibly build) the archive itself.
+    """
+    bundle, manifest_path, curd_id = args
+    result = subprocess.run(
+        [
+            sys.executable,
+            bundle,
+            "manifest_update",
+            "set-curd-status",
+            "--manifest",
+            manifest_path,
+            "--curd",
+            str(curd_id),
+            "--status",
+            "running",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    return (result.returncode, result.stderr)
+
+
+class TestConcurrentWrites:
+    def test_parallel_updates_never_corrupt_file(self, tmp_path: Path) -> None:
+        path = _write_fixture(tmp_path)
+        n_curds = len(_curds())
+        bundle = str(COOK_ARCHIVE)
+        jobs = [(bundle, str(path), i + 1) for i in range(n_curds)]
+        # Repeat the volley to widen the race window.
+        for _ in range(3):
+            with multiprocessing.Pool(processes=min(4, n_curds)) as pool:
+                results = pool.map(_worker, jobs)
+            # The advisory lock serialises all writes — no update should be lost
+            # and no writer should fail due to a race condition.
+            data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+            assert isinstance(data, dict)
+            assert len(_l(data["curds"])) == n_curds
+            for rc, err in results:
+                assert rc == 0, f"unexpected rc={rc} stderr={err!r}"
+        # Final state still passes validation.
+        assert _validate(path).returncode == 0
+
+    def test_all_distinct_updates_survive(self, tmp_path: Path) -> None:
+        """With N>=8 concurrent writers each targeting a DISTINCT curd id, every
+        update must appear in the final manifest (no lost writes). This is the
+        behavioral proof that the advisory lock wraps the full read-modify-write."""
+        n = 10
+        path = tmp_path / "manifest_big.yaml"
+        manifest = _manifest()
+        manifest["curds"] = [
+            {
+                "id": i + 1,
+                "behavior": f"Feature {i + 1}",
+                "acceptance_criterion": f"AC {i + 1}",
+                "files": [f"src/f{i}.ts"],
+                "test_target": f"pytest src/f{i}.ts",
+                "status": "pending",
+                "retry_count": 0,
+            }
+            for i in range(n)
+        ]
+        _ = path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+
+        # All jobs target distinct curd ids with the same manifest file — genuine
+        # concurrent contention with no serialisation at the test level.
+        bundle = str(COOK_ARCHIVE)
+        jobs = [(bundle, str(path), i + 1) for i in range(n)]
+        with multiprocessing.Pool(processes=n) as pool:
+            results = pool.map(_worker, jobs)
+
+        # Every writer must have succeeded.
+        for rc, err in results:
+            assert rc == 0, f"rc={rc} stderr={err!r}"
+
+        # Every curd's update must be present in the final manifest.
+        data = _d(cast(object, yaml.safe_load(path.read_text(encoding="utf-8"))))
+        assert _validate(path).returncode == 0
+        assert len(_l(data["curds"])) == n
+        for curd in _l(data["curds"]):
+            c = _d(curd)
+            assert c["status"] == "running", (
+                f"curd {c['id']} status={c['status']!r} — update was lost"
+            )

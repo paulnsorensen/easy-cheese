@@ -1,0 +1,356 @@
+{
+  "kind": "planner_result",
+  "payload": {
+    "disposition": "complete",
+    "plan": {
+      "objective": "Land the first contract-first Mold-to-Cook replacement stack with enforceable canonical handoffs and doctrine-compliant skill bundles.",
+      "context": {
+        "constraints": [
+          "First boundary is Mold to Cook; later Cook to Press to Age to Cure and Wheypoint/#430 are constraints and non-goals.",
+          "Decorator payload authority remains separate from phase-contract routing.",
+          "Use clean replacement PRs and preserve #466 through #470 behavior."
+        ],
+        "invariants": [
+          "Canonical HandoffPointer and NormalizationReceipt are the sole executable handoff authority."
+        ]
+      },
+      "curds": [
+        {
+          "key": "restack_433",
+          "outcome": "Restack #433 as an independently reviewable replacement baseline",
+          "scope": {
+            "paths": [
+              "scripts/build_pyz.py",
+              "tests/scripts/test_build_pyz.py"
+            ],
+            "excluded_paths": [
+              "src/easy_cheese/skills",
+              "skills/mold/scripts/mold.pyz"
+            ]
+          },
+          "outputs": [
+            "Restack #433 as an independently reviewable replacement baseline"
+          ],
+          "criteria": [
+            {
+              "description": "#433 replacement baseline preserves the independently tracked acceptance evidence",
+              "check": "python3 -m pytest tests/scripts/test_build_pyz.py -k restack_433 && just check"
+            },
+            {
+              "description": "Restacked commit boundaries leave no production handoff behavior hidden in #433",
+              "check": "python3 -m pytest tests/scripts/test_build_pyz.py -k replacement_baseline && just check"
+            }
+          ],
+          "dependencies": []
+        },
+        {
+          "key": "extract_455_website",
+          "outcome": "Extract #455 website work into an independent outcome",
+          "scope": {
+            "paths": [
+              "website",
+              "docs/website"
+            ],
+            "excluded_paths": [
+              "src/easy_cheese/skills",
+              "skills/cook/scripts/cook.pyz"
+            ]
+          },
+          "outputs": [
+            "Extract #455 website work into an independent outcome"
+          ],
+          "criteria": [
+            {
+              "description": "#455 website extraction has its own tracked implementation and verification seam",
+              "check": "python3 -m pytest tests/test_website_extraction.py && just check"
+            },
+            {
+              "description": "Website extraction does not alter Mold-to-Cook contract runtime behavior",
+              "check": "python3 -m pytest tests/test_website_extraction.py -k isolated && just check"
+            }
+          ],
+          "dependencies": []
+        },
+        {
+          "key": "canonical_handoff_contracts",
+          "outcome": "Define canonical HandoffPointer and NormalizationReceipt contracts plus contract lifecycle",
+          "scope": {
+            "paths": [
+              "src/easy_cheese_schemas/handoff.py",
+              "src/easy_cheese_schemas/contracts.py",
+              "tests/schemas/python/test_handoff_contracts.py"
+            ],
+            "excluded_paths": [
+              "src/easy_cheese/skills/mold",
+              "src/easy_cheese/skills/cook"
+            ]
+          },
+          "outputs": [
+            "Define canonical HandoffPointer and NormalizationReceipt contracts plus contract lifecycle"
+          ],
+          "criteria": [
+            {
+              "description": "Reject a schema or phase-route mismatch before a HandoffPointer is accepted",
+              "check": "python3 -m pytest tests/schemas/python/test_handoff_contracts.py -k schema_or_route_mismatch && just check"
+            },
+            {
+              "description": "Bind each NormalizationReceipt to the exact canonical payload digest and route",
+              "check": "python3 -m pytest tests/schemas/python/test_handoff_contracts.py -k receipt_binding && just check"
+            },
+            {
+              "description": "Publish payload and receipt before pointer-last atomic publication and recover no visible partial pointer",
+              "check": "python3 -m pytest tests/schemas/python/test_handoff_contracts.py -k pointer_last_atomic && just check"
+            },
+            {
+              "description": "Repeat publication idempotently while rejecting corrupted referenced artifacts",
+              "check": "python3 -m pytest tests/schemas/python/test_handoff_contracts.py -k idempotency_or_corruption && just check"
+            }
+          ],
+          "dependencies": []
+        },
+        {
+          "key": "bundle_doctrine_runtime",
+          "outcome": "Implement layout-derived same-named skill bundle runtime closure",
+          "scope": {
+            "paths": [
+              "src/easy_cheese/shared/bundles.py",
+              "src/easy_cheese/skills/mold",
+              "src/easy_cheese/skills/cook",
+              "scripts/build_pyz.py",
+              "tests/scripts/test_bundle_doctrine.py"
+            ],
+            "excluded_paths": [
+              "skills/mold/scripts/mold.pyz",
+              "skills/cook/scripts/cook.pyz"
+            ]
+          },
+          "outputs": [
+            "Implement layout-derived same-named skill bundle runtime closure"
+          ],
+          "criteria": [
+            {
+              "description": "Each skill archive contains only its minimal transitive runtime closure",
+              "check": "python3 -m pytest tests/scripts/test_bundle_doctrine.py -k minimal_closure && just check"
+            },
+            {
+              "description": "Reject native extensions and platform-specific modules from every bundle closure",
+              "check": "python3 -m pytest tests/scripts/test_bundle_doctrine.py -k native_rejection && just check"
+            },
+            {
+              "description": "Detect deferred and function-body imports during closure resolution",
+              "check": "python3 -m pytest tests/scripts/test_bundle_doctrine.py -k deferred_import && just check"
+            },
+            {
+              "description": "Run bundles in a subprocess isolation environment with repo paths, PYTHONPATH, and site packages unavailable",
+              "check": "python3 -m pytest tests/scripts/test_bundle_doctrine.py -k subprocess_isolation && just check"
+            }
+          ],
+          "dependencies": [
+            "restack_433"
+          ]
+        },
+        {
+          "key": "bundle_command_compilation",
+          "outcome": "Compile @bundle_command dispatch from declarative command metadata",
+          "scope": {
+            "paths": [
+              "src/easy_cheese/shared/bundle_commands.py",
+              "scripts/build_pyz.py",
+              "tests/scripts/test_bundle_commands.py"
+            ],
+            "excluded_paths": [
+              "src/easy_cheese/skills/mold",
+              "src/easy_cheese/skills/cook"
+            ]
+          },
+          "outputs": [
+            "Compile @bundle_command dispatch from declarative command metadata"
+          ],
+          "criteria": [
+            {
+              "description": "Reject duplicate and unreferenced @bundle_command declarations",
+              "check": "python3 -m pytest tests/scripts/test_bundle_commands.py -k duplicate_or_unreferenced && just check"
+            },
+            {
+              "description": "Fail generated command-region drift against compiled dispatch metadata",
+              "check": "python3 -m pytest tests/scripts/test_bundle_commands.py -k generated_region_drift && just check"
+            },
+            {
+              "description": "Dispatch every command through its own same-named archive rather than source checkout code",
+              "check": "python3 -m pytest tests/scripts/test_bundle_commands.py -k own_archive_dispatch && just check"
+            }
+          ],
+          "dependencies": [
+            "bundle_doctrine_runtime"
+          ]
+        },
+        {
+          "key": "mold_pointer_producer",
+          "outcome": "Make Mold normalize, validate, and publish only canonical handoff pointers",
+          "scope": {
+            "paths": [
+              "src/easy_cheese/skills/mold",
+              "src/easy_cheese/shared/handoffs.py",
+              "skills/mold/SKILL.md",
+              "tests/mold/test_pointer_producer.py"
+            ],
+            "excluded_paths": [
+              "src/easy_cheese/skills/cook",
+              "skills/mold/scripts/mold.pyz"
+            ]
+          },
+          "outputs": [
+            "Make Mold normalize, validate, and publish only canonical handoff pointers"
+          ],
+          "criteria": [
+            {
+              "description": "Mold recovery accepts only the closed syntax-generous, semantics-strict writer profile",
+              "check": "python3 -m pytest tests/mold/test_pointer_producer.py -k closed_syntax_recovery && just check"
+            },
+            {
+              "description": "Mold publishes a receipt-bound payload followed atomically by its HandoffPointer",
+              "check": "python3 -m pytest tests/mold/test_pointer_producer.py -k receipt_pointer_publication && just check"
+            },
+            {
+              "description": "Mold preserves validate-spec behavior while producing canonical handoff artifacts",
+              "check": "python3 -m pytest tests/mold/test_pointer_producer.py -k validate_spec && just check"
+            },
+            {
+              "description": "mold.pyz works in isolated execution without repository imports",
+              "check": "python3 -m pytest tests/mold/test_pointer_producer.py -k isolated_mold_pyz && just check"
+            }
+          ],
+          "dependencies": [
+            "canonical_handoff_contracts",
+            "bundle_doctrine_runtime",
+            "bundle_command_compilation"
+          ]
+        },
+        {
+          "key": "cook_pointer_consumer",
+          "outcome": "Make Cook consume and validate canonical Mold handoff pointers only",
+          "scope": {
+            "paths": [
+              "src/easy_cheese/skills/cook",
+              "src/easy_cheese/shared/handoffs.py",
+              "skills/cook/SKILL.md",
+              "tests/cook/test_pointer_consumer.py"
+            ],
+            "excluded_paths": [
+              "src/easy_cheese/skills/mold",
+              "skills/cook/scripts/cook.pyz"
+            ]
+          },
+          "outputs": [
+            "Make Cook consume and validate canonical Mold handoff pointers only"
+          ],
+          "criteria": [
+            {
+              "description": "Cook pointer-only execution rejects a bare payload when no HandoffPointer is supplied",
+              "check": "python3 -m pytest tests/cook/test_pointer_consumer.py -k pointer_only && just check"
+            },
+            {
+              "description": "Cook validates pointer route, schema version, and bound receipt before execution",
+              "check": "python3 -m pytest tests/cook/test_pointer_consumer.py -k route_schema_receipt && just check"
+            },
+            {
+              "description": "Cook preserves normalization and strict equality verification at the consumer seam",
+              "check": "python3 -m pytest tests/cook/test_pointer_consumer.py -k normalization_strict_equality && just check"
+            },
+            {
+              "description": "cook.pyz executes in isolation without repository paths, PYTHONPATH, or site packages",
+              "check": "python3 -m pytest tests/cook/test_pointer_consumer.py -k isolated_cook_pyz && just check"
+            }
+          ],
+          "dependencies": [
+            "canonical_handoff_contracts",
+            "bundle_doctrine_runtime",
+            "bundle_command_compilation",
+            "mold_pointer_producer"
+          ]
+        },
+        {
+          "key": "legacy_recovery_and_adapters",
+          "outcome": "Migrate legacy handoffs through explicit exact-version adapters without legacy execution",
+          "scope": {
+            "paths": [
+              "src/easy_cheese/shared/legacy_handoffs.py",
+              "src/easy_cheese/shared/handoffs.py",
+              "tests/shared/test_legacy_handoffs.py"
+            ],
+            "excluded_paths": [
+              "src/easy_cheese/skills/mold",
+              "src/easy_cheese/skills/cook"
+            ]
+          },
+          "outputs": [
+            "Migrate legacy handoffs through explicit exact-version adapters without legacy execution"
+          ],
+          "criteria": [
+            {
+              "description": "Migrate legacy artifacts only for explicitly supported exact-version-only migration versions",
+              "check": "python3 -m pytest tests/shared/test_legacy_handoffs.py -k exact_version_only && just check"
+            },
+            {
+              "description": "Adapter sunset gates prevent migration after its declared removal version",
+              "check": "python3 -m pytest tests/shared/test_legacy_handoffs.py -k adapter_sunset && just check"
+            },
+            {
+              "description": "Recover interrupted pointer publication by validating artifacts before retrying pointer-last publication",
+              "check": "python3 -m pytest tests/shared/test_legacy_handoffs.py -k interrupted_publication && just check"
+            },
+            {
+              "description": "Enforce no legacy execution on every Cook execution path after migration",
+              "check": "python3 -m pytest tests/shared/test_legacy_handoffs.py -k no_legacy_execution && just check"
+            }
+          ],
+          "dependencies": [
+            "mold_pointer_producer",
+            "cook_pointer_consumer"
+          ]
+        },
+        {
+          "key": "replacement_stack_conformance",
+          "outcome": "Prove the complete replacement stack preserves selected legacy evidence and bundle-only behavior",
+          "scope": {
+            "paths": [
+              "tests/conformance/test_replacement_stack.py",
+              "scripts/check_bundles.py",
+              ".github/workflows/build-pyz.yml"
+            ],
+            "excluded_paths": [
+              "src/easy_cheese/skills/press",
+              "src/easy_cheese/skills/age",
+              "src/easy_cheese/skills/cure"
+            ]
+          },
+          "outputs": [
+            "Prove the complete replacement stack preserves selected legacy evidence and bundle-only behavior"
+          ],
+          "criteria": [
+            {
+              "description": "#459 verifies index and HEAD materialization currency for every replacement archive",
+              "check": "python3 -m pytest tests/conformance/test_replacement_stack.py -k index_head_materialization && just check"
+            },
+            {
+              "description": "Selected #429 assertions remain green at the replacement boundary",
+              "check": "python3 -m pytest tests/conformance/test_replacement_stack.py -k selected_429 && just check"
+            },
+            {
+              "description": "Full Mold-to-Cook conformance runs bundle-only with isolated archives",
+              "check": "python3 -m pytest tests/conformance/test_replacement_stack.py -k full_bundle_only && just check"
+            },
+            {
+              "description": "Remove stale shells only after preserved evidence demonstrates their replacement",
+              "check": "python3 -m pytest tests/conformance/test_replacement_stack.py -k stale_shell_closure && just check"
+            }
+          ],
+          "dependencies": [
+            "extract_455_website",
+            "legacy_recovery_and_adapters"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,208 @@
+"""Command surface for the Age application bundle."""
+
+from __future__ import annotations
+
+import sys
+
+
+from easy_cheese.shared import findings, gates, handoff, paths, severity, slugify
+from easy_cheese.shared.bundle_commands import bundle_command, derive_command, dispatch
+
+
+@bundle_command("wheypoint-resolve")
+def _wheypoint_resolve(argv: list[str]) -> int:
+    from easy_cheese.shared.wheypoint.resolve_cli import main
+
+    return main(argv)
+
+
+@bundle_command("artifact-path")
+def _artifact_path(argv: list[str]) -> int:
+    from easy_cheese.shared.artifact_path import main
+
+    return main(argv)
+
+
+@bundle_command("html-report")
+def _html_report(argv: list[str]) -> int:
+    from easy_cheese.skills.age.age_html_report import main
+
+    return main(argv)
+
+
+@bundle_command("age-route")
+def _age_route(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.age_route_cli import main
+
+    return main(argv)
+
+
+@bundle_command("review-instructions")
+def _review_instructions(argv: list[str]) -> int:
+    from easy_cheese.skills.age.review_instructions import main
+
+    return main(argv)
+
+
+@bundle_command("review-plan-check")
+def _review_plan_check(argv: list[str]) -> int:
+    from easy_cheese.skills.age.review_plan_check import main
+
+    return main(argv)
+
+
+@bundle_command("review-surface")
+def _review_surface(argv: list[str]) -> int:
+    from easy_cheese.shared.fanout.review_surface_cli import main
+
+    return main(argv)
+
+
+@bundle_command("severity")
+def _severity(argv: list[str]) -> int:
+    from easy_cheese.shared.severity import main
+
+    return main(argv)
+
+
+@bundle_command("slugify")
+def _slugify(argv: list[str]) -> int:
+    from easy_cheese.shared.slugify import main
+
+    return main(argv)
+
+
+@bundle_command("review-lock")
+def _review_lock(argv: list[str]) -> int:
+    from easy_cheese.skills.age.review_lock import main
+
+    return main(argv)
+
+
+@bundle_command("write-handoff-artifact")
+def _write_handoff_artifact(argv: list[str]) -> int:
+    from easy_cheese.skills.age.review_lock import gated_write_handoff_artifact
+
+    return gated_write_handoff_artifact(argv)
+
+
+@bundle_command("read-handoff-slug")
+def _read_handoff_slug(argv: list[str]) -> int:
+    from easy_cheese.shared.read_handoff_slug import main
+
+    return main(argv)
+
+
+@bundle_command("findings")
+def _findings(argv: list[str]) -> int:
+    from easy_cheese.shared.findings import main
+
+    return main(argv)
+
+
+@bundle_command("gates")
+def _gates(argv: list[str]) -> int:
+    from easy_cheese.shared.gates import main
+
+    return main(argv)
+
+
+@bundle_command("paths")
+def _paths(argv: list[str]) -> int:
+    from easy_cheese.shared.paths import main
+
+    return main(argv)
+
+
+@bundle_command("handoff")
+def _handoff(argv: list[str]) -> int:
+    from easy_cheese.shared.handoff import main
+
+    return main(argv)
+
+
+@bundle_command("render-html")
+def _render_html(argv: list[str]) -> int:
+    from easy_cheese.shared.html_report_cli import main
+
+    return main(argv)
+
+
+COMMANDS = (
+    derive_command(
+        _wheypoint_resolve,
+        "Resolve a phase slug through the shared Wheypoint kernel (JSON out)",
+    ),
+    derive_command(
+        _artifact_path,
+        "Resolve the durable or transient artifact path for a phase and slug",
+    ),
+    derive_command(
+        _html_report, "Render an /age markdown report into one offline HTML file"
+    ),
+    derive_command(
+        _age_route,
+        "Plan scoped review subjects from evidence-bearing context (JSON in, JSON out)",
+    ),
+    derive_command(
+        _review_instructions,
+        "Collect scoped repository and explicit external instruction sources",
+    ),
+    derive_command(
+        _review_plan_check,
+        "Check a review plan against supplied dispatch observations (JSON in, JSON out)",
+    ),
+    derive_command(
+        _review_surface,
+        "Score the git surface that the age router sizes (JSON out)",
+    ),
+    derive_command(
+        _severity,
+        "Compute per-finding severity and fix-cost-now buckets",
+        leaves=severity.LEAVES,
+    ),
+    derive_command(
+        _slugify,
+        "Derive a kebab-case slug and durable spec path from task text",
+        leaves=slugify.LEAVES,
+    ),
+    derive_command(
+        _review_lock,
+        "Record the production tree digest that keeps /age review-only",
+    ),
+    derive_command(
+        _write_handoff_artifact,
+        "Write an age handoff atomically after the review lock verifies the tree; pass --grounded paths",
+    ),
+    derive_command(
+        _read_handoff_slug, "Read the handoff preamble back from a phase artifact"
+    ),
+    derive_command(
+        _findings,
+        "Render an /age report's selection table or coder brief and resolve selection verbs",
+        leaves=findings.LEAVES,
+    ),
+    derive_command(
+        _gates,
+        "Map each quality-gate result to a readiness verdict",
+        leaves=gates.LEAVES,
+    ),
+    derive_command(
+        _paths,
+        "Slugify, validate, resolve, and list .cheese artifact paths",
+        leaves=paths.LEAVES,
+    ),
+    derive_command(
+        _handoff,
+        "Render, parse, and dispatch-split handoff preambles",
+        leaves=handoff.LEAVES,
+    ),
+    derive_command(
+        _render_html,
+        "Render a markdown report into one self-contained offline HTML file",
+    ),
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return dispatch(COMMANDS, sys.argv[1:] if argv is None else argv)

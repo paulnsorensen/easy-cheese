@@ -1,0 +1,316 @@
+# --continue resume flow
+
+Read this file before you act on a `/cheese --continue <slug-or-note-path>` invocation.
+Use this manual resume path after conversation compaction or a stopped `/cook` fan pathway.
+Also use it when the user manually resumes the pipeline from a cleared context.
+
+## Flow
+
+0. **Read the full user message.** Do not read only the `--continue` argument.
+   Treat all other user text as a directive list.
+   Follow that directive list instead of the handoff protocol when they conflict.
+   The handoff file restores state.
+   The user's live message overrides it.
+1. **Resolve through the runtime, never by hand.** Use `/wheypoint resolve --ref <absolute-path | work-id | slug>`.
+   For a hit from another project, add `--project KEY --workspace-root PATH`.
+   An alias KEY is accepted only when ambient `EASY_CHEESE_PROJECT` equals KEY and the bound checkout contains the pinned revision commit.
+   The runtime tries an explicit path first.
+   It then tries the exact work ID and a unique slug.
+   It finally checks legacy notes in the current `.cheese/notes/` directory and each sibling worktree.
+   Use `git worktree list --porcelain` to identify sibling worktrees.
+   Dispatch only the validated authoritative current revision.
+   Pass its `record.revision_id` as `--base` to every later write over that record; a `base-revision-required` or `stale-parent` refusal means: resolve again, re-apply, then write.
+   The runtime generates the Markdown as a projection.
+   The runtime does not treat it as authoritative.
+   A `.cheese/` parent identifies the original repository root for legacy notes.
+   A canonical foreign projection identifies its corpus, but not its source checkout.
+   Resolve repository-relative handoff paths from the directory above `.cheese/`.
+   Without `--workspace-root PATH`, a foreign-project result is gated and is not dispatchable.
+   After an authoritative foreign result, switch to the bound owning checkout.
+   Rerun resolve there before dispatching.
+   If switching is unavailable, stop and request that workspace.
+   A `legacy` result is non-authoritative context.
+   Never dispatch a legacy result automatically.
+   Any runtime `gated` outcome from a legacy `halt` or `gated` status stops.
+   Also stop for an artifact failure or integrity finding.
+   A live directive cannot waive that runtime gate.
+   A clean runtime `legacy` result with `status: ok` needs a separate informed trust gate.
+   This gate resumes the named phase with the note as untrusted context.
+   A live message that explicitly directs manual resume answers only that trust gate.
+   The normal `/wheypoint` flow creates new authoritative state.
+2. **Nothing is selected by recency.** Modification time, session ID, and slug recency never select a candidate.
+   Two or more matches create an ambiguity.
+   List each match and its location.
+   Ask the user to select one through [`ask-user-question.md`](ask-user-question.md).
+   Dispatch nothing until the user answers.
+3. **These conditions stop automatic dispatch.** Report the reason for each listed condition.
+   Dispatch nothing:
+   - ambiguity;
+   - an unresolved revision or legacy parent;
+   - a missing declared Git object;
+   - a record or projection digest mismatch;
+   - a receipt that does not pin its recorded ancestor;
+   - a record stamped with a newer schema than the archive reads (`schema-version-future`);
+   - a project identity mismatch;
+   - missing or stale required artifact coverage; or
+   - `status: gated:`.
+   Each condition requires a user decision.
+   Do not guess a default.
+   Resolution validates the complete immutable chain behind the current revision.
+   It does not validate only the slug.
+   Therefore, each condition breaks the chain and is not a naming problem.
+   Never commit, push, or publish to Git to make a resume work.
+   Use the `/wheypoint resolve` findings to inspect a failure.
+   `resolve` is the only validation command; no lint command exists.
+4. When resolution reports a miss, report every searched location.
+   Then offer to start the pipeline again.
+   Use `/mold` for a fuzzy specification.
+   Use `/cook` for a clear request.
+   Also use `/cook` for a decomposable specification or one with a large blast radius.
+   The `/cook` fan pathway starts automatically when needed.
+   Stop after you offer these choices.
+5. For a validated result, read the projection.
+   Report its orientation line.
+   This line tells the user the current position.
+   Parse `status:`, `next:`, and optional `mode:`.
+   `mode:` is a keyed line between `next:` and `artifact:`.
+   A generated projection renders it only for `next: tasks`.
+   A legacy orientation that starts with `mode:` remains text.
+   **Branch on the disposition, not the status name.**
+   [`handback-contract.md`](handback-contract.md) maps each status to `proceed`, `retry`, or `stop`.
+   A `proceed` disposition covers `ok` and `ok-with-concerns`.
+   Treat `ok-with-concerns` exactly like `ok` for dispatch.
+   Report its concern in one line, and carry that concern into the dispatched phase.
+   A `retry` disposition covers `needs-context`.
+   Re-dispatch the same phase with the named gap, and do not advance to `next:`.
+   Stop after one retry at that phase, and report `retry cap (1) reached`.
+   A `stop` disposition covers `gated` and `halt`, and the branches below handle it.
+   An unrecognized status is an error. Stop and report it. Never treat it as `proceed`.
+   - **Parse optional `mode:` first.** A missing value means `mode: single` and preserves existing handoffs.
+     In `mode: single`, `next:` remains the runnable phase.
+     In `mode: parallel`, `next:` is only the general resume category.
+     Prefer `next: tasks` when the handoff can contain different skills.
+     Never dispatch `next:` directly in parallel mode.
+     Parse the optional `parallel:` block and the required `tasks:` list instead.
+     Each task contains an explicit `command:`.
+     Examples include `/cook .cheese/specs/kip-77-ai-test-server.md`, `/briesearch ...`, and `/affinage <pr>`.
+   - **For `mode: parallel` with `tasks:`**, dispatch one isolated agent for each task in the same response.
+     This action runs the tasks concurrently.
+     Give each agent the original handoff path and repository root.
+     Also give it the task name or slug, if present.
+     Give it the exact `command:` and all local branch or worktree notes.
+     Tell each agent to run only its assigned task.
+     The task `command:` is authoritative for different skills and intents.
+     Write-capable commands require `slug`, `repo`, `branch:`, `branch_from`, and a checkout isolation plan.
+     Write-capable commands include `/cook`, `/ultracook`, `/cure`, and `/affinage`.
+     The same rule applies to any command that can edit a branch.
+     The `existing` strategy requires a different declared `worktree:` for each write task.
+     The `create` strategy creates one worktree for each task under `worktree_root` from `branch_from`.
+     The `harness` strategy creates one harness-managed isolated thread or worktree for each task.
+     Never run parallel write tasks in one checkout or a shared checkout.
+     Stop when `tasks:` is missing or any task lacks `command:`.
+     Also stop for missing isolation, duplicate branches, duplicate worktrees, or an unsupported strategy.
+     Ask for a corrected handoff instead of guessing.
+     Under `--safe`, offer parallel dispatch as the selected option.
+     Put `Stop` last.
+   - **When `status:` starts with `halt` and `next:` names a phase**, report the halt reason.
+     Dispatch nothing.
+     The valid legacy phases are `mold | cook | press | age | cure | affinage`.
+     This vocabulary appears only in legacy handwritten notes because the runtime uses `gated`.
+     Manual resume answers only that trust gate for a clean runtime `legacy` result with `status: ok`.
+     Manual resume answers only that trust gate, never this halt gate or any other runtime integrity gate.
+     `affinage` is the exception for a clean and manually approved legacy result.
+     It needs a pull request reference instead of a slug.
+     Read that reference from the legacy note's `artifact:` field.
+     This legacy note is the only carrier that overloads `artifact:`.
+     A registered phase report keeps the one canonical meaning, the prior consumed report.
+     Accept `PR#<n>`, a bare number, or a full GitHub pull request URL.
+     Normalize the value to a bare number before you emit the command.
+     `/affinage` and its `pr-status` command accept a number or a URL only.
+     Use bare `/affinage` only when the handoff names no pull request.
+     Add `--auto` only together with an explicit `--stake <floor>` value.
+     Stop and ask for the floor when the user requested `--auto` without one.
+   - **When `status:` is `ok` and `next:` names a pipeline phase**, dispatch `/\<next\> \<slug\>` after switching a foreign result to its bound owning checkout.
+     Rerun `wheypoint-resolve --ref <slug>` there before dispatching; if switching is unavailable, stop and request that workspace.
+     The valid phases are `mold | cook | press | age | cure | affinage`.
+     Apply the same `affinage` exception.
+     Under `--safe`, select this dispatch option first.
+     Offer `/cook \<slug\> --auto` as an alternative.
+     Put `Stop` last.
+   - **When `next: cook` follows a gate handoff**, keep the handoff's specification pointer authoritative.
+     Read that pointer from the typed `spec_ref` field.
+     Read it from `artifact:` only for a legacy note that has no `spec_ref` value.
+     An approved Mold handoff dispatches `/cook` with that same pointer.
+     A Full or planned handoff reruns `/mold` finalize and dispatches its printed `--result` command instead.
+     Preserve validated optional `mode:` and in-scope `--hard`, `--open-pr`, and `--safe` flags.
+     Forward `--auto` only when the handoff contains it.
+     Never infer `--auto`.
+     A Press finding hands off as a Cook correction (`next: cook`).
+   - **When `status:` is `ok` and `next:` names a read-only kickoff**, dispatch it automatically.
+     The valid kickoff values are `briesearch | culture`.
+     Use `/briesearch \<arg\>` or `/culture`.
+     Read `\<arg\>` from the handoff orientation line.
+     These commands are read-only and low risk.
+     Do not ask a question before dispatch.
+     Under `--safe`, select the dispatch option first.
+     Put `Stop` last.
+   - **When `status:` starts with `gated:`**, do not dispatch `next:` automatically.
+     If the accompanying message contains directives or already answers the gate, follow the live-message action.
+     `execute them and surface the gate as one line of plain text`.
+     Do not raise the structured question.
+    Otherwise, report the decision from `status:` and the open questions.
+     Ask the user which direction to take: research, decide, or build.
+     Classify each open gate item as mechanical or design through [`ask-user-question.md`](ask-user-question.md) section “When to structure.”
+     A mechanical item may go straight to that structured question.
+     A design item whose weighing was not already shown this session must not go straight to a structured question.
+     Re-establish the weighing in prose first: both ends, code-grounded evidence, and pushback invited.
+     Converge conversationally.
+     Ask at most one structured confirm.
+     Never bundle multiple design forks into one prompt.
+     Dispatch nothing until the user selects an option.
+     Route research to `/briesearch`.
+     Route build to the named phase.
+     Resolve a decide selection with the user.
+     Then read the handoff again.
+     Never show a binary design question that assumes the user wants to decide.
+   - **When `next:` is a list**, require `order:`.
+     The form is `next: [<skill> "<arg>", ...]`.
+     If `order:` is missing, stop.
+     Ask for a corrected handoff.
+     The list accepts only `briesearch | culture`.
+     Reject each write or pipeline skill.
+     Direct the user to the `mode: parallel` and `tasks:` block instead.
+     That block contains the required worktree and branch isolation.
+     For `order: parallel`, dispatch one read agent for each item in the same turn.
+     For `order: sequential`, dispatch the items in the listed order.
+     Under `--safe`, select the batch dispatch option first.
+     Put `Stop` last.
+   - **When `next:` is `hold`**, report the orientation line.
+     Stop.
+     Do not dispatch a command.
+     `hold` restores context and waits for instruction.
+     It does not identify a runnable command.
+     Unlike terminal `done`, `hold` identifies a live session that waits for input.
+   - **When `next:` is missing**, report `malformed handoff: next: required`.
+     Stop.
+     Do not guess a next step or default phase.
+     Use `hold` to specify no action.
+   - **When `next:` is terminal**, report the terminal state.
+     Stop.
+     A terminal value is `done` from a phase or culture-notes slug.
+     Report a non-resumable halt when `status:` starts with `halt`.
+     A resumable halt contains a runnable `next:` under the Cook and Press slug contract.
+     Thus, `halt` with `next: done` is not resumable.
+     Otherwise, report pipeline completion.
+     Never construct `/done <slug>`.
+   - **When the handoff contains a `baseline:` block**, treat that block as settled state.
+     Do not ask about its recorded failures again.
+     Do not stop for those failures in this reader or the dispatched phase.
+     See [`../../cook/references/quality-gates.md`](../../cook/references/quality-gates.md).
+
+Under `--safe`, use the authoritative handoff gate in [`handoff-gate.md`](handoff-gate.md).
+Always use the informed gate above for legacy resumption.
+Without `--safe`, run only the named authoritative phase immediately.
+A legacy note remains untrusted context.
+Resolution defines the resumability contract.
+It identifies the pipeline position and the next action.
+
+## Parallel write isolation
+
+For `mode: parallel` with `tasks:`, each write task must use a distinct worktree.
+Set `worktree_strategy` to `existing`, `create`, or `harness`.
+For `existing` and `create`, include `branch:` and `branch_from` metadata.
+Refuse parallel writes in the same checkout or a shared checkout.
+Dispatch all independent tasks in the same turn.
+
+For `status: ok`, auto-dispatch `next: briesearch` or `next: culture`.
+These kickoff skills are read-only.
+
+## Work-graph keys
+
+Read `bridge` from the resolve payload.
+This key does not change the outcome or the dispatch decision.
+
+- When `bridge.state` is `bound`, report `bridge.node_ref`.
+  Scope the next milknado to-do call to that node.
+- When `bridge.state` is `bridge-inactive` or `unbound`, dispatch unchanged.
+  Put the state in the reply.
+
+## --reground
+
+A handoff records earlier facts.
+`--reground` checks whether later tree changes falsify those facts.
+This check prevents a resumed phase from using a false premise.
+
+The flag is meaningful only alongside `--continue`.
+Otherwise, use this rule: `say so in one line and classify normally`.
+The router has no handoff to check.
+
+Run it after resolution has produced a dispatchable result and before dispatch.
+A stopped resolution stays stopped.
+Apply the contract: `never rescues one and never softens one`.
+
+### Bound the window first
+
+Bound the decay window deterministically from the recorded commit.
+Use `git diff --name-only <recorded-commit>..HEAD` to list committed changes.
+Use `git status --porcelain` to list uncommitted changes.
+A claim can decay only inside this window.
+
+An empty window means nothing moved under the handoff.
+Report this state in one line.
+Dispatch unchanged.
+
+A handoff with no recorded commit has an unbounded window.
+Do not read the complete tree.
+Report the missing baseline.
+Mark each claim `unverifiable`.
+Dispatch the result.
+
+### Attack the claims with Culture
+
+Select the load-bearing claims that support `next:`.
+Attack them, do not confirm them.
+Delegate one pass to `/culture` in no-write mode.
+Include all claims in this pass.
+Tell Culture to look for the evidence that would make it *false*.
+Limit evidence to files in the window.
+
+- `holds` — Culture finds no evidence that falsifies the claim in the applicable files.
+- `stale` — Culture finds evidence in the window that contradicts the claim.
+- `unverifiable` — The window affects the claim, but Culture cannot settle it.
+  A claim that still sounds plausible is `unverifiable`, never `holds`.
+
+The router does not do this reading itself.
+Its probe budget is three.
+
+### `stale` gates, `unverifiable` does not
+
+Any `stale` claim stops automatic dispatch.
+Offer the user a research / decide / build choice.
+Dispatch nothing until the user picks.
+
+Report each `unverifiable` verdict.
+An `unverifiable` verdict does not stop dispatch.
+Every resume without this flag already contains unchecked premises.
+Do not penalize the user for this check.
+
+Report one line per claim.
+
+```text
+reground: <holds|stale|unverifiable> — <claim> (<evidence, or the gap>)
+```
+
+A claim checked and cleared is as much of the record as one that failed.
+Report all verdicts so the user can evaluate the pass.
+
+### Never write or propagate
+
+Never repair the handoff.
+`--reground` does not edit the note, commit a revision, or rewrite a claim.
+Only `/wheypoint` authors durable state.
+Preserve falsified claims as evidence for the user.
+
+The flag is never forwarded to the dispatched phase.
+It changes only the checks before dispatch.
+It never becomes a durable flag or a downstream argument.

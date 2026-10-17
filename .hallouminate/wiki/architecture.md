@@ -1,0 +1,126 @@
+# Architecture of easy-cheese
+
+easy-cheese is a **skills-only collection**: there is no application
+binary, no long-running service, no library to import. Every change adds,
+edits, or supports a skill under `skills/<name>/`, following the
+[Agent Skills spec](https://agentskills.io/specification). The product
+*is* the set of markdown-plus-scripts skills a coding agent loads at
+runtime (`AGENTS.md:25`).
+
+## The unit: a skill
+
+A skill is a directory whose shape encodes progressive disclosure
+(`README.md:42-53`):
+
+```text
+skills/<skill-name>/
+├── SKILL.md          # required: YAML frontmatter (name + description) + body
+├── references/       # optional: detail pulled in on demand
+├── scripts/          # optional: self-contained executable .pyz archive
+└── assets/           # optional: templates / static resources
+```
+
+`SKILL.md` is the always-loaded surface. Its frontmatter `description`
+is what the host matches against a user request to decide whether to
+invoke the skill, so it carries trigger phrases. The body is the
+operating procedure; anything heavy is pushed into `references/` and
+pulled in only when the flow reaches it. Example: `/mold` keeps its
+two-key handshake checklist in `references/handshake.md` and links it
+from the body rather than inlining it (`skills/mold/SKILL.md:21`).
+
+## Progressive disclosure
+
+The pattern is deliberate context economy: the agent reads `SKILL.md`
+first, then descends into `references/<topic>.md` only for the step it
+reaches. Content shared *across* skills lives in the always-installed
+`cheese` skill's `references/` directory
+(`skills/cheese/references/handoff-gate.md`, `skills/cheese/references/formatting.md`) and
+is referenced by sibling-relative path (`../cheese/references/<file>.md`
+from a `SKILL.md`, `../../cheese/references/<file>.md` from a
+`references/*.md`) (`README.md:53`).
+
+Python skills ship one self-contained archive, invoked as
+`python3 skills/<skill>/scripts/<skill>.pyz <subcommand>`.
+Wedge builds that archive; startup does not download it.
+Applications start at `src/easy_cheese/skills/<skill>/commands.py`.
+Each manifest selects its own skill package, shared support, CLI support, schemas, and pinned dependencies.
+See [tooling](./tooling.md) and the [bundle doctrine](./architecture/skill-python-bundle-doctrine.md) for the build contract.
+
+
+
+The four-directory shape above is the *file layout*. Anthropic separately
+names three **load levels**, which is what actually costs context: Level 1
+metadata (frontmatter, always loaded for every installed skill, ~100
+tokens each), Level 2 instructions (the `SKILL.md` body, on trigger,
+target under 5k tokens), and Level 3+ resources (`references/`,
+`scripts/`, `assets/`, zero cost until accessed). Level 3 has no
+auto-discovery — a file the body never links is a file the model never
+reads.
+
+Deferring content into `references/` therefore only saves context when
+`SKILL.md` also states *when* to read the file; a bare split relocates
+the tokens rather than deferring them. Budgets, the measured state of
+this repo, and the CI ratchet live in
+[skill-size-budget](./skill-size-budget.md).
+
+## The cheese pipeline
+
+The workflow skills compose into one pipeline, ordered
+**culture → mold → cut → cook → press → age → cure → plate**
+(`skills/mold/SKILL.md:125`, `skills/cook/SKILL.md:202`,
+`skills/cut/SKILL.md:183`):
+
+| Skill | Role in the pipeline |
+|---|---|
+| `/cheese` | Front door — classifies input, routes to the right skill |
+| `/culture` | No-write thinking / exploration |
+| `/mold` | Converge a fuzzy idea into an approved spec |
+| `/cut` | Outside-in RED evidence — prove the approved behavior fails at its declared seam, then freeze that oracle in a `GateReceipt` |
+| `/cook` | TDD-disciplined implementation of a spec |
+| `/press` | Adversarial test hardening |
+| `/age` | Ten-dimension review → severity-grouped findings |
+| `/cure` | Apply selected findings as focused fixes |
+| `/plate` | Write and verify final artifacts, validate, commit, and publish one PR or a stack |
+| `/ultracook` | Retired (PR #317) — a compatibility redirect to `/cook`. The fresh-context isolation and file-disjoint parallel fan it once ran now live in `/cook`'s fan pathway |
+
+Workflow skills call source-code backends directly through the shared
+`skills/cheese/references/code-intelligence-routing.md` contract. The retired
+code-intelligence wrapper skills previously sat beneath the pipeline; their
+policy now lives in that shared reference. `/cook`'s fan pathway — which
+absorbed the now-retired `/ultracook` (PR #316 moved ownership; PR #317
+retired the entry point to a redirect stub) — chains cook → press → age →
+cure non-interactively in fresh-context isolation; its parallel mode
+(formerly `/cheese-factory`) fans file-disjoint curds through `src/fanout/`
+into reviewable PRs (`AGENTS.md:42-49`; see
+[architecture/ultracook-agent-topology](./architecture/ultracook-agent-topology.md)).
+
+## Portability is the design center
+
+No repo-wide MCP requirement. Workflow skills *suggest* tools (tilth,
+Context7, Tavily, code-review-graph) but carry host-native fallbacks, so
+the collection runs on any compliant agent host (`README.md:161`).
+
+The retired code-intelligence wrapper skills previously encoded stricter
+backend selection and edit sequencing. Workflow skills now preserve that
+precision through the shared routing contract while degrading explicitly to
+bounded native fallbacks when semantic backends are unavailable
+(`skills/cheese/references/code-intelligence-routing.md`).
+
+## Why a wiki at all
+
+Durable architecture/convention/rationale knowledge needs a home that
+survives the task that produced it and is worth committing into the tree
+— that is this wiki. It is one of three memory lanes: specs and research
+reports are durable too but anchor at the out-of-git XDG project corpus,
+and transient per-task output stays gitignored under `.cheese/`.
+Durability is not the same axis as git-tracking
+(`skills/cheese/references/formatting.md:103`); see [wiki-conventions](./wiki-conventions.md)
+for the classification rule and
+[workflow-invariants](./workflow-invariants.md) for where it sits among
+the other pipeline invariants.
+
+
+_Source: /briesearch on Agent Skill sizing (progressive-disclosure load levels) · Updated: 2026-07-27_
+
+_Source: [PR #729](https://github.com/paulnsorensen/easy-cheese/pull/729), approved A correction · Updated: 2026-09-28 · Supersedes: proposed runtime loaders and release-only archive assets._
+

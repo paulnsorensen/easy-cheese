@@ -1,0 +1,228 @@
+# Easy Cheese domain model
+
+<certain> Easy Cheese separates semantic work contracts, workflow continuity, and physical execution. CurdPlan is the semantic work authority. WheypointRecord is the continuity authority. CurdRecord and Milknado plan v2 remain physical/runtime state.
+
+## Workflow continuity
+
+**WheypointRecord** - the living durable continuity authority for one work item across conversations, phases, branches, and worktrees.
+_Avoid_: WorkRecord, session, latest note
+_Code_: `src/easy_cheese_schemas/wheypoint.py:484`
+
+**WheypointDelta** - a revision-checked semantic update that adds or explicitly transitions protected record state; omission carries state forward.
+_Avoid_: note rewrite, implicit deletion
+_Code_: `src/easy_cheese_schemas/wheypoint.py:569`
+
+**WheypointRevision** - an immutable resulting record and receipt for one accepted delta, including parent, preservation, provenance, and projection evidence.
+_Avoid_: mutable checkpoint, latest file
+_Code_: `src/easy_cheese_schemas/wheypoint.py:613`
+
+**WheypointProjection** - generated Markdown for human reading and continuation handoff; it is never the continuity authority.
+_Avoid_: authoritative note, continuity database
+_Code_: `src/easy_cheese_schemas/wheypoint.py:645`
+
+**WorkAttempt** - one future branch/worktree execution belonging to a WheypointRecord; it owns tentative execution context, phase progress, and artifact links.
+_Avoid_: session, Hard Cheese attempt
+_Code_: NEW ENTITY
+
+**WorkTask** - one future ordered phase directive claimed by a WorkAttempt and kept nonterminal until completed or explicitly abandoned.
+_Avoid_: phase name, background session
+_Code_: NEW ENTITY
+
+**AttemptStatePatch** - one future revision-checked lifecycle transition for a WorkAttempt, distinct from curated WheypointDelta context updates.
+_Avoid_: implicit unblock, status field edit
+_Code_: NEW ENTITY
+
+**WorktreeKey** - local identity derived from a Git worktree-specific Git directory; it groups future active or paused WorkAttempts for deterministic continuation.
+_Avoid_: branch key, cwd key
+_Code_: NEW ENTITY
+
+**HandoffEnvelope** - a future versioned cross-phase metadata envelope surrounding a phase-owned Markdown report.
+_Avoid_: WheypointProjection, unrestricted metadata document
+_Code_: NEW ENTITY
+
+**Repo-local Wheypoint snapshot** - an optional portable copy of a WheypointRecord; it is exported explicitly and never becomes a second authority.
+_Avoid_: automatic mirror, co-authoritative record
+_Code_: NEW ENTITY
+
+
+
+**CheckpointIntent** - the only agent-facing writer view for a wheypoint checkpoint; the host derives the WheypointDelta from it, including compaction proofs passed as a sidecar.
+_Avoid_: delta, commit payload
+_Code_: `src/easy_cheese/skills/wheypoint/checkpoint.py:86` (moving to `src/easy_cheese_schemas/contracts.py` per ADR wheypoint-ergonomics-002)
+
+**Directive** - a protected entry of kind `directive` holding a user-stated constraint or preference with a verbatim `quote`; it never gates and is carried forward like a decision.
+_Avoid_: note, constraint, preference, working-context line
+_Code_: NEW ENTITY (`EntryKind.DIRECTIVE`, `WheypointRecord.directives`)
+
+**HandoffTask** - one typed item of a `next: tasks` handoff: slug, intent, repo, branch, branch_from, command, optional worktree.
+_Avoid_: parallel task, move, hand-written tasks block
+_Code_: NEW ENTITY
+
+**ParallelPlan** - the typed `parallel:` block of a multi-move handoff: isolation, worktree_strategy, optional worktree_root.
+_Avoid_: parallel block, legacy note header
+_Code_: NEW ENTITY
+
+**schema-version-future** - the finding that refuses a record whose schema stamp is newer than the reading runtime (above 5). Every read path returns it and writes nothing. It replaced `runtime-behind` when schema 5 removed the lint module.
+_Avoid_: runtime-behind, store-inconsistent (for version skew)
+_Code_: `src/easy_cheese/shared/wheypoint/lint_types.py:18` (`LintCode.SCHEMA_VERSION_FUTURE`)
+
+## Semantic work contracts
+
+**CurdPlan** - the canonical semantic description of executable work, checks, dependencies, and bounded shared context.
+_Avoid_: CurdBlock, Decomposition, Milknado plan
+_Code_: NEW ENTITY
+
+**Semantic Curd** - one independently verifiable unit inside CurdPlan with outcome, scope, inputs, outputs, dependencies, and checks.
+_Avoid_: CurdRecord, batch node
+_Code_: NEW ENTITY
+
+**CurdBlock** - Easy Cheese's lossless legacy and physical projection of representable CurdPlan work.
+_Avoid_: canonical plan
+_Code_: src/easy_cheese_schemas/curd.py:148
+
+**Decomposition** - a lossless migration projection of representable CurdPlan work.
+_Avoid_: canonical plan
+_Code_: src/easy_cheese_schemas/decomposition.py:39
+
+**CurdRecord** - mutable runtime dispatch state whose integer id is distinct from semantic curd_id.
+_Avoid_: semantic curd
+_Code_: src/easy_cheese_schemas/manifest.py:345
+
+**PlannerRequest** - a typed decompose, remediate, or replan request carrying evidence.
+_Avoid_: CurdExecutionRequest
+_Code_: NEW ENTITY
+
+**PlannerResult** - the planner disposition and optional valid CurdPlan.
+_Avoid_: Decomposition
+_Code_: NEW ENTITY
+
+**ReviewResult** - typed review findings plus a coverage ledger; it never creates curds.
+_Avoid_: remediation plan
+_Code_: NEW ENTITY
+
+**DiagnosisResult** - reproduction, hypotheses, optional confirmed cause, regression seam, and unresolved evidence.
+_Avoid_: fix handoff, remediation plan
+_Code_: NEW ENTITY
+
+**CurdResult** - one criterion-led semantic result per input curd.
+_Avoid_: Milknado node result, CurdRecord
+_Code_: NEW ENTITY
+
+**ArtifactRef** - canonical content identity validated for URI policy, digest, size, media type, and optional schema.
+_Avoid_: Wheypoint ArtifactLink, universal runtime envelope
+_Code_: NEW ENTITY
+
+**EvidenceRef** - a typed reference to evidence used by planning, review, diagnosis, or verification.
+_Avoid_: embedded log
+_Code_: NEW ENTITY
+
+**SourceLocation** - a bounded location inside referenced evidence.
+_Avoid_: raw path string
+_Code_: NEW ENTITY
+
+**AgentWriterView** - the slim payload an agent authors before deterministic host normalization.
+_Avoid_: canonical artifact
+_Code_: NEW ENTITY
+
+**ContractVersion** - host-authored schema identity and major/minor version metadata.
+_Avoid_: agent-authored version, version range negotiation
+_Code_: NEW ENTITY
+
+**UnsupportedProjection** - typed evidence that a legacy projection cannot preserve CurdPlan semantics.
+_Avoid_: lossy conversion
+_Code_: NEW ENTITY
+
+**Phase route table** - the private `_ROUTES` mapping of source phase to allowed destinations and payload schema URIs; `validate_route` checks it. It replaced the PhaseContract declarations and the TransitionRegistry in PR #772.
+_Avoid_: PhaseContract, TransitionRegistry, universal payload schema
+_Code_: `src/easy_cheese/shared/phase_routes.py`
+
+**source_plan_ref** - physical-projection provenance containing semantic plan ID, revision, and digest.
+_Avoid_: runtime plan ID
+_Code_: NEW ENTITY
+
+**source_curd_ref** - physical-item provenance containing semantic curd ID and digest.
+_Avoid_: Milknado node ID
+_Code_: NEW ENTITY
+
+
+
+**Publication index entry** - the private record that keeps artifact integrity and replay checks for one cross-phase publication. It replaced the public HandoffPointer and NormalizationReceipt contracts in PR #773.
+_Avoid_: HandoffPointer, NormalizationReceipt, continuity envelope
+_Code_: `src/easy_cheese/shared/publication.py`
+
+**PublishedArtifact** - producer result containing the canonical payload and pointer.
+_Avoid_: uncommitted payload
+_Code_: NEW ENTITY
+
+**AcceptedArtifact** - consumer result exposed only after pointer, route, reference, and payload validation.
+_Avoid_: parsed bare payload
+_Code_: NEW ENTITY
+
+
+
+**CureDiagnosisBinding** - the three-field record (`source_plan_ref`, `source_curd_ref`, `diagnosis`, no defaults) that Cure requires for every curd in the validated plan, including clean curds; a partial set is rejected before dispatch with `missing=[...]`.
+_Avoid_: selective binding, failing-curd-only binding
+_Code_: `src/easy_cheese_schemas/workflow.py:126-143,1142-1211`
+
+**PlannerRequest kind** - the discriminator that changes required fields: `decompose` forbids `source_plan_ref`, `replan` requires it, `remediate` requires it plus `evidence`.
+_Avoid_: one request shape for every planner call
+_Code_: `src/easy_cheese_schemas/contracts.py:1034-1080`
+
+**Domain-model target** - the glossary location returned by `domain_model_target()`: one Markdown file, one split context directory, or one Hallouminate corpus. A consumer that corrects the glossary must define read, selection, write, and read-back for all three shapes and select the bounded-context page before any update.
+_Avoid_: single-file assumption
+_Code_: `src/easy_cheese/shared/paths.py:497-510,555-602`; `skills/mold/references/curdle.md:313-333`
+
+## Outside-in RED gating
+
+**GateReceipt** - the strict phase-neutral evidence envelope that binds approved work, contract mode, witness disposition, runner argv, protected-file digests, and producer provenance across Cut, Cook, and Press.
+_Avoid_: red test file, cut receipt, press receipt, editable handoff
+_Code_: `src/easy_cheese_schemas/gates.py`
+
+**TestContract** - Mold-owned executable intent for one acceptance criterion, naming its stable public interface, outer seam, deterministic expected failure, and tracer-or-matrix mode.
+_Avoid_: acceptance prose, generated test, test case
+_Code_: `src/easy_cheese_schemas/gates.py`
+
+**Cut** - the pre-implementation gate that canonicalizes Test Contracts, adopts or authors the outer test, proves RED, protects evidence by digest, and issues a GateReceipt without committing the red-only state.
+_Avoid_: test-writing phase, pre-Cook commit, fixture generator
+_Code_: `src/cut/red_gate.py`
+
+**Tracer** - the smallest deterministic causal witness that crosses the approved outer seam for one acceptance criterion.
+_Avoid_: unit test, smoke test, contract matrix
+_Code_: `mode == "tracer"` in `src/easy_cheese_schemas/gates.py`
+
+**Contract matrix** - the complete uniquely identified behavior rows for a ratified and versioned public API, schema, or protocol.
+_Avoid_: parameterized test, many tracers, arbitrary public function tests
+_Code_: `mode == "contract-matrix"` in `src/easy_cheese_schemas/gates.py`
+
+**Protected oracle** - the Cut-authored or adopted test and fixture set whose path-safe digests are fixed in the GateReceipt and must remain untouched until final GREEN validation.
+_Avoid_: staged test commit, read-only checkout, mutable test plan
+_Code_: `protected_files` in `src/easy_cheese_schemas/gates.py`
+
+**Corrective continuation** - a Press-owned bounded return to Cook carrying a producer-`press` GateReceipt for an in-contract production failure exposed by a Press-authored attack.
+_Avoid_: Press-to-Cook route, Press production edit, retry
+_Code_: `CorrectiveRoute` in `src/fanout/press_route.py:25-31`
+
+**Gate applicability** - Mold's explicit closed classification of requested work as `red-required` behavior or a named `not-applicable` non-behavior class.
+_Avoid_: filename heuristic, inferred docs-only, UI exemption
+_Code_: `GateApplicability` in `src/mold/taste_test.py:180`
+
+
+## Mold visual review
+
+The review canvas is implemented as a local, token-protected Mold surface. The aggregate persists immutable revisions, working feedback, and submitted snapshots; the frontend renders declared image, Mermaid, contract-table, and Excalidraw artifacts. It remains separate from approval, workflow continuity, and semantic work authorities.[^mold-review-canvas]
+
+**MoldReview** — the skill-local aggregate for review artifacts, questions, working feedback, and submitted snapshots.
+_Avoid_: WheypointRecord, CurdPlan
+_Code_: NEW ENTITY; intended owner `src/easy_cheese/skills/mold/`
+
+**ReviewRevision** — one immutable agent-authored document within a MoldReview, with a revision number, content digest, and parent revision.
+_Avoid_: mutable working copy, submitted feedback snapshot
+_Code_: NEW ENTITY; intended owner `src/easy_cheese/skills/mold/`
+
+Neither entity grants approval or replaces workflow continuity and semantic work authorities.
+Browser tests now exercise the local canvas. Typed-plan approval remains a separate prerequisite for workflow authorization.
+
+[^mold-review-canvas]: Approved design spec: /Users/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/mold-review-canvas.md; persistence model and extraction status. [Snapshot decision](./adr/mold-review-canvas-005.md).
+
+_Source: Mold domain-model artifacts; r014 skill-review round notes (ingest hash 499c49c7b67d5eb6) for CureDiagnosisBinding, PlannerRequest kind, and Domain-model target · Updated: 2026-09-04_
+

@@ -1,0 +1,9 @@
+{
+  "name": "mold-cook-browser-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "1.55.0"
+  }
+}

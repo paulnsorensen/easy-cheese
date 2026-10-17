@@ -1,0 +1,153 @@
+"""Tests for ultracook wiring_topo_sort.py."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from typing import cast
+from pathlib import Path
+
+import pytest
+import yaml
+
+from easy_cheese_schemas.wiring_graph import WiringCycleError, compute_waves, cycle_errors
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+COOK_ARCHIVE = REPO_ROOT / "skills" / "cook" / "scripts" / "cook.pyz"
+
+
+def _wiring(*entries: tuple[str, list[str]]) -> list[dict[str, str | list[str]]]:
+    return [{"id": wid, "depends_on": list(deps)} for wid, deps in entries]
+
+
+def _write_manifest(path: Path, wiring: list[dict[str, str | list[str]]]) -> None:
+    _ = path.write_text(yaml.safe_dump({"wiring": wiring}, sort_keys=False), encoding="utf-8")
+
+
+def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(COOK_ARCHIVE), "wiring_topo_sort", *args],
+        capture_output=True,
+        text=True,
+    )
+
+
+class TestComputeWaves:
+    def test_linear_chain(self) -> None:
+        # W1 <- W2 <- W3 must serialize into three single-item waves.
+        wiring: list[tuple[str, list[str]]] = [("W1", []), ("W2", ["W1"]), ("W3", ["W2"])]
+        assert compute_waves(wiring) == [["W1"], ["W2"], ["W3"]]
+
+    def test_branching_dag(self) -> None:
+        # Two independent children of W1 must land in the same second wave —
+        # the whole point of waves is to surface parallelism for dispatch.
+        wiring: list[tuple[str, list[str]]] = [("W1", []), ("W2", ["W1"]), ("W3", ["W1"])]
+        assert compute_waves(wiring) == [["W1"], ["W2", "W3"]]
+
+    def test_empty_wiring_returns_empty(self) -> None:
+        assert compute_waves([]) == []
+
+    def test_cycle_raises_typed_error_with_canonical_detail(self) -> None:
+        # The shared graph keeps its canonical path and exposes typed IDs so
+        # boundary adapters do not need to parse the error string.
+        wiring = [("W1", ["W2"]), ("W2", ["W1"])]
+        with pytest.raises(WiringCycleError) as raised:
+            _ = compute_waves(wiring)
+        error = raised.value
+        assert error.cycle_path == ("W1", "W2", "W1")
+        assert error.cycle_ids == ("W1", "W2")
+        assert str(error) == "the dependency graph has cycle W1 -> W2 -> W1"
+        assert cycle_errors(wiring) == [str(error)]
+
+    def test_self_loop_is_ignored(self) -> None:
+        # A wiring item depending on itself is meaningless, not a cycle —
+        # strip it so the dispatcher can still make progress.
+        wiring = [("W1", ["W1"])]
+        assert compute_waves(wiring) == [["W1"]]
+
+    def test_unknown_dep_treated_as_satisfied(self) -> None:
+        # `depends_on` legitimately references curds too; deps outside the
+        # wiring set must not block topo sort.
+        wiring = [("W1", ["curd-3"])]
+        assert compute_waves(wiring) == [["W1"]]
+
+    def test_wave_ordering_is_deterministic(self) -> None:
+        # IDs within a wave are sorted so output is stable across runs.
+        wiring: list[tuple[str, list[str]]] = [("W3", []), ("W1", []), ("W2", [])]
+        assert compute_waves(wiring) == [["W1", "W2", "W3"]]
+
+
+class TestCLI:
+    """Drives the built cook archive."""
+
+    def test_linear_chain(self, tmp_path: Path) -> None:
+        manifest = tmp_path / "manifest.yaml"
+        _write_manifest(
+            manifest, _wiring(("W1", []), ("W2", ["W1"]), ("W3", ["W2"]))
+        )
+        result = _run_cli("--manifest", str(manifest))
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {"waves": [["W1"], ["W2"], ["W3"]]}
+
+    def test_branching_dag(self, tmp_path: Path) -> None:
+        manifest = tmp_path / "manifest.yaml"
+        _write_manifest(
+            manifest, _wiring(("W1", []), ("W2", ["W1"]), ("W3", ["W1"]))
+        )
+        result = _run_cli("--manifest", str(manifest))
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {"waves": [["W1"], ["W2", "W3"]]}
+
+    def test_json_output_shape(self, tmp_path: Path) -> None:
+        manifest = tmp_path / "manifest.yaml"
+        _write_manifest(
+            manifest, _wiring(("W1", []), ("W2", ["W1"]), ("W3", ["W1"]))
+        )
+        result = _run_cli("--manifest", str(manifest), "--json")
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {"waves": [["W1"], ["W2", "W3"]]}
+
+    def test_empty_wiring_emits_empty_waves(self, tmp_path: Path) -> None:
+        manifest = tmp_path / "manifest.yaml"
+        _ = manifest.write_text(yaml.safe_dump({"wiring": []}), encoding="utf-8")
+        result = _run_cli("--manifest", str(manifest))
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {"waves": []}
+
+    def test_missing_manifest_exits_two(self, tmp_path: Path) -> None:
+        # A nonexistent path is a usage-shaped error per fromargs, so exit 2
+        # (not 1) — the dispatcher distinguishes "bad invocation" from "valid
+        # invocation, content failed".
+        missing = tmp_path / "does-not-exist.yaml"
+        result = _run_cli("--manifest", str(missing))
+        assert result.returncode == 2
+        assert "manifest not found" in result.stderr
+
+    def test_cycle_exits_two_with_legacy_error(self, tmp_path: Path) -> None:
+        manifest = tmp_path / "manifest.yaml"
+        _write_manifest(manifest, _wiring(("W2", ["W1"]), ("W1", ["W2"])))
+        result = _run_cli("--manifest", str(manifest))
+        assert result.returncode == 2
+        assert result.stdout == ""
+        error = cast("dict[str, object]", json.loads(result.stderr))
+        assert error["error"] == "cycle detected: W1, W2"
+        assert error["exit_code"] == 2
+
+    def test_missing_manifest_flag_exits_two(self) -> None:
+        # fromargs' own missing-required-arg path also exits 2; check that
+        # the CLI surface doesn't accidentally silently default the path.
+        result = _run_cli()
+        assert result.returncode == 2
+
+    def test_accepts_json_manifest(self, tmp_path: Path) -> None:
+        # manifest_io tries JSON before YAML; a .json manifest must also work
+        # so callers don't need to pre-convert.
+        manifest = tmp_path / "manifest.json"
+        _ = manifest.write_text(
+            json.dumps({"wiring": [{"id": "W1", "depends_on": []}]}),
+            encoding="utf-8",
+        )
+        result = _run_cli("--manifest", str(manifest))
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == {"waves": [["W1"]]}

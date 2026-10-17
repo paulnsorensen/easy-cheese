@@ -1,0 +1,98 @@
+# adr
+
+<!-- HALLOUMINATE:INDEX-START -->
+- [agent-resolution](./agent-resolution.md) — ADR: Progressive agent resolution is a shared contract
+- [artifact-schema-validator-compatibility-001](./artifact-schema-validator-compatibility-001.md) — ADR: Preserve artifact schema-validator injection until a major release
+- [baseline-repair-pathway-001](./baseline-repair-pathway-001.md) — ADR: Both frames get the concurrent repair pathway; worktree primitive becomes shared  [status: accepted]
+- [baseline-repair-pathway-002](./baseline-repair-pathway-002.md) — ADR: Repair consent is automatic under --auto, prompted at record time otherwise  [status: accepted]
+- [baseline-repair-pathway-003](./baseline-repair-pathway-003.md) — ADR: Repair merges as an independent PR from main; mechanical intertangle fallback  [status: accepted]
+- [baseline-repair-pathway-004](./baseline-repair-pathway-004.md) — ADR: /pasteurize stays unchanged in v1 — the frame owns isolation and briefing  [status: accepted]
+- [cheese-corpus-setup-001](./cheese-corpus-setup-001.md) — ADR-001: install.sh derives the durable root via the skill's bundled Python archive, not bash  [status: accepted]
+- [cheese-corpus-setup-002](./cheese-corpus-setup-002.md) — ADR-002: spec-discovery falls back to `resolve_slug` when hallouminate is absent  [status: accepted]
+- [cheese-corpus-setup-003](./cheese-corpus-setup-003.md) — ADR-003: delete the `spec_match` scoring engine rather than refactor it  [status: accepted]
+- [cheese-kernel-shared-refs-001](./cheese-kernel-shared-refs-001.md) — ADR: shared docs live in the cheese skill's references dir, cited sibling-relative
+- [cheese-kernel-shared-refs-002](./cheese-kernel-shared-refs-002.md) — ADR: owner-homed cross-skill content stays with its owner
+- [codex-omp-portability-001](./codex-omp-portability-001.md) — ADR: Shared harness portability reference
+- [cross-skill-work-contract-001](./cross-skill-work-contract-001.md) — ADR: WorkRecord continuity is worktree-scoped and pointer-free
+- [cross-skill-work-contract-002](./cross-skill-work-contract-002.md) — ADR: Cross-skill handoffs use a versioned envelope and phase-owned contracts
+- [cross-skill-work-contract-003](./cross-skill-work-contract-003.md) — ADR: Cheese bundles its YAML contract runtime
+- [culture-wheypoint-collaboration-001](./culture-wheypoint-collaboration-001.md) — ADR: /culture delegates its end-of-session artifact to /wheypoint
+- [deterministic-fanout-sizing-001](./deterministic-fanout-sizing-001.md) — ADR-001 — Risk overrides promote a dimension, they do not escalate `n`
+- [deterministic-fanout-sizing-002](./deterministic-fanout-sizing-002.md) — ADR-002 — The file-weight table is inverted: default full weight
+- [deterministic-fanout-sizing-003](./deterministic-fanout-sizing-003.md) — ADR-003 — No LLM classifier in the sizing path
+- [deterministic-fanout-sizing-004](./deterministic-fanout-sizing-004.md) — ADR-004 — Curd blocks declare a size estimate; the validator gates it
+- [hallouminate-wiring-stack-001](./hallouminate-wiring-stack-001.md) — ADR: hallouminate wiring ships as a stacked 4-PR build, one PR per issue
+- [hallouminate-wiring-stack-002](./hallouminate-wiring-stack-002.md) — ADR: cook and age record durable-change flags; only the publication boundary writes the wiki
+- [hallouminate-wiring-stack-003](./hallouminate-wiring-stack-003.md) — ADR: liberal wiki grounding in mold/culture is prose guidance, not a coherence gate
+- [hallouminate-wiring-stack-004](./hallouminate-wiring-stack-004.md) — ADR: validate_wiki.py hardcodes .hallouminate/wiki/ discovery, ignoring config.toml corpus_paths
+- [hard-cheese-question-targeting-001](./hard-cheese-question-targeting-001.md) — ADR: hard-cheese targets diff hunks with a script and lets the judge phrase the questions
+- [hard-cheese-question-targeting-002](./hard-cheese-question-targeting-002.md) — ADR: ranked regions appear before the first attempt; targeted questions appear only after a FAIL
+- [hard-cheese-question-targeting-003](./hard-cheese-question-targeting-003.md) — ADR: the hard-cheese prompt opens with a purpose-first sentence and keeps the paper's questions verbatim
+- [hard-cheese-retained-001](./hard-cheese-retained-001.md) — ADR: hard-cheese retained despite local zero-use signal
+- [legacy-adapter-lifecycle-004](./legacy-adapter-lifecycle-004.md) — ADR: Legacy handoff adapters are exact, explicit, and temporary
+- [legacy-migration-withdrawal-001](./legacy-migration-withdrawal-001.md) — ADR: Workflow-layer CurdPlan migration is withdrawn
+- [mold-cook-boundary-001](./mold-cook-boundary-001.md) — ADR: Cook prepares missing plans but preserves plan approval
+- [mold-cook-boundary-002](./mold-cook-boundary-002.md) — ADR: Curdle overrides save work without granting execution
+- [mold-cook-boundary-003](./mold-cook-boundary-003.md) — ADR: Partial plans need explicit subset approval and preserved remainder
+- [mold-cook-boundary-004](./mold-cook-boundary-004.md) — ADR: Handoff validation binds to an explicit artifact root and affirmative consent
+- [mold-follow-up-routing-001](./mold-follow-up-routing-001.md) — ADR: every non-goal enters a disposition batch before Curdle
+- [mold-follow-up-routing-002](./mold-follow-up-routing-002.md) — ADR: route follow-ups per deliverable unit instead of choosing one backlog
+- [mold-follow-up-routing-003](./mold-follow-up-routing-003.md) — ADR: publish follow-ups after the local Curdle write
+- [mold-follow-up-routing-004](./mold-follow-up-routing-004.md) — ADR: external follow-up publication uses deterministic identity
+- [mold-review-canvas-001](./mold-review-canvas-001.md) — ADR: Browser choices preserve Mold authority
+- [mold-review-canvas-002](./mold-review-canvas-002.md) — ADR: Bundle the review server and assets in the mold archive
+- [mold-review-canvas-003](./mold-review-canvas-003.md) — ADR: Embed upstream Excalidraw and retain Mermaid source
+- [mold-review-canvas-004](./mold-review-canvas-004.md) — ADR: Use browser layouts for frontend TUI and backend reviews
+- [mold-review-canvas-005](./mold-review-canvas-005.md) — ADR: Submit snapshots and preserve revision-bound working feedback
+- [mold-review-canvas-006](./mold-review-canvas-006.md) — ADR: Review artifacts without executing supplied programs
+- [mold-review-canvas-007](./mold-review-canvas-007.md) — ADR: Keep the local review transport bounded
+- [mold-review-canvas-008](./mold-review-canvas-008.md) — ADR: Replace subject layouts with Mold shape views and pins
+- [outer-tdd-gates-001](./outer-tdd-gates-001.md) — ADR: Hybrid outside-in RED evidence uses a phase-neutral receipt
+- [outer-tdd-gates-002](./outer-tdd-gates-002.md) — ADR: Cut owns pre-implementation RED establishment
+- [outer-tdd-gates-003](./outer-tdd-gates-003.md) — ADR: Press retains ownership of bounded corrective Cook continuations
+- [outer-tdd-gates-004](./outer-tdd-gates-004.md) — ADR: Mold owns Test Contracts and a bounded fresh-context taste gate
+- [outer-tdd-gates-005](./outer-tdd-gates-005.md) — ADR: Gate applicability is explicit and uses existing project runners
+- [plate-publication-boundary-001](./plate-publication-boundary-001.md) — ADR: plate owns the commit-to-PR publication boundary
+- [plate-publication-boundary-002](./plate-publication-boundary-002.md) — ADR: Plate decides PR topology without asking
+- [post-pr-wiki-writeback-001](./post-pr-wiki-writeback-001.md) — ADR: curdle wiki writes enforced by gate node + read-back verify, not a Stop-hook
+- [post-pr-wiki-writeback-002](./post-pr-wiki-writeback-002.md) — ADR: post-PR learnings write-back reuses wiki-ingest, not the personal wiki-curator skill
+- [pyz-pipeline-contracts-001](./pyz-pipeline-contracts-001.md) — ADR: Bundle builds verify the staged import closure, including function-body imports
+- [pyz-pipeline-contracts-002](./pyz-pipeline-contracts-002.md) — ADR: Bundle currency remains a dedicated build gate
+- [pyz-pipeline-contracts-003](./pyz-pipeline-contracts-003.md) — ADR: Runtime source locations follow the package layout
+- [pyz-pipeline-contracts-004](./pyz-pipeline-contracts-004.md) — ADR: The subcommand registry is pruned to the prose-referenced set with strict two-way equality
+- [pyz-pipeline-contracts-005](./pyz-pipeline-contracts-005.md) — ADR: cook joins COMMON_CONSUMERS so its documented common.pyz fallback ships
+- [pyz-pipeline-contracts-006](./pyz-pipeline-contracts-006.md) — ADR: The Astro site source moves out of src/ to website/, leaving src/ purely Python
+- [skill-boundary-normalization-002](./skill-boundary-normalization-002.md) — ADR: Generous writer ingress ends before canonical persistence
+- [skill-boundary-protocol-001](./skill-boundary-protocol-001.md) — ADR: Cross-skill execution starts from a canonical pointer
+- [skill-bundle-authority-003](./skill-bundle-authority-003.md) — ADR: Package layout and decorators define each skill bundle
+- [skill-docs-single-page-001](./skill-docs-single-page-001.md) — ADR-001: Fold skill references into one docs page instead of separate sub-pages  [status: accepted]
+- [skill-docs-single-page-002](./skill-docs-single-page-002.md) — ADR-002: Left-nav heading TOC is h2-only, via a custom Starlight Sidebar override  [status: accepted]
+- [skill-overlap-ratchet-001](./skill-overlap-ratchet-001.md) — ADR: Own the Snowflake overlap analyzer in easy-cheese
+- [skill-overlap-ratchet-002](./skill-overlap-ratchet-002.md) — ADR: Preserve H2 and H3 identity during semantic chunking
+- [skill-overlap-ratchet-003](./skill-overlap-ratchet-003.md) — ADR: Compare semantic overlap against explicit reference topology
+- [skill-overlap-ratchet-004](./skill-overlap-ratchet-004.md) — ADR: Ratchet reviewed content-specific overlap findings
+- [skill-size-ratchet-001](./skill-size-ratchet-001.md) — ADR: Measure SKILL.md bodies in estimated tokens, not lines
+- [skill-size-ratchet-002](./skill-size-ratchet-002.md) — ADR: No tokenizer dependency in the skill-size gate
+- [skill-size-ratchet-003](./skill-size-ratchet-003.md) — ADR: Ratchet skill size and reference structure against a recorded baseline
+- [spec-format-enforcement-001](./spec-format-enforcement-001.md) — ADR: Mold spec format enforced by decorator-declared document contracts
+- [spec-format-enforcement-002](./spec-format-enforcement-002.md) — ADR: Schema awareness via in-place generated regions; phase registry unchanged
+- [starlight-docs-cutover-001](./starlight-docs-cutover-001.md) — ADR: Starlight docs cutover
+- [wheypoint-continuity-kernel-001](./wheypoint-continuity-kernel-001.md) — Wheypoint continuity authority
+- [wheypoint-continuity-kernel-002](./wheypoint-continuity-kernel-002.md) — Dedicated Wheypoint runtime boundary
+- [wheypoint-continuity-kernel-003](./wheypoint-continuity-kernel-003.md) — Immutable Wheypoint updates and resolution
+- [wheypoint-continuity-kernel-004](./wheypoint-continuity-kernel-004.md) — Canonical JSON persistence for Wheypoint records
+- [wheypoint-ergonomics-001](./wheypoint-ergonomics-001.md) — Decision dossiers decoupled from gating
+- [wheypoint-ergonomics-002](./wheypoint-ergonomics-002.md) — Wheypoint schema types live in the contract catalog module
+- [wheypoint-ergonomics-003](./wheypoint-ergonomics-003.md) — One agent-facing wheypoint verb, with compaction proofs as a sidecar
+- [wheypoint-ergonomics-004](./wheypoint-ergonomics-004.md) — Additive schema evolution keeps old digests valid
+- [wheypoint-ergonomics-005](./wheypoint-ergonomics-005.md) — Checkpoints must carry the user's words
+- [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md) — ADR: wheypoint provenance as additive header fields with join/split verbs
+- [wheypoint-schema5-stack-001](./wheypoint-schema5-stack-001.md) — Wheypoint schema 5 follow-up stack decisions
+- [workflow-contract-milknado-seam-001](./workflow-contract-milknado-seam-001.md) — ADR: CurdPlan is the semantic work authority
+- [workflow-contract-milknado-seam-002](./workflow-contract-milknado-seam-002.md) — ADR: Agents write slim views and hosts normalize canonical contracts
+- [workflow-contract-milknado-seam-003](./workflow-contract-milknado-seam-003.md) — ADR: The planner owns semantic decomposition
+- [workflow-contract-milknado-seam-004](./workflow-contract-milknado-seam-004.md) — ADR: Executors consume CurdPlan and return criterion-led CurdResult
+- [workflow-contract-milknado-seam-005](./workflow-contract-milknado-seam-005.md) — ADR: Payload schemas and transition routing remain separate
+- [workflow-contract-milknado-seam-006](./workflow-contract-milknado-seam-006.md) — ADR: Easy Cheese proves the core seam before Milknado adoption
+- [writer-view-boundary-simplification-001](./writer-view-boundary-simplification-001.md) — ADR: Strict contract-version equality and a single cook CLI module
+<!-- HALLOUMINATE:INDEX-END -->

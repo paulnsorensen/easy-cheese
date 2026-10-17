@@ -1,0 +1,663 @@
+#!/usr/bin/env python3
+"""Detect squash-merge residue before running the conflict cascade.
+
+When a PR is squash-merged into the base branch, the local branch retains the
+pre-squash commits. Rebasing then re-applies commits whose content is already
+in base, producing useless conflicts that mergiraf cannot resolve — the right
+answer is to create a clean branch from base and replay verified unique
+commits, or merge base when the unique commits are unknown.
+
+Detection cascade (strongest first; later signals run only when needed):
+  1. Tree-match — walk recent commits on base looking for one whose tree
+     equals the tree at some point on the branch. That commit is a squash
+     of branch commits up to that point. Works offline, through fork PRs,
+     and when the branch has additional commits past the squash (the case
+     `local-synth` misses). Always runs first.
+  2. gh API — `gh pr list --state merged --head <branch>` provides PR
+     metadata (number, URL) and an independent SHA-overlap signal. Always
+     runs alongside tree-match so it can enrich a tree-match verdict, and
+     supplies the verdict on its own when tree-match found nothing.
+  3. Local synthesis — synthesize a would-be squash commit from HEAD's
+     tree and ask `git cherry` whether base contains an equivalent. Only
+     runs when neither tree-match nor gh produced a verdict. Last resort;
+     cannot enumerate squashed vs unique commits, and misses the case
+     where the branch has commits past the squash.
+
+Prints a preferred clean-branch remedy when the replay set is verified.
+Local synthesis offers only the merge remedy.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import subprocess
+import sys
+from typing import NotRequired, TypedDict, cast
+
+import fromargs
+
+from easy_cheese.shared.git_utils import run_git
+from easy_cheese.skills.melt.operation import abort_args, current_operation, status
+
+_SAFE_REF = re.compile(r"^[A-Za-z0-9._/-]+$")
+
+
+class _Commit(TypedDict):
+    sha: str
+    short: str
+    subject: str
+
+
+class _GhPr(TypedDict):
+    number: NotRequired[int]
+    url: NotRequired[str]
+    mergeCommit: NotRequired[dict[str, str] | None]
+    commits: NotRequired[list[dict[str, str]]]
+    mergedAt: NotRequired[str]
+
+
+class _PrInfo(TypedDict):
+    number: int
+    url: str
+    merge_commit: str | None
+    merged_at: str
+    pr_commits: list[str]
+    multiple_prs: bool
+
+
+class _PrRef(TypedDict):
+    number: int
+    url: str
+    merged_at: str
+    merge_commit: str | None
+
+
+class _TreeMatch(TypedDict):
+    squash_commit: str
+    squash_short: str
+    squash_subject: str
+    squashed_commits: list[_Commit]
+    unique_commits: list[_Commit]
+
+
+class _Remedy(TypedDict):
+    name: str
+    destructive: bool
+    description: str
+    commands: list[str]
+
+
+class _DetectResult(TypedDict):
+    verdict: str
+    method: str | None
+    branch: str
+    base: str
+    head_ref: str
+    pr: _PrRef | None
+    squash_commit: _Commit | None
+    branch_commits: list[_Commit]
+    squashed_shas: list[str]
+    unique_commits: list[_Commit]
+    remedies: list[_Remedy]
+    warnings: list[str]
+    application: NotRequired[_ApplyResult]
+
+
+class _ApplyResult(TypedDict):
+    state: str
+    remedy: str | None
+    failed_step: str | None
+    recovery_branch: str
+    error: str | None
+
+
+def _current_branch() -> str | None:
+    r: subprocess.CompletedProcess[str] = run_git(["branch", "--show-current"])
+    if r.returncode != 0:
+        return None
+    return r.stdout.strip() or None
+
+
+def _merge_base(base: str, head: str = "HEAD") -> str | None:
+    r: subprocess.CompletedProcess[str] = run_git(["merge-base", base, head])
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def _commits_since(base: str, head: str = "HEAD") -> list[_Commit] | None:
+    """Returns commits on success (possibly empty), None on git failure."""
+    r: subprocess.CompletedProcess[str] = run_git(
+        ["log", "--reverse", "--format=%H%x09%s", f"{base}..{head}"]
+    )
+    if r.returncode != 0:
+        return None
+    commits: list[_Commit] = []
+    for line in r.stdout.strip().split("\n"):
+        if "\t" in line:
+            sha, subject = line.split("\t", 1)
+            commits.append({"sha": sha, "short": sha[:8], "subject": subject})
+    return commits
+
+
+
+def _base_branch_name(base_ref: str) -> str:
+    """Strip the remote prefix from a base ref so it matches gh's --base flag.
+
+    Only strips the leading segment when it matches a registered remote, so
+    slash-named local branches like `release/1.0` are preserved as-is.
+    `origin/main` → `main`. `upstream/release/1.0` → `release/1.0`. `main` → `main`.
+    """
+    if "/" not in base_ref:
+        return base_ref
+    prefix, _, rest = base_ref.partition("/")
+    r: subprocess.CompletedProcess[str] = run_git(["remote"])
+    if r.returncode == 0 and prefix in r.stdout.splitlines():
+        return rest
+    return base_ref
+
+
+def _check_via_gh(branch: str, base_ref: str) -> _PrInfo | None:
+    if shutil.which("gh") is None:
+        return None
+    cmd = [
+        "gh", "pr", "list",
+        "--state", "merged",
+        "--head", branch,
+        "--base", _base_branch_name(base_ref),
+        "--json", "number,url,mergeCommit,commits,mergedAt",
+        "-L", "5",
+    ]
+    r: subprocess.CompletedProcess[str] = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    try:
+        prs = cast(list[_GhPr], json.loads(r.stdout))
+    except json.JSONDecodeError:
+        return None
+    if not prs:
+        return None
+    prs.sort(key=lambda p: p.get("mergedAt", ""), reverse=True)
+    pr = prs[0]
+    if "number" not in pr or "url" not in pr or "mergedAt" not in pr:
+        return None
+    return {
+        "number": pr["number"],
+        "url": pr["url"],
+        "merge_commit": (pr.get("mergeCommit") or {}).get("oid"),
+        "merged_at": pr["mergedAt"],
+        "pr_commits": [c["oid"] for c in pr.get("commits", [])],
+        "multiple_prs": len(prs) > 1,
+    }
+
+
+def _log_with_trees(
+    range_ref: str, *, reverse: bool = False, limit: int | None = None
+) -> list[tuple[str, str, str]] | None:
+    """git log --format='%H<tab>%T<tab>%s' <range> → [(sha, tree, subject)].
+    Returns None on git failure, [] when the range is empty.
+    """
+    args = ["log"]
+    if limit is not None:
+        args.append(f"-{limit}")
+    if reverse:
+        args.append("--reverse")
+    args += ["--format=%H%x09%T%x09%s", range_ref]
+    r: subprocess.CompletedProcess[str] = run_git(args)
+    if r.returncode != 0:
+        return None
+    rows: list[tuple[str, str, str]] = []
+    if not r.stdout.strip():
+        return rows
+    for line in r.stdout.strip().split("\n"):
+        parts = line.split("\t", 2)
+        if len(parts) == 3:
+            rows.append((parts[0], parts[1], parts[2]))
+    return rows
+
+
+def _format_commit_list(rows: list[tuple[str, str, str]]) -> list[_Commit]:
+    return [{"sha": sha, "short": sha[:8], "subject": subj} for sha, _, subj in rows]
+
+
+def _build_tree_match_result(
+    base_sha: str,
+    base_subject: str,
+    branch_commits: list[tuple[str, str, str]],
+    squash_index: int,
+) -> _TreeMatch:
+    """Format a tree-match hit into the result dict shape."""
+    return {
+        "squash_commit": base_sha,
+        "squash_short": base_sha[:8],
+        "squash_subject": base_subject,
+        "squashed_commits": _format_commit_list(branch_commits[: squash_index + 1]),
+        "unique_commits": _format_commit_list(branch_commits[squash_index + 1 :]),
+    }
+
+
+def _check_via_tree_match(base_ref: str, head: str = "HEAD") -> _TreeMatch | None:
+    """Strongest of the three detection methods: works offline, through forks
+    and renames, and (unlike `_check_via_synthesis`) handles the case where
+    the user has committed additional work on top of the squashed commits.
+    """
+    mb = _merge_base(base_ref, head)
+    if not mb:
+        return None
+
+    branch_commits = _log_with_trees(f"{mb}..{head}", reverse=True)
+    if branch_commits is None:
+        print("warning: tree-match detection skipped (git log failed)", file=sys.stderr)
+        return None
+    if not branch_commits:
+        return None
+
+    # Map tree SHA -> latest branch index with that tree. Revert-then-redo
+    # collisions prefer the latest so the unique-commit replay set stays small.
+    branch_tree_to_index = {tree: i for i, (_, tree, _) in enumerate(branch_commits)}
+
+    # Cap base log at 500 commits to stay fast on long-running base branches.
+    base_commits = _log_with_trees(f"{mb}..{base_ref}", limit=500)
+    if base_commits is None:
+        print("warning: tree-match detection skipped (git log failed)", file=sys.stderr)
+        return None
+
+    for base_sha, base_tree, base_subject in base_commits:
+        if base_tree in branch_tree_to_index:
+            return _build_tree_match_result(
+                base_sha, base_subject, branch_commits, branch_tree_to_index[base_tree]
+            )
+    return None
+
+
+def _check_via_synthesis(base_ref: str, head: str = "HEAD") -> bool | None:
+    """Build a would-be squash commit from head's tree, then ask `git cherry`
+    whether base_ref already contains an equivalent. Returns True if yes.
+    """
+    mb = _merge_base(base_ref, head)
+    if not mb:
+        return None
+    tree: subprocess.CompletedProcess[str] = run_git(["rev-parse", f"{head}^{{tree}}"])
+    if tree.returncode != 0:
+        return None
+    synth: subprocess.CompletedProcess[str] = run_git(
+        ["commit-tree", tree.stdout.strip(), "-p", mb, "-m", "_squash-probe"]
+    )
+    if synth.returncode != 0:
+        return None
+    cherry: subprocess.CompletedProcess[str] = run_git(["cherry", base_ref, synth.stdout.strip()])
+    if cherry.returncode != 0:
+        return None
+    first = cherry.stdout.strip().split("\n")[0] if cherry.stdout.strip() else ""
+    return first.startswith("-")
+
+
+def _branch_during_rebase() -> str | None:
+    operation, branch = current_operation()
+    return branch if operation == "rebase" else None
+
+
+def _in_progress_abort() -> str | None:
+    operation, _ = current_operation()
+    return f"git {operation} --abort" if operation else None
+
+
+def _resolve_head(branch: str) -> str:
+    """Return a ref usable as HEAD for diff/log: prefer local branch tip, fall
+    back to remote-tracking ref, else literal 'HEAD'."""
+    for candidate in (branch, f"refs/heads/{branch}", f"origin/{branch}"):
+        r: subprocess.CompletedProcess[str] = run_git(["rev-parse", "--verify", "--quiet", candidate])
+        if r.returncode == 0 and r.stdout.strip():
+            return candidate
+    return "HEAD"
+
+
+def _build_merge_remedy(base_ref: str, abort: str | None) -> _Remedy:
+    commands: list[str] = []
+    if abort:
+        commands.append(abort)
+    commands.append(f"git merge {base_ref}")
+    commands.append(
+        "# resolve any remaining conflicts with /melt — squashed commits "
+        + "collapse to no-ops, so only real edits should remain"
+    )
+    return {
+        "name": "merge",
+        "destructive": False,
+        "description": (
+            "Merge base into branch. Non-destructive: preserves all "
+            "branch history and refs. Squashed commits collapse to a "
+            "no-op merge, so only real conflicts surface. Use this "
+            "when detection cannot verify the replay set."
+        ),
+        "commands": commands,
+    }
+
+
+def _build_clean_branch_remedy(
+    result: _DetectResult, base_ref: str, abort: str | None
+) -> _Remedy:
+    commands = [f"git switch -c {result['branch']}-clean {base_ref}"]
+    if result["unique_commits"]:
+        shas = " ".join(c["sha"] for c in result["unique_commits"])
+        commands.append(f"git cherry-pick {shas}")
+    if abort:
+        commands.insert(0, abort)
+    return {
+        "name": "clean-branch",
+        "destructive": False,
+        "description": (
+            "Create a clean branch from base and replay verified unique commits. "
+            "Keep the original branch unchanged for recovery."
+        ),
+        "commands": commands,
+    }
+
+
+def _gh_correlates_with_tree(gh: _PrInfo, tree: _TreeMatch) -> bool:
+    """True iff the gh PR is the same squash that tree-match found.
+
+    Branch names get reused across PRs, so the gh PR currently advertising
+    this branch is not always the one whose squash sits on base. Confirm
+    via merge-commit equality (strongest) or SHA overlap between the PR's
+    source commits and the tree-match squashed set before attaching gh
+    metadata — otherwise we'd point the user at an unrelated PR.
+    """
+    if gh.get("merge_commit") and gh["merge_commit"] == tree["squash_commit"]:
+        return True
+    pr_shas = set(gh.get("pr_commits", []))
+    squashed_shas = {c["sha"] for c in tree.get("squashed_commits", [])}
+    return bool(pr_shas & squashed_shas)
+
+
+def _gh_merge_commit_disagrees(gh: _PrInfo, tree: _TreeMatch) -> bool:
+    """True iff gh recorded a merge_commit that differs from the tree-match
+    squash commit. Soft signal — correlation may still hold via SHA overlap,
+    but the recorded merge points elsewhere, so warn the user.
+    """
+    mc = gh.get("merge_commit")
+    return bool(mc and mc != tree["squash_commit"])
+
+
+def _init_result(branch: str, base_ref: str, head_ref: str) -> _DetectResult:
+    return {
+        "verdict": "not-detected",
+        "method": None,
+        "branch": branch,
+        "base": base_ref,
+        "head_ref": head_ref,
+        "pr": None,
+        "squash_commit": None,
+        "branch_commits": [],
+        "squashed_shas": [],
+        "unique_commits": [],
+        "remedies": [],
+        "warnings": [],
+    }
+
+
+def _apply_synth_fallback(result: _DetectResult, base_ref: str, head_ref: str) -> None:
+    """Last-resort detection when tree-match and gh both came up empty.
+    `git cherry`-based equivalence check — cannot enumerate squashed vs
+    unique commits, so the user has to review the branch list by hand."""
+    synth = _check_via_synthesis(base_ref, head_ref)
+    if synth:
+        result["verdict"] = "squash-merged"
+        result["method"] = "local-synth"
+        result["warnings"].append(
+            "detected via local synthesis; cannot enumerate which commits "
+            + "were squashed vs unique — review branch commits manually"
+        )
+
+
+def _apply_tree_match_to_result(result: _DetectResult, tree: _TreeMatch, gh: _PrInfo | None) -> None:
+    result["verdict"] = "squash-merged"
+    result["squash_commit"] = {
+        "sha": tree["squash_commit"],
+        "short": tree["squash_short"],
+        "subject": tree["squash_subject"],
+    }
+    result["unique_commits"] = tree["unique_commits"]
+    if gh and _gh_correlates_with_tree(gh, tree):
+        result["method"] = "tree-match+gh"
+        result["pr"] = {
+            "number": gh["number"],
+            "url": gh["url"],
+            "merged_at": gh["merged_at"],
+            "merge_commit": gh["merge_commit"],
+        }
+        result["squashed_shas"] = gh["pr_commits"]
+        if _gh_merge_commit_disagrees(gh, tree):
+            mc = gh["merge_commit"]
+            assert mc is not None
+            result["warnings"].append(
+                f"gh PR #{gh['number']} merge-commit {mc[:8]} "
+                + f"differs from tree-match squash {tree['squash_commit'][:8]} — "
+                + "PR commits overlap but the recorded squash may be a different one"
+            )
+        if gh["multiple_prs"]:
+            result["warnings"].append("multiple merged PRs from this branch — using most recent")
+        return
+    result["method"] = "tree-match"
+    if gh:
+        result["warnings"].append(
+            f"gh found PR #{gh['number']} ({gh['url']}) but its "
+            + "commits do not correlate with the tree-match squash — "
+            + "branch name may have been reused; not attaching PR metadata"
+        )
+
+
+def _apply_gh_only_to_result(result: _DetectResult, gh: _PrInfo) -> None:
+    """Zero SHA overlap is treated as inconclusive (reused branch name or full rebase)."""
+    squashed = set(gh["pr_commits"])
+    unique = [c for c in result["branch_commits"] if c["sha"] not in squashed]
+    matched = len(result["branch_commits"]) - len(unique)
+    if matched == 0:
+        result["warnings"].append(
+            f"gh found PR #{gh['number']} ({gh['url']}) but no local "
+            + "commits matched its SHAs and tree-match found no equivalent "
+            + "commit on base — treating as inconclusive"
+        )
+        return
+    result["verdict"] = "squash-merged"
+    result["method"] = "gh-api"
+    result["pr"] = {
+        "number": gh["number"],
+        "url": gh["url"],
+        "merged_at": gh["merged_at"],
+        "merge_commit": gh["merge_commit"],
+    }
+    result["squashed_shas"] = gh["pr_commits"]
+    result["unique_commits"] = unique
+    if gh["multiple_prs"]:
+        result["warnings"].append("multiple merged PRs from this branch — using most recent")
+
+
+def detect(branch: str, base_ref: str) -> _DetectResult:
+    head_ref = _resolve_head(branch)
+    result = _init_result(branch, base_ref, head_ref)
+
+    branch_commits = _commits_since(base_ref, head_ref)
+    if branch_commits is None:
+        result["warnings"].append(
+            f"git log failed for {base_ref}..{head_ref} — is {base_ref} fetched?"
+        )
+        return result
+    result["branch_commits"] = branch_commits
+
+    if not result["branch_commits"]:
+        result["warnings"].append(f"no commits between {base_ref} and {head_ref}")
+        return result
+
+    # Run tree-match first — strongest signal, works offline, and unlike
+    # gh-api or local-synth it handles the case where the branch has commits
+    # past the squash. gh runs in parallel to enrich tree-match or to
+    # supply the verdict on its own.
+    tree = _check_via_tree_match(base_ref, head_ref)
+    gh = _check_via_gh(branch, base_ref)
+
+    if tree:
+        _apply_tree_match_to_result(result, tree, gh)
+    elif gh:
+        _apply_gh_only_to_result(result, gh)
+
+    if result["verdict"] == "not-detected":
+        _apply_synth_fallback(result, base_ref, head_ref)
+
+    if result["verdict"] == "squash-merged":
+        gh_clean_verified = True
+        if result["method"] == "gh-api" and not result["unique_commits"]:
+            pr = result["pr"]
+            merge_commit = pr["merge_commit"] if pr else None
+            gh_clean_verified = bool(
+                merge_commit
+                and re.fullmatch(r"[0-9a-fA-F]{40}", merge_commit)
+                and run_git(["merge-base", "--is-ancestor", merge_commit, base_ref]).returncode == 0
+            )
+            if not gh_clean_verified:
+                result["warnings"].append(
+                    f"gh PR merge commit {merge_commit or 'unknown'} is not verified on "
+                    + f"selected base {base_ref}; using merge remedy"
+                )
+        replay_has_merge = any(
+            (parents := run_git(["rev-list", "--parents", "-n", "1", commit["sha"]])).returncode
+            or len(parents.stdout.split()) > 2
+            for commit in result["unique_commits"]
+        )
+        if replay_has_merge:
+            result["warnings"].append("verified replay includes a merge commit; using merge remedy")
+        abort = _in_progress_abort()
+        merge = _build_merge_remedy(base_ref, abort)
+        result["remedies"] = (
+            [merge]
+            if result["method"] == "local-synth" or replay_has_merge
+            or (result["method"] == "gh-api" and (result["unique_commits"] or not gh_clean_verified))
+            else [_build_clean_branch_remedy(result, base_ref, abort), merge]
+        )
+
+    return result
+
+
+def _apply_remedy(result: _DetectResult, *, abort_operation: bool = False) -> _ApplyResult:
+    branch = result["branch"]
+    remedy = result["remedies"][0]["name"]
+    outcome: _ApplyResult = {
+        "state": "failed", "remedy": remedy, "failed_step": None,
+        "recovery_branch": branch, "error": None,
+    }
+    clean_branch = f"{branch}-clean"
+    if remedy == "clean-branch":
+        collision = run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{clean_branch}"])
+        if collision.returncode != 1:
+            outcome["failed_step"] = "preflight-branch"
+            outcome["error"] = "clean branch already exists" if collision.returncode == 0 else collision.stderr.strip()
+            return outcome
+
+    operation, rebase_branch = current_operation()
+    if operation and not abort_operation:
+        outcome["state"] = "confirmation-required"
+        outcome["failed_step"] = f"git {operation} --abort"
+        outcome["error"] = "active operation requires --abort-operation confirmation"
+        return outcome
+    active_branch = rebase_branch if operation == "rebase" else _current_branch()
+    if active_branch != branch:
+        outcome["failed_step"] = "preflight-branch"
+        outcome["error"] = f"{branch} is not the active branch"
+        return outcome
+    original = run_git(["show-ref", "--verify", "--quiet", f"refs/heads/{branch}"])
+    if original.returncode:
+        outcome["failed_step"] = "preflight-recovery"
+        outcome["error"] = f"recovery branch {branch} is unavailable"
+        return outcome
+    if operation is None:
+        dirty = run_git(["status", "--porcelain"])
+        if dirty.returncode or dirty.stdout.strip():
+            outcome["failed_step"] = "preflight-worktree"
+            outcome["error"] = dirty.stderr.strip() or "worktree has uncommitted changes"
+            return outcome
+    steps: list[list[str]] = []
+    if abort := abort_args(operation):
+        steps.append(abort)
+    if remedy == "clean-branch":
+        steps.append(["switch", "-c", clean_branch, result["base"]])
+        if result["unique_commits"]:
+            steps.append(["cherry-pick", *(commit["sha"] for commit in result["unique_commits"])])
+    else:
+        steps.append(["merge", result["base"]])
+
+    for step in steps:
+        command = f"git {' '.join(step)}"
+        attempt = run_git(step)
+        if attempt.returncode:
+            outcome["failed_step"] = command
+            outcome["error"] = attempt.stderr.strip() or attempt.stdout.strip()
+            if status()["status"] == "blocked":
+                outcome["state"] = "needs-resolution"
+            return outcome
+    outcome["state"] = "applied"
+    return outcome
+
+
+class _NotApplicableResult(TypedDict):
+    verdict: str
+    reason: str
+    application: NotRequired[_ApplyResult]
+
+
+def detect_squash_residue_cmd(
+    *, base: str = "origin/main", branch: str | None = None, apply: bool = False,
+    abort_operation: bool = False,
+) -> _DetectResult | _NotApplicableResult:
+    """Detect squash-merge residue and emit the remedy.
+
+    Parameters
+    ----------
+    base
+        Base ref to compare against.
+    branch
+        Branch to check (default: current).
+    """
+    if not _SAFE_REF.match(base) or base.startswith("-"):
+        raise fromargs.CliError(f"--base {base!r} contains unsafe characters", exit_code=2)
+
+    resolved_branch = branch or _current_branch() or _branch_during_rebase()
+    if not resolved_branch:
+        raise fromargs.CliError(
+            "cannot determine current branch — pass --branch <name>", exit_code=2
+        )
+
+    if not _SAFE_REF.match(resolved_branch) or resolved_branch.startswith("-"):
+        raise fromargs.CliError(
+            f"branch {resolved_branch!r} contains unsafe characters", exit_code=2
+        )
+
+    base_short = base.split("/")[-1]
+    if resolved_branch == base_short or resolved_branch in ("main", "master", "develop"):
+        return {"verdict": "not-applicable", "reason": f"on base branch {resolved_branch}"}
+
+    result = detect(resolved_branch, base)
+    if apply:
+        result["application"] = (
+            _apply_remedy(result, abort_operation=abort_operation)
+            if result["remedies"]
+            else {"state": "not-applied", "remedy": None, "failed_step": None,
+                  "recovery_branch": resolved_branch, "error": None}
+        )
+    return result
+
+
+def build_app() -> fromargs.App:
+    return fromargs.App(
+        "detect-squash-residue",
+        help="Detect squash-merge residue and emit the remedy.",
+        help_formatter="plain",
+        default_command=detect_squash_residue_cmd,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

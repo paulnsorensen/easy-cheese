@@ -1,0 +1,816 @@
+"""Slug validation and corpus path math.
+
+Used by every workflow skill that writes a corpus artifact. Durable phases
+(``specs``, ``research``) anchor at a stable per-project XDG location; transient
+pipeline phases stay repo-local under ``.cheese/``. See ``default_root_for_phase``.
+
+The canonical slug pattern matches ultracook's manifest-schema.json so a
+slug accepted by one validator is accepted by all.
+"""
+
+from __future__ import annotations
+
+import difflib
+import functools
+import os
+import re
+import subprocess
+from collections.abc import Callable
+from pathlib import Path
+from typing import Literal, NamedTuple, TypedDict
+
+import fromargs
+
+from easy_cheese.shared import git_utils
+
+# Source of truth: skills/ultracook/references/manifest-schema.json.
+# Kebab-case, no leading/trailing hyphen, no double hyphens, 1-64 chars.
+# If manifest-schema.json changes (e.g., adding allowed characters), this regex
+# must be updated in lockstep — keep in sync via manual review.
+KEBAB_SLUG = re.compile(r"^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$")
+
+# Phases that own a `.cheese/<phase>/<slug>.md` artifact tree. The set spans
+# phases owned by several orchestrators (`/ultracook`, `/pasteurize`,
+# `/research`) plus one-off notes/specs/hard artifacts.
+PHASES: frozenset[str] = frozenset(
+    {
+        "cook",
+        "press",
+        "age",
+        "cure",
+        "specs",
+        "notes",
+        "hard",
+        "research",
+        "ultracook",
+        "pasteurize",
+    }
+)
+
+# Phases whose artifacts are durable, project-scoped knowledge worth a stable
+# home outside any single checkout: a spec or research report stays useful
+# across branches and clones and shouldn't ride along in git. They anchor at the
+# per-project XDG corpus. Every other phase is transient pipeline handoff state
+# (cook/press/age/cure reports, notes, hard explanations) and stays repo-local
+# under .cheese/ where it travels with the branch and surfaces in the PR.
+XDG_PHASES: frozenset[str] = frozenset({"specs", "research"})
+
+# Repo-local root for transient phases. Relative on purpose: it resolves against
+# the working directory so artifacts live with the branch being worked on.
+REPO_LOCAL_ROOT = Path(".cheese")
+
+# Phases of the cook → press → age → cure pipeline chain.
+CHAIN_PHASES: tuple[str, ...] = ("cook", "press", "age", "cure")
+
+# Phase token -> on-disk directory name, when the two diverge. The phase TOKEN
+# stays stable for every caller (artifact_path, resolver); only the
+# directory under the root differs. `hard` writes to `.cheese/hard-cheese/`,
+# matching src/hard-cheese/append-attempt.py. Phases not listed map to
+# themselves.
+PHASE_DIRS: dict[str, str] = {"hard": "hard-cheese"}
+
+# Aux registry: artifact owners that are NOT pipeline phases. `affinage` writes
+# `.cheese/affinage/pr-<n>.md` keyed by PR number (a valid kebab slug, but not a
+# user-chosen one) and has no pipeline semantics, so it stays out of PHASES but
+# the resolver still finds it.
+AUX_PHASES: frozenset[str] = frozenset({"affinage"})
+
+# Phase/aux token -> slash-command skill that owns it. Mostly identity
+# (`/<phase>`); these are the exceptions.
+PHASE_SKILL: dict[str, str] = {
+    "hard": "/hard-cheese",
+    "specs": "/mold",
+    "notes": "/wheypoint",
+    "research": "/briesearch",
+    "affinage": "/affinage",
+}
+
+
+def phase_dir(phase: str) -> str:
+    """On-disk directory name for a phase token (identity unless in PHASE_DIRS)."""
+    return PHASE_DIRS.get(phase, phase)
+
+
+def phase_skill(phase: str) -> str:
+    """Slash-command skill that owns a phase/aux token (identity `/<phase>` default)."""
+    return PHASE_SKILL.get(phase, f"/{phase}")
+
+
+def validate_slug(slug: object) -> str | None:
+    """Return an error string if invalid, else None."""
+    if not isinstance(slug, str) or not slug:
+        return "slug must be a non-empty string"
+    if not KEBAB_SLUG.match(slug):
+        return (
+            f"slug {slug!r} must be kebab-case, 1-64 chars, [a-z0-9-], "
+            "no leading/trailing hyphen, no double hyphens"
+        )
+    return None
+
+
+def reject_path_segment(field: str, value: str) -> None:
+    """Reject path-traversal segments and Windows drive/path designators."""
+    if ".." in value or "/" in value or "\\" in value or ":" in value:
+        raise fromargs.CliError(f"{field} rejects path traversal: {value!r}")
+
+
+_STOPWORDS = frozenset(
+    {"a", "an", "and", "the", "of", "for", "to", "in", "on", "with", "is"}
+)
+
+
+def slugify(text: str, *, max_words: int = 5) -> str:
+    """Best-effort kebab-slug from arbitrary text.
+
+    Deliberately NOT ``python-slugify`` (or any general slugifier), and not a
+    candidate for replacement by one. The divergences are the point:
+
+    - **Stopwords are dropped** (``_STOPWORDS``) *before* the word cap, so a
+      title-cased task phrase spends its budget on meaning
+      (``"The quick brown fox jumps"`` -> ``quick-brown-fox-jumps``).
+    - **The result is capped at ``max_words`` words**, because the slug is a
+      human-readable artifact filename, not a URL of the whole title.
+    - **Non-``[a-z0-9]`` characters are deleted, never transliterated** — a
+      general slugifier turns ``"über"`` into ``uber``; here it becomes ``ber``.
+      Deleting keeps the output inside ``KEBAB_SLUG`` for every input without a
+      Unicode table riding along in every skill archive.
+    - **Hard-truncated to 64 characters** to match ``KEBAB_SLUG``.
+
+    Swapping in a standard slugifier would change the output of all four, and
+    the output is embedded in on-disk artifact paths (``.cheese/<phase>/
+    <slug>.md`` and the XDG corpus): every already-written spec, report, and
+    manifest would stop resolving. The tests in
+    ``tests/shared/python/test_paths.py::TestSlugify`` pin these four
+    behaviours so a future migration fails loudly instead of silently orphaning
+    artifacts.
+
+    The result always satisfies ``validate_slug`` unless it is empty; callers
+    must reject the empty slug themselves (see ``_cmd_slugify``).
+    """
+    lowered = re.sub(r"[^a-z0-9\s-]+", "", text.lower())
+    words = [w for w in lowered.split() if w and w not in _STOPWORDS]
+    slug = "-".join(words[:max_words])
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    # Strip again after truncation: a cut landing on a hyphen would otherwise
+    # emit a trailing-hyphen slug that validate_slug rejects.
+    return slug[:64].strip("-")
+
+
+def _xdg_dir(env_var: str, *default: str) -> Path:
+    """An XDG base dir from ``env_var``, or ``~/<default...>`` as the fallback.
+
+    Per the XDG Base Directory spec, a value that is not an absolute path is
+    ignored in favour of the default.
+    """
+    raw = os.environ.get(env_var, "").strip()
+    if raw and Path(raw).is_absolute():
+        return Path(raw)
+    return Path.home().joinpath(*default)
+
+
+def xdg_data_home() -> Path:
+    """``$XDG_DATA_HOME`` or ``~/.local/share``."""
+    return _xdg_dir("XDG_DATA_HOME", ".local", "share")
+
+
+def _sanitize_segment(name: str) -> str:
+    """Collapse arbitrary text into one filesystem-safe path segment.
+
+    No separators and no traversal survive, so the result is always a single
+    directory name. Empty input falls back to ``default``.
+    """
+    cleaned = re.sub(r"[^a-z0-9._-]+", "-", name.strip().lower())
+    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("-._")
+    return (cleaned or "default")[:96]
+
+
+def _slug_from_remote(url: str) -> str:
+    """Reduce a git remote URL to its trailing ``owner/repo``.
+
+    Handles scp-style (``git@host:owner/repo.git``) and URL-style
+    (``https://host/owner/repo``) remotes; the ``.git`` suffix is dropped. The
+    last two path segments are kept, so credential/host prefixes, proxy path
+    prefixes, and GitLab subgroups all collapse to a stable ``owner/repo``.
+    """
+    s = url.strip()
+    if s.endswith(".git"):
+        s = s[:-4]
+    if "//" in s:  # scheme://host/owner/repo
+        s = re.sub(r"^[a-z][a-z0-9+.-]*://[^/]+/", "", s)
+    elif ":" in s:  # scp-like git@host:owner/repo
+        s = s.split(":", 1)[1]
+    segments = [seg for seg in s.strip("/").split("/") if seg]
+    return "/".join(segments[-2:])
+
+
+@functools.lru_cache(maxsize=8)
+def _git_identity(root: Path | None = None) -> str | None:
+    """``owner/repo`` from origin, else the git toplevel dir name, else None."""
+    try:
+        remote: subprocess.CompletedProcess[str] = git_utils.run_git(
+            ["config", "--get", "remote.origin.url"], cwd=root, timeout=5
+        )
+        if remote.returncode == 0 and remote.stdout.strip():
+            return _slug_from_remote(remote.stdout.strip())
+        top: subprocess.CompletedProcess[str] = git_utils.run_git(
+            ["rev-parse", "--show-toplevel"], cwd=root, timeout=5
+        )
+        if top.returncode == 0 and top.stdout.strip():
+            return Path(top.stdout.strip()).name
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return None
+
+
+def git_project_key(root: Path | None = None) -> str | None:
+    """Return the Git-derived project key without ambient corpus overrides."""
+    identity = _git_identity(root)
+    if not identity:
+        return None
+    return _sanitize_segment(identity.replace("/", "-"))
+
+
+def project_key(root: Path | str | None = None) -> str:
+    """Stable per-project corpus key, matching the git repository.
+
+    ``$EASY_CHEESE_PROJECT`` wins when set; otherwise the origin ``owner/repo``
+    (e.g. ``paulnsorensen-easy-cheese``), the git toplevel name, or finally the
+    working-directory name. Always a single sanitized path segment.
+    """
+    override = os.environ.get("EASY_CHEESE_PROJECT", "").strip()
+    if override:
+        return _sanitize_segment(override)
+    resolved_root = None if root is None else Path(root).resolve()
+    identity = git_project_key(resolved_root)
+    if identity:
+        return identity
+    return _sanitize_segment(
+        Path.cwd().name if resolved_root is None else resolved_root.name
+    )
+
+
+def corpus_home() -> Path:
+    """Base dir holding every project's durable corpus.
+
+    ``$EASY_CHEESE_HOME`` overrides when it is an absolute path (a relative value
+    is ignored, matching the XDG convention); otherwise ``$XDG_DATA_HOME/cheese``
+    (default ``~/.local/share/cheese``).
+    """
+    override = os.environ.get("EASY_CHEESE_HOME", "").strip()
+    if override and Path(override).is_absolute():
+        return Path(override)
+    return xdg_data_home() / "cheese"
+
+
+def project_corpus_root(project: str | None = None) -> Path:
+    """``<corpus_home>/<project>`` — the per-project durable corpus root."""
+    return corpus_home() / (project or project_key())
+
+
+def default_root_for_phase(phase: str, *, project: str | None = None) -> Path:
+    """Where a phase's artifacts live when no explicit ``root`` is given.
+
+    Durable phases (see ``XDG_PHASES``) anchor at the per-project XDG corpus;
+    everything else stays repo-local under ``.cheese/``.
+    """
+    if phase in XDG_PHASES:
+        return project_corpus_root(project)
+    return REPO_LOCAL_ROOT
+
+
+def artifact_path(phase: str, slug: str, *, root: Path | str | None = None) -> Path:
+    """Return ``<root>/<phase-dir>/<slug>.md``. Validates phase + slug.
+
+    The on-disk directory may differ from the phase token: ``phase_dir`` maps
+    ``hard`` to ``hard-cheese`` (see ``PHASE_DIRS``); every other phase maps to
+    itself.
+
+    With ``root`` omitted, the root is resolved per phase via
+    ``default_root_for_phase`` (durable phases → XDG corpus, rest → ``.cheese/``).
+    Pass ``root=`` to override, e.g. a pytest ``tmp_path``.
+
+    Covers flat-phase artifacts (specs, transient reports). Research long-form
+    reports use a nested ``research/<slug>/<slug>.md`` layout composed from
+    ``project_corpus_root()`` by ``/briesearch``; this flat helper is not that path.
+    """
+    if phase not in PHASES:
+        raise ValueError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
+    err = validate_slug(slug)
+    if err is not None:
+        raise ValueError(err)
+    base = Path(root) if root is not None else default_root_for_phase(phase)
+    return base / phase_dir(phase) / f"{slug}.md"
+
+
+def existing_artifacts(
+    slug: str, *, root: Path | str | None = None, phases: tuple[str, ...] = CHAIN_PHASES
+) -> dict[str, Path]:
+    """Return ``{phase: path}`` for each phase's artifact present on disk.
+
+    With ``root`` omitted, each phase routes through ``default_root_for_phase``:
+    durable phases -> the XDG corpus (matching ``resolve_slug``/``artifact_path``),
+    everything else -> the cwd-relative ``.cheese/`` (unlike ``resolve_slug``,
+    which anchors its ``.cheese/`` at the git toplevel). Pass ``root`` to pin
+    every phase to one location instead (e.g. a pytest ``tmp_path``).
+    """
+    err = validate_slug(slug)
+    if err is not None:
+        raise ValueError(err)
+    found: dict[str, Path] = {}
+    for phase in phases:
+        base = Path(root) if root is not None else default_root_for_phase(phase)
+        candidate = base / phase_dir(phase) / f"{slug}.md"
+        if candidate.is_file():
+            found[phase] = candidate
+    return found
+
+
+def git_toplevel() -> Path | None:
+    """Absolute git worktree root, or None outside a repo."""
+    try:
+        top: subprocess.CompletedProcess[str] = git_utils.run_git(
+            ["rev-parse", "--show-toplevel"], timeout=5
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if top.returncode == 0 and top.stdout.strip():
+        return Path(top.stdout.strip())
+    return None
+
+
+def outside_git_repository() -> bool:
+    """True only when git reports `not a git repository`.
+
+    A timeout, a missing git, or a refusal such as `safe.directory` is not
+    proof that the working directory is outside a checkout.
+    """
+    try:
+        result: subprocess.CompletedProcess[str] = git_utils.run_git(
+            ["rev-parse", "--show-toplevel"],
+            timeout=5,
+            env={**os.environ, "LC_ALL": "C", "LANGUAGE": "C"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode != 0 and "not a git repository" in result.stderr
+
+
+def resolve_repo_root(repo_root: Path | str | None) -> Path:
+    """Absolute repo root: the given value, else git toplevel, else cwd."""
+    if repo_root is not None:
+        return Path(repo_root).resolve()
+    return (git_toplevel() or Path.cwd()).resolve()
+
+
+def phase_dirpath(phase: str, repo_root: Path) -> Path:
+    """Absolute artifact directory for a phase/aux token."""
+    base = project_corpus_root() if phase in XDG_PHASES else repo_root / ".cheese"
+    return base / phase_dir(phase)
+
+
+def _phase_entries(phase: str, repo_root: Path) -> list[tuple[str, Path]]:
+    """``(stem, abs_path)`` for every artifact present in a phase's directory.
+
+    The stem is the slug-shaped key used for exact and fuzzy matching. Honors
+    the irregular layouts: ``research/<slug>/<slug>.md`` (nested),
+    ``ultracook/<slug>/manifest.yaml`` (dir + manifest), and the flat
+    ``<dir>/<slug>.md`` everywhere else.
+    """
+    dirpath = phase_dirpath(phase, repo_root)
+    if not dirpath.is_dir():
+        return []
+    entries: list[tuple[str, Path]] = []
+    if phase == "research":
+        for sub in dirpath.iterdir():
+            nested = sub / f"{sub.name}.md"
+            if sub.is_dir() and nested.is_file():
+                entries.append((sub.name, nested))
+        entries.extend((f.stem, f) for f in dirpath.glob("*.md"))
+    elif phase == "ultracook":
+        for sub in dirpath.iterdir():
+            manifest = sub / "manifest.yaml"
+            if sub.is_dir() and manifest.is_file():
+                entries.append((sub.name, manifest))
+        entries.extend((f.stem, f) for f in dirpath.glob("*.md"))
+    else:
+        entries.extend((f.stem, f) for f in dirpath.glob("*.md"))
+    return entries
+
+
+# Below this ratio a fuzzy stem match is noise, not a near-miss.
+_FUZZY_CUTOFF = 0.6
+
+
+class SlugMatch(TypedDict):
+    """One candidate artifact path returned by ``resolve_slug``."""
+
+    abs_path: str
+    phase: str
+    skill: str
+    confidence: float
+
+
+class ResolveSlugResult(TypedDict):
+    """Return shape of ``resolve_slug``."""
+
+    matches: list[SlugMatch]
+    fallback_roots: list[str]
+
+
+def resolve_slug(
+    slug: str,
+    *,
+    phase_hint: str | None = None,
+    repo_root: Path | str | None = None,
+) -> ResolveSlugResult:
+    """Resolve a slug to absolute artifact path(s) without relative-path guessing.
+
+    Three tiers: exact stem match (confidence 1.0), fuzzy stem match
+    (confidence = difflib ratio), then a fallback listing the absolute phase-dir
+    roots searched so the caller can grep them directly.
+
+    ``phase_hint=None`` searches every known token. A ``phase_hint`` that names a
+    known phase/aux token restricts the search to that one directory; an unknown
+    hint raises ``ValueError``.
+    """
+    err = validate_slug(slug)
+    if err is not None:
+        raise ValueError(err)
+    known = sorted(PHASES | AUX_PHASES)
+    if phase_hint is not None and phase_hint not in known:
+        raise ValueError(f"unknown phase {phase_hint!r}; expected one of {known}")
+    repo = resolve_repo_root(repo_root)
+    phases = [phase_hint] if phase_hint is not None else known
+
+    exact: list[SlugMatch] = []
+    fuzzy_pool: list[tuple[str, Path, str]] = []
+    searched_roots: list[str] = []
+    for phase in phases:
+        searched_roots.append(str(phase_dirpath(phase, repo)))
+        for stem, path in _phase_entries(phase, repo):
+            if stem == slug:
+                exact.append(
+                    {
+                        "abs_path": str(path),
+                        "phase": phase,
+                        "skill": phase_skill(phase),
+                        "confidence": 1.0,
+                    }
+                )
+            else:
+                fuzzy_pool.append((stem, path, phase))
+
+    if exact:
+        exact.sort(key=lambda m: (m["phase"], m["abs_path"]))
+        return {"matches": exact, "fallback_roots": []}
+
+    fuzzy: list[SlugMatch] = []
+    for stem, path, phase in fuzzy_pool:
+        ratio = difflib.SequenceMatcher(None, slug, stem).ratio()
+        if ratio >= _FUZZY_CUTOFF:
+            fuzzy.append(
+                {
+                    "abs_path": str(path),
+                    "phase": phase,
+                    "skill": phase_skill(phase),
+                    "confidence": round(ratio, 3),
+                }
+            )
+    if fuzzy:
+        fuzzy.sort(key=lambda m: (-m["confidence"], m["phase"], m["abs_path"]))
+        return {"matches": fuzzy, "fallback_roots": []}
+
+    return {"matches": [], "fallback_roots": sorted(set(searched_roots))}
+
+
+def list_artifacts(
+    phase: str, *, repo_root: Path | str | None = None
+) -> list[dict[str, str]]:
+    """Return ``[{"slug": stem, "path": abs_path}, ...]`` for a phase's artifacts.
+
+    Reuses ``_phase_entries``/``phase_dirpath`` (also driving ``resolve_slug``) so
+    durable phases (specs, research) list from the XDG corpus and transient phases
+    list from ``.cheese/`` -- one routing source, not a second copy of it.
+    """
+    if phase not in PHASES:
+        raise ValueError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
+    repo = resolve_repo_root(repo_root)
+    entries = sorted(_phase_entries(phase, repo), key=lambda e: (e[0], str(e[1])))
+    return [{"slug": stem, "path": str(path)} for stem, path in entries]
+
+
+# The project domain model's file stem. A single bounded context lives in
+# `<stem>.md`; at the second context the store splits into a `<stem>/` directory
+# (index.md + one page per context). Both layouts share this stem.
+DOMAIN_MODEL_STEM = "domain-model"
+
+
+def _existing_domain_model(store_root: Path) -> Path | None:
+    """The domain model already in a file store, or None.
+
+    Matches both layouts: the single-context `<store>/domain-model.md` file and
+    the multi-context `<store>/domain-model/` directory. The file wins when both
+    somehow exist, mirroring the single→split lazy-migration order.
+    """
+    single = store_root / f"{DOMAIN_MODEL_STEM}.md"
+    if single.is_file():
+        return single
+    split = store_root / DOMAIN_MODEL_STEM
+    if split.is_dir():
+        return split
+    return None
+
+
+class WikiProbe(NamedTuple):
+    """A corpus match plus whether the listing probe completed."""
+
+    corpus: str | None
+    reachable: bool
+
+
+def _wiki_corpus(list_corpora: Callable[[], list[str]] | None) -> WikiProbe:
+    """Return the first ``repo:*:wiki`` corpus from a successful probe.
+
+    Corpus names come from hallouminate, not the checkout directory, which may
+    differ in worktrees. Missing or failed probes degrade to file storage.
+    """
+    if list_corpora is None:
+        return WikiProbe(corpus=None, reachable=False)
+    try:
+        corpora = list_corpora()
+    except Exception:
+        return WikiProbe(corpus=None, reachable=False)
+    wiki = next(
+        (c for c in corpora if c.startswith("repo:") and c.endswith(":wiki")), None
+    )
+    return WikiProbe(corpus=wiki, reachable=True)
+
+
+def _wiki_has_model(
+    wiki_has_model: Callable[[str], bool] | None, corpus: str
+) -> bool | None:
+    """Whether a domain-model document already exists in ``corpus``.
+
+    Three-valued: ``True``/``False`` when ``wiki_has_model`` confirms one way
+    or the other, ``None`` when the hook is absent or raises — "cannot
+    confirm", not "confirmed absent".
+    """
+    if wiki_has_model is None:
+        return None
+    try:
+        return bool(wiki_has_model(corpus))
+    except Exception:
+        return None
+
+
+class DomainModelTarget(NamedTuple):
+    """Resolved domain-model store.
+
+    ``wiki_reachable`` distinguishes a successful listing with no matching
+    corpus from a probe that was unavailable or failed.
+    """
+
+    backend: Literal["file", "hallouminate"]
+    location: str | Path
+    wiki_reachable: bool
+
+
+def domain_model_target(
+    *,
+    repo_root: Path | str | None = None,
+    project: str | None = None,
+    list_corpora: Callable[[], list[str]] | None = None,
+    wiki_has_model: Callable[[str], bool] | None = None,
+) -> DomainModelTarget:
+    """Resolve the existing domain model or the target for its first write.
+
+    Existing models win in wiki, tracked docs, then XDG order. A listed wiki
+    wins creation; otherwise tracked ``docs/`` wins over XDG. A missing or
+    failed wiki-model probe cannot confirm presence, so existing file stores
+    still win while a listed corpus remains the creation target.
+    """
+    repo = resolve_repo_root(repo_root)
+    docs_root = repo / "docs"
+    xdg_root = project_corpus_root(project)
+
+    probe = _wiki_corpus(list_corpora)
+    wiki = probe.corpus
+    if wiki is not None and _wiki_has_model(wiki_has_model, wiki) is True:
+        return DomainModelTarget("hallouminate", wiki, probe.reachable)
+
+    # Read-probe the file stores in full: an existing model wins over a create.
+    for store_root in (docs_root, xdg_root):
+        existing = _existing_domain_model(store_root)
+        if existing is not None:
+            return DomainModelTarget("file", existing, probe.reachable)
+
+    # Create (first write): wiki corpus if present, else tracked docs/, else XDG.
+    if wiki is not None:
+        return DomainModelTarget("hallouminate", wiki, probe.reachable)
+    create_root = docs_root if docs_root.is_dir() else xdg_root
+    return DomainModelTarget(
+        "file", create_root / f"{DOMAIN_MODEL_STEM}.md", probe.reachable
+    )
+
+
+def domain_model_target_cmd(
+    *,
+    probe: Literal["unavailable", "no-match", "match"],
+    corpus: str | None = None,
+    model: Literal["present", "absent", "unknown"] | None = None,
+    repo_root: str | None = None,
+    project: str | None = None,
+) -> dict[str, object]:
+    """Resolve the domain-model store from explicit Hallouminate probe results.
+
+    Parameters
+    ----------
+    probe
+        Hallouminate probe result.
+    corpus
+        Matching repo:<name>:wiki corpus (required with --probe match).
+    model
+        Model status in the matching corpus (required with --probe match).
+    repo_root
+        Repo root for docs/domain-model.md (default: git toplevel or cwd).
+    project
+        XDG corpus project key (default: environment or repository identity).
+    """
+    if probe in {"unavailable", "no-match"}:
+        if corpus is not None or model is not None:
+            raise fromargs.CliError("--corpus and --model require --probe match")
+        if probe == "unavailable":
+            list_corpora: Callable[[], list[str]] | None = None
+        else:
+
+            def no_corpora() -> list[str]:
+                return []
+
+            list_corpora = no_corpora
+        wiki_has_model: Callable[[str], bool] | None = None
+    else:
+        if corpus is None:
+            raise fromargs.CliError("--corpus is required when --probe is match")
+        if model is None:
+            raise fromargs.CliError("--model is required when --probe is match")
+        if not corpus.startswith("repo:") or not corpus.endswith(":wiki"):
+            raise fromargs.CliError("--corpus must match repo:<name>:wiki")
+
+        def matched_corpus() -> list[str]:
+            return [corpus]
+
+        list_corpora = matched_corpus
+        if model == "present":
+
+            def model_present(_corpus: str) -> bool:
+                return True
+
+            wiki_has_model = model_present
+        elif model == "absent":
+
+            def model_absent(_corpus: str) -> bool:
+                return False
+
+            wiki_has_model = model_absent
+        else:
+            wiki_has_model = None
+
+    target = domain_model_target(
+        repo_root=repo_root,
+        project=project,
+        list_corpora=list_corpora,
+        wiki_has_model=wiki_has_model,
+    )
+    return {
+        "backend": target.backend,
+        "location": str(target.location),
+        "wiki_reachable": target.wiki_reachable,
+    }
+
+
+def slugify_cmd(*, text: str) -> str:
+    """Kebab-slug arbitrary text.
+
+    Parameters
+    ----------
+    text
+        Source text to slugify.
+    """
+    if not text:
+        raise fromargs.CliError("slugify requires non-empty --text")
+    slug = slugify(text)
+    if not slug:
+        raise fromargs.CliError(f"slugify produced an empty slug from {text!r}")
+    return slug
+
+
+def validate_cmd(*, slug: str) -> None:
+    """Exit 0 if slug is valid kebab-case.
+
+    Parameters
+    ----------
+    slug
+        Candidate slug.
+    """
+    err = validate_slug(slug)
+    if err is not None:
+        raise fromargs.CliError(err)
+
+
+def existing_cmd(
+    *, slug: str, phase: str, root: str | None = None, limit: int | None = None
+) -> list[str]:
+    """List .cheese/<phase>/<slug>.md artifacts present on disk.
+
+    Parameters
+    ----------
+    slug
+        Candidate slug.
+    phase
+        One of the known phases.
+    root
+        Artifact root override (default: phase-appropriate -- XDG corpus for
+        durable phases, .cheese/ otherwise).
+    limit
+        Cap list length.
+    """
+    err = validate_slug(slug)
+    if err is not None:
+        raise fromargs.CliError(err)
+    if phase not in PHASES:
+        raise fromargs.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
+    found = existing_artifacts(slug, root=root, phases=(phase,))
+    items = [str(p) for p in found.values()]
+    return items if limit is None else items[:limit]
+
+
+def list_cmd(
+    *, phase: str, repo_root: str | None = None, limit: int | None = None
+) -> list[dict[str, str]]:
+    """Enumerate slugs (and paths) for a phase's artifacts on disk.
+
+    Parameters
+    ----------
+    phase
+        One of the known phases.
+    repo_root
+        Repo root for .cheese/ (default: git toplevel or cwd).
+    limit
+        Cap list length.
+    """
+    if phase not in PHASES:
+        raise fromargs.CliError(f"unknown phase {phase!r}; expected one of {sorted(PHASES)}")
+    try:
+        entries = list_artifacts(phase, repo_root=repo_root)
+    except ValueError as exc:
+        raise fromargs.CliError(str(exc)) from exc
+    return entries if limit is None else entries[:limit]
+
+
+def resolve_cmd(
+    *, slug: str, phase: str | None = None, repo_root: str | None = None
+) -> ResolveSlugResult:
+    """Resolve a slug to absolute artifact path(s) across all phases.
+
+    Parameters
+    ----------
+    slug
+        Candidate slug.
+    phase
+        Restrict the search to this phase/aux token.
+    repo_root
+        Repo root for .cheese/ (default: git toplevel or cwd).
+    """
+    err = validate_slug(slug)
+    if err is not None:
+        raise fromargs.CliError(err)
+    try:
+        return resolve_slug(slug, phase_hint=phase, repo_root=repo_root)
+    except ValueError as exc:
+        raise fromargs.CliError(str(exc)) from exc
+
+
+LEAVES = ("slugify", "validate", "existing", "resolve", "list", "domain-model-target")
+
+
+def build_app() -> fromargs.App:
+    app = fromargs.App(
+        "paths",
+        help="Slugify, validate, resolve, and list .cheese artifact paths.",
+        help_formatter="plain",
+    )
+    _ = app.command(slugify_cmd, name="slugify")
+    _ = app.command(validate_cmd, name="validate")
+    _ = app.command(existing_cmd, name="existing")
+    _ = app.command(resolve_cmd, name="resolve")
+    _ = app.command(list_cmd, name="list")
+    _ = app.command(domain_model_target_cmd, name="domain-model-target")
+    return app
+
+
+def main(argv: list[str] | None = None) -> int:
+    return build_app().run(argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
