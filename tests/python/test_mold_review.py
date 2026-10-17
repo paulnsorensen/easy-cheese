@@ -195,8 +195,11 @@ def test_poll_observes_submission_saved_after_poll_starts(tmp_path: Path) -> Non
     thread = threading.Thread(target=poll)
     thread.start()
     time.sleep(0.1)
-    review.submit({"answer": "yes"}, 1, "op-late")
-    thread.join(timeout=2)
+    # Submit as the review server does: inside the state transaction. The
+    # poll then waits for the durable write and does not time out during fsync.
+    with state_transaction(path):
+        review.submit({"answer": "yes"}, 1, "op-late")
+    thread.join(timeout=30)
     assert not thread.is_alive()
     assert result == [0]
     assert json.loads(output.getvalue())["operation_id"] == "op-late"
