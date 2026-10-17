@@ -104,6 +104,7 @@ class TestPublicContract:
             "efficiency",
             "conventions",
             "altitude",
+            "judo",
         )
 
     def test_plan_contains_contextual_shape_not_dimension_partition(self) -> None:
@@ -121,7 +122,7 @@ class TestPublicContract:
             "dispatch_batches",
             "degraded_reason",
         } <= set(plan)
-        assert plan["policy_version"] == "age-review-plan.v1"
+        assert plan["policy_version"] == "age-review-plan.v2"
         assert plan["n"] == len(cast(list[object], plan["assignments"]))
 
     def test_reordering_canonicalizes_plan_and_digest(self) -> None:
@@ -144,7 +145,7 @@ class TestPublicContract:
 class TestSubjectPolicy:
     def test_normal_small_reserves_protected_subjects_without_padding(self) -> None:
         plan = _route(effort="normal", score=20)
-        assert plan["n"] == 3
+        assert plan["n"] == 4
         assert [
             assignment["id"]
             for assignment in cast(list[dict[str, object]], plan["assignments"])
@@ -152,6 +153,7 @@ class TestSubjectPolicy:
             "general",
             "conventions",
             "altitude",
+            "judo",
         ]
         assert _assignment(plan, "general")["subjects"] == [
             "changed-behavior",
@@ -168,7 +170,7 @@ class TestSubjectPolicy:
         normal = _route(effort="normal", score=100)
         assert [
             row["id"] for row in cast(list[dict[str, object]], normal["assignments"])
-        ] == ["general", "security", "conventions", "altitude"]
+        ] == ["general", "security", "conventions", "altitude", "judo"]
         deep = _route(effort="deep", score=100)
         assert [
             row["id"] for row in cast(list[dict[str, object]], deep["assignments"])
@@ -180,6 +182,7 @@ class TestSubjectPolicy:
             "spec-tests",
             "conventions",
             "altitude",
+            "judo",
         ]
         assert "changed-behavior" in cast(
             list[str], _assignment(deep, "general")["subjects"]
@@ -324,7 +327,7 @@ class TestCapabilitiesAndVerification:
     def test_unavailable_fanout_reports_desired_and_combined_plans(self) -> None:
         plan = _route(can_fan_out=False, effort="normal")
         assert plan["degraded_reason"] == "agent fan-out unavailable"
-        assert plan["desired_n"] == 3
+        assert plan["desired_n"] == 4
         assert plan["n"] == 1
         assert _assignment(plan, "combined")["subjects"] == list(age_route.SUBJECTS)
         verification = cast(dict[str, object], plan["verification"])
@@ -335,7 +338,7 @@ class TestCapabilitiesAndVerification:
         plan = _route(effort="deep", score=400, concurrency_limit=2)
         assignments = cast(list[dict[str, object]], plan["assignments"])
         batches = cast(list[list[str]], plan["dispatch_batches"])
-        assert len(assignments) == 10
+        assert len(assignments) == 11
         assert all(1 <= len(batch) <= 2 for batch in batches)
         assert [item for batch in batches for item in batch] == [
             cast(str, assignment["id"]) for assignment in assignments
@@ -464,18 +467,18 @@ class TestContractBoundaries:
         context = _context(scope="overall", effort="quick")
         subjects = cast(list[dict[str, object]], context["subjects"])
         subjects[-1]["applicability"] = "no"
-        subjects[-1]["evidence"] = ["overall review explicitly includes altitude"]
+        subjects[-1]["evidence"] = ["overall review explicitly includes judo"]
         plan = age_route.route(context=context)
         assert plan["n"] == len(age_route.SUBJECTS)
-        altitude = _assignment(plan, "altitude")
-        assert altitude["subjects"] == ["altitude"]
+        judo = _assignment(plan, "judo")
+        assert judo["subjects"] == ["judo"]
 
     def test_protected_not_applicable_subject_requires_targets_for_override(
         self,
     ) -> None:
         context = _context(applicability={"conventions": "no"})
         subjects = cast(list[dict[str, object]], context["subjects"])
-        subjects[-2]["targets"] = []
+        next(row for row in subjects if row["subject"] == "conventions")["targets"] = []
         with pytest.raises(ValueError, match="planned assignment"):
             _ = age_route.route(context=context)
 

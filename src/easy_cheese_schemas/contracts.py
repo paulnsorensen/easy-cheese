@@ -226,6 +226,7 @@ class ReviewDimension(str, Enum):
     TELEMETRY = "telemetry"
     CONVENTIONS = "conventions"
     ALTITUDE = "altitude"
+    JUDO = "judo"
 
 
 class ReviewSeverity(str, Enum):

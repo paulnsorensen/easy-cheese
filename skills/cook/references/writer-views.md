@@ -153,7 +153,7 @@ enum PlannerDisposition = "complete" | "partial" | "no_work" | "blocked" | "inva
 
 enum ReproductionDisposition = "reproduced" | "not_reproduced" | "blocked"
 
-enum ReviewDimension = "correctness" | "security" | "encapsulation" | "spec" | "complexity" | "deslop" | "assertions" | "nih" | "efficiency" | "telemetry" | "conventions" | "altitude"
+enum ReviewDimension = "correctness" | "security" | "encapsulation" | "spec" | "complexity" | "deslop" | "assertions" | "nih" | "efficiency" | "telemetry" | "conventions" | "altitude" | "judo"
 
 enum ReviewDisposition = "clean" | "findings" | "blocked" | "invalid" | "executor_failure"
 
