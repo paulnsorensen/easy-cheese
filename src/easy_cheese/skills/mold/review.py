@@ -37,7 +37,8 @@ ASSET_TYPES = {
     ".woff": "font/woff",
     ".woff2": "font/woff2",
 }
-TAILNET_HOST = re.compile(r"(?:[a-z0-9-]+\.)+ts\.net")
+TAILNET_HOST_PATTERN = re.compile(r"(?:[a-z0-9-]+\.)+ts\.net")
+PORT_PATTERN = re.compile(r"[0-9]{1,5}")
 
 
 @contextmanager
@@ -236,19 +237,21 @@ class _Handler(BaseHTTPRequestHandler):
             return None
         if host == f"127.0.0.1:{server.server_port}":
             return f"http://{host}"
-        name, _, port = host.partition(":")
+        name, separator, port = host.partition(":")
         if (
             server.trusted_host is not None
             and name == server.trusted_host
-            and (not port or port.isdigit())
+            and (not separator or PORT_PATTERN.fullmatch(port))
             and self.headers.get("X-Forwarded-Proto") == "https"
         ):
             return f"https://{host}"
         return None
 
     def _authorized(self, require_origin: bool = False) -> bool:
-        origin = self.headers.get("Origin")
         expected = self._expected_origin()
+        if expected is None:
+            return False
+        origin = self.headers.get("Origin")
         token = self.headers.get("X-Mold-Token")
         request = urlparse(self.path)
         if not token and request.path in ("/", "/index.html"):
@@ -262,13 +265,11 @@ class _Handler(BaseHTTPRequestHandler):
                 ),
                 "",
             )
-        if expected is None:
-            return False
         same_origin = origin == expected if require_origin else origin in (None, "null", expected)
         return same_origin and secrets.compare_digest(token, cast(_ReviewServer, self.server).token)
 
     def _asset_is_authorized(self, path: str) -> bool:
-        if not path.startswith("/assets/"):
+        if not path.startswith("/assets/") or self._expected_origin() is None:
             return False
         if self.headers.get("Sec-Fetch-Site") == "same-origin":
             return True
@@ -442,7 +443,7 @@ def _serve(*, state_dir: str, port: int = 0, trusted_host: str | None = None) ->
         Tailnet name such as ``node.tailnet.ts.net`` to accept through
         ``tailscale serve``; the server still binds loopback only.
     """
-    if trusted_host is not None and not TAILNET_HOST.fullmatch(trusted_host):
+    if trusted_host is not None and not TAILNET_HOST_PATTERN.fullmatch(trusted_host):
         raise fromargs.CliError(
             f"trusted host must be a lowercase *.ts.net name without a port: {trusted_host!r}",
             exit_code=2,

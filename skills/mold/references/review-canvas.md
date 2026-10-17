@@ -18,9 +18,11 @@ Use this mode only when the user asks to open the canvas from another tailnet de
 
 1. Read the node name from `tailscale status --json` at `Self.DNSName`, without the trailing dot.
 2. Add `--trusted-host NODE.TAILNET.ts.net` to `review serve`.
-3. Give the user the `tailscale_serve` command from the launch output, and give them `remote_url`.
+3. Give the user the `tailscale_serve` command from the launch output.
+   Give the user the `remote_url` from the launch output.
 4. Tell the user that the `tailscale_serve` command replaces an existing HTTPS mapping on port 443.
-   To keep that mapping, add `--https=PORT` to the command and add `:PORT` to the host in `remote_url`.
+   To keep that mapping, add `--https=PORT` to the command.
+   Then add `:PORT` to the host in `remote_url`.
 5. After the review closes, tell the user to remove the mapping with `tailscale serve --https=PORT off`.
 
 The server still binds `127.0.0.1` and never starts or stops `tailscale serve` itself.

@@ -6,7 +6,7 @@ Status: accepted (2026-10-17). Amends [mold-review-canvas-007](./mold-review-can
 
 The review server binds `127.0.0.1` and accepts only `Host: 127.0.0.1:<port>`.
 A user on another tailnet device cannot open the canvas.
-`tailscale serve` forwards the original `*.ts.net` Host and sets `X-Forwarded-Proto: https` over TLS (`ipn/ipnlocal/serve.go`).
+`tailscale serve` forwards the original `*.ts.net` Host and sets `X-Forwarded-Proto: https` over TLS ([`ipn/ipnlocal/serve.go` in the tailscale/tailscale repository](https://github.com/tailscale/tailscale/blob/main/ipn/ipnlocal/serve.go)).
 The browser then sends an `https://` Origin, so the old checks reject every proxied request.
 
 ## Decision
