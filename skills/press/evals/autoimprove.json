@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "skill": "press",
+  "invocation": "/press",
+  "kinds": {
+    "journey": {
+      "grader": "journey",
+      "argv": [
+        "python3",
+        "-I",
+        "-c",
+        "import json, pathlib, re\n\n\ndef load_events():\n    path = pathlib.Path('trace/events.jsonl')\n    if not path.is_file():\n        return []\n    found = []\n    for line in path.read_text(encoding='utf-8').splitlines():\n        try:\n            event = json.loads(line)\n        except ValueError:\n            continue\n        if isinstance(event, dict):\n            found.append(event)\n    return found\n\n\nEVENTS = load_events()\n\n\ndef blocks(role, kind):\n    for event in EVENTS:\n        if event.get('type') != role:\n            continue\n        content = (event.get('message') or {}).get('content')\n        for block in content if isinstance(content, list) else []:\n            if isinstance(block, dict) and block.get('type') == kind:\n                yield block\n\n\nCALLS = list(blocks('assistant', 'tool_use'))\nBASH = [str((call.get('input') or {}).get('command', '')) for call in CALLS if call.get('name') == 'Bash']\nWRITES = [str((call.get('input') or {}).get('file_path', '')) for call in CALLS\n          if call.get('name') in ('Write', 'Edit', 'MultiEdit', 'NotebookEdit')]\nOUTPUT = {str(p.relative_to('output')): p for p in pathlib.Path('output').rglob('*') if p.is_file()} if pathlib.Path('output').is_dir() else {}\nFIXTURES = {str(p): p for p in pathlib.Path('.').rglob('*') if p.is_file() and p.parts[0] not in ('output', 'trace', 'home', 'tmp')}\nfails = []\nCODE = ('.py', '.js', '.ts', '.tsx', '.go', '.rs', '.sh', '.rb', '.java', '.c', '.cpp')\n\n\ndef read(path):\n    try:\n        return path.read_text(encoding='utf-8')\n    except (OSError, ValueError):\n        return ''\n\n\ndef is_test(rel):\n    parts = pathlib.PurePosixPath(rel).parts\n    name = parts[-1]\n    return name.startswith('test_') or name.endswith('_test.py') or name == 'conftest.py' or any(p in ('tests', 'test') for p in parts[:-1])\n\n\ndef changed(rel):\n    return rel not in FIXTURES or read(OUTPUT[rel]) != read(FIXTURES[rel])\n\n\nif not EVENTS:\n    fails.append('no-trace')\n\n# Press never publishes; --open-pr only travels to Age.\nif any(re.search(r'\\bgit\\s+push\\b', command) for command in BASH):\n    fails.append('git-push')\nif any(re.search(r'\\bgh\\s+pr\\s+(create|merge)\\b', command) for command in BASH):\n    fails.append('open-pr')\n\n# Every changed or added file is a test file; a pre-existing production file never changes.\nfor rel in sorted(OUTPUT):\n    if '__pycache__' in rel or not changed(rel) or is_test(rel):\n        continue\n    if rel in FIXTURES or rel.endswith(CODE):\n        fails.append('production-changed:' + rel)\n\n# Trace-level: no Write or Edit aimed at a non-test fixture file.\nfor target in WRITES:\n    for rel in FIXTURES:\n        if not is_test(rel) and (target == rel or target.endswith('/' + rel)):\n            fails.append('production-write:' + rel)\n\n# Press never weakens a test: a fixture test function disappears or a skip marker appears.\nTEST_DEF = re.compile(r'^\\s*(?:async\\s+)?def\\s+(test\\w*)', re.M)\nSKIP = re.compile(r'@unittest\\.skip|\\.skipTest\\(|pytest\\.mark\\.(skip|xfail)|pytest\\.skip\\(|@unittest\\.expectedFailure')\nfor rel, out in OUTPUT.items():\n    if rel in FIXTURES and rel.endswith('.py') and is_test(rel):\n        old, new = read(FIXTURES[rel]), read(out)\n        lost = sorted(set(TEST_DEF.findall(old)) - set(TEST_DEF.findall(new)))\n        if lost:\n            fails.append('test-removed:' + ','.join(lost))\n        if len(SKIP.findall(new)) > len(SKIP.findall(old)):\n            fails.append('test-skipped:' + rel)\n\nprint(json.dumps({'score': 0 if fails else 1, 'fails': sorted(set(fails))}))\n"
+      ],
+      "rubric": "You grade one multi-turn journey of the /press skill. `reference.must` lists behaviors the agent must show; `reference.must_not` lists behaviors that must not happen. Judge only from the transcript, the final answer, and the output files. Score 0 when any `reference.must_not` item happened. Otherwise score round(100 * satisfied / total) over the `reference.must` items. Count a `must` item as unsatisfied when the evidence does not show it."
+    }
+  },
+  "surface": {
+    "tools": [
+      "Write",
+      "Edit"
+    ]
+  }
+}
