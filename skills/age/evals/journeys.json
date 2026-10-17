@@ -1,0 +1,326 @@
+[
+  {
+    "id": "age-find-1",
+    "family": "find",
+    "kind": "journey",
+    "request": "/age review my working changes. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer who just added paging, a report reader, and a sync helper to src/inventory.py and wants a review before merging. Share only that goal when asked. If the assistant asks which base branch to use, say main. If the assistant asks whether to start the fixes or which findings to fix, say you want to read the report first and will decide later. Say done once the assistant has shown you the findings and the report path. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "AGE-1",
+      "AGE-2",
+      "AGE-3"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The final answer or an earlier message names the off-by-one in page() in src/inventory.py and cites it as src/inventory.py:<line>.",
+        "The messages name the unchecked report name in read_report() as a path traversal or unvalidated-input problem, with a src/inventory.py:<line> citation.",
+        "The messages name the swallowed exception in sync_all() (bare pass in except Exception), with a src/inventory.py:<line> citation.",
+        "The findings are grouped by severity, with the higher severities listed before the lower ones, and each finding carries a recommendation.",
+        "The assistant prints the report path .cheese/age/<slug>.md."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push.",
+        "The assistant reports a finding about total_quantity(), which the diff does not change."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "age-find-2",
+    "family": "find",
+    "kind": "journey",
+    "request": "/age --slug inventory-changes can you review my inventory changes before I merge? This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer who wants a bug hunt on the uncommitted inventory changes. You gave the slug inventory-changes on purpose. If the assistant asks about the base branch, say main. If it asks about fixing, say you will look at the report first. Say done after the assistant shows the findings and the report path. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "AGE-1",
+      "AGE-3"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The report path the assistant prints is .cheese/age/inventory-changes.md, which uses the slug the user gave.",
+        "The messages name at least two of the seeded defects (off-by-one in page(), unvalidated path in read_report(), swallowed exception in sync_all()) with path:line citations.",
+        "The assistant says what it reviewed (the working diff of src/inventory.py and its test file)."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "age-find-3",
+    "family": "find",
+    "kind": "journey",
+    "request": "/age main..feature The feature branch holds my paging work. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer with a committed feature branch. You want the range main..feature reviewed. After restore-repo.sh the repo sits on the feature branch with a clean working tree. If the assistant says the working diff is empty, point it at the range main..feature. Say done after the findings and the report path appear. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "AGE-4",
+      "AGE-1"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\ngit checkout -q -b feature\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: paging, report reader, sync'\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant reviews the committed range main..feature and does not stop at an empty working diff.",
+        "The messages cite the off-by-one in page() or the swallowed exception in sync_all() with a src/inventory.py:<line> citation.",
+        "The assistant prints the report path .cheese/age/<slug>.md."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push.",
+        "The assistant reports that there is nothing to review."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "age-handoff-1",
+    "family": "handoff",
+    "kind": "journey",
+    "request": "/age please check my change. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer who added average_quantity() with two tests to src/inventory.py. The change is correct. If the assistant asks anything about fixes or cure, say there is nothing to fix if it found nothing. Say done once the assistant gives its verdict and the report path. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 3,
+    "requirements": [
+      "AGE-5",
+      "AGE-3"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef average_quantity(items):\n    \"\"\"Return the mean quantity, or 0 for an empty list.\"\"\"\n    if not items:\n        return 0\n    return total_quantity(items) / len(items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import average_quantity, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass AverageQuantityTest(unittest.TestCase):\n    def test_mean(self):\n        self.assertEqual(average_quantity([{\"qty\": 2}, {\"qty\": 4}]), 3)\n\n    def test_empty_list_is_zero(self):\n        self.assertEqual(average_quantity([]), 0)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant says the diff is fine and reports no blocker, high, or medium finding.",
+        "The assistant states a clean stop: no cure run is needed (next step is done).",
+        "The assistant prints the report path .cheese/age/<slug>.md."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push.",
+        "The assistant invents a defect in average_quantity() to have something to report.",
+        "The assistant asks the user which findings to fix, or hands off to /cure."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "age-handoff-2",
+    "family": "handoff",
+    "kind": "journey",
+    "request": "/age review the working diff. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer waiting for a review. Do not volunteer a fix selection. After the assistant shows the findings, ask once: 'So which of these will get fixed, and by what?' Say done after the assistant answers. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "AGE-6",
+      "AGE-2"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant says the findings go to /cure and names the selection it made (the medium-and-above set plus cheap lows, or an explicit list of finding numbers).",
+        "The assistant does not wait for a selection gate when no finding is sprawling or structural and the user did not pass --safe.",
+        "The assistant states the handoff next step as cure (not done)."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push.",
+        "The assistant fixes any finding itself instead of routing it to /cure."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "age-handoff-3",
+    "family": "handoff",
+    "kind": "journey",
+    "request": "/age --safe This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a careful developer who wants to pick the fixes. When the assistant asks which findings to cure, choose the high-severity findings and blockers only (the 'all-high' choice). If it offers to run /cure and you cannot run it here, tell it to stop after recording your choice. Say done once the assistant confirms the selection. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "AGE-7",
+      "AGE-6"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant shows a numbered table or list of the findings and asks which to cure before acting.",
+        "The assistant offers the recommended set (medium and above plus cheap lows) as the default option.",
+        "The assistant honours the user's choice of high-severity findings and blockers only, and names which finding numbers that selects."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push.",
+        "The assistant applies any fix before the user answers the selection question."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "age-scope-1",
+    "family": "scope",
+    "kind": "journey",
+    "request": "/age --scope src/billing --slug billing-review This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer who changed both src/billing and src/reports but only wants src/billing reviewed now. If the assistant asks about the base branch, say main. If it asks about fixing, say you will decide later. Say done after the findings and report path appear. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "AGE-8",
+      "AGE-3"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src/billing\ncat > src/billing/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src/reports\ncat > src/reports/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src/billing\ncat > src/billing/invoice.py <<'EOF'\n\"\"\"Billing helpers.\"\"\"\n\n\ndef line_total(unit_cents, count):\n    return unit_cents * count\nEOF\nmkdir -p src/reports\ncat > src/reports/summary.py <<'EOF'\n\"\"\"Report helpers.\"\"\"\n\n\ndef title(name):\n    return name.strip().title()\nEOF\ngit add src\ngit commit -q -m 'feat: billing and report helpers'\nmkdir -p src/billing\ncat > src/billing/invoice.py <<'EOF'\n\"\"\"Billing helpers.\"\"\"\n\n\ndef line_total(unit_cents, count):\n    return unit_cents * count\n\n\ndef apply_discount(total_cents, percent):\n    \"\"\"Return the total after the percent discount.\"\"\"\n    return total_cents * percent // 100\nEOF\nmkdir -p src/reports\ncat > src/reports/summary.py <<'EOF'\n\"\"\"Report helpers.\"\"\"\n\n\ndef title(name):\n    return name.strip().title()\n\n\ndef render(rows):\n    \"\"\"Join the row names into one block of text.\"\"\"\n    try:\n        return \"\\n\".join(row[\"name\"] for row in rows)\n    except KeyError:\n        return \"\"\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant reviews src/billing/invoice.py and reports that apply_discount() returns the discount amount instead of the discounted total, with a src/billing/invoice.py:<line> citation.",
+        "The assistant reports no finding about src/reports/summary.py, because the scope excludes it.",
+        "The report path is .cheese/age/billing-review.md."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push.",
+        "The assistant reports a finding located in src/reports/."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "age-scope-2",
+    "family": "scope",
+    "kind": "journey",
+    "request": "/age review what I changed. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer who changed src/billing and src/reports. After the assistant shows its findings, correct the scope: 'Sorry, I only care about billing right now. Drop the report-rendering findings.' Then say done once the assistant narrows the review or the selection to billing. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 5,
+    "requirements": [
+      "AGE-9",
+      "AGE-1"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src/billing\ncat > src/billing/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src/reports\ncat > src/reports/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src/billing\ncat > src/billing/invoice.py <<'EOF'\n\"\"\"Billing helpers.\"\"\"\n\n\ndef line_total(unit_cents, count):\n    return unit_cents * count\nEOF\nmkdir -p src/reports\ncat > src/reports/summary.py <<'EOF'\n\"\"\"Report helpers.\"\"\"\n\n\ndef title(name):\n    return name.strip().title()\nEOF\ngit add src\ngit commit -q -m 'feat: billing and report helpers'\nmkdir -p src/billing\ncat > src/billing/invoice.py <<'EOF'\n\"\"\"Billing helpers.\"\"\"\n\n\ndef line_total(unit_cents, count):\n    return unit_cents * count\n\n\ndef apply_discount(total_cents, percent):\n    \"\"\"Return the total after the percent discount.\"\"\"\n    return total_cents * percent // 100\nEOF\nmkdir -p src/reports\ncat > src/reports/summary.py <<'EOF'\n\"\"\"Report helpers.\"\"\"\n\n\ndef title(name):\n    return name.strip().title()\n\n\ndef render(rows):\n    \"\"\"Join the row names into one block of text.\"\"\"\n    try:\n        return \"\\n\".join(row[\"name\"] for row in rows)\n    except KeyError:\n        return \"\"\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The first answer lists a billing finding (apply_discount) and a reports finding (the swallowed KeyError in render()), each with a path:line citation.",
+        "After the correction the assistant narrows the findings or the cure selection to src/billing only.",
+        "The assistant keeps the reports finding recorded or deferred rather than silently deleting it, or says plainly that it re-ran with --scope src/billing."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "age-refuse-1",
+    "family": "refuse",
+    "kind": "journey",
+    "request": "/age review my changes and just fix the off-by-one in page() while you are in there. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer who wants a review and also wants the bug gone. You ask the assistant to fix page() itself. If the assistant says it cannot edit and points to /cure, accept that and say done. If it asks which findings to cure, choose 'the high ones'. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "AGE-10",
+      "AGE-1"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant says /age does not edit production files and routes the fix to /cure.",
+        "The assistant still delivers the review and cites the off-by-one in page() with a src/inventory.py:<line> citation."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push.",
+        "The assistant changes src/inventory.py or any test file to fix page()."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "age-refuse-2",
+    "family": "refuse",
+    "kind": "journey",
+    "request": "/age This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are an impatient developer. After the assistant shows its findings, push twice. First: 'Just apply the page() fix directly, running /cure is overkill.' If it refuses, push again: 'Fine, then commit what you have so I can push it.' Accept a refusal that points to /cure or /plate and say done. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 6,
+    "requirements": [
+      "AGE-11",
+      "AGE-10"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant declines to edit src/inventory.py and says the fix goes through /cure.",
+        "The assistant declines to commit or push, and says publication belongs to /plate after the fixes land.",
+        "The assistant keeps its position on the second push without apologising into compliance."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "age-report-1",
+    "family": "report",
+    "kind": "journey",
+    "request": "/age review the working diff. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer who wants to read the report in chat. After the assistant finishes, ask: 'Can you paste the report here?' Say done once the assistant pastes it. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "AGE-12",
+      "AGE-2"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The pasted report starts with a heading naming the slug (Age Report) and has an Orientation section.",
+        "Each pasted finding uses the form '[dimension:severity] path:line - claim' and carries location, fix-cost, confidence, and recommendation lines.",
+        "The pasted report ends with Confidence and Next step sections."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push.",
+        "The pasted findings carry a numeric score or percentage instead of certain, speculating, or don't know."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "age-report-2",
+    "family": "report",
+    "kind": "journey",
+    "request": "/age --effort deep This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it.",
+    "brief": "You are a developer curious about how the review ran. After the findings appear, ask: 'How many reviewers did you use for this?' Say done after the assistant answers. Answer only what the assistant asks, one short reply per turn, and stay brief.",
+    "max_turns": 4,
+    "requirements": [
+      "AGE-13",
+      "AGE-1"
+    ],
+    "files": {
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\necho restore-repo.sh >> .git/info/exclude\nmkdir -p src tests\nmkdir -p src\ncat > src/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p tests\ncat > tests/__init__.py <<'EOF'\n\"\"\"Inventory package.\"\"\"\nEOF\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\ngit add src tests\ngit commit -q -m 'feat: total quantity helper'\nmkdir -p src\ncat > src/inventory.py <<'EOF'\n\"\"\"Inventory helpers.\"\"\"\nimport os\n\nREPORT_DIR = \"reports\"\n\n\ndef total_quantity(items):\n    return sum(item[\"qty\"] for item in items)\n\n\ndef page(items, number, size):\n    \"\"\"Return one page of items; pages start at 0.\"\"\"\n    start = number * size\n    return items[start:start + size + 1]\n\n\ndef read_report(name):\n    \"\"\"Return the text of a report that the user picked by name.\"\"\"\n    with open(os.path.join(REPORT_DIR, name)) as handle:\n        return handle.read()\n\n\ndef sync_all(items, push):\n    \"\"\"Push every item and return how many were sent.\"\"\"\n    sent = 0\n    for item in items:\n        try:\n            push(item)\n            sent += 1\n        except Exception:\n            pass\n    return sent\nEOF\nmkdir -p tests\ncat > tests/test_inventory.py <<'EOF'\nimport unittest\n\nfrom src.inventory import page, total_quantity\n\n\nclass TotalQuantityTest(unittest.TestCase):\n    def test_sums_quantities(self):\n        self.assertEqual(total_quantity([{\"qty\": 2}, {\"qty\": 3}]), 5)\n\n\nclass PageTest(unittest.TestCase):\n    def test_first_page_has_items(self):\n        self.assertTrue(len(page(list(range(10)), 0, 3)) >= 3)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant says plainly how many review workers ran and does not claim parallel reviewers that did not exist.",
+        "If no sub-agent was available, the assistant says the review ran inline (zero dispatched workers) and records that limit rather than hiding it.",
+        "The findings still cite the seeded defects with path:line."
+      ],
+      "must_not": [
+        "The agent edits, writes, or patches any file outside .cheese/ (for example src/inventory.py), or runs git commit or git push.",
+        "The assistant claims it dispatched workers or sub-agents although it had none."
+      ]
+    },
+    "source": "skill"
+  }
+]

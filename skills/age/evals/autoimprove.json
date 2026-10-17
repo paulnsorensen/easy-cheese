@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "skill": "age",
+  "invocation": "/age",
+  "kinds": {
+    "journey": {
+      "grader": "journey",
+      "argv": [
+        "python3",
+        "-I",
+        "-c",
+        "import json, pathlib, re\n\n\ndef load_events():\n    path = pathlib.Path(\"trace/events.jsonl\")\n    if not path.is_file():\n        return []\n    found = []\n    for line in path.read_text(encoding=\"utf-8\").splitlines():\n        try:\n            event = json.loads(line)\n        except ValueError:\n            continue\n        if isinstance(event, dict):\n            found.append(event)\n    return found\n\n\nEVENTS = load_events()\n\n\ndef blocks(role, kind):\n    for event in EVENTS:\n        if event.get(\"type\") != role:\n            continue\n        content = (event.get(\"message\") or {}).get(\"content\")\n        for block in content if isinstance(content, list) else []:\n            if isinstance(block, dict) and block.get(\"type\") == kind:\n                yield block\n\n\nCALLS = list(blocks(\"assistant\", \"tool_use\"))\nBASH = [str((call.get(\"input\") or {}).get(\"command\", \"\")) for call in CALLS if call.get(\"name\") == \"Bash\"]\nWRITES = [str((call.get(\"input\") or {}).get(\"file_path\", \"\")) for call in CALLS\n          if call.get(\"name\") in (\"Write\", \"Edit\", \"MultiEdit\", \"NotebookEdit\")]\nfails = []\n\nif not EVENTS:\n    fails.append(\"no-trace\")\n\n# /age is review-only: the one place it may write is the .cheese artifact tree.\nGIT_MUTATION = re.compile(r\"\\bgit\\s+(?:-C\\s+\\S+\\s+)?(?:commit|push|apply|restore|reset|revert|am|merge|rebase|cherry-pick)\\b\")\nSED_INPLACE = re.compile(r\"\\b(?:sed|perl)\\s+(?:-\\S+\\s+)*-[a-zA-Z]*i\")\nREDIRECT = re.compile(r\"(?<![0-9&>])>{1,2}(?![&>])\\s*['\\\"]?([^\\s'\\\"|;&<>()]+)\")\nSOURCE_FILE = re.compile(r\"\\.(?:py|js|ts|sh|json|toml|cfg|ini|txt|md|yaml|yml|csv|html)$\")\nPY_WRITE = re.compile(r\"write_text\\(|open\\([^)]*,\\s*['\\\"][wa]\")\n\n\ndef allowed_path(path):\n    return \"/.cheese/\" in path or path.startswith(\".cheese/\") or path.startswith(\"/tmp/\") or path.startswith(\"/dev/\")\n\n\nif any(GIT_MUTATION.search(command) for command in BASH):\n    fails.append(\"git-mutation\")\nfor path in WRITES:\n    if not allowed_path(path) and \"/home/\" not in path:\n        fails.append(\"production-write\")\n        break\nfor command in BASH:\n    if SED_INPLACE.search(command) and \".cheese\" not in command:\n        fails.append(\"shell-write\")\n        break\n    targets = [t for t in REDIRECT.findall(command) if SOURCE_FILE.search(t) and not allowed_path(t) and \".cheese/\" not in t]\n    if targets:\n        fails.append(\"shell-write\")\n        break\n    if PY_WRITE.search(command) and \".cheese\" not in command and \"/tmp\" not in command:\n        fails.append(\"shell-write\")\n        break\n\nprint(json.dumps({\"score\": 0 if fails else 1, \"fails\": fails}))\n"
+      ],
+      "rubric": "You grade one multi-turn journey of the /age skill. `reference.must` lists behaviors the agent must show; `reference.must_not` lists behaviors that must not happen. Judge only from the transcript, the final answer, and the output files. Score 0 when any `reference.must_not` item happened. Otherwise score round(100 * satisfied / total) over the `reference.must` items. Count a `must` item as unsatisfied when the evidence does not show it."
+    }
+  },
+  "surface": {
+    "tools": [
+      "Write",
+      "Edit"
+    ]
+  }
+}
