@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Publish one staged release tree as one commit on the dist branch.
+"""Publish one main commit and its built archives as one commit on dist.
 
-Each dist commit holds the complete shippable tree built from one main
-commit. One push moves the branch, so a clone sees the old skills and
-archives or the new ones, never a mix. The branch is append-only: a publish
-fast-forwards it and records its source in a `Source-Commit` trailer. A
-source that does not descend from the last published source is refused, so
-a late or manual run cannot move dist back.
+Main tracks no archives. Each dist commit holds the complete tree of one main
+commit plus the archives built from it. One push moves the branch, so a clone
+sees the old skills and archives or the new ones, never a mix. The branch is
+append-only: a publish fast-forwards it and records its source in a
+`Source-Commit` trailer. A source that does not descend from the last
+published source is refused, so a late or manual run cannot move dist back.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from typing import cast
 TRAILER = "Source-Commit"
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "actions@github.com"
+ARCHIVES = "skills/*/scripts/*.pyz"
 
 
 @dataclass(frozen=True)
@@ -69,14 +70,25 @@ def _remote_tip(repo: Path, remote: str, branch: str) -> str | None:
     return _git(repo, "rev-parse", "FETCH_HEAD^{commit}")
 
 
-def _staged_tree(repo: Path, staged: Path) -> str:
-    """Write the staged directory as a tree object; ignore rules do not apply."""
-    git_dir = _git(repo, "rev-parse", "--absolute-git-dir")
+def _dist_tree(repo: Path, source: str, staged: Path) -> str:
+    """Write the source tree with its archives replaced by the staged archives."""
+    archives = sorted(staged.glob(ARCHIVES))
+    if not archives:
+        raise SystemExit(f"publish_dist: no staged archives under {staged}")
     with tempfile.TemporaryDirectory() as scratch:
         env = {**os.environ, "GIT_INDEX_FILE": str(Path(scratch) / "index")}
-        tree_args = ("--git-dir", git_dir, "--work-tree", str(staged))
-        _ = _git(staged, *tree_args, "add", "--all", "--force", ".", env=env)
-        return _git(staged, *tree_args, "write-tree", env=env)
+        _ = _git(repo, "read-tree", source, env=env)
+        # A tracked archive the build no longer makes (a removed skill) must not ship.
+        tracked = _git(repo, "ls-files", "--", ARCHIVES, env=env).splitlines()
+        if tracked:
+            _ = _git(repo, "update-index", "--force-remove", "--", *tracked, env=env)
+        for archive in archives:
+            blob = _git(repo, "hash-object", "-w", "--", str(archive))
+            path = archive.relative_to(staged).as_posix()
+            _ = _git(
+                repo, "update-index", "--add", "--cacheinfo", f"100755,{blob},{path}", env=env
+            )
+        return _git(repo, "write-tree", env=env)
 
 
 def publish(
@@ -88,15 +100,13 @@ def publish(
     branch: str,
     trunk: str,
 ) -> Result:
-    """Append the staged tree for `source` to `branch` on `remote`."""
-    if not any(staged.glob("skills/*/SKILL.md")):
-        raise SystemExit(f"publish_dist: no staged skills under {staged}")
+    """Append `source` plus the archives under `staged` to `branch` on `remote`."""
     source = _git(repo, "rev-parse", "--verify", f"{source}^{{commit}}")
     if not _is_ancestor(repo, source, trunk):
         raise SystemExit(f"publish_dist: {source} is not on {trunk}; refusing to publish")
 
+    tree = _dist_tree(repo, source, staged)
     tip = _remote_tip(repo, remote, branch)
-    tree = _staged_tree(repo, staged)
     if tip is not None:
         published = _git(repo, "log", "-1", f"--format=%(trailers:key={TRAILER},valueonly)", tip)
         if not published:
@@ -127,7 +137,7 @@ def publish(
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     _ = parser.add_argument("--source", required=True, help="main commit the tree was built from")
-    _ = parser.add_argument("--staged", type=Path, required=True, help="stage_release.py output")
+    _ = parser.add_argument("--staged", type=Path, required=True, help="stage_release.py output; its archives ship")
     _ = parser.add_argument("--remote", default="origin")
     _ = parser.add_argument("--branch", default="dist")
     _ = parser.add_argument("--trunk", default="origin/main", help="ref the source must be on")

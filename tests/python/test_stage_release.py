@@ -169,9 +169,10 @@ def test_release_workflow_validates_staged_tree_after_transformations() -> None:
     assert "working-directory: ${{ runner.temp }}/release" in workflow[stage:validate]
 
 
-def test_release_workflow_builds_nothing() -> None:
-    """The tag workflow publishes committed archives without build tooling."""
+def test_release_workflow_builds_archives_before_staging() -> None:
+    """Main tracks no archives, so the tag workflow builds them from the tagged source."""
     workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert workflow.index("just wedge-build") < workflow.index("python3 scripts/stage_release.py")
     assert "requirements-build.txt" not in workflow
     assert "build_pyz" not in workflow
     assert "shiv" not in workflow.lower()

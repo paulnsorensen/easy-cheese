@@ -127,7 +127,7 @@ before review.
 
 Easy-cheese is intentionally a small surface. What that means in practice:
 
-- **Skills only.** The repository publishes no custom agents, commands, eta templates, or harness-specific bundles. `SKILL.md` defines each capability, and Python-backed skills include one committed self-contained `.pyz` archive.
+- **Skills only.** The repository publishes no custom agents, commands, eta templates, or harness-specific bundles. `SKILL.md` defines each capability, and Python-backed skills include one self-contained `.pyz` archive.
 - **No repo-wide MCP requirement.** Workflow skills suggest tools (tilth, Context7, Tavily) but have host-native fallbacks. Source-code work follows the shared routing contract: prefer tilth when present, use equivalent native AST/LSP/anchored-edit backends when available, and report any precision loss from bounded fallbacks.
 - **One orchestrator skill, narrowly scoped.** `/cook` is the single implementation orchestrator: focused specs use its single-coder path, while file-disjoint curds use its fresh-context fan pathway. `/ultracook` is only a compatibility redirect to `/cook`. Harvest and `/plate` remain parent-owned; parallel curds use sequential same-worktree phase spawns and a terminal reviewer pass before publication.
 - **No automatic re-age loop in `/cure`.** The skill describes the protocol; the human runs the next `/age` when ready.
@@ -144,22 +144,21 @@ For the stability policy, `schema_version` contract, and strictness tiers, see [
 
 ## Run and build skill archives
 
-You need only Python 3.11 or newer to run a skill. Each Python-backed skill commits one self-contained executable archive at `skills/<skill>/scripts/<skill>.pyz`:
+You need only Python 3.11 or newer to run a skill. Each Python-backed skill ships one self-contained executable archive at `skills/<skill>/scripts/<skill>.pyz`:
 
 ```sh
 python3 skills/<skill>/scripts/<skill>.pyz <subcommand>
 ```
 
-If you change runtime source, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`, rebuild every affected archive:
+The default branch, `dist`, holds the published tree. On every merge to `main`, CI builds the archives and appends one `dist` commit with the full `main` tree plus those archives, so an install never mixes a new `SKILL.md` with an old archive. `main` tracks no archives. In a `main` checkout, build them before you run a skill:
 
 ```sh
 just wedge-build
-just wedge-check
 ```
 
 `just wedge-build` runs [wedge](https://github.com/paulnsorensen/skillz-that-grillz/tree/main/lib) at build time. It vendors `src/`, builds one reproducible archive per skill, and keeps archive metadata in `wedge.toml`. Each application's `commands.py` declares its public subcommands as an immutable tuple of `Command(name, "module:callable")` values. The archive resolves a selected target lazily and calls it with only that command's arguments.
 
-`just check` runs `just wedge-check`, which executes `wedge bundle --check` and fails on a missing, corrupt, or stale committed archive. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
+`just check` and `just ci` build the archives before any test executes one. For implementation details, see the [contributor workflow](./CONTRIBUTING.md).
 
 ## Optional tools
 
@@ -201,14 +200,6 @@ To scope the install to just the current repo instead (recorded under
 
 ```sh
 npx skills@latest add paulnsorensen/easy-cheese --all
-```
-
-Every merge to `main` also publishes one commit to the `dist` branch. That
-commit holds the skills and the archives built from that `main` commit, and
-nothing else. To install from it:
-
-```sh
-npx skills@latest add paulnsorensen/easy-cheese#dist --all --global
 ```
 
 After install, start with `/cheese` if you're not sure which wheel to cut into

@@ -1,4 +1,4 @@
-"""The dist publisher appends one complete tree per main commit and never moves back."""
+"""The dist publisher appends one source tree plus its archives per main commit."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import publish_dist  # noqa: E402
 
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "publish-dist.yml"
+ARCHIVE = "skills/cook/scripts/cook.pyz"
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -38,6 +39,9 @@ def source(tmp_path: Path) -> Path:
     repo = tmp_path / "source"
     _ = subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
     _ = _git(repo, "remote", "add", "origin", str(remote))
+    (repo / "skills" / "cook").mkdir(parents=True)
+    _ = (repo / "skills" / "cook" / "SKILL.md").write_text("# cook\n")
+    _ = _git(repo, "add", "skills")
     _ = _commit(repo, "one")
     return repo
 
@@ -52,10 +56,8 @@ def _commit(repo: Path, label: str) -> str:
 
 
 def _stage(root: Path, version: str) -> Path:
-    scripts = root / "skills" / "cook" / "scripts"
-    scripts.mkdir(parents=True)
-    _ = (root / "skills" / "cook" / "SKILL.md").write_text(f"# cook {version}\n")
-    archive = scripts / "cook.pyz"
+    archive = root / ARCHIVE
+    archive.parent.mkdir(parents=True)
     _ = archive.write_bytes(f"#!/usr/bin/env python3\n# {version}\n".encode())
     archive.chmod(0o755)
     return root
@@ -68,7 +70,7 @@ def _publish(repo: Path, sha: str, staged: Path) -> publish_dist.Result:
 
 
 def _clone_dist(repo: Path, into: Path) -> Path:
-    """Clone dist the way `npx skills add owner/repo#dist` does."""
+    """Clone dist the way `npx skills add` clones a branch: depth 1."""
     remote = _git(repo, "remote", "get-url", "origin")
     _ = subprocess.run(
         ["git", "clone", "-q", "--depth", "1", "--branch", "dist", remote, str(into)],
@@ -77,20 +79,23 @@ def _clone_dist(repo: Path, into: Path) -> Path:
     return into
 
 
-def test_first_publish_creates_dist_with_the_whole_tree(source: Path, tmp_path: Path) -> None:
+def test_first_publish_holds_source_and_archives(source: Path, tmp_path: Path) -> None:
     sha = _git(source, "rev-parse", "HEAD")
     result = _publish(source, sha, _stage(tmp_path / "s1", "v1"))
 
     assert result.status == "published"
     clone = _clone_dist(source, tmp_path / "clone")
-    assert (clone / "skills/cook/SKILL.md").read_text() == "# cook v1\n"
-    archive = clone / "skills/cook/scripts/cook.pyz"
+    assert (clone / "src.txt").read_text() == "one"
+    assert (clone / "skills/cook/SKILL.md").read_text() == "# cook\n"
+    archive = clone / ARCHIVE
+    assert archive.read_bytes().endswith(b"# v1\n")
     assert archive.stat().st_mode & 0o111, "archive lost its executable bit"
-    assert not (clone / "src.txt").exists(), "dist must hold only the staged tree"
     assert _git(clone, "log", "-1", "--format=%(trailers:key=Source-Commit,valueonly)") == sha
 
 
-def test_next_publish_appends_one_commit_with_both_files(source: Path, tmp_path: Path) -> None:
+def test_next_publish_moves_source_and_archive_in_one_commit(
+    source: Path, tmp_path: Path
+) -> None:
     first = _publish(source, _git(source, "rev-parse", "HEAD"), _stage(tmp_path / "s1", "v1"))
     sha = _commit(source, "two")
     second = _publish(source, sha, _stage(tmp_path / "s2", "v2"))
@@ -99,16 +104,31 @@ def test_next_publish_appends_one_commit_with_both_files(source: Path, tmp_path:
     clone = _clone_dist(source, tmp_path / "clone")
     assert _git(clone, "rev-parse", "HEAD^") == first.commit, "dist must fast-forward"
     changed = _git(clone, "show", "--name-only", "--format=", "HEAD").splitlines()
-    assert sorted(changed) == ["skills/cook/SKILL.md", "skills/cook/scripts/cook.pyz"]
+    assert sorted(changed) == [ARCHIVE, "src.txt"]
 
 
-def test_unchanged_tree_adds_no_commit(source: Path, tmp_path: Path) -> None:
-    first = _publish(source, _git(source, "rev-parse", "HEAD"), _stage(tmp_path / "s1", "v1"))
-    sha = _commit(source, "tests only")
+def test_republishing_the_same_source_adds_no_commit(source: Path, tmp_path: Path) -> None:
+    sha = _git(source, "rev-parse", "HEAD")
+    first = _publish(source, sha, _stage(tmp_path / "s1", "v1"))
     again = _publish(source, sha, _stage(tmp_path / "s2", "v1"))
 
     assert again.status == "unchanged"
     assert again.commit == first.commit
+
+
+def test_built_archives_replace_tracked_ones(source: Path, tmp_path: Path) -> None:
+    """A stale tracked archive, or one for a removed skill, never ships."""
+    for rel, body in ((ARCHIVE, b"stale"), ("skills/gone/scripts/gone.pyz", b"gone")):
+        path = source / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_bytes(body)
+    _ = _git(source, "add", "-f", "skills")
+    sha = _commit(source, "tracked archives")
+
+    _ = _publish(source, sha, _stage(tmp_path / "s1", "v1"))
+    clone = _clone_dist(source, tmp_path / "clone")
+    assert (clone / ARCHIVE).read_bytes().endswith(b"# v1\n")
+    assert not (clone / "skills/gone").exists()
 
 
 def test_older_source_cannot_move_dist_back(source: Path, tmp_path: Path) -> None:
@@ -131,10 +151,18 @@ def test_source_off_main_is_refused(source: Path, tmp_path: Path) -> None:
     assert _git(source, "ls-remote", "origin", "refs/heads/dist") == ""
 
 
-def test_empty_stage_is_refused(source: Path, tmp_path: Path) -> None:
+def test_stage_without_archives_is_refused(source: Path, tmp_path: Path) -> None:
     (tmp_path / "empty").mkdir()
-    with pytest.raises(SystemExit, match="no staged skills"):
+    with pytest.raises(SystemExit, match="no staged archives"):
         _ = _publish(source, "HEAD", tmp_path / "empty")
+
+
+def test_main_tracks_no_archives() -> None:
+    """Archives live only on dist; a branch cut from dist must not merge them back."""
+    tracked = _git(REPO_ROOT, "ls-files", "--", publish_dist.ARCHIVES)
+    assert tracked == "", (
+        "main must not track archives; branch from main, not dist, and drop: " + tracked
+    )
 
 
 def test_workflow_builds_stages_checks_then_publishes() -> None:

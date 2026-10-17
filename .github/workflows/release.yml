@@ -39,8 +39,23 @@ jobs:
           sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
           gh --version
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+
+      - name: Set up just
+        run: |
+          uv tool install rust-just==1.58.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Main tracks no archives, so the tagged commit builds its own.
+      - name: Build archives
+        run: just wedge-build
+
       # stage_release copies each skill's SKILL.md and executable self-contained
-      # archive; it builds nothing and needs only the standard library.
+      # archive; it needs only the standard library.
       - name: Stage shippable release tree
         run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/release"
 
