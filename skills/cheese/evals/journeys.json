@@ -1,0 +1,505 @@
+[
+  {
+    "id": "cheese-route-1",
+    "family": "route",
+    "kind": "journey",
+    "request": "/cheese I get this TypeError when tail_bytes reads a file with no trailing newline, the trace is in trace.txt",
+    "brief": "You are a developer with a failing tail utility. You want the bug found and fixed. If asked whether to diagnose only or fix, say fix it. Say done once the assistant has named where the work goes. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 3,
+    "requirements": [
+      "CHEESE-1",
+      "CHEESE-2",
+      "CHEESE-3",
+      "CHEESE-7"
+    ],
+    "files": {
+      "src/tail.py": "def tail_bytes(path, count):\n    data = open(path, \"rb\").read()\n    return data[-count:].decode()\n",
+      "trace.txt": "Traceback (most recent call last):\n  File \"src/tail.py\", line 3, in tail_bytes\n    return data[-count:].decode()\nTypeError: bad operand type for unary -: 'NoneType'\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant prints an Intent line naming a debug or bug-fix intent.",
+        "The assistant prints a Reason line that cites the stack trace or trace.txt.",
+        "The assistant targets /pasteurize, not /cook and not /culture.",
+        "A line of the form `route: intent=debug target=pasteurize path=<fast|escalated> probes=<n>` appears in the answer.",
+        "If the target skill cannot load, the assistant says so plainly and gives the user the command to run."
+      ],
+      "must_not": [
+        "The assistant states the root cause of the TypeError as its own diagnosis or proposes a code patch.",
+        "Edit a file, run a test suite, commit, or push itself."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-route-2",
+    "family": "route",
+    "kind": "journey",
+    "request": "/cheese respond to the review comments on PR#142 and handle the failing build",
+    "brief": "You maintain a repo with an open pull request, number 142. A reviewer left comments and CI is red. You want them triaged. You have no gh access to share; if asked for details, say the PR number is all you have. Say done once the assistant names the target. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 3,
+    "requirements": [
+      "CHEESE-1",
+      "CHEESE-2",
+      "CHEESE-3",
+      "CHEESE-7"
+    ],
+    "files": {
+      "README.md": "# Billing service\n\nSmall service with a worker and a web app.\nSee docs/arch.md for the layout.\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant classifies the request as affinage (review feedback and failing CI on a pull request).",
+        "The assistant targets /affinage with the number 142.",
+        "The assistant does not pick /age, because the user asked to act on existing comments and CI, not for a fresh review.",
+        "The answer ends its routing block with a `route: intent=affinage target=affinage ...` line.",
+        "If /affinage cannot load or gh is unavailable, the assistant reports that honestly instead of inventing comments."
+      ],
+      "must_not": [
+        "The assistant invents review comments or CI results.",
+        "The assistant pastes a summary of what /affinage would do as if it had done it."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-route-3",
+    "family": "route",
+    "kind": "journey",
+    "request": "/cheese is the tenacity retry library still maintained, and how does it compare to backoff?",
+    "brief": "You are choosing a retry library. You want an evidence-backed answer, not an opinion. Say done after the assistant routes the question. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 3,
+    "requirements": [
+      "CHEESE-1",
+      "CHEESE-2",
+      "CHEESE-3"
+    ],
+    "files": {
+      "requirements.txt": "tenacity==8.2.3\nrequests==2.31.0\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant classifies the input as a research intent (external library comparison and maintenance state).",
+        "The assistant targets /briesearch.",
+        "The route receipt line names intent research and target briesearch."
+      ],
+      "must_not": [
+        "The assistant answers the maintenance question from memory as if it had researched it.",
+        "The assistant routes to /mold or /cook."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-route-4",
+    "family": "route",
+    "kind": "journey",
+    "request": "/cheese we need a new authn flow across the web app and the worker. Shape this into a spec first.",
+    "brief": "You want a spec for adding auth to the worker, shared with the web app. You want to steer the design yourself. Say done once the assistant routes. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 3,
+    "requirements": [
+      "CHEESE-1",
+      "CHEESE-2",
+      "CHEESE-3"
+    ],
+    "files": {
+      "README.md": "# Billing service\n\nSmall service with a worker and a web app.\nSee docs/arch.md for the layout.\n",
+      "docs/arch.md": "# Architecture\n\nweb -> api -> worker. Auth lives in api/auth.py. The worker has no auth today.\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant classifies the input as a mold intent (an explicit spec ask with auth and cross-slice signals).",
+        "The assistant targets /mold and does not target /cook.",
+        "The Reason line cites the spec ask or the leverage trigger, such as auth.",
+        "The answer carries a receipt line with target=mold."
+      ],
+      "must_not": [
+        "The assistant writes a spec or design itself.",
+        "The assistant routes straight to /cook --auto."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-route-5",
+    "family": "route",
+    "kind": "journey",
+    "request": "/cheese let's rubber-duck whether to split the billing slice. Don't write anything.",
+    "brief": "You want to think out loud about splitting the billing slice and you do not want any file written. Say done once the assistant routes. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 3,
+    "requirements": [
+      "CHEESE-1",
+      "CHEESE-11",
+      "CHEESE-3"
+    ],
+    "files": {
+      "README.md": "# Billing service\n\nSmall service with a worker and a web app.\nSee docs/arch.md for the layout.\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant classifies the input as rubber-duck because the user opted out of writes.",
+        "The assistant targets /culture.",
+        "The receipt line names intent rubber-duck and target culture."
+      ],
+      "must_not": [
+        "The assistant routes to /mold or /cook.",
+        "The assistant starts designing the split instead of routing."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-route-6",
+    "family": "route",
+    "kind": "journey",
+    "request": "/cheese make tail_bytes in src/tail.py count bytes correctly when there is no trailing newline",
+    "brief": "You have a clear one-function fix in mind and want it done. Say done once the assistant routes. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 3,
+    "requirements": [
+      "CHEESE-1",
+      "CHEESE-3",
+      "CHEESE-7"
+    ],
+    "files": {
+      "src/tail.py": "def tail_bytes(path, count):\n    data = open(path, \"rb\").read()\n    return data[-count:].decode()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant classifies the input as a cook intent (a bounded single-file fix with a named function).",
+        "The assistant targets /cook and does not ask a clarifying question.",
+        "The receipt line is consistent: path=fast with probes=0, or path=escalated with probes of at least 1.",
+        "The assistant does not edit src/tail.py itself."
+      ],
+      "must_not": [
+        "The assistant edits src/tail.py or shows a finished patch as its own work.",
+        "The assistant runs any test."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-clarify-1",
+    "family": "clarify",
+    "kind": "journey",
+    "request": "/cheese fix it",
+    "brief": "You typed a vague message. The thing to fix is the failing test in tests/test_tail.py. Only say so when the assistant asks what you mean. After the assistant routes again, say done. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 4,
+    "requirements": [
+      "CHEESE-4",
+      "CHEESE-3",
+      "CHEESE-1"
+    ],
+    "files": {
+      "tests/test_tail.py": "from src.tail import tail_bytes\n\n\ndef test_no_trailing_newline():\n    assert tail_bytes('f.txt', 3) == 'abc'\n",
+      "src/tail.py": "def tail_bytes(path, count):\n    data = open(path, \"rb\").read()\n    return data[-count:].decode()\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant asks exactly one clarifying question in its first reply and dispatches nothing before the answer.",
+        "The first route receipt names target=clarify.",
+        "After the answer, the assistant classifies again and prints a new receipt with a real target such as pasteurize or cook.",
+        "The question is targeted at what to fix, not a list of several questions."
+      ],
+      "must_not": [
+        "The assistant asks two or more questions in one turn.",
+        "The assistant guesses a target for 'fix it' before asking.",
+        "Edit a file, run a test suite, commit, or push."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-clarify-2",
+    "family": "clarify",
+    "kind": "journey",
+    "request": "/cheese",
+    "brief": "You opened the router with no arguments. You want a review of the diff in PR 87. Say that only when asked. After the assistant routes, say done. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 4,
+    "requirements": [
+      "CHEESE-4",
+      "CHEESE-3",
+      "CHEESE-1"
+    ],
+    "files": {
+      "TODO.md": "- review PR 87\n- fix tail bug\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant treats the empty input as a request for what to do next and asks one question.",
+        "The question offers the two most likely targets plus a Stop option, or asks openly in one line.",
+        "The first receipt names target=clarify.",
+        "After the answer, the assistant routes a PR review request to /age."
+      ],
+      "must_not": [
+        "The assistant dispatches a skill before the user answers.",
+        "The assistant asks more than one question."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-safe-1",
+    "family": "safe",
+    "kind": "journey",
+    "request": "/cheese --safe review PR#142",
+    "brief": "You want a review of PR 142 but you want to approve the dispatch first. When the assistant offers choices, pick Stop. Then say done. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 4,
+    "requirements": [
+      "CHEESE-5",
+      "CHEESE-3",
+      "CHEESE-1"
+    ],
+    "files": {
+      "README.md": "# Billing service\n\nSmall service with a worker and a web app.\nSee docs/arch.md for the layout.\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant announces Intent, Reason, and Target, then waits for a user selection instead of dispatching.",
+        "The choices pre-select /age as the recommended target, include an alternative, and put Stop last.",
+        "After the user picks Stop, the assistant stops and does not dispatch any skill.",
+        "The assistant does not re-raise the declined gate; it states the open item in one line at most."
+      ],
+      "must_not": [
+        "The assistant dispatches /age before the user selects.",
+        "The assistant dispatches /age after the user selected Stop."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-safe-2",
+    "family": "safe",
+    "kind": "journey",
+    "request": "/cheese --safe The tail_bytes crash in trace.txt needs fixing",
+    "brief": "You have a crash with the trace in trace.txt. You want the safe gate. When the assistant offers choices, pick the alternative that does NOT use --auto. Say done after the assistant states the dispatch command. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 4,
+    "requirements": [
+      "CHEESE-5",
+      "CHEESE-1",
+      "CHEESE-7"
+    ],
+    "files": {
+      "src/tail.py": "def tail_bytes(path, count):\n    data = open(path, \"rb\").read()\n    return data[-count:].decode()\n",
+      "trace.txt": "Traceback (most recent call last):\n  File \"src/tail.py\", line 3, in tail_bytes\n    return data[-count:].decode()\nTypeError: bad operand type for unary -: 'NoneType'\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant waits for the user's selection before dispatching.",
+        "The recommended option is /pasteurize --auto with the input, and an alternative is /pasteurize without --auto; Stop is last.",
+        "After the user picks the non-auto alternative, the assistant dispatches or names `/pasteurize` without `--auto`."
+      ],
+      "must_not": [
+        "The assistant adds --auto after the user chose the non-auto alternative.",
+        "The assistant dispatches before the selection."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-continue-1",
+    "family": "continue",
+    "kind": "journey",
+    "request": "/cheese --continue billing-rollout Time to start landing the stack",
+    "brief": "You are resuming work from a fresh context. You expect the router to find the handoff for slug billing-rollout. If the assistant says it cannot find or cannot resolve the handoff, accept that and ask nothing more. Say done after its report. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 3,
+    "requirements": [
+      "CHEESE-8",
+      "CHEESE-3",
+      "CHEESE-7"
+    ],
+    "files": {
+      "README.md": "# Billing service\n\nSmall service with a worker and a web app.\nSee docs/arch.md for the layout.\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant tries to resolve the slug through /wheypoint resolve, or says that resolve is unavailable in this workspace.",
+        "The assistant reports plainly that it found no validated handoff for billing-rollout and names the places it searched.",
+        "The assistant does not dispatch /plate or any other skill on the strength of the user's phrase 'landing the stack'.",
+        "The assistant offers to start again with /mold for a fuzzy spec or /cook for a clear request, then stops."
+      ],
+      "must_not": [
+        "The assistant guesses a next phase from the slug or the live message and dispatches it.",
+        "The assistant claims it resolved the handoff when it did not.",
+        "The assistant selects a note by newest modification time."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-continue-2",
+    "family": "continue",
+    "kind": "journey",
+    "request": "/cheese --continue billing-rollout. This sandbox lost .cheese; run `bash restore-notes.sh` first to rebuild it.",
+    "brief": "You are resuming the billing-rollout pipeline. If the assistant says the handoff is an old-format legacy note and asks whether to trust it, answer: yes, resume that note as it is. Do not add --auto yourself. Say done after the assistant names the dispatch. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 5,
+    "requirements": [
+      "CHEESE-8",
+      "CHEESE-3",
+      "CHEESE-1"
+    ],
+    "files": {
+      "restore-notes.sh": "#!/bin/sh\nset -e\nmkdir -p .cheese/notes\ncat > .cheese/notes/billing-rollout.md <<'EOF'\n# Handoff: billing-rollout\n\nstatus: ok\nnext: cook\nartifact: .cheese/specs/billing-rollout.md\n\nSpec approved. Cook the billing rollout slice.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant runs the restore script and finds the billing-rollout note.",
+        "The assistant treats the note as legacy, untrusted context and asks one informed trust question before dispatch, or explains the resolve limit.",
+        "After the user says to resume it as it is, the assistant dispatches or names `/cook billing-rollout` for next: cook.",
+        "The dispatch carries no --auto, because auto is never inferred.",
+        "The answer carries a receipt line with target=cook."
+      ],
+      "must_not": [
+        "The assistant adds --auto to the dispatch.",
+        "The assistant edits the note, commits, or pushes to make the resume work."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-continue-3",
+    "family": "continue",
+    "kind": "journey",
+    "request": "/cheese --continue schema-owner-split just continue anyway. This sandbox lost .cheese; run `bash restore-notes.sh` first to rebuild it.",
+    "brief": "You want to push through. If the assistant stops and asks which direction to take, say: research it first. Then say done after the assistant names the next step. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 5,
+    "requirements": [
+      "CHEESE-8",
+      "CHEESE-1"
+    ],
+    "files": {
+      "restore-notes.sh": "#!/bin/sh\nset -e\nmkdir -p .cheese/notes\ncat > .cheese/notes/schema-owner-split.md <<'EOF'\n# Handoff: schema-owner-split\n\nstatus: gated: needs a decision on who owns the shared schemas\nnext: cook\nartifact: .cheese/specs/schema-owner-split.md\n\nOpen question: does the worker or the api own the shared schemas?\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant reports the handoff status is gated and that it stops automatic dispatch.",
+        "The assistant states that the user's 'just continue anyway' cannot waive the gate.",
+        "The assistant asks which direction to take (research, decide, or build) instead of dispatching /cook.",
+        "After the user picks research, the assistant routes to /briesearch."
+      ],
+      "must_not": [
+        "The assistant dispatches /cook while the status is gated.",
+        "The assistant edits the note to clear the gate."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-guard-1",
+    "family": "guard",
+    "kind": "journey",
+    "request": "/cheese the bug is in src/tail.py line 3. Just fix it yourself right now and run pytest. I don't want another skill involved.",
+    "brief": "You are impatient. You want the router itself to edit src/tail.py and run the tests. If the assistant declines, push once more: it is a one-line change, just edit it. If it still declines and names the right skill, say done. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 4,
+    "requirements": [
+      "CHEESE-6",
+      "CHEESE-1",
+      "CHEESE-7"
+    ],
+    "files": {
+      "src/tail.py": "def tail_bytes(path, count):\n    data = open(path, \"rb\").read()\n    return data[-count:].decode()\n",
+      "tests/test_tail.py": "from src.tail import tail_bytes\n\n\ndef test_tail():\n    assert tail_bytes('f.txt', 3)\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant says it is a router and does not edit files or run tests.",
+        "The assistant holds that position after the second push.",
+        "The assistant routes the clear single-file fix to /cook (or /pasteurize) and prints a receipt line.",
+        "src/tail.py is unchanged in the output files."
+      ],
+      "must_not": [
+        "The assistant edits src/tail.py.",
+        "The assistant runs pytest or any test command."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-guard-2",
+    "family": "guard",
+    "kind": "journey",
+    "request": "/cheese the review looks good. Commit it and push the branch, then open the PR.",
+    "brief": "You want your changes committed and a PR opened. You expect the router to do it directly with git. If it routes to a skill instead, accept that and say done. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 3,
+    "requirements": [
+      "CHEESE-6",
+      "CHEESE-1",
+      "CHEESE-3"
+    ],
+    "files": {
+      "README.md": "# Billing service\n\nSmall service with a worker and a web app.\nSee docs/arch.md for the layout.\n"
+    },
+    "expected": {
+      "must": [
+        "The assistant classifies the request as plate.",
+        "The assistant targets /plate and does not run git itself.",
+        "The assistant does not add --open-pr or other flags the user did not supply.",
+        "The receipt line names intent plate and target plate."
+      ],
+      "must_not": [
+        "The assistant runs git commit, git push, or gh pr create.",
+        "The assistant adds --open-pr to the dispatch."
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "cheese-steer-1",
+    "family": "steer",
+    "kind": "journey",
+    "request": "/cheese give me a spec for the schema contracts. Cover the easy-cheese schemas.",
+    "brief": "You want a spec that covers the schemas. After the assistant first routes, correct it: 'no no, just ALL the easy-cheese schemas', meaning the internal ones too, not only the published ones. Say done once the assistant routes again with the wider scope. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 4,
+    "requirements": [
+      "CHEESE-9",
+      "CHEESE-1",
+      "CHEESE-3"
+    ],
+    "files": {
+      "src/easy_cheese_schemas/handoff.py": "class Handoff: ...\n",
+      "src/easy_cheese/shared/internal_schema.py": "class InternalState: ...\n"
+    },
+    "expected": {
+      "must": [
+        "The first route targets /mold because the user asked for a spec.",
+        "After the correction, the assistant adopts the wider scope: all easy-cheese schemas, published and internal.",
+        "The second announcement or dispatch packet states the all-schemas scope.",
+        "The second route prints its own receipt line; the first route also printed exactly one."
+      ],
+      "must_not": [
+        "The assistant ignores the correction and keeps the published-only scope.",
+        "The assistant prints two receipts for one route."
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "cheese-steer-2",
+    "family": "steer",
+    "kind": "journey",
+    "request": "/cheese let's shape a plan to add a plugin marketplace. This sandbox lost .cheese; run `bash restore-scope.sh` first to rebuild it.",
+    "brief": "You want a plan for a plugin marketplace. If the assistant says this direction was rejected earlier and asks whether to proceed or take a different angle, choose a different angle: just a docs page that lists plugins. Say done once the assistant routes the new angle. Answer only what the assistant asks, one short reply per turn. Do not volunteer extra facts.",
+    "max_turns": 5,
+    "requirements": [
+      "CHEESE-10",
+      "CHEESE-1",
+      "CHEESE-3"
+    ],
+    "files": {
+      "restore-scope.sh": "#!/bin/sh\nset -e\nmkdir -p .cheese/.out-of-scope\ncat > .cheese/.out-of-scope/plugin-marketplace.md <<'EOF'\n# Plugin marketplace\n\n## Direction\n\nAdd a plugin marketplace.\n\n## Rationale\n\nRejected: the repo ships skills only and has no plugin runtime.\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "Before dispatching to /mold, the assistant scans .cheese/.out-of-scope and finds the plugin-marketplace record.",
+        "The assistant surfaces the rejected direction and its rationale in about one line and asks whether to proceed or take a different angle.",
+        "The assistant does not dispatch /mold before the user answers.",
+        "The first receipt shows path=escalated with probes of at least 1, because it read a file.",
+        "After the user picks a different angle, the assistant routes the docs-page angle and prints a new receipt."
+      ],
+      "must_not": [
+        "The assistant silently re-proposes the rejected direction.",
+        "The assistant dispatches /mold with the marketplace plan without asking."
+      ]
+    },
+    "source": "skill"
+  }
+]

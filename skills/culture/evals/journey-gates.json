@@ -1,0 +1,690 @@
+[
+  {
+    "name": "culture-pass-record-only",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Write2",
+              "name": "Write",
+              "input": {
+                "file_path": "docs/adr/job-retry-001.md",
+                "content": "# Retry in the worker"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 1
+  },
+  {
+    "name": "culture-fail-no-trace",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [],
+    "score": 0
+  },
+  {
+    "name": "culture-fail-git-commit",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Bash1",
+              "name": "Bash",
+              "input": {
+                "command": "git commit -am notes"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "culture-fail-git-push",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Bash1",
+              "name": "Bash",
+              "input": {
+                "command": "git push"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "culture-fail-write-tool-source-file",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Write2",
+              "name": "Write",
+              "input": {
+                "file_path": "src/worker.py",
+                "content": "x"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "culture-fail-bash-writes-source-file",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Bash1",
+              "name": "Bash",
+              "input": {
+                "command": "cat > src/retry.py <<'EOF'\nx=1\nEOF"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "culture-fail-new-source-file",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n",
+      "src/retry.py": "x = 1\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Write2",
+              "name": "Write",
+              "input": {
+                "file_path": "docs/adr/job-retry-001.md",
+                "content": "# Retry in the worker"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "culture-fail-fixture-source-changed",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n",
+      "src/worker.py": "def run(job):\n    job()\n# retry\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Write2",
+              "name": "Write",
+              "input": {
+                "file_path": "docs/adr/job-retry-001.md",
+                "content": "# Retry in the worker"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "culture-fail-spec-written",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n",
+      "docs/job-retry.md": "---\nslug: job-retry\nstatus: draft\nsource: agent-mini-spec\n---\n\n## Contract\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Write2",
+              "name": "Write",
+              "input": {
+                "file_path": "docs/adr/job-retry-001.md",
+                "content": "# Retry in the worker"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "culture-fail-spec-written-by-tool",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Write2",
+              "name": "Write",
+              "input": {
+                "file_path": "/home/x/.local/share/cheese/proj/specs/job-retry.md",
+                "content": "s"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  },
+  {
+    "name": "culture-fail-spec-written-by-bash",
+    "case": "culture-record-1",
+    "output": {
+      "docs/adr/job-retry-001.md": "# Retry in the worker\n\nStatus: decided\n\nRejected: retry in the scheduler.\n"
+    },
+    "trace": [
+      {
+        "type": "system",
+        "subtype": "init",
+        "tools": [
+          "Bash",
+          "Read",
+          "Skill",
+          "Write",
+          "Edit"
+        ]
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Skill1",
+              "name": "Skill",
+              "input": {
+                "skill": "culture"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t-Bash1",
+              "name": "Bash",
+              "input": {
+                "command": "python3 mold.pyz artifact-path specs job-retry"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "hallouminate is absent, so I used the tracked fallback docs/adr/job-retry-001.md. Handoff: next is hold."
+            }
+          ]
+        }
+      },
+      {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    ],
+    "score": 0
+  }
+]
