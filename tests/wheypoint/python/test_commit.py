@@ -485,8 +485,20 @@ def test_a_changed_request_against_a_stale_parent_promotes_nothing(
 
 
 def test_two_concurrent_writers_on_one_parent_promote_exactly_one_revision(
-    store: storage.WorkStore, make_promotion: Callable[..., Promotion]
+    store: storage.WorkStore,
+    make_promotion: Callable[..., Promotion],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # This test proves that the record lock lets exactly one writer promote.
+    # It does not prove durability: `test_storage` checks the fsync order.
+    # A real fsync waits for the host disk, and on a loaded host one call can
+    # take more than 10 seconds. The winner holds the lock during all six
+    # fsync calls of its promotion, so the join timeout then measures disk
+    # latency, not a deadlock. The no-op keeps the timeout a deadlock guard.
+    def skip_fsync(_fd: int) -> None:
+        return None
+
+    monkeypatch.setattr(os, "fsync", skip_fsync)
     seed = _seed(store, make_promotion)
     start = threading.Barrier(2)
     outcomes: list[object] = []
