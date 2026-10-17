@@ -46,7 +46,7 @@ Pass `unavailable` when Hallouminate is not loaded or the probe failed. Pass `no
 
 ### Shape — option generation
 
-**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Present lettered options (`A/B/C/D`) for the user to select. The user chooses consequential forks (the leverage line in `../../age/references/voice.md`); do not settle them. Settle every fork below the line and log it. Give a one-line rationale for each option, not a verdict. Validate Cycle every critical assumption behind an option. Score options by the information they leave behind. Prefer the option that reduces the next maintainer's required knowledge or makes that knowledge more obvious.
+**Job:** turn a grounded problem into 2+ candidate approaches with trade-offs. Always include **Do Nothing**. Present lettered options (`A/B/C/D`) for the user to select, behind a fork card (`fork-questions.md`). The user chooses consequential forks (the leverage line in `../../age/references/voice.md`); do not settle them. Settle every fork below the line and log it. Give a one-line rationale for each option, not a verdict. Validate Cycle every critical assumption behind an option. Score options by the information they leave behind. Prefer the option that reduces the next maintainer's required knowledge or makes that knowledge more obvious.
 
 **Exit when:** the user picks one option (→ Sketch). Return to Explore when no option survives.
 
@@ -71,7 +71,7 @@ Run the shape check (`shape-check.md`) before drafting when the change touches m
 
 ### Grill — adversarial clarification
 
-**Job:** stress-test the chosen approach and sketched interfaces. Grill runs on consequential forks and `high` blast-radius options only. Tag each grilled item with what it moves: an acceptance criterion, a public seam, or a non-goal. An item that moves none of those, or that sits below the leverage line, is not a user fork: batch-report it as upheld with a one-line steelman, or record it `[AGENT-DECIDED]`; either way the ledger carries its vetoable alternative (`../../age/references/voice.md`). Such items never become a user turn. Use **one grilled item per turn** for consequential items, except for the clean-steelman batch below. For each consequential decision, produce at most a **steelman + tension statement**. Then present a **user fork**: uphold / amend-as-proposed / user's own call. Invoke the question primitive in [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md). Use a real user turn. Do not render an `A/B/C/D` prose block and answer it yourself. Never self-issue verdicts for items that change the design. When the steelman fails cleanly and grilling finds nothing, you MAY batch-report items as upheld. When grilling produces an amendment, ask through the same primitive before adding the amendment to the ledger. Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption appears.
+**Job:** stress-test the chosen approach and sketched interfaces. Grill runs on consequential forks and `high` blast-radius options only. Tag each grilled item with what it moves: an acceptance criterion, a public seam, or a non-goal. An item that moves none of those, or that sits below the leverage line, is not a user fork: batch-report it as upheld with a one-line steelman, or record it `[AGENT-DECIDED]`; either way the ledger carries its vetoable alternative (`../../age/references/voice.md`). Such items never become a user turn. Use **one grilled item per turn** for consequential items, except for the clean-steelman batch below. For each consequential decision, produce at most a **steelman + tension statement**. Then present a **user fork** behind a fork card (`fork-questions.md`): uphold / amend-as-proposed / user's own call. Invoke the question primitive in [`../../cheese/references/ask-user-question.md`](../../cheese/references/ask-user-question.md). Use a real user turn. Do not render an `A/B/C/D` prose block and answer it yourself. Never self-issue verdicts for items that change the design. When the steelman fails cleanly and grilling finds nothing, you MAY batch-report items as upheld. When grilling produces an amendment, ask through the same primitive before adding the amendment to the ledger. Traverse decision branches and contract corners. Pause for a Validate Cycle when an unverified assumption appears.
 
 **Exit when:** every branch and contract corner is touched and agent confidence ≥ user confidence.
 
@@ -86,7 +86,9 @@ Diagnose is **diagnostic-only** — hand off to Shape ("what's the fix?") then C
 
 ## User knobs (free-form interrupts)
 
-`explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`, `validate <hypothesis>`, `prototype <question>`, `curdle`, `pause`, `enough`, plus the tier knobs `quick`, `light`, and `full` (`tiers.md`). Honour these immediately.
+`explore`, `ground`, `shape`, `sketch`, `grill`, `diagnose`, `explain [fork-id]`, `validate <hypothesis>`, `prototype <question>`, `curdle`, `pause`, `enough`, plus the tier knobs `quick`, `light`, and `full` (`tiers.md`). Honour these immediately.
+
+`explain [fork-id]` re-renders the open fork, or the named fork, with more context (`fork-questions.md` § Explain more).
 
 `prototype <question>` launches a Prototype Cycle (`prototype-cycle.md`): a
 throwaway built in a hermetic sub-agent worktree to settle an ungrillable design
