@@ -2,6 +2,7 @@
 # pyright: reportAny=false, reportUnusedCallResult=false
 from __future__ import annotations
 
+import http.client
 import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
@@ -9,12 +10,15 @@ from io import StringIO
 import threading
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
 from easy_cheese.skills.mold.review import MoldReview, ReviewRevision, state_transaction
+
+TAILNET_HOST = "node.tailnet.ts.net"
 
 
 def test_revision_is_immutable_and_digest_is_stable(tmp_path: Path) -> None:
@@ -168,6 +172,152 @@ def test_serve_persists_initial_review_and_returns_tokenized_url(
     finally:
         if process.poll() is None:
             process.kill()
+
+
+@pytest.fixture
+def tailnet_server(
+    tmp_path: Path, skill_archive: Callable[[str], Path]
+) -> Iterator[tuple[dict[str, str], int]]:
+    archive = skill_archive("mold")
+    document = tmp_path / "doc.json"
+    document.write_text(json.dumps({"questions": []}), encoding="utf-8")
+    subprocess.run(
+        ["python3", str(archive), "review", "publish", "--state-dir", str(tmp_path), "--input", str(document)],
+        check=True,
+        capture_output=True,
+    )
+    process = subprocess.Popen(
+        [
+            "python3", str(archive), "review", "serve", "--state-dir", str(tmp_path),
+            "--port", "0", "--trusted-host", TAILNET_HOST,
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        launch: dict[str, str] = json.loads(process.stdout.readline())
+        port = urlsplit(launch["url"]).port
+        assert port is not None
+        yield launch, port
+    finally:
+        subprocess.run(
+            ["python3", str(archive), "review", "close", "--state-dir", str(tmp_path)],
+            capture_output=True,
+        )
+        try:
+            process.wait(timeout=3)
+        finally:
+            if process.poll() is None:
+                process.kill()
+
+
+def _request(
+    port: int, method: str, path: str, headers: dict[str, str], body: object | None = None
+) -> tuple[int, str]:
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+    try:
+        payload = None if body is None else json.dumps(body)
+        connection.request(method, path, body=payload, headers=headers)
+        response = connection.getresponse()
+        response.read()
+        return response.status, response.getheader("Set-Cookie") or ""
+    finally:
+        connection.close()
+
+
+def _serve_proxy_headers(token: str, host: str = TAILNET_HOST) -> dict[str, str]:
+    """Headers that ``tailscale serve`` forwards: original Host plus X-Forwarded-Proto."""
+    return {"Host": host, "X-Forwarded-Proto": "https", "X-Mold-Token": token}
+
+
+def test_trusted_host_accepts_tailscale_serve_requests(
+    tailnet_server: tuple[dict[str, str], int],
+) -> None:
+    launch, port = tailnet_server
+    token = launch["token"]
+    assert launch["remote_url"] == f"https://{TAILNET_HOST}/?token={token}"
+    assert launch["tailscale_serve"] == f"tailscale serve --bg http://127.0.0.1:{port}"
+    status, cookie = _request(port, "GET", f"/?token={token}", _serve_proxy_headers(""))
+    assert status == 200
+    assert "; Secure" in cookie
+    for host in (TAILNET_HOST, f"{TAILNET_HOST}:8443"):
+        headers = _serve_proxy_headers(token, host) | {
+            "Origin": f"https://{host}",
+            "Content-Type": "application/json",
+        }
+        status, _ = _request(port, "POST", "/api/autosave", headers, {"revision": 1, "generation": 0 if host == TAILNET_HOST else 1, "feedback": {}})
+        assert status == 200
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"Host": "evil.tail0000.ts.net", "Origin": "https://evil.tail0000.ts.net"}, id="other-host"),
+        pytest.param({"Origin": f"http://{TAILNET_HOST}"}, id="http-origin"),
+        pytest.param({"Origin": "https://evil.example"}, id="hostile-origin"),
+        pytest.param({"X-Forwarded-Proto": "http"}, id="plain-http-proxy"),
+        pytest.param({"Tailscale-Funnel-Request": "?1"}, id="funnel"),
+        pytest.param({"X-Mold-Token": "wrong"}, id="bad-token"),
+    ],
+)
+def test_trusted_host_rejects_unsafe_requests(
+    tailnet_server: tuple[dict[str, str], int], overrides: dict[str, str]
+) -> None:
+    launch, port = tailnet_server
+    headers = _serve_proxy_headers(launch["token"]) | {
+        "Origin": f"https://{TAILNET_HOST}",
+        "Content-Type": "application/json",
+    } | overrides
+    status, _ = _request(port, "POST", "/api/autosave", headers, {"revision": 1, "generation": 0, "feedback": {}})
+    assert status == 403
+
+
+def test_loopback_rejects_tailnet_host_without_flag(
+    tmp_path: Path, skill_archive: Callable[[str], Path]
+) -> None:
+    archive = skill_archive("mold")
+    process = subprocess.Popen(
+        ["python3", str(archive), "review", "serve", "--state-dir", str(tmp_path), "--port", "0"],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        launch: dict[str, str] = json.loads(process.stdout.readline())
+        assert "remote_url" not in launch
+        port = urlsplit(launch["url"]).port
+        assert port is not None
+        status, _ = _request(port, "GET", "/api/review", _serve_proxy_headers(launch["token"]))
+        assert status == 403
+        status, cookie = _request(port, "GET", f"/?token={launch['token']}", {"Host": f"127.0.0.1:{port}"})
+        assert status == 200
+        assert "Secure" not in cookie
+    finally:
+        subprocess.run(
+            ["python3", str(archive), "review", "close", "--state-dir", str(tmp_path)],
+            capture_output=True,
+        )
+        try:
+            process.wait(timeout=3)
+        finally:
+            if process.poll() is None:
+                process.kill()
+
+
+@pytest.mark.parametrize("value", ["example.com", "node.ts.net.evil.com", "ts.net", "node.tailnet.ts.net:443", "Node..ts.net"])
+def test_serve_rejects_non_tailnet_trusted_host(
+    tmp_path: Path, skill_archive: Callable[[str], Path], value: str
+) -> None:
+    archive = skill_archive("mold")
+    result = subprocess.run(
+        ["python3", str(archive), "review", "serve", "--state-dir", str(tmp_path), "--port", "0", "--trusted-host", value],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 2
+    assert "trusted host" in result.stderr
 
 
 def test_publish_creates_nested_state_directory(tmp_path: Path) -> None:
