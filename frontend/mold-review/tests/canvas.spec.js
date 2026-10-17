@@ -28,6 +28,14 @@ async function serveExample(name) {
   return serve(state);
 }
 
+// Send flushes the debounced autosave before it posts, so under load the label can lag two round trips.
+async function sendAndAwait(page, name) {
+  const sent = page.waitForResponse(res => res.url().endsWith('/api/submit') && res.request().method() === 'POST', {timeout: 30000});
+  await page.getByRole('button', {name}).click();
+  expect((await sent).ok()).toBe(true);
+  await expect(page.getByText(/Submitted/)).toBeVisible();
+}
+
 async function serveDocument(document) {
   const state = await mkdtemp(join(tmpdir(), 'mold-canvas-'));
   const input = join(state, 'revision.json');
@@ -144,8 +152,7 @@ test('send then send & end use distinct operation ids so the second submit is no
   try {
     await page.goto(s.url);
     await page.locator('fieldset.question').getByRole('radio').first().check();
-    await page.getByRole('button', {name: /^send to agent/}).click();
-    await expect(page.getByText(/Submitted/)).toBeVisible();
+    await sendAndAwait(page, /^send to agent/);
     const origin = new URL(s.url).origin;
     const second = await request.post(`${origin}/api/submit`, {
       headers: {'X-Mold-Token': s.token, 'Content-Type': 'application/json', Origin: origin},
@@ -170,8 +177,7 @@ test('send and end submits pins and an end_session flag', async ({page}) => {
     await page.getByLabel('Note text').fill('query should return an iterator, not a list.');
     await page.getByRole('button', {name: 'queue note'}).click();
     await page.locator('fieldset.question').getByRole('radio').first().check();
-    await page.getByRole('button', {name: 'send & end'}).click();
-    await expect(page.getByText(/Submitted/)).toBeVisible();
+    await sendAndAwait(page, 'send & end');
     const submitted = poll(s.state);
     expect(submitted.feedback.end_session).toBe(true);
     expect(submitted.operation_id).toBe('browser-1-end');
