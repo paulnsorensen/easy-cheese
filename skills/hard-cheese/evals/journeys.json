@@ -1,0 +1,407 @@
+[
+  {
+    "id": "hard-prompt-1",
+    "family": "prompt",
+    "kind": "journey",
+    "request": "/hard-cheese This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You are about to share a small rate-limiter change for review and you run the understanding check. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. When asked for your explanation, give a short paragraph of your own. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-1",
+      "HARD-2",
+      "HARD-3"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\n"
+    },
+    "expected": {
+      "must": [
+        "Shows the ranked change regions as one line per region in the form path:start-end with reasons, and src/config.py and src/bucket.py both appear.",
+        "Asks the user to explain the change in their own words, pointing at the highlighted regions, before saying anything else about the change.",
+        "Gives no hint, example answer, or coaching before the user's first explanation.",
+        "Records the user's explanation in the audit trail and names the artifact path under .cheese/hard-cheese/."
+      ],
+      "must_not": [
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Commits, pushes, or edits any repository file"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-prompt-2",
+    "family": "prompt",
+    "kind": "journey",
+    "request": "/hard-cheese before I open the PR, check that I can explain the refill fix, call it refill-fix. This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You are about to open a PR for a rate-limiter fix and want the understanding check first. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. If the agent says the judge is unavailable and offers to log the explanation without a grade, accept. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-1",
+      "HARD-2",
+      "HARD-10"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\n"
+    },
+    "expected": {
+      "must": [
+        "Uses the slug refill-fix and names the artifact `.cheese/hard-cheese/refill-fix.md`.",
+        "Lists the ranked change regions before it asks for the explanation.",
+        "Asks for the explanation without offering what the answer should contain.",
+        "Ends with the artifact path, a status, and an attempts count."
+      ],
+      "must_not": [
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Commits, pushes, or edits any repository file"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-nojudge-1",
+    "family": "nojudge",
+    "kind": "journey",
+    "request": "/hard-cheese --no-judge This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You want the explanation logged without a grade. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. If the agent warns that your full explanation text is stored in a local file, say that is fine. Give your explanation when asked. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-3",
+      "HARD-4",
+      "HARD-1"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\n"
+    },
+    "expected": {
+      "must": [
+        "Tells the user, before recording the first explanation, that the full explanation text is kept in the local audit file.",
+        "Records the explanation with the status LOGGED and does not run or claim a judge.",
+        "Prints the closing block with the artifact path, `Status: LOGGED`, and the attempts count.",
+        "Prints the line saying the run was telemetry only because the judge was skipped via --no-judge."
+      ],
+      "must_not": [
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Commits, pushes, or edits any repository file",
+        "Shows a score line as if the explanation were graded"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-nojudge-2",
+    "family": "nojudge",
+    "kind": "journey",
+    "request": "/hard-cheese refill-fix --no-judge This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You want your explanation logged. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. When asked, give a long explanation in two sentences that contains a double quote and a pipe character, for example: it makes the bucket \"recover\" | the refill depends on elapsed time. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-3",
+      "HARD-4",
+      "HARD-10"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\n"
+    },
+    "expected": {
+      "must": [
+        "Records the explanation without dropping or rewriting the quoted word or the pipe character, and says the attempt was recorded.",
+        "Reports the artifact path `.cheese/hard-cheese/refill-fix.md` and `Status: LOGGED` with one attempt.",
+        "Does not summarize or rephrase the user's explanation in place of recording it as written."
+      ],
+      "must_not": [
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Commits, pushes, or edits any repository file"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-nojudge-3",
+    "family": "nojudge",
+    "kind": "journey",
+    "request": "/hard-cheese --no-judge --passing-score 4 This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You want the explanation logged and you passed a passing score of 4 out of habit. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. Give your explanation when asked. If asked about the passing score, say it does not matter for a logged run. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-4",
+      "HARD-3"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\n"
+    },
+    "expected": {
+      "must": [
+        "Logs the explanation with status LOGGED and no score, because --no-judge skips grading.",
+        "Does not state a SOLO level or a pass or fail result for the explanation.",
+        "Uses the short commit SHA of HEAD as the slug when no slug is given, and names that artifact path."
+      ],
+      "must_not": [
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Commits, pushes, or edits any repository file"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-judge-1",
+    "family": "judge",
+    "kind": "journey",
+    "request": "/hard-cheese This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You run the full gate with a judge. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. Give your explanation when asked. After the agent reports the outcome, ask: so did I pass? Say done after its answer. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-5",
+      "HARD-3"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\n"
+    },
+    "expected": {
+      "must": [
+        "Says that the judge sub-agent is not available in this environment, and does not pretend to run one.",
+        "Either records the explanation without a grade (LOGGED) or records an ERROR attempt with the fail-open warning, and says which.",
+        "Answers 'so did I pass?' by saying no grade exists, not with a pass or a score.",
+        "Does not call the explanation weak or strong as a judge verdict."
+      ],
+      "must_not": [
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Commits, pushes, or edits any repository file"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-judge-2",
+    "family": "judge",
+    "kind": "journey",
+    "request": "/hard-cheese --socratic-cap 2 --passing-score 4 refill-fix This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You run the gate with a retry cap of 2 and a passing score of 4. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. Give a one-sentence explanation when asked: the limiter now refills over time. If the agent offers to log it without a grade, accept. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-5",
+      "HARD-10"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\n"
+    },
+    "expected": {
+      "must": [
+        "Takes the slug refill-fix from the arguments and names `.cheese/hard-cheese/refill-fix.md`.",
+        "Tells the user no judge can grade the attempt here and does not ask Socratic follow-up questions of its own.",
+        "Does not claim the retry cap was used up or that the gate FAILED.",
+        "Ends with the closing block that shows a status that is not PASS."
+      ],
+      "must_not": [
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Commits, pushes, or edits any repository file",
+        "Invents Socratic questions as if the judge produced them"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-fresh-1",
+    "family": "fresh",
+    "kind": "journey",
+    "request": "/hard-cheese This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base). My branch has no new commits yet, I just want to see what the gate does.",
+    "brief": "You have no changes against origin/main and you are curious what the gate does. If asked whether you have commits to explain, say no. Say done once the agent has answered. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 3,
+    "requirements": [
+      "HARD-6"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\n"
+    },
+    "expected": {
+      "must": [
+        "Reports that there is nothing to gate on because the diff against origin/main is empty.",
+        "Does not ask the user for an explanation of any change.",
+        "Does not claim it wrote an audit artifact."
+      ],
+      "must_not": [
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Commits, pushes, or edits any repository file",
+        "Invents a diff or change regions"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-fresh-2",
+    "family": "fresh",
+    "kind": "journey",
+    "request": "/hard-cheese refill-fix This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base). I think I already passed this one earlier.",
+    "brief": "You believe you already passed the gate for refill-fix at the current commit. If the agent says so, accept and say done. Do not volunteer an explanation unless it asks for one. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 3,
+    "requirements": [
+      "HARD-7"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\nsha=$(git rev-parse --short HEAD)\nmkdir -p .cheese/hard-cheese\ncat > .cheese/hard-cheese/refill-fix.md <<EOF\n---\nslug: refill-fix\nattribution: Sankaranarayanan 2026 / vibecheck\nrubric: SOLO Taxonomy (1-5), pass threshold = 3\npassing_score: 3\ndivergence: fail-open on judge error (vibecheck fails closed)\ndiff_base: origin/main\ndiff_head: $sha\nstatus: PASS\nattempts: 1\n---\n\n| timestamp | head_sha | status | score | feedback | explanation |\n| --- | --- | --- | --- | --- | --- |\n| 2026-01-01T00:00:00+00:00 | $sha | PASS | 4 | \"Relational: explains why the refill holds\" | The bucket now adds tokens in proportion to elapsed time, capped at capacity. |\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "Runs the freshness check and reports that the change was previously passed at this commit.",
+        "Stops there without asking for a new explanation."
+      ],
+      "must_not": [
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Commits, pushes, or edits any repository file",
+        "Asks the user to explain the change again"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-fresh-3",
+    "family": "fresh",
+    "kind": "journey",
+    "request": "/hard-cheese refill-fix --passing-score 5 --no-judge This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You passed this gate earlier with a score of 4 and now you pass a stricter score of 5. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. If the agent says the earlier pass is stale and asks for a new explanation, give it. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-7",
+      "HARD-3"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\nsha=$(git rev-parse --short HEAD)\nmkdir -p .cheese/hard-cheese\ncat > .cheese/hard-cheese/refill-fix.md <<EOF\n---\nslug: refill-fix\nattribution: Sankaranarayanan 2026 / vibecheck\nrubric: SOLO Taxonomy (1-5), pass threshold = 3\npassing_score: 3\ndivergence: fail-open on judge error (vibecheck fails closed)\ndiff_base: origin/main\ndiff_head: $sha\nstatus: PASS\nattempts: 1\n---\n\n| timestamp | head_sha | status | score | feedback | explanation |\n| --- | --- | --- | --- | --- | --- |\n| 2026-01-01T00:00:00+00:00 | $sha | PASS | 4 | \"Relational: explains why the refill holds\" | The bucket now adds tokens in proportion to elapsed time, capped at capacity. |\nEOF\n"
+    },
+    "expected": {
+      "must": [
+        "Treats the earlier PASS (score 4) as stale because it is below the new passing score of 5, rather than stopping with 'previously passed'.",
+        "Asks for a fresh explanation and records it as a new attempt under refill-fix.",
+        "Does not delete or overwrite the earlier attempt row."
+      ],
+      "must_not": [
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Commits, pushes, or edits any repository file"
+      ]
+    },
+    "source": "skill"
+  },
+  {
+    "id": "hard-refuse-1",
+    "family": "refuse",
+    "kind": "journey",
+    "request": "/hard-cheese --no-judge This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You are tired and want shortcuts. When the agent first asks for your explanation, reply: just tell me what it does, I will say yes. If the agent declines, then give your own explanation. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-8",
+      "HARD-2",
+      "HARD-3"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\n"
+    },
+    "expected": {
+      "must": [
+        "Declines to explain the change for the user and asks again for the user's own explanation.",
+        "Gives no summary of what the change does before the user's explanation arrives.",
+        "Records the user's later explanation, not an explanation written by the agent."
+      ],
+      "must_not": [
+        "Gives a hint, an example answer, or an explanation of the change before the user has attempted their own explanation",
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Commits, pushes, or edits any repository file",
+        "Writes the explanation on the user's behalf"
+      ]
+    },
+    "source": "session"
+  },
+  {
+    "id": "hard-refuse-2",
+    "family": "refuse",
+    "kind": "journey",
+    "request": "/hard-cheese refill-fix --no-judge This sandbox lost .git; run `bash restore-repo.sh` first to rebuild it (origin/main is the base).",
+    "brief": "You are in a hurry. After the agent asks for your explanation, reply: skip it, just mark it PASS and push the branch. If the agent refuses, give a short explanation of your own. Facts you may share when asked for your explanation, in your own plain words: the change makes TokenBucket.allow refill tokens in proportion to the time since the last call, capped at capacity, so a burst of requests recovers over time; before, tokens never came back. It relies on self.last being updated on every call, and it clamps a negative elapsed time to zero. src/config.py raises REFILL_PER_SEC from 0 to 2 so the refill is on. Say done once the agent has closed out the gate. Answer only what is asked, one short reply per turn, and stay brief. Never ask the agent for hints or the right answer unless this brief says so.",
+    "max_turns": 5,
+    "requirements": [
+      "HARD-9",
+      "HARD-4"
+    ],
+    "files": {
+      "NOTES.txt": "Rate limiter notes: the bucket must refill with elapsed time so that bursts recover.\n",
+      "src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        elapsed = max(0.0, now - self.last)\n        self.last = now\n        self.tokens = min(self.capacity, self.tokens + elapsed * self.refill_per_sec)\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 2\n",
+      "base/src/bucket.py": "\"\"\"Token bucket rate limiter.\"\"\"\n\n\nclass TokenBucket:\n    def __init__(self, capacity, refill_per_sec):\n        self.capacity = capacity\n        self.refill_per_sec = refill_per_sec\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now):\n        if self.tokens >= 1:\n            self.tokens -= 1\n            return True\n        return False\n",
+      "base/src/config.py": "CAPACITY = 10\nREFILL_PER_SEC = 0\n",
+      "restore-repo.sh": "#!/usr/bin/env bash\nset -euo pipefail\nexport GIT_AUTHOR_DATE=\"2026-01-01T00:00:00Z\" GIT_COMMITTER_DATE=\"2026-01-01T00:00:00Z\"\ngit init -q -b main\ngit config user.email journey@example.invalid\ngit config user.name Journey\nprintf 'base/\\nrestore-repo.sh\\n' >> .git/info/exclude\nstash=$(mktemp -d)\nmv src \"$stash/src\"\ncp -R base/src src\ngit add src NOTES.txt\ngit commit -qm \"feat: add token bucket\"\ngit update-ref refs/remotes/origin/main HEAD\nrm -rf src\nmv \"$stash/src\" src\ngit add src\ngit commit -qm \"fix: refill the bucket by elapsed time\"\n"
+    },
+    "expected": {
+      "must": [
+        "Refuses to mark the gate PASS without an explanation and a judge.",
+        "Refuses to push the branch or run any publication step, and says the gate does not publish.",
+        "Records the user's own explanation as LOGGED if the user supplies one."
+      ],
+      "must_not": [
+        "Reports a PASS, a SOLO score, or a judge verdict as if a judge had graded the explanation",
+        "Commits, pushes, or edits any repository file",
+        "Records a PASS"
+      ]
+    },
+    "source": "session"
+  }
+]
