@@ -62,12 +62,12 @@ Do not launch a separate classifier agent to fill this record.
 | `efficiency` | Inspect costly paths, avoidable work, copying, allocation, I/O, and scaling |
 | `conventions` | Cite the applicable written rule, its source, violating code, and required correction |
 | `altitude` | Name the local symptom, responsible component, better placement, and concrete cost |
-| `judo` | Name the incidental complexity, the reframe, what it deletes, and the behavior it preserves |
+| `reframe` | Name the incidental complexity, the new model, what it deletes, and the behavior it preserves |
 
 A worker may emit several finding dimensions.
 Different subjects may expose the same problem.
-A convention, altitude, or judo finding needs concrete evidence, not a style preference.
-An altitude or judo recommendation that contradicts an approved design identifies that decision; it is not permission for an automatic redesign.
+A convention, altitude, or reframe finding needs concrete evidence, not a style preference.
+An altitude or reframe recommendation that contradicts an approved design identifies that decision; it is not permission for an automatic redesign.
 
 ## Plan and effort
 
@@ -77,7 +77,7 @@ Semantic context can differ between independent runs; do not call that fully det
 
 Quick mode combines ordinary work and the three protected subjects.
 A mandatory risk adds its required specialist without upgrading unrelated assignments.
-Normal and deep modes reserve separate conventions, altitude, and judo reviewers.
+Normal and deep modes reserve separate conventions, altitude, and reframe reviewers.
 The remaining ordinary isolation allowances use the current weighted score bands:
 
 | Effort | Below 60 | 60 through 250 | Above 250 |
@@ -97,7 +97,7 @@ Do not refresh a production lock to hide changed source; restart the review when
 
 Assemble `packet.md` once before the review lock.
 Give each worker its assignment and the packet's relevant evidence sections.
-Conventions, altitude, and judo retain the whole-change context; other workers receive scoped targets.
+Conventions, altitude, and reframe retain the whole-change context; other workers receive scoped targets.
 Do not give a security specialist every test file merely because the review includes tests.
 Reuse the shared caller and dependency evidence instead of discovering it independently for every subject.
 

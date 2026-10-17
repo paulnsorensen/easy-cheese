@@ -57,7 +57,7 @@ def test_the_worked_report_preserves_finding_identity() -> None:
         ("security", "high", "src/api/admin/users.ts:55"),
         ("complexity", "medium", "src/utils/format.ts:200-240"),
         ("conventions", "medium", "src/config.py:12"),
-        ("judo", "medium", "src/export/csv.ts:30-88"),
+        ("reframe", "medium", "src/export/csv.ts:30-88"),
         ("deslop", "low", "src/utils/format.ts:18"),
         ("altitude", "low", "src/utils/format.ts:24"),
     ]

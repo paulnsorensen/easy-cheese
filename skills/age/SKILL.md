@@ -85,12 +85,14 @@ Use `--overall` for full subject fan-out across the review target.
 
 ## Review dimensions
 
-Review correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry, conventions, altitude, and judo.
+Review correctness, security, encapsulation, spec, complexity, deslop, assertions, NIH, efficiency, telemetry, conventions, altitude, and reframe.
 Assign one `blocker`, `high`, `medium`, or `low` severity to each finding.
 Use `references/dimensions.md` for severity rules and recommendation shapes.
 This workflow omits the git-history/precedent dimension.
 
 ## Flow
+
+![The /age review flow](assets/review-flow.svg)
 
 1. Identify the diff, scope, and relevant specification or issue.
    Read `references/fan-out.md` for the context checklist and deterministic planning contract.

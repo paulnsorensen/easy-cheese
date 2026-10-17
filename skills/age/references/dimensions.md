@@ -47,7 +47,7 @@ Every finding carries these fields:
 
 | Field | Values | Source |
 | --- | --- | --- |
-| `dimension` | correctness, security, encapsulation, spec, complexity, deslop, assertions, nih, efficiency, telemetry, conventions, altitude, judo | reviewer-tagged |
+| `dimension` | correctness, security, encapsulation, spec, complexity, deslop, assertions, nih, efficiency, telemetry, conventions, altitude, reframe | reviewer-tagged |
 | `severity` | `blocker / high / medium / low` | computed (formula above) |
 | `location` | `class / module / cross-module / contract` | reviewer-classified |
 | `fix-cost-now` | `contained / moderate / sprawling` | bucketed from blast-radius count |
@@ -85,7 +85,7 @@ Apply the `contract` bump only to dimensions where boundary position changes fin
 | telemetry | yes | A boundary outbound call with silent failure forms the canonical blocker |
 | conventions | no | An explicit rule remains independently evidenced wherever it occurs; boundary position does not change the convention claim |
 | altitude | no | Placement quality is graded from its symptom and concrete cost, not from API location alone |
-| judo | no | A reframe is graded by the complexity it deletes, not by API location |
+| reframe | no | A reframe is graded by the complexity it deletes, not by API location |
 
 ## Fix-cost-now
 
@@ -133,7 +133,7 @@ Per-dimension `structural` anchors:
 | nih | Other modules import a reinvented primitive. Replacing it later requires migrating every caller. |
 | efficiency | An unbounded structure runs on a long-running path. Retained references accumulate as callers grow. |
 | telemetry | New code standardizes on a hand-rolled logging shape. Migrating to the real logger later touches every call site. |
-| judo | New features keep landing as special cases on the incidental model. Each one adds a branch that the reframe must later delete. |
+| reframe | New features keep landing as special cases on the incidental model. Each one adds a branch that the reframe must later delete. |
 
 The `structural` tag adds the compounding `+1` bump in the formula.
 Use the tag to record that the repair cost grows over time.
@@ -170,7 +170,7 @@ Look for off-by-one errors, ordering errors, null/empty edge cases, silent failu
 
 The diff's new path can exercise an existing race, lost write, or contradictory branch in the caller graph. Expand callers one level before grading clean.
 
-Name correctness evidence as concrete input/state → wrong output, exception, lost write, or unsafe side effect. Do not promote a style preference or an architecture concern into correctness; use `conventions`, `altitude`, or `judo` only when its own evidence contract is met.
+Name correctness evidence as concrete input/state → wrong output, exception, lost write, or unsafe side effect. Do not promote a style preference or an architecture concern into correctness; use `conventions`, `altitude`, or `reframe` only when its own evidence contract is met.
 Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
 
 Recommendation shape: "Add a guard for X" / "Return early when Y" / "Replace `catch (_)` with explicit handling".
@@ -454,28 +454,28 @@ Boundaries: § Dimension boundaries owns every ownership rule. Read that table b
 
 Recommendation shape: "Move `<behavior>` to `<owner>` after confirming the approved placement" / "Inline `<wrapper>` beside `<caller>` and record the placement decision" / "Keep `<boundary>` and record why its concrete cost is accepted".
 
-### judo
+### reframe
 
-Review whether a different model of the change deletes complexity instead of moving it. Altitude asks where behavior belongs. Judo asks whether the behavior, branch, or concept needs to exist. A valid `judo` finding must name all four: `incidental complexity`, `reframe`, `deleted`, and `behavior preserved`.
+Review whether a different model of the change deletes complexity instead of moving it. Altitude asks where behavior belongs. Reframe asks whether the behavior, branch, or concept needs to exist. A valid `reframe` finding must name all four: `incidental complexity`, `new model`, `deleted`, and `behavior preserved`.
 
 - `incidental complexity`: the branches, modes, flags, helpers, or layers that the change adds or keeps only because of its current model.
-- `reframe`: the different state model, ownership, default flow, or existing abstraction that the change can use instead.
-- `deleted`: the named branches, concepts, or layers that disappear after the reframe. Count them.
+- `new model`: the different state model, ownership, default flow, or existing abstraction that the change can use instead.
+- `deleted`: the named branches, concepts, or layers that disappear under the new model. Count them.
 - `behavior preserved`: the observable behavior that stays the same, and the tests or callers that prove it.
 
-A reframe that moves the same concepts to a different place is not a judo finding. Use `altitude` or `complexity` for it. A preference for a different style is not a finding.
+A change that moves the same concepts to a different place is not a reframe finding. Use `altitude` or `complexity` for it. A preference for a different style is not a finding.
 
 Look for one-off booleans, nullable modes, or flags that split an existing flow. Look for repeated conditionals that signal a missing model. Look for special-case logic that a better default removes. Look for a new layer that an existing abstraction already covers. Look for a refactor that moves complexity but does not reduce the number of concepts a reader must hold.
 
 | Base | Trigger |
 | --- | --- |
-| `high` | Assign `high` when the diff adds a mode, flag, or branch family to a shared flow, and a visible reframe deletes it and the branches it already forces |
-| `medium` | Assign `medium` when a reframe deletes a layer, a helper set, or two or more branches that the diff adds or extends |
-| `low` | Assign `low` when a local reframe deletes one branch or helper with no change outside the function |
+| `high` | Assign `high` when the diff adds a mode, flag, or branch family to a shared flow, and a visible new model deletes it and the branches it already forces |
+| `medium` | Assign `medium` when a new model deletes a layer, a helper set, or two or more branches that the diff adds or extends |
+| `low` | Assign `low` when a local new model deletes one branch or helper with no change outside the function |
 
-Judo has no default `blocker` row. A base `high` finding with `fix-cost-later: structural` still reaches `blocker` after the compounding bump.
+Reframe has no default `blocker` row. A base `high` finding with `fix-cost-later: structural` still reaches `blocker` after the compounding bump.
 
-When an approved design intentionally chooses the current model, treat a judo reframe as an explicit decision for the user to confirm or reject. Do not turn a judo reframe into an automatic `/cure` rewrite; the recommendation must preserve the approved decision or explicitly request that it be changed. A reframe is often `fix-cost-now: sprawling`, so the handoff asks before `/cure` applies it.
+When an approved design intentionally chooses the current model, treat a reframe finding as an explicit decision for the user to confirm or reject. Do not turn a reframe finding into an automatic `/cure` rewrite; the recommendation must preserve the approved decision or explicitly request that it be changed. A reframe is often `fix-cost-now: sprawling`, so the handoff asks before `/cure` applies it.
 
 Boundaries: § Dimension boundaries owns every ownership rule. Read that table before you assign a dimension.
 
@@ -518,9 +518,9 @@ Look for one primary dimension per finding. Use this table to choose the primary
 | altitude / encapsulation | Use `encapsulation` when the defect leaks a boundary or lifts an invariant into callers. Use `altitude` when the boundary's level or owner is the defect and the public surface remains intact. |
 | altitude / spec | Use `spec` for a named approved placement that the diff contradicts. Use `altitude` for a placement concern not already fixed by the approved design. A contrary altitude observation is an explicit decision, not an automatic `/cure` rewrite. |
 | altitude / conventions | Use `conventions` for a documented placement rule with exact source/code evidence. Use `altitude` for a concrete placement symptom and cost when no such rule exists. |
-| judo / altitude | Use `altitude` when the same behavior must move to a better owner. Use `judo` when a different model makes the behavior or concept unnecessary. |
-| judo / complexity | Use `complexity` for one shape defect with a local fix. Use `judo` when one reframe deletes several branches, modes, or layers; name the `complexity` findings that the reframe subsumes. |
-| judo / deslop | Use `deslop` for dead code or residue that a direct delete removes. Use `judo` when the deletion needs a model change first. |
-| judo / spec | Use `spec` for a named approved model that the diff contradicts. Use `judo` for a reframe that the approved design does not fix. A reframe of an approved design is an explicit decision, not an automatic `/cure` rewrite. |
+| reframe / altitude | Use `altitude` when the same behavior must move to a better owner. Use `reframe` when a different model makes the behavior or concept unnecessary. |
+| reframe / complexity | Use `complexity` for one shape defect with a local fix. Use `reframe` when one new model deletes several branches, modes, or layers; name the `complexity` findings that the reframe subsumes. |
+| reframe / deslop | Use `deslop` for dead code or residue that a direct delete removes. Use `reframe` when the deletion needs a model change first. |
+| reframe / spec | Use `spec` for a named approved model that the diff contradicts. Use `reframe` for a new model that the approved design does not fix. A reframe of an approved design is an explicit decision, not an automatic `/cure` rewrite. |
 
-Architecture preference alone is not a finding. Every `altitude` row must carry its symptom, owner, better placement, and concrete cost. Every `judo` row must carry its incidental complexity, reframe, deleted concepts, and preserved behavior. A violation of an approved design remains an explicit decision to confirm or reject; it does not authorize `/cure` to rewrite the design automatically.
+Architecture preference alone is not a finding. Every `altitude` row must carry its symptom, owner, better placement, and concrete cost. Every `reframe` row must carry its incidental complexity, new model, deleted concepts, and preserved behavior. A violation of an approved design remains an explicit decision to confirm or reject; it does not authorize `/cure` to rewrite the design automatically.

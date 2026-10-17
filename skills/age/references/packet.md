@@ -34,7 +34,7 @@ Use this map to prepare the initial rubric material without copying the whole re
 | efficiency | efficiency |
 | conventions | conventions |
 | altitude | altitude, encapsulation, complexity |
-| judo | judo, complexity, altitude |
+| reframe | reframe, complexity, altitude |
 
 Extract rubric sections by their dimension headings from `dimensions.md`.
 Combined assignments receive the union of the relevant rubrics.
@@ -42,12 +42,12 @@ A worker that identifies another kind of problem reads that rubric before classi
 
 ## Evidence views
 
-Conventions, altitude, and judo receive the whole-change orientation and component relationships.
+Conventions, altitude, and reframe receive the whole-change orientation and component relationships.
 Other workers receive their assigned targets and the relevant shared evidence sections.
 Workers may inspect additional code when evidence requires it; target scopes are starting points, not excuses to miss affected callers.
 A security assignment names its trust boundary, not every test file in the repository.
 The altitude view includes the owning component and immediate consumers so it can evaluate solution placement.
-The judo view includes the enclosing module and the abstractions it already provides so it can find a reframe that deletes complexity.
+The reframe view includes the enclosing module and the abstractions it already provides so it can find a new model that deletes complexity.
 An optional explorer can resolve a genuinely unmapped area; it is not a fixed prerequisite for every review.
 
 ## Output and reconciliation ownership

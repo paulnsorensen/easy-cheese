@@ -104,7 +104,7 @@ class TestPublicContract:
             "efficiency",
             "conventions",
             "altitude",
-            "judo",
+            "reframe",
         )
 
     def test_plan_contains_contextual_shape_not_dimension_partition(self) -> None:
@@ -153,7 +153,7 @@ class TestSubjectPolicy:
             "general",
             "conventions",
             "altitude",
-            "judo",
+            "reframe",
         ]
         assert _assignment(plan, "general")["subjects"] == [
             "changed-behavior",
@@ -170,7 +170,7 @@ class TestSubjectPolicy:
         normal = _route(effort="normal", score=100)
         assert [
             row["id"] for row in cast(list[dict[str, object]], normal["assignments"])
-        ] == ["general", "security", "conventions", "altitude", "judo"]
+        ] == ["general", "security", "conventions", "altitude", "reframe"]
         deep = _route(effort="deep", score=100)
         assert [
             row["id"] for row in cast(list[dict[str, object]], deep["assignments"])
@@ -182,7 +182,7 @@ class TestSubjectPolicy:
             "spec-tests",
             "conventions",
             "altitude",
-            "judo",
+            "reframe",
         ]
         assert "changed-behavior" in cast(
             list[str], _assignment(deep, "general")["subjects"]
@@ -192,6 +192,7 @@ class TestSubjectPolicy:
         plan = _route(effort="quick", score=20)
         assert plan["n"] == 1
         assert _assignment(plan, "general")["subjects"] == list(age_route.SUBJECTS)
+        assert "protected:reframe" not in cast(list[str], plan["rationale"])
 
     def test_unknown_subject_stays_with_general_owner(self) -> None:
         plan = _route(
@@ -467,11 +468,11 @@ class TestContractBoundaries:
         context = _context(scope="overall", effort="quick")
         subjects = cast(list[dict[str, object]], context["subjects"])
         subjects[-1]["applicability"] = "no"
-        subjects[-1]["evidence"] = ["overall review explicitly includes judo"]
+        subjects[-1]["evidence"] = ["overall review explicitly includes reframe"]
         plan = age_route.route(context=context)
         assert plan["n"] == len(age_route.SUBJECTS)
-        judo = _assignment(plan, "judo")
-        assert judo["subjects"] == ["judo"]
+        reframe = _assignment(plan, "reframe")
+        assert reframe["subjects"] == ["reframe"]
 
     def test_protected_not_applicable_subject_requires_targets_for_override(
         self,

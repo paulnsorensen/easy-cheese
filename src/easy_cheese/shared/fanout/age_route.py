@@ -45,7 +45,7 @@ SUBJECTS: tuple[str, ...] = (
     "efficiency",
     "conventions",
     "altitude",
-    "judo",
+    "reframe",
 )
 
 _OPTIONAL_SUBJECTS = (
@@ -66,7 +66,7 @@ _SCOPE = frozenset({"diff", "overall"})
 _EFFORTS = ("quick", "normal", "deep")
 _WORKER_EFFORT = {"quick": "low", "normal": "medium", "deep": "high"}
 _EFFORT_INDEX = {name: index for index, name in enumerate(_EFFORTS)}
-_PROTECTED_SUBJECTS = ("conventions", "altitude", "judo")
+_PROTECTED_SUBJECTS = ("conventions", "altitude", "reframe")
 
 # The old risk signals remain explicit, but now map to review procedures rather
 # than dimensions.  The two final rows are the contextual signals introduced
