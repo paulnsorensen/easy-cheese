@@ -970,6 +970,7 @@ def _draft_sections(draft: object) -> dict[str, str]:
     text = _draft_bytes(draft).decode("utf-8")
     headings = list(re.finditer(r"(?im)^#{1,6}\s+(.+?)\s*$", text))
     result = {}
+    exact: set[str] = set()
     for index, heading in enumerate(headings):
         title = _heading_title(heading.group(1))
         end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
@@ -987,6 +988,10 @@ def _draft_sections(draft: object) -> dict[str, str]:
         )
         if key:
             normalized = _REFLECTION_ALIASES[key]
+            if title == key:
+                exact.add(normalized)
+            elif normalized in exact:
+                continue
             result[normalized] = text[heading.end() : end]
     return result
 

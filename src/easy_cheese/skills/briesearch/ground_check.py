@@ -39,6 +39,15 @@ Reads a markdown report, finds every evidence table (a table whose header has a
     bundle does no I/O beyond the corpus. With no manifest beside the report the
     check degrades to a single MANIFEST advisory.
 
+When the report carries an ``Uncertainty and local checks`` section, it also
+enforces:
+
+  - LOCAL_CHECK (error): the section is ``none`` or the declared four-column
+    table, and no row leaves a cell empty. Documentation cannot prove our
+    deployed integration, so every open uncertainty must name the smallest
+    local check that resolves it; a row without one hands the next phase
+    nothing to run.
+
 Violations are reported in the `violations` field of the JSON result at exit 0.
 Exit: 1 on an untrusted adjacent manifest, 2 on an unreadable report file.
 """
@@ -213,6 +222,74 @@ def _find_columns(header: list[str]) -> _Columns | None:
     if evidence < 0:
         evidence = claim  # degenerate table: cite inside the claim cell
     return _Columns(claim, evidence, confidence, freshness)
+
+
+LOCAL_CHECKS_HEADING = "Uncertainty and local checks"
+LOCAL_CHECK_COLUMNS = (
+    "Decision affected",
+    "Evidence",
+    "Remaining uncertainty in our environment",
+    "Smallest local check",
+)
+_HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*$")
+
+
+def _check_local_checks(lines: list[str]) -> list[Violation]:
+    """Check each ``Uncertainty and local checks`` section the report carries."""
+    out: list[Violation] = []
+    for start, line in enumerate(lines):
+        heading = _HEADING.match(line.strip())
+        if heading is None or heading.group(1).lower() != LOCAL_CHECKS_HEADING.lower():
+            continue
+        body: list[str] = []
+        for item in lines[start + 1 :]:
+            if _HEADING.match(item.strip()):
+                break
+            if item.strip():
+                body.append(item.strip())
+        out.extend(_check_local_check_body(body))
+    return out
+
+
+def _check_local_check_body(body: list[str]) -> list[Violation]:
+    rows = [_split_row(line) for line in body if line.startswith("|")]
+    if not rows:
+        if any(line.strip("`").lower() == "none" for line in body):
+            return []
+        return [
+            Violation(
+                "error",
+                0,
+                "LOCAL_CHECK",
+                f"{LOCAL_CHECKS_HEADING!r} is neither `none` nor a local-check table",
+            )
+        ]
+    expected = [column.lower() for column in LOCAL_CHECK_COLUMNS]
+    if (
+        [cell.lower() for cell in rows[0]] != expected
+        or len(rows) < 2
+        or not _is_separator(rows[1])
+    ):
+        return [
+            Violation(
+                "error",
+                0,
+                "LOCAL_CHECK",
+                f"{LOCAL_CHECKS_HEADING!r} table must use the columns "
+                + " | ".join(LOCAL_CHECK_COLUMNS),
+            )
+        ]
+    return [
+        Violation(
+            "error",
+            row_no,
+            "LOCAL_CHECK",
+            "every open uncertainty must fill all four cells, including the "
+            + "smallest local check that resolves it",
+        )
+        for row_no, cells in enumerate(rows[2:], start=1)
+        if len(cells) != len(LOCAL_CHECK_COLUMNS) or not all(cells)
+    ]
 
 
 def _footnote_definitions(lines: list[str]) -> tuple[dict[str, str], set[str]]:
@@ -649,6 +726,7 @@ def check_report(
     ]
     if ledger is not None:
         violations.extend(_check_manifest(ledger, report_dir, report_stem))
+    violations.extend(_check_local_checks(lines))
     tables_checked = 0
     remote_seen: set[str] = set()
     context = _Context(
