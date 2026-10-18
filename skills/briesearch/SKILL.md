@@ -47,7 +47,7 @@ The capabilities in `references/routing.md` are the contract. Providers are repl
 
 ## Output
 
-Use the style and citation format in [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Follow the output contract in `references/synthesis.md`. Return one synthesis paragraph, a claim evidence table, open questions, confidence, and the recommended next step. Give a one-line reason for the confidence value. For deep research, write the long report to `research/<slug>/<slug>.md` in the durable corpus. Resolve each path with `research-layout <slug>`. See `references/synthesis.md`. Return the absolute `report` path returned by `research-layout` as the artifact reference.
+Use the style and citation format in [`../cheese/references/formatting.md`](../cheese/references/formatting.md). Follow the output contract in `references/synthesis.md`. Return one synthesis paragraph, a claim evidence table, open questions, the local checks for any remaining uncertainty, confidence, and the recommended next step. Give a one-line reason for the confidence value. For deep research, write the long report to `research/<slug>/<slug>.md` in the durable corpus. Resolve each path with `research-layout <slug>`. See `references/synthesis.md`. Return the absolute `report` path returned by `research-layout` as the artifact reference.
 
 ## Rules
 
