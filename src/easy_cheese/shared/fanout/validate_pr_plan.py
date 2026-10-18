@@ -39,13 +39,13 @@ def check(path: str | None = None) -> dict[str, object]:
     try:
         plan = read_mapping_arg_or_stdin(argv, "usage: validate_pr_plan.py [<pr-plan.yaml|pr-plan.json>]")
     except ManifestLoadError as exc:
-        exit_code = 2 if str(exc).startswith("usage:") else 1
+        exit_code = 2 if str(exc).startswith("usage:") else 4
         raise fromargs.CliError(str(exc), exit_code=exit_code) from exc
 
     loaded = load_pr_plan(plan)
     if loaded.problems:
         raise fromargs.CliError(
-            "\n".join(f"ERROR: {error}" for error in loaded.problems), exit_code=1
+            "\n".join(f"ERROR: {error}" for error in loaded.problems), exit_code=4
         )
 
     assert loaded.value is not None

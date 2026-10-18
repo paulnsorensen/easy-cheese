@@ -26,7 +26,7 @@ def test_mini_spec_mode_in_skill_appends_hard() -> None:
     line = next(
         line
         for line in _read("SKILL.md").splitlines()
-        if "finalize and dispatch only a ready pointer" in line
+        if "dispatch `/cook --spec <path>` for clear standalone work" in line
     )
     assert HARD_RULE.search(line), line
 

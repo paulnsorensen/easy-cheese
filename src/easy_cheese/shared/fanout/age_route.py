@@ -30,7 +30,7 @@ __all__ = [
     "route",
 ]
 
-POLICY_VERSION = "age-review-plan.v1"
+POLICY_VERSION = "age-review-plan.v2"
 
 # Review subjects are the independent procedures the coordinator can assign.
 # Keep this order stable for canonical plan output.
@@ -45,6 +45,7 @@ SUBJECTS: tuple[str, ...] = (
     "efficiency",
     "conventions",
     "altitude",
+    "reframe",
 )
 
 _OPTIONAL_SUBJECTS = (
@@ -65,7 +66,7 @@ _SCOPE = frozenset({"diff", "overall"})
 _EFFORTS = ("quick", "normal", "deep")
 _WORKER_EFFORT = {"quick": "low", "normal": "medium", "deep": "high"}
 _EFFORT_INDEX = {name: index for index, name in enumerate(_EFFORTS)}
-_PROTECTED_SUBJECTS = ("conventions", "altitude")
+_PROTECTED_SUBJECTS = ("conventions", "altitude", "reframe")
 
 # The old risk signals remain explicit, but now map to review procedures rather
 # than dimensions.  The two final rows are the contextual signals introduced

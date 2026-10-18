@@ -462,7 +462,7 @@ def _keys(hits: Sequence[discovery.Hit]) -> set[tuple[str, str]]:
 
 
 @pytest.mark.usefixtures("isolated_home")
-def test_ac12_linked_to_and_backlinks_return_the_same_records(
+def test_ac12_linked_to_returns_edge_and_link_records(
     tmp_path: Path,
     make_record: Callable[..., WheypointRecord],
     make_promotion: Callable[..., _PromotionLike],
@@ -471,7 +471,10 @@ def test_ac12_linked_to_and_backlinks_return_the_same_records(
     target = "wheypoint:proj-a/target"
     seed = functools.partial(_seed_fields, corpus, make_record, make_promotion)
     seed("target")
-    seed("by-edge", edges=[WorkEdge(to=f"{target}@rev-0001", kind=EdgeKind.INFORMS)])
+    seed(
+        "by-edge",
+        edges=[WorkEdge(to=f"{target}@rev-0001", kind=EdgeKind.SUPERSEDES)],
+    )
     seed(
         "by-link",
         artifact_links=[
@@ -480,22 +483,24 @@ def test_ac12_linked_to_and_backlinks_return_the_same_records(
     )
     seed(
         "elsewhere",
-        edges=[WorkEdge(to="wheypoint:proj-a/other", kind=EdgeKind.INFORMS)],
+        edges=[WorkEdge(to="wheypoint:proj-a/other", kind=EdgeKind.SUPERSEDES)],
     )
 
     listed = discovery.discover(
         start=tmp_path, corpus_root=corpus, linked_to=[target]
     ).hits
-    back = discovery.backlinks(target, start=tmp_path, corpus_root=corpus)
 
     assert _keys(listed) == {("proj-a", "by-edge"), ("proj-a", "by-link")}
-    assert _keys(back) == _keys(listed)
     by_ref = {
         hit.ref: hit
         for hit in discovery.discover(start=tmp_path, corpus_root=corpus).hits
     }
-    assert by_ref["by-edge"].edges_out == (("informs", f"{target}@rev-0001"),)
-    assert by_ref["target"].edges_in == (("informs", "wheypoint:proj-a/by-edge"),)
+    assert by_ref["by-edge"].edges_out == (
+        ("supersedes", f"{target}@rev-0001"),
+    )
+    assert by_ref["target"].edges_in == (
+        ("supersedes", "wheypoint:proj-a/by-edge"),
+    )
     pinned = discovery.discover(
         start=tmp_path, corpus_root=corpus, linked_to=[f"{target}@rev-0002"]
     ).hits
@@ -521,7 +526,7 @@ def test_grep_matches_edge_rationale(
         edges=[
             WorkEdge(
                 to="wheypoint:proj-a/target@rev-0001",
-                kind=EdgeKind.INFORMS,
+                kind=EdgeKind.SUPERSEDES,
                 rationale="unique-rationale-marker",
             )
         ],
@@ -550,15 +555,18 @@ def test_ac12_linked_to_matches_a_repo_link_by_its_path(
     )
     _seed_fields(corpus, make_record, make_promotion, "without")
 
-    hits = discovery.backlinks(
-        "repo:./docs/spec.md", start=tmp_path, corpus_root=corpus
-    )
+    hits = discovery.discover(
+        start=tmp_path, corpus_root=corpus, linked_to=["repo:./docs/spec.md"]
+    ).hits
 
     assert _keys(hits) == {("proj-a", "with-spec")}
 
 
-def _question(entry_id: str, state: EntryState) -> ProtectedEntry:
+def _question(
+    entry_id: str, state: EntryState, owner: str | None = None
+) -> ProtectedEntry:
     return ProtectedEntry(
+        owner=owner,
         entry_id=entry_id,
         kind=EntryKind.QUESTION,
         summary=f"Question {entry_id}?",
@@ -581,13 +589,14 @@ def test_ac13_entry_filters_and_gated_return_only_gated_records(
     seed(
         "settled",
         questions=[_question("q-done", EntryState.RESOLVED)],
-        blockers=[
+        decisions=[
             ProtectedEntry(
-                entry_id="b-live",
-                kind=EntryKind.BLOCKER,
-                summary="Waiting on CI.",
+                entry_id="d-live",
+                kind=EntryKind.DECISION,
+                summary="Wait on CI.",
                 state=EntryState.ACTIVE,
                 blocks_continuation=False,
+                rationale="CI owns the verdict.",
             )
         ],
     )
@@ -638,7 +647,9 @@ def test_forked_from_and_edge_kind_filters_find_the_child(
             WorkEdge(to="wheypoint:proj-a/parent@rev-0001", kind=EdgeKind.FORKED_FROM)
         ],
     )
-    seed("peer", edges=[WorkEdge(to="wheypoint:proj-a/parent", kind=EdgeKind.INFORMS)])
+    seed(
+        "peer", edges=[WorkEdge(to="wheypoint:proj-a/parent", kind=EdgeKind.SUPERSEDES)]
+    )
 
     forked = discovery.discover(
         start=tmp_path, corpus_root=corpus, forked_from=["parent"]
@@ -650,3 +661,26 @@ def test_forked_from_and_edge_kind_filters_find_the_child(
     assert _keys(forked) == {("proj-a", "child")}
     assert forked[0].forked_from == "parent"
     assert _keys(by_kind) == {("proj-a", "child")}
+
+
+@pytest.mark.usefixtures("isolated_home")
+def test_list_owner_matches_active_question_owners_case_insensitively(
+    tmp_path: Path,
+    make_record: Callable[..., WheypointRecord],
+    make_promotion: Callable[..., _PromotionLike],
+) -> None:
+    corpus = tmp_path / "cheese" / "proj-a"
+    seed = functools.partial(_seed_fields, corpus, make_record, make_promotion)
+    seed("ana-open", questions=[_question("q-a", EntryState.ACTIVE, owner="Ana")])
+    seed("ana-done", questions=[_question("q-b", EntryState.RESOLVED, owner="Ana")])
+    seed("bo-open", questions=[_question("q-c", EntryState.ACTIVE, owner="Bo")])
+    seed("unowned", questions=[_question("q-d", EntryState.ACTIVE)])
+
+    def owned_by(*owner: str) -> set[tuple[str, str]]:
+        return _keys(
+            discovery.discover(start=tmp_path, corpus_root=corpus, owner=owner).hits
+        )
+
+    assert owned_by("aNa") == {("proj-a", "ana-open")}
+    assert owned_by("ana", "BO") == {("proj-a", "ana-open"), ("proj-a", "bo-open")}
+    assert owned_by("carl") == set()

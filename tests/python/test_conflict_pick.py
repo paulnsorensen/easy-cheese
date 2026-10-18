@@ -95,7 +95,7 @@ class TestMain:
         path = tmp_path / "bundle.pyz"
         original = b"\x00\xffbinary archive"
         _ = path.write_bytes(original)
-        assert conflict_pick.main([str(path), "--ours"]) == 1
+        assert conflict_pick.main([str(path), "--ours"]) == 2
         assert path.read_bytes() == original
         error = capsys.readouterr().err
         assert "source conflicts" in error
@@ -110,7 +110,7 @@ class TestMain:
         path = tmp_path / "logo.png"
         original = b"<<<<<<< HEAD\n\x00\xff\n=======\n\x01\n>>>>>>> b\n"
         _ = path.write_bytes(original)
-        assert conflict_pick.main([str(path), "--theirs"]) == 1
+        assert conflict_pick.main([str(path), "--theirs"]) == 2
         assert path.read_bytes() == original
         assert "binary file" in capsys.readouterr().err
 
@@ -123,6 +123,6 @@ class TestMain:
         path = tmp_path / "notes.txt"
         original = "<<<<<<< HEAD\ncafé\n=======\nthé\n>>>>>>> b\n".encode("latin-1")
         _ = path.write_bytes(original)
-        assert conflict_pick.main([str(path), "--ours"]) == 1
+        assert conflict_pick.main([str(path), "--ours"]) == 2
         assert path.read_bytes() == original
         assert "not UTF-8 text" in capsys.readouterr().err

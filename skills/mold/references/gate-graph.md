@@ -96,6 +96,6 @@ Every draft must reflect Approach, Interface sketches, and Acceptance. A draft t
 
 The lexical pre-check (`taste-test --precheck`) runs the deterministic sub-checks (section presence, fork-id or decision-text mention, goal drift) against the draft alone. It runs before the reviewer dispatch. It does not count toward the two correction rounds. The full `taste-test` with `--verdict` repeats the same checks on the digest-bound verdict.
 
-A third failure stops typed planning and a runnable Cook handoff. Mold may retain the blocked draft.
+A third taste failure stops typed planning and preserves the draft for review. Taste evidence does not become a Cook execution reference.
 
-Only a user-selected automatic route uses `/cook --auto <pointer path>`. It passes the published pointer and bound metadata without changes. This metadata includes contract and taste data.
+Only a user-selected automatic route uses `/cook --auto`: `--spec <spec-path>` for standalone work, `--result <result-path>` for bound curd work. Cook reads the ready refs from the result without changes.

@@ -24,19 +24,6 @@ from easy_cheese.cli import wheypoint
 from conftest import WORK_ID, run_cli
 
 CAPTURED_AT = "2026-08-30T12:00:00Z"
-DOSSIER = [
-    {
-        "fork": "Where the intent is bound",
-        "options": [
-            {
-                "option": "runtime",
-                "evidence": ["the caller cannot see the lock"],
-                "breaks": "nothing: commit re-checks under it",
-            }
-        ],
-        "prior_leaning": "runtime",
-    }
-]
 
 
 def _run(command: str, *args: str, stdin: str = "") -> tuple[int, dict[str, object]]:
@@ -195,7 +182,7 @@ def test_a_genesis_replay_needs_an_explicit_captured_at() -> None:
     status, conflict = _run("checkpoint", stdin=unstamped)
 
     assert first["replayed"] is False
-    assert status == 1
+    assert status == 2
     assert _get(conflict, "error", "code") == "genesis-conflict"
 
 
@@ -227,7 +214,9 @@ def test_a_concurrent_writer_still_loses_under_the_lock(
     current = store.read_record()
     assert current is not None
     intent = checkpoint.CheckpointIntent(
-        work_id=WORK_ID, orientation="Built against the record that was current."
+        work_id=WORK_ID,
+        orientation="Built against the record that was current.",
+        base_revision_id=current.revision_id,
     )
     delta = checkpoint.build_delta(intent, current)
 
@@ -254,7 +243,7 @@ def test_a_base_revision_id_that_is_not_current_refuses(
         ),
     )
 
-    assert status == 1
+    assert status == 2
     # The pinned base is passed through to the kernel, so the refusal is the
     # kernel's own -- checkpoint invents no second staleness check above it.
     assert _get(payload, "error", "code") == "stale-parent"
@@ -284,25 +273,101 @@ def test_a_base_revision_id_on_work_with_no_record_refuses() -> None:
         "checkpoint", stdin=_first(base_revision_id="rev-000000000000")
     )
 
-    assert status == 1
+    assert status == 2
     # Pinning a revision that is not the genesis sentinel says the caller read
     # a record; there is none, so the kernel refuses rather than creating one.
     assert _get(payload, "error", "code") == "commit-refused"
 
 
+def _tree_bytes(store: storage.WorkStore) -> dict[Path, bytes]:
+    return {
+        path: path.read_bytes() for path in store.root.rglob("*") if path.is_file()
+    }
+
+
+def test_a_write_to_an_existing_record_without_a_base_is_refused(
+    store: storage.WorkStore, genesis: dict[str, object]
+) -> None:
+    before = _tree_bytes(store)
+
+    status, payload = run_cli(
+        ["checkpoint"],
+        stdin=_intent(orientation="Wrote without reading."),
+        read_first=False,
+    )
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "base-revision-required"
+    message = cast(str, _get(payload, "error", "message"))
+    assert cast(str, genesis["revision_id"]) in message
+    assert _tree_bytes(store) == before
+
+
+def test_the_base_flag_names_the_revision_the_writer_read(
+    genesis: dict[str, object],
+) -> None:
+    status, payload = run_cli(
+        [
+            "checkpoint",
+            WORK_ID,
+            "--base",
+            cast(str, genesis["revision_id"]),
+            "--orientation",
+            "Wrote with the flag.",
+        ],
+        read_first=False,
+    )
+
+    assert status == 0, payload
+    assert payload["parent_revision_id"] == genesis["revision_id"]
+
+
+def test_a_stale_base_flag_is_refused_without_writing(
+    store: storage.WorkStore, genesis: dict[str, object]
+) -> None:
+    _, _ = _run("checkpoint", stdin=_intent(orientation="Moves the record on."))
+    before = _tree_bytes(store)
+
+    status, payload = run_cli(
+        [
+            "checkpoint",
+            WORK_ID,
+            "--base",
+            cast(str, genesis["revision_id"]),
+            "--orientation",
+            "Wrote from a stale read.",
+        ],
+        read_first=False,
+    )
+
+    assert status == 2
+    assert _get(payload, "error", "code") == "stale-parent"
+    assert _tree_bytes(store) == before
+
+
+@pytest.mark.usefixtures("store")
+def test_genesis_needs_no_base() -> None:
+    status, payload = run_cli(["checkpoint"], stdin=_first(), read_first=False)
+
+    assert status == 0, payload
+    assert payload["parent_revision_id"] is None
+
+
+@pytest.mark.usefixtures("genesis")
+def test_checkpoint_no_longer_has_a_compacted_option() -> None:
+    status, payload = run_cli(
+        ["checkpoint", WORK_ID, "--compacted", "--orientation", "Nope."],
+        read_first=False,
+    )
+
+    assert status != 0
+    assert _get(payload, "error", "code") != "base-revision-required"
+    assert "compacted" in cast(str, _get(payload, "error", "text"))
+
+
 @pytest.mark.parametrize(
     "field, value",
     [
-        ("compacted", True),
-        (
-            "compaction",
-            {
-                "rehydrated_from_revision_id": "rev-000000000000",
-                "rehydrated_record_digest": "sha256:" + "0" * 64,
-                "reconciled_entry_ids": [],
-                "reconciliation_source_session_ids": [],
-            },
-        ),
         ("expected_revision_id", "rev-000000000000"),
     ],
 )
@@ -318,11 +383,11 @@ def test_checkpoint_refuses_the_fields_that_belong_to_commit(
     """
     status, payload = _run("checkpoint", stdin=_intent(**{field: value}))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "commit-only-field"
     message = cast(str, _get(payload, "error", "message"))
     assert field in message
-    assert "checkpoint --compacted" in message
+    assert "--compacted" not in message
     assert "base_revision_id" in message
 
 
@@ -347,7 +412,7 @@ def test_checkpoint_refuses_a_field_the_record_cannot_hold(
     """
     status, payload = _run("checkpoint", stdin=_first(**{field: value}))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
     message = cast(str, _get(payload, "error", "message"))
     assert field in message
@@ -382,7 +447,6 @@ def test_omitted_protected_state_carries_forward() -> None:
         _get(payload, "record", "next_action", "artifact")
         == ".cheese/cook/wheypoint-checkpoint.md"
     )
-    assert cast(list[str], _get(payload, "revision", "preserved_entry_ids"))
 
 
 @pytest.mark.usefixtures("store")
@@ -396,9 +460,9 @@ def test_retirement_still_needs_a_caller_authored_transition() -> None:
                     "kind": "question",
                     "summary": "Does binding weaken the stale-writer check?",
                     "blocks_continuation": True,
+                    "rationale": "The stale-writer check is the guarantee.",
                 }
             ],
-            decision_dossier=DOSSIER,
         ),
     )
     assert status == 0, first
@@ -416,7 +480,6 @@ def test_retirement_still_needs_a_caller_authored_transition() -> None:
                     "rationale": "commit re-checks the parent under the lock.",
                 }
             ],
-            decision_dossier=[],
         ),
     )
 
@@ -438,7 +501,7 @@ def test_a_transition_without_a_rationale_is_not_a_retirement() -> None:
         stdin=_intent(transitions=[{"entry_id": "q-nothing", "action": "resolve"}]),
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
@@ -455,18 +518,18 @@ def test_a_gating_addition_derives_gated_status_and_a_projection(
             session={"captured_at": CAPTURED_AT},
             entries=[
                 {
-                    "kind": "blocker",
+                    "kind": "question",
                     "summary": "The bundle manifest has not been regenerated.",
                     "blocks_continuation": True,
+                    "rationale": "Cook cannot start on a stale manifest.",
                 }
             ],
-            decision_dossier=DOSSIER,
         ),
     )
 
     assert status == 0, payload
     assert payload["status"] == "gated"
-    gating = cast(list[dict[str, object]], _get(payload, "record", "blockers"))
+    gating = cast(list[dict[str, object]], _get(payload, "record", "questions"))
     assert [entry["state"] for entry in gating] == ["active"]
     assert payload["durability"] == "repo-snapshot"
     revision_id = cast(str, payload["revision_id"])
@@ -512,7 +575,7 @@ def test_mirror_failure_then_retry_resumes_the_committed_revision(
 
     status, first = _run("checkpoint", "--note-dir", str(notes), stdin=intent)
 
-    assert status == 1
+    assert status == 2
     assert _get(first, "error", "code") == "note-unwritable"
     # The projection claims repo-snapshot durability, so a failed mirror must
     # leave no promoted record behind to carry that claim.
@@ -543,7 +606,7 @@ def test_mirror_failure_then_retry_resumes_the_committed_revision(
 def test_an_artifact_without_a_next_move_refuses() -> None:
     status, payload = _run("checkpoint", stdin=_intent(artifact=".cheese/x.md"))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
     assert "next" in cast(str, _get(payload, "error", "message"))
 
@@ -554,7 +617,7 @@ def test_a_first_checkpoint_must_say_what_comes_next() -> None:
         "checkpoint", stdin=_intent(orientation="No next move.", working_context=[])
     )
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
@@ -562,14 +625,14 @@ def test_a_first_checkpoint_must_say_what_comes_next() -> None:
 def test_an_unknown_next_move_is_refused_as_an_intent() -> None:
     status, payload = _run("checkpoint", stdin=_intent(next="deploy"))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
 def test_checkpoint_reports_a_work_id_that_is_not_a_path_segment() -> None:
     status, payload = _run("checkpoint", stdin=json.dumps({"work_id": "../escape"}))
 
-    assert status == 1
+    assert status == 2
     assert _get(payload, "error", "code") == "invalid-intent"
 
 
@@ -594,9 +657,14 @@ def test_build_delta_carries_the_next_action_when_next_is_omitted(
 ) -> None:
     """The unit seam: an omitted move sends None, which the kernel reads as
     "unchanged" -- checkpoint invents no NextAction to restate it with."""
+    record = make_record()
     delta = checkpoint.build_delta(
-        checkpoint.CheckpointIntent(work_id=WORK_ID, orientation="Only this."),
-        make_record(),
+        checkpoint.CheckpointIntent(
+            work_id=WORK_ID,
+            orientation="Only this.",
+            base_revision_id=record.revision_id,
+        ),
+        record,
     )
 
     assert delta.next_action is None
@@ -735,13 +803,43 @@ def test_the_checkpoint_command_is_registered_for_the_bundle() -> None:
     ]
 
 
-def test_ac15_build_delta_forwards_remove_dossier_forks(
-    make_record: Callable[..., WheypointRecord],
+@pytest.mark.usefixtures("store")
+@pytest.mark.parametrize(
+    ("overrides", "key_path"),
+    [
+        ({"decision_dossier": []}, "decision_dossier"),
+        ({"remove_dossier_forks": ["Durability default"]}, "remove_dossier_forks"),
+        ({"add_blockers": []}, "add_blockers"),
+        (
+            {"add_edges": [{"to": "repo:docs/spec.md", "kind": "relates_to"}]},
+            "add_edges[1].kind",
+        ),
+    ],
+)
+def test_ac5_removed_intent_surface_is_refused_and_names_the_key_path(
+    overrides: dict[str, object], key_path: str
 ) -> None:
-    intent = checkpoint.CheckpointIntent(
-        work_id=WORK_ID, remove_dossier_forks=("Durability default",)
+    status, payload = _run("checkpoint", stdin=_first(**overrides))
+
+    assert status == 2, payload
+    assert _get(payload, "error", "code") == "invalid-intent"
+    assert key_path in cast(str, _get(payload, "error", "message"))
+
+
+@pytest.mark.usefixtures("genesis")
+def test_ac6_a_blocking_question_without_a_rationale_is_refused() -> None:
+    status, payload = _run(
+        "checkpoint",
+        stdin=_intent(
+            entries=[
+                {
+                    "kind": "question",
+                    "summary": "Does binding weaken the stale-writer check?",
+                    "blocks_continuation": True,
+                }
+            ]
+        ),
     )
 
-    delta = checkpoint.build_delta(intent, make_record(gating=True))
-
-    assert delta.remove_dossier_forks == ("Durability default",)
+    assert status == 2, payload
+    assert "rationale" in cast(str, _get(payload, "error", "message"))

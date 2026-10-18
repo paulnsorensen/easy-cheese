@@ -423,7 +423,7 @@ def preflight_cmd(*, trunk: str, remote: str = "origin", cwd: str = ".") -> dict
     try:
         return preflight(Path(cwd).resolve(), trunk, remote)
     except GhStackValidationError as error:
-        raise fromargs.CliError(str(error), exit_code=1) from error
+        raise fromargs.CliError(str(error), exit_code=2) from error
 
 
 def build_preflight_app() -> fromargs.App:
@@ -452,7 +452,7 @@ def run_cmd(*command: str, cwd: str = ".") -> dict[str, object]:
     try:
         return run_guarded(list(command), Path(cwd).resolve())
     except GhStackValidationError as error:
-        raise fromargs.CliError(str(error), exit_code=1) from error
+        raise fromargs.CliError(str(error), exit_code=2) from error
 
 
 def build_run_app() -> fromargs.App:
@@ -483,7 +483,7 @@ def verify_cmd(*, trunk: str, remote: str = "origin", cwd: str = ".") -> dict[st
     try:
         return verify_publication(Path(cwd).resolve(), trunk, remote)
     except GhStackValidationError as error:
-        raise fromargs.CliError(str(error), exit_code=1) from error
+        raise fromargs.CliError(str(error), exit_code=2) from error
 
 
 def build_verify_app() -> fromargs.App:

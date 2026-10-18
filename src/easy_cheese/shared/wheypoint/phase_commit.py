@@ -2,8 +2,8 @@
 
 `commit_phase_revision` owns the whole phase write: it validates the grounded
 manifest, reads the current record, refuses an ungrounded genesis write,
-collects optional session provenance, writes the artifact through the caller's
-`write_contents` callback, and only then commits. The artifact lands *before*
+collects optional session provenance, writes the caller's `contents`
+atomically, and only then commits. The artifact lands *before*
 the commit deliberately -- an artifact on disk without a revision is visible to
 the next resolve, which gates on `stale-artifact-link`, while a revision that
 pins an artifact nobody wrote is a lie no reader can detect.
@@ -17,7 +17,7 @@ import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from attrs import define, evolve
+from attrs import define
 
 from easy_cheese_schemas.contracts import (
     LOWER_IDENTIFIER_RE,
@@ -30,7 +30,7 @@ from easy_cheese_schemas.contracts import (
 )
 
 from easy_cheese.shared import paths
-from easy_cheese.shared.wheypoint import checkpoint, commit, storage
+from easy_cheese.shared.wheypoint import canonical, checkpoint, commit, storage
 from easy_cheese.shared.wheypoint.grounded import (
     GroundedEntryError,
     validate_grounded,
@@ -50,7 +50,7 @@ class PhaseCommitRefusal(Exception):
 class ArtifactOrphaned(Exception):
     """The artifact landed on disk but its revision did not.
 
-    Raised for anything that fails after `write_contents()` returned. `expected`
+    Raised for anything that fails after the artifact write returned. `expected`
     says whether the underlying failure is one the kernel raises on purpose, so
     a caller prints a stack only for the ones that carry no message of their own.
     """
@@ -68,10 +68,9 @@ class ArtifactOrphaned(Exception):
 
 @define(frozen=True)
 class CommitOutcome:
-    """A phase commit's result, plus whether the stale-parent retry fired."""
+    """A phase commit's result."""
 
     result: commit.CommitResult
-    retried: bool
 
 
 def _warn(text: str) -> None:
@@ -175,6 +174,41 @@ def _base_revision_id(current: WheypointRecord | None) -> str:
     return commit.GENESIS_PARENT if current is None else current.revision_id
 
 
+def _require_read_base(
+    current: WheypointRecord | None, base_revision_id: str | None
+) -> None:
+    """Refuse a phase write over an existing record the writer has not read.
+
+    The writer names the revision it read; a missing or superseded base is
+    refused before the artifact lands, because a retry that re-bound the
+    parent would write over state the writer never re-read.
+    """
+    if current is None:
+        if base_revision_id is not None:
+            raise PhaseCommitRefusal(
+                f"stale-parent: --base {base_revision_id!r} names a revision, but "
+                + "no record exists: re-read the record, then write again"
+            )
+        return
+    if base_revision_id is None:
+        raise PhaseCommitRefusal(
+            "base-revision-required: the record already exists, so pass the revision "
+            + f"you read as --base; the current revision is {current.revision_id!r}: "
+            + "re-read the record, then write again"
+        )
+    if base_revision_id != current.revision_id:
+        raise _stale_parent(base_revision_id, current.revision_id)
+
+
+def _stale_parent(
+    base_revision_id: str, current_revision_id: str
+) -> PhaseCommitRefusal:
+    return PhaseCommitRefusal(
+        f"stale-parent: --base {base_revision_id!r} is not the current revision "
+        + f"{current_revision_id!r}: re-read the record, re-apply, then write again"
+    )
+
+
 def _require_genesis_grounding(
     current: WheypointRecord | None, grounded: Sequence[str]
 ) -> None:
@@ -218,64 +252,6 @@ def _build_delta(
     except checkpoint.IntentError as exc:
         raise commit.CommitError(str(exc)) from exc
 
-
-def _retry_intent(
-    intent: CheckpointIntent,
-    *,
-    base_revision_id: str,
-    grounded: Sequence[str],
-    artifact_links: list[ArtifactLink],
-    current: WheypointRecord | None,
-) -> CheckpointIntent:
-    return evolve(
-        intent,
-        base_revision_id=base_revision_id,
-        working_context=list(grounded) if grounded else None,
-        notes=None if current is not None else intent.notes,
-        artifact_links=artifact_links,
-    )
-
-
-def _retry(
-    intent: CheckpointIntent,
-    *,
-    phase: str,
-    grounded: Sequence[str],
-    links: list[ArtifactLink],
-    store: storage.WorkStore,
-    root_path: Path,
-) -> CommitOutcome:
-    """Rebuild the intent against the record that landed first, and re-commit."""
-    work_id = intent.work_id
-    refreshed = store.read_record()
-    refreshed_base = _base_revision_id(refreshed)
-    _warn(
-        f"retry work_id={work_id} phase={phase}"
-        + f" stale_parent={intent.base_revision_id} refreshed_parent={refreshed_base}"
-    )
-    _require_genesis_grounding(refreshed, grounded)
-    retry_delta = _build_delta(
-        _retry_intent(
-            intent,
-            base_revision_id=refreshed_base,
-            grounded=grounded,
-            artifact_links=links,
-            current=refreshed,
-        ),
-        refreshed,
-    )
-    try:
-        result = commit.commit(retry_delta, store=store, artifact_root=root_path)
-    except commit.CommitError as exc:
-        _warn(f"retry outcome=failed work_id={work_id} phase={phase} error={exc}")
-        raise
-    _warn(
-        f"retry outcome=committed work_id={work_id} phase={phase}"
-        + f" revision_id={result.revision.revision_id}"
-    )
-    return CommitOutcome(result=result, retried=True)
-
-
 def _require_kebab_work_id(work_id: str) -> None:
     """Refuse a work id no `.cheese/` reader can resolve, before any write.
 
@@ -303,16 +279,154 @@ def _refuse_unbindable_intent(
     refusal with nothing on disk instead of an orphaned artifact.
     """
     try:
-        _ = CheckpointIntent(
+        _ = _phase_intent(
             work_id=work_id,
+            phase=phase,
+            next_skill=next_skill,
+            artifact_path=artifact_path,
             orientation=orientation,
-            working_context=list(grounded) if grounded else None,
-            notes=f"{phase} phase handoff",
-            next=NextMove(next_skill),
-            artifact=artifact_path,
+            grounded=grounded,
+            links=None,
+            parent=None,
+            genesis=True,
+            session=None,
         )
     except ValueError as exc:
         raise PhaseCommitRefusal(str(exc)) from exc
+
+
+def _phase_intent(
+    *,
+    work_id: str,
+    phase: str,
+    next_skill: str,
+    artifact_path: str,
+    orientation: str,
+    grounded: Sequence[str],
+    links: list[ArtifactLink] | None,
+    parent: str | None,
+    genesis: bool,
+    session: SessionProvenance | None,
+) -> CheckpointIntent:
+    return CheckpointIntent(
+        work_id=work_id,
+        orientation=orientation,
+        working_context=list(grounded) if grounded else None,
+        notes=f"{phase} phase handoff" if genesis else None,
+        next=NextMove(next_skill),
+        artifact=artifact_path,
+        artifact_links=links,
+        base_revision_id=parent,
+        session=session,
+    )
+
+
+def _original_session(
+    store: storage.WorkStore,
+    current: WheypointRecord,
+    artifact_path: str,
+    base_revision_id: str,
+    session: SessionProvenance | None,
+) -> SessionProvenance | None:
+    """The provenance a retry must repeat to match its original request.
+
+    A session without its own timestamp gets one from the clock, so a retry
+    reuses the timestamp of the receipt the record pins for this artifact,
+    when that receipt sits over the base and came from this session.
+    """
+    if session is None or session.captured_at is not None:
+        return session
+    link = next(
+        (link for link in current.artifact_links if link.path == artifact_path),
+        None,
+    )
+    if link is None or link.revision_id is None:
+        return session
+    revision = store.find_complete_revision(link.revision_id)
+    original = None if revision is None else revision.session_provenance
+    if (
+        revision is None
+        or original is None
+        or revision.parent_revision_id != base_revision_id
+        or original.harness != session.harness
+        or original.session_id != session.session_id
+    ):
+        return session
+    return original
+
+
+def _pins_artifact(
+    record: WheypointRecord, *, artifact_path: str, revision_id: str, digest: str
+) -> bool:
+    return any(
+        link.path == artifact_path
+        and link.revision_id == revision_id
+        and link.digest == digest
+        for link in record.artifact_links
+    )
+
+
+def _replay_landed_write(
+    *,
+    work_id: str,
+    phase: str,
+    next_skill: str,
+    artifact_path: str,
+    artifact_target: Path,
+    orientation: str,
+    grounded: Sequence[str],
+    current: WheypointRecord,
+    base_revision_id: str,
+    contents_digest: str,
+    session: SessionProvenance | None,
+    store: storage.WorkStore,
+    root_path: Path,
+) -> CommitOutcome:
+    """Return the revision this same write already landed over a stale base.
+
+    This path never writes the artifact. The kernel looks up the receipt for
+    the identical request under the record lock, and the check below runs
+    under that lock too: the record must still pin the artifact to that
+    receipt with these bytes, and the file must still hold them. Anything else
+    is `stale-parent`.
+    """
+    intent = _phase_intent(
+        work_id=work_id,
+        phase=phase,
+        next_skill=next_skill,
+        artifact_path=artifact_path,
+        orientation=orientation,
+        grounded=grounded,
+        links=_phase_links(root=root_path, work_id=work_id, phase=phase),
+        parent=base_revision_id,
+        genesis=False,
+        session=_original_session(
+            store, current, artifact_path, base_revision_id, session
+        ),
+    )
+    delta = _build_delta(intent, current)
+
+    def confirm(pending: commit.PendingRevision) -> None:
+        if not (
+            pending.replayed
+            and _pins_artifact(
+                pending.record,
+                artifact_path=artifact_path,
+                revision_id=pending.revision.revision_id,
+                digest=contents_digest,
+            )
+            and storage.file_digest(artifact_target) == contents_digest
+        ):
+            raise _stale_parent(base_revision_id, pending.record.revision_id)
+
+    try:
+        result = commit.commit(
+            delta, store=store, artifact_root=root_path, finalize=confirm
+        )
+    except commit.StaleParentError as exc:
+        latest = store.read_record() or current
+        raise _stale_parent(base_revision_id, latest.revision_id) from exc
+    return CommitOutcome(result=result)
 
 
 def _commit_written(
@@ -334,32 +448,38 @@ def _commit_written(
         raise commit.CommitError(
             f"the written phase artifact is not present: {artifact_path!r}"
         )
-    intent = CheckpointIntent(
+    intent = _phase_intent(
         work_id=work_id,
+        phase=phase,
+        next_skill=next_skill,
+        artifact_path=artifact_path,
         orientation=orientation,
-        working_context=list(grounded) if grounded else None,
-        notes=None if current is not None else f"{phase} phase handoff",
-        next=NextMove(next_skill),
-        artifact=artifact_path,
-        artifact_links=links,
-        base_revision_id=_base_revision_id(current),
+        grounded=grounded,
+        links=links,
+        parent=_base_revision_id(current),
+        genesis=current is None,
         session=session,
     )
     delta = _build_delta(intent, current)
+    return CommitOutcome(
+        result=commit.commit(delta, store=store, artifact_root=root_path)
+    )
+
+
+def _write_artifact(target: Path, contents: str) -> None:
     try:
-        return CommitOutcome(
-            result=commit.commit(delta, store=store, artifact_root=root_path),
-            retried=False,
-        )
-    except (commit.StaleParentError, commit.GenesisConflictError):
-        return _retry(
-            intent,
-            phase=phase,
-            grounded=grounded,
-            links=links,
-            store=store,
-            root_path=root_path,
-        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        storage.write_atomic(target, contents.encode("utf-8"))
+    except OSError as exc:
+        raise PhaseCommitRefusal(f"cannot write {target}: {exc}") from exc
+
+
+def _resolve_session(
+    provenance: SessionProvenance | None,
+) -> SessionProvenance | None:
+    if provenance is not None:
+        return provenance
+    return _session_provenance_from_environment()
 
 
 def commit_phase_revision(
@@ -371,17 +491,24 @@ def commit_phase_revision(
     orientation: str,
     grounded: Sequence[str],
     store: storage.WorkStore,
-    write_contents: Callable[[], None],
+    contents: str,
     root: Path | str | None = None,
     provenance: SessionProvenance | None = None,
+    base_revision_id: str | None = None,
 ) -> CommitOutcome:
     """Validate, write the artifact, then commit one chain-phase revision.
 
     Failure classification belongs to this producer, not its caller: everything
-    before `write_contents()` raises `PhaseCommitRefusal` (caller usage, nothing
+    before the artifact write raises `PhaseCommitRefusal` (caller usage, nothing
     on disk) or the kernel's own error for an environment failure, and anything
-    after it raises `ArtifactOrphaned`. One stale-parent conflict is retried
-    against the record that landed first.
+    after it raises `ArtifactOrphaned`. An existing record needs the revision
+    the writer read as `base_revision_id`; a missing or stale base is a
+    refusal, and a conflict under the lock is not retried.
+
+    `contents` is the artifact text; the producer writes it atomically and
+    derives its digest. A stale base that is this same write retried after a
+    lost response returns the original revision as a replay instead of
+    `stale-parent`, and writes nothing.
     """
     try:
         root_path = paths.resolve_repo_root(root)
@@ -397,14 +524,33 @@ def commit_phase_revision(
             grounded=grounded_entries,
         )
         current = store.read_record()
+        if (
+            current is not None
+            and base_revision_id is not None
+            and base_revision_id != current.revision_id
+        ):
+            return _replay_landed_write(
+                session=_resolve_session(provenance),
+                work_id=work_id,
+                phase=phase,
+                next_skill=next_skill,
+                artifact_path=artifact_path,
+                artifact_target=artifact_target,
+                orientation=orientation,
+                grounded=grounded_entries,
+                current=current,
+                base_revision_id=base_revision_id,
+                contents_digest=canonical.digest_text(contents),
+                store=store,
+                root_path=root_path,
+            )
+        _require_read_base(current, base_revision_id)
         _require_genesis_grounding(current, grounded_entries)
+        session = _resolve_session(provenance)
     except (commit.CommitError, GroundedEntryError) as exc:
         raise PhaseCommitRefusal(str(exc)) from exc
-    session = (
-        provenance if provenance is not None else _session_provenance_from_environment()
-    )
 
-    write_contents()
+    _write_artifact(artifact_target, contents)
 
     try:
         return _commit_written(

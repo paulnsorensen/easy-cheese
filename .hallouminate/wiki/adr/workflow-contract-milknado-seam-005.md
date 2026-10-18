@@ -1,5 +1,7 @@
 # ADR: Payload schemas and transition routing remain separate
 
+> Superseded in part by PR #772: routing is now a private table, not a published `phase-contract` schema. Payload schemas and routing still stay separate. See [workflow-contract-map](../architecture/workflow-contract-map.md).
+
 Decision status: accepted
 Spec: `/home/paul/.local/share/cheese/paulnsorensen-easy-cheese/specs/workflow-contract-milknado-seam.md`
 

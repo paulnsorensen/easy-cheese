@@ -40,7 +40,7 @@ def resolve(phase: str, slug: str) -> dict[str, str]:
     try:
         resolved = artifact_path(phase, slug)
     except ValueError as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     return {"path": str(resolved)}
 
 

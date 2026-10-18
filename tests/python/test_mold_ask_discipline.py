@@ -62,11 +62,11 @@ def _body_below_frontmatter(path: Path) -> str:
     """Markdown body with the leading YAML frontmatter block removed.
 
     The positive guard must verify the RC1 *body* reword, not the skill
-    `description:` frontmatter: culture/SKILL.md's description legitimately says
-    "BEFORE asking the user anything", which matches ASKING_PRIMARY regardless of
-    the body sentence — so searching the whole file lets the guard pass vacuously
-    even if the body regressed to a leaning phrasing. Scoping to the body forces
-    the match to trace to the reword this guard exists to protect.
+    `description:` frontmatter: any text in a skill `description:` could match
+    ASKING_PRIMARY regardless of the body sentence — so searching the whole file
+    lets the guard pass vacuously even if the body regressed to a leaning
+    phrasing. Scoping to the body keeps description text from satisfying the
+    guard and forces the match to trace to the reword it protects.
     """
     lines = path.read_text(encoding="utf-8").splitlines()
     if lines and lines[0].strip() == "---":
@@ -81,8 +81,8 @@ def test_asking_primary_intent_present() -> None:
     # wholesale. Anchor the positive intent to the BODY (below the frontmatter):
     # each file must still make asking the user the explicit move in its prose, so
     # the reword's purpose can't be hollowed out. Matching the whole file would be
-    # vacuous for culture — its `description:` frontmatter already says "asking
-    # the user", independent of the body sentence RC1 reworded.
+    # vacuous: description text could satisfy the guard independent of the body
+    # sentence RC1 reworded.
     #
     # Require BOTH the phrase AND an affirmative ownership clause (the fork is the
     # user's to decide): the phrase alone can persist inside prose that demotes it,

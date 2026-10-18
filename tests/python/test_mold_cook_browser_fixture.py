@@ -1,7 +1,7 @@
 """Hermetic coverage for the browser fixture's Cook writer.
 
 The opt-in browser regression needs Chromium. This module drives the same
-``outer_workflow.py`` entry point against a real accepted handoff, so the
+``outer_workflow.py`` entry point against direct finalized inputs, so the
 curd disposition the fixture produces stays verified without a browser.
 """
 
@@ -15,9 +15,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import cast
 
+import attrs
 import pytest
 
-from tests.python.test_mold_cook_producer import finalize_fixture, make_spec
+from easy_cheese_schemas.contracts import PlannerDisposition, PlannerUncertainty, UncertaintyScope
+from tests.python.test_mold_cook_producer import finalize_fixture, make_planner_result, make_spec
 
 
 FIXTURE = (
@@ -48,11 +50,11 @@ def test_outer_workflow_records_a_passed_curd(
     finalized = finalize_fixture(repository, spec_path=spec)
     assert finalized.status == "ready"
     artifact_root = repository / "artifacts"
-    pointer = artifact_root / "pointers" / "operation-1.json"
+    result_path = cast(str, finalized.payload["result_path"])
 
     module = _load_outer_workflow()
     main = cast("Callable[[Sequence[str]], int]", module.main)
-    exit_code = main([str(pointer), str(repository), str(artifact_root)])
+    exit_code = main([result_path, str(repository), str(artifact_root)])
 
     assert exit_code == 0
     produced = cast(dict[str, object], json.loads(capsys.readouterr().out))
@@ -60,7 +62,38 @@ def test_outer_workflow_records_a_passed_curd(
         "feature": "index.html",
         "results": 1,
         "disposition": "passed",
+        "whole_task_complete": True,
+        "remainder": [],
     }
     document = repository / "index.html"
     assert document.is_file()
     assert "Feature executed" in document.read_text(encoding="utf-8")
+
+
+def test_outer_workflow_preserves_partial_remainder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    remainder = (
+        PlannerUncertainty(
+            description="unselected parent work remains",
+            scope=UncertaintyScope.OMITTED_WORK,
+        ),
+    )
+    planner = attrs.evolve(
+        make_planner_result(),
+        disposition=PlannerDisposition.PARTIAL,
+        unresolved_work=remainder,
+    )
+    finalized = finalize_fixture(repository, planner=planner)
+    assert finalized.status == "ready"
+    result_path = cast(str, finalized.payload["result_path"])
+    module = _load_outer_workflow()
+    main = cast("Callable[[Sequence[str]], int]", module.main)
+    assert main([result_path, str(repository), str(repository / "artifacts")]) == 0
+    produced = cast(dict[str, object], json.loads(capsys.readouterr().out))
+    assert produced["disposition"] == "passed"
+    assert produced["whole_task_complete"] is False
+    assert produced["remainder"] == ["unselected parent work remains"]
+    assert (repository / "index.html").is_file()

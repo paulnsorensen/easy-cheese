@@ -717,7 +717,7 @@ def ground_check_cmd(report: str) -> dict[str, object]:
         except LedgerError as exc:
             # A manifest that cannot be trusted is worse than none: the report
             # claims a capture record the gate cannot read.
-            raise fromargs.CliError(str(exc), exit_code=1) from exc
+            raise fromargs.CliError(str(exc), exit_code=4) from exc
 
     violations, tables = check_report(
         text, report_dir, Path.cwd(), ledger, path.stem

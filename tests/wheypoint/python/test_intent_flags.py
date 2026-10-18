@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from easy_cheese_schemas import CheckpointIntent, EntryKind, TransitionAction
+from easy_cheese_schemas import CheckpointIntent, EntryKind, TransitionAction, load
 from easy_cheese_schemas.contracts import EdgeKind
 
 from easy_cheese.shared.wheypoint import (
@@ -22,15 +23,27 @@ from conftest import WORK_ID, Promotion
 HAND_WRITTEN: dict[str, object] = {
     "work_id": WORK_ID,
     "entries": [
-        {"kind": "question", "summary": "Q", "blocks_continuation": True},
+        {
+            "kind": "question",
+            "summary": "Q",
+            "blocks_continuation": True,
+            "rationale": "Why.",
+        },
         {"kind": "directive", "summary": "D", "quote": "d"},
     ],
 }
 
 
-def _flag_form() -> dict[str, object]:
+def _flag_form(base: str | None = None) -> dict[str, object]:
     return intent_flags.overlay(
-        {}, work_id=WORK_ID, question=["Q"], gates=True, directive=["D"], quote=["d"]
+        {},
+        work_id=WORK_ID,
+        base=base,
+        question=["Q"],
+        gates=True,
+        rationale=["Why."],
+        directive=["D"],
+        quote=["d"],
     )
 
 
@@ -47,8 +60,11 @@ def test_ac14_both_forms_fingerprint_the_same_delta(
 ) -> None:
     current = make_promotion(gating=True).record
 
-    flag_delta = checkpoint.build_delta(_intent(_flag_form()), current)
-    file_delta = checkpoint.build_delta(_intent(HAND_WRITTEN), current)
+    base = current.revision_id
+    flag_delta = checkpoint.build_delta(_intent(_flag_form(base)), current)
+    file_delta = checkpoint.build_delta(
+        _intent({**HAND_WRITTEN, "base_revision_id": base}), current
+    )
 
     assert records.request_fingerprint(flag_delta) == records.request_fingerprint(
         file_delta
@@ -59,10 +75,16 @@ def test_ac14_both_forms_commit_the_same_revision(
     tmp_path: Path, make_promotion: Callable[..., Promotion]
 ) -> None:
     revision_ids: list[str] = []
-    for form, payload in (("flags", _flag_form()), ("file", HAND_WRITTEN)):
+    for form in ("flags", "file"):
         store = storage.WorkStore.open(WORK_ID, corpus_root=tmp_path / form)
         seed = make_promotion(gating=True)
         store.promote(seed.record, seed.revision, seed.markdown)
+        base = seed.record.revision_id
+        payload = (
+            _flag_form(base)
+            if form == "flags"
+            else {**HAND_WRITTEN, "base_revision_id": base}
+        )
         delta = checkpoint.build_delta(_intent(payload), store.read_record())
         revision_ids.append(commit.commit(delta, store=store).record.revision_id)
 
@@ -75,13 +97,13 @@ def test_overlay_appends_after_the_payload_and_overrides_scalars() -> None:
         "work_id": "from-file",
         "next": "cook",
         "working_context": ["a.py"],
-        "entries": [{"kind": "blocker", "summary": "From the file."}],
+        "entries": [{"kind": "question", "summary": "From the file."}],
     }
 
     result = intent_flags.overlay(
         payload,
         work_id=WORK_ID,
-        blocker=["From a flag."],
+        question=["From a flag."],
         decision=["Cap it."],
         rationale=["Pool saturates."],
         orientation="Oriented.",
@@ -99,12 +121,16 @@ def test_overlay_appends_after_the_payload_and_overrides_scalars() -> None:
         "notes": "Body.",
         "working_context": ["a.py", "b.py"],
         "entries": [
-            {"kind": "blocker", "summary": "From the file."},
-            {"kind": "blocker", "summary": "From a flag.", "blocks_continuation": False},
+            {"kind": "question", "summary": "From the file."},
+            {
+                "kind": "question",
+                "summary": "From a flag.",
+                "blocks_continuation": False,
+            },
             {"kind": "decision", "summary": "Cap it.", "rationale": "Pool saturates."},
         ],
     }
-    assert payload["entries"] == [{"kind": "blocker", "summary": "From the file."}]
+    assert payload["entries"] == [{"kind": "question", "summary": "From the file."}]
     assert payload["working_context"] == ["a.py"]
 
 
@@ -135,12 +161,12 @@ def test_link_pairs_with_kind_and_pins_only_a_pinnable_scheme() -> None:
         {},
         work_id=WORK_ID,
         link=["repo:docs/spec.md", "milknado:proj/node-1"],
-        kind=["informs", "checkpoints"],
+        kind=["supersedes", "checkpoints"],
         covers=["q-aaaaaaaaaaaa"],
     )
 
     assert result["add_edges"] == [
-        {"to": "repo:docs/spec.md", "kind": "informs"},
+        {"to": "repo:docs/spec.md", "kind": "supersedes"},
         {"to": "milknado:proj/node-1", "kind": "checkpoints"},
     ]
     assert result["artifact_links"] == [
@@ -153,7 +179,7 @@ def test_link_pairs_with_kind_and_pins_only_a_pinnable_scheme() -> None:
     intent = _intent(result)
     assert intent.add_edges is not None
     assert [edge.kind for edge in intent.add_edges] == [
-        EdgeKind.INFORMS,
+        EdgeKind.SUPERSEDES,
         EdgeKind.CHECKPOINTS,
     ]
 
@@ -168,9 +194,10 @@ def test_link_pairs_with_kind_and_pins_only_a_pinnable_scheme() -> None:
         ({"quote": ["d"]}, "flag-pairing"),
         ({"link": ["repo:a.md"]}, "flag-pairing"),
         ({"gates": True}, "flag-pairing"),
+        ({"question": ["Q"], "gates": True}, "flag-pairing"),
         ({"covers": ["q-aaaaaaaaaaaa"]}, "flag-pairing"),
         ({"link": ["repo:a.md"], "kind": ["parent_of"]}, "flag-kind"),
-        ({"link": ["nowhere:a"], "kind": ["informs"]}, "flag-link"),
+        ({"link": ["nowhere:a"], "kind": ["checkpoints"]}, "flag-link"),
     ],
 )
 def test_overlay_refuses_flags_that_do_not_pair(
@@ -183,3 +210,330 @@ def test_overlay_refuses_flags_that_do_not_pair(
 def test_overlay_refuses_a_payload_list_field_that_is_not_a_list() -> None:
     with pytest.raises(intent_flags.IntentFlagError, match="^flag-conflict: "):
         _ = intent_flags.overlay({"entries": "oops"}, question=["Q"])
+
+
+def test_supersede_without_by_refuses_when_the_added_entry_has_no_summary() -> None:
+    payload: dict[str, object] = {
+        "work_id": WORK_ID,
+        "base_revision_id": "rev-abc",
+        "entries": [{"kind": "decision"}],
+    }
+    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing: "):
+        _ = intent_flags.overlay(
+            payload, supersede=["d-aaaaaaaaaaaa"], rationale=["why"]
+        )
+
+
+def test_supersede_flags_build_a_supersede_transition_with_its_successor() -> None:
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        base="rev-0001",
+        supersede=["d-old"],
+        by=["d-new"],
+        rationale=["Replaced."],
+    )
+
+    assert payload["transitions"] == [
+        {
+            "entry_id": "d-old",
+            "action": "supersede",
+            "rationale": "Replaced.",
+            "target_entry_id": "d-new",
+        }
+    ]
+
+
+def test_supersede_without_by_derives_the_id_of_the_one_added_entry() -> None:
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        base="rev-0001",
+        decision=["Use B"],
+        supersede=["d-old"],
+        rationale=["why", "Replaced."],
+    )
+    intent = _intent(payload)
+    assert intent.entries is not None
+
+    expected = commit.proposed_entry_id(
+        WORK_ID, "rev-0001", EntryKind.DECISION, "Use B", False, 0
+    )
+    transitions = payload["transitions"]
+    assert isinstance(transitions, list)
+    assert transitions[0]["target_entry_id"] == expected
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        {"supersede": ["d-old"], "rationale": ["Replaced."]},
+        {
+            "supersede": ["d-old"],
+            "rationale": ["Replaced."],
+            "question": ["Q?"],
+        },
+        {
+            "supersede": ["d-old"],
+            "decision": ["B", "C"],
+            "rationale": ["b", "c", "Replaced."],
+        },
+    ],
+)
+def test_supersede_pairing_refuses_when_no_successor_resolves(
+    flags: dict[str, object],
+) -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing"):
+        _ = intent_flags.overlay({}, work_id=WORK_ID, base="rev-0001", **flags)  # pyright: ignore[reportArgumentType]
+
+
+def test_supersede_pairing_refuses_a_by_count_that_differs() -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing"):
+        _ = intent_flags.overlay(
+            {},
+            work_id=WORK_ID,
+            supersede=["d-a", "d-b"],
+            by=["d-c"],
+            rationale=["x", "y"],
+        )
+
+
+def test_question_owner_and_when_pair_by_position_with_the_questions() -> None:
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        question=["A?", "B?"],
+        owner=["Ana", "Bo"],
+        when=["soon", "later"],
+    )
+
+    assert _intent(payload).entries is not None
+    assert payload["entries"] == [
+        {
+            "kind": "question",
+            "summary": "A?",
+            "blocks_continuation": False,
+            "owner": "Ana",
+            "when": "soon",
+        },
+        {
+            "kind": "question",
+            "summary": "B?",
+            "blocks_continuation": False,
+            "owner": "Bo",
+            "when": "later",
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        {"question": ["A?", "B?"], "owner": ["Ana"]},
+        {"question": ["A?"], "when": ["soon", "later"]},
+        {"owner": ["Ana"]},
+    ],
+)
+def test_owner_and_when_counts_that_differ_from_question_refuse(
+    flags: dict[str, object],
+) -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match="^flag-pairing"):
+        _ = intent_flags.overlay({}, work_id=WORK_ID, **flags)  # pyright: ignore[reportArgumentType]
+
+
+def test_owner_on_a_non_question_is_refused_by_the_schema() -> None:
+    payload = {
+        "work_id": WORK_ID,
+        "entries": [
+            {"kind": "decision", "summary": "D", "rationale": "r", "owner": "Ana"}
+        ],
+    }
+
+    loaded = load(payload, CheckpointIntent, strict=True, forbid_unknown=True)
+
+    assert loaded.value is None
+    assert any("owner" in problem for problem in loaded.problems)
+
+
+def test_operator_directive_flag_adds_a_scope_operator_directive_after_work_ones() -> None:
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        directive=["Work rule"],
+        quote=["work words"],
+        operator_directive=["Style rule"],
+        operator_quote=["style words"],
+    )
+
+    assert _intent(payload).entries is not None
+    assert payload["entries"] == [
+        {"kind": "directive", "summary": "Work rule", "quote": "work words"},
+        {
+            "kind": "directive",
+            "summary": "Style rule",
+            "quote": "style words",
+            "scope": "operator",
+        },
+    ]
+
+
+def test_each_quote_flag_pairs_only_with_its_own_directive_flag() -> None:
+    # CLI order is operator first; the quotes must not follow it.
+    payload = intent_flags.overlay(
+        {},
+        work_id=WORK_ID,
+        operator_directive=["B"],
+        operator_quote=["qb"],
+        directive=["A"],
+        quote=["qa"],
+    )
+
+    assert payload["entries"] == [
+        {"kind": "directive", "summary": "A", "quote": "qa"},
+        {"kind": "directive", "summary": "B", "quote": "qb", "scope": "operator"},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("directive", "quote", "operator_directive", "operator_quote", "flag"),
+    [
+        ([], [], ["Style rule"], [], "--operator-quote"),
+        ([], ["stray"], ["Style rule"], ["words"], "--quote"),
+        (["Work rule"], ["words"], [], ["stray"], "--operator-quote"),
+        (["Work rule"], [], [], [], "--quote"),
+    ],
+)
+def test_a_quote_count_that_differs_from_its_directive_count_refuses(
+    directive: list[str],
+    quote: list[str],
+    operator_directive: list[str],
+    operator_quote: list[str],
+    flag: str,
+) -> None:
+    with pytest.raises(intent_flags.IntentFlagError, match=f"^flag-pairing.*{flag}"):
+        _ = intent_flags.overlay(
+            {},
+            work_id=WORK_ID,
+            directive=directive,
+            quote=quote,
+            operator_directive=operator_directive,
+            operator_quote=operator_quote,
+        )
+
+
+def test_scope_operator_on_a_question_is_refused_by_the_schema() -> None:
+    payload = {
+        "work_id": WORK_ID,
+        "entries": [{"kind": "question", "summary": "Q?", "scope": "operator"}],
+    }
+
+    loaded = load(payload, CheckpointIntent, strict=True, forbid_unknown=True)
+
+    assert loaded.value is None
+    assert any("scope" in problem for problem in loaded.problems)
+
+
+def _checkout(root: Path) -> Path:
+    (root / "src").mkdir(parents=True)
+    _ = (root / "src" / "app.py").write_text("x = 1\n", encoding="utf-8")
+    _ = (root / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    for args in (
+        ["init", "-q"],
+        ["add", "-A"],
+        ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
+    ):
+        _ = subprocess.run(["git", "-C", str(root), *args], check=True)
+    return root
+
+
+def test_pin_line_ref_in_context_and_artifact_link(tmp_path: Path) -> None:
+    checkout = _checkout(tmp_path)
+    payload: dict[str, object] = {
+        "working_context": ["see src/app.py:12 and src/app.py:3-9, not src/gone.py:4"],
+        "artifact_links": [
+            {"path": "src/app.py:7"},
+            {"path": "src/app.py:7", "ref": "repo:src/app.py:7"},
+        ],
+    }
+
+    pinned, warnings = intent_flags.pin_line_refs(
+        payload, checkout=checkout, head="abc1234"
+    )
+
+    assert pinned["working_context"] == [
+        "see src/app.py:12@abc1234 and src/app.py:3-9@abc1234, not src/gone.py:4"
+    ]
+    assert pinned["artifact_links"] == [
+        {"path": "src/app.py:7@abc1234"},
+        {"path": "src/app.py:7@abc1234", "ref": "repo:src/app.py:7@abc1234"},
+    ]
+    assert warnings == ["unpinned-line-ref"]
+    assert payload["working_context"] == [
+        "see src/app.py:12 and src/app.py:3-9, not src/gone.py:4"
+    ]
+
+
+def test_unpinned_line_ref_without_a_checkout_warns() -> None:
+    payload: dict[str, object] = {"working_context": ["src/app.py:12"]}
+
+    pinned, warnings = intent_flags.pin_line_refs(payload, checkout=None, head=None)
+
+    assert pinned == payload
+    assert warnings == ["unpinned-line-ref"]
+
+
+def test_pin_line_ref_without_a_line_ref_stays_quiet() -> None:
+    payload: dict[str, object] = {"working_context": ["no refs here"]}
+
+    pinned, warnings = intent_flags.pin_line_refs(payload, checkout=None, head=None)
+
+    assert (pinned, warnings) == (payload, [])
+
+
+def test_symbol_ref_and_already_pinned_ref_stay_as_written(tmp_path: Path) -> None:
+    checkout = _checkout(tmp_path)
+    payload: dict[str, object] = {
+        "working_context": [
+            "src/app.py#main",
+            "src/app.py:12@0ddba11",
+            "https://example.com/src/app.py:12",
+        ],
+        "artifact_links": [{"path": "src/app.py#main"}],
+    }
+
+    pinned, warnings = intent_flags.pin_line_refs(
+        payload, checkout=checkout, head="abc1234"
+    )
+
+    assert pinned == payload
+    assert warnings == []
+
+
+def test_untracked_and_ignored_files_stay_unpinned_and_warn(tmp_path: Path) -> None:
+    checkout = _checkout(tmp_path)
+    _ = (checkout / "new.py").write_text("y = 2\n", encoding="utf-8")
+    _ = (checkout / "scratch.log").write_text("z\n", encoding="utf-8")
+    payload: dict[str, object] = {
+        "working_context": ["new.py:1", "scratch.log:2", "src/gone.py:4"]
+    }
+
+    pinned, warnings = intent_flags.pin_line_refs(
+        payload, checkout=checkout, head="abc1234"
+    )
+
+    assert pinned == payload
+    assert warnings == ["unpinned-line-ref"]
+
+
+def test_a_host_and_port_is_not_a_line_ref(tmp_path: Path) -> None:
+    payload: dict[str, object] = {
+        "working_context": ["curl 127.0.0.1:8080 and example.com:443"]
+    }
+
+    assert intent_flags.pin_line_refs(payload, checkout=None, head=None) == (
+        payload,
+        [],
+    )
+    assert intent_flags.pin_line_refs(
+        payload, checkout=_checkout(tmp_path), head="abc1234"
+    ) == (payload, [])

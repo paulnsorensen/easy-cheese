@@ -64,9 +64,7 @@ Cook cannot weaken or bypass existing tests.
    For a new pull request, `/cure` dispatches `/plate` only when the user supplied `--open-pr`.
    In the fan pathway, the Cook orchestrator owns its own terminal `/plate` dispatch.
    `/plate` honors explicit topology.
-   It selects an obviously cohesive single without asking.
-   It asks before mutation when it recommends stacked or when the shape is ambiguous.
-   This requirement also applies under auto.
+   Otherwise it decides the shape without asking, also under auto.
 
 ## Cap enforcement
 

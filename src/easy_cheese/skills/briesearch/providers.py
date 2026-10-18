@@ -648,7 +648,7 @@ def providers_cmd(*, cwd: str = ".") -> dict[str, object]:
     """
     path = Path(cwd)
     if not path.is_dir():
-        raise fromargs.CliError(f"not a directory: {path}", exit_code=1)
+        raise fromargs.CliError(f"not a directory: {path}", exit_code=2)
     return detect_providers(env=os.environ, home=Path.home(), cwd=path.resolve())
 
 
