@@ -12,5 +12,5 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(scope="session")
 def skill_archive() -> Callable[[str], Path]:
-    """Return the committed archive path for a skill."""
+    """Return the built archive path for a skill (`just wedge-build`)."""
     return lambda skill: ROOT / "skills" / skill / "scripts" / f"{skill}.pyz"

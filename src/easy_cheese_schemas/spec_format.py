@@ -32,10 +32,14 @@ _HARDENED_SOURCES = frozenset(
 # happens to carry it, is validated exactly as it is for a hardened one.
 _POST_V013_SECTIONS = frozenset({"Grounding"})
 
-# Required only under ``--strict``; a non-strict read tolerates its absence.
-# This module stays stdlib-only, so it cannot import the contracts constant;
-# a test pins this literal to ``ACCEPTANCE_DEMONSTRATION_SECTION``.
+# Required under ``--strict`` on a full spec and an early curd, where the
+# demonstration is worth the ceremony; a non-strict read tolerates its absence.
+# A Quick-tier ``agent-mini-spec`` may carry it, and its shape is then checked,
+# but it is never required there. This module stays stdlib-only, so it cannot
+# import the contracts constant; a test pins this literal to
+# ``ACCEPTANCE_DEMONSTRATION_SECTION``.
 _DEMONSTRATION_SECTION = "Acceptance demonstration"
+_DEMONSTRATION_OPTIONAL_SOURCES = frozenset({"agent-mini-spec"})
 
 _MINI_SPEC_REQUIRED_SECTIONS = frozenset({"Contract", "Acceptance", "Non-goals"})
 
@@ -63,7 +67,10 @@ class SpecFormatPolicy:
     ) -> bool:
         """Whether a missing ``section_name`` heading is an error."""
         if section_name == _DEMONSTRATION_SECTION:
-            return self._strict
+            return (
+                self._strict
+                and self._source not in _DEMONSTRATION_OPTIONAL_SOURCES
+            )
         if self._source == "mold-curd-mini-spec":
             return section_name in _MINI_SPEC_REQUIRED_SECTIONS
         if self._source == "agent-mini-spec":

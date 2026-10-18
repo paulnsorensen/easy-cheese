@@ -17,6 +17,7 @@ Run `python3 skills/press/scripts/press.pyz wheypoint-resolve --ref <slug>`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
 Show advisory `stale-commit` and `grounded-path-missing` findings.
+Keep its `record.revision_id` as `<base>` ([§ Base revision](../cheese/references/handback-contract.md#base-revision)).
 
 ## Inputs
 
@@ -98,7 +99,7 @@ Write the file with `python3 skills/press/scripts/press.pyz write-handoff-artifa
 
 ```text
 python3 skills/press/scripts/press.pyz write-handoff-artifact \
-  --slug <slug> --status <status> --phase press --next <next> \
+  --slug <slug> --status <status> --phase press --next <next> [--base <base>] \
   --artifact .cheese/cook/<slug>.md --orientation "<one-line orientation>" \
   --durable-flags "<preserved Cook value>" --baseline "<baseline artifact path>" \
   --grounded <path[#start-end]> --body-file <body-path>
@@ -113,7 +114,7 @@ baseline: none | <baseline artifact path>
 <one-line orientation>
 ```
 
-The [handback contract](../cheese/references/handback-contract.md) defines the `status:` grammar. The preamble accepts no other keys. Put every Press value in the report body.
+The handback contract defines the `status:` grammar. The preamble accepts no other keys. Put every Press value in the report body.
 
 `artifact:` names the consumed Cook report. Do not put attack evidence on this line.
 

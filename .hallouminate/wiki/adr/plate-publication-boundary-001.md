@@ -1,6 +1,6 @@
 # ADR: plate owns the commit-to-PR publication boundary
 
-**Status:** accepted (2026-07-14); amended 2026-09-28
+**Status:** accepted (2026-07-14); amended 2026-09-28; topology paragraph superseded 2026-10-15 by [[plate-publication-boundary-002]]
 
 The publishing boundary previously spanned an external `/commit` skill, an external
 `/pr-stack` skill, and raw `/gh` handoffs. That split left no single phase responsible

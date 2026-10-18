@@ -1,12 +1,4 @@
-"""Mold-owned canonical finalization and planner normalization.
-
-The planner writer speaks in keys and envelopes.  This module is the host seam:
-it materializes the writer view once, joins the resulting authority with a
-strictly validated spec, explicit taste evidence, and the spec's
-landing declaration, then publishes only a canonical ``MoldCookHandoff``.
-Incomplete work is represented as a blocked ``CookPreparationResult`` and is
-never converted into a runnable pointer.
-"""
+"""Mold spec and planner finalization for direct Cook inputs."""
 
 from __future__ import annotations
 
@@ -38,14 +30,9 @@ from easy_cheese_schemas.contracts import (
 from easy_cheese_schemas.mold_cook import (
     CookExecutionHold,
     CookHoldKind,
-    CookPreparationOutcome,
-    CookPreparationResult,
     CookRequirementKind,
     CookUnmetRequirement,
     MoldCookCoverage,
-    MoldCookHandoff,
-    MoldCookInputKind,
-    MoldCookMode,
 )
 from easy_cheese_schemas.planner import materialize_planner_result
 
@@ -53,14 +40,10 @@ from easy_cheese_schemas.planner import materialize_planner_result
 # no structuring entry point yet. Mold borrows the private one rather than keep
 # a second field-by-field structuring path.
 from easy_cheese_schemas.schema_runtime import (
-    FORK_TASTE_VERDICT_SCHEMA_URI,
-    TASTE_LEDGER_SCHEMA_URI,
     ContractValidationError,
-    _typed_host as structure_contract_value,  # pyright: ignore[reportPrivateUsage]
+    structure_contract_value,
     canonical_bytes,
     load_agent_writer_view,
-    require_contract_version,
-    validate_contract,
 )
 from easy_cheese.shared.artifacts import (
     ArtifactDigestMismatchError,
@@ -72,17 +55,15 @@ from easy_cheese.shared.frontmatter_lists import frontmatter_string_list
 from easy_cheese.shared.mold_cook_handoff import (
     evaluate_mold_cook_spec,
     materialize_artifact_ref,
-    publish_mold_cook_handoff,
+    request_directive,
+    validate_bound_execution,
     resolve_contract_value,
 )
-from easy_cheese.shared.publication import PublicationError, atomic_write
+from easy_cheese.shared.publication import atomic_write
 from easy_cheese.shared.taste_test import (
     MAX_SPEC_BYTES,
-    ForkTasteVerdict,
-    TasteTestError,
     parse_spec_frontmatter,
     read_spec_text,
-    validate_taste_result,
 )
 from easy_cheese.skills.mold.validate_spec import validate as validate_spec
 
@@ -100,15 +81,6 @@ class FinalizationError(ValueError):
 
 _ALLOWED_LIFECYCLES = frozenset({"draft", "approved", "approved-with-prerequisites"})
 _ALLOWED_OVERRIDE_KEYS = frozenset({"save_approved"})
-_REQUEST_DIRECTIVE_KEYS = frozenset(
-    {"request_directive", "execution_directive", "whole_request_directive"}
-)
-_DIRECTIVE_FIELDS = frozenset(
-    {"action", "decision", "directive", "disposition", "intent"}
-)
-_REQUEST_DIRECTIVE_HEADINGS = re.compile(
-    r"(?im)^##\s+(?:request|execution|whole-request)\s+directive\s*$"
-)
 _ContractT = TypeVar("_ContractT")
 
 
@@ -193,43 +165,6 @@ def _read_spec_snapshot(path: Path) -> _SpecSnapshot:
         raise FinalizationError(f"spec snapshot exceeds {MAX_SPEC_BYTES} bytes")
     return _SpecSnapshot(path, content, text, _frontmatter(text))
 
-
-def _directive_value(value: object) -> str | None:
-    if isinstance(value, Mapping):
-        mapping = cast(Mapping[str, object], value)
-        for key in _DIRECTIVE_FIELDS:
-            candidate = mapping.get(key)
-            if isinstance(candidate, str):
-                value = candidate
-                break
-        else:
-            return None
-    if not isinstance(value, str):
-        return None
-    normalized = value.strip().casefold().replace("_", "-").replace(" ", "-")
-    return normalized if normalized in {"do-not-implement", "do-not-proceed"} else None
-
-
-def _section_directive(text: str) -> str | None:
-    match = _REQUEST_DIRECTIVE_HEADINGS.search(text)
-    if match is None:
-        return None
-    next_heading = re.search(r"(?im)^##\s+", text[match.end() :])
-    section = (
-        text[match.end() : match.end() + next_heading.start()]
-        if next_heading
-        else text[match.end() :]
-    )
-    for line in section.splitlines():
-        candidate = line.strip().lstrip("-*").strip()
-        if ":" not in candidate:
-            continue
-        key, value = candidate.split(":", 1)
-        if key.strip().casefold() in _DIRECTIVE_FIELDS:
-            directive = _directive_value(value)
-            if directive is not None:
-                return directive
-    return None
 
 
 def _load_contract(value: object, contract: type[_ContractT]) -> _ContractT:
@@ -409,16 +344,7 @@ def _frontmatter(text: str) -> _Frontmatter:
         )
     overrides = _string_list_field(text, "gates_overridden")
     holds = _string_list_field(text, "execution_holds")
-    directive = next(
-        (
-            parsed
-            for key, value in values.items()
-            if key in _REQUEST_DIRECTIVE_KEYS
-            for parsed in (_directive_value(value),)
-            if parsed is not None
-        ),
-        None,
-    ) or _section_directive(text)
+    directive = request_directive(text)
     return _Frontmatter(
         status_value,
         overrides,
@@ -468,25 +394,6 @@ def _validate_spec_snapshot(snapshot: _SpecSnapshot) -> tuple[list[str], str | N
         return validate_spec(candidate, strict=True)
 
 
-def _check_taste(
-    spec_text: str,
-    taste_result: object | None,
-    decision_ledger: object | None,
-) -> tuple[ForkTasteVerdict | None, str]:
-    if taste_result is None:
-        return None, "taste verdict is required and was not supplied"
-    try:
-        verdict = validate_taste_result(
-            taste_result,
-            draft=spec_text,
-            decision_ledger=decision_ledger,
-        )
-    except (TasteTestError, OSError, TypeError, ValueError) as exc:
-        return None, f"taste verdict is invalid: {exc}"
-    if not verdict.passed:
-        blockers = ", ".join(verdict.blockers) or "verdict was not pass"
-        return verdict, f"taste verdict did not pass: {blockers}"
-    return verdict, ""
 
 
 def _canonical_output(value: object) -> dict[str, object]:
@@ -496,9 +403,31 @@ def _canonical_output(value: object) -> dict[str, object]:
     return cast(dict[str, object], raw)
 
 
+def _result_path(root: Path, operation_id: str) -> Path:
+    return root / "results" / f"{_safe_segment(operation_id)}.json"
+
+
 def _save_result(root: Path, operation_id: str, output: Mapping[str, object]) -> Path:
-    path = root / "results" / f"{_safe_segment(operation_id)}.json"
-    _write_bounded(path, (json.dumps(output, sort_keys=True, indent=2) + "\n").encode())
+    path = _result_path(root, operation_id)
+    payload = (json.dumps(output, sort_keys=True, indent=2) + "\n").encode()
+    if path.exists():
+        existing = path.read_bytes()
+        if existing != payload:
+            try:
+                decoded = cast(object, json.loads(existing))
+            except ValueError:
+                decoded = None
+            status = (
+                cast(dict[str, object], decoded).get("status", "unknown")
+                if isinstance(decoded, dict)
+                else "unreadable"
+            )
+            raise FinalizationError(
+                f"operation id {operation_id!r} already holds a different result "
+                + f"(status {status!r}); increase the ordinal to use a new operation id"
+            )
+        return path
+    _write_bounded(path, payload)
     return path
 
 
@@ -534,35 +463,19 @@ def _blocked_outcome(
     operation_id: str,
     *,
     request_id: str,
-    input_kind: MoldCookInputKind,
     ledger: _GateLedger,
     spec_ref: ArtifactRef,
 ) -> FinalizationOutcome:
-    """Save incomplete work as a validated, blocked preparation result."""
-    references = ledger.references
-    holds = ledger.holds
-    requirements = ledger.requirements
-    version = require_contract_version(CookPreparationResult)
-    preparation = CookPreparationResult(
-        contract_version=version,
-        request_id=request_id,
-        input_kind=input_kind,
-        outcome=CookPreparationOutcome.BLOCKED,
-        references=tuple(references),
-        holds=tuple(holds),
-        requirements=tuple(requirements),
-    )
-    preparation_artifact = validate_contract(
-        canonical_bytes(preparation), CookPreparationResult, version
-    )
+    """Save incomplete work without creating a Cook entry contract."""
     output: dict[str, object] = {
         "status": "saved-not-ready",
         "ready": False,
         "saved": True,
+        "request_id": request_id,
         "spec_ref": _canonical_output(spec_ref),
-        "preparation_result": _canonical_output(preparation_artifact.value),
-        "requirements": [_canonical_output(item) for item in requirements],
-        "holds": [_canonical_output(item) for item in holds],
+        "references": [_canonical_output(item) for item in ledger.references],
+        "requirements": [_canonical_output(item) for item in ledger.requirements],
+        "holds": [_canonical_output(item) for item in ledger.holds],
     }
     result_path = _save_result(artifact_root, operation_id, output)
     output["result_path"] = str(result_path)
@@ -578,13 +491,6 @@ class _PlannerArtifacts:
     planner_persisted: _Persisted | None
     plan_persisted: _Persisted | None
 
-
-@dataclass(frozen=True)
-class _TasteEvidence:
-    """Retained taste verdict and taste decision ledger artifacts."""
-
-    verdict_persisted: _Persisted | None
-    ledger_persisted: _Persisted | None
 
 
 @dataclass
@@ -764,87 +670,55 @@ def _gate_user_directive(ledger: _GateLedger, frontmatter: _Frontmatter) -> None
 def _gate_planner_artifacts(
     ledger: _GateLedger,
     *,
-    mode: MoldCookMode,
     planner_result: PlannerResult | Mapping[str, object] | Path | None,
     plan: CurdPlan | Mapping[str, object] | Path | None,
     artifact_root: Path,
 ) -> _PlannerArtifacts:
-    """Materialize and retain the planner authority the tier requires.
-
-    Invalid or absent planner artifacts are unmet requirements, never raised
-    errors.
-    """
-    requirements = ledger.requirements
-    references = ledger.references
+    """Retain the planner result and its materialized plan."""
     typed_planner: PlannerResult | None = None
     typed_plan: CurdPlan | None = None
     planner_persisted: _Persisted | None = None
     plan_persisted: _Persisted | None = None
-    if mode is MoldCookMode.FULL:
-        try:
-            if planner_result is not None:
-                typed_planner = _load_contract(planner_result, PlannerResult)
-                planner_persisted = _persist(
-                    artifact_root,
-                    value=typed_planner,
-                    role="planner_result",
-                    media_type="application/json",
-                    schema_uri="https://schemas.easy-cheese.dev/planner-result",
-                )
-                references.append(planner_persisted.reference)
-            else:
-                _append_requirement(
-                    requirements,
-                    _requirement(
-                        "planner-result",
-                        CookRequirementKind.PLAN,
-                        "Full-tier work requires a canonical PlannerResult",
-                    ),
-                )
-            if plan is not None:
-                typed_plan = _load_contract(plan, CurdPlan)
-            elif typed_planner is not None:
-                typed_plan = typed_planner.plan
-            if typed_plan is None:
-                _append_requirement(
-                    requirements,
-                    _requirement(
-                        "curd-plan",
-                        CookRequirementKind.PLAN,
-                        "Full-tier work requires a materialized canonical CurdPlan",
-                    ),
-                )
-            else:
-                plan_persisted = _persist(
-                    artifact_root,
-                    value=typed_plan,
-                    role="curd_plan",
-                    media_type="application/json",
-                    schema_uri="https://schemas.easy-cheese.dev/curd-plan",
-                )
-                references.append(plan_persisted.reference)
-        except (
-            FinalizationError,
-            ContractValidationError,
-            OSError,
-            TypeError,
-            ValueError,
-        ) as exc:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "planner-artifacts",
-                    CookRequirementKind.PLAN,
-                    f"planner artifacts are invalid or stale: {exc}",
-                ),
+    try:
+        if planner_result is not None:
+            typed_planner = _load_contract(planner_result, PlannerResult)
+            planner_persisted = _persist(
+                artifact_root,
+                value=typed_planner,
+                role="planner_result",
+                media_type="application/json",
+                schema_uri="https://schemas.easy-cheese.dev/planner-result",
             )
-    elif planner_result is not None or plan is not None:
+            ledger.references.append(planner_persisted.reference)
+        if plan is not None:
+            typed_plan = _load_contract(plan, CurdPlan)
+        elif typed_planner is not None:
+            typed_plan = typed_planner.plan
+        if typed_plan is not None:
+            plan_persisted = _persist(
+                artifact_root,
+                value=typed_plan,
+                role="curd_plan",
+                media_type="application/json",
+                schema_uri="https://schemas.easy-cheese.dev/curd-plan",
+            )
+            ledger.references.append(plan_persisted.reference)
+    except (FinalizationError, ContractValidationError, OSError, TypeError, ValueError) as exc:
         _append_requirement(
-            requirements,
+            ledger.requirements,
             _requirement(
-                "light-authority",
+                "planner-artifacts",
                 CookRequirementKind.PLAN,
-                "Light-tier work must not carry planner artifacts",
+                f"planner artifacts are invalid or stale: {exc}",
+            ),
+        )
+    if typed_planner is None or typed_plan is None:
+        _append_requirement(
+            ledger.requirements,
+            _requirement(
+                "planner-artifacts",
+                CookRequirementKind.PLAN,
+                "Cook needs a PlannerResult and materialized CurdPlan",
             ),
         )
     return _PlannerArtifacts(
@@ -852,78 +726,6 @@ def _gate_planner_artifacts(
     )
 
 
-def _gate_taste(
-    ledger: _GateLedger,
-    *,
-    spec_text: str,
-    taste_result: ForkTasteVerdict | Mapping[str, object] | Path | None,
-    decision_ledger: object | None,
-    artifact_root: Path,
-) -> _TasteEvidence:
-    """Validate and retain the taste verdict and its decision ledger."""
-    requirements = ledger.requirements
-    references = ledger.references
-    taste_verdict, taste_reason = _check_taste(spec_text, taste_result, decision_ledger)
-    taste_persisted: _Persisted | None = None
-    taste_ledger_persisted: _Persisted | None = None
-    if taste_verdict is None or taste_reason:
-        _append_requirement(
-            requirements,
-            _requirement("taste-verdict", CookRequirementKind.EVIDENCE, taste_reason),
-        )
-    else:
-        try:
-            taste_persisted = _persist(
-                artifact_root,
-                value=taste_verdict.to_dict(),
-                schema_uri=FORK_TASTE_VERDICT_SCHEMA_URI,
-                role="taste_verdict",
-                media_type="application/json",
-            )
-            references.append(taste_persisted.reference)
-        except (FinalizationError, OSError, TypeError, ValueError) as exc:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "taste-verdict",
-                    CookRequirementKind.EVIDENCE,
-                    f"taste verdict could not be retained: {exc}",
-                ),
-            )
-    if decision_ledger is None:
-        _append_requirement(
-            requirements,
-            _requirement(
-                "taste-ledger",
-                CookRequirementKind.EVIDENCE,
-                "a protected taste decision ledger reference is required",
-            ),
-        )
-    else:
-        try:
-            ledger_value = (
-                _read_json(decision_ledger)
-                if isinstance(decision_ledger, Path)
-                else decision_ledger
-            )
-            taste_ledger_persisted = _persist(
-                artifact_root,
-                value=ledger_value,
-                schema_uri=TASTE_LEDGER_SCHEMA_URI,
-                role="taste_ledger",
-                media_type="application/json",
-            )
-            references.append(taste_ledger_persisted.reference)
-        except (FinalizationError, OSError, TypeError, ValueError) as exc:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "taste-ledger",
-                    CookRequirementKind.EVIDENCE,
-                    f"taste decision ledger could not be retained: {exc}",
-                ),
-            )
-    return _TasteEvidence(taste_persisted, taste_ledger_persisted)
 
 
 def _gate_landing(
@@ -933,35 +735,19 @@ def _gate_landing(
     spec_ref: ArtifactRef,
     lifecycle: str,
     planner: _PlannerArtifacts,
-    taste: _TasteEvidence,
 ) -> Landing | None:
-    """Read the spec's landing declaration through the shared evaluator."""
-    requirements = ledger.requirements
-    holds = ledger.holds
-    bound_taste = (
-        taste.verdict_persisted is not None and taste.ledger_persisted is not None
-    )
+    """Read the spec landing declaration against its plan."""
     try:
         readiness = evaluate_mold_cook_spec(
             snapshot.content,
             spec_ref=spec_ref,
             plan=planner.plan,
             lifecycle=lifecycle,
-            taste_verdict_ref=(
-                taste.verdict_persisted.reference
-                if bound_taste and taste.verdict_persisted is not None
-                else None
-            ),
-            taste_ledger_ref=(
-                taste.ledger_persisted.reference
-                if bound_taste and taste.ledger_persisted is not None
-                else None
-            ),
-            holds=holds,
+            holds=ledger.holds,
         )
     except (ContractValidationError, TypeError, ValueError) as exc:
         _append_requirement(
-            requirements,
+            ledger.requirements,
             _requirement(
                 "landing-declaration", CookRequirementKind.INTEGRITY, str(exc)
             ),
@@ -998,88 +784,45 @@ def _gate_host_coverage(
 def _gate_coverage(
     ledger: _GateLedger,
     *,
-    mode: MoldCookMode,
     coverage: MoldCookCoverage | None,
     planner: _PlannerArtifacts,
     landing: Landing | None,
 ) -> None:
-    """Check the host-proposed coverage against the tier and the plan."""
-    requirements = ledger.requirements
-    typed_planner = planner.planner
-    typed_plan = planner.plan
+    """Check selected scope against the bound plan and landing declaration."""
     if coverage is None:
         _append_requirement(
-            requirements,
+            ledger.requirements,
             _requirement(
                 "host-coverage",
                 CookRequirementKind.SCOPE,
-                "host-proposed scope coverage is required before finalization",
+                "selected scope is required before finalization",
             ),
         )
-    elif mode is MoldCookMode.LIGHT:
-        if len(coverage.curd_ids) != 1:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "light-coverage",
-                    CookRequirementKind.SCOPE,
-                    "Light-tier handoffs authorize exactly one canonical curd",
-                ),
-            )
-        if coverage.unresolved_work:
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "light-remainder",
-                    CookRequirementKind.PLAN,
-                    "Light-tier handoffs cannot discard unresolved planner work",
-                ),
-            )
-    elif typed_planner is not None and typed_plan is not None:
-        if typed_planner.plan is None or canonical_bytes(
-            typed_planner.plan
-        ) != canonical_bytes(typed_plan):
-            _append_requirement(
-                requirements,
-                _requirement(
-                    "plan-binding",
-                    CookRequirementKind.INTEGRITY,
-                    "PlannerResult and CurdPlan references must name identical canonical bytes",
-                ),
-            )
-        if landing is not None:
-            declared_ids = tuple(curd.curd_id for curd in typed_plan.curds)
-            if landing.shape is not LandingShape.SINGLE:
-                expected_landing = {
-                    curd_id for layer in landing.layers for curd_id in layer
-                }
-                if expected_landing != set(declared_ids):
-                    _append_requirement(
-                        requirements,
-                        _requirement(
-                            "landing-coverage",
-                            CookRequirementKind.INTEGRITY,
-                            "landing coverage must cover exactly the canonical plan curds",
-                        ),
-                    )
-            if not set(coverage.curd_ids).issubset(set(declared_ids)):
-                _append_requirement(
-                    requirements,
-                    _requirement(
-                        "coverage-ids",
-                        CookRequirementKind.INTEGRITY,
-                        "approved coverage names unknown canonical curd IDs",
-                    ),
-                )
-    elif mode is MoldCookMode.FULL:
+        return
+    plan = planner.plan
+    if plan is None:
+        return
+    declared_ids = {curd.curd_id for curd in plan.curds}
+    if not set(coverage.curd_ids).issubset(declared_ids):
         _append_requirement(
-            requirements,
+            ledger.requirements,
             _requirement(
-                "full-coverage",
-                CookRequirementKind.PLAN,
-                "Full-tier work cannot publish without a valid planner result and plan",
+                "coverage-ids",
+                CookRequirementKind.INTEGRITY,
+                "selected scope names unknown canonical curd IDs",
             ),
         )
+    if landing is not None and landing.shape is not LandingShape.SINGLE:
+        expected = {curd_id for layer in landing.layers for curd_id in layer}
+        if expected != declared_ids:
+            _append_requirement(
+                ledger.requirements,
+                _requirement(
+                    "landing-coverage",
+                    CookRequirementKind.INTEGRITY,
+                    "landing coverage must cover exactly the canonical plan curds",
+                ),
+            )
 
 
 def _finalize_publication(
@@ -1087,103 +830,55 @@ def _finalize_publication(
     operation_id: str,
     *,
     request_id: str,
-    input_kind: MoldCookInputKind,
-    mode: MoldCookMode,
-    spec_path: Path,
     spec_ref: ArtifactRef,
     planner: _PlannerArtifacts,
-    taste: _TasteEvidence,
     coverage: MoldCookCoverage | None,
     ledger: _GateLedger,
 ) -> FinalizationOutcome:
-    """Publish the canonical handoff once every gate has cleared.
-
-    A gap here is a host defect, not incomplete work, so a missing artifact
-    raises.  Only a failed publication degrades to a blocked saved result.
-    """
-    requirements = ledger.requirements
-    planner_ref: ArtifactRef | None = None
-    plan_ref: ArtifactRef | None = None
-    if mode is MoldCookMode.FULL:
-        planner_persisted = planner.planner_persisted
-        plan_persisted = planner.plan_persisted
-        if (
-            planner.planner is None
-            or planner.plan is None
-            or planner_persisted is None
-            or plan_persisted is None
-        ):
-            raise FinalizationError(
-                "ready Full-tier finalization requires planner artifacts"
-            )
-        planner_ref = planner_persisted.reference
-        plan_ref = plan_persisted.reference
-    handoff_version = require_contract_version(MoldCookHandoff)
-    taste_persisted = taste.verdict_persisted
-    taste_ledger_persisted = taste.ledger_persisted
-    if coverage is None or taste_persisted is None or taste_ledger_persisted is None:
-        raise FinalizationError(
-            "ready finalization requires coverage and retained taste evidence"
-        )
-    handoff = MoldCookHandoff(
-        contract_version=handoff_version,
-        request_id=request_id,
-        input_kind=input_kind,
-        mode=mode,
-        spec_ref=spec_ref,
-        coverage=coverage,
-        planner_result_ref=planner_ref,
-        plan_ref=plan_ref,
-        taste_verdict_ref=taste_persisted.reference,
-        taste_ledger_ref=taste_ledger_persisted.reference,
-        runner_approval_ref=None,
-        setup_evidence_refs=(),
-    )
+    """Save direct Cook inputs after validating their exact references."""
+    if (
+        planner.planner_persisted is None
+        or planner.plan_persisted is None
+        or coverage is None
+    ):
+        raise FinalizationError("ready finalization requires a planner, plan, and scope")
+    planner_ref = planner.planner_persisted.reference
+    plan_ref = planner.plan_persisted.reference
     try:
-        canonical = canonical_bytes(handoff)
-        digest = "sha256:" + hashlib.sha256(canonical).hexdigest()
-        published = publish_mold_cook_handoff(
-            handoff,
-            request_digest=digest,
-            operation_id=operation_id,
+        _ = validate_bound_execution(
+            spec_ref=spec_ref,
+            planner_result_ref=planner_ref,
+            plan_ref=plan_ref,
+            coverage=coverage,
             artifact_root=artifact_root,
-            canonical=canonical,
         )
-    except (ContractValidationError, PublicationError, TypeError, ValueError) as exc:
+    except (ContractValidationError, TypeError, ValueError) as exc:
         _append_requirement(
-            requirements,
+            ledger.requirements,
             _requirement(
-                "handoff-integrity",
+                "execution-inputs",
                 CookRequirementKind.INTEGRITY,
-                f"canonical handoff failed shared validation or publication: {exc}",
+                f"bound Cook inputs are invalid: {exc}",
             ),
         )
         return _blocked_outcome(
-            artifact_root,
-            operation_id,
-            request_id=request_id,
-            input_kind=input_kind,
-            ledger=ledger,
-            spec_ref=spec_ref,
+            artifact_root, operation_id,
+            request_id=request_id, ledger=ledger, spec_ref=spec_ref,
         )
-
-    pointer = _canonical_output(published.pointer)
+    result_path = _result_path(artifact_root, operation_id)
     output: dict[str, object] = {
         "status": "ready",
         "ready": True,
         "saved": True,
         "next": "cook",
-        "command": [
-            "/cook",
-            "--auto",
-            str(artifact_root / "pointers" / f"{_safe_segment(operation_id)}.json"),
-            "--spec",
-            str(spec_path),
-        ],
-        "pointer": pointer,
-        "handoff": _canonical_output(published.canonical.value),
+        "command": ["/cook", "--auto", "--result", str(result_path)],
+        "request_id": request_id,
+        "spec_ref": _canonical_output(spec_ref),
+        "planner_result_ref": _canonical_output(planner_ref),
+        "plan_ref": _canonical_output(plan_ref),
+        "coverage": _canonical_output(coverage),
     }
-    result_path = _save_result(artifact_root, operation_id, output)
+    _ = _save_result(artifact_root, operation_id, output)
     output["result_path"] = str(result_path)
     return FinalizationOutcome(output)
 
@@ -1194,22 +889,13 @@ def finalize_mold(
     artifact_root: Path,
     operation_id: str,
     request_id: str,
-    input_kind: MoldCookInputKind = MoldCookInputKind.DIRECT_SPEC,
-    mode: MoldCookMode = MoldCookMode.FULL,
     planner_result: PlannerResult | Mapping[str, object] | Path | None = None,
     plan: CurdPlan | Mapping[str, object] | Path | None = None,
     proposed_coverage: MoldCookCoverage | Mapping[str, object] | Path | None = None,
-    taste_result: ForkTasteVerdict | Mapping[str, object] | Path | None = None,
-    decision_ledger: object | None = None,
     save_approved: bool = False,
     overrides: Mapping[str, object] | None = None,
 ) -> FinalizationOutcome:
-    """Join all Mold authority checks and publish only a ready handoff.
-
-    Each gate appends to the ledger in a fixed order instead of raising, so
-    incomplete but well-formed work returns a blocked saved result.  Malformed
-    lifecycle or override controls raise ``FinalizationError``.
-    """
+    """Save incomplete work or return direct validated Cook inputs."""
     if overrides is not None:
         unknown = set(overrides) - _ALLOWED_OVERRIDE_KEYS
         if unknown:
@@ -1235,16 +921,8 @@ def finalize_mold(
     _gate_user_directive(ledger, frontmatter)
     planner_artifacts = _gate_planner_artifacts(
         ledger,
-        mode=mode,
         planner_result=planner_result,
         plan=plan,
-        artifact_root=artifact_root,
-    )
-    taste_evidence = _gate_taste(
-        ledger,
-        spec_text=snapshot.text,
-        taste_result=taste_result,
-        decision_ledger=decision_ledger,
         artifact_root=artifact_root,
     )
     landing = _gate_landing(
@@ -1253,38 +931,27 @@ def finalize_mold(
         spec_ref=spec_ref,
         lifecycle=frontmatter.status,
         planner=planner_artifacts,
-        taste=taste_evidence,
     )
     coverage = _gate_host_coverage(
         ledger, proposed=proposed_coverage, planner=planner_artifacts
     )
     _gate_coverage(
         ledger,
-        mode=mode,
         coverage=coverage,
         planner=planner_artifacts,
         landing=landing,
     )
-
     if ledger.blocked:
         return _blocked_outcome(
-            artifact_root,
-            operation_id,
-            request_id=request_id,
-            input_kind=input_kind,
-            ledger=ledger,
-            spec_ref=spec_ref,
+            artifact_root, operation_id,
+            request_id=request_id, ledger=ledger, spec_ref=spec_ref,
         )
     return _finalize_publication(
         artifact_root,
         operation_id,
         request_id=request_id,
-        input_kind=input_kind,
-        mode=mode,
-        spec_path=spec_path,
         spec_ref=spec_ref,
         planner=planner_artifacts,
-        taste=taste_evidence,
         coverage=coverage,
         ledger=ledger,
     )

@@ -26,7 +26,11 @@ from pathlib import Path
 
 from attrs import define, field
 
-from easy_cheese_schemas import phase_contracts
+from easy_cheese_schemas.handback_status import (
+    StatusError,
+    parse_status_field,
+    status_disposition,
+)
 
 NOTES_DIR_PARTS = (".cheese", "notes")
 WORKTREE_LIST_ARGS = ("git", "worktree", "list", "--porcelain")
@@ -87,7 +91,7 @@ class LegacyHandoffSlug:
     @property
     def disposition(self) -> str:
         """Route through the shared vocabulary rather than a per-status check."""
-        return phase_contracts.status_disposition(self.status)
+        return status_disposition(self.status)
 
 
 class LegacyDecodeError(ValueError):
@@ -121,8 +125,8 @@ def _parse_legacy_status(value: str) -> tuple[str, str | None]:
     name this reader accepts is always one the runtime can route.
     """
     try:
-        return phase_contracts.parse_status_field(value, require_reason=False)
-    except phase_contracts.StatusError as exc:
+        return parse_status_field(value, require_reason=False)
+    except StatusError as exc:
         raise LegacyDecodeError(str(exc)) from exc
 
 

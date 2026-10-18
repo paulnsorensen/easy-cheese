@@ -37,13 +37,14 @@ Run `python3 skills/cook/scripts/cook.pyz wheypoint-resolve --ref <slug>`.
 `not-found` proceeds cold; `legacy` shows its source and slug, then proceeds.
 `gated`, `ambiguous`, and `error` stop and show the payload.
 Show advisory `stale-commit` and `grounded-path-missing` findings.
+Keep its `record.revision_id` as `<base>` ([§ Base revision](../cheese/references/handback-contract.md#base-revision)).
 
 ## Inputs
 
 Accept a pasted spec or issue, focused acceptance criteria, or an unambiguous task.
 Read explicit spec paths verbatim.
 Resolve a bare slug to `path` from `python3 skills/cook/scripts/cook.pyz artifact-path specs <slug>`.
-A Mold handoff pointer, a spec path, and a slug enter through § Mold-to-Cook ingress and preparation.
+A Mold spec path or finalized direct inputs enter through § Mold-to-Cook ingress.
 Flags:
 
 - `--auto` chains `/age → /cure` after the in-Cook Press loop.
@@ -51,7 +52,8 @@ Flags:
 - `--hard` propagates through `/plate`.
 - `--open-pr` lets terminal `/plate` publish. Auto mode never adds this flag.
 - `--resume <slug>` resumes a typed fan handoff and its referenced artifacts.
-- `--spec <spec-path>` names the approved spec for a Mold pointer. A plan whose `dependencies` cross `landing.layers` is refused before any coder dispatch.
+- `--result <path>` runs a ready Mold result.
+- `--spec <spec-path>` names the selected Mold spec. A plan whose `dependencies` cross `landing.layers` is refused before coder dispatch.
 
 Optional context payload:
 
@@ -95,7 +97,7 @@ Read [`references/fan-pathway.md`](references/fan-pathway.md) for topology and l
 
 **Fast path.** Use the single-coder path for one low- or medium-blast-radius curd.
 
-**Curded.** Require a `ready` Full `MoldCookHandoff` and validated `CurdPlan`.
+**Curded.** Require a bound `spec_ref`, `planner_result_ref`, `plan_ref`, and exact `MoldCookCoverage` from a ready Mold finalization. The host validates them before `execute_bound_plan` dispatches any writer.
 Run `cook(CurdPlan) → reviewer(age)` with confirmed diagnosis and `CureDiagnosisBinding` through the progress-aware fan state machine until clean, stalled, or blocked.
 Each curd's Cook loop runs its own Press loop.
 The barrier runs Cook's integrated acceptance check on the merged tip.
@@ -126,7 +128,6 @@ Do not remove, skip, or weaken unrelated tests to make the change pass.
 
 Use the baseline for gate failures.
 [`references/quality-gates.md`](references/quality-gates.md) defines the policy, the classification terms, and the baseline artifact.
-Each downstream phase links to this reference instead of repeating it.
 
 [`references/writer-views.md`](references/writer-views.md) generates schemas for writer-view payloads inline.
 The `normalize` and `validate` CLIs apply these schemas before agent-authored JSON reaches host-owned identifiers.
@@ -140,8 +141,6 @@ Use [`references/package-report.md`](references/package-report.md) to report fil
 
 Write a minimum-shape handoff slug at the top of `.cheese/cook/<slug>.md`.
 Use the same file for the report; do not create a second file.
-This slug lets downstream phases resume or chain without rereading the full report.
-The fan pathway also uses it during wave orchestration.
 Use this schema:
 
 ```markdown
@@ -154,21 +153,20 @@ baseline: none | <path to the baseline artifact — shape in references/quality-
 <one-line orientation: what cook changed>
 ```
 
-The [handback contract](../cheese/references/handback-contract.md) defines the canonical `status:` grammar, including `ok` and `halt`.
+The handback contract defines the canonical `status:` grammar, including `ok` and `halt`.
 Only `next:` and the additional keyed lines are specific to a phase.
 
 `artifact:` names the upstream artifact that this run consumed.
-For a Mold route, use the approved specification pointer.
+For a Mold route, use the approved spec path.
 Leave `artifact:` empty when this run consumed no upstream artifact.
 Do not point `artifact:` at this Cook report.
-`/cheese` forwards the same pointer to the next phase.
 
 Use the canonical boundary writer when you emit this handoff for the typed fan result.
 Carry the result schema explicitly:
 
 ```text
 python3 skills/cook/scripts/cook.pyz write-handoff-artifact \
-  --slug <slug> --status <status> --phase cook --next age \
+  --slug <slug> --status <status> --phase cook --next age [--base <base>] \
   --artifact <artifact-path> --orientation "<one-line orientation>" \
   --payload-schema https://schemas.easy-cheese.dev/curd-result \
   --grounded <path[#start-end]> \
@@ -274,10 +272,11 @@ Stop when it contains `next: cure` or does not contain `next`.
 
 Generated bundle command inventory: [`references/commands.md`](references/commands.md).
 
-## Mold-to-Cook ingress and preparation
+## Mold-to-Cook ingress
 
-Classify and prepare every input before execution; only the standalone fast-path skips this step.
-A spec needs no Mold format or handoff. Cook proceeds on invocation; see the fan-pathway reference.
-Only a freshly accepted `ready` Full handoff may reach `workflow.cook`.
-Follow [`references/fan-pathway.md`](references/fan-pathway.md) § Classified Mold-to-Cook ingress and § Preparation loop.
+A saved Mold spec is not execution authority. Start Cook only when the user requests the selected scope and route.
+A standalone task, including `--spec` alone, may skip finalization.
+Spec-hold refusal: refuse a `--spec` run whose frontmatter has `execution_holds` or a `do-not-implement` or `do-not-proceed` `request_directive`.
+Refuse a non-`ready` `--result` file; a ready one passes `cook.pyz validate-result` before `execute_bound_plan`.
+Follow [`references/fan-pathway.md`](references/fan-pathway.md) § Direct Mold-to-Cook ingress.
 Run the fresh-agent regression scenarios in [`references/evals.md`](references/evals.md) when this boundary changes.

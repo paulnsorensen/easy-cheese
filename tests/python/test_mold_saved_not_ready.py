@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import cast
 
 from easy_cheese.skills.mold.producer import finalize_mold
-from easy_cheese_schemas.mold_cook import MoldCookMode
-
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "spec_format" / "valid_spec.md"
@@ -34,7 +32,6 @@ def test_incomplete_finalization_saves_a_blocked_preparation_result(
         artifact_root=tmp_path / "artifacts",
         operation_id="saved-1",
         request_id="saved-request-1",
-        mode=MoldCookMode.LIGHT,
     )
 
     assert outcome.status == "saved-not-ready"
@@ -46,9 +43,9 @@ def test_incomplete_finalization_saves_a_blocked_preparation_result(
     )
     assert saved["status"] == "saved-not-ready"
     assert saved["saved"] is True
-    preparation = cast(Mapping[str, object], saved["preparation_result"])
-    assert preparation["outcome"] == "blocked"
-    assert preparation["request_id"] == "saved-request-1"
+    assert saved["request_id"] == "saved-request-1"
+    assert saved["requirements"]
+    assert "next" not in saved
     assert not (tmp_path / "artifacts" / "pointers" / "saved-1.json").exists()
 
 
@@ -58,7 +55,6 @@ def test_save_only_override_and_user_hold_never_emit_a_pointer(tmp_path: Path) -
         artifact_root=tmp_path / "artifacts",
         operation_id="saved-2",
         request_id="saved-request-2",
-        mode=MoldCookMode.LIGHT,
         save_approved=True,
     )
 

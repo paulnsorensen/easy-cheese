@@ -28,7 +28,6 @@ from easy_cheese.shared.wheypoint import canonical, projection, records, storage
 from tests.python.test_mold_cook_producer import (
     make_planner_result,
     make_spec,
-    taste_fixture,
 )
 
 
@@ -100,6 +99,14 @@ def _write_args(
     for entry in grounded:
         args.extend(("--grounded", entry))
     return args
+
+
+def _read_base(root: Path, env: dict[str, str]) -> list[str]:
+    """The `--base` a phase writer passes after it reads the current record."""
+    shown = _run("wheypoint", "show", "--work-id", SLUG, cwd=root, env=env)
+    assert shown.returncode == 0, shown.stderr
+    record = cast(dict[str, object], _json(shown)["record"])
+    return ["--base", cast(str, record["revision_id"])]
 
 
 def _seed_git(root: Path) -> None:
@@ -189,7 +196,10 @@ def test_curd_2_chain_writes_revisions_and_validates_grounded_genesis(
     record = cast(dict[str, object], _json(shown)["record"])
     assert record["working_context"] == list(entries)
 
-    carried = _run("cook", *_write_args(genesis, "cook"), cwd=genesis, env=env)
+    base = _read_base(genesis, env)
+    carried = _run(
+        "cook", *_write_args(genesis, "cook"), *base, cwd=genesis, env=env
+    )
     assert carried.returncode == 0, carried.stderr
     carried_show = _run("wheypoint", "show", "--work-id", SLUG, cwd=genesis, env=env)
     assert carried_show.returncode == 0, carried_show.stderr
@@ -301,7 +311,10 @@ def test_curd_3_resolves_phase_artifacts_and_reports_stale_inputs(
     assert payload["outcome"] == "gated"
     assert payload["dispatchable"] is False
 
-    carried = _run("cook", *_write_args(lint_root, "cook"), cwd=lint_root, env=lint_env)
+    base = _read_base(lint_root, lint_env)
+    carried = _run(
+        "cook", *_write_args(lint_root, "cook"), *base, cwd=lint_root, env=lint_env
+    )
     assert carried.returncode == 0, carried.stderr
     shown = _run("wheypoint", "show", "--work-id", SLUG, cwd=lint_root, env=lint_env)
     assert shown.returncode == 0, shown.stderr
@@ -389,11 +402,9 @@ def _seed_ambiguous_slug(corpus_root: Path, slug: str, project_key: str) -> None
             next_action=NextAction(move=NextMove.COOK, orientation="proceed"),
             decisions=[],
             questions=[],
-            blockers=[],
             artifact_links=[],
-            decision_dossier=[],
         )
-        projected, markdown = projection.build_projection(
+        _, markdown = projection.build_projection(
             record, durability=Durability.CANONICAL_LOCAL
         )
         revision = WheypointRevision(
@@ -407,9 +418,7 @@ def _seed_ambiguous_slug(corpus_root: Path, slug: str, project_key: str) -> None
             record_digest=records.record_digest(record),
             applied_additions=[],
             applied_transitions=[],
-            preserved_entry_ids=[],
             projection_path=f"projections/{record.revision_number}-{record.revision_id}.md",
-            projection_digest=projected.projection_digest,
             repository=RepositoryProvenance(
                 branch="claude/wheypoint", commit="abc1234"
             ),
@@ -556,10 +565,10 @@ def test_curd_4c_resolves_error_outcome_per_phase_bundle(
     root.mkdir()
     env = _env(root, f"{SLUG}-{phase}-error")
     result = _run(phase, "wheypoint-resolve", "--ref", "", cwd=root, env=env)
-    assert result.returncode == 1
+    assert result.returncode == 2
     assert result.stdout == ""
     envelope = cast(dict[str, object], json.loads(result.stderr))
-    assert envelope["exit_code"] == 1
+    assert envelope["exit_code"] == 2
     assert cast(str, envelope["error"]).startswith("error:")
 
 
@@ -628,28 +637,10 @@ def test_curd_4_mold_publication_creates_no_wheypoint_revision(tmp_path: Path) -
     artifact_root = root / "artifacts"
     spec = make_spec(root)
     planner = make_planner_result()
-    taste = taste_fixture(spec)
     planner_path = root / "planner.json"
     plan_path = root / "plan.json"
-    taste_path = root / "taste.json"
-    ledger_path = root / "ledger.json"
     _ = planner_path.write_bytes(canonical_bytes(planner))
     _ = plan_path.write_bytes(canonical_bytes(planner.plan))
-    _ = taste_path.write_text(
-        json.dumps(
-            {
-                "draft_sha256": taste.draft_sha256,
-                "verdict": taste.verdict,
-                "forks": [],
-                "contradictions": [],
-                "orphaned_decisions": [],
-                "unsupported_assumptions": [],
-                "acceptance_gaps": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-    _ = ledger_path.write_text("[]\n", encoding="utf-8")
     publish = _run(
         "mold",
         "finalize",
@@ -658,10 +649,6 @@ def test_curd_4_mold_publication_creates_no_wheypoint_revision(tmp_path: Path) -
         str(planner_path),
         "--plan",
         str(plan_path),
-        "--taste-result",
-        str(taste_path),
-        "--ledger",
-        str(ledger_path),
         "--operation-id",
         "phase-rehydration-guard",
         "--request-id",
