@@ -635,11 +635,14 @@ def test_stack_tools_reports_missing_providers(
     }
 
 
+GIT_TOWN_TOOLS = frozenset({"git", "git-town"})
+
+
 def _git_town_report(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     files: dict[str, str],
-    tools: frozenset[str] = frozenset({"git", "git-town"}),
+    tools: frozenset[str] = GIT_TOWN_TOOLS,
 ) -> tuple[dict[str, object], object]:
     """Detect Git Town in a clone that has `files` and no local trunk key."""
     for name, content in files.items():
