@@ -1319,7 +1319,7 @@ class TestCookTypedTopology:
         body = _skill_corpus("cook")
         body_lower = body.lower()
         assert "post-merge" in body_lower
-        assert "press → age → cure → age" in body
+        assert "integrated acceptance check → age ↔ cure → age" in body
         assert "terminal age" in body_lower
 
 

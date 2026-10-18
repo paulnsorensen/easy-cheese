@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 COOK = REPO_ROOT / "skills" / "cook"
 SKILL = COOK / "SKILL.md"
 REFERENCES = COOK / "references"
+PRESS_GAP_ANALYSIS = REPO_ROOT / "skills" / "press" / "references" / "gap-analysis.md"
 PROSE = (SKILL, *sorted(REFERENCES.glob("*.md")))
 
 
@@ -286,6 +287,11 @@ def test_cook_is_the_single_press_round_counter() -> None:
     assert "Cook counts the rounds." in press
     assert "Press emits `halt: correction-cap` or `halt: coverage-gap` only from that round number" in press
     assert "halt: invalid-evidence" in loop
+    for text in (loop, press, _read(PRESS_GAP_ANALYSIS)):
+        assert "halt: press-round-limit" in text
+    assert "6 Press rounds in total" in loop
+    assert "6 Press rounds in total" in _read(PRESS_GAP_ANALYSIS)
+    assert "the orchestrator blocks the curd and routes to Mold" in loop
 
 
 def test_instructions_exempt_the_cook_press_sub_agent_from_the_dispatch_rule() -> None:
