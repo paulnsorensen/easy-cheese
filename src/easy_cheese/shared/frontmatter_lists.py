@@ -9,6 +9,7 @@ taste-test spec gate read ``entity_referent_bindings`` records here.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from typing import TypeVar, cast
@@ -22,22 +23,56 @@ __all__ = [
 _ItemT = TypeVar("_ItemT")
 
 
+def _closing_quote(text: str, start: int) -> int:
+    """Return the index of the quote that closes the scalar opened at ``start``.
+
+    A double-quoted scalar escapes with a backslash; a single-quoted scalar
+    escapes its quote by doubling it.  An unbalanced scalar yields ``-1``.
+    """
+    quote = text[start]
+    index = start + 1
+    while index < len(text):
+        char = text[index]
+        if quote == '"' and char == "\\":
+            index += 2
+        elif char != quote:
+            index += 1
+        elif quote == "'" and text[index + 1 : index + 2] == "'":
+            index += 2
+        else:
+            return index
+    return -1
+
+
+def _unquote(quoted: str, key: str) -> str:
+    """Decode one quoted YAML scalar given with both of its quotes."""
+    if quoted[0] == "'":
+        return quoted[1:-1].replace("''", "'")
+    try:
+        return cast(str, json.loads(quoted, strict=False))
+    except json.JSONDecodeError:
+        message = f"{key} is malformed: invalid escape in quoted scalar"
+        raise ValueError(message) from None
+
+
 def strip_flow_comment(value: str) -> str:
     """Drop a trailing ``# comment`` from a YAML flow collection value.
 
     A ``#`` starts a comment only outside quotes, at the start or after
-    whitespace, so a quoted ``#`` survives.
+    whitespace, so a quoted ``#`` survives, including after an escaped quote.
     """
-
-    quote: str | None = None
-    for index, char in enumerate(value):
-        if quote is not None:
-            if char == quote:
-                quote = None
-        elif char in "'\"":
-            quote = char
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char in "'\"":
+            end = _closing_quote(value, index)
+            if end < 0:
+                break
+            index = end + 1
         elif char == "#" and (not index or value[index - 1].isspace()):
             return value[:index].rstrip()
+        else:
+            index += 1
     return value.strip()
 
 
@@ -69,13 +104,12 @@ class _FlowReader:
         return value
 
     def value(self) -> object:
-        match self.peek():
-            case "[":
-                return self.collection("]", self.value)
-            case "{":
-                return dict(self.collection("}", self.entry))
-            case _:
-                return self.scalar(",]}")
+        opener = self.peek()
+        if opener == "[":
+            return self.collection("]", self.value)
+        if opener == "{":
+            return dict(self.collection("}", self.entry))
+        return self.scalar(",]}")
 
     def collection(self, close: str, item: Callable[[], _ItemT]) -> list[_ItemT]:
         self.pos += 1
@@ -96,10 +130,10 @@ class _FlowReader:
     def scalar(self, stops: str, *, key: bool = False) -> str:
         quote = self.peek()
         if quote and quote in "'\"":
-            end = self.text.find(quote, self.pos + 1)
+            end = _closing_quote(self.text, self.pos)
             if end < 0:
                 raise ValueError(f"{self.key} is malformed: unbalanced quote")
-            item = self.text[self.pos + 1 : end]
+            item = _unquote(self.text[self.pos : end + 1], self.key)
             self.pos = end + 1
             return item
         start = self.pos

@@ -1156,6 +1156,10 @@ _BINDING_DECLARATIONS = {
     "empty-list-trailing-comment": "entity_referent_bindings: []   # note\n",
     "string-list-trailing-comment": "gates_overridden: []   # note\n",
     "hold-list-trailing-comment": "execution_holds: []   # note\n",
+    "escaped-quotes-with-hash": (
+        'entity_referent_bindings: [{noun: "advisor", note: "a \\" # b"}]   # c\n'
+    ),
+    "doubled-single-quote": "entity_referent_bindings:\n  - {noun: 'it''s'}\n",
 }
 
 
@@ -1203,8 +1207,9 @@ def test_curdle_template_binding_line_passes_strict_validation(
         "entity_referent_bindings:\n  - advisor\n",
         "entity_referent_bindings: [advisor]\n",
         'entity_referent_bindings: [{noun: "advisor"]\n',
+        'entity_referent_bindings: [{noun: "bad \\q"}]\n',
     ],
-    ids=["block-scalar-item", "flow-scalar-item", "unbalanced-flow"],
+    ids=["block-scalar-item", "flow-scalar-item", "unbalanced-flow", "bad-escape"],
 )
 def test_malformed_binding_declaration_is_rejected(
     tmp_path: Path, _run: _RunFn, declaration: str

@@ -671,8 +671,20 @@ _BINDING_RECORD = {
             ({**_BINDING_RECORD, "citation": ["a.js:1"]},),
         ),
         ("entity_referent_bindings: []   # note\n", ()),
+        (
+            'entity_referent_bindings: [{noun: "advisor", note: "a \\" # b"}]   # c\n',
+            ({"noun": "advisor", "note": 'a " # b'},),
+        ),
+        ("entity_referent_bindings:\n  - {noun: 'it''s'}\n", ({"noun": "it's"},)),
     ],
-    ids=["block-noun-only", "block-full-record", "flow-nested-citation", "comment"],
+    ids=[
+        "block-noun-only",
+        "block-full-record",
+        "flow-nested-citation",
+        "comment",
+        "escaped-quotes-with-hash",
+        "doubled-single-quote",
+    ],
 )
 def test_documented_binding_records_pass_the_spec_document_gate(
     taste: _MoldTasteTestModule, declaration: str, expected: tuple[object, ...]
