@@ -93,6 +93,8 @@ Read `references/flow-details.md` for exact commands, exit codes, and grading re
    Route a conflicting or dirty merge state to `## Merge-conflict resolution`.
 3. **Check out the PR.** Run `gh pr checkout <pr>`.
    The fresh review and `/cure` read the PR head from the working tree.
+   Skip this step when `## Merge-conflict resolution` already checked out the PR.
+   A second checkout fails while the uncommitted `/melt` merge is in progress.
    With `--safe`, ask before the checkout.
    A failed checkout stops with `status: halt: pr-checkout-failed`.
 4. **Fetch comments.** Fetch inline threads from `pulls/<pr>/comments`.

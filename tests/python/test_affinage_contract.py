@@ -93,6 +93,12 @@ def test_checkout_precedes_every_working_tree_read() -> None:
     act = skill.index("9. **Act or ask.**")
     assert checkout < fresh < act
     assert "A failed checkout stops with `status: halt: pr-checkout-failed`." in skill
+    # The conflict path checks out and merges first; /melt leaves MERGE_HEAD,
+    # so a second `gh pr checkout` (git merge --ff-only) would fail.
+    assert (
+        "Skip this step when `## Merge-conflict resolution` already checked out the PR."
+        in skill
+    )
     flow = _read(REFERENCES / "flow-details.md")
     assert "Step 3 checks out the PR, so use `origin/<base>...HEAD`." in flow
 
