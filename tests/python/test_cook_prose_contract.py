@@ -152,7 +152,9 @@ def test_the_planner_request_kind_is_defined_for_every_failure_class() -> None:
 def test_the_cook_contract_admits_the_mold_route() -> None:
     skill = _read(SKILL)
 
-    assert "handoff(next = press | age | mold)" in skill
+    assert "handoff(next = age | mold | done)" in skill
+    assert "next: mold | age | done" in skill
+    assert "press | age" not in skill
     assert "Cook returns `next: mold` for a specification failure." in skill
     assert (
         "A fan run also returns `next: mold` for a stalled remediation scope, "
@@ -194,3 +196,111 @@ def test_no_cook_prose_names_a_retired_ultracook_heading() -> None:
     for path in PROSE:
         assert "### When invoked from /ultracook" not in _read(path), path
     assert "skills/age/SKILL.md § Router call" not in _read(REFERENCES / "tdd-loop.md")
+
+
+def test_acceptance_evidence_names_every_proof_field() -> None:
+    """AC-3: the package report records detection proof, not only a green run."""
+    report = _read(REFERENCES / "package-report.md")
+    section = report.split("### Acceptance evidence", 1)[1].split("\n### ", 1)[0]
+
+    for field in (
+        "Smallest complete path:",
+        "Detection proof:",
+        "Revision:",
+        "Environment:",
+        "Command:",
+        "Observed result:",
+        "verified | unverified: <reduced claim>",
+    ):
+        assert field in section, field
+    assert "### Press loop" in report
+    assert ".cheese/press/<slug>.md" in report
+    assert "- /press <slug>" not in report
+
+
+def test_cook_owns_first_acceptance_coverage_without_a_gate() -> None:
+    """AC-12: the obligation is reported, never gated."""
+    skill = _read(SKILL)
+    tdd = _read(REFERENCES / "tdd-loop.md")
+
+    assert "does not load a gate receipt" in skill
+    assert "This is a reported obligation, not a gate." in skill
+    assert "Cook owns first acceptance coverage" in skill
+    assert "This is a reported obligation, not a gate." in tdd
+    assert "report the behavior `unverified` and name the reduced claim" in tdd
+    assert "Never substitute an offline check silently." in tdd
+    for path in (SKILL, REFERENCES / "tdd-loop.md", REFERENCES / "press-loop.md"):
+        assert "RED gate" not in _read(path), path
+
+
+def test_cook_flow_dispatches_press_after_the_taste_test_without_a_menu() -> None:
+    """AC-4: the Press loop is a Cook step, not a user choice."""
+    skill = _read(SKILL)
+    loop = _read(REFERENCES / "press-loop.md")
+    flow = skill.split("## Flow", 1)[1].split("\n## ", 1)[0]
+
+    assert flow.index("**Taste-test**") < flow.index("**Press loop**") < flow.index("**Hand off**")
+    assert "fresh-context Press agent" in flow
+    assert "The user never selects Press from a menu." in loop
+    assert "After the taste test passes, Cook dispatches a fresh-context Press agent." in loop
+    assert "| `finding` | Run a correction (`correction = true`)." in loop
+    assert "| `coverage_gap` | Run a coverage addition (`correction = true`)." in loop
+    assert "`halt: correction-cap`" in loop
+    assert "`halt: coverage-gap`" in loop
+    assert "`--auto` chains `/age → /cure` after the in-Cook Press loop." in skill
+
+
+def test_cook_never_publishes_press_or_offers_it_in_a_menu() -> None:
+    """AC-8: handoff grammar and menus carry no Press route."""
+    skill = _read(SKILL)
+    gate = _read(COOK.parent / "cheese" / "references" / "handoff-gate.md")
+    menu = skill.split("\n## Handoff\n", 1)[1].split("\n## ", 1)[0]
+
+    for line in skill.splitlines():
+        if "next: press" in line:
+            assert "never" in line.lower(), line
+    assert "Never publish `next: press`" in skill
+    assert "/press" not in menu
+    assert "**Review the change** *(recommended)* — `/age <slug>`." in menu
+    assert "`/age <slug> --auto --open-pr`" in menu
+    assert "/press" not in gate
+    assert "Run one global `/press" not in skill
+
+
+def test_every_cook_prose_file_closes_its_code_fences() -> None:
+    for path in PROSE:
+        fences = [line for line in _read(path).splitlines() if line.startswith("```")]
+        assert len(fences) % 2 == 0, path
+
+
+def test_cook_is_the_single_press_round_counter() -> None:
+    """A fresh Press agent cannot count rounds, so Cook passes the number."""
+    loop = _read(REFERENCES / "press-loop.md")
+    skill = _read(SKILL)
+    press = _read(COOK.parent / "press" / "SKILL.md")
+
+    assert "Cook is the single round counter." in loop
+    assert "Cook passes the round number and the attack identity in each dispatch." in loop
+    assert "tester" not in loop
+    assert "| Press loop | coder |" in skill
+    assert "Cook counts the rounds." in press
+    assert "Press emits `halt: correction-cap` or `halt: coverage-gap` only from that round number" in press
+    assert "halt: invalid-evidence" in loop
+
+
+def test_instructions_exempt_the_cook_press_sub_agent_from_the_dispatch_rule() -> None:
+    text = _read(REPO_ROOT / ".github" / "instructions" / "skills.instructions.md")
+
+    assert "The one exception is Cook's" in text
+    assert "not a phase handoff" in " ".join(text.split())
+
+
+def test_press_loop_runs_inline_on_a_harness_without_sub_agents() -> None:
+    """T8: a host with no sub-agents degrades visibly; it never skips Press."""
+    loop = _read(REFERENCES / "press-loop.md")
+    skill = _read(SKILL)
+
+    assert "When the host has no fresh-context sub-agent, run the round inline instead of halting." in loop
+    assert "Record `topology: inline` and `degraded: true` in `agent_resolution`" in loop
+    assert "Never skip the round because no sub-agent exists." in loop
+    assert "general, then inline in the Cook session (`degraded: true`)" in skill

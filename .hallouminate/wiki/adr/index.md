@@ -1,6 +1,7 @@
 # adr
 
 <!-- HALLOUMINATE:INDEX-START -->
+- [acceptance-demonstration-press-fold-001](./acceptance-demonstration-press-fold-001.md) — ADR: Cook owns an automatic Press loop with a coverage_gap outcome
 - [acceptance-demonstration-press-fold-002](./acceptance-demonstration-press-fold-002.md) — ADR: Full specs and early curds carry an Acceptance demonstration section
 - [agent-resolution](./agent-resolution.md) — ADR: Progressive agent resolution is a shared contract
 - [artifact-schema-validator-compatibility-001](./artifact-schema-validator-compatibility-001.md) — ADR: Preserve artifact schema-validator injection until a major release

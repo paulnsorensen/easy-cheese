@@ -130,23 +130,70 @@ def test_finding_hands_off_to_cook_and_green_to_age() -> None:
     gap = _read(REFERENCES / "gap-analysis.md")
 
     assert "| finding (an attack test exposes a defect) | `ok-with-concerns: <defect>` | `cook` |" in skill
-    assert "A `next: cook` handoff is a Cook correction (`correction = true`)." in skill
+    assert "A `next: cook` handoff is a Cook correction (`correction = true`)" in skill
     assert "- GREEN hands off to `/age`." in gap
     assert "- A finding hands off to Cook as a correction (`next: cook`)." in gap
     assert "- Invalid evidence and production changes stop." in gap
 
 
 def test_press_outcome_vocabulary_has_no_red_gate() -> None:
-    """The RED gate is removed; Press selects one of four outcomes."""
+    """The RED gate is removed; Press selects one of five outcomes."""
     skill = _read(SKILL)
     gap = _read(REFERENCES / "gap-analysis.md")
-    outcomes = "`green`, `finding`, `invalid_evidence`, or `production_changed`"
+    outcomes = (
+        "`green`, `finding`, `coverage_gap`, `invalid_evidence`, or `production_changed`"
+    )
 
     assert outcomes in skill
     assert outcomes in gap
     for removed in ("in_contract_red", "third-red", "press-corrective-cook", "RED gate"):
         assert removed not in skill
         assert removed not in gap
+
+
+def test_coverage_gap_routes_to_cook_and_a_second_one_halts() -> None:
+    """AC-5: Press reports missing coverage instead of writing it."""
+    skill = _read(SKILL)
+    gap = _read(REFERENCES / "gap-analysis.md")
+
+    assert "| `coverage_gap` | `ok-with-concerns: coverage-gap: <gap>` | `cook` |" in skill
+    assert "| second `coverage_gap` in one Cook run | `halt: coverage-gap` | `done` |" in skill
+    assert "Press does not write first coverage. When it is missing, Press reports `coverage_gap`." in skill
+    assert "Press never owns first coverage" not in skill
+    assert "- A `coverage_gap` hands off to Cook (`next: cook`)." in gap
+    assert "A second `coverage_gap` in one Cook run stops with `status: halt: coverage-gap`" in gap
+
+
+def test_press_asks_one_question_and_selects_one_attack() -> None:
+    """AC-6: record the question, the single attack, and why it threatens the claim."""
+    skill = _read(SKILL)
+    gap = _read(REFERENCES / "gap-analysis.md")
+    question = "Can the user's original complaint still occur while every test passes?"
+
+    assert question in skill
+    assert question in gap
+    assert "Select ONE relevant false-success attack, not all four." in skill
+    assert "Select ONE relevant false-success attack. Do not run all four:" in gap
+    for attack in (
+        "an unexpected coded error",
+        "a no-op implementation",
+        "an empty or unusable artifact",
+        "reported success without the required state change",
+    ):
+        assert attack in gap, attack
+    assert "why it threatens the claim" in skill
+    assert "why it threatens the claim" in gap
+    assert "Inspect the acceptance check before you add tests." in gap
+
+
+def test_press_stays_callable_for_a_manual_rerun_that_hands_off_to_age() -> None:
+    """AC-13: `/press <slug>` survives the fold into Cook's loop."""
+    skill = _read(SKILL)
+
+    assert "For a manual re-run, Press accepts this invocation and hands off to Age on GREEN:" in skill
+    assert "/press <slug> [--auto] [--hard] [--open-pr]" in skill
+    assert "When Cook dispatched Press, return the handoff to Cook and stop." in skill
+    assert "| GREEN | `ok` | `age` |" in skill
 
 
 def test_gap_analysis_preserves_the_attack() -> None:
