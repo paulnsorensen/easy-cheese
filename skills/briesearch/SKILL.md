@@ -1,6 +1,6 @@
 ---
 name: briesearch
-description: Researches cited evidence from documentation, current web sources, repositories, local code, and Git hosting. Use when the user asks to research, compare, investigate, verify facts, find guidance, assess maintenance, or gather evidence before implementation. Trigger on "research X", "compare A vs B", "what's the latest on", "is X still maintained", or "/briesearch". Do not use for one clear file lookup or when the user already has sufficient evidence.
+description: Researches cited evidence from documentation, current web sources, repositories, local code, and Git hosting. Use when the user asks to research, compare, investigate, verify facts, find guidance, assess maintenance, or gather evidence before implementation. Trigger on "research X", "compare A vs B", "what's the latest on", "is X still maintained", "ground this plan in the docs", or "/briesearch". Do not use for one clear file lookup or when the user already has sufficient evidence.
 license: MIT
 metadata: {dispatches-agents: true}
 ---
@@ -18,7 +18,7 @@ Accept the complete user prompt as the research question. Ask one question only 
 
 ## Flow
 
-1. **Classify.** Identify the required source types, the research method, and the depth tier: `quick`, `standard`, or `deep`. See `references/budgets.md`.
+1. **Classify.** Identify the required source types, the research method, and the depth tier: `quick`, `standard`, or `deep`. See `references/budgets.md`. A plan that depends on a library uses the library docs brief in `references/routing.md`.
 2. **Plan.** Use a compact freshness plan for one time-sensitive fact. Use the full plan for comparisons, best practices, reports, or questions with multiple parts. Define decisions, constraints, subqueries, and stop criteria. See `references/query-planning.md`.
 3. **Route.** Select the required capabilities. Run `providers` to rank the usable routes for each provider capability. Select one route for each capability in the order of `references/providers.md` § Route order. Wiki and local code keep their own routing in `references/routing.md`. Then emit the routing block. Run each capability marked `YES` through its selected route or an explicit fallback.
 4. **Gather.** Declare the call budget before the first call. Load only the selected provider tools when the harness defers schemas. Fetch independent capabilities in parallel when the harness supports parallel work. Send heavy fetches to a research sub-agent. See `## Sub-agent context gate`. Verify cited URLs with a retrieval route that returns raw page text. Never quote a model summary. See `references/routing.md` § Provider tool sets. Record each call in the capture manifest immediately. Include the provider, tool, and status. Do not repeat a logged search. Do not extract a logged URL again. Fetch it again only when freshness becomes relevant. Record that fetch with `"refresh": true`. Gather is done when the manifest records evidence, an empty result, or an unavailable result for each `YES` capability.

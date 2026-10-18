@@ -1,18 +1,24 @@
 name: publish dist
 
-# Each main commit publishes one dist commit: the shippable tree with archives
-# built from that commit. One push moves dist, so an install from
+# Each run publishes the main tip as one dist commit: the shippable tree with
+# archives built from that commit. One push moves dist, so an install from
 # `paulnsorensen/easy-cheese#dist` sees one consistent set of skills.
+#
+# A run publishes the main tip, not the commit that started it. A cancelled or
+# failed run therefore loses nothing: the next push, manual run, or hourly
+# reconcile publishes every commit that the lost run missed.
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "23 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
-# One publish at a time, in push order. GitHub keeps one pending run per group,
-# so a burst of merges publishes only the newest main commit.
+# One publish at a time. GitHub keeps one pending run per group and cancels the
+# older pending run; the run that remains publishes the newest main tip.
 concurrency:
   group: publish-dist
   cancel-in-progress: false
@@ -22,50 +28,76 @@ jobs:
     name: publish dist branch
     runs-on: ubuntu-latest
     steps:
+      # A schedule or manual run starts on another branch; always build main.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
           fetch-depth: 0
 
+      - name: Compare dist with main
+        id: plan
+        run: |
+          set -euo pipefail
+          main=$(git rev-parse HEAD)
+          published=$(git log -1 --format='%(trailers:key=Source-Commit,valueonly)' origin/dist 2>/dev/null || true)
+          if [ "$published" = "$main" ]; then
+            echo "dist already holds main@$main"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "dist holds main@${published:-none}; publishing main@$main"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Python
+        if: steps.plan.outputs.publish == 'true'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
       - name: Set up uv
+        if: steps.plan.outputs.publish == 'true'
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.12.5"
           python-version: "3.12"
 
       - name: Set up just
+        if: steps.plan.outputs.publish == 'true'
         run: |
           uv tool install rust-just==1.58.0
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      # Build from source, so dist is correct even when a committed archive is stale.
       - name: Build archives
+        if: steps.plan.outputs.publish == 'true'
         run: just wedge-build
 
       - name: Stage shippable tree
+        if: steps.plan.outputs.publish == 'true'
         run: python3 scripts/stage_release.py --out "$RUNNER_TEMP/dist"
 
       - name: Install latest gh CLI
+        if: steps.plan.outputs.publish == 'true'
         run: |
           set -euo pipefail
-          latest=$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | jq -r .tag_name)
+          # The releases/latest redirect makes no API call, so the shared
+          # runner rate limit cannot fail this step with HTTP 403.
+          url=$(curl -fsSIL --retry 3 -o /dev/null -w '%{url_effective}' https://github.com/cli/cli/releases/latest)
+          latest="${url##*/}"
           ver="${latest#v}"
-          curl -fsSL "https://github.com/cli/cli/releases/download/${latest}/gh_${ver}_linux_amd64.tar.gz" | tar -xz -C /tmp
+          curl -fsSL --retry 3 "https://github.com/cli/cli/releases/download/${latest}/gh_${ver}_linux_amd64.tar.gz" | tar -xz -C /tmp
           sudo install -m 755 "/tmp/gh_${ver}_linux_amd64/bin/gh" /usr/local/bin/gh
           gh --version
 
       - name: Validate staged skills
+        if: steps.plan.outputs.publish == 'true'
         working-directory: ${{ runner.temp }}/dist
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh skill publish --dry-run
 
       - name: Run each staged archive
+        if: steps.plan.outputs.publish == 'true'
         working-directory: ${{ runner.temp }}/dist
         run: |
           set -euo pipefail
@@ -74,7 +106,8 @@ jobs:
           done
 
       - name: Publish dist commit
+        if: steps.plan.outputs.publish == 'true'
         run: |-
           python3 scripts/publish_dist.py \
-            --source "$GITHUB_SHA" --staged "$RUNNER_TEMP/dist" \
+            --source HEAD --staged "$RUNNER_TEMP/dist" \
             --remote origin --branch dist --trunk origin/main
