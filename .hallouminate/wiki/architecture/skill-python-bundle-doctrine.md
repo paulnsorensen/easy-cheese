@@ -89,11 +89,14 @@ The release workflow builds the archives from the tagged commit, then stages the
 
 ## Publication to dist
 
-The `publish dist` workflow runs on every push to `main`, one run at a time.
-It builds the archives, stages and validates the shipped tree, and runs each archive.
+The `publish dist` workflow runs on every push to `main`, on an hourly schedule, and on manual dispatch, one run at a time.
+Each run builds the archives from the `main` tip, so a lost or cancelled run loses nothing; the next run catches `dist` up.
+It stages and validates the shipped tree and runs each archive. The validate workflow runs the same checks on every pull request.
 `scripts/publish_dist.py` then writes one commit: the full `main` tree plus the built archives, with a `Source-Commit` trailer.
 One fast-forward push moves `dist`, so an install never mixes a new `SKILL.md` with an old archive.
-The publisher refuses a source off `main` or behind the last published source.
+The publisher refuses a source off `main` or one that diverges from the last published source.
+A source behind the last published one is a no-op (`superseded`), and a `dist` tip without a `Source-Commit` trailer is published over with a warning (PR #811).
+Scheduled and dispatched runs use the workflow file on `dist` (the default branch) but check out and publish `main`.
 
 `dist` is the default branch, so `npx skills add`, `gh skill install`, scheduled workflows, and Dependabot read it.
 It holds the full tree so those readers still find workflows, manifests, and source.

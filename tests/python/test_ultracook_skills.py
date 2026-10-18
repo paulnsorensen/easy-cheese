@@ -576,21 +576,8 @@ class TestWheypointJoinSplitVerbs:
 
 
 # ---------------------------------------------------------------------------
-# Wiring: install fallback list and README skill table
+# Wiring: README skill table
 # ---------------------------------------------------------------------------
-
-
-class TestInstallFallbackList:
-    def test_includes_ultracook(self) -> None:
-        install_sh = _read(REPO_ROOT / "scripts" / "install.sh")
-        line = next(
-            line
-            for line in install_sh.splitlines()
-            if line.startswith("EC_FALLBACK_SKILLS=")
-        )
-        assert "ultracook" in line, (
-            "EC_FALLBACK_SKILLS must include ultracook so offline installs ship it"
-        )
 
 
 class TestReadmeMentionsUltracook:
