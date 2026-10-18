@@ -647,6 +647,60 @@ def test_spec_without_test_contracts_section_has_no_contract_problem(
 
 
 
+_BINDING_RECORD = {
+    "noun": "advisor",
+    "verdict": "bound",
+    "referent": "advise()",
+    "citation": "a.js:1",
+    "note": "x",
+}
+
+
+@pytest.mark.parametrize(
+    ("declaration", "expected"),
+    [
+        ('entity_referent_bindings:\n  - {noun: "advisor"}\n', ({"noun": "advisor"},)),
+        (
+            "entity_referent_bindings:\n"
+            + '  - {noun: "advisor", verdict: bound, referent: "advise()", '
+            + 'citation: "a.js:1", note: "x"}\n',
+            (_BINDING_RECORD,),
+        ),
+        (
+            'entity_referent_bindings: [{noun: "advisor", verdict: "bound", '
+            + 'referent: "advise()", citation: ["a.js:1"], note: "x"}]\n',
+            ({**_BINDING_RECORD, "citation": ["a.js:1"]},),
+        ),
+        ("entity_referent_bindings: []   # note\n", ()),
+        (
+            'entity_referent_bindings: [{noun: "advisor", note: "a \\" # b"}]   # c\n',
+            ({"noun": "advisor", "note": 'a " # b'},),
+        ),
+        ("entity_referent_bindings:\n  - {noun: 'it''s'}\n", ({"noun": "it's"},)),
+    ],
+    ids=[
+        "block-noun-only",
+        "block-full-record",
+        "flow-nested-citation",
+        "comment",
+        "escaped-quotes-with-hash",
+        "doubled-single-quote",
+    ],
+)
+def test_documented_binding_records_pass_the_spec_document_gate(
+    taste: _MoldTasteTestModule, declaration: str, expected: tuple[object, ...]
+) -> None:
+    """Issue #778: `taste-test --precheck` reads documented binding records
+    and a commented empty list as a list of mappings."""
+    spec = contract_spec().replace(
+        "source: mold-handshake\n", "source: mold-handshake\n" + declaration, 1
+    )
+    assert not any("spec-document" in gap for gap in taste.lexical_precheck(spec, []))
+    document, _, _ = cast(tuple[object, str, object], taste.typed_mold_document(spec))
+    frontmatter = cast(object, getattr(document, "frontmatter"))
+    assert getattr(frontmatter, "entity_referent_bindings") == expected
+
+
 def test_lexical_precheck_passes_on_reflected_draft(
     taste: _MoldTasteTestModule,
 ) -> None:
