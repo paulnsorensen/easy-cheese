@@ -11,7 +11,7 @@ It covers the `single` shape and the `orthogonal_flat` shape (independent PRs of
 3. Draft a title and body per `## Body contract` below.
 4. Write the body to a temporary or transient file. Pass that file through `--body-file`.
    Do not embed a markdown heredoc in `--body`.
-   Then run `python3 skills/plate/scripts/plate.pyz check-pr-body --body-file <body-path>`.
+   Then run `python3 skills/plate/scripts/plate.pyz check-pr-body --body-file <body-path> --diagram-base <base>`.
    Add `--template-file .github/PULL_REQUEST_TEMPLATE.md` when the repository tracks that template.
    Add `--stack-layer` for a stack layer. Fix every reported error and run the check again.
    Do not create or edit the PR until the check exits 0.
@@ -81,7 +81,7 @@ A reviewer reads a short body. Agent-written bodies that claim changes the diff 
 When the repository tracks `.github/PULL_REQUEST_TEMPLATE.md`, use its section headings.
 Otherwise use `## Why`, `## What changed`, `## Non-obvious changes`, `## How to verify`, and `## Risk`.
 `check-pr-body` enforces the 40-line cap, the required headings, the `Plated as` line, the filler-word ban,
-and, for a stack layer, the `Stack: <n> of <total>` line and the stack-order flowchart.
+the diagram that `--diagram-base` triggers, and, for a stack layer, the `Stack: <n> of <total>` line and the stack-order flowchart.
 The 20-line cap for a small change, the claims, and the reading order stay a judgment call.
 Keep the body file transient unless the repository tracks PR templates or release artifacts.
 Leave a transient body file unstaged after verification.
@@ -126,6 +126,11 @@ Add one Mermaid diagram only when the structure is the point of the review:
 | A stack of PRs | `flowchart` of the stack order, with this PR marked |
 
 Add no diagram to a small fix, a docs-only change, or an independent PR.
+`check-pr-body --diagram-base <base>` applies the first row to the paths changed since `<base>`.
+It requires a `flowchart` when three or more code modules change and one is added, removed, or renamed.
+Tests, fixtures, and vendored code are not modules. When it requires none, it prints one line that says why.
+If the review does not need a required diagram, write `Diagram: none, <reason>` in the body instead.
+The `sequenceDiagram` row stays a judgment call.
 Derive the diagram from the diff. Show only components that the diff changes, plus their direct callers.
 Keep it to 15 nodes or fewer. Quote a label that holds punctuation, for example `R["router.select()"]`.
 Never use `end` as a node id. Use `<br>` for a line break. Do not add theme or style directives.

@@ -12,5 +12,11 @@ $ git diff --stat per commit
 22bb1e4  .github/workflows/validate.yml (+1 -1)
 33cc2d5  skills/melt/SKILL.md (+2 -2)
 
+$ git diff --name-status --find-renames main...HEAD
+M	.github/workflows/validate.yml
+M	skills/melt/SKILL.md
+M	src/easy_cheese/skills/briesearch/detect.py
+M	tests/python/test_briesearch_detect.py
+
 The three commits touch disjoint files. None imports, reads, or documents another.
 Each commit cherry-picks cleanly onto main alone and passes the gate there.

@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from easy_cheese.shared import git_utils
 from easy_cheese.skills.plate import pr_body
+from easy_cheese.skills.plate.diagram_trigger import DiagramNeed
 
 _SECTIONS = "\n".join(f"{heading}\nNone\n" for heading in pr_body.DEFAULT_HEADINGS)
 _PLATED = "Plated as single: one cohesive change\n"
@@ -100,3 +102,82 @@ def test_cli_accepts_a_valid_body(tmp_path: Path, capsys: pytest.CaptureFixture[
 
     assert pr_body.main(["--body-file", str(path)]) == 0
     assert '"valid": true' in capsys.readouterr().out
+
+
+_FLOW = DiagramNeed("flowchart", "code modules: 3 changed, 3 added, removed, or renamed")
+
+
+@pytest.mark.parametrize(
+    ("extra", "need", "valid"),
+    [
+        ("", _FLOW, False),
+        ("```mermaid\nsequenceDiagram\n  A->>B: ack\n```\n", _FLOW, False),
+        (_DIAGRAM, _FLOW, True),
+        ("Diagram: none, the three modules are one renamed package", _FLOW, True),
+        ("", DiagramNeed(None, "docs-only change"), True),
+    ],
+)
+def test_triggered_diagram_needs_the_named_kind_or_a_recorded_skip(
+    extra: str, need: DiagramNeed, valid: bool
+) -> None:
+    missing = f"diff needs a mermaid flowchart ({_FLOW.reason}); add one, or a line: Diagram: none, <reason>"
+
+    assert pr_body.check_body(_body(extra), need=need) == ([] if valid else [missing])
+
+
+def _git(repo: Path, *args: str) -> None:
+    result = git_utils.run_git(list(args), cwd=repo)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.fixture
+def body_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Enter a repo whose `feature` branch adds three modules to `main`; return a body path outside it."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "--initial-branch=main", ".")
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test")
+    _git(repo, "config", "commit.gpgsign", "false")
+    _ = (repo / "app.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "seed")
+    _git(repo, "switch", "-c", "feature")
+    for name in ("router.py", "probe.py", "report.py"):
+        _ = (repo / name).write_text(f"# {name}\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "flow")
+    monkeypatch.chdir(repo)
+    return tmp_path / "body.md"
+
+
+def test_cli_diagram_base_enforces_the_flowchart_on_a_cross_module_diff(
+    body_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _ = body_path.write_text(_body())
+
+    assert pr_body.main(["--body-file", str(body_path), "--diagram-base", "main"]) == 2
+    assert "diff needs a mermaid flowchart (code modules: 3 changed, 3 added" in capsys.readouterr().err
+
+    _ = body_path.write_text(_body(_DIAGRAM))
+    assert pr_body.main(["--body-file", str(body_path), "--diagram-base", "main"]) == 0
+    assert "diagram not required" not in capsys.readouterr().err
+
+
+def test_cli_diagram_base_prints_one_skip_line_when_no_diagram_is_required(
+    body_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _ = body_path.write_text(_body().replace("Plated as single", "Plated as orthogonal_flat"))
+
+    assert pr_body.main(["--body-file", str(body_path), "--diagram-base", "main"]) == 0
+    assert capsys.readouterr().err == "diagram not required: independent PR (Plated as orthogonal_flat)\n"
+
+
+@pytest.mark.parametrize(("base", "message"), [("nope", "git diff nope...HEAD failed"), ("-x", "must name a ref")])
+def test_cli_diagram_base_rejects_an_unusable_ref(
+    body_path: Path, capsys: pytest.CaptureFixture[str], base: str, message: str
+) -> None:
+    _ = body_path.write_text(_body(_DIAGRAM))
+
+    assert pr_body.main(["--body-file", str(body_path), f"--diagram-base={base}"]) == 2
+    assert message in capsys.readouterr().err

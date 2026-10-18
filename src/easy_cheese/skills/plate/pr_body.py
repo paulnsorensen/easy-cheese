@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import fromargs
 
+from easy_cheese.shared.git_utils import run_git
 from easy_cheese.shared.publication import BoundedReadOverflow, read_bounded
+from easy_cheese.skills.plate.diagram_trigger import DiagramNeed, decide, parse_name_status
 
 _MAX_BODY_BYTES = 200_000
 MAX_LINES = 40
@@ -22,6 +25,7 @@ _STACK_SHAPES = {"stacked_linear", "diamond_stack"}
 _SHAPES = _STACK_SHAPES | {"single", "orthogonal_flat"}
 _PLATED = re.compile(r"^Plated as (?P<shape>[a-z_]+): \S", re.MULTILINE)
 _STACK_LINE = re.compile(r"^Stack: \d+ of \d+", re.MULTILINE)
+_NO_DIAGRAM = re.compile(r"^Diagram: none, \S", re.MULTILINE)
 _CHECKLIST = re.compile(r"^\s*[-*] \[[ xX]\]")
 _FILLER = re.compile(
     r"\b(comprehensive|robust|seamless(ly)?|leverag(e|es|ed|ing)|significantly|dramatically)\b",
@@ -44,8 +48,21 @@ def _headings(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.startswith("## ")]
 
 
+def _draws(diagram: list[str], kind: str) -> bool:
+    return any(line.strip().startswith(kind) for line in diagram)
+
+
+def plated_shape(body: str) -> str | None:
+    plated = _PLATED.search(body)
+    return None if plated is None else plated.group("shape")
+
+
 def check_body(
-    body: str, *, stack_layer: bool = False, template: str | None = None
+    body: str,
+    *,
+    stack_layer: bool = False,
+    template: str | None = None,
+    need: DiagramNeed | None = None,
 ) -> list[str]:
     """Return every violated mechanical rule of the body contract."""
     errors: list[str] = []
@@ -60,17 +77,27 @@ def check_body(
     present = set(_headings(body))
     errors.extend(f"missing heading: {heading}" for heading in required if heading not in present)
 
-    plated = _PLATED.search(body)
-    if plated is None or plated.group("shape") not in _SHAPES:
+    shape = plated_shape(body)
+    if shape not in _SHAPES:
         errors.append("missing topology line: Plated as <shape>: <reason>")
-    elif stack_layer and plated.group("shape") not in _STACK_SHAPES:
-        errors.append(f"stack layer needs a stacked shape, got Plated as {plated.group('shape')}")
+    elif stack_layer and shape not in _STACK_SHAPES:
+        errors.append(f"stack layer needs a stacked shape, got Plated as {shape}")
 
     if stack_layer:
         if _STACK_LINE.search(body) is None:
             errors.append("stack layer needs a line: Stack: <n> of <total>")
-        if not any(line.strip().startswith("flowchart") for line in diagram):
+        if not _draws(diagram, "flowchart"):
             errors.append("stack layer needs a mermaid flowchart of the stack order")
+
+    if (
+        need is not None
+        and need.kind is not None
+        and not _draws(diagram, need.kind)
+        and _NO_DIAGRAM.search(body) is None
+    ):
+        errors.append(
+            f"diff needs a mermaid {need.kind} ({need.reason}); add one, or a line: Diagram: none, <reason>"
+        )
 
     for number, line in enumerate(lines, start=1):
         hit = _FILLER.search(line)
@@ -86,8 +113,25 @@ def _read(path: str) -> str:
         raise fromargs.CliError(f"{path}: {error}", exit_code=2) from error
 
 
+def _diagram_need(base: str, shape: str | None) -> DiagramNeed:
+    if base.startswith("-"):
+        raise fromargs.CliError(f"--diagram-base must name a ref, got {base!r}", exit_code=2)
+    revisions = f"{base}...HEAD"
+    result = run_git(["diff", "--name-status", "--find-renames", "-z", revisions])
+    if result.returncode != 0:
+        raise fromargs.CliError(f"git diff {revisions} failed: {result.stderr.strip()}", exit_code=2)
+    try:
+        return decide(parse_name_status(result.stdout), shape=shape)
+    except ValueError as error:
+        raise fromargs.CliError(f"git diff {revisions}: {error}", exit_code=2) from error
+
+
 def check_cmd(
-    body_file: str, *, stack_layer: bool = False, template_file: str | None = None
+    body_file: str,
+    *,
+    stack_layer: bool = False,
+    template_file: str | None = None,
+    diagram_base: str | None = None,
 ) -> dict[str, object]:
     """Check a drafted PR body against the mechanical rules of the body contract.
 
@@ -99,9 +143,15 @@ def check_cmd(
         Require the stack position line and the stack-order flowchart.
     template_file
         Path to the repository PR template; its `##` headings replace the defaults.
+    diagram_base
+        Base ref; require the diagram that the paths changed in `<base>...HEAD` call for.
     """
     template = _read(template_file) if template_file is not None else None
-    errors = check_body(_read(body_file), stack_layer=stack_layer, template=template)
+    body = _read(body_file)
+    need = None if diagram_base is None else _diagram_need(diagram_base, plated_shape(body))
+    if need is not None and need.kind is None:
+        print(f"diagram not required: {need.reason}", file=sys.stderr)
+    errors = check_body(body, stack_layer=stack_layer, template=template, need=need)
     if errors:
         raise fromargs.CliError("\n".join(errors), exit_code=2)
     return {"valid": True}
