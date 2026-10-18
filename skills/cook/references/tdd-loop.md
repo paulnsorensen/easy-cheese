@@ -175,9 +175,9 @@ than only a helper function:
 
 The command under test supplies no agent callback and no user response.  The
 orchestrator supplies planner output and runner approval explicitly; the Cook
-result is recomputed from those references on every transition.
+result is recomputed from those references on each call.
 The final execution-boundary test uses
-`execute_accepted_handoff` with real dispatch callbacks.  It proves that
+`execute_bound_plan` with real dispatch callbacks.  It proves that
 non-ready, held, stale, and overbroad handoffs stop before `workflow.cook`,
 while a ready Full handoff forwards the exact plan curd IDs and leaves the
 canonical planner remainder untouched.

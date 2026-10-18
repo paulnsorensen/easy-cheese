@@ -23,25 +23,28 @@ Install these prerequisites before you run the checks:
 ```sh
 git clone https://github.com/paulnsorensen/easy-cheese.git
 cd easy-cheese
-brew install just uv bats-core shellcheck yamllint yamlfmt markdownlint-cli2 node rust
+brew install just uv bats-core yamllint yamlfmt markdownlint-cli2 node rust
 corepack enable
 just check
 ```
 
-`just check` uses `uv` to resolve the Python tools temporarily. It verifies every committed skill archive before any archive executes.
+`just check` uses `uv` to resolve the Python tools temporarily. It builds every skill archive before any archive executes.
 
 ## Build skill archives
 
-Each Python skill commits one executable archive at `skills/<skill>/scripts/<skill>.pyz`.
+Each Python skill ships one executable archive at `skills/<skill>/scripts/<skill>.pyz`.
 Wedge builds self-contained archives at build time. It is not a runtime dependency.
 Users run the archive directly with Python; no loader or first-run download exists.
 
-Run `just wedge-build` after changing runtime source under `src/`, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`.
-Run `just wedge-check` before focused tests that execute an archive.
+The `main` branch tracks no archives; Git ignores them.
+On every merge to `main`, the `publish dist` workflow builds them and appends one commit to `dist`, the default branch.
+That commit holds the full `main` tree plus the archives, so pull requests never conflict on an archive.
+Branch from `main` and open pull requests against `main`. A branch cut from `dist` carries archives and fails CI.
+
+Run `just wedge-build` after a fresh clone, and after changing runtime source under `src/`, `pyproject.toml`, `uv.lock`, a phase contract, or a `wedge.toml`.
 
 ```sh
 just wedge-build
-just wedge-check
 ```
 
 `just wedge-build` builds each skill through the pinned Wedge and rewrites its archive.
@@ -65,8 +68,7 @@ Write diagnostics to stderr. Return an integer process status.
 Do not modify `sys.argv`. Do not run the target through `runpy`.
 See `src/easy_cheese/skills/affinage/commands.py` for a complete manifest.
 
-Commit each regenerated `.pyz` archive with the source change.
-`just wedge-check` verifies every committed archive against a temporary Wedge build.
+Do not commit a `.pyz` archive. `just test` builds the archives before the suites run, and a test fails when `main` tracks one.
 
 ## Documentation style
 
@@ -97,6 +99,16 @@ Run `just check` before you open a pull request.
    The squash merge uses the pull request title as the commit subject.
 4. Complete the pull request template. Explain why the change is necessary.
 5. Wait for CI to pass. Address the review comments.
+
+### Merge a pull request
+
+The [Mergify](https://mergify.com) merge queue merges every pull request into `main`.
+Do not use the merge button.
+When the pull request is approved and CI is green, comment `@mergifyio queue` on it.
+The queue merges `main` into the pull request, runs the required checks again, and squash-merges it.
+The queue merges one pull request at a time, so `main` receives only trees that CI tested.
+To remove a pull request from the queue, comment `@mergifyio dequeue`.
+The queue rules are in [`.mergify.yml`](./.mergify.yml).
 
 ## Code of Conduct
 

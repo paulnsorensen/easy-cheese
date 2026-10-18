@@ -17,16 +17,6 @@ from easy_cheese_schemas.contracts import (
     PlannerResult,
     ReviewResult,
 )
-from easy_cheese_schemas.mold_cook import (
-    CookPreparationResult,
-    MoldCookApproval,
-    MoldCookHandoff,
-)
-from easy_cheese_schemas.phase_contracts import (
-    COMPILED_TRANSITION_REGISTRY,
-    TransitionError,
-    validate_transition,
-)
 from easy_cheese_schemas.schema_runtime import (
     ContractValidationError,
     normalize_agent_output,
@@ -43,7 +33,6 @@ NAME_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 ERROR_TYPES = {
     "ArtifactResolutionError": ArtifactResolutionError,
     "ContractValidationError": ContractValidationError,
-    "TransitionError": TransitionError,
 }
 
 
@@ -112,7 +101,6 @@ def test_contract_fixture_case_schema_is_closed() -> None:
         "validate_contract": {"schema_uri", "supported_version"},
         "normalize_agent_output": set(),
         "resolve_artifact": set(),
-        "validate_transition": set(),
     }
     for case in CONTRACT_CASES:
         operation = case["operation"]
@@ -180,35 +168,6 @@ def _validated_contract_observation(case: dict[str, object]) -> dict[str, object
                 for curd in value.curds
                 for criterion in curd.criteria
             ],
-        }
-    if schema_uri.endswith("/mold-cook-handoff"):
-        assert isinstance(value, MoldCookHandoff)
-        return {
-            "type": type(value).__name__,
-            "request_id": value.request_id,
-            "input_kind": value.input_kind.value,
-            "mode": value.mode.value,
-            "curd_ids": list(value.coverage.curd_ids),
-        }
-    if schema_uri.endswith("/mold-cook-approval"):
-        assert isinstance(value, MoldCookApproval)
-        return {
-            "type": type(value).__name__,
-            "request_id": value.request_id,
-            "kind": value.kind.value,
-            "decision": value.decision.value,
-            "curd_ids": list(value.coverage.curd_ids),
-        }
-    if schema_uri.endswith("/cook-preparation-result"):
-        assert isinstance(value, CookPreparationResult)
-        return {
-            "type": type(value).__name__,
-            "request_id": value.request_id,
-            "outcome": value.outcome.value,
-            "reference_ids": [item.artifact_id for item in value.references],
-            "curd_ids": (
-                [] if value.coverage is None else list(value.coverage.curd_ids)
-            ),
         }
     assert isinstance(value, CurdResult)
     return {
@@ -300,28 +259,6 @@ def _resolved_artifact_observation(
     }
 
 
-def _transition_observation(case: dict[str, object]) -> dict[str, object]:
-    input_ = case["input"]
-    assert isinstance(input_, dict)
-    input_ = cast("dict[str, object]", input_)
-    source = input_["source"]
-    destination = input_["destination"]
-    payload_schema_uri = input_.get("payload_schema_uri")
-    assert isinstance(source, str)
-    assert isinstance(destination, str)
-    assert payload_schema_uri is None or isinstance(payload_schema_uri, str)
-    transition = validate_transition(
-        COMPILED_TRANSITION_REGISTRY, source, destination, payload_schema_uri
-    )
-    assert transition is not None
-    return {
-        "type": type(transition).__name__,
-        "source": transition.source,
-        "destination": transition.destination,
-        "payload_schema_uri": transition.payload_schema_uri,
-    }
-
-
 def _dispatch_contract_case(
     case: dict[str, object], tmp_path: Path
 ) -> dict[str, object]:
@@ -332,8 +269,6 @@ def _dispatch_contract_case(
         return _normalized_contract_observation(case)
     if operation == "resolve_artifact":
         return _resolved_artifact_observation(case, tmp_path)
-    if operation == "validate_transition":
-        return _transition_observation(case)
     raise AssertionError(f"unhandled fixture operation: {operation}")
 
 

@@ -225,7 +225,7 @@ def batch_resolve(
     """
     if not shutil.which("mergiraf"):
         raise fromargs.CliError(
-            "mergiraf not found — install with: cargo install mergiraf", exit_code=1
+            "mergiraf not found — install with: cargo install mergiraf", exit_code=2
         )
 
     if debug:

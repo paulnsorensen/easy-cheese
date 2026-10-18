@@ -254,7 +254,7 @@ def test_main_fails_on_an_unreadable_manifest(tmp_path: Path) -> None:
     report = tmp_path / "slug.md"
     _ = report.write_text(_REPORT, encoding="utf-8")
     _ = (tmp_path / "manifest.json").write_text("[]", encoding="utf-8")
-    assert ground_check.main([str(report)]) == 1
+    assert ground_check.main([str(report)]) == 4
 
 
 def test_citation_scanner_keeps_balanced_parentheses(tmp_path: Path) -> None:

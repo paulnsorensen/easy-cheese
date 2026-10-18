@@ -709,6 +709,40 @@ class TestEmitSkillPage:
             / "references"
         ).exists()
 
+    def test_copies_embedded_skill_asset_beside_the_page(
+        self, gen_docs: _GenDocsModule, isolated_docs: Path
+    ) -> None:
+        skill_dir = isolated_docs / "skills" / "age"
+        (skill_dir / "assets").mkdir(parents=True)
+        _ = (skill_dir / "assets" / "flow.svg").write_text("<svg/>", encoding="utf-8")
+        _ = (skill_dir / "SKILL.md").write_text(
+            "---\nname: age\ndescription: Review it.\nlicense: MIT\n---\n"
+            + "# /age\n\n![Flow](assets/flow.svg)\n",
+            encoding="utf-8",
+        )
+
+        _ = gen_docs.emit_skill_page(skill_dir)
+
+        skills_out = isolated_docs / "website" / "content" / "docs" / "skills"
+        assert "![Flow](./age/flow.svg)" in (skills_out / "age.md").read_text(
+            encoding="utf-8"
+        )
+        assert (skills_out / "age" / "flow.svg").read_text(encoding="utf-8") == "<svg/>"
+
+    def test_missing_embedded_skill_asset_fails_the_build(
+        self, gen_docs: _GenDocsModule, isolated_docs: Path
+    ) -> None:
+        skill_dir = isolated_docs / "skills" / "age"
+        skill_dir.mkdir(parents=True)
+        _ = (skill_dir / "SKILL.md").write_text(
+            "---\nname: age\ndescription: Review it.\nlicense: MIT\n---\n"
+            + "# /age\n\n![Flow](assets/flow.svg)\n",
+            encoding="utf-8",
+        )
+
+        with pytest.raises(FileNotFoundError, match="flow.svg"):
+            _ = gen_docs.emit_skill_page(skill_dir)
+
 
 class TestEmitSidebar:
     def test_writes_flat_sidebar_links(

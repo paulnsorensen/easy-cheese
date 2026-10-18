@@ -159,8 +159,8 @@ def _unmarked_corpus_sections(text: str) -> list[tuple[int, int]]:
 def migrate_legacy(config_path: Path | None = None, *, apply: bool) -> Change:
     """Remove an UNMARKED ``cheese-global`` [[corpus]] block pointing at
     ``~/.cheese`` (the legacy skill-installed drift). A ``cheese-global``
-    block pointing anywhere else is left untouched. Skill-only leg -- never
-    called from install.sh, so the installer stays non-destructive.
+    block pointing anywhere else is left untouched. Skill-only leg -- the
+    plain ``global --apply`` path never calls it, so that path stays non-destructive.
     """
     path = resolve_config_path(config_path)
     no_legacy = Change(

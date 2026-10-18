@@ -15,10 +15,10 @@ Ceremony scales to the job. The Bounds pass picks one of three tiers from `refer
 2. **Route** — choose the secondary mode from `references/modes.md`, announce it, and correct false premises first.
 3. **Dialogue** — consequential forks are the user's to pick. A fork is consequential per the leverage line in `../age/references/voice.md`. Every other fork is `[AGENT-DECIDED]`. Supply options, trade-offs, and evidence before you ask. Ground each critical claim through code, the [Validate Cycle](references/validate-cycle.md), or a [Prototype Cycle](references/prototype-cycle.md). Resolve every contradiction. Render the decision map after three consecutive fork questions, or on request.
 4. **Sketch** — For work across modules or with a new public interface, run `references/shape-check.md`. Bind identity and role nouns to code referents. Record the Placement block; no bodies.
-5. **Plan and validate** — run the fresh-context fork-coherence taste test with `python3 skills/mold/scripts/mold.pyz taste-test` and persist its digest-bound pass; a failure reopens only named forks, and the third failed verdict stops. Light with one expected curd needs no planner. Otherwise dispatch a typed `PlannerRequest`, validate its `PlannerResultWriterView` (one retry, then save without a runnable handoff), and normalize on the host. Show the semantic curds and waves before any Cook choice. See `references/curdle.md` § "Typed planner dispatch".
-6. **Readiness check** — Before saving, the agent runs the coherence self-check and strict spec validation. Save a draft even when unresolved parent work remains; record each hold in the spec's `execution_holds:` frontmatter list, and finalize refuses ready while any entry remains. User approval is not a prerequisite for writing. Before Cook, require an explicit user selection of the scope and route. See `references/handshake.md` and `references/early-curds.md`.
-7. **Curdle** — Resolve the durable spec path: run `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` and read `path` from its JSON reply. Write the validated draft and read it back. Retain typed plan evidence and unresolved holds. Write local issue drafts and durable decisions; publish follow-ups only after their own approval. A concrete bounded curd may use `references/early-curds.md` now, while Mold continues shaping its parent. The resolved spec path is internal; Cook receives only a ready finalizer pointer after the user selects Cook.
-8. **Offer Cook or keep shaping** — after reconciliation, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md). A saved draft is not a handoff. If the user selects Cook, run `scripts/mold.pyz finalize`. Dispatch only a ready pointer and the selected route. Otherwise keep shaping or stop without a Cook command.
+5. **Plan and validate** — run the fresh-context fork-coherence taste test with `python3 skills/mold/scripts/mold.pyz taste-test`; a failure reopens only named forks, and the third failed verdict stops. The taste review guides the spec but is not a Cook execution reference. For bound curd work, dispatch a typed `PlannerRequest`, validate its `PlannerResultWriterView` (one retry, then save without runnable inputs), and normalize on the host. A clear single-curd task can instead use standalone Cook without a planner. Show semantic curds and waves before any Cook choice. See `references/curdle.md` § "Typed planner dispatch".
+6. **Readiness check** — Before saving, run the coherence self-check and strict spec validation. Save a draft when unresolved parent work remains; record each hold in `execution_holds:`. Finalization refuses ready while an entry remains. User approval is not a prerequisite for writing. Before Cook, require an explicit user selection of scope and route. See `references/handshake.md` and `references/early-curds.md`.
+7. **Curdle** — Resolve the durable spec path with `python3 skills/mold/scripts/mold.pyz artifact-path specs <slug>` and read `path` from its JSON reply. Write the validated draft and read it back. Retain typed plan evidence and unresolved holds. Write local issue drafts and durable decisions; publish follow-ups only after their own approval. A concrete bounded curd may use `references/early-curds.md` while Mold continues shaping its parent. The selected spec path can enter standalone Cook; bound curd execution also receives validated direct refs, never a pointer.
+8. **Offer Cook or keep shaping** — after reconciliation, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md). A saved draft is not an execution request. If the user selects bound curd execution, run `scripts/mold.pyz finalize` and pass only ready direct inputs. A standalone clear task can enter Cook by spec path without machine finalization. Otherwise keep shaping or stop without a Cook command.
 
 Portability: [rules](../cheese/references/harness-portability.md). Slash commands are host renderings, not the control model.
 
@@ -41,7 +41,7 @@ Modes: references/modes.md. Evals: references/evals.md. Canvas: [review-canvas.m
 
 ## Agent-invoked mini-spec mode
 
-`/cheese`'s tier-1 escalation calls `/mold` after the call site passes all cook fast-path checks. The Quick tier enters the same mode without a write-approval turn. It produces a validated draft without design dialogue. Return the spec path, not a runnable pointer. After the spec validates, show it and ask one direct Cook question. When the user selects Cook, finalize and dispatch only a ready pointer. Append `--hard` when the user passed it.
+`/cheese`'s tier-1 escalation calls `/mold` after the call site passes all Cook fast-path checks. The Quick tier enters the same mode without a write-approval turn. It produces a validated draft without design dialogue. Return the spec path. After the spec validates, show it and ask one direct Cook question. On explicit selection, dispatch `/cook --spec <path>` for clear standalone work; do not invent a pointer or require a planner. Append `--hard` when the user passed it.
 
 The full coherence checklist does not run in this mode. The agent-introduced-scope check still runs implicitly. Every distinguishing noun must come from the user's input or tier-2 `/culture`/`/briesearch` synthesis. Never add one silently.
 
@@ -82,7 +82,7 @@ include it, and no gate requires it. Row-level rules: `references/curdle.md`
 
 ### Fork taste gate
 
-`python3 skills/mold/scripts/mold.pyz taste-test` binds the verdict to draft SHA256 and each settled fork. Stale, partial, or blocked verdicts fail; a failure reopens only named forks, with two rounds. Approved specs pass unchanged metadata and the published pointer to `/cook --auto`.
+`python3 skills/mold/scripts/mold.pyz taste-test` binds the verdict to draft SHA256 and each settled fork. Stale, partial, or blocked verdicts fail; a failure reopens only named forks, with two rounds. Approved specs pass unchanged metadata to `/cook --spec <spec-path>` (add `--auto` only when the user chose it) for standalone work; bound curd work uses `/cook --auto --result <result-path>`.
 
 Each fork appears in Approach, Interface sketches, and Acceptance, plus Test Contracts when the draft has them. Do not rename sections. Tag reflecting lines with fork id and run `taste-test --precheck` before dispatch. `goal` must survive verbatim in Problem statement (`goal-drift`); each `G-n` clause carries an Acceptance or disposition tag (`goal-coverage`). See `references/curdle.md` § Spec template and `references/gate-graph.md`.
 
@@ -90,7 +90,7 @@ Each fork appears in Approach, Interface sketches, and Acceptance, plus Test Con
 
 Mold may save a validated parent spec or early curd mini-spec without an approval turn. The agent coherence check still controls what the artifact claims as settled. Print the narrowing delta (`taste-test --coverage`) and the scope audit table before presenting any Cook option. Unresolved decisions remain visible holds, not implicit approvals. See `references/handshake.md`.
 
-Never start Cook from a saved spec, silence, `--auto`, or a general design approval. The user must select the exact curd or parent scope and a Cook route. An explicit Cook selection plus `finalize` is enough. A changed scope or plan needs a new selection. A failed gate leaves a saved draft without a runnable pointer. See `references/early-curds.md`.
+Never start Cook from a saved spec, silence, `--auto`, or a general design approval. The user must select the exact curd or parent scope and a Cook route. A changed scope or plan needs a new selection. A failed bound finalization leaves a saved draft without executable refs. See `references/early-curds.md`.
 
 ## --hard
 
@@ -103,14 +103,15 @@ See `../hard-cheese/references/composition.md`.
 
 **Pipeline:** culture → **[mold]** → cook → press → age → cure → plate
 
-After Curdle's phase two finishes, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md) for the blast-radius digest. A draft offers no Cook command. On an explicit Cook selection, finalize and keep only a consumer-valid canonical `HandoffPointer`. Prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)); never pre-select. Keep applicability, contract, and taste metadata unchanged. Append `--hard` when the user passed it.
+After Curdle's phase two finishes, run [`python3 skills/mold/scripts/mold.pyz curd-count`](references/curd-count.md) for the blast-radius digest. A draft offers no Cook command. On explicit Cook selection, retain the selected spec path for standalone work. Bound curd work dispatches the printed finalize command, `/cook --auto --result <result-path>`; the result carries `request_id`, `spec_ref`, `planner_result_ref`, `plan_ref`, and exact `coverage`. Prompt through the shared handoff gate ([policy](../cheese/references/handoff-gate.md)); never pre-select. Keep applicability, contract, and taste review metadata unchanged. Append `--hard` when the user passed it.
 
-The digest's `mode` is orientation, not a skill. Render the fixed blast-radius menu from `decomposable`, `candidate_curds`, `verdict`, and `mode`; see `references/handoff-menus.md`.
+The digest's `mode` is orientation, not a skill or Cook gate. Render the fixed blast-radius menu from `decomposable`, `candidate_curds`, `verdict`, and `mode`; see `references/handoff-menus.md`.
 
 ## Rules
 
 - Dialogue first; artifacts are the by-product.
 - **Tiered lettered options.** Consequential forks use `A/B/C/D` choices via the question transport at `../cheese/references/ask-user-question.md`. Never decide them silently. Everything below the leverage line is `[AGENT-DECIDED]` by default: make the call, log a one-line vetoable alternative in the ledger, and do not ask. A fork is valid only after its depth was contributed in-dialogue first. Precede every structured question with visible prose that weighs the fork and the evidence. Keep one open picker.
+- **Fork cards.** Before each consequential question, show a fork card: what it decides, what it moves, and each branch as a symbol table or plain-text graph. Offer `Explain more` as a choice; an unclear reply re-renders the same fork with more context ([fork-questions](references/fork-questions.md)).
 - **Altitude tag.** Every `Asking` fork names the acceptance criterion, public seam, or non-goal it moves. A fork that moves none, or that sits below the leverage line, is `[AGENT-DECIDED]` or a follow-up candidate, never a user question.
 - **Decision ledger.** Each round prints `Goal / Decided / Asking / [AGENT-DECIDED]`, the goal verbatim. Curdle persists consequential decisions to [ADRs](references/adr.md) and minor ones to the spec. The taste verdict names every settled consequential entry exactly once.
 - **Decision map and fork-round cap.** Stop after three consecutive fork rounds that add no new evidence, or three consecutive forks that fail the altitude tag, or when the user requests a decision map. Show completed forks, remaining forks, and a ready or blocked verdict. A fourth round requires new grounding, a delegated digest, or a `/wheypoint` checkpoint. The map shows ledger state. It does not create an artifact.
@@ -119,7 +120,7 @@ The digest's `mode` is orientation, not a skill. Render the fixed blast-radius m
 - Do not silently settle uncertain claims.
 - Apply the shared voice kernel at `../age/references/voice.md`. Correct false premises. Mark each critical claim's confidence as `certain | speculating | don't know`. Steelman before you dismiss. Put consequential forks to the user; depth informs the question, never replaces it.
 
-The schema entanglement behind curdle's spec-template and cook's writer views is phase registry × schema catalog × models per transition. The generated [`../cheese/references/schema-intertwine.md`](../cheese/references/schema-intertwine.md) documents it.
+The generated [`../cheese/references/schema-intertwine.md`](../cheese/references/schema-intertwine.md) lists every published schema and its contract model.
 
 ## Agent resolution
 

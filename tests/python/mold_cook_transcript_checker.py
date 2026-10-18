@@ -26,7 +26,6 @@ class TranscriptCheckError(ValueError):
 class TranscriptReport:
     scenario: str
     input_kind: str
-    mode: str
     artifact_refs: tuple[str, ...]
     event_types: tuple[str, ...]
 
@@ -34,32 +33,17 @@ class TranscriptReport:
 _EVENT_TYPES = frozenset(
     {
         "input_classified",
-        "prepare",
-        "approval_recorded",
         "plan_materialized",
+        "runner_response",
         "setup_authorized",
         "setup_evidence",
-        "handoff_published",
-        "consumer_accept",
+        "bound_inputs",
         "feature_write",
         "remainder_preserved",
     }
 )
-_INPUT_KINDS = frozenset(
-    {"direct_spec", "slug", "task", "canonical_pointer", "continuation"}
-)
-_MODES = frozenset({"full", "light"})
-_APPROVAL_KINDS = frozenset({"runner"})
-
-# Only runner setup needs a recorded approval. Light scope and Full plan
-# handoffs proceed on invocation, so no approval gates them.
-_AUTHORIZED_ACTIONS: dict[str, frozenset[str]] = {
-    "runner": frozenset({"setup_authorized", "setup_evidence"}),
-}
-_GATED_ACTIONS = frozenset(
-    action for actions in _AUTHORIZED_ACTIONS.values() for action in actions
-)
-
+_INPUT_KINDS = frozenset({"direct_spec", "slug", "task", "continuation"})
+_GATED_ACTIONS = frozenset({"setup_authorized", "setup_evidence"})
 
 def _mapping(value: object, label: str) -> dict[str, object]:
     if not isinstance(value, Mapping):
@@ -79,20 +63,18 @@ def _text(value: object, label: str) -> str:
 
 def _artifact_refs(events: Sequence[dict[str, object]]) -> tuple[str, ...]:
     refs: list[str] = []
-    published: str | None = None
+    bound: str | None = None
     for event in events:
-        if event["type"] not in {"handoff_published", "consumer_accept"}:
+        if event["type"] not in {"bound_inputs", "feature_write"}:
             continue
         value = _text(event.get("artifact_ref"), "artifact_ref")
         if value.startswith(("/", "~")) or ".." in Path(value).parts:
             raise TranscriptCheckError("artifact_ref must be repository-relative")
-        if event["type"] == "handoff_published":
-            published = value
-        elif value != published:
-            raise TranscriptCheckError(
-                "consumer accepted an artifact the trace never published"
-            )
-        refs.append(value)
+        if event["type"] == "bound_inputs":
+            bound = value
+            refs.append(value)
+        elif value != bound:
+            raise TranscriptCheckError("feature used inputs the trace never validated")
     return tuple(refs)
 
 
@@ -100,7 +82,6 @@ def check_transcript(
     trace: Mapping[str, object],
     *,
     expected_input_kind: str | None = None,
-    expected_mode: str | None = None,
 ) -> TranscriptReport:
     """Validate action ordering and authority without inspecting prose."""
     document = _mapping(trace, "trace")
@@ -132,53 +113,31 @@ def check_transcript(
     if expected_input_kind is not None and input_kind != expected_input_kind:
         raise TranscriptCheckError("trace routed the input to the wrong ingress")
 
-    preparations = [event for event in events if event["type"] == "prepare"]
-    if not preparations:
-        raise TranscriptCheckError("trace has no preparation action")
-    mode = _text(preparations[-1].get("mode"), "prepare.mode")
-    if mode not in _MODES:
-        raise TranscriptCheckError(f"unsupported preparation mode {mode!r}")
-    if expected_mode is not None and mode != expected_mode:
-        raise TranscriptCheckError("trace used the wrong preparation mode")
-
-    approvals = [
-        (index, event)
-        for index, event in enumerate(events)
-        if event["type"] == "approval_recorded"
-    ]
-    approval_gates: list[tuple[int, str]] = []
-    for index, approval in approvals:
-        if approval.get("source") != "harness":
-            raise TranscriptCheckError(
-                "approval evidence must originate in the fixture harness"
-            )
-        kind = _text(approval.get("kind"), "approval.kind")
-        if kind not in _APPROVAL_KINDS:
-            raise TranscriptCheckError(f"unsupported approval kind {kind!r}")
-        if approval.get("decision") != "approved":
-            raise TranscriptCheckError("recorded approval does not authorize execution")
-        approval_gates.append((index, kind))
-
+    plans = [index for index, event in enumerate(events) if event["type"] == "plan_materialized"]
+    if not plans:
+        raise TranscriptCheckError("trace has no materialized plan")
+    bound_indices = [index for index, event in enumerate(events) if event["type"] == "bound_inputs"]
+    if not bound_indices or bound_indices[-1] <= plans[-1]:
+        raise TranscriptCheckError("direct inputs were not validated after planning")
+    if events[bound_indices[-1]].get("ready") is not True:
+        raise TranscriptCheckError("bound inputs are not ready")
     first_write = next(
-        (
-            index
-            for index, event in enumerate(events)
-            if event["type"] == "feature_write"
-        ),
+        (index for index, event in enumerate(events) if event["type"] == "feature_write"),
         None,
     )
-    accepted_index = next(
-        (
-            index
-            for index, event in enumerate(events)
-            if event["type"] == "consumer_accept"
-        ),
-        None,
-    )
-    if first_write is not None and (
-        accepted_index is None or first_write < accepted_index
-    ):
-        raise TranscriptCheckError("feature write occurred before consumer acceptance")
+    if first_write is not None and first_write < bound_indices[-1]:
+        raise TranscriptCheckError("feature write occurred before bound input validation")
+
+    responses = [
+        index for index, event in enumerate(events)
+        if event["type"] == "runner_response"
+    ]
+    for index in responses:
+        response = events[index]
+        if response.get("source") != "harness":
+            raise TranscriptCheckError("runner response must originate in the fixture harness")
+        if response.get("decision") != "approved":
+            raise TranscriptCheckError("runner response does not authorize setup")
 
     setup_authorized = next(
         (
@@ -217,39 +176,23 @@ def check_transcript(
         if len(preserved) != 1 or not preserved[0].get("unresolved_work"):
             raise TranscriptCheckError("partial workflow lost its unresolved remainder")
 
-    published_indices = [
-        index
-        for index, event in enumerate(events)
-        if event["type"] == "handoff_published"
-    ]
-    if not published_indices:
-        raise TranscriptCheckError("trace has no published handoff")
-    final_published = events[published_indices[-1]]
-    if final_published.get("ready") is not True:
-        raise TranscriptCheckError("final handoff is not ready")
-    if accepted_index is None or accepted_index <= published_indices[-1]:
-        raise TranscriptCheckError("ready handoff was not accepted by the consumer")
-    if events[accepted_index].get("ready") is not True:
-        raise TranscriptCheckError("consumer reported a false ready result")
-
+    if responses and setup_evidence is None:
+        raise TranscriptCheckError("runner response has no setup evidence")
+    if setup_evidence is not None and setup_evidence > bound_indices[-1]:
+        raise TranscriptCheckError("setup evidence arrived after bound validation")
     refs = _artifact_refs(events)
-
     for index, event in enumerate(events):
         action = event["type"]
-        if action not in _GATED_ACTIONS:
-            continue
-        if not any(
-            gate_index < index and action in _AUTHORIZED_ACTIONS[kind]
-            for gate_index, kind in approval_gates
+        if action in _GATED_ACTIONS and not any(
+            response_index < index for response_index in responses
         ):
             raise TranscriptCheckError(
-                f"{action} is not authorized by any approval that precedes it"
+                f"{action} is not authorized by a preceding runner response"
             )
 
     return TranscriptReport(
         scenario=scenario,
         input_kind=input_kind,
-        mode=mode,
         artifact_refs=refs,
         event_types=types,
     )

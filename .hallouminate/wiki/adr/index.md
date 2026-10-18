@@ -8,7 +8,7 @@
 - [baseline-repair-pathway-002](./baseline-repair-pathway-002.md) — ADR: Repair consent is automatic under --auto, prompted at record time otherwise  [status: accepted]
 - [baseline-repair-pathway-003](./baseline-repair-pathway-003.md) — ADR: Repair merges as an independent PR from main; mechanical intertangle fallback  [status: accepted]
 - [baseline-repair-pathway-004](./baseline-repair-pathway-004.md) — ADR: /pasteurize stays unchanged in v1 — the frame owns isolation and briefing  [status: accepted]
-- [cheese-corpus-setup-001](./cheese-corpus-setup-001.md) — ADR-001: install.sh derives the durable root via the skill's bundled Python archive, not bash  [status: accepted]
+- [cheese-corpus-setup-001](./cheese-corpus-setup-001.md) — ADR-001: install.sh derives the durable root via the skill's bundled Python archive, not bash  [status: superseded]
 - [cheese-corpus-setup-002](./cheese-corpus-setup-002.md) — ADR-002: spec-discovery falls back to `resolve_slug` when hallouminate is absent  [status: accepted]
 - [cheese-corpus-setup-003](./cheese-corpus-setup-003.md) — ADR-003: delete the `spec_match` scoring engine rather than refactor it  [status: accepted]
 - [cheese-kernel-shared-refs-001](./cheese-kernel-shared-refs-001.md) — ADR: shared docs live in the cheese skill's references dir, cited sibling-relative
@@ -54,6 +54,7 @@
 - [outer-tdd-gates-004](./outer-tdd-gates-004.md) — ADR: Mold owns Test Contracts and a bounded fresh-context taste gate
 - [outer-tdd-gates-005](./outer-tdd-gates-005.md) — ADR: Gate applicability is explicit and uses existing project runners
 - [plate-publication-boundary-001](./plate-publication-boundary-001.md) — ADR: plate owns the commit-to-PR publication boundary
+- [plate-publication-boundary-002](./plate-publication-boundary-002.md) — ADR: Plate decides PR topology without asking
 - [post-pr-wiki-writeback-001](./post-pr-wiki-writeback-001.md) — ADR: curdle wiki writes enforced by gate node + read-back verify, not a Stop-hook
 - [post-pr-wiki-writeback-002](./post-pr-wiki-writeback-002.md) — ADR: post-PR learnings write-back reuses wiki-ingest, not the personal wiki-curator skill
 - [pyz-pipeline-contracts-001](./pyz-pipeline-contracts-001.md) — ADR: Bundle builds verify the staged import closure, including function-body imports
@@ -87,6 +88,7 @@
 - [wheypoint-ergonomics-004](./wheypoint-ergonomics-004.md) — Additive schema evolution keeps old digests valid
 - [wheypoint-ergonomics-005](./wheypoint-ergonomics-005.md) — Checkpoints must carry the user's words
 - [wheypoint-provenance-schema-001](./wheypoint-provenance-schema-001.md) — ADR: wheypoint provenance as additive header fields with join/split verbs
+- [wheypoint-schema5-stack-001](./wheypoint-schema5-stack-001.md) — Wheypoint schema 5 follow-up stack decisions
 - [workflow-contract-milknado-seam-001](./workflow-contract-milknado-seam-001.md) — ADR: CurdPlan is the semantic work authority
 - [workflow-contract-milknado-seam-002](./workflow-contract-milknado-seam-002.md) — ADR: Agents write slim views and hosts normalize canonical contracts
 - [workflow-contract-milknado-seam-003](./workflow-contract-milknado-seam-003.md) — ADR: The planner owns semantic decomposition

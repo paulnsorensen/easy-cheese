@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .preparation import execute_accepted_handoff
+from .preparation import execute_bound_plan
 
-
-__all__ = ["execute_accepted_handoff"]
+__all__ = ["execute_bound_plan"]

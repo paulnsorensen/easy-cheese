@@ -492,7 +492,7 @@ def _publish(
             revision = review.publish(cast(JSONObject, document), base_revision)
             review.save(path)
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise fromargs.CliError(str(exc), exit_code=1) from exc
+        raise fromargs.CliError(str(exc), exit_code=2) from exc
     return cast(JSONObject, revision.__dict__)
 
 

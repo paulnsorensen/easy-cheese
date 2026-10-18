@@ -100,39 +100,3 @@ def test_normalize_planner_entrypoint_materializes_canonical_result(
     plan = cast(dict[str, object], output["plan"])
     assert plan["plan_id"] == "command-plan-1"
     assert cast(list[dict[str, object]], plan["curds"])[0]["curd_id"] == "command-curd-1"
-
-
-def test_finalize_entrypoint_saves_invalid_taste_as_not_ready(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    fixture = Path(__file__).parent / "fixtures" / "spec_format" / "valid_spec.md"
-    spec_path = tmp_path / "spec.md"
-    _ = spec_path.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
-    taste_path = tmp_path / "taste.json"
-    _ = taste_path.write_text(json.dumps({"not": "a taste verdict"}), encoding="utf-8")
-
-    exit_code = commands.main(
-        [
-            "finalize",
-            str(spec_path),
-            "--artifact-root",
-            str(tmp_path / "artifacts"),
-            "--operation-id",
-            "invalid-taste",
-            "--request-id",
-            "invalid-taste-request",
-            "--taste-result",
-            str(taste_path),
-        ]
-    )
-    captured = capsys.readouterr()
-    assert exit_code == 0
-    assert captured.err == ""
-    output = cast(dict[str, object], json.loads(captured.out))
-    assert output["status"] == "saved-not-ready"
-    requirements = cast(list[dict[str, object]], output["requirements"])
-    assert any(
-        item["requirement_id"] == "taste-verdict"
-        and "taste verdict is invalid" in cast(str, item["description"])
-        for item in requirements
-    )

@@ -1,0 +1,16 @@
+Repository: easy-cheese. Trunk: main. Branch: feat/probe-cache. No PR exists for this branch.
+Quality gate: `just check` passed at HEAD (exit 0). No other check ran.
+Installed stack tools: Graphite (configured).
+
+$ git log --oneline main..HEAD
+7d3e9a1 feat(briesearch): cache provider probes and report cache hits
+
+$ git diff --stat main...HEAD
+ src/easy_cheese/skills/briesearch/probe.py   | 64 ++++++++++++
+ tests/python/test_probe_cache.py             | 48 +++++++++
+ 2 files changed, 112 insertions(+)
+
+Notes from the implementer:
+- One commit holds the whole change. Every hunk in probe.py serves the cache.
+- The test file covers only probe.py. No file is independent of another.
+- There is no refactor, rename, or unrelated change in the diff.

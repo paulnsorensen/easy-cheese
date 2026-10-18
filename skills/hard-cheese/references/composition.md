@@ -18,8 +18,8 @@ Each upstream skill passes the flags forward. Only `/plate` runs `/hard-cheese`.
 | --- | --- | --- | --- |
 | `/hard-cheese <slug>` standalone | Yes | Immediately. | No pipeline state is required. |
 | `/plate --hard` commit-only | No | n/a | Nothing is shared for review. |
-| `/plate --hard` existing PR | Yes | After final writes and validation, before update. | No layout question. |
-| `/plate --hard` new PR | Yes | After topology resolution and final validation, before publication. | An explicit choice skips the question. A cohesive single change also skips the question. Other shapes can require a question. |
+| `/plate --hard` existing PR | Yes | After final writes and validation, before update. | Plate preserves the detected topology. |
+| `/plate --hard` new PR | Yes | After topology resolution and final validation, before publication. | Plate decides the shape without a question. An explicit choice wins. |
 | Upstream `--hard` without terminal `/plate` | No | n/a | The flag remains pending. |
 
 ## The single puncture point

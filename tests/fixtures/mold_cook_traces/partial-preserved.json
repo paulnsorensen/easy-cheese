@@ -1,11 +1,9 @@
 {
   "scenario": "partial-preserved",
   "events": [
-    {"type": "input_classified", "input_kind": "canonical_pointer"},
-    {"type": "prepare", "mode": "full", "outcome": "needs-planning"},
+    {"type": "input_classified", "input_kind": "direct_spec"},
     {"type": "plan_materialized", "outcome": "partial"},
     {"type": "remainder_preserved", "unresolved_work": ["curd-2"]},
-    {"type": "handoff_published", "ready": true, "artifact_ref": "artifacts/pointers/partial.json"},
-    {"type": "consumer_accept", "ready": true, "artifact_ref": "artifacts/pointers/partial.json"}
+    {"type": "bound_inputs", "ready": true, "artifact_ref": "artifacts/finalization-results/partial.json"}
   ]
 }

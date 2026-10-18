@@ -1,6 +1,6 @@
 # Publication gateway invariants
 
-`src/easy_cheese/shared/publication.py` is the trust boundary for every cross-phase `HandoffPointer`. The r014 shared and schemas reviews (`review-shared.md`, `edge-schemas-shared.md`, `hub-shared.md`) found six holes; the cure round closed them (commits `466ce044`, `b18b463b`, `732bcabf` and the `cure2-shared.md` set). Each fix is now an invariant that tests pin. The entity vocabulary lives in [domain-model](../domain-model.md).
+`src/easy_cheese/shared/publication.py` is the trust boundary for every cross-phase publication. Since PR #773 it publishes canonical payloads through a private operation index; the public `handoff-pointer` and `normalization-receipt` schema roots no longer exist. The r014 shared and schemas reviews (`review-shared.md`, `edge-schemas-shared.md`, `hub-shared.md`) found six holes; the cure round closed them (commits `466ce044`, `b18b463b`, `732bcabf` and the `cure2-shared.md` set). Each fix is now an invariant that tests pin. The entity vocabulary lives in [domain-model](../domain-model.md).
 
 ## Pointers are `file` only
 
@@ -16,7 +16,7 @@ Every payload, receipt, or pointer read goes through one reader that takes at mo
 
 ## Receipts carry one legacy identity
 
-`NormalizationReceipt` publishes two legacy source-identity URIs. The model now requires them to be equal and non-null (`src/easy_cheese_schemas/contracts.py:676-690`); the fix was equality validation, not field removal.
+The r014 cure made `NormalizationReceipt` require its two legacy source-identity URIs to be equal and non-null. PR #773 removed that model, so the invariant no longer applies to code. Stored Wheypoint records still load, because the v3 link normalizer still runs on read and returns effective refs without a receipt.
 
 ## Quote repair rejects ambiguity
 
@@ -25,6 +25,10 @@ The generous-writer repair normalizes stray whitespace, trailing commas, and str
 ## One artifact resolver
 
 `publication.py` once carried a weaker local `ArtifactRef` resolver beside the schema package's `resolve_artifact`. The gateway now calls only `resolve_artifact`; do not reintroduce a second resolver.
+
+## Routes come from one private table
+
+The gateway calls `validate_route` from `src/easy_cheese/shared/phase_routes.py` at publish and at accept time. A pointer with the wrong destination route or an old plan schema URI is refused. The guards keep their own tests: `test_accept_rejects_pointer_with_old_plan_schema` and `test_accept_rejects_pointer_with_wrong_destination_route`. PR #774 removed the deep-validator registry; the transport guards stay.
 
 ## Known platform gap
 

@@ -54,6 +54,27 @@ def emit_commands(plan: PrPlan) -> list[str]:
     return lines
 
 
+def emit_carve_commands(plan: PrPlan, source_branch: str) -> list[dict[str, object]]:
+    """Render per-group branch-carving commands, without push or PR create.
+
+    Each entry holds the branch, its base, the `carve` commands that create the
+    branch and cherry-pick its commits, and the `restore` command that returns
+    to `source_branch` once the group is published.
+    """
+    return [
+        {
+            "branch": group.branch,
+            "base": group.base,
+            "carve": [
+                f"git switch -c {sq(group.branch)} {sq(group.base)}",
+                *(f"git cherry-pick {sq(sha)}" for sha in group.commits),
+            ],
+            "restore": f"git switch {sq(source_branch)}",
+        }
+        for group in plan.groups
+    ]
+
+
 def convert(path: str | None = None) -> dict[str, object]:
     """Convert a fan-out pr-plan to branch / cherry-pick / PR-create commands.
 
@@ -78,13 +99,13 @@ def convert(path: str | None = None) -> dict[str, object]:
     try:
         plan = read_mapping_arg_or_stdin(argv, f"usage: {PROG} [<pr-plan.yaml|pr-plan.json>]")
     except ManifestLoadError as exc:
-        exit_code = 2 if str(exc).startswith("usage:") else 1
+        exit_code = 2 if str(exc).startswith("usage:") else 4
         raise fromargs.CliError(str(exc), exit_code=exit_code) from exc
 
     loaded = load_pr_plan(plan)
     if loaded.value is None:
         raise fromargs.CliError(
-            "\n".join(f"ERROR: {error}" for error in loaded.problems), exit_code=1
+            "\n".join(f"ERROR: {error}" for error in loaded.problems), exit_code=4
         )
 
     return {"commands": emit_commands(loaded.value)}

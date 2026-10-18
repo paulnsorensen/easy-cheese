@@ -7,6 +7,9 @@
 # Easy-cheese runtime scratch (research notes, age sidecars, mold state, etc.)
 .cheese/
 
+# Skill archives are build output of src/ (`just wedge-build`). Only the
+# `publish dist` workflow commits them, and only to the dist branch.
+skills/*/scripts/*.pyz
 # Conductor workspace scratch
 .context/
 

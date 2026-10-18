@@ -141,7 +141,7 @@
     "plate_layout": {
       "type": "string",
       "enum": ["single", "stacked"],
-      "description": "Authoritative /plate topology-preflight resolution. Required by the parallel --open-pr flow before any seed, curd, or wiring commit; may come from an explicit choice, cohesive-single inference, or user confirmation."
+      "description": "Authoritative /plate topology-preflight resolution. Required by the parallel --open-pr flow before any seed, curd, or wiring commit; comes from an explicit choice or topology decision."
     },
     "seed": {
       "type": "object",
