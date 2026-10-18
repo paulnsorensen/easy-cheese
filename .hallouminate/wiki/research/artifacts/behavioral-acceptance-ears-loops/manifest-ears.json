@@ -1,0 +1,77 @@
+{
+  "slug": "behavioral-acceptance-ears-loops/ears",
+  "invocation": "sidechain",
+  "budget": {
+    "search": 4,
+    "extract": 5,
+    "spawn": 0
+  },
+  "extensions": [],
+  "calls": [
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web__run.search_query",
+      "query": "Alistair Mavin EARS Easy Approach to Requirements Syntax 2009 five patterns ubiquitous event driven unwanted behavior state driven optional feature pdf",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web__run.search_query",
+      "query": "site:cucumber.io/docs/gherkin/reference/ Given When Then observable outcome examples business rules",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web__run.open",
+      "url": "https://www.researchgate.net/profile/Alistair_Mavin/publication/224079416_Easy_approach_to_requirements_syntax_EARS/links/568ce3bf08aeb488ea311990/Easy-approach-to-requirements-syntax-EARS.pdf",
+      "url_digest": "c160fb6b94bea3243ebc2853254b9a15946392c5d5b9d8b0576d9b1be2eb6743",
+      "file": "raw/mavin-2009.md",
+      "title": "Easy approach to requirements syntax (EARS)",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web__run.open",
+      "url": "https://cucumber.io/docs/gherkin/reference/",
+      "url_digest": "155968ea9f078444c338577a24b5d107f02accfbae2b59b52680dbffa914671b",
+      "file": "raw/cucumber-gherkin.md",
+      "title": "Reference | Cucumber",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "search",
+      "provider": "web",
+      "tool": "web__run.search_query",
+      "query": "site:cucumber.io/docs/bdd/ discovery formulation automation examples BDD without Cucumber tool",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web__run.open",
+      "url": "https://cucumber.io/docs/bdd/",
+      "url_digest": "642e49ac2548ec6137c3f5bfc362404b2884fba704811d22b02f00c0a2fc3247",
+      "file": "raw/cucumber-bdd.md",
+      "title": "Behaviour-Driven Development | Cucumber",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    },
+    {
+      "kind": "extract",
+      "provider": "web",
+      "tool": "web__run.open",
+      "url": "https://cucumber.io/docs/bdd/myths/",
+      "url_digest": "4e737870ce342d0006c850ec85c7a50abac787a8f0b1f7eaa953f92f6256e499",
+      "file": "raw/cucumber-myths.md",
+      "title": "Myths about BDD | Cucumber",
+      "fetched": "2026-10-17",
+      "status": "ok"
+    }
+  ]
+}
