@@ -231,9 +231,21 @@ def test_demonstration_order_relative_to_acceptance_is_not_enforced(
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_strict_mini_spec_requires_the_demonstration(tmp_path: Path) -> None:
+def test_strict_quick_mini_spec_may_omit_the_demonstration(tmp_path: Path) -> None:
+    """Quick-tier ceremony stays small: the section is optional on a mini-spec."""
     spec = _with_demonstration(MINI_SPEC, "")
-    assert _demonstration_errors(tmp_path, spec, "--strict")
+    assert "## Acceptance demonstration" not in spec
+    result = _run_pyz(_write(tmp_path, "quick.md", spec), "--strict")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_strict_quick_mini_spec_still_checks_a_present_demonstration(
+    tmp_path: Path,
+) -> None:
+    spec = _with_demonstration(MINI_SPEC, "## Acceptance demonstration\n\nn/a:\n")
+    errors = _demonstration_errors(tmp_path, spec, "--strict")
+    assert len(errors) == 1
+    assert "n/a reason is empty" in errors[0]
 
 
 def test_strict_curd_mini_spec_requires_the_demonstration(tmp_path: Path) -> None:

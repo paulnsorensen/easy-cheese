@@ -53,7 +53,7 @@ Add exactly one row for each probe. Record the real outcome. Never invent a row.
 - AC-2: <verifiable check 2>
 
 ## Acceptance demonstration
-Required. Behavior work fills all seven rows, each non-empty. Non-behavior work writes one line instead: `n/a: <reason>`.
+Optional on a Quick-tier mini-spec (`source: agent-mini-spec`); include it when a realistic end-to-end check is not obvious from `## Acceptance`. Required on an early curd (`source: mold-curd-mini-spec`). When present, `validate-spec --strict` checks it: behavior work fills all seven rows, each non-empty, and non-behavior work writes one line instead: `n/a: <reason>`.
 Include one plausible false success and how the check rejects it. Keep rows independent of the implementation.
 
 | Field | Value |
