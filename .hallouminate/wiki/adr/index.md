@@ -48,6 +48,7 @@
 - [mold-review-canvas-006](./mold-review-canvas-006.md) — ADR: Review artifacts without executing supplied programs
 - [mold-review-canvas-007](./mold-review-canvas-007.md) — ADR: Keep the local review transport bounded
 - [mold-review-canvas-008](./mold-review-canvas-008.md) — ADR: Replace subject layouts with Mold shape views and pins
+- [mold-review-canvas-009](./mold-review-canvas-009.md) — ADR: Reach the review canvas over Tailscale through tailscale serve
 - [outer-tdd-gates-001](./outer-tdd-gates-001.md) — ADR: Hybrid outside-in RED evidence uses a phase-neutral receipt
 - [outer-tdd-gates-002](./outer-tdd-gates-002.md) — ADR: Cut owns pre-implementation RED establishment
 - [outer-tdd-gates-003](./outer-tdd-gates-003.md) — ADR: Press retains ownership of bounded corrective Cook continuations
