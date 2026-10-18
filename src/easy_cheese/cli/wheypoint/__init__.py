@@ -604,7 +604,7 @@ def build_app(stdin: TextIO) -> fromargs.App:
             the new work id (default: the bundle's work id)
         note_dir
             directory the readable projection is mirrored into (default:
-            <git toplevel>/.cheese/notes)
+            `<git toplevel>`/.cheese/notes; no mirror outside a repository)
         no_note
             write no mirror; the import stays canonical-local
         workspace_root
