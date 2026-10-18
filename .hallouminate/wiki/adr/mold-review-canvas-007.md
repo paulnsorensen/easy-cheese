@@ -1,6 +1,7 @@
 # ADR: Keep the local review transport bounded
 
 Status: implemented (2026-09-19); the bounded local review transport and Mold canvas are available through the Mold archive. Remaining prerequisites are typed-plan approval and the existing project quality gates.
+Amended by [mold-review-canvas-009](./mold-review-canvas-009.md): an opt-in trusted tailnet host reaches the loopback server through `tailscale serve`.
 
 ## Context
 
